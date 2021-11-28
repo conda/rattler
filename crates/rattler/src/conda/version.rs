@@ -1,4 +1,5 @@
 use itertools::{EitherOrBoth, Itertools};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::error::Error;
@@ -14,7 +15,7 @@ macro_rules! regex {
     }};
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::From)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::From, Serialize, Deserialize)]
 enum NumeralOrOther {
     Numeral(usize),
     Other(String),
@@ -57,7 +58,7 @@ impl Display for NumeralOrOther {
     }
 }
 
-#[derive(Default, Clone, Eq, PartialEq, Hash)]
+#[derive(Default, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 struct VersionComponent {
     components: SmallVec<[NumeralOrOther; 4]>,
     ranges: SmallVec<[Range<usize>; 4]>,
@@ -119,7 +120,7 @@ impl PartialOrd for VersionComponent {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct Version {
     norm: String,
     version: VersionComponent,
@@ -193,21 +194,37 @@ pub enum ParseVersionKind {
     EmptyVersionComponent,
 }
 
+/// Returns true if the specified string contains only valid chars for a version string.
+fn has_valid_chars(version: &str) -> bool {
+    version
+        .chars()
+        .all(|c| matches!(c, '*'|'.'|'+'|'!'|'_'|'0'..='9'|'a'..='z'))
+}
+
 impl FromStr for Version {
     type Err = ParseVersionError;
 
-    // Implementation taken from https://github.com/ilastik/conda/blob/master/conda/resolve.py
+    // Implementation taken from https://github.com/conda/conda/blob/0050c514887e6cbbc1774503915b45e8de12e405/conda/models/version.py#L47
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Trim the version
-        let lowered = s.trim().to_lowercase();
-        if lowered.is_empty() {
+        // Version comparison is case-insensitive so normalize everything to lowercase
+        let normalized = s.trim().to_lowercase();
+
+        // Basic validity check
+        if normalized.is_empty() {
             return Err(ParseVersionError::new(s, ParseVersionKind::Empty));
         }
 
+        // Allow for dashes as long as there are no underscores as well. Dashes are then converted
+        // to underscores.
+        let lowered = if normalized.contains('-') && !normalized.contains('_') {
+            normalized.replace('-', "_")
+        } else {
+            normalized
+        };
+
         // Ensure the string only contains valid characters
-        let version_check_re = regex!(r#"^[\*\.\+!_0-9a-z]+$"#);
-        if !version_check_re.is_match(&lowered) {
+        if !has_valid_chars(&lowered) {
             return Err(ParseVersionError::new(
                 s,
                 ParseVersionKind::InvalidCharacters,
@@ -247,14 +264,38 @@ impl FromStr for Version {
             ));
         }
 
+        // Split the local version by '_' or '.'
         let local_split = local.split(&['.', '_'][..]);
-        let version_split = epoch.iter().copied().chain(rest.split(&['.', '_'][..]));
+
+        // If the last character of a version is '-' or '_', don't split that out individually.
+        // Implements the instructions for openssl-like versions. You can work-around this problem
+        // by appending a dash to plain version numbers.
+        let version: SmallVec<[String; 6]> = if rest.ends_with('_') {
+            let mut versions: SmallVec<[String; 6]> = rest[..(rest.len() as isize - 1) as usize]
+                .replace('_', ".")
+                .split('.')
+                .map(ToOwned::to_owned)
+                .collect();
+            if let Some(last) = versions.last_mut() {
+                *last += "_";
+            }
+            versions
+        } else {
+            rest.replace('_', ".")
+                .split('.')
+                .map(ToOwned::to_owned)
+                .collect()
+        };
+        let version_split = epoch
+            .iter()
+            .copied()
+            .chain(version.iter().map(|s| s.as_str()));
 
         fn split_component<'a>(
             split_iter: impl Iterator<Item = &'a str>,
         ) -> Result<VersionComponent, ParseVersionKind> {
             let mut result = VersionComponent::default();
-            for component in split_iter.filter(|c| !c.is_empty()) {
+            for component in split_iter {
                 let version_split_re = regex!(r#"([0-9]+|[^0-9]+)"#);
                 let mut numeral_or_alpha_split = version_split_re.find_iter(component).peekable();
                 if numeral_or_alpha_split.peek().is_none() {
@@ -274,11 +315,13 @@ impl FromStr for Version {
                     };
                     result.components.push(parsed);
                 }
-                if range_start < result.components.len() && !matches!(&result.components[range_start], NumeralOrOther::Numeral(_)) {
-                        result
-                            .components
-                            .insert(range_start, NumeralOrOther::Numeral(0))
-                    }
+                if range_start < result.components.len()
+                    && !matches!(&result.components[range_start], NumeralOrOther::Numeral(_))
+                {
+                    result
+                        .components
+                        .insert(range_start, NumeralOrOther::Numeral(0))
+                }
 
                 let range_end = result.components.len();
                 result.ranges.push(range_start..range_end);
@@ -287,7 +330,11 @@ impl FromStr for Version {
         }
 
         let version = split_component(version_split).map_err(|e| ParseVersionError::new(s, e))?;
-        let local = split_component(local_split).map_err(|e| ParseVersionError::new(s, e))?;
+        let local = if local.is_empty() {
+            Default::default()
+        } else {
+            split_component(local_split).map_err(|e| ParseVersionError::new(s, e))?
+        };
 
         Ok(Self {
             norm: lowered,
@@ -300,7 +347,10 @@ impl FromStr for Version {
 #[cfg(test)]
 mod test {
     use crate::conda::Version;
+    use rand::seq::SliceRandom;
     use std::cmp::Ordering;
+
+    // Tests are inspired by: https://github.com/conda/conda/blob/33a142c16530fcdada6c377486f1c1a385738a96/tests/models/test_version.py
 
     #[test]
     fn valid_versions() {
@@ -384,5 +434,102 @@ mod test {
             }
             previous = Some(version);
         }
+    }
+
+    #[test]
+    fn openssl_convetion() {
+        let version_strs = [
+            "1.0.1dev",
+            "1.0.1_", // <- this
+            "1.0.1a",
+            "1.0.1b",
+            "1.0.1c",
+            "1.0.1d",
+            "1.0.1r",
+            "1.0.1rc",
+            "1.0.1rc1",
+            "1.0.1rc2",
+            "1.0.1s",
+            "1.0.1", // <- compared to this
+            "1.0.1post.a",
+            "1.0.1post.b",
+            "1.0.1post.z",
+            "1.0.1post.za",
+            "1.0.2",
+        ];
+        let parsed_versions: Vec<Version> =
+            version_strs.iter().map(|v| v.parse().unwrap()).collect();
+        let mut random_versions = parsed_versions.clone();
+        random_versions.shuffle(&mut rand::thread_rng());
+        random_versions.sort();
+        assert_eq!(random_versions, parsed_versions);
+    }
+
+    #[test]
+    fn test_pep440() {
+        // this list must be in sorted order (slightly modified from the PEP 440 test suite
+        // https://github.com/pypa/packaging/blob/master/tests/test_version.py)
+        let versions = [
+            // Implicit epoch of 0
+            "1.0a1",
+            "1.0a2.dev456",
+            "1.0a12.dev456",
+            "1.0a12",
+            "1.0b1.dev456",
+            "1.0b2",
+            "1.0b2.post345.dev456",
+            "1.0b2.post345",
+            "1.0c1.dev456",
+            "1.0c1",
+            "1.0c3",
+            "1.0rc2",
+            "1.0.dev456",
+            "1.0",
+            "1.0.post456.dev34",
+            "1.0.post456",
+            "1.1.dev1",
+            "1.2.r32+123456",
+            "1.2.rev33+123456",
+            "1.2+abc",
+            "1.2+abc123def",
+            "1.2+abc123",
+            "1.2+123abc",
+            "1.2+123abc456",
+            "1.2+1234.abc",
+            "1.2+123456",
+            // Explicit epoch of 1
+            "1!1.0a1",
+            "1!1.0a2.dev456",
+            "1!1.0a12.dev456",
+            "1!1.0a12",
+            "1!1.0b1.dev456",
+            "1!1.0b2",
+            "1!1.0b2.post345.dev456",
+            "1!1.0b2.post345",
+            "1!1.0c1.dev456",
+            "1!1.0c1",
+            "1!1.0c3",
+            "1!1.0rc2",
+            "1!1.0.dev456",
+            "1!1.0",
+            "1!1.0.post456.dev34",
+            "1!1.0.post456",
+            "1!1.1.dev1",
+            "1!1.2.r32+123456",
+            "1!1.2.rev33+123456",
+            "1!1.2+abc",
+            "1!1.2+abc123def",
+            "1!1.2+abc123",
+            "1!1.2+123abc",
+            "1!1.2+123abc456",
+            "1!1.2+1234.abc",
+            "1!1.2+123456",
+        ];
+
+        let parsed_versions: Vec<Version> = versions.iter().map(|v| v.parse().unwrap()).collect();
+        let mut random_versions = parsed_versions.clone();
+        random_versions.shuffle(&mut rand::thread_rng());
+        random_versions.sort();
+        assert_eq!(random_versions, parsed_versions);
     }
 }

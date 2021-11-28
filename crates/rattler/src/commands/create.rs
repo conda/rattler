@@ -134,7 +134,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         size: 0,
         subdir: "".to_string(),
         timestamp: None,
-        version: root_version.to_string(),
+        version: root_version.clone(),
     };
 
     index.add_record(&root_package)?;

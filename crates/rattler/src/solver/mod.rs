@@ -35,10 +35,9 @@ pub struct Index {
 
 impl Index {
     pub fn add_record(&mut self, record: &conda::Record) -> anyhow::Result<()> {
-        let version = record.version.as_str().parse()?;
         let package_versions = self.packages.entry(record.name.clone()).or_default();
         package_versions.insert(
-            version,
+            record.version.clone(),
             Deps {
                 run: record
                     .depends

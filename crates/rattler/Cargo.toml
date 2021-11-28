@@ -20,9 +20,13 @@ url = { version = "2.2.2", features = ["serde"] }
 regex = "1.5.4"
 indicatif = "0.17.0-beta.1"
 bytes = "1.1.0"
-smallvec = "1.7.0"
+smallvec = { version="1.7.0", features=["serde"] }
 itertools = "0.10.1"
 tracing = "0.1.29"
 pep440 = "0.2.0"
 once_cell = "1.8.0"
 derive_more = "0.99.16"
+void = "1.0.2"
+
+[dev-dependencies]
+rand = "0.8.4"

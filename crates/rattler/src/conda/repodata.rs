@@ -1,5 +1,6 @@
 use fxhash::{FxHashMap, FxHashSet};
 use serde::Deserialize;
+use crate::conda::Version;
 
 #[derive(Debug, Deserialize)]
 pub struct Repodata {
@@ -15,7 +16,7 @@ pub struct ChannelInfo {
     pub subdir: String,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize)]
 pub struct Record {
     pub name: String,
     pub build: String,
@@ -31,5 +32,15 @@ pub struct Record {
     pub size: usize,
     pub subdir: String,
     pub timestamp: Option<usize>,
-    pub version: String,
+    #[serde(deserialize_with="version_from_str")]
+    pub version: Version,
+}
+
+fn version_from_str<'de, D>(deserializer: D) -> Result<Version, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+{
+    String::deserialize(deserializer)?
+        .parse()
+        .map_err(serde::de::Error::custom)
 }

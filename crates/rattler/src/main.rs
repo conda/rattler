@@ -2,6 +2,7 @@ use structopt::StructOpt;
 
 mod commands;
 pub(crate) mod conda;
+pub(crate) mod utils;
 mod solver;
 
 #[derive(Debug, StructOpt)]
