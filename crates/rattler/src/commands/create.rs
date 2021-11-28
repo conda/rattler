@@ -1,5 +1,5 @@
 use crate::conda::{Channel, ChannelConfig, Platform, Record, Repodata, Version};
-use crate::solver::{Index};
+use crate::solver::Index;
 use bytes::BufMut;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -9,7 +9,6 @@ use pubgrub::solver::resolve;
 use pubgrub::version::Version as PubGrubVersion;
 use structopt::StructOpt;
 use thiserror::Error;
-use tracing::trace;
 use url::Url;
 
 #[derive(Debug, StructOpt)]
@@ -58,8 +57,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
                 .map(move |(platform, url)| (channel, platform, url))
         })
         .flatten()
-        .map(|(channel, platform, url)| (channel, platform, url.join("repodata.json").unwrap()))
-        .collect::<Vec<_>>();
+        .map(|(channel, platform, url)| (channel, platform, url.join("repodata.json").unwrap()));
 
     // Create a client
     let client = reqwest::Client::builder()
@@ -68,7 +66,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         .build()?;
     let multi_progress = indicatif::MultiProgress::new();
 
-    let download_targets: Vec<_> = repodatas
+    let download_targets = repodatas
         .into_iter()
         .map(|(channel, platform, url)| {
             let progress_bar = multi_progress.add(ProgressBar::new(0));
@@ -77,8 +75,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
                 .progress_chars("=> "));
             progress_bar.enable_steady_tick(100);
             (channel, platform, url, progress_bar)
-        })
-        .collect();
+        });
 
     // Download them all!
     let client = &client;
@@ -112,12 +109,8 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
     for repo_data in repodata {
         for (package_filename, package_info) in repo_data.packages {
             if !repo_data.removed.contains(&package_filename) {
-                match index.add_record(&package_info) {
-                    Err(e) => tracing::debug!(
-                        "couldn't add {}: {}",
-                        package_filename,e
-                    ),
-                    _ => {}
+                if let Err(e) = index.add_record(&package_info) {
+                    tracing::warn!("couldn't add {}: {}", package_filename, e);
                 }
             }
         }
@@ -141,21 +134,31 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         size: 0,
         subdir: "".to_string(),
         timestamp: None,
-        version: root_version.to_string()
+        version: root_version.to_string(),
     };
 
-    index.add_record(&root_package);
+    index.add_record(&root_package)?;
+
+    println!("setup the index");
 
     match resolve(&index, root_package.name, root_version) {
         Ok(result) => {
-            let pinned_packages:Vec<_> = result.into_iter().collect();
-            let longest_package_name = pinned_packages.iter().map(|(package_name, _)| package_name.len()).max().unwrap_or(0);
+            let pinned_packages: Vec<_> = result.into_iter().collect();
+            let longest_package_name = pinned_packages
+                .iter()
+                .map(|(package_name, _)| package_name.len())
+                .max()
+                .unwrap_or(0);
 
             for (package, version) in pinned_packages.iter() {
-                println!("{:<longest_package_name$} {}", package, version, longest_package_name=longest_package_name)
+                println!(
+                    "{:<longest_package_name$} {}",
+                    package,
+                    version,
+                    longest_package_name = longest_package_name
+                )
             }
-
-        },
+        }
         Err(PubGrubError::NoSolution(mut derivation_tree)) => {
             derivation_tree.collapse_no_versions();
             eprintln!("{}", DefaultStringReporter::report(&derivation_tree));

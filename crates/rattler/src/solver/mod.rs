@@ -1,13 +1,25 @@
-use crate::conda::{Version};
+use crate::conda;
+use crate::conda::Version;
 use fxhash::FxHashMap;
+use once_cell::sync::Lazy;
 use pubgrub::range::Range;
 use pubgrub::solver::{Dependencies, DependencyProvider};
 use pubgrub::version::Version as PubGrubVersion;
 use std::borrow::Borrow;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
 use std::error::Error;
-use crate::conda;
+
+static LOWEST: Lazy<Version> = Lazy::new(|| "0a0".parse().unwrap());
+
+impl PubGrubVersion for Version {
+    fn lowest() -> Self {
+        LOWEST.clone()
+    }
+
+    fn bump(&self) -> Self {
+        format!("{}1", self).parse().unwrap()
+    }
+}
 
 type PackageName = String;
 
@@ -23,7 +35,7 @@ pub struct Index {
 
 impl Index {
     pub fn add_record(&mut self, record: &conda::Record) -> anyhow::Result<()> {
-        let version = Version::try_from(record.version.as_str())?;
+        let version = record.version.as_str().parse()?;
         let package_versions = self.packages.entry(record.name.clone()).or_default();
         package_versions.insert(
             version,
@@ -38,7 +50,7 @@ impl Index {
                                 .unwrap_or((s.as_str(), ""))
                                 .0
                                 .to_owned(),
-                            Range::any()
+                            Range::any(),
                         )
                     })
                     .collect(),
