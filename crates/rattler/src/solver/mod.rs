@@ -17,7 +17,7 @@ impl PubGrubVersion for Version {
     }
 
     fn bump(&self) -> Self {
-        format!("{}1", self).parse().unwrap()
+        self.bump()
     }
 }
 
