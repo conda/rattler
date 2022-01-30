@@ -1,21 +1,22 @@
 use structopt::StructOpt;
 
 mod commands;
-pub(crate) mod conda;
-pub(crate) mod utils;
 mod solver;
 
+/// Command line options available through the `rattler` cli.
 #[derive(Debug, StructOpt)]
 struct Opt {
     #[structopt(subcommand)]
     command: Command,
 }
 
+/// Different commands supported by `rattler`.
 #[derive(Debug, StructOpt)]
 enum Command {
     Create(commands::create::Opt),
 }
 
+/// Entry point of the `rattler` cli.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opt = Opt::from_args();

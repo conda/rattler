@@ -5,8 +5,13 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+/// Describes channel configuration which influences how channel strings are interpreted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
+    /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
+    /// the `https://conda.anaconda.org` server but users are free to change this. This allows
+    /// naming channels just by their name instead of their entire Url (e.g. "conda-forge" actually
+    /// refers to "https://conda.anaconda.org/conda-forge").
     channel_alias: Url,
 }
 
@@ -21,14 +26,23 @@ impl Default for ChannelConfig {
 
 #[derive(Debug, Clone)]
 pub struct Channel {
+    /// The platforms supported by this channel
     pub platforms: Vec<Platform>,
+
+    /// The Url scheme of the channel. Usually http, https or file.
     pub scheme: String,
+
+    /// The server and path part of the Url.
     pub location: String,
+
+    /// The name of the channel
     pub name: String,
 }
 
 impl Channel {
-    pub fn from_str(str: &str, config: &ChannelConfig) -> Result<Self, ParseChannelError> {
+    /// Parses a [`Channel`] from a string and a channel configuration.
+    pub fn from_str(str: impl AsRef<str>, config: &ChannelConfig) -> Result<Self, ParseChannelError> {
+        let str = str.as_ref();
         let (platforms, channel) = parse_platforms(str)?;
 
         let channel = if parse_scheme(channel).is_some() {
@@ -46,7 +60,7 @@ impl Channel {
         Ok(channel)
     }
 
-    /// Constructs a new `Channel` from a `Url` and associated platforms.
+    /// Constructs a new [`Channel`] from a `Url` and associated platforms.
     pub fn from_url(url: Url, platforms: Vec<Platform>, _config: &ChannelConfig) -> Self {
         let path = url.path().trim_end_matches('/');
 
@@ -93,7 +107,7 @@ impl Channel {
         }
     }
 
-    /// Construct a channel from a name
+    /// Construct a channel from a name, platform and configuration.
     pub fn from_name(name: &str, platforms: Vec<Platform>, config: &ChannelConfig) -> Self {
         // TODO: custom channels
         Self {
@@ -215,7 +229,12 @@ fn is_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::conda::channel::parse_scheme;
+    use super::{
+        parse_scheme,
+        Channel,
+        ChannelConfig,
+        Platform
+    };
 
     #[test]
     fn test_parse_scheme() {
@@ -223,5 +242,34 @@ mod tests {
         assert_eq!(parse_scheme("http://google.com"), Some("http"));
         assert_eq!(parse_scheme("google.com"), None);
         assert_eq!(parse_scheme(""), None);
+    }
+
+    #[test]
+    fn parse_by_name() {
+        let config = ChannelConfig::default();
+
+        let channel = Channel::from_str("conda-forge", &config).unwrap();
+        assert_eq!(channel.scheme, "https");
+        assert_eq!(channel.location, "conda.anaconda.org");
+        assert_eq!(channel.name, "conda-forge");
+        assert_eq!(channel.platforms, vec![Platform::current(), Platform::NoArch]);
+    }
+
+    #[test]
+    fn parse_platform() {
+        let platform = Platform::Linux32;
+        let config = ChannelConfig::default();
+
+        let channel = Channel::from_str(format!("https://conda.anaconda.com/conda-forge[{platform}]"), &config).unwrap();
+        assert_eq!(channel.scheme, "https");
+        assert_eq!(channel.location, "conda.anaconda.com");
+        assert_eq!(channel.name, "conda-forge");
+        assert_eq!(channel.platforms, vec![platform]);
+
+        let channel = Channel::from_str(format!("https://repo.anaconda.com/pkgs/main[{platform}]"), &config).unwrap();
+        assert_eq!(channel.scheme, "https");
+        assert_eq!(channel.location, "repo.anaconda.com");
+        assert_eq!(channel.name, "pkgs/main");
+        assert_eq!(channel.platforms, vec![platform]);
     }
 }

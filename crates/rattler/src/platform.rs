@@ -1,8 +1,13 @@
-use std::str::FromStr;
+use std::{
+    str::FromStr,
+    fmt,
+    fmt::Formatter
+};
+use serde::{Deserializer, Serializer};
 use thiserror::Error;
 
 /// A platform supported by Conda.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
 
@@ -23,7 +28,7 @@ pub enum Platform {
 
 impl Platform {
     /// Returns the platform for which the current binary was build.
-    pub fn current() -> Platform {
+    pub const fn current() -> Platform {
         #[cfg(target_os = "linux")]
         {
             #[cfg(target_arch = "x86")]
@@ -51,6 +56,7 @@ impl Platform {
         compile_error!("unsupported target os");
     }
 
+    /// Returns a string representation of the platform.
     pub fn as_str(self) -> &'static str {
         self.into()
     }
@@ -105,5 +111,23 @@ impl From<Platform> for &'static str {
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
         }
+    }
+}
+
+impl fmt::Display for Platform {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl serde::Serialize for Platform {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Platform {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        String::deserialize(deserializer)?.parse().map_err(serde::de::Error::custom)
     }
 }

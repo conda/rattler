@@ -1,4 +1,5 @@
-use super::{NumeralOrOther, Version, VersionComponent};
+use super::{NumeralOrOther, VersionOrder, VersionComponent};
+use crate::utils::regex;
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -63,21 +64,19 @@ pub enum ParseVersionErrorKind {
     EmptyVersionComponent,
 }
 
+/// Returns true if the specified char is a valid char for a version string.
+pub(crate) fn is_valid_char(c: char) -> bool {
+    matches!(c, '*'|'.'|'+'|'!'|'_'|'0'..='9'|'a'..='z')
+}
+
 /// Returns true if the specified string contains only valid chars for a version string.
 fn has_valid_chars(version: &str) -> bool {
     version
         .chars()
-        .all(|c| matches!(c, '*'|'.'|'+'|'!'|'_'|'0'..='9'|'a'..='z'))
+        .all(is_valid_char)
 }
 
-macro_rules! regex {
-    ($re:literal $(,)?) => {{
-        static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
-        RE.get_or_init(|| regex::Regex::new($re).unwrap())
-    }};
-}
-
-impl FromStr for Version {
+impl FromStr for VersionOrder {
     type Err = ParseVersionError;
 
     // Implementation taken from https://github.com/conda/conda/blob/0050c514887e6cbbc1774503915b45e8de12e405/conda/models/version.py#L47

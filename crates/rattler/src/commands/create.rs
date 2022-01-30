@@ -1,12 +1,14 @@
-use crate::conda::{Channel, ChannelConfig, Platform, Record, Repodata, Version};
+use rattler::{Channel, ChannelConfig, Platform, PackageRecord, Repodata, Version};
 use crate::solver::Index;
 use bytes::BufMut;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
-use pubgrub::error::PubGrubError;
-use pubgrub::report::{DefaultStringReporter, Reporter};
-use pubgrub::solver::resolve;
-use pubgrub::version::Version as PubGrubVersion;
+use pubgrub::{
+    solver::resolve,
+    report::{DefaultStringReporter, Reporter},
+    error::PubGrubError,
+    version::Version as PubGrubVersion
+};
 use structopt::StructOpt;
 use thiserror::Error;
 use url::Url;
@@ -118,7 +120,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
 
     // Construct a fake package just for us
     let root_version = Version::lowest();
-    let root_package = Record {
+    let root_package = PackageRecord {
         name: "__solver".to_string(),
         build: "".to_string(),
         build_number: 0,
