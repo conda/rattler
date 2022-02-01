@@ -1,4 +1,4 @@
-use super::{NumeralOrOther, VersionOrder, VersionComponent};
+use super::{NumeralOrOther, VersionComponent, VersionOrder};
 use crate::utils::regex;
 use smallvec::SmallVec;
 use std::{
@@ -71,9 +71,7 @@ pub(crate) fn is_valid_char(c: char) -> bool {
 
 /// Returns true if the specified string contains only valid chars for a version string.
 fn has_valid_chars(version: &str) -> bool {
-    version
-        .chars()
-        .all(is_valid_char)
+    version.chars().all(is_valid_char)
 }
 
 impl FromStr for VersionOrder {

@@ -1,13 +1,13 @@
 mod channel;
+mod match_spec;
 mod platform;
 mod repo_data;
-mod version;
-mod match_spec;
-mod version_spec;
 pub(crate) mod utils;
+mod version;
+mod version_spec;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
-pub use platform::{Platform, ParsePlatformError};
-pub use repo_data::{RepoData, PackageRecord, ChannelInfo, NoArchType};
-pub use version::{VersionOrder, ParseVersionErrorKind, ParseVersionError};
+pub use platform::{ParsePlatformError, Platform};
+pub use repo_data::{ChannelInfo, NoArchType, PackageRecord, RepoData};
+pub use version::{ParseVersionError, ParseVersionErrorKind, VersionOrder};
 pub use version_spec::VersionSpec;

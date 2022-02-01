@@ -41,7 +41,10 @@ pub struct Channel {
 
 impl Channel {
     /// Parses a [`Channel`] from a string and a channel configuration.
-    pub fn from_str(str: impl AsRef<str>, config: &ChannelConfig) -> Result<Self, ParseChannelError> {
+    pub fn from_str(
+        str: impl AsRef<str>,
+        config: &ChannelConfig,
+    ) -> Result<Self, ParseChannelError> {
         let str = str.as_ref();
         let (platforms, channel) = parse_platforms(str)?;
 
@@ -229,12 +232,7 @@ fn is_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        parse_scheme,
-        Channel,
-        ChannelConfig,
-        Platform
-    };
+    use super::{parse_scheme, Channel, ChannelConfig, Platform};
 
     #[test]
     fn test_parse_scheme() {
@@ -252,7 +250,10 @@ mod tests {
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.org");
         assert_eq!(channel.name, "conda-forge");
-        assert_eq!(channel.platforms, vec![Platform::current(), Platform::NoArch]);
+        assert_eq!(
+            channel.platforms,
+            vec![Platform::current(), Platform::NoArch]
+        );
     }
 
     #[test]
@@ -260,13 +261,21 @@ mod tests {
         let platform = Platform::Linux32;
         let config = ChannelConfig::default();
 
-        let channel = Channel::from_str(format!("https://conda.anaconda.com/conda-forge[{platform}]"), &config).unwrap();
+        let channel = Channel::from_str(
+            format!("https://conda.anaconda.com/conda-forge[{platform}]"),
+            &config,
+        )
+        .unwrap();
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.com");
         assert_eq!(channel.name, "conda-forge");
         assert_eq!(channel.platforms, vec![platform]);
 
-        let channel = Channel::from_str(format!("https://repo.anaconda.com/pkgs/main[{platform}]"), &config).unwrap();
+        let channel = Channel::from_str(
+            format!("https://repo.anaconda.com/pkgs/main[{platform}]"),
+            &config,
+        )
+        .unwrap();
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "repo.anaconda.com");
         assert_eq!(channel.name, "pkgs/main");

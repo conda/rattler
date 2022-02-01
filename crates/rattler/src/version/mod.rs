@@ -10,7 +10,6 @@ use std::{
 };
 
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
-pub(crate) use parse::is_valid_char;
 
 /// This class implements an order relation between version strings. Version strings can contain the
 /// usual alphanumeric characters (A-Za-z0-9), separated into components by dots and underscores.

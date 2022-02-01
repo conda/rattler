@@ -32,55 +32,51 @@ pub struct PackageRecord {
     pub name: String,
     #[serde(deserialize_with = "version_from_str")]
     pub version: VersionOrder,
-    #[serde(alias="build_string")]
+    #[serde(alias = "build_string")]
     pub build: String,
     pub build_number: usize,
 
     //pub channel: Channel,
     pub subdir: String,
     //pub filename: String
-
     pub md5: Option<String>,
     //pub legacy_bz2_md5: Option<String>,
     //pub legacy_bz2_size: Option<usize>,
-
     pub sha256: Option<String>,
 
     pub arch: Option<String>,
     pub platform: Option<Platform>,
 
-    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends: Vec<String>,
-    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
 
-    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub track_features: Vec<String>,
-    #[serde(default, skip_serializing_if="Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub features: Vec<String>,
 
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub noarch: Option<NoArchType>,
 
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_env: Option<String>,
 
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub license_family: Option<String>,
 
     // pub package_type: ?
-
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<usize>,
 
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
 
-    #[serde(skip_serializing_if="Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<usize>,
-
 }
 
 /// Parses a version from a string

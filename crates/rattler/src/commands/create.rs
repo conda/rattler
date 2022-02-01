@@ -1,14 +1,14 @@
-use rattler::{Channel, ChannelConfig, Platform, PackageRecord, Repodata, Version};
 use crate::solver::Index;
 use bytes::BufMut;
 use futures::StreamExt;
 use indicatif::{ProgressBar, ProgressStyle};
 use pubgrub::{
-    solver::resolve,
-    report::{DefaultStringReporter, Reporter},
     error::PubGrubError,
-    version::Version as PubGrubVersion
+    report::{DefaultStringReporter, Reporter},
+    solver::resolve,
+    version::Version as PubGrubVersion,
 };
+use rattler::{Channel, ChannelConfig, PackageRecord, Platform, Repodata, Version};
 use structopt::StructOpt;
 use thiserror::Error;
 use url::Url;

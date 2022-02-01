@@ -1,9 +1,5 @@
-use std::{
-    str::FromStr,
-    fmt,
-    fmt::Formatter
-};
 use serde::{Deserializer, Serializer};
+use std::{fmt, fmt::Formatter, str::FromStr};
 use thiserror::Error;
 
 /// A platform supported by Conda.
@@ -121,13 +117,21 @@ impl fmt::Display for Platform {
 }
 
 impl serde::Serialize for Platform {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(self.as_str())
     }
 }
 
 impl<'de> serde::Deserialize<'de> for Platform {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-        String::deserialize(deserializer)?.parse().map_err(serde::de::Error::custom)
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
     }
 }
