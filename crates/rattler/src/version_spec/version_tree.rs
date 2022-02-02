@@ -1,17 +1,30 @@
-use super::{LogicalOperator, ParseVersionSpecError};
+use super::LogicalOperator;
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::iter::Peekable;
+use thiserror::Error;
 
-/// A representation of a hierarchy of versions
+/// A representation of an hierarchy of version constraints e.g. `1.3.4,>=5.0.1|(1.2.4,>=3.0.1)`.
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum VersionTree<'a> {
     Term(&'a str),
     Group(LogicalOperator, Vec<VersionTree<'a>>),
 }
 
+#[derive(Debug, Clone, Error, Eq, PartialEq)]
+pub enum ParseVersionTreeError {
+    #[error("missing '()")]
+    MissingClosingParenthesis,
+
+    #[error("unexpected token")]
+    UnexpectedOperator,
+
+    #[error("unexpected eof")]
+    UnexpectedEndOfString,
+}
+
 impl<'a> TryFrom<&'a str> for VersionTree<'a> {
-    type Error = ParseVersionSpecError;
+    type Error = ParseVersionTreeError;
 
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
         let version_spec_tokens = crate::utils::regex!("\\s*[()|,]|[^()|,]+");
@@ -46,6 +59,8 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             }
         }
 
+        /// Modifies the specified version tree to become a Group of the specified operator type and
+        /// returns a reference to the container of the group.
         fn make_group<'a, 'b>(
             term: &'b mut VersionTree<'a>,
             op: LogicalOperator,
@@ -70,23 +85,27 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             }
         }
 
+        /// Parses an atomic term, e.g. (`>=1.2.3` or a group surrounded by parenthesis)
         fn parse_term<'a, I: Iterator<Item = VersionTreeToken<'a>>>(
             tokens: &mut Peekable<I>,
-        ) -> Result<VersionTree<'a>, ParseVersionSpecError> {
-            let token = tokens.next().ok_or(ParseVersionSpecError::UnexpectedEOF)?;
+        ) -> Result<VersionTree<'a>, ParseVersionTreeError> {
+            let token = tokens
+                .next()
+                .ok_or(ParseVersionTreeError::UnexpectedEndOfString)?;
             match token {
                 VersionTreeToken::ParenOpen => {
                     let group = parse_group(tokens, 2)?;
                     if tokens.next() != Some(VersionTreeToken::ParenClose) {
-                        return Err(ParseVersionSpecError::MissingParenthesis);
+                        return Err(ParseVersionTreeError::MissingClosingParenthesis);
                     }
                     Ok(group)
                 }
                 VersionTreeToken::Term(term) => Ok(VersionTree::Term(term)),
-                _ => return Err(ParseVersionSpecError::UnexpectedOperator),
+                _ => return Err(ParseVersionTreeError::UnexpectedOperator),
             }
         }
 
+        /// Returns the operator precedence to ensure correct ordering.
         fn op_precedence(op: LogicalOperator) -> u8 {
             match op {
                 LogicalOperator::And => 1,
@@ -94,10 +113,11 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             }
         }
 
+        /// Parses a group of constraints seperated by `|` and/or `,`.
         fn parse_group<'a, I: Iterator<Item = VersionTreeToken<'a>>>(
             tokens: &mut Peekable<I>,
             max_precedence: u8,
-        ) -> Result<VersionTree<'a>, ParseVersionSpecError> {
+        ) -> Result<VersionTree<'a>, ParseVersionTreeError> {
             let mut result = parse_term(tokens)?;
             loop {
                 let op = match tokens.peek() {

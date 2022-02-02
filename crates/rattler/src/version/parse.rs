@@ -12,7 +12,7 @@ use std::{
 };
 
 /// An error that occurred during parsing of a string to a version.
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParseVersionError {
     /// The original string that was the input of the parser
     pub version: String,
@@ -53,7 +53,7 @@ impl ParseVersionError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ParseVersionErrorKind {
     Empty,
     InvalidCharacters,
@@ -66,7 +66,7 @@ pub enum ParseVersionErrorKind {
 
 /// Returns true if the specified char is a valid char for a version string.
 pub(crate) fn is_valid_char(c: char) -> bool {
-    matches!(c, '*'|'.'|'+'|'!'|'_'|'0'..='9'|'a'..='z')
+    matches!(c, '.'|'+'|'!'|'_'|'0'..='9'|'a'..='z')
 }
 
 /// Returns true if the specified string contains only valid chars for a version string.
