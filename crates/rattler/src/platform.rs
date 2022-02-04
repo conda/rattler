@@ -33,7 +33,7 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Linux64;
 
-            #[cfg(not(any(target_arg = "x86_64", target_arg = "x86")))]
+            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
             compile_error!("unsupported linux architecture");
         }
         #[cfg(windows)]
