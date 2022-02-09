@@ -4,13 +4,16 @@ mod version_tree;
 use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;
 use crate::{ParseVersionError, VersionOrder};
+use serde::{Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use thiserror::Error;
 use version_tree::VersionTree;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub(crate) use constraint::is_start_of_version_constraint;
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize)]
 pub enum VersionOperator {
     Equals,
     NotEquals,
@@ -23,7 +26,7 @@ pub enum VersionOperator {
     Compatible,
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize)]
 pub enum LogicalOperator {
     And,
     Or,
@@ -92,6 +95,57 @@ impl Display for VersionOperator {
             VersionOperator::NotStartsWith => write!(f, "!=startswith"),
             VersionOperator::Compatible => write!(f, "~="),
         }
+    }
+}
+
+impl Display for LogicalOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LogicalOperator::And => write!(f, ","),
+            LogicalOperator::Or => write!(f, "|"),
+        }
+    }
+}
+
+impl Display for VersionSpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        fn write(spec: &VersionSpec, f: &mut Formatter<'_>, part_of_or: bool) -> std::fmt::Result {
+            match spec {
+                VersionSpec::Any => write!(f, "*"),
+                VersionSpec::Operator(op, version) => match op {
+                    VersionOperator::StartsWith => write!(f, "{}.*", version),
+                    VersionOperator::NotStartsWith => write!(f, "!={}.*", version),
+                    op => write!(f, "{}{}", op, version),
+                },
+                VersionSpec::Group(op, group) => {
+                    let requires_parenthesis = *op == LogicalOperator::And && part_of_or;
+                    if requires_parenthesis {
+                        write!(f, "(")?;
+                    }
+                    for (i, spec) in group.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, "{}", op)?;
+                        }
+                        write(spec, f, *op == LogicalOperator::Or)?;
+                    }
+                    if requires_parenthesis {
+                        write!(f, ")")?;
+                    }
+                    Ok(())
+                }
+            }
+        }
+
+        write(self, f, false)
+    }
+}
+
+impl Serialize for VersionSpec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&format!("{}", self))
     }
 }
 

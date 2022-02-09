@@ -1,5 +1,6 @@
 use super::{ParsePlatformError, Platform};
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
@@ -24,10 +25,12 @@ impl Default for ChannelConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct Channel {
-    /// The platforms supported by this channel
-    pub platforms: Vec<Platform>,
+    /// The platforms supported by this channel, or None if no explicit platforms have been
+    /// specified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platforms: Option<SmallVec<[Platform; 2]>>,
 
     /// The Url scheme of the channel. Usually http, https or file.
     pub scheme: String,
@@ -64,13 +67,17 @@ impl Channel {
     }
 
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(url: Url, platforms: Vec<Platform>, _config: &ChannelConfig) -> Self {
+    pub fn from_url(
+        url: Url,
+        platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
+        _config: &ChannelConfig,
+    ) -> Self {
         let path = url.path().trim_end_matches('/');
 
         // Case 1: No path give, channel name is ""
         if path.is_empty() {
             return Self {
-                platforms,
+                platforms: platforms.map(Into::into),
                 scheme: url.scheme().to_owned(),
                 location: url.host_str().unwrap_or("").to_owned(),
                 name: String::from(""),
@@ -90,7 +97,7 @@ impl Channel {
                 host.to_owned()
             };
             Self {
-                platforms,
+                platforms: platforms.map(Into::into),
                 scheme: url.scheme().to_owned(),
                 location,
                 name: path.trim_start_matches('/').to_owned(),
@@ -102,7 +109,7 @@ impl Channel {
                 .rsplit_once('/')
                 .unwrap_or_else(|| ("/", url.path()));
             Self {
-                platforms,
+                platforms: platforms.map(Into::into),
                 scheme: String::from("file"),
                 location: location.to_owned(),
                 name: name.to_owned(),
@@ -111,10 +118,14 @@ impl Channel {
     }
 
     /// Construct a channel from a name, platform and configuration.
-    pub fn from_name(name: &str, platforms: Vec<Platform>, config: &ChannelConfig) -> Self {
+    pub fn from_name(
+        name: &str,
+        platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
+        config: &ChannelConfig,
+    ) -> Self {
         // TODO: custom channels
         Self {
-            platforms,
+            platforms: platforms.map(Into::into),
             scheme: config.channel_alias.scheme().to_owned(),
             location: format!(
                 "{}/{}",
@@ -145,14 +156,23 @@ impl Channel {
 
     /// Returns the Urls for all the supported platforms of this package.
     pub fn platforms_url(&self) -> Vec<(Platform, Url)> {
-        self.platforms
+        self.platforms_or_default()
             .iter()
             .map(|&platform| (platform, self.platform_url(platform)))
             .collect()
     }
+
+    /// Returns the platforms explicitly mentioned in the channel or the default platforms of the
+    /// current system.
+    pub fn platforms_or_default(&self) -> &[Platform] {
+        self.platforms
+            .as_ref()
+            .map(|platforms| platforms.as_ref())
+            .unwrap_or_else(|| default_platforms())
+    }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum ParseChannelError {
     #[error("could not parse the platforms")]
     ParsePlatformError(#[source] ParsePlatformError),
@@ -177,7 +197,9 @@ impl From<url::ParseError> for ParseChannelError {
 }
 
 /// Extract the platforms from the given human readable channel.
-fn parse_platforms(channel: &str) -> Result<(Vec<Platform>, &str), ParsePlatformError> {
+fn parse_platforms(
+    channel: &str,
+) -> Result<(Option<SmallVec<[Platform; 2]>>, &str), ParsePlatformError> {
     if channel.rfind(']').is_some() {
         if let Some(start_platform_idx) = channel.find('[') {
             let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
@@ -186,17 +208,18 @@ fn parse_platforms(channel: &str) -> Result<(Vec<Platform>, &str), ParsePlatform
                 .map(str::trim)
                 .map(FromStr::from_str)
                 .collect::<Result<_, _>>()?;
-            return Ok((platforms, &channel[0..start_platform_idx]));
+            return Ok((Some(platforms), &channel[0..start_platform_idx]));
         }
     }
 
-    Ok((default_platforms(), channel))
+    Ok((None, channel))
 }
 
 /// Returns the default platforms. These are based on the platform this binary was build for as well
 /// as platform agnostic platforms.
-fn default_platforms() -> Vec<Platform> {
-    return vec![Platform::current(), Platform::NoArch];
+const fn default_platforms() -> &'static [Platform] {
+    const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
+    return &CURRENT_PLATFORMS;
 }
 
 /// Parses the schema part of the human-readable channel. Returns the scheme part if it exists.
@@ -233,6 +256,7 @@ fn is_path(path: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{parse_scheme, Channel, ChannelConfig, Platform};
+    use smallvec::smallvec;
 
     #[test]
     fn test_parse_scheme() {
@@ -250,10 +274,7 @@ mod tests {
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.org");
         assert_eq!(channel.name, "conda-forge");
-        assert_eq!(
-            channel.platforms,
-            vec![Platform::current(), Platform::NoArch]
-        );
+        assert_eq!(channel.platforms, None);
     }
 
     #[test]
@@ -269,7 +290,7 @@ mod tests {
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.com");
         assert_eq!(channel.name, "conda-forge");
-        assert_eq!(channel.platforms, vec![platform]);
+        assert_eq!(channel.platforms, Some(smallvec![platform]));
 
         let channel = Channel::from_str(
             format!("https://repo.anaconda.com/pkgs/main[{platform}]"),
@@ -279,6 +300,6 @@ mod tests {
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "repo.anaconda.com");
         assert_eq!(channel.name, "pkgs/main");
-        assert_eq!(channel.platforms, vec![platform]);
+        assert_eq!(channel.platforms, Some(smallvec![platform]));
     }
 }

@@ -1,7 +1,7 @@
 mod parse;
 
 use itertools::{EitherOrBoth, Itertools};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use smallvec::SmallVec;
 use std::{
     cmp::Ordering,
@@ -17,7 +17,7 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 /// optional epoch number - an integer followed by '!' - can precede the actual version string (this
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
 /// case-insensitive.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct VersionOrder {
     norm: String,
     version: VersionComponent,
@@ -181,6 +181,15 @@ impl PartialOrd for VersionOrder {
 impl Display for VersionOrder {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.norm.as_str())
+    }
+}
+
+impl Serialize for VersionOrder {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.norm)
     }
 }
 

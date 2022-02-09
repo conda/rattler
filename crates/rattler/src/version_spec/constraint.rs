@@ -52,6 +52,11 @@ fn parse_operator(s: &str) -> Option<(VersionOperator, &str)> {
     }
 }
 
+/// Returns true if the specified character is the first character of a version constraint.
+pub(crate) fn is_start_of_version_constraint(c: char) -> bool {
+    matches!(c, '>' | '<' | '=' | '!' | '~')
+}
+
 impl FromStr for Constraint {
     type Err = ParseConstraintError;
 
@@ -61,7 +66,7 @@ impl FromStr for Constraint {
             Ok(Constraint::Any)
         } else if s.starts_with("^") || s.ends_with("$") {
             Err(ParseConstraintError::RegexConstraintsNotSupported)
-        } else if s.starts_with(&['>', '<', '=', '!', '~']) {
+        } else if s.starts_with(is_start_of_version_constraint) {
             let (op, version_str) =
                 parse_operator(s).ok_or(ParseConstraintError::InvalidOperator)?;
             if !version_str.starts_with(char::is_alphanumeric) {

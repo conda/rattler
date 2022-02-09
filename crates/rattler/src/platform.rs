@@ -59,7 +59,7 @@ impl Platform {
 }
 
 /// An error that can occur when parsing a platform from a string.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
 #[error("'{string}' is not a known platform")]
 pub struct ParsePlatformError {
     pub string: String,
