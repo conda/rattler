@@ -3,6 +3,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
 pub enum NoArchType {
     Generic,
     Python,
@@ -45,21 +46,20 @@ pub struct PackageRecord {
     pub sha256: Option<String>,
 
     pub arch: Option<String>,
-    pub platform: Option<Platform>,
+    pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
 
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub track_features: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub features: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_features: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub features: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub noarch: Option<NoArchType>,
-
+    // #[serde(skip_serializing_if = "Option::is_none")]
+    // pub noarch: Option<NoArchType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_env: Option<String>,
 

@@ -148,7 +148,7 @@ impl Channel {
     }
 
     /// Returns the Urls for the given platform
-    fn platform_url(&self, platform: Platform) -> Url {
+    pub fn platform_url(&self, platform: Platform) -> Url {
         let mut base_url = self.base_url();
         base_url.set_path(&format!("{}/{}/", base_url.path(), platform.as_str()));
         base_url
@@ -169,6 +169,11 @@ impl Channel {
             .as_ref()
             .map(|platforms| platforms.as_ref())
             .unwrap_or_else(|| default_platforms())
+    }
+
+    /// Returns the canonical name of the channel
+    pub fn canonical_name(&self) -> String {
+        format!("{}://{}/{}", self.scheme, self.location, self.name)
     }
 }
 

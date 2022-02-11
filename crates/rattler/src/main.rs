@@ -19,6 +19,8 @@ enum Command {
 /// Entry point of the `rattler` cli.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    pretty_env_logger::init();
+
     let opt = Opt::from_args();
     match opt.command {
         Command::Create(opt) => commands::create::create(opt).await,

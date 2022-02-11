@@ -1,17 +1,8 @@
-// use crate::solver::Index;
-use bytes::BufMut;
-use futures::StreamExt;
-use indicatif::{ProgressBar, ProgressStyle};
-use pubgrub::{
-    error::PubGrubError,
-    report::{DefaultStringReporter, Reporter},
-    solver::resolve,
-    version::Version as PubGrubVersion,
-};
-use rattler::{Channel, ChannelConfig, PackageRecord, Platform, RepoData, VersionOrder};
+use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
+use itertools::Itertools;
+use rattler::{Channel, ChannelConfig, LoadRepoDataProgress, RepoDataLoader};
 use structopt::StructOpt;
 use thiserror::Error;
-use url::Url;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -41,13 +32,83 @@ impl From<reqwest::Error> for DownloadError {
 }
 
 pub async fn create(_opt: Opt) -> anyhow::Result<()> {
-    // let channel_config = ChannelConfig::default();
-    //
-    // // Get the channels to download
-    // let channels = vec![
-    //     Channel::from_str("conda-forge", &channel_config)?,
-    //     Channel::from_str("robostack", &channel_config)?,
-    // ];
+    let channel_config = ChannelConfig::default();
+
+    // Get the channels to download
+    let channels = vec![
+        Channel::from_str("conda-forge", &channel_config)?,
+        Channel::from_str("robostack", &channel_config)?,
+    ];
+
+    let cache_dir = dirs::cache_dir().ok_or_else(|| {
+        anyhow::anyhow!("could not determine cache directory for current platform")
+    })?;
+
+    // Create repo data loaders for
+    let client = reqwest::Client::builder().build()?;
+    let multi_progress = indicatif::MultiProgress::new();
+
+    let repo_data_sources = channels
+        .into_iter()
+        .flat_map(|channel| {
+            channel
+                .platforms_or_default()
+                .into_iter()
+                .copied()
+                .map(|platform| (channel.clone(), platform))
+                .collect_vec()
+        })
+        .collect_vec();
+
+    let client_ref = &client;
+    let download_futures = repo_data_sources.iter()
+        .map(|(channel, platform)| {
+        let progress_bar = multi_progress.add(ProgressBar::new(0));
+            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
+        progress_bar.set_style(ProgressStyle::default_bar()
+            .on_finish(ProgressFinish::WithMessage("Done!".into()))
+            .template(&format!("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30!.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}"))
+            .progress_chars("=>-"));
+        progress_bar.enable_steady_tick(100);
+        let loader = RepoDataLoader::new(channel.clone(), platform.clone(), &cache_dir);
+        async move {
+            match loader.load(client_ref, |progress| match progress {
+                LoadRepoDataProgress::Downloading { progress, total } => {
+                    progress_bar.set_length(total.unwrap_or(progress) as u64);
+                    progress_bar.set_position(progress as u64);
+                }
+                LoadRepoDataProgress::Decoding => {}
+            }).await {
+                Ok(repo_data) => {
+                    progress_bar.set_style(ProgressStyle::default_bar()
+                        .template(&format!("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.green}}")));
+                    progress_bar.set_message("Done!");
+                    progress_bar.finish();
+                    Ok(repo_data)
+                },
+                Err(err) => {
+                    progress_bar.set_style(ProgressStyle::default_bar()
+                        .template(&format!("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red}}"))
+                        .progress_chars("=>-"));
+                    progress_bar.set_message("Error!");
+                    progress_bar.finish();
+                    Err(err)
+                }
+            }
+        }
+    }
+    );
+
+    let results = futures::future::join_all(download_futures).await;
+    for result in results.iter() {
+        match result {
+            Ok(_repo_data) => {}
+            Err(err) => {
+                log::error!("{}", err);
+            }
+        }
+    }
+
     //
     // // Get the urls for the repodata
     // let repodatas = channels
@@ -169,38 +230,4 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
     // }
 
     Ok(())
-}
-
-async fn download_repo_data_with_progress(
-    client: &reqwest::Client,
-    channel: &Channel,
-    platform: Platform,
-    url: Url,
-    progress_bar: &ProgressBar,
-) -> Result<RepoData, DownloadError> {
-    let response = client.get(url).send().await.map_err(DownloadError::from)?;
-
-    let total_size = response.content_length().unwrap_or(100);
-    progress_bar.set_length(total_size);
-    progress_bar.set_message("Downloading...");
-
-    let mut downloaded = 0;
-    let mut byte_stream = response.bytes_stream();
-    let mut bytes = Vec::with_capacity(total_size as usize);
-    while let Some(chunk) = byte_stream.next().await {
-        let chunk = chunk?;
-        let new = downloaded + chunk.len() as u64;
-        bytes.put(chunk);
-        downloaded = new;
-        progress_bar.set_length(new.max(total_size));
-        progress_bar.set_position(new);
-    }
-
-    progress_bar.set_style(ProgressStyle::default_bar().template(&format!(
-        "{{spinner:.green}} {}/{} [{{elapsed_precise}}] {{msg}}",
-        &channel.name,
-        platform.as_str()
-    )));
-    progress_bar.set_message("Parsing...");
-    serde_json::from_slice(&bytes).map_err(DownloadError::from)
 }
