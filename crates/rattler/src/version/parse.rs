@@ -1,4 +1,4 @@
-use super::{NumeralOrOther, VersionComponent, VersionOrder};
+use super::{NumeralOrOther, Version, VersionComponent};
 use crate::utils::regex;
 use smallvec::SmallVec;
 use std::{
@@ -74,7 +74,7 @@ fn has_valid_chars(version: &str) -> bool {
     version.chars().all(is_valid_char)
 }
 
-impl FromStr for VersionOrder {
+impl FromStr for Version {
     type Err = ParseVersionError;
 
     // Implementation taken from https://github.com/conda/conda/blob/0050c514887e6cbbc1774503915b45e8de12e405/conda/models/version.py#L47

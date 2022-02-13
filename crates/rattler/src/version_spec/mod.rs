@@ -3,7 +3,8 @@ mod version_tree;
 
 use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;
-use crate::{ParseVersionError, VersionOrder};
+use crate::{ParseVersionError, Version};
+use log::Log;
 use serde::{Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
@@ -24,6 +25,24 @@ pub enum VersionOperator {
     StartsWith,
     NotStartsWith,
     Compatible,
+    NotCompatible,
+}
+
+impl VersionOperator {
+    pub fn complement(self) -> Self {
+        match self {
+            VersionOperator::Equals => VersionOperator::NotEquals,
+            VersionOperator::NotEquals => VersionOperator::Equals,
+            VersionOperator::Greater => VersionOperator::LessEquals,
+            VersionOperator::GreaterEquals => VersionOperator::Less,
+            VersionOperator::Less => VersionOperator::GreaterEquals,
+            VersionOperator::LessEquals => VersionOperator::Greater,
+            VersionOperator::StartsWith => VersionOperator::NotStartsWith,
+            VersionOperator::NotStartsWith => VersionOperator::StartsWith,
+            VersionOperator::Compatible => VersionOperator::NotCompatible,
+            VersionOperator::NotCompatible => VersionOperator::Compatible,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize)]
@@ -32,10 +51,20 @@ pub enum LogicalOperator {
     Or,
 }
 
+impl LogicalOperator {
+    pub fn complement(self) -> Self {
+        match self {
+            LogicalOperator::And => LogicalOperator::Or,
+            LogicalOperator::Or => LogicalOperator::And,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum VersionSpec {
+    None,
     Any,
-    Operator(VersionOperator, VersionOrder),
+    Operator(VersionOperator, Version),
     Group(LogicalOperator, Vec<VersionSpec>),
 }
 
@@ -94,6 +123,7 @@ impl Display for VersionOperator {
             VersionOperator::StartsWith => write!(f, "="),
             VersionOperator::NotStartsWith => write!(f, "!=startswith"),
             VersionOperator::Compatible => write!(f, "~="),
+            VersionOperator::NotCompatible => write!(f, "!~="),
         }
     }
 }
@@ -133,6 +163,7 @@ impl Display for VersionSpec {
                     }
                     Ok(())
                 }
+                VersionSpec::None => write!(f, "!"),
             }
         }
 
@@ -152,7 +183,7 @@ impl Serialize for VersionSpec {
 #[cfg(test)]
 mod tests {
     use crate::version_spec::{LogicalOperator, VersionOperator};
-    use crate::{VersionOrder, VersionSpec};
+    use crate::{Version, VersionSpec};
     use std::str::FromStr;
 
     #[test]
@@ -161,14 +192,14 @@ mod tests {
             VersionSpec::from_str("1.2.3"),
             Ok(VersionSpec::Operator(
                 VersionOperator::Equals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             VersionSpec::from_str(">=1.2.3"),
             Ok(VersionSpec::Operator(
                 VersionOperator::GreaterEquals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
     }
@@ -181,11 +212,11 @@ mod tests {
                 vec![
                     VersionSpec::Operator(
                         VersionOperator::GreaterEquals,
-                        VersionOrder::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
                     VersionSpec::Operator(
                         VersionOperator::Less,
-                        VersionOrder::from_str("2.0.0").unwrap()
+                        Version::from_str("2.0.0").unwrap()
                     ),
                 ]
             ))
@@ -197,11 +228,11 @@ mod tests {
                 vec![
                     VersionSpec::Operator(
                         VersionOperator::GreaterEquals,
-                        VersionOrder::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
                     VersionSpec::Operator(
                         VersionOperator::Less,
-                        VersionOrder::from_str("1.0.0").unwrap()
+                        Version::from_str("1.0.0").unwrap()
                     ),
                 ]
             ))
@@ -213,11 +244,11 @@ mod tests {
                 vec![
                     VersionSpec::Operator(
                         VersionOperator::GreaterEquals,
-                        VersionOrder::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
                     VersionSpec::Operator(
                         VersionOperator::Less,
-                        VersionOrder::from_str("1.0.0").unwrap()
+                        Version::from_str("1.0.0").unwrap()
                     ),
                 ]
             ))

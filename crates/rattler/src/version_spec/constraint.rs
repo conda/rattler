@@ -1,5 +1,5 @@
 use super::VersionOperator;
-use crate::{ParseVersionError, VersionOrder};
+use crate::{ParseVersionError, Version};
 use std::str::FromStr;
 use thiserror::Error;
 
@@ -10,7 +10,7 @@ pub enum Constraint {
     Any,
 
     /// Version comparison (e.g `>1.2.3`)
-    Comparison(VersionOperator, VersionOrder),
+    Comparison(VersionOperator, Version),
 }
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
@@ -92,22 +92,20 @@ impl FromStr for Constraint {
             };
             Ok(Constraint::Comparison(
                 op,
-                VersionOrder::from_str(version_str)
-                    .map_err(ParseConstraintError::InvalidVersion)?,
+                Version::from_str(version_str).map_err(ParseConstraintError::InvalidVersion)?,
             ))
         } else if s.ends_with("*") {
             let version_str = s.trim_end_matches('*').trim_end_matches('.');
             Ok(Constraint::Comparison(
                 VersionOperator::StartsWith,
-                VersionOrder::from_str(version_str)
-                    .map_err(ParseConstraintError::InvalidVersion)?,
+                Version::from_str(version_str).map_err(ParseConstraintError::InvalidVersion)?,
             ))
         } else if s.contains('*') {
             Err(ParseConstraintError::RegexConstraintsNotSupported)
         } else {
             Ok(Constraint::Comparison(
                 VersionOperator::Equals,
-                VersionOrder::from_str(s).map_err(ParseConstraintError::InvalidVersion)?,
+                Version::from_str(s).map_err(ParseConstraintError::InvalidVersion)?,
             ))
         }
     }
@@ -118,7 +116,7 @@ mod test {
     use super::Constraint;
     use crate::version_spec::constraint::ParseConstraintError;
     use crate::version_spec::VersionOperator;
-    use crate::VersionOrder;
+    use crate::Version;
     use std::str::FromStr;
 
     #[test]
@@ -168,56 +166,56 @@ mod test {
             Constraint::from_str(">1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::Greater,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("<1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::Less,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("=1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::StartsWith,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("==1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::Equals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("!=1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::NotEquals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("~=1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::Compatible,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str(">=1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::GreaterEquals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("<=1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::LessEquals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
     }
@@ -228,21 +226,21 @@ mod test {
             Constraint::from_str("=1.2.*"),
             Ok(Constraint::Comparison(
                 VersionOperator::StartsWith,
-                VersionOrder::from_str("1.2").unwrap()
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("!=1.2.*"),
             Ok(Constraint::Comparison(
                 VersionOperator::NotStartsWith,
-                VersionOrder::from_str("1.2").unwrap()
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str(">=1.2.*"),
             Ok(Constraint::Comparison(
                 VersionOperator::GreaterEquals,
-                VersionOrder::from_str("1.2").unwrap()
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
@@ -277,7 +275,7 @@ mod test {
             Constraint::from_str("1.2.*"),
             Ok(Constraint::Comparison(
                 VersionOperator::StartsWith,
-                VersionOrder::from_str("1.2").unwrap()
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert!(matches!(
@@ -292,7 +290,7 @@ mod test {
             Constraint::from_str("1.2.3"),
             Ok(Constraint::Comparison(
                 VersionOperator::Equals,
-                VersionOrder::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
     }

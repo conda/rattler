@@ -14,19 +14,37 @@ use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::str::FromStr;
+use thiserror::Error;
 use url::Url;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseMatchSpecError {
+    #[error("invalid package path or url")]
     InvalidPackagePathOrUrl,
+
+    #[error("invalid bracket")]
     InvalidBracket,
+
+    #[error("invalid number of colons")]
     InvalidNumberOfColons,
-    ParseChannelError(ParseChannelError),
+
+    #[error("invalid channel")]
+    ParseChannelError(#[from] ParseChannelError),
+
+    #[error("invalid bracket key: {0}")]
     InvalidBracketKey(String),
+
+    #[error("missing package name")]
     MissingPackageName,
+
+    #[error("multiple bracket sections not allowed")]
     MultipleBracketSectionsNotAllowed,
+
+    #[error("invalid version and build")]
     InvalidVersionAndBuild,
-    InvalidVersionSpec(ParseVersionSpecError),
+
+    #[error("invalid version spec: {0}")]
+    InvalidVersionSpec(#[from] ParseVersionSpecError),
 }
 
 impl MatchSpec {

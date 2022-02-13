@@ -1,3 +1,5 @@
+mod fetch;
+
 use super::{ParsePlatformError, Platform};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -5,6 +7,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+
+pub use fetch::{FetchRepoDataError, FetchRepoDataProgress};
 
 /// Describes channel configuration which influences how channel strings are interpreted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,7 +29,7 @@ impl Default for ChannelConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Eq, PartialEq)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
     /// specified.
@@ -222,7 +226,7 @@ fn parse_platforms(
 
 /// Returns the default platforms. These are based on the platform this binary was build for as well
 /// as platform agnostic platforms.
-const fn default_platforms() -> &'static [Platform] {
+pub const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
     return &CURRENT_PLATFORMS;
 }

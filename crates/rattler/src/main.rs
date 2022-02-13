@@ -1,7 +1,6 @@
 use structopt::StructOpt;
 
 mod commands;
-mod solver;
 
 /// Command line options available through the `rattler` cli.
 #[derive(Debug, StructOpt)]

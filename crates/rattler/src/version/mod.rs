@@ -18,13 +18,13 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
 /// case-insensitive.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct VersionOrder {
+pub struct Version {
     norm: String,
     version: VersionComponent,
     local: VersionComponent,
 }
 
-impl VersionOrder {
+impl Version {
     /// Bumps this version to a version that is considered just higher than this version.
     pub fn bump(&self) -> Self {
         let mut result = self.clone();
@@ -55,6 +55,10 @@ impl VersionOrder {
             NumeralOrOther::Other(name) => name == "DEV",
             _ => false,
         })
+    }
+
+    pub fn starts_with(&self, other: &Self) -> bool {
+        return self.version.starts_with(&other.version) && self.local.starts_with(&other.local);
     }
 }
 
@@ -106,6 +110,32 @@ impl Display for NumeralOrOther {
 struct VersionComponent {
     components: SmallVec<[NumeralOrOther; 4]>,
     ranges: SmallVec<[Range<usize>; 4]>,
+}
+
+impl VersionComponent {
+    pub fn starts_with(&self, other: &Self) -> bool {
+        for ranges in self.ranges.iter().zip_longest(other.ranges.iter()) {
+            let (left, right) = match ranges {
+                EitherOrBoth::Both(left, right) => (left, right),
+                EitherOrBoth::Left(left) => return true,
+                EitherOrBoth::Right(right) => return false,
+            };
+            for values in left
+                .clone()
+                .map(|i| &self.components[i])
+                .zip_longest(right.clone().map(|i| &other.components[i]))
+            {
+                if !match values {
+                    EitherOrBoth::Both(a, b) => a == b,
+                    EitherOrBoth::Left(a) => return true,
+                    EitherOrBoth::Right(a) => return false,
+                } {
+                    return false;
+                }
+            }
+        }
+        true
+    }
 }
 
 impl Debug for VersionComponent {
@@ -164,7 +194,7 @@ impl PartialOrd for VersionComponent {
     }
 }
 
-impl Ord for VersionOrder {
+impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
         self.version
             .cmp(&other.version)
@@ -172,19 +202,19 @@ impl Ord for VersionOrder {
     }
 }
 
-impl PartialOrd for VersionOrder {
+impl PartialOrd for Version {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Display for VersionOrder {
+impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.norm.as_str())
     }
 }
 
-impl Serialize for VersionOrder {
+impl Serialize for Version {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -195,7 +225,7 @@ impl Serialize for VersionOrder {
 
 #[cfg(test)]
 mod test {
-    use super::VersionOrder;
+    use super::Version;
     use rand::seq::SliceRandom;
     use std::cmp::Ordering;
     use std::str::FromStr;
@@ -246,7 +276,7 @@ mod test {
             } else {
                 ("", v)
             };
-            let version: VersionOrder = version.parse().unwrap();
+            let version: Version = version.parse().unwrap();
             let op = match op {
                 "<" => CmpOp::Less,
                 "==" => CmpOp::Equal,
@@ -255,7 +285,7 @@ mod test {
             (op, version)
         });
 
-        let mut previous: Option<VersionOrder> = None;
+        let mut previous: Option<Version> = None;
         for (op, version) in ops {
             match op {
                 CmpOp::Less => {
@@ -307,7 +337,7 @@ mod test {
             "1.0.1post.za",
             "1.0.2",
         ];
-        let parsed_versions: Vec<VersionOrder> =
+        let parsed_versions: Vec<Version> =
             version_strs.iter().map(|v| v.parse().unwrap()).collect();
         let mut random_versions = parsed_versions.clone();
         random_versions.shuffle(&mut rand::thread_rng());
@@ -376,8 +406,7 @@ mod test {
             "1!1.2+123456",
         ];
 
-        let parsed_versions: Vec<VersionOrder> =
-            versions.iter().map(|v| v.parse().unwrap()).collect();
+        let parsed_versions: Vec<Version> = versions.iter().map(|v| v.parse().unwrap()).collect();
         let mut random_versions = parsed_versions.clone();
         random_versions.shuffle(&mut rand::thread_rng());
         random_versions.sort();
@@ -386,6 +415,13 @@ mod test {
 
     #[test]
     fn bump() {
-        VersionOrder::from_str("1").unwrap();
+        Version::from_str("1").unwrap();
+    }
+
+    #[test]
+    fn starts_with() {
+        assert!(Version::from_str("1.2.3")
+            .unwrap()
+            .starts_with(&Version::from_str("1.2").unwrap()));
     }
 }

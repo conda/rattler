@@ -1,6 +1,18 @@
+use futures::{StreamExt, TryFutureExt};
+use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache};
 use indicatif::{ProgressBar, ProgressFinish, ProgressStyle};
 use itertools::Itertools;
-use rattler::{Channel, ChannelConfig, LoadRepoDataProgress, RepoDataLoader};
+use pubgrub::error::PubGrubError;
+use pubgrub::report::{DefaultStringReporter, Reporter};
+use pubgrub::solver::resolve;
+use rattler::{
+    Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, PackageIndex, PackageRecord,
+    RepoData, SolverIndex, Version,
+};
+use reqwest_middleware::ClientBuilder;
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
+use std::str::FromStr;
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -10,224 +22,182 @@ pub struct Opt {
     channels: Option<Vec<String>>,
 }
 
-#[derive(Error, Debug)]
-enum DownloadError {
-    #[error("error deserializing repository data: {0}")]
-    DeserializeError(#[source] serde_json::Error),
-
-    #[error("error downloading data: {0}")]
-    TransportError(#[source] reqwest::Error),
-}
-
-impl From<serde_json::Error> for DownloadError {
-    fn from(e: serde_json::Error) -> Self {
-        DownloadError::DeserializeError(e)
-    }
-}
-
-impl From<reqwest::Error> for DownloadError {
-    fn from(e: reqwest::Error) -> Self {
-        DownloadError::TransportError(e)
-    }
-}
-
 pub async fn create(_opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
     // Get the channels to download
     let channels = vec![
         Channel::from_str("conda-forge", &channel_config)?,
-        Channel::from_str("robostack", &channel_config)?,
+        // Channel::from_str("robostack", &channel_config)?,
     ];
 
-    let cache_dir = dirs::cache_dir().ok_or_else(|| {
-        anyhow::anyhow!("could not determine cache directory for current platform")
-    })?;
+    // Download all repo data from the channels and create an index
+    let repo_data = load_channels(&channels).await?;
+    let index = PackageIndex::from(repo_data);
 
-    // Create repo data loaders for
-    let client = reqwest::Client::builder().build()?;
-    let multi_progress = indicatif::MultiProgress::new();
+    let mut solve_index = SolverIndex::new(index);
 
-    let repo_data_sources = channels
-        .into_iter()
-        .flat_map(|channel| {
-            channel
-                .platforms_or_default()
-                .into_iter()
-                .copied()
-                .map(|platform| (channel.clone(), platform))
-                .collect_vec()
-        })
-        .collect_vec();
+    let root_package_name = String::from("__solver");
+    let root_version = Version::from_str("1").unwrap();
+    let root_package = PackageRecord {
+        name: root_package_name.clone(),
+        version: root_version.clone(),
+        build: "".to_string(),
+        build_number: 0,
+        subdir: "".to_string(),
+        md5: None,
+        sha256: None,
+        arch: None,
+        platform: None,
+        depends: vec![String::from("python")],
+        constrains: vec![],
+        track_features: None,
+        features: None,
+        preferred_env: None,
+        license: None,
+        license_family: None,
+        timestamp: None,
+        date: None,
+        size: None,
+    };
 
-    let client_ref = &client;
-    let download_futures = repo_data_sources.iter()
-        .map(|(channel, platform)| {
-        let progress_bar = multi_progress.add(ProgressBar::new(0));
-            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-        progress_bar.set_style(ProgressStyle::default_bar()
-            .on_finish(ProgressFinish::WithMessage("Done!".into()))
-            .template(&format!("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30!.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}"))
-            .progress_chars("=>-"));
-        progress_bar.enable_steady_tick(100);
-        let loader = RepoDataLoader::new(channel.clone(), platform.clone(), &cache_dir);
-        async move {
-            match loader.load(client_ref, |progress| match progress {
-                LoadRepoDataProgress::Downloading { progress, total } => {
-                    progress_bar.set_length(total.unwrap_or(progress) as u64);
-                    progress_bar.set_position(progress as u64);
-                }
-                LoadRepoDataProgress::Decoding => {}
-            }).await {
-                Ok(repo_data) => {
-                    progress_bar.set_style(ProgressStyle::default_bar()
-                        .template(&format!("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.green}}")));
-                    progress_bar.set_message("Done!");
-                    progress_bar.finish();
-                    Ok(repo_data)
-                },
-                Err(err) => {
-                    progress_bar.set_style(ProgressStyle::default_bar()
-                        .template(&format!("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red}}"))
-                        .progress_chars("=>-"));
-                    progress_bar.set_message("Error!");
-                    progress_bar.finish();
-                    Err(err)
-                }
+    solve_index.add(root_package.clone());
+
+    match resolve(&solve_index, root_package_name, root_package) {
+        Ok(result) => {
+            let pinned_packages: Vec<_> = result.into_iter().collect();
+            let longest_package_name = pinned_packages
+                .iter()
+                .map(|(package_name, _)| package_name.len())
+                .max()
+                .unwrap_or(0);
+
+            println!("Found a solution!");
+            for (package, version) in pinned_packages.iter() {
+                println!(
+                    "- {:<longest_package_name$} {}",
+                    package,
+                    version,
+                    longest_package_name = longest_package_name
+                )
             }
         }
-    }
-    );
-
-    let results = futures::future::join_all(download_futures).await;
-    for result in results.iter() {
-        match result {
-            Ok(_repo_data) => {}
-            Err(err) => {
-                log::error!("{}", err);
-            }
+        Err(PubGrubError::NoSolution(mut derivation_tree)) => {
+            derivation_tree.collapse_no_versions();
+            eprintln!(
+                "Could not find a solution:\n{}",
+                DefaultStringReporter::report(&derivation_tree)
+            );
         }
+        Err(e) => eprintln!("could not find a solution!\n{}", e),
     }
-
-    //
-    // // Get the urls for the repodata
-    // let repodatas = channels
-    //     .iter()
-    //     .map(|channel| {
-    //         let platforms = channel.platforms_url();
-    //         platforms
-    //             .into_iter()
-    //             .map(move |(platform, url)| (channel, platform, url))
-    //     })
-    //     .flatten()
-    //     .map(|(channel, platform, url)| (channel, platform, url.join("repodata.json").unwrap()));
-    //
-    // // Create a client
-    // let client = reqwest::Client::builder()
-    //     .deflate(true)
-    //     .gzip(true)
-    //     .build()?;
-    // let multi_progress = indicatif::MultiProgress::new();
-    //
-    // let download_targets = repodatas
-    //     .into_iter()
-    //     .map(|(channel, platform, url)| {
-    //         let progress_bar = multi_progress.add(ProgressBar::new(0));
-    //         progress_bar.set_style(ProgressStyle::default_bar()
-    //             .template(&format!("{{spinner:.green}} {}/{} [{{elapsed_precise}}] [{{bar:20}}] {{bytes}}/{{total_bytes}} {{msg}}", &channel.name, platform.as_str()))
-    //             .progress_chars("=> "));
-    //         progress_bar.enable_steady_tick(100);
-    //         (channel, platform, url, progress_bar)
-    //     });
-    //
-    // // Download them all!
-    // let client = &client;
-    // let repodata: Vec<Repodata> = futures::future::try_join_all(download_targets.into_iter().map(
-    //     |(channel, platform, url, progress_bar)| async move {
-    //         match download_repo_data_with_progress(client, channel, platform, url, &progress_bar)
-    //             .await
-    //         {
-    //             Ok(repodata) => {
-    //                 progress_bar.set_style(ProgressStyle::default_bar().template(&format!(
-    //                     "{{spinner:.green}} {}/{} [{{elapsed_precise}}] {{msg}}",
-    //                     &channel.name,
-    //                     platform.as_str()
-    //                 )));
-    //                 progress_bar.finish_with_message("Done");
-    //                 Ok(repodata)
-    //             }
-    //             Err(err) => {
-    //                 progress_bar.abandon_with_message("Error");
-    //                 Err(err)
-    //             }
-    //         }
-    //     },
-    // ))
-    // .await?;
-    //
-    // // Construct an index
-    // let mut index = Index::default();
-    //
-    // // Add all records from the repodata
-    // for repo_data in repodata {
-    //     for (package_filename, package_info) in repo_data.packages {
-    //         if !repo_data.removed.contains(&package_filename) {
-    //             if let Err(e) = index.add_record(&package_info) {
-    //                 tracing::warn!("couldn't add {}: {}", package_filename, e);
-    //             }
-    //         }
-    //     }
-    // }
-    //
-    // // Construct a fake package just for us
-    // let root_version = Version::lowest();
-    // let root_package = PackageRecord {
-    //     name: "__solver".to_string(),
-    //     build: "".to_string(),
-    //     build_number: 0,
-    //     depends: vec![
-    //         String::from("ros-noetic-cob-cam3d-throttle"),
-    //         String::from("ros-distro-mutex"),
-    //     ],
-    //     constrains: vec![],
-    //     license: None,
-    //     license_family: None,
-    //     md5: "".to_string(),
-    //     sha256: None,
-    //     size: 0,
-    //     subdir: "".to_string(),
-    //     timestamp: None,
-    //     version: root_version.clone(),
-    // };
-    //
-    // index.add_record(&root_package)?;
-    //
-    // println!("setup the index");
-    //
-    // match resolve(&index, root_package.name, root_version) {
-    //     Ok(result) => {
-    //         let pinned_packages: Vec<_> = result.into_iter().collect();
-    //         let longest_package_name = pinned_packages
-    //             .iter()
-    //             .map(|(package_name, _)| package_name.len())
-    //             .max()
-    //             .unwrap_or(0);
-    //
-    //         for (package, version) in pinned_packages.iter() {
-    //             println!(
-    //                 "{:<longest_package_name$} {}",
-    //                 package,
-    //                 version,
-    //                 longest_package_name = longest_package_name
-    //             )
-    //         }
-    //     }
-    //     Err(PubGrubError::NoSolution(mut derivation_tree)) => {
-    //         derivation_tree.collapse_no_versions();
-    //         eprintln!("{}", DefaultStringReporter::report(&derivation_tree));
-    //     }
-    //     Err(e) => eprintln!("could not find a solution!\n{}", e),
-    // }
 
     Ok(())
+}
+
+#[derive(Error, Debug)]
+enum LoadChannelsError {
+    #[error("error fetching repodata")]
+    FetchErrors(Vec<FetchRepoDataError>),
+    #[error("{0}")]
+    IoError(#[from] std::io::Error),
+    #[error("{0}")]
+    Other(#[from] anyhow::Error),
+}
+
+/// Interactively loads the [`RepoData`] of the specified channels.
+async fn load_channels<'c, I: IntoIterator<Item = &'c Channel> + 'c>(
+    channels: I,
+) -> Result<Vec<RepoData>, LoadChannelsError> {
+    // Get the cache directory
+    let http_cache_dir = dirs::cache_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
+        .join("rattler/cache");
+    std::fs::create_dir_all(&http_cache_dir)
+        .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
+
+    // Construct a client with a cache and retry policy
+    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+    let client = ClientBuilder::new(reqwest::Client::new())
+        .with(Cache(HttpCache {
+            mode: CacheMode::Default,
+            manager: CACacheManager {
+                path: http_cache_dir.to_string_lossy().to_string(),
+            },
+            options: None,
+        }))
+        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+        .build();
+
+    // Setup the progress bar
+    let multi_progress = indicatif::MultiProgress::new();
+    let default_progress_style = ProgressStyle::default_bar()
+        .template(&format!("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30!.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}"))
+        .progress_chars("=> ");
+    let finished_progress_tyle = ProgressStyle::default_bar().template(&format!(
+        "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}"
+    ));
+    let errorred_progress_tyle = ProgressStyle::default_bar().template(&format!(
+        "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}"
+    ));
+
+    // Iterate over all channel and platform permutations
+    let (repo_datas, errors): (Vec<_>, Vec<_>) = futures::future::join_all(
+        channels
+            .into_iter()
+            .flat_map(move |channel| {
+                channel
+                    .platforms_or_default()
+                    .into_iter()
+                    .map(move |platform| (channel, *platform))
+            })
+            .map(move |(channel, platform)| {
+                // Create progress bar
+                let progress_bar = multi_progress.add(ProgressBar::new(0));
+                progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
+                progress_bar.set_style(default_progress_style.clone());
+                progress_bar.enable_steady_tick(100);
+                let client = client.clone();
+                let errorred_progress_tyle = errorred_progress_tyle.clone();
+                let finished_progress_tyle = finished_progress_tyle.clone();
+                async move {
+                    match channel
+                        .fetch_repo_data(&client, platform, |progress| match progress {
+                            FetchRepoDataProgress::Downloading { progress, total } => {
+                                if let Some(total) = total {
+                                    progress_bar.set_length(total as u64);
+                                    progress_bar.set_position(progress as u64)
+                                }
+                            }
+                            _ => {}
+                        })
+                        .await
+                    {
+                        Ok(repo_data) => {
+                            progress_bar.set_style(finished_progress_tyle.clone());
+                            progress_bar.set_message("Done!");
+                            progress_bar.finish();
+                            Ok(repo_data)
+                        }
+                        Err(err) => {
+                            progress_bar.set_style(errorred_progress_tyle.clone());
+                            progress_bar.set_message("Error!");
+                            progress_bar.finish_at_current_pos();
+                            Err(err)
+                        }
+                    }
+                }
+            }),
+    )
+    .await
+    .into_iter()
+    .partition(Result::is_ok);
+
+    if !errors.is_empty() {
+        Err(LoadChannelsError::FetchErrors(
+            errors.into_iter().map(Result::unwrap_err).collect(),
+        ))
+    } else {
+        Ok(repo_datas.into_iter().map(Result::unwrap).collect())
+    }
 }

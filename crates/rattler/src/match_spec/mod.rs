@@ -1,23 +1,33 @@
 use crate::{Channel, VersionSpec};
 use serde::Serialize;
-use std::fmt::Debug;
+use serde_with::skip_serializing_none;
+use std::fmt::{Debug, Display, Formatter};
 
 mod parse;
 
 /// A `MatchSpec` is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`PackageRecord`] can be used to compose a `MatchSpec`.
-#[derive(Debug, Default, Clone, Serialize)]
-struct MatchSpec {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<VersionSpec>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    build: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    filename: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    channel: Option<Channel>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    namespace: Option<String>,
+#[skip_serializing_none]
+#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
+pub struct MatchSpec {
+    pub name: Option<String>,
+    pub version: Option<VersionSpec>,
+    pub build: Option<String>,
+    pub filename: Option<String>,
+    pub channel: Option<Channel>,
+    pub namespace: Option<String>,
+}
+
+impl Display for MatchSpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        if let Some(channel) = &self.channel {
+            // TODO: namespace
+            write!(f, "{}::", channel.canonical_name())?;
+        }
+
+        match &self.name {
+            Some(name) => write!(f, "{}", name),
+            None => write!(f, "*"),
+        }
+    }
 }
