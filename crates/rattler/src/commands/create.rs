@@ -49,7 +49,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         sha256: None,
         arch: None,
         platform: None,
-        depends: vec![String::from("python")],
+        depends: vec![String::from("pyqt5-sip")],
         constrains: vec![],
         track_features: None,
         features: None,

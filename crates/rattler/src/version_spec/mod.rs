@@ -14,7 +14,7 @@ use version_tree::VersionTree;
 
 pub(crate) use constraint::is_start_of_version_constraint;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 pub enum VersionOperator {
     Equals,
     NotEquals,
@@ -45,7 +45,7 @@ impl VersionOperator {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 pub enum LogicalOperator {
     And,
     Or,
@@ -60,7 +60,7 @@ impl LogicalOperator {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum VersionSpec {
     None,
     Any,

@@ -2,6 +2,7 @@ use crate::version_spec::{LogicalOperator, VersionOperator};
 use crate::{match_spec, ChannelConfig, MatchSpec, PackageRecord, RepoData, Version, VersionSpec};
 use async_compression::Level::Default;
 use fxhash::FxHashMap;
+use itertools::Itertools;
 use pubgrub::range::Range;
 use pubgrub::solver::{Dependencies, DependencyProvider};
 use pubgrub::type_aliases::DependencyConstraints;
@@ -144,7 +145,7 @@ impl VersionSet for VersionSpec {
 
     /// Compute the complement of this set.
     fn complement(&self) -> Self {
-        match self {
+        let result = match self {
             VersionSpec::None => VersionSpec::Any,
             VersionSpec::Any => VersionSpec::None,
             VersionSpec::Operator(op, version) => {
@@ -154,50 +155,61 @@ impl VersionSet for VersionSpec {
                 op.complement(),
                 versions.iter().map(|op| op.complement()).collect(),
             ),
-        }
+        };
+        // println!("complement of '{}' = '{}'", self, &result);
+        result
     }
 
     /// Compute the intersection with another set.
     fn intersection(&self, other: &Self) -> Self {
-        if self == other {
-            return self.clone();
-        }
+        let intersection = if self == other {
+            self.clone()
+        } else {
+            match (self, other) {
+                // If one is None, the result is None
+                (VersionSpec::None, _) | (_, VersionSpec::None) => VersionSpec::None,
 
-        match (self, other) {
-            // If one is None, the result is None
-            (VersionSpec::None, _) | (_, VersionSpec::None) => VersionSpec::None,
+                // If one if Any, the other spec is enough
+                (VersionSpec::Any, other) | (other, VersionSpec::Any) => other.clone(),
 
-            // If one if Any, the other spec is enough
-            (VersionSpec::Any, other) | (other, VersionSpec::Any) => other.clone(),
+                // Both are and groups, concatenate them
+                (
+                    VersionSpec::Group(LogicalOperator::And, elems1),
+                    VersionSpec::Group(LogicalOperator::And, elems2),
+                ) => VersionSpec::Group(
+                    LogicalOperator::And,
+                    elems1
+                        .iter()
+                        .cloned()
+                        .chain(elems2.iter().cloned())
+                        .sorted()
+                        .collect(),
+                ),
 
-            // Both are and groups, concatenate them
-            (
-                VersionSpec::Group(LogicalOperator::And, elems1),
-                VersionSpec::Group(LogicalOperator::And, elems2),
-            ) => VersionSpec::Group(
-                LogicalOperator::And,
-                elems1
-                    .iter()
-                    .cloned()
-                    .chain(elems2.iter().cloned())
-                    .collect(),
-            ),
+                // One of the specs an and group, fuse it with an element
+                (VersionSpec::Group(LogicalOperator::And, elems), other)
+                | (other, VersionSpec::Group(LogicalOperator::And, elems)) => VersionSpec::Group(
+                    LogicalOperator::And,
+                    elems.iter().cloned().chain(once(other.clone())).collect(),
+                ),
 
-            // One of the specs an and group, fuse it with an element
-            (VersionSpec::Group(LogicalOperator::And, elems), other)
-            | (other, VersionSpec::Group(LogicalOperator::And, elems)) => VersionSpec::Group(
-                LogicalOperator::And,
-                elems.iter().cloned().chain(once(other.clone())).collect(),
-            ),
-
-            // Otherwise create a new group
-            (a, b) => VersionSpec::Group(LogicalOperator::And, vec![a.clone(), b.clone()]),
-        }
+                // Otherwise create a new group
+                (a, b) => VersionSpec::Group(
+                    LogicalOperator::And,
+                    once(a.clone()).chain(once(b.clone())).collect(),
+                ),
+            }
+        };
+        // println!(
+        //     "intersection of '{}' and '{}' = '{}'",
+        //     self, other, &intersection
+        // );
+        intersection
     }
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool {
-        match self {
+        let contains = match self {
             VersionSpec::None => false,
             VersionSpec::Any => true,
             VersionSpec::Group(LogicalOperator::And, elems) => {
@@ -215,7 +227,15 @@ impl VersionSet for VersionSpec {
             VersionSpec::Operator(VersionOperator::StartsWith, other) => v.starts_with(other),
             VersionSpec::Operator(VersionOperator::NotStartsWith, other) => !v.starts_with(other),
             VersionSpec::Operator(op, _) => unimplemented!("operator {} is not implemented", op),
-        }
+        };
+
+        // if contains {
+        //     println!("{} does contain {}", self, v);
+        // } else {
+        //     println!("{} does NOT contain {}", self, v);
+        // }
+
+        contains
     }
 }
 
@@ -356,3 +376,81 @@ impl VersionSet for MatchSpecSet {
 //         result
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use crate::solver::MatchSpecSet;
+    use crate::{ChannelConfig, MatchSpec, RepoData};
+    use itertools::Itertools;
+    use pubgrub::version_set::VersionSet;
+    use std::fs::File;
+    use std::io::BufReader;
+    use std::path::PathBuf;
+
+    fn repo_data() -> RepoData {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_data_path = manifest_dir.join("resources/conda_forge_noarch_repodata.json");
+
+        let mut reader = BufReader::new(File::open(repo_data_path).unwrap());
+        serde_json::from_reader(reader).unwrap()
+    }
+
+    #[test]
+    fn test_versions() {
+        let repo_data = repo_data();
+        let all_versions = repo_data.packages.values();
+        for record in all_versions {
+            assert!(!MatchSpecSet::empty().contains(record));
+            assert!(MatchSpecSet::full().contains(record));
+            assert!(MatchSpecSet::singleton(record.clone()).contains(&record));
+            assert!(!MatchSpecSet::singleton(record.clone())
+                .complement()
+                .contains(&record));
+        }
+    }
+
+    #[test]
+    fn test_version_compare() {
+        let repo_data = repo_data();
+        for record in repo_data.packages.values().take(100) {
+            for record2 in repo_data.packages.values().take(100) {
+                assert_ne!(record2 < record, record2 >= record);
+                assert_ne!(record2 <= record, record2 > record);
+                assert_ne!(record2 == record, record2 != record);
+                assert_ne!(record2 >= record, record2 < record);
+                assert_ne!(record2 > record, record2 <= record);
+            }
+        }
+    }
+
+    #[test]
+    fn test_version_and_set() {
+        let repo_data = repo_data();
+        let sets = repo_data
+            .packages
+            .values()
+            .flat_map(|p| p.depends.iter())
+            .map(|d| {
+                MatchSpecSet::from(MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap())
+            })
+            .take(100);
+        let versions = repo_data.packages.values().take(100).collect_vec();
+        for set in sets {
+            assert_eq!(MatchSpecSet::empty(), set.complement().intersection(&set));
+            assert_eq!(MatchSpecSet::full(), set.complement().union(&set));
+
+            for version in versions.iter() {
+                assert_eq!(set.contains(&version), !set.complement().contains(&version));
+            }
+        }
+        // for record in repo_data.packages.values().take(100) {
+        //     for record2 in repo_data.packages.values().take(100) {
+        //         assert_ne!(record2 < record, record2 >= record);
+        //         assert_ne!(record2 <= record, record2 > record);
+        //         assert_ne!(record2 == record, record2 != record);
+        //         assert_ne!(record2 >= record, record2 < record);
+        //         assert_ne!(record2 > record, record2 <= record);
+        //     }
+        // }
+    }
+}
