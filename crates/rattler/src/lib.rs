@@ -6,6 +6,7 @@ mod solver;
 pub(crate) mod utils;
 mod version;
 mod version_spec;
+mod range;
 
 pub use channel::{
     Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, ParseChannelError,
