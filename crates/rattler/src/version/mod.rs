@@ -17,7 +17,7 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 /// optional epoch number - an integer followed by '!' - can precede the actual version string (this
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
 /// case-insensitive.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Hash)]
 pub struct Version {
     norm: String,
     version: VersionComponent,
@@ -29,21 +29,18 @@ impl Version {
     pub fn bump(&self) -> Self {
         let mut result = self.clone();
 
-        if let NumeralOrOther::Numeral(num) = result
+        let last_component = result
             .version
             .components
-            .last_mut()
-            .expect("there must be at least one component")
-        {
-            *num += 1;
-        } else {
-            result.version.components.push(NumeralOrOther::Numeral(1));
-            let last_range = result
-                .version
-                .ranges
-                .last_mut()
-                .expect("there must be at least one range");
-            last_range.end += 1;
+            .iter_mut()
+            .rev()
+            .find_map(|component| match component {
+                NumeralOrOther::Numeral(v) => Some(v),
+                _ => None,
+            });
+        match last_component {
+            Some(component) => *component += 1,
+            None => unreachable!(),
         }
 
         result
@@ -61,6 +58,14 @@ impl Version {
         return self.version.starts_with(&other.version) && self.local.starts_with(&other.local);
     }
 }
+
+impl PartialEq<Self> for Version {
+    fn eq(&self, other: &Self) -> bool {
+        self.version == other.version && self.local == other.local
+    }
+}
+
+impl Eq for Version {}
 
 /// Either a number, literal or the infinity.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::From, Serialize, Deserialize)]
@@ -117,8 +122,8 @@ impl VersionComponent {
         for ranges in self.ranges.iter().zip_longest(other.ranges.iter()) {
             let (left, right) = match ranges {
                 EitherOrBoth::Both(left, right) => (left, right),
-                EitherOrBoth::Left(left) => return true,
-                EitherOrBoth::Right(right) => return false,
+                EitherOrBoth::Left(_) => return true,
+                EitherOrBoth::Right(_) => return false,
             };
             for values in left
                 .clone()
@@ -127,8 +132,8 @@ impl VersionComponent {
             {
                 if !match values {
                     EitherOrBoth::Both(a, b) => a == b,
-                    EitherOrBoth::Left(a) => return true,
-                    EitherOrBoth::Right(a) => return false,
+                    EitherOrBoth::Left(_) => return true,
+                    EitherOrBoth::Right(_) => return false,
                 } {
                     return false;
                 }
@@ -415,7 +420,14 @@ mod test {
 
     #[test]
     fn bump() {
-        Version::from_str("1").unwrap();
+        assert_eq!(
+            Version::from_str("1.1").unwrap().bump(),
+            Version::from_str("1.2").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1l").unwrap().bump(),
+            Version::from_str("1.2l").unwrap()
+        )
     }
 
     #[test]

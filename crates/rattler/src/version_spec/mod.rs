@@ -4,7 +4,6 @@ mod version_tree;
 use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;
 use crate::{ParseVersionError, Version};
-use log::Log;
 use serde::{Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
@@ -70,13 +69,13 @@ pub enum VersionSpec {
 
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
-    #[error("invalid version")]
+    #[error("invalid version: {0}")]
     InvalidVersion(#[source] ParseVersionError),
 
-    #[error("invalid version tree")]
+    #[error("invalid version tree: {0}")]
     InvalidVersionTree(#[source] ParseVersionTreeError),
 
-    #[error("invalid version constraint")]
+    #[error("invalid version constraint: {0}")]
     InvalidConstraint(#[source] ParseConstraintError),
 }
 

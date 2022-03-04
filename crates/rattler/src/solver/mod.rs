@@ -1,11 +1,9 @@
 use crate::version_spec::{LogicalOperator, VersionOperator};
-use crate::{match_spec, ChannelConfig, MatchSpec, PackageRecord, RepoData, Version, VersionSpec};
-use async_compression::Level::Default;
+use crate::{ChannelConfig, MatchSpec, PackageRecord, Range, RepoData, Version, VersionSpec};
+use futures::TryFutureExt;
 use fxhash::FxHashMap;
 use itertools::Itertools;
-use pubgrub::range::Range;
 use pubgrub::solver::{Dependencies, DependencyProvider};
-use pubgrub::type_aliases::DependencyConstraints;
 use pubgrub::version_set::VersionSet;
 use std::borrow::Borrow;
 use std::error::Error;
@@ -50,6 +48,8 @@ impl PackageIndex {
             .get(package)
             .into_iter()
             .flat_map(|package_index| package_index.versions.values())
+            .sorted_by_key(|record| &record.version)
+            .rev()
     }
 }
 
@@ -95,7 +95,7 @@ impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
         version: &PackageRecord,
     ) -> Result<Dependencies<Package, MatchSpecSet>, Box<dyn Error>> {
         println!("get_dependencies for `{}` {}", package, version.version);
-        let deps = version
+        let deps = match version
             .depends
             .iter()
             .map(
@@ -105,15 +105,54 @@ impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
                     Ok((spec.name.as_ref().cloned().unwrap(), spec.into()))
                 },
             )
-            .collect::<Result<_, _>>()?;
-        println!("{:?}", &deps);
+            .collect::<Result<_, _>>()
+        {
+            Err(e) => {
+                println!("{}", e);
+                return Err(e.into());
+            }
+            Ok(v) => v,
+        };
         Ok(Dependencies::Known(deps))
+    }
+}
+
+impl From<VersionSpec> for Range<Version> {
+    fn from(spec: VersionSpec) -> Self {
+        match spec {
+            VersionSpec::None => Range::none(),
+            VersionSpec::Any => Range::any(),
+            VersionSpec::Operator(VersionOperator::Less, v) => Range::less(v),
+            VersionSpec::Operator(VersionOperator::LessEquals, v) => Range::less_equal(v),
+            VersionSpec::Operator(VersionOperator::Greater, v) => Range::greater(v),
+            VersionSpec::Operator(VersionOperator::GreaterEquals, v) => Range::greater_equal(v),
+            VersionSpec::Operator(VersionOperator::Equals, v) => Range::equal(v),
+            VersionSpec::Operator(VersionOperator::NotEquals, v) => Range::not_equal(v),
+            VersionSpec::Operator(VersionOperator::StartsWith, v) => {
+                Range::between(v.clone(), v.bump())
+            }
+            VersionSpec::Operator(op, _v) => {
+                unreachable!("version operator {} not implemented", op)
+            }
+            VersionSpec::Group(LogicalOperator::And, specs) => specs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .reduce(|acc: Range<Version>, version: Range<Version>| acc.intersection(&version))
+                .unwrap_or_else(|| Range::none()),
+            VersionSpec::Group(LogicalOperator::Or, specs) => specs
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .reduce(|acc: Range<Version>, version: Range<Version>| acc.union(&version))
+                .unwrap_or_else(|| Range::none()),
+        }
     }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct MatchSpecSet {
-    version_spec: VersionSpec,
+    version_spec: Range<Version>,
 }
 
 impl Display for MatchSpecSet {
@@ -125,7 +164,7 @@ impl Display for MatchSpecSet {
 impl From<MatchSpec> for MatchSpecSet {
     fn from(m: MatchSpec) -> Self {
         Self {
-            version_spec: m.version.unwrap_or(VersionSpec::Any),
+            version_spec: m.version.unwrap_or(VersionSpec::Any).into(),
         }
     }
 }
@@ -245,21 +284,21 @@ impl VersionSet for MatchSpecSet {
     /// Constructor for an empty set containing no version.
     fn empty() -> Self {
         Self {
-            version_spec: VersionSpec::empty(),
+            version_spec: Range::none(),
         }
     }
 
     /// Constructor for a set containing exactly one version.
     fn singleton(v: Self::V) -> Self {
         Self {
-            version_spec: VersionSpec::singleton(v.version),
+            version_spec: Range::equal(v.version.clone()),
         }
     }
 
     /// Compute the complement of this set.
     fn complement(&self) -> Self {
         Self {
-            version_spec: self.version_spec.complement(),
+            version_spec: self.version_spec.negate(),
         }
     }
 
@@ -391,7 +430,7 @@ mod tests {
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_data_path = manifest_dir.join("resources/conda_forge_noarch_repodata.json");
 
-        let mut reader = BufReader::new(File::open(repo_data_path).unwrap());
+        let reader = BufReader::new(File::open(repo_data_path).unwrap());
         serde_json::from_reader(reader).unwrap()
     }
 
@@ -443,14 +482,14 @@ mod tests {
                 assert_eq!(set.contains(&version), !set.complement().contains(&version));
             }
         }
-        // for record in repo_data.packages.values().take(100) {
-        //     for record2 in repo_data.packages.values().take(100) {
-        //         assert_ne!(record2 < record, record2 >= record);
-        //         assert_ne!(record2 <= record, record2 > record);
-        //         assert_ne!(record2 == record, record2 != record);
-        //         assert_ne!(record2 >= record, record2 < record);
-        //         assert_ne!(record2 > record, record2 <= record);
-        //     }
-        // }
+        for record in repo_data.packages.values().take(100) {
+            for record2 in repo_data.packages.values().take(100) {
+                assert_ne!(record2 < record, record2 >= record);
+                assert_ne!(record2 <= record, record2 > record);
+                assert_ne!(record2 == record, record2 != record);
+                assert_ne!(record2 >= record, record2 < record);
+                assert_ne!(record2 > record, record2 <= record);
+            }
+        }
     }
 }

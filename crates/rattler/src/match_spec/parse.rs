@@ -68,10 +68,11 @@ fn strip_comment(input: &str) -> (&str, Option<&str>) {
 /// Strips any if statements from the matchspec. `if` statements in matchspec are "anticipating
 /// future compatibility issues".
 fn strip_if(input: &str) -> (&str, Option<&str>) {
-    input
-        .split_once("if")
-        .map(|(spec, if_statement)| (spec, Some(if_statement)))
-        .unwrap_or_else(|| (input, None))
+    // input
+    //     .split_once("if")
+    //     .map(|(spec, if_statement)| (spec, Some(if_statement)))
+    //     .unwrap_or_else(|| (input, None))
+    (input, None)
 }
 
 /// Returns true if the specified string represents a package path.
@@ -332,7 +333,16 @@ mod tests {
     use crate::match_spec::parse::{split_version_and_build, BracketVec, ParseMatchSpecError};
     use crate::match_spec::MatchSpec;
     use crate::ChannelConfig;
+    use async_compression::Level::Default;
     use smallvec::smallvec;
+
+    #[test]
+    fn test_parse() {
+        assert_eq!(
+            MatchSpec::from_str("ca-certificates", &ChannelConfig::default()).unwrap(),
+            MatchSpec::default()
+        )
+    }
 
     #[test]
     fn test_strip_brackets() {

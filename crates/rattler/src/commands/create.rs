@@ -28,7 +28,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
     // Get the channels to download
     let channels = vec![
         Channel::from_str("conda-forge", &channel_config)?,
-        // Channel::from_str("robostack", &channel_config)?,
+        Channel::from_str("robostack", &channel_config)?,
     ];
 
     // Download all repo data from the channels and create an index
@@ -49,7 +49,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         sha256: None,
         arch: None,
         platform: None,
-        depends: vec![String::from("pyqt5-sip")],
+        depends: vec![String::from("ros-noetic-rviz")],
         constrains: vec![],
         track_features: None,
         features: None,

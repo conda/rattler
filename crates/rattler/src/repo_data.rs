@@ -1,10 +1,8 @@
-use crate::{ChannelConfig, MatchSpec, Platform, Version};
+use crate::{ChannelConfig, MatchSpec, Version};
 use fxhash::{FxHashMap, FxHashSet};
-use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, DeserializeAs};
-use std::fmt;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
 
 #[derive(Debug, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]

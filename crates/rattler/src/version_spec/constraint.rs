@@ -82,9 +82,11 @@ impl FromStr for Constraint {
                     }
                     VersionOperator::NotEquals => (version_str, VersionOperator::NotStartsWith),
                     op => {
-                        return Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                            op,
-                        ))
+                        // return Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
+                        //     op,
+                        // ))
+                        log::warn!("Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was {version_str}.*, but conda is ignoring the .* and treating it as {version_str}");
+                        (version_str, op)
                     }
                 }
             } else {
