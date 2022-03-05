@@ -102,7 +102,7 @@ impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
         package: &Package,
         version: &PackageRecord,
     ) -> Result<Dependencies<Package, MatchSpecSet>, Box<dyn Error>> {
-        println!(
+        log::debug!(
             "get_dependencies for {}={}={}",
             package, version.version, version.build
         );
@@ -112,7 +112,7 @@ impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
             .map(
                 |spec_str| -> Result<(String, MatchSpecSet), anyhow::Error> {
                     let spec = MatchSpec::from_str(spec_str, &self.channel_config)?;
-                    println!(" - {}", spec_str);
+                    log::debug!(" - {}", spec_str);
                     Ok((spec.name.as_ref().cloned().unwrap(), spec.into()))
                 },
             )
