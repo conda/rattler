@@ -76,6 +76,7 @@ impl<V: Clone> Range<V> {
 }
 
 impl<V: Clone> Range<V> {
+    /// Returns the complement of this Range.
     pub fn negate(&self) -> Self {
         match self.segments.first() {
             // Complement of ∅ is ∞
@@ -152,13 +153,13 @@ impl<V: Ord> Range<V> {
     }
 }
 
-impl<V: Ord + Clone + Debug> Range<V> {
-    /// Compute the union of two sets of versions.
+impl<V: Ord + Clone> Range<V> {
+    /// Computes the union of two sets of versions.
     pub fn union(&self, other: &Self) -> Self {
         self.negate().intersection(&other.negate()).negate()
     }
 
-    /// Compute the intersection of two sets of versions.
+    /// Computes the intersection of two sets of versions.
     pub fn intersection(&self, other: &Self) -> Self {
         let mut segments: SmallVec<[Interval<V>; 2]> = Default::default();
         let mut left_iter = self.segments.iter();
@@ -288,360 +289,6 @@ impl<V: Ord + Clone + Debug> Range<V> {
                     segments.push((lower, upper));
                 }
 
-                //
-                // // Left side is any
-                // (Some((Unbounded, Unbounded)), Some(right)) => {
-                //     segments.push(right.clone());
-                //     for segment in right_iter {
-                //         segments.push(segment.clone())
-                //     }
-                //     break;
-                // }
-                //
-                // // Right side is any
-                // (Some(left), Some((Unbounded, Unbounded))) => {
-                //     segments.push(left.clone());
-                //     for segment in left_iter {
-                //         segments.push(segment.clone())
-                //     }
-                //     break;
-                // }
-                //
-                // // Both sides contain a positive unbounded interval
-                // (Some((left, Unbounded)), Some((right, Unbounded))) => {
-                //     let start = max_exclusive(left, right);
-                //     segments.push((start, Unbounded));
-                //     break;
-                // }
-                //
-                // // Both sides contain a negative unbounded interval
-                // (
-                //     Some((
-                //         Unbounded,
-                //         left_upper_limit @ Included(left_upper_limit_version)
-                //         | left_upper_limit @ Excluded(left_upper_limit_version),
-                //     )),
-                //     Some((
-                //         Unbounded,
-                //         right_upper_limit @ Included(right_upper_limit_version)
-                //         | right_upper_limit @ Excluded(right_upper_limit_version),
-                //     )),
-                // ) => {
-                //     match left_upper_limit_version.cmp(right_upper_limit_version) {
-                //         Ordering::Less => {
-                //             left = left_iter.next();
-                //             segments.push((Unbounded, left_upper_limit.clone()));
-                //         }
-                //         Ordering::Equal if matches!(left_upper_limit, Excluded(_)) => {
-                //             left = left_iter.next();
-                //             segments.push((Unbounded, left_upper_limit.clone()));
-                //         },
-                //         Ordering::Equal if matches!(right_upper_limit, Excluded(_)) => {
-                //             right = right_iter.next();
-                //             segments.push((Unbounded, right_upper_limit.clone()));
-                //         }
-                //         Ordering::Equal => {
-                //             left = left_iter.next();
-                //             right = right_iter.next();
-                //             segments.push((Unbounded, right_upper_limit.clone()));
-                //         }
-                //         Ordering::Greater => {
-                //             right = right_iter.next();
-                //             segments.push((Unbounded, right_upper_limit.clone()));
-                //         }
-                //     }
-                // }
-                //
-                // // Left contains a positive unbounded interval, right is bounded
-                // (
-                //     Some((
-                //         left_lower_limit @ Included(la) | left_lower_limit @ Excluded(la),
-                //         Unbounded,
-                //     )),
-                //     Some((
-                //         right_lower_limit @ Included(_) | right_lower_limit @ Excluded(_),
-                //         right_upper_limit @ Included(rb) | right_upper_limit @ Excluded(rb),
-                //     )),
-                // ) => match rb.cmp(la) {
-                //     Ordering::Less => right = right_iter.next(),
-                //     Ordering::Equal => {
-                //         if matches!(
-                //             (left_lower_limit, right_upper_limit),
-                //             (Included(_), Included(_))
-                //         ) {
-                //             segments.push((left_lower_limit.clone(), right_upper_limit.clone()));
-                //         }
-                //         for r in right_iter.cloned() {
-                //             segments.push(r)
-                //         }
-                //         break;
-                //     }
-                //     Ordering::Greater => {
-                //         let start = max_exclusive(left_lower_limit, right_lower_limit);
-                //         segments.push((start, right_upper_limit.clone()));
-                //         for r in right_iter.cloned() {
-                //             segments.push(r)
-                //         }
-                //         break;
-                //     }
-                // },
-                //
-                // // Right contains a positive unbounded interval, Left is bounded
-                // (
-                //     Some((
-                //         right_lower_limit @ Included(_) | right_lower_limit @ Excluded(_),
-                //         right_upper_limit @ Included(rb) | right_upper_limit @ Excluded(rb),
-                //     )),
-                //     Some((
-                //         left_lower_limit @ Included(la) | left_lower_limit @ Excluded(la),
-                //         Unbounded,
-                //     )),
-                // ) => match rb.cmp(la) {
-                //     Ordering::Less => left = left_iter.next(),
-                //     Ordering::Equal => {
-                //         if matches!(
-                //             (left_lower_limit, right_upper_limit),
-                //             (Included(_), Included(_))
-                //         ) {
-                //             segments.push((left_lower_limit.clone(), right_upper_limit.clone()));
-                //         }
-                //         for r in left_iter.cloned() {
-                //             segments.push(r)
-                //         }
-                //         break;
-                //     }
-                //     Ordering::Greater => {
-                //         let start = max_exclusive(left_lower_limit, right_lower_limit);
-                //         segments.push((start, right_upper_limit.clone()));
-                //         for r in left_iter.cloned() {
-                //             segments.push(r)
-                //         }
-                //         break;
-                //     }
-                // },
-                //
-                // // Left contains a negative unbounded interval, right is bounded
-                // (
-                //     Some((
-                //         Unbounded,
-                //         left_upper_limit @ Included(left_upper_limit_version)
-                //         | left_upper_limit @ Excluded(left_upper_limit_version),
-                //     )),
-                //     Some((
-                //         right_lower_limit @ Included(right_lower_limit_version)
-                //         | right_lower_limit @ Excluded(right_lower_limit_version),
-                //         right_upper_limit @ Included(right_upper_limit_version)
-                //         | right_upper_limit @ Excluded(right_upper_limit_version),
-                //     )),
-                // ) => match right_lower_limit_version.cmp(&left_upper_limit_version) {
-                //     Ordering::Greater => {
-                //         left = left_iter.next();
-                //     }
-                //     Ordering::Equal
-                //         if !matches!(
-                //             (left_upper_limit, right_lower_limit),
-                //             (Included(_), Included(_))
-                //         ) =>
-                //     {
-                //         left = left_iter.next();
-                //     }
-                //     _ => {
-                //         let start = min_exclusive(right_lower_limit, left_upper_limit);
-                //         match right_upper_limit_version.cmp(left_upper_limit_version) {
-                //             Ordering::Less => {
-                //                 right = right_iter.next();
-                //                 segments.push((start, right_upper_limit.clone()));
-                //             }
-                //             Ordering::Equal
-                //                 if !matches!(
-                //                     (left_upper_limit, right_upper_limit),
-                //                     (Included(_), Included(_))
-                //                 ) =>
-                //             {
-                //                 right = right_iter.next();
-                //                 segments.push((start, right_upper_limit.clone()));
-                //             }
-                //             Ordering::Equal => {
-                //                 right = right_iter.next();
-                //                 segments.push((start, Excluded(right_upper_limit_version.clone())));
-                //             }
-                //             Ordering::Greater => {
-                //                 left = left_iter.next();
-                //                 segments.push((start, left_upper_limit.clone()));
-                //             }
-                //         };
-                //     }
-                // },
-                //
-                // // Right contains a negative unbounded interval, Left is bounded
-                // (
-                //     Some((
-                //         right_lower_limit @ Included(right_lower_limit_version)
-                //         | right_lower_limit @ Excluded(right_lower_limit_version),
-                //         right_upper_limit @ Included(right_upper_limit_version)
-                //         | right_upper_limit @ Excluded(right_upper_limit_version),
-                //     )),
-                //     Some((
-                //         Unbounded,
-                //         left_upper_limit @ Included(left_upper_limit_version)
-                //         | left_upper_limit @ Excluded(left_upper_limit_version),
-                //     )),
-                // ) => match right_lower_limit_version.cmp(&left_upper_limit_version) {
-                //     Ordering::Greater => {
-                //         right = right_iter.next();
-                //     }
-                //     Ordering::Equal
-                //         if !matches!(
-                //             (left_upper_limit, right_lower_limit),
-                //             (Included(_), Included(_))
-                //         ) =>
-                //     {
-                //         right = right_iter.next();
-                //     }
-                //     _ => {
-                //         let start = min_exclusive(right_lower_limit, left_upper_limit);
-                //         match right_upper_limit_version.cmp(left_upper_limit_version) {
-                //             Ordering::Less => {
-                //                 left = left_iter.next();
-                //                 segments.push((start, right_upper_limit.clone()));
-                //             }
-                //             Ordering::Equal
-                //                 if !matches!(
-                //                     (left_upper_limit, right_upper_limit),
-                //                     (Included(_), Included(_))
-                //                 ) =>
-                //             {
-                //                 left = left_iter.next();
-                //                 segments.push((start, right_upper_limit.clone()));
-                //             }
-                //             Ordering::Equal => {
-                //                 left = left_iter.next();
-                //                 segments.push((start, Excluded(right_upper_limit_version.clone())));
-                //             }
-                //             Ordering::Greater => {
-                //                 right = right_iter.next();
-                //                 segments.push((start, left_upper_limit.clone()));
-                //             }
-                //         };
-                //     }
-                // },
-                //
-                // // Left contains positive interval, right contains negative interval (-∞ < v > upper_bound, lower_bound < v > ∞)
-                // (
-                //     Some((
-                //         lower_limit @ Included(lower_limit_version)
-                //         | lower_limit @ Excluded(lower_limit_version),
-                //         Unbounded,
-                //     )),
-                //     Some((
-                //         Unbounded,
-                //         upper_limit @ Included(upper_limit_version)
-                //         | upper_limit @ Excluded(upper_limit_version),
-                //     )),
-                // )
-                // | (
-                //     Some((
-                //         Unbounded,
-                //         upper_limit @ Included(upper_limit_version)
-                //         | upper_limit @ Excluded(upper_limit_version),
-                //     )),
-                //     Some((
-                //         lower_limit @ Included(lower_limit_version)
-                //         | lower_limit @ Excluded(lower_limit_version),
-                //         Unbounded,
-                //     )),
-                // ) => {
-                //     match lower_limit_version.cmp(upper_limit_version) {
-                //         Ordering::Less => segments.push((lower_limit.clone(), upper_limit.clone())),
-                //         Ordering::Equal => match (lower_limit, upper_limit) {
-                //             (Included(lower), Included(upper)) => {
-                //                 segments.push((Included(lower.clone()), Included(upper.clone())))
-                //             }
-                //             _ => {}
-                //         },
-                //         Ordering::Greater => {}
-                //     };
-                //     break;
-                // }
-                //
-                // // Left and right are completely bounded
-                // (
-                //     Some((
-                //         left_lower_limit @ Included(left_lower_limit_version)
-                //         | left_lower_limit @ Excluded(left_lower_limit_version),
-                //         left_upper_limit @ Included(left_upper_limit_version)
-                //         | left_upper_limit @ Excluded(left_upper_limit_version),
-                //     )),
-                //     Some((
-                //         right_lower_limit @ Included(right_lower_limit_version)
-                //         | right_lower_limit @ Excluded(right_lower_limit_version),
-                //         right_upper_limit @ Included(right_upper_limit_version)
-                //         | right_upper_limit @ Excluded(right_upper_limit_version),
-                //     )),
-                // ) => {
-                //     // Check if the left range is completely disjoint and in front of the right
-                //     let is_left_disjoint =
-                //         match left_upper_limit_version.cmp(right_lower_limit_version) {
-                //             Ordering::Less => true,
-                //             Ordering::Equal
-                //                 if !matches!(
-                //                     (left_upper_limit, right_lower_limit),
-                //                     (Included(_), Included(_))
-                //                 ) =>
-                //             {
-                //                 true
-                //             }
-                //             _ => false,
-                //         };
-                //     if is_left_disjoint {
-                //         left = left_iter.next();
-                //         continue;
-                //     }
-                //
-                //     // Check if the right range is completely disjoint and in front of the left
-                //     let is_right_disjoint =
-                //         match right_upper_limit_version.cmp(left_lower_limit_version) {
-                //             Ordering::Less => true,
-                //             Ordering::Equal
-                //                 if !matches!(
-                //                     (left_lower_limit, right_upper_limit),
-                //                     (Included(_), Included(_))
-                //                 ) =>
-                //             {
-                //                 true
-                //             }
-                //             _ => false,
-                //         };
-                //     if is_right_disjoint {
-                //         right = right_iter.next();
-                //         continue;
-                //     }
-                //
-                //     let start = max_exclusive(left_lower_limit, right_lower_limit);
-                //     match left_upper_limit_version.cmp(right_upper_limit_version) {
-                //         Ordering::Less => {
-                //             segments.push((start, left_upper_limit.clone()));
-                //             left = left_iter.next();
-                //         }
-                //         Ordering::Equal => {
-                //             let end = match (left_upper_limit, right_upper_limit) {
-                //                 (Included(v), Included(_)) => Included(v.clone()),
-                //                 (Included(_), Excluded(v)) => Excluded(v.clone()),
-                //                 (Excluded(v), Included(_)) => Excluded(v.clone()),
-                //                 (Excluded(v), Excluded(_)) => Excluded(v.clone()),
-                //                 _ => unreachable!(),
-                //             };
-                //             segments.push((start, end));
-                //             right = right_iter.next();
-                //             left = left_iter.next();
-                //         }
-                //         Ordering::Greater => {
-                //             segments.push((start, right_upper_limit.clone()));
-                //             right = right_iter.next();
-                //         }
-                //     }
-                // }
-
                 // Left or right has ended
                 (None, _) | (_, None) => {
                     break;
@@ -650,57 +297,6 @@ impl<V: Ord + Clone + Debug> Range<V> {
         }
 
         Self { segments }
-    }
-}
-
-// enum LeftRightEqual<V> {
-//     Left(V),
-//     Right(V),
-//     Equal(Bound<V>),
-// }
-//
-// fn max_exclusive<V: Ord + Clone>(left: &Bound<V>, right: &Bound<V>) -> LeftRightEqual<V> {
-//     match (left, right) {
-//         (Bound::Unbounded, Bound::Unbounded) => LeftRightEqual::Equal(Unbounded),
-//         (Bound::Unbounded, Bound::Excluded(r1)|Bound::Included(r1)) => LeftRightEqual::Right(right.clone()),
-//         (Bound::Excluded(r1)|Bound::Included(r1), Bound::Unbounded) => LeftRightEqual::Left(left.clone()),
-//         (Bound::Included(l1)|Bound::Excluded(l1), Bound::Included(r1)|Bound::Excluded(r1)) => match l1.cmp(r1) {
-//             Ordering::Less => LeftRightEqual::Right(r1),
-//             Ordering::Equal => match (left, right) {
-//                 (Bound::Included(_), Bound::Excluded(_)) => LeftRightEqual::Equal(right.clone()),
-//                 (Bound::Excluded(_), Bound::Excluded(_)) => LeftRightEqual::Equal(right.clone()),
-//                 (Bound::Excluded(_), Bound::Included(_)) => LeftRightEqual::Equal(left.clone()),
-//                 (Bound::Included(_), Bound::Included(_)) => LeftRightEqual::Equal(left.clone()),
-//                 _ => unreachable!()
-//             },
-//             Ordering::Greater => LeftRightEqual::Left(l1),
-//         }
-//     }
-// }
-
-fn min_exclusive<V: Ord + Clone>(left: &Bound<V>, right: &Bound<V>) -> Bound<V> {
-    match (left, right) {
-        (Bound::Included(l1), Bound::Included(r1)) => match l1.cmp(r1) {
-            Ordering::Less => Included(l1.clone()),
-            Ordering::Equal => Included(r1.clone()),
-            Ordering::Greater => Included(r1.clone()),
-        },
-        (Bound::Excluded(l1), Bound::Included(r1)) => match l1.cmp(r1) {
-            Ordering::Less => Excluded(l1.clone()),
-            Ordering::Equal => Excluded(l1.clone()),
-            Ordering::Greater => Included(r1.clone()),
-        },
-        (Bound::Included(l1), Bound::Excluded(r1)) => match l1.cmp(r1) {
-            Ordering::Less => Included(l1.clone()),
-            Ordering::Equal => Excluded(r1.clone()),
-            Ordering::Greater => Excluded(r1.clone()),
-        },
-        (Bound::Excluded(l1), Bound::Excluded(r1)) => match l1.cmp(r1) {
-            Ordering::Less => Excluded(l1.clone()),
-            Ordering::Equal => Excluded(r1.clone()),
-            Ordering::Greater => Excluded(r1.clone()),
-        },
-        _ => unreachable!(),
     }
 }
 
@@ -715,20 +311,20 @@ impl<V: Display + Eq> Display for Range<V> {
                 }
                 match segment {
                     (Unbounded, Unbounded) => write!(f, "*")?,
-                    (Unbounded, Included(v)) => write!(f, "v <= {v}")?,
-                    (Unbounded, Excluded(v)) => write!(f, "v < {v}")?,
-                    (Included(v), Unbounded) => write!(f, "{v} <= v")?,
+                    (Unbounded, Included(v)) => write!(f, "<={v}")?,
+                    (Unbounded, Excluded(v)) => write!(f, "<{v}")?,
+                    (Included(v), Unbounded) => write!(f, ">={v}")?,
                     (Included(v), Included(b)) => {
                         if v == b {
                             write!(f, "{v}")?
                         } else {
-                            write!(f, "{v} <= v <= {b}")?
+                            write!(f, ">={v},<={b}")?
                         }
                     }
-                    (Included(v), Excluded(b)) => write!(f, "{v} <= v < {b}")?,
-                    (Excluded(v), Unbounded) => write!(f, "{v} < v")?,
-                    (Excluded(v), Included(b)) => write!(f, "{v} < v <= {b}")?,
-                    (Excluded(v), Excluded(b)) => write!(f, "{v} < v < {b}")?,
+                    (Included(v), Excluded(b)) => write!(f, ">={v}, <{b}")?,
+                    (Excluded(v), Unbounded) => write!(f, ">{v}")?,
+                    (Excluded(v), Included(b)) => write!(f, ">{v}, <={b}")?,
+                    (Excluded(v), Excluded(b)) => write!(f, ">{v}, <{b}")?,
                 };
             }
         }
@@ -739,6 +335,64 @@ impl<V: Display + Eq> Display for Range<V> {
 #[cfg(test)]
 mod tests {
     use super::Range as R;
+    use super::Range;
+    use proptest::prelude::*;
+    use proptest::test_runner::TestRng;
+    use smallvec::smallvec;
+    use std::ops::Bound::{self, Excluded, Included, Unbounded};
+
+    pub fn strategy() -> impl Strategy<Value = R<usize>> {
+        prop::collection::vec(any::<usize>(), 0..10)
+            .prop_map(|mut vec| {
+                vec.sort_unstable();
+                vec.dedup();
+                vec
+            })
+            .prop_perturb(|vec, mut rng| {
+                let mut segments = smallvec![];
+                let mut iter = vec.into_iter().peekable();
+                if let Some(first) = iter.next() {
+                    fn next_bound<I: Iterator<Item = usize>>(
+                        iter: &mut I,
+                        rng: &mut TestRng,
+                    ) -> Bound<usize> {
+                        if let Some(next) = iter.next() {
+                            if rng.gen_bool(0.5) {
+                                Included(next)
+                            } else {
+                                Excluded(next)
+                            }
+                        } else {
+                            Unbounded
+                        }
+                    }
+
+                    let start = if rng.gen_bool(0.3) {
+                        Unbounded
+                    } else {
+                        if rng.gen_bool(0.5) {
+                            Included(first)
+                        } else {
+                            Excluded(first)
+                        }
+                    };
+
+                    let end = next_bound(&mut iter, &mut rng);
+                    segments.push((start, end));
+
+                    while iter.peek().is_some() {
+                        let start = next_bound(&mut iter, &mut rng);
+                        let end = next_bound(&mut iter, &mut rng);
+                        segments.push((start, end));
+                    }
+                }
+                return Range { segments };
+            })
+    }
+
+    fn version_strat() -> impl Strategy<Value = usize> {
+        any::<usize>()
+    }
 
     #[test]
     fn negate() {
@@ -873,11 +527,97 @@ mod tests {
 
     #[test]
     fn format() {
-        assert_eq!(format!("{}", R::between(1, 3)), String::from("1 <= v < 3"));
+        assert_eq!(format!("{}", R::between(1, 3)), String::from(">=1, <3"));
         assert_eq!(format!("{}", R::<i32>::any()), String::from("*"));
         assert_eq!(
             format!("{}", R::between(1, 3).negate()),
-            String::from("v < 1, 3 <= v")
+            String::from("<1, >=3")
         );
+    }
+
+    proptest! {
+
+        // Testing negate ----------------------------------
+
+        #[test]
+        fn negate_is_different(range in strategy()) {
+            assert_ne!(range.negate(), range);
+        }
+
+        #[test]
+        fn double_negate_is_identity(range in strategy()) {
+            assert_eq!(range.negate().negate(), range);
+        }
+
+        #[test]
+        fn negate_contains_opposite(range in strategy(), version in version_strat()) {
+            assert_ne!(range.contains(&version), range.negate().contains(&version));
+        }
+
+        // Testing intersection ----------------------------
+
+        #[test]
+        fn intersection_is_symmetric(r1 in strategy(), r2 in strategy()) {
+            assert_eq!(r1.intersection(&r2), r2.intersection(&r1));
+        }
+
+        #[test]
+        fn intersection_with_any_is_identity(range in strategy()) {
+            assert_eq!(Range::any().intersection(&range), range);
+        }
+
+        #[test]
+        fn intersection_with_none_is_none(range in strategy()) {
+            assert_eq!(Range::none().intersection(&range), Range::none());
+        }
+
+        #[test]
+        fn intersection_is_idempotent(r1 in strategy(), r2 in strategy()) {
+            assert_eq!(r1.intersection(&r2).intersection(&r2), r1.intersection(&r2));
+        }
+
+        #[test]
+        fn intersection_is_associative(r1 in strategy(), r2 in strategy(), r3 in strategy()) {
+            assert_eq!(r1.intersection(&r2).intersection(&r3), r1.intersection(&r2.intersection(&r3)));
+        }
+
+        #[test]
+        fn intesection_of_complements_is_none(range in strategy()) {
+            assert_eq!(range.negate().intersection(&range), Range::none());
+        }
+
+        #[test]
+        fn intesection_contains_both(r1 in strategy(), r2 in strategy(), version in version_strat()) {
+            assert_eq!(r1.intersection(&r2).contains(&version), r1.contains(&version) && r2.contains(&version));
+        }
+
+        // Testing union -----------------------------------
+
+        #[test]
+        fn union_of_complements_is_any(range in strategy()) {
+            assert_eq!(range.negate().union(&range), Range::any());
+        }
+
+        #[test]
+        fn union_contains_either(r1 in strategy(), r2 in strategy(), version in version_strat()) {
+            assert_eq!(r1.union(&r2).contains(&version), r1.contains(&version) || r2.contains(&version));
+        }
+
+        // Testing contains --------------------------------
+
+        #[test]
+        fn always_contains_exact(version in version_strat()) {
+            assert!(Range::equal(version).contains(&version));
+        }
+
+        #[test]
+        fn contains_negation(range in strategy(), version in version_strat()) {
+            assert_ne!(range.contains(&version), range.negate().contains(&version));
+        }
+
+        #[test]
+        fn contains_intersection(range in strategy(), version in version_strat()) {
+            assert_eq!(range.contains(&version), range.intersection(&Range::equal(version)) != Range::none());
+        }
     }
 }

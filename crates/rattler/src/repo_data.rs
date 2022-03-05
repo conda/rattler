@@ -98,7 +98,7 @@ where
         .map_err(serde::de::Error::custom)
 }
 
-fn matchspec_from_str<'de, D>(deserializer: D) -> Result<MatchSpec, D::Error>
+fn _matchspec_from_str<'de, D>(deserializer: D) -> Result<MatchSpec, D::Error>
 where
     D: serde::Deserializer<'de>,
 {

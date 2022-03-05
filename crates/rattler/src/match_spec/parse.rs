@@ -333,16 +333,7 @@ mod tests {
     use crate::match_spec::parse::{split_version_and_build, BracketVec, ParseMatchSpecError};
     use crate::match_spec::MatchSpec;
     use crate::ChannelConfig;
-    use async_compression::Level::Default;
     use smallvec::smallvec;
-
-    #[test]
-    fn test_parse() {
-        assert_eq!(
-            MatchSpec::from_str("ca-certificates", &ChannelConfig::default()).unwrap(),
-            MatchSpec::default()
-        )
-    }
 
     #[test]
     fn test_strip_brackets() {
