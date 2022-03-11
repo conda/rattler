@@ -1,6 +1,5 @@
-use futures::{StreamExt, TryFutureExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache};
-use indicatif::{MultiProgressAlignment, ProgressBar, ProgressFinish, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::report::{DefaultStringReporter, Reporter};
@@ -13,7 +12,6 @@ use reqwest_middleware::ClientBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::str::FromStr;
-use std::time::Duration;
 use structopt::StructOpt;
 use thiserror::Error;
 
@@ -50,7 +48,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         sha256: None,
         arch: None,
         platform: None,
-        depends: vec![String::from("mamba")],
+        depends: vec![String::from("pinject")],
         constrains: vec![],
         track_features: None,
         features: None,
@@ -135,12 +133,16 @@ async fn load_channels<'c, I: IntoIterator<Item = &'c Channel> + 'c>(
     let default_progress_style = ProgressStyle::default_bar()
         .template(&format!("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}")).unwrap()
         .progress_chars("=> ");
-    let finished_progress_tyle = ProgressStyle::default_bar().template(&format!(
-        "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}"
-    )).unwrap();
-    let errorred_progress_tyle = ProgressStyle::default_bar().template(&format!(
-        "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}"
-    )).unwrap();
+    let finished_progress_tyle = ProgressStyle::default_bar()
+        .template(&format!(
+            "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}"
+        ))
+        .unwrap();
+    let errorred_progress_tyle = ProgressStyle::default_bar()
+        .template(&format!(
+            "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}"
+        ))
+        .unwrap();
 
     // Iterate over all channel and platform permutations
     let (repo_datas, errors): (Vec<_>, Vec<_>) = futures::future::join_all(

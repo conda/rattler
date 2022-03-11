@@ -25,7 +25,7 @@ url = { version = "2.2.2", features = ["serde"] }
 regex = "1.5.4"
 indicatif = "0.17.0-rc.6"
 bytes = "1.1.0"
-smallvec = { version="1.7.0", features=["serde"] }
+smallvec = { version="1.8.0", features=["serde", "const_new", "const_generics", "union"] }
 itertools = "0.10.1"
 tracing = "0.1.29"
 pep440 = "0.2.0"

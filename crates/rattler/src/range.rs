@@ -5,7 +5,7 @@ use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 type Interval<V> = (Bound<V>, Bound<V>);
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Range<V> {
     segments: SmallVec<[Interval<V>; 2]>,
 }
@@ -14,7 +14,7 @@ impl<V: Clone> Range<V> {
     /// Empty set of versions.
     pub fn none() -> Self {
         Self {
-            segments: SmallVec::default(),
+            segments: SmallVec::new_const(),
         }
     }
 

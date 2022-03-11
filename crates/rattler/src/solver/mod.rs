@@ -1,12 +1,13 @@
 use crate::version_spec::{LogicalOperator, VersionOperator};
-use crate::{ChannelConfig, MatchSpec, PackageRecord, Range, RepoData, Version, VersionSpec};
+use crate::{
+    ChannelConfig, MatchSpec, MatchSpecConstraints, PackageRecord, Range, RepoData, Version,
+    VersionSpec,
+};
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use pubgrub::solver::{Dependencies, DependencyProvider};
-use pubgrub::version_set::VersionSet;
 use std::borrow::Borrow;
 use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Default)]
 pub struct PackageRecordIndex {
@@ -85,8 +86,8 @@ impl SolverIndex {
 
 pub type Package = String;
 
-impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
-    fn choose_package_version<T: Borrow<Package>, U: Borrow<MatchSpecSet>>(
+impl DependencyProvider<Package, MatchSpecConstraints> for SolverIndex {
+    fn choose_package_version<T: Borrow<Package>, U: Borrow<MatchSpecConstraints>>(
         &self,
         potential_packages: impl Iterator<Item = (T, U)>,
     ) -> Result<(T, Option<PackageRecord>), Box<dyn Error>> {
@@ -101,16 +102,18 @@ impl DependencyProvider<Package, MatchSpecSet> for SolverIndex {
         &self,
         package: &Package,
         version: &PackageRecord,
-    ) -> Result<Dependencies<Package, MatchSpecSet>, Box<dyn Error>> {
+    ) -> Result<Dependencies<Package, MatchSpecConstraints>, Box<dyn Error>> {
         log::debug!(
             "get_dependencies for {}={}={}",
-            package, version.version, version.build
+            package,
+            version.version,
+            version.build
         );
         let deps = match version
             .depends
             .iter()
             .map(
-                |spec_str| -> Result<(String, MatchSpecSet), anyhow::Error> {
+                |spec_str| -> Result<(String, MatchSpecConstraints), anyhow::Error> {
                     let spec = MatchSpec::from_str(spec_str, &self.channel_config)?;
                     log::debug!(" - {}", spec_str);
                     Ok((spec.name.as_ref().cloned().unwrap(), spec.into()))
@@ -161,63 +164,9 @@ impl From<VersionSpec> for Range<Version> {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct MatchSpecSet {
-    version_spec: Range<Version>,
-}
-
-impl Display for MatchSpecSet {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.version_spec)
-    }
-}
-
-impl From<MatchSpec> for MatchSpecSet {
-    fn from(m: MatchSpec) -> Self {
-        Self {
-            version_spec: m.version.unwrap_or(VersionSpec::Any).into(),
-        }
-    }
-}
-
-impl VersionSet for MatchSpecSet {
-    type V = PackageRecord;
-
-    /// Constructor for an empty set containing no version.
-    fn empty() -> Self {
-        Self {
-            version_spec: Range::none(),
-        }
-    }
-
-    /// Constructor for a set containing exactly one version.
-    fn singleton(v: Self::V) -> Self {
-        Self {
-            version_spec: Range::equal(v.version.clone()),
-        }
-    }
-
-    /// Compute the complement of this set.
-    fn complement(&self) -> Self {
-        Self {
-            version_spec: self.version_spec.negate(),
-        }
-    }
-
-    fn intersection(&self, other: &Self) -> Self {
-        Self {
-            version_spec: self.version_spec.intersection(&other.version_spec),
-        }
-    }
-
-    fn contains(&self, v: &Self::V) -> bool {
-        self.version_spec.contains(&v.version)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::solver::MatchSpecSet;
+    use crate::MatchSpecConstraints;
     use crate::{ChannelConfig, MatchSpec, RepoData};
     use itertools::Itertools;
     use pubgrub::version_set::VersionSet;
@@ -238,10 +187,10 @@ mod tests {
         let repo_data = repo_data();
         let all_versions = repo_data.packages.values();
         for record in all_versions {
-            assert!(!MatchSpecSet::empty().contains(record));
-            assert!(MatchSpecSet::full().contains(record));
-            assert!(MatchSpecSet::singleton(record.clone()).contains(&record));
-            assert!(!MatchSpecSet::singleton(record.clone())
+            assert!(!MatchSpecConstraints::empty().contains(record));
+            assert!(MatchSpecConstraints::full().contains(record));
+            assert!(MatchSpecConstraints::singleton(record.clone()).contains(&record));
+            assert!(!MatchSpecConstraints::singleton(record.clone())
                 .complement()
                 .contains(&record));
         }
@@ -269,13 +218,18 @@ mod tests {
             .values()
             .flat_map(|p| p.depends.iter())
             .map(|d| {
-                MatchSpecSet::from(MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap())
+                MatchSpecConstraints::from(
+                    MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap(),
+                )
             })
             .take(100);
         let versions = repo_data.packages.values().take(100).collect_vec();
         for set in sets {
-            assert_eq!(MatchSpecSet::empty(), set.complement().intersection(&set));
-            assert_eq!(MatchSpecSet::full(), set.complement().union(&set));
+            assert_eq!(
+                MatchSpecConstraints::empty(),
+                set.complement().intersection(&set)
+            );
+            assert_eq!(MatchSpecConstraints::full(), set.complement().union(&set));
 
             for version in versions.iter() {
                 assert_eq!(set.contains(&version), !set.complement().contains(&version));

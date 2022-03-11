@@ -1,5 +1,6 @@
 mod channel;
 mod match_spec;
+mod match_spec_constraints;
 mod platform;
 mod range;
 mod repo_data;
@@ -12,6 +13,7 @@ pub use channel::{
     Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, ParseChannelError,
 };
 pub use match_spec::MatchSpec;
+pub use match_spec_constraints::MatchSpecConstraints;
 pub use platform::{ParsePlatformError, Platform};
 pub use repo_data::{ChannelInfo, NoArchType, PackageRecord, RepoData};
 pub use solver::{PackageIndex, SolverIndex};

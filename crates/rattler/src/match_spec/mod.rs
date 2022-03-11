@@ -13,6 +13,7 @@ pub struct MatchSpec {
     pub name: Option<String>,
     pub version: Option<VersionSpec>,
     pub build: Option<String>,
+    pub build_number: Option<usize>,
     pub filename: Option<String>,
     pub channel: Option<Channel>,
     pub namespace: Option<String>,

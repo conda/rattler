@@ -247,26 +247,30 @@ mod test {
         );
         assert_eq!(
             Constraint::from_str("==1.2.*"),
-            Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                VersionOperator::Equals
+            Ok(Constraint::Comparison(
+                VersionOperator::Equals,
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str(">1.2.*"),
-            Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                VersionOperator::Greater
+            Ok(Constraint::Comparison(
+                VersionOperator::Greater,
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("<=1.2.*"),
-            Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                VersionOperator::LessEquals
+            Ok(Constraint::Comparison(
+                VersionOperator::LessEquals,
+                Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("<1.2.*"),
-            Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                VersionOperator::Less
+            Ok(Constraint::Comparison(
+                VersionOperator::Less,
+                Version::from_str("1.2").unwrap()
             ))
         );
     }
