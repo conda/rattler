@@ -19,16 +19,21 @@ use thiserror::Error;
 pub struct Opt {
     #[structopt(short)]
     channels: Option<Vec<String>>,
+
+    #[structopt(required = true)]
+    specs: Vec<String>
 }
 
-pub async fn create(_opt: Opt) -> anyhow::Result<()> {
+pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
     // Get the channels to download
-    let channels = vec![
-        Channel::from_str("conda-forge", &channel_config)?,
-        Channel::from_str("robostack", &channel_config)?,
-    ];
+    let channels = opt
+        .channels
+        .unwrap_or_else(|| vec![String::from("conda-forge"), String::from("robostack")])
+        .into_iter()
+        .map(|channel_str| Channel::from_str(&channel_str, &channel_config))
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Download all repo data from the channels and create an index
     let repo_data = load_channels(&channels).await?;
@@ -48,7 +53,7 @@ pub async fn create(_opt: Opt) -> anyhow::Result<()> {
         sha256: None,
         arch: None,
         platform: None,
-        depends: vec![String::from("mamba")],
+        depends: vec![String::from("ros-noetic-rviz")],//opt.specs,
         constrains: vec![],
         track_features: None,
         features: None,

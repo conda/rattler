@@ -1,6 +1,7 @@
 use crate::{MatchSpec, PackageRecord, Range, Version};
 use itertools::Itertools;
 use pubgrub::version_set::VersionSet;
+use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
@@ -91,6 +92,15 @@ impl VersionSet for MatchSpecConstraints {
         Self { groups: vec![] }
     }
 
+    fn full() -> Self {
+        Self {
+            groups: vec![MatchSpecElement {
+                version: Range::any(),
+                build_number: Range::any(),
+            }],
+        }
+    }
+
     fn singleton(v: Self::V) -> Self {
         Self {
             groups: vec![MatchSpecElement {
@@ -108,16 +118,24 @@ impl VersionSet for MatchSpecConstraints {
         } else {
             let mut permutations = Vec::with_capacity(self.groups.len());
             for spec in self.groups.iter() {
-                permutations.push([
-                    MatchSpecElement {
-                        version: spec.version.negate(),
+                let mut group_entries: SmallVec<[MatchSpecElement; 2]> = SmallVec::new();
+                let version_complement = spec.version.negate();
+                if version_complement != Range::none() {
+                    group_entries.push(MatchSpecElement {
+                        version: version_complement,
                         build_number: Range::any(),
-                    },
-                    MatchSpecElement {
+                    });
+                }
+
+                let build_complement = spec.build_number.negate();
+                if build_complement != Range::none() {
+                    group_entries.push(MatchSpecElement {
                         version: Range::any(),
                         build_number: spec.build_number.negate(),
-                    },
-                ]);
+                    });
+                }
+
+                permutations.push(group_entries);
             }
 
             let mut groups = HashSet::new();
@@ -229,6 +247,15 @@ mod tests {
         assert_eq!(
             constraint.complement().complement().complement(),
             constraint.complement()
+        );
+
+        assert_eq!(
+            MatchSpecConstraints::empty(),
+            constraint.complement().intersection(&constraint)
+        );
+        assert_eq!(
+            MatchSpecConstraints::full(),
+            constraint.complement().union(&constraint)
         );
     }
 }
