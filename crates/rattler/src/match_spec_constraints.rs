@@ -1,12 +1,17 @@
 use crate::{MatchSpec, PackageRecord, Range, Version};
 use itertools::Itertools;
+use once_cell::sync::OnceCell;
 use pubgrub::version_set::VersionSet;
 use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter::once;
+use std::sync::RwLock;
+
+static COMPLEMENT_CACHE: OnceCell<RwLock<HashMap<MatchSpecConstraints, MatchSpecConstraints>>> =
+    OnceCell::new();
 
 /// A single AND group in a `MatchSpecConstraints`
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
@@ -85,32 +90,8 @@ impl Display for MatchSpecConstraints {
     }
 }
 
-impl VersionSet for MatchSpecConstraints {
-    type V = PackageRecord;
-
-    fn empty() -> Self {
-        Self { groups: vec![] }
-    }
-
-    fn full() -> Self {
-        Self {
-            groups: vec![MatchSpecElement {
-                version: Range::any(),
-                build_number: Range::any(),
-            }],
-        }
-    }
-
-    fn singleton(v: Self::V) -> Self {
-        Self {
-            groups: vec![MatchSpecElement {
-                version: Range::equal(v.version),
-                build_number: Range::equal(v.build_number),
-            }],
-        }
-    }
-
-    fn complement(&self) -> Self {
+impl MatchSpecConstraints {
+    fn compute_complement(&self) -> Self {
         if self.groups.is_empty() {
             Self {
                 groups: vec![MatchSpecElement::any()],
@@ -161,9 +142,57 @@ impl VersionSet for MatchSpecConstraints {
             }
         }
     }
+}
+
+impl VersionSet for MatchSpecConstraints {
+    type V = PackageRecord;
+
+    fn empty() -> Self {
+        Self { groups: vec![] }
+    }
+
+    fn full() -> Self {
+        Self {
+            groups: vec![MatchSpecElement {
+                version: Range::any(),
+                build_number: Range::any(),
+            }],
+        }
+    }
+
+    fn singleton(v: Self::V) -> Self {
+        Self {
+            groups: vec![MatchSpecElement {
+                version: Range::equal(v.version),
+                build_number: Range::equal(v.build_number),
+            }],
+        }
+    }
+
+    fn complement(&self) -> Self {
+        // dbg!("taking the complement of group ",  self.groups.len());
+
+        let complement_cache = COMPLEMENT_CACHE.get_or_init(|| RwLock::new(Default::default()));
+        {
+            let read_lock = complement_cache.read().unwrap();
+            if let Some(result) = read_lock.get(self) {
+                return result.clone();
+            }
+        }
+
+        dbg!("-- NOT CACHED", self);
+
+        let complement = self.compute_complement();
+        {
+            let mut write_lock = complement_cache.write().unwrap();
+            write_lock.insert(self.clone(), complement.clone());
+        }
+
+        return complement;
+    }
 
     fn intersection(&self, other: &Self) -> Self {
-        let mut groups = once(self.groups.iter())
+        let groups: HashSet<_> = once(self.groups.iter())
             .chain(once(other.groups.iter()))
             .multi_cartesian_product()
             .map(|elems| {
@@ -174,11 +203,13 @@ impl VersionSet for MatchSpecConstraints {
                     .unwrap()
             })
             .filter(|group| group != &MatchSpecElement::none())
-            .collect_vec();
+            .collect();
 
         if groups.iter().any(|group| group == &MatchSpecElement::any()) {
             return MatchSpecElement::any().into();
         }
+
+        let mut groups = groups.into_iter().collect_vec();
 
         groups.sort_by_cached_key(|e| {
             let mut hasher = DefaultHasher::new();
