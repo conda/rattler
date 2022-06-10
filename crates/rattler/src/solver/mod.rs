@@ -1,6 +1,6 @@
 use crate::version_spec::{LogicalOperator, VersionOperator};
 use crate::{
-    ChannelConfig, MatchSpec, MatchSpecConstraints, PackageRecord, Range, RepoData, Version,
+    ChannelConfig, MatchSpec, MatchSpecConstraints, PackageRecord, RepoData, Version,
     VersionSpec,
 };
 use fxhash::FxHashMap;
@@ -8,6 +8,7 @@ use itertools::Itertools;
 use pubgrub::solver::{Dependencies, DependencyProvider};
 use std::borrow::Borrow;
 use std::error::Error;
+use pubgrub::range::Range;
 
 #[derive(Default)]
 pub struct PackageRecordIndex {
@@ -134,14 +135,14 @@ impl DependencyProvider<Package, MatchSpecConstraints> for SolverIndex {
 impl From<VersionSpec> for Range<Version> {
     fn from(spec: VersionSpec) -> Self {
         match spec {
-            VersionSpec::None => Range::none(),
-            VersionSpec::Any => Range::any(),
-            VersionSpec::Operator(VersionOperator::Less, v) => Range::less(v),
-            VersionSpec::Operator(VersionOperator::LessEquals, v) => Range::less_equal(v),
-            VersionSpec::Operator(VersionOperator::Greater, v) => Range::greater(v),
-            VersionSpec::Operator(VersionOperator::GreaterEquals, v) => Range::greater_equal(v),
-            VersionSpec::Operator(VersionOperator::Equals, v) => Range::equal(v),
-            VersionSpec::Operator(VersionOperator::NotEquals, v) => Range::not_equal(v),
+            VersionSpec::None => Range::empty(),
+            VersionSpec::Any => Range::full(),
+            VersionSpec::Operator(VersionOperator::Less, v) => Range::strictly_lower_than(v),
+            VersionSpec::Operator(VersionOperator::LessEquals, v) => Range::lower_than(v),
+            VersionSpec::Operator(VersionOperator::Greater, v) => Range::strictly_higher_than(v),
+            VersionSpec::Operator(VersionOperator::GreaterEquals, v) => Range::higher_than(v),
+            VersionSpec::Operator(VersionOperator::Equals, v) => Range::singleton(v),
+            VersionSpec::Operator(VersionOperator::NotEquals, v) => Range::singleton(v).complement(),
             VersionSpec::Operator(VersionOperator::StartsWith, v) => {
                 Range::between(v.clone(), v.bump())
             }
@@ -153,13 +154,13 @@ impl From<VersionSpec> for Range<Version> {
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.intersection(&version))
-                .unwrap_or_else(|| Range::none()),
+                .unwrap_or_else(|| Range::empty()),
             VersionSpec::Group(LogicalOperator::Or, specs) => specs
                 .iter()
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.union(&version))
-                .unwrap_or_else(|| Range::none()),
+                .unwrap_or_else(|| Range::empty()),
         }
     }
 }

@@ -1,3 +1,10 @@
+//! Ranges are constraints defining sets of versions.
+//!
+//! Concretely, those constraints correspond to any set of versions
+//! representable as the concatenation, union, and complement
+//! of the ranges building blocks.
+
+use pubgrub::version_set::VersionSet;
 use smallvec::{smallvec, SmallVec};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
@@ -329,6 +336,38 @@ impl<V: Display + Eq> Display for Range<V> {
             }
         }
         Ok(())
+    }
+}
+
+impl<T: Debug + Display + Clone + Eq + Ord> VersionSet for Range<T> {
+    type V = T;
+
+    fn empty() -> Self {
+        Range::none()
+    }
+
+    fn singleton(v: Self::V) -> Self {
+        Range::equal(v)
+    }
+
+    fn complement(&self) -> Self {
+        Range::negate(self)
+    }
+
+    fn intersection(&self, other: &Self) -> Self {
+        Range::intersection(self, other)
+    }
+
+    fn contains(&self, v: &Self::V) -> bool {
+        Range::contains(self, v)
+    }
+
+    fn full() -> Self {
+        Range::any()
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        Range::union(self, other)
     }
 }
 

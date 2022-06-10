@@ -1,4 +1,15 @@
-use crate::{MatchSpec, PackageRecord, Version};
+use rattler::RepoData;
+use std::fs::File;
+use std::io::BufReader;
+use std::path::PathBuf;
+
+struct Package {
+    name: String,
+    build_number: usize,
+    dependencies:
+}
+
+use crate::{MatchSpec, PackageRecord, Range, Version};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
 use pubgrub::version_set::VersionSet;
@@ -9,7 +20,6 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::sync::RwLock;
-use pubgrub::range::Range;
 
 static COMPLEMENT_CACHE: OnceCell<RwLock<HashMap<MatchSpecConstraints, MatchSpecConstraints>>> =
     OnceCell::new();
@@ -25,16 +35,16 @@ impl MatchSpecElement {
     /// Returns an instance that matches nothing.
     fn none() -> Self {
         Self {
-            version: Range::empty(),
-            build_number: Range::empty(),
+            version: Range::none(),
+            build_number: Range::none(),
         }
     }
 
     /// Returns an instance that matches anything.
     fn any() -> Self {
         Self {
-            version: Range::full(),
-            build_number: Range::full(),
+            version: Range::any(),
+            build_number: Range::any(),
         }
     }
 
@@ -42,7 +52,7 @@ impl MatchSpecElement {
     fn intersection(&self, other: &Self) -> Self {
         let version = self.version.intersection(&other.version);
         let build_number = self.build_number.intersection(&other.build_number);
-        if version == Range::empty() || build_number == Range::empty() {
+        if version == Range::none() || build_number == Range::none() {
             Self::none()
         } else {
             Self {
@@ -68,12 +78,12 @@ impl From<MatchSpec> for MatchSpecConstraints {
     fn from(spec: MatchSpec) -> Self {
         Self {
             groups: vec![MatchSpecElement {
-                version: spec.version.map(Into::into).unwrap_or_else(|| Range::full()),
+                version: spec.version.map(Into::into).unwrap_or_else(|| Range::any()),
                 build_number: spec
                     .build_number
                     .clone()
-                    .map(Range::singleton)
-                    .unwrap_or_else(|| Range::full()),
+                    .map(Range::equal)
+                    .unwrap_or_else(|| Range::any()),
             }],
         }
     }
@@ -87,7 +97,7 @@ impl From<MatchSpecElement> for MatchSpecConstraints {
 
 impl Display for MatchSpecConstraints {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", &self.groups[0].version)
+        write!(f, "bla")
     }
 }
 
@@ -101,19 +111,19 @@ impl MatchSpecConstraints {
             let mut permutations = Vec::with_capacity(self.groups.len());
             for spec in self.groups.iter() {
                 let mut group_entries: SmallVec<[MatchSpecElement; 2]> = SmallVec::new();
-                let version_complement = spec.version.complement();
-                if version_complement != Range::empty() {
+                let version_complement = spec.version.negate();
+                if version_complement != Range::none() {
                     group_entries.push(MatchSpecElement {
                         version: version_complement,
-                        build_number: Range::full(),
+                        build_number: Range::any(),
                     });
                 }
 
-                let build_complement = spec.build_number.complement();
-                if build_complement != Range::empty() {
+                let build_complement = spec.build_number.negate();
+                if build_complement != Range::none() {
                     group_entries.push(MatchSpecElement {
-                        version: Range::full(),
-                        build_number: spec.build_number.complement(),
+                        version: Range::any(),
+                        build_number: spec.build_number.negate(),
                     });
                 }
 
@@ -126,7 +136,7 @@ impl MatchSpecConstraints {
 
                 if group == MatchSpecElement::any() {
                     return MatchSpecConstraints::from(group);
-                } else if group != MatchSpecElement::any() {
+                } else if group != MatchSpecElement::none() {
                     groups.insert(group);
                 }
             }
@@ -155,8 +165,8 @@ impl VersionSet for MatchSpecConstraints {
     fn full() -> Self {
         Self {
             groups: vec![MatchSpecElement {
-                version: Range::full(),
-                build_number: Range::full(),
+                version: Range::any(),
+                build_number: Range::any(),
             }],
         }
     }
@@ -164,8 +174,8 @@ impl VersionSet for MatchSpecConstraints {
     fn singleton(v: Self::V) -> Self {
         Self {
             groups: vec![MatchSpecElement {
-                version: Range::singleton(v.version),
-                build_number: Range::singleton(v.build_number),
+                version: Range::equal(v.version),
+                build_number: Range::equal(v.build_number),
             }],
         }
     }
@@ -226,68 +236,11 @@ impl VersionSet for MatchSpecConstraints {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::match_spec_constraints::MatchSpecConstraints;
-    use crate::{PackageRecord, Version};
-    use pubgrub::version_set::VersionSet;
-    use std::str::FromStr;
+#[test]
+fn test_pubgrub() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_data_path = manifest_dir.join("resources/conda_forge_noarch_repodata.json");
 
-    #[test]
-    fn complement() {
-        let record = PackageRecord {
-            name: "".to_string(),
-            version: Version::from_str("1.2.3").unwrap(),
-            build: "".to_string(),
-            build_number: 1,
-            subdir: "".to_string(),
-            md5: None,
-            sha256: None,
-            arch: None,
-            platform: None,
-            depends: vec![],
-            constrains: vec![],
-            track_features: None,
-            features: None,
-            preferred_env: None,
-            license: None,
-            license_family: None,
-            timestamp: None,
-            date: None,
-            size: None,
-        };
-
-        let constraint = MatchSpecConstraints::singleton(record.clone());
-
-        assert!(constraint.contains(&record));
-        assert!(!constraint.complement().contains(&record));
-
-        assert_eq!(constraint.intersection(&constraint), constraint);
-        assert_eq!(
-            constraint.intersection(&constraint.complement()),
-            MatchSpecConstraints::empty()
-        );
-
-        assert_eq!(
-            constraint
-                .complement()
-                .complement()
-                .complement()
-                .complement(),
-            constraint
-        );
-        assert_eq!(
-            constraint.complement().complement().complement(),
-            constraint.complement()
-        );
-
-        assert_eq!(
-            MatchSpecConstraints::empty(),
-            constraint.complement().intersection(&constraint)
-        );
-        assert_eq!(
-            MatchSpecConstraints::full(),
-            constraint.complement().union(&constraint)
-        );
-    }
+    let reader = BufReader::new(File::open(repo_data_path).unwrap());
+    let repo_data: RepoData = serde_json::from_reader(reader).unwrap();
 }
