@@ -10,14 +10,23 @@ use url::Url;
 
 pub use fetch::{FetchRepoDataError, FetchRepoDataProgress};
 
-/// Describes channel configuration which influences how channel strings are interpreted.
+/// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
+/// channel URLs.
+///
+/// When working with [`Channel`]s you want to resolve them to a Url. The Url describes where to
+/// find the data in the channel. Working with URLs is less user friendly since most of the time
+/// users only use channels from one particular server. Conda solves this by allowing users not to
+/// specify a full Url but instead only specify the name of the channel and reading the primary
+/// server address from a configuration file (e.g. `.condarc`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
     /// the `https://conda.anaconda.org` server but users are free to change this. This allows
     /// naming channels just by their name instead of their entire Url (e.g. "conda-forge" actually
     /// refers to "https://conda.anaconda.org/conda-forge").
-    channel_alias: Url,
+    ///
+    /// The default value is: https://conda.anaconda.org
+    pub channel_alias: Url,
 }
 
 impl Default for ChannelConfig {
@@ -29,6 +38,7 @@ impl Default for ChannelConfig {
     }
 }
 
+/// `Channel`s are the primary source of package information. 
 #[derive(Debug, Clone, Serialize, Eq, PartialEq)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
