@@ -42,3 +42,10 @@ pretty_env_logger = "0.4.0"
 rand = "0.8.4"
 insta = "0.12.0"
 proptest = "1.0.0"
+
+
+[build-dependencies]
+cc = "1"
+anyhow = "1"
+bindgen = "0.60"
+cmake = "0.1"
