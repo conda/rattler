@@ -82,7 +82,7 @@ fn generate_bindings(include_path: &Path) -> Result<()> {
     check_solvext_bindings(include_path, generator)?
         .generate()
         .unwrap()
-        .write_to_file(Path::new(&output).join("bindings.rs"))?;
+        .write_to_file(Path::new(&output).join("libsolv_bindings.rs"))?;
 
     Ok(())
 }
