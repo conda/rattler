@@ -322,7 +322,7 @@ mod test {
     }
 
     #[test]
-    fn openssl_convetion() {
+    fn openssl_convention() {
         let version_strs = [
             "1.0.1dev",
             "1.0.1_", // <- this
