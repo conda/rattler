@@ -1,4 +1,3 @@
-use futures::{SinkExt, TryFutureExt, TryStreamExt};
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -13,7 +12,6 @@ use reqwest_middleware::ClientBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
 use std::str::FromStr;
-use anyhow::Context;
 use structopt::StructOpt;
 use thiserror::Error;
 use tokio::spawn;
