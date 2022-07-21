@@ -1,15 +1,17 @@
-mod parse;
-
-use itertools::{EitherOrBoth, Itertools};
-use serde::{Deserialize, Serialize, Serializer};
-use smallvec::SmallVec;
+use std::hash::{Hash, Hasher};
 use std::{
     cmp::Ordering,
     fmt::{Debug, Display, Formatter},
     ops::Range,
 };
 
+use itertools::{EitherOrBoth, Itertools};
+use serde::{Deserialize, Serialize, Serializer};
+use smallvec::SmallVec;
+
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
+
+mod parse;
 
 /// This class implements an order relation between version strings. Version strings can contain the
 /// usual alphanumeric characters (A-Za-z0-9), separated into components by dots and underscores.
@@ -17,7 +19,7 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 /// optional epoch number - an integer followed by '!' - can precede the actual version string (this
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
 /// case-insensitive.
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug)]
 pub struct Version {
     norm: String,
     version: VersionComponent,
@@ -55,7 +57,7 @@ impl Version {
     }
 
     pub fn starts_with(&self, other: &Self) -> bool {
-        return self.version.starts_with(&other.version) && self.local.starts_with(&other.local);
+        self.version.starts_with(&other.version) && self.local.starts_with(&other.local)
     }
 }
 
@@ -66,6 +68,13 @@ impl PartialEq<Self> for Version {
 }
 
 impl Eq for Version {}
+
+impl Hash for Version {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.version.hash(state);
+        self.local.hash(state);
+    }
+}
 
 /// Either a number, literal or the infinity.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::From, Serialize, Deserialize)]
@@ -230,10 +239,12 @@ impl Serialize for Version {
 
 #[cfg(test)]
 mod test {
-    use super::Version;
-    use rand::seq::SliceRandom;
     use std::cmp::Ordering;
     use std::str::FromStr;
+
+    use rand::seq::SliceRandom;
+
+    use super::Version;
 
     // Tests are inspired by: https://github.com/conda/conda/blob/33a142c16530fcdada6c377486f1c1a385738a96/tests/models/test_version.py
 

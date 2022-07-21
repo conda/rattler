@@ -49,7 +49,7 @@ impl Channel {
         mut callback: CB,
     ) -> Result<RepoData, FetchRepoDataError>
     where
-        CB: FnMut(FetchRepoDataProgress) -> () + Send,
+        CB: FnMut(FetchRepoDataProgress) + Send,
     {
         // Notify the callback
         callback(FetchRepoDataProgress::Downloading {

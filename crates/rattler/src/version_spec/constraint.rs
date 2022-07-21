@@ -4,6 +4,7 @@ use std::str::FromStr;
 use thiserror::Error;
 
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum Constraint {
     /// Matches anything (`*`)
@@ -39,11 +40,11 @@ fn parse_operator(s: &str) -> Option<(VersionOperator, &str)> {
         Some((VersionOperator::GreaterEquals, rest))
     } else if let Some(rest) = s.strip_prefix("~=") {
         Some((VersionOperator::Compatible, rest))
-    } else if let Some(rest) = s.strip_prefix("<") {
+    } else if let Some(rest) = s.strip_prefix('<') {
         Some((VersionOperator::Less, rest))
-    } else if let Some(rest) = s.strip_prefix(">") {
+    } else if let Some(rest) = s.strip_prefix('>') {
         Some((VersionOperator::Greater, rest))
-    } else if let Some(rest) = s.strip_prefix("=") {
+    } else if let Some(rest) = s.strip_prefix('=') {
         Some((VersionOperator::StartsWith, rest))
     } else if s.starts_with(|c: char| c.is_alphanumeric()) {
         Some((VersionOperator::Equals, s))
@@ -64,7 +65,7 @@ impl FromStr for Constraint {
         let s = s.trim();
         if s == "*" {
             Ok(Constraint::Any)
-        } else if s.starts_with("^") || s.ends_with("$") {
+        } else if s.starts_with('^') || s.ends_with('$') {
             Err(ParseConstraintError::RegexConstraintsNotSupported)
         } else if s.starts_with(is_start_of_version_constraint) {
             let (op, version_str) =
@@ -96,7 +97,7 @@ impl FromStr for Constraint {
                 op,
                 Version::from_str(version_str).map_err(ParseConstraintError::InvalidVersion)?,
             ))
-        } else if s.ends_with("*") {
+        } else if s.ends_with('*') {
             let version_str = s.trim_end_matches('*').trim_end_matches('.');
             Ok(Constraint::Comparison(
                 VersionOperator::StartsWith,

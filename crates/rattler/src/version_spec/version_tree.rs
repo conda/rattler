@@ -101,7 +101,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
                     Ok(group)
                 }
                 VersionTreeToken::Term(term) => Ok(VersionTree::Term(term)),
-                _ => return Err(ParseVersionTreeError::UnexpectedOperator),
+                _ => Err(ParseVersionTreeError::UnexpectedOperator),
             }
         }
 
@@ -143,7 +143,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             Ok(result)
         }
 
-        return parse_group(&mut tokens.peekable(), 2);
+        parse_group(&mut tokens.peekable(), 2)
     }
 }
 

@@ -68,15 +68,11 @@ impl From<MatchSpec> for MatchSpecConstraints {
     fn from(spec: MatchSpec) -> Self {
         Self {
             groups: vec![MatchSpecElement {
-                version: spec
-                    .version
-                    .map(Into::into)
-                    .unwrap_or_else(|| Range::full()),
+                version: spec.version.map(Into::into).unwrap_or_else(Range::full),
                 build_number: spec
                     .build_number
-                    .clone()
                     .map(Range::singleton)
-                    .unwrap_or_else(|| Range::full()),
+                    .unwrap_or_else(Range::full),
             }],
         }
     }
@@ -192,7 +188,7 @@ impl VersionSet for MatchSpecConstraints {
             write_lock.insert(self.clone(), complement.clone());
         }
 
-        return complement;
+        complement
     }
 
     fn intersection(&self, other: &Self) -> Self {

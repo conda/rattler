@@ -155,13 +155,13 @@ impl From<VersionSpec> for Range<Version> {
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.intersection(&version))
-                .unwrap_or_else(|| Range::empty()),
+                .unwrap_or_else(Range::empty),
             VersionSpec::Group(LogicalOperator::Or, specs) => specs
                 .iter()
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.union(&version))
-                .unwrap_or_else(|| Range::empty()),
+                .unwrap_or_else(Range::empty),
         }
     }
 }
