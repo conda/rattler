@@ -38,7 +38,7 @@ impl Default for ChannelConfig {
     }
 }
 
-/// `Channel`s are the primary source of package information. 
+/// `Channel`s are the primary source of package information.
 #[derive(Debug, Clone, Serialize, Eq, PartialEq)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
