@@ -1,14 +1,13 @@
 use crate::version_spec::{LogicalOperator, VersionOperator};
 use crate::{
-    ChannelConfig, MatchSpec, MatchSpecConstraints, PackageRecord, RepoData, Version,
-    VersionSpec,
+    ChannelConfig, MatchSpec, MatchSpecConstraints, PackageRecord, RepoData, Version, VersionSpec,
 };
 use fxhash::FxHashMap;
 use itertools::Itertools;
+use pubgrub::range::Range;
 use pubgrub::solver::{Dependencies, DependencyProvider};
 use std::borrow::Borrow;
 use std::error::Error;
-use pubgrub::range::Range;
 
 #[derive(Default)]
 pub struct PackageRecordIndex {
@@ -142,7 +141,9 @@ impl From<VersionSpec> for Range<Version> {
             VersionSpec::Operator(VersionOperator::Greater, v) => Range::strictly_higher_than(v),
             VersionSpec::Operator(VersionOperator::GreaterEquals, v) => Range::higher_than(v),
             VersionSpec::Operator(VersionOperator::Equals, v) => Range::singleton(v),
-            VersionSpec::Operator(VersionOperator::NotEquals, v) => Range::singleton(v).complement(),
+            VersionSpec::Operator(VersionOperator::NotEquals, v) => {
+                Range::singleton(v).complement()
+            }
             VersionSpec::Operator(VersionOperator::StartsWith, v) => {
                 Range::between(v.clone(), v.bump())
             }
@@ -154,13 +155,13 @@ impl From<VersionSpec> for Range<Version> {
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.intersection(&version))
-                .unwrap_or_else(|| Range::empty()),
+                .unwrap_or_else(Range::empty),
             VersionSpec::Group(LogicalOperator::Or, specs) => specs
                 .iter()
                 .cloned()
                 .map(Into::into)
                 .reduce(|acc: Range<Version>, version: Range<Version>| acc.union(&version))
-                .unwrap_or_else(|| Range::empty()),
+                .unwrap_or_else(Range::empty),
         }
     }
 }

@@ -1,20 +1,22 @@
+use std::str::FromStr;
+
 use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use pubgrub::error::PubGrubError;
 use pubgrub::report::{DefaultStringReporter, Reporter};
 use pubgrub::solver::resolve;
+use reqwest_middleware::ClientBuilder;
+use reqwest_retry::policies::ExponentialBackoff;
+use reqwest_retry::RetryTransientMiddleware;
+use structopt::StructOpt;
+use thiserror::Error;
+use tokio::spawn;
+
 use rattler::{
     Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, PackageIndex, PackageRecord,
     RepoData, SolverIndex, Version,
 };
-use reqwest_middleware::ClientBuilder;
-use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::RetryTransientMiddleware;
-use std::str::FromStr;
-use structopt::StructOpt;
-use thiserror::Error;
-use tokio::spawn;
 
 #[derive(Debug, StructOpt)]
 pub struct Opt {
@@ -46,7 +48,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let root_version = Version::from_str("1").unwrap();
     let root_package = PackageRecord {
         name: root_package_name.clone(),
-        version: root_version.clone(),
+        version: root_version,
         build: "".to_string(),
         build_number: 0,
         subdir: "".to_string(),
@@ -137,83 +139,79 @@ async fn load_channels<'c, I: IntoIterator<Item = &'c Channel> + 'c>(
     // Setup the progress bar
     let multi_progress = indicatif::MultiProgress::new();
     let default_progress_style = ProgressStyle::default_bar()
-        .template(&format!("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}")).unwrap()
+        .template("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}").unwrap()
         .progress_chars("=> ");
     let finished_progress_tyle = ProgressStyle::default_bar()
-        .template(&format!(
-            "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}"
-        ))
+        .template("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}")
         .unwrap();
     let errorred_progress_tyle = ProgressStyle::default_bar()
-        .template(&format!(
-            "  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}"
-        ))
+        .template("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}")
         .unwrap();
 
     // Iterate over all channel and platform permutations
-    let (repo_datas, errors): (Vec<_>, Vec<_>) =
-        futures::future::join_all(
-            channels
-                .into_iter()
-                .flat_map(move |channel| {
-                    channel
-                        .platforms_or_default()
-                        .into_iter()
-                        .map(move |platform| (channel, *platform))
-                })
-                .map(move |(channel, platform)| {
-                    // Create progress bar
-                    let progress_bar = multi_progress.add(ProgressBar::new(1));
-                    progress_bar.set_style(default_progress_style.clone());
-                    progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
+    let (repo_datas, errors): (Vec<_>, Vec<_>) = futures::future::join_all(
+        channels
+            .into_iter()
+            .flat_map(move |channel| {
+                channel
+                    .platforms_or_default()
+                    .iter()
+                    .map(move |platform| (channel, *platform))
+            })
+            .map(move |(channel, platform)| {
+                // Create progress bar
+                let progress_bar = multi_progress.add(ProgressBar::new(1));
+                progress_bar.set_style(default_progress_style.clone());
+                progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
 
-                    // progress_bar.enable_steady_tick(Duration::from_millis(100));
-                    let client = client.clone();
-                    let async_channel = channel.clone();
-                    let async_progress_bar = progress_bar.clone();
-                    let errorred_progress_tyle = errorred_progress_tyle.clone();
-                    let finished_progress_tyle = finished_progress_tyle.clone();
-                    async move {
-                        match spawn(async move {
-                            async_channel.fetch_repo_data(&client, platform, |progress| {
-                                match progress {
-                                    FetchRepoDataProgress::Downloading { progress, total } => {
-                                        if let Some(total) = total {
-                                            async_progress_bar.set_length(total as u64);
-                                            async_progress_bar.set_position(progress as u64);
-                                            async_progress_bar.tick();
-                                        }
-                                    }
-                                    _ => {}
+                // progress_bar.enable_steady_tick(Duration::from_millis(100));
+                let client = client.clone();
+                let async_channel = channel.clone();
+                let async_progress_bar = progress_bar.clone();
+                let errorred_progress_tyle = errorred_progress_tyle.clone();
+                let finished_progress_tyle = finished_progress_tyle.clone();
+                async move {
+                    match spawn(async move {
+                        async_channel
+                            .fetch_repo_data(&client, platform, |progress| {
+                                if let FetchRepoDataProgress::Downloading {
+                                    progress,
+                                    total: Some(total),
+                                } = progress
+                                {
+                                    async_progress_bar.set_length(total as u64);
+                                    async_progress_bar.set_position(progress as u64);
+                                    async_progress_bar.tick();
                                 }
-                            }).await
-                        })
-                        .await
-                        {
-                            Ok(Ok(repo_data)) => {
-                                progress_bar.set_style(finished_progress_tyle.clone());
-                                progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-                                progress_bar.set_message("Done!");
-                                progress_bar.finish();
-                                Ok(repo_data)
-                            },
-                            Ok(Err(err)) => {
-                                progress_bar.set_style(errorred_progress_tyle.clone());
-                                progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-                                progress_bar.set_message("Error!");
-                                progress_bar.finish();
-                                Err(err)
-                            },
-                            Err(_) => {
-                                Err(FetchRepoDataError::MiddlewareError(anyhow::anyhow!("join error")))
-                            }
+                            })
+                            .await
+                    })
+                    .await
+                    {
+                        Ok(Ok(repo_data)) => {
+                            progress_bar.set_style(finished_progress_tyle.clone());
+                            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
+                            progress_bar.set_message("Done!");
+                            progress_bar.finish();
+                            Ok(repo_data)
                         }
+                        Ok(Err(err)) => {
+                            progress_bar.set_style(errorred_progress_tyle.clone());
+                            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
+                            progress_bar.set_message("Error!");
+                            progress_bar.finish();
+                            Err(err)
+                        }
+                        Err(_) => Err(FetchRepoDataError::MiddlewareError(anyhow::anyhow!(
+                            "join error"
+                        ))),
                     }
-                }),
-        )
-        .await
-        .into_iter()
-        .partition(Result::is_ok);
+                }
+            }),
+    )
+    .await
+    .into_iter()
+    .partition(Result::is_ok);
 
     if !errors.is_empty() {
         Err(LoadChannelsError::FetchErrors(

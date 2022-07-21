@@ -97,7 +97,7 @@ where
 }
 
 /// Parses the contents of a bracket list `[version="1,2,3", bla=3]`
-fn parse_bracket_list<'a>(input: &'a str) -> Result<BracketVec<'a>, ParseMatchSpecError> {
+fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
     /// Parses a key in a bracket string
     fn parse_key(input: &str) -> IResult<&str, &str> {
         whitespace_enclosed(context(
@@ -163,7 +163,8 @@ fn parse_bracket_vec_into_components(
     bracket: BracketVec,
     match_spec: MatchSpec,
 ) -> Result<MatchSpec, ParseMatchSpecError> {
-    for (key, _value) in bracket {
+    if let Some(&(key, _)) = bracket.first() {
+        // TODO: not supported yet
         return Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()));
     }
     Ok(match_spec)
