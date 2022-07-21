@@ -2,6 +2,9 @@ on: [push, pull_request]
 
 name: Continuous integration
 
+env:
+  RUSTFLAGS: -Dwarnings
+
 jobs:
   check:
     name: Check
