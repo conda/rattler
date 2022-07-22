@@ -14,7 +14,7 @@ futures = "0.3.17"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version="1.0.68", features=["raw_value"] }
 fxhash = "0.2.1"
-serde_with="1.12.0"
+serde_with="2.0.0"
 pubgrub = { git="https://github.com/baszalmstra/pubgrub.git", branch="feat/inclusive_range" }
 reqwest = { version = "0.11.6", features = ["stream"] }
 reqwest-middleware = "0.1.4"
