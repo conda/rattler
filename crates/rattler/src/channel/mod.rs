@@ -1,14 +1,16 @@
-mod fetch;
-
-use super::{ParsePlatformError, Platform};
-use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use std::path::PathBuf;
 use std::str::FromStr;
+
+use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
 
 pub use fetch::{FetchRepoDataError, FetchRepoDataProgress};
+
+use super::{ParsePlatformError, Platform};
+
+mod fetch;
 
 /// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
 /// channel URLs.
@@ -38,7 +40,7 @@ impl Default for ChannelConfig {
     }
 }
 
-/// `Channel`s are the primary source of package information. 
+/// `Channel`s are the primary source of package information.
 #[derive(Debug, Clone, Serialize, Eq, PartialEq)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
@@ -179,10 +181,11 @@ impl Channel {
     /// Returns the platforms explicitly mentioned in the channel or the default platforms of the
     /// current system.
     pub fn platforms_or_default(&self) -> &[Platform] {
-        self.platforms
-            .as_ref()
-            .map(|platforms| platforms.as_ref())
-            .unwrap_or_else(|| default_platforms())
+        if let Some(platforms) = &self.platforms {
+            platforms.as_slice()
+        } else {
+            default_platforms()
+        }
     }
 
     /// Returns the canonical name of the channel
@@ -216,6 +219,7 @@ impl From<url::ParseError> for ParseChannelError {
 }
 
 /// Extract the platforms from the given human readable channel.
+#[allow(clippy::type_complexity)]
 fn parse_platforms(
     channel: &str,
 ) -> Result<(Option<SmallVec<[Platform; 2]>>, &str), ParsePlatformError> {
@@ -238,7 +242,7 @@ fn parse_platforms(
 /// as platform agnostic platforms.
 pub const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
-    return &CURRENT_PLATFORMS;
+    &CURRENT_PLATFORMS
 }
 
 /// Parses the schema part of the human-readable channel. Returns the scheme part if it exists.
@@ -274,8 +278,9 @@ fn is_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_scheme, Channel, ChannelConfig, Platform};
     use smallvec::smallvec;
+
+    use super::{parse_scheme, Channel, ChannelConfig, Platform};
 
     #[test]
     fn test_parse_scheme() {

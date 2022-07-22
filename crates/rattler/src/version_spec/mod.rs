@@ -59,6 +59,7 @@ impl LogicalOperator {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum VersionSpec {
     None,
@@ -67,6 +68,7 @@ pub enum VersionSpec {
     Group(LogicalOperator, Vec<VersionSpec>),
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
     #[error("invalid version: {0}")]

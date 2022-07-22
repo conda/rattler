@@ -1,6 +1,7 @@
 use crate::{MatchSpec, PackageRecord, Version};
 use itertools::Itertools;
 use once_cell::sync::OnceCell;
+use pubgrub::range::Range;
 use pubgrub::version_set::VersionSet;
 use smallvec::SmallVec;
 use std::collections::hash_map::DefaultHasher;
@@ -9,7 +10,6 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::iter::once;
 use std::sync::RwLock;
-use pubgrub::range::Range;
 
 static COMPLEMENT_CACHE: OnceCell<RwLock<HashMap<MatchSpecConstraints, MatchSpecConstraints>>> =
     OnceCell::new();
@@ -68,12 +68,11 @@ impl From<MatchSpec> for MatchSpecConstraints {
     fn from(spec: MatchSpec) -> Self {
         Self {
             groups: vec![MatchSpecElement {
-                version: spec.version.map(Into::into).unwrap_or_else(|| Range::full()),
+                version: spec.version.map(Into::into).unwrap_or_else(Range::full),
                 build_number: spec
                     .build_number
-                    .clone()
                     .map(Range::singleton)
-                    .unwrap_or_else(|| Range::full()),
+                    .unwrap_or_else(Range::full),
             }],
         }
     }
@@ -189,7 +188,7 @@ impl VersionSet for MatchSpecConstraints {
             write_lock.insert(self.clone(), complement.clone());
         }
 
-        return complement;
+        complement
     }
 
     fn intersection(&self, other: &Self) -> Self {
