@@ -1,3 +1,4 @@
+use serde_with::As;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::ptr::NonNull;
@@ -25,37 +26,50 @@ impl Drop for Pool {
     }
 }
 
-impl Pool {
-    /// Save a string to the pool
-    /// Always tries to create one if it does not exist
-    pub fn string_to_id<S: AsRef<str>>(&mut self, str: S) -> StringId {
-        // Save because conversion is valid
-        let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
+/// Interns from Target to Id
+trait Intern {
+    type Id;
+
+    fn intern(&self, pool: &mut Pool) -> Self::Id;
+}
+
+impl StringId {
+    /// Resolve to the interned type
+    fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
+        // Safe because the new-type wraps the ffi::id and cant be created otherwise
+        unsafe {
+            let c_str = ffi::pool_id2str(pool.0.as_ptr(), self.0);
+            CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
+        }
+    }
+}
+
+impl<T: AsRef<str>> Intern for T {
+    type Id = StringId;
+
+    fn intern(&self, pool: &mut Pool) -> Self::Id {
+        // Safe because conversion is valid
+        let c_str =
+            CString::new(self.as_ref()).expect("could never be null because of trait-bound");
         let length = c_str.as_bytes().len();
         let c_str = c_str.as_c_str();
 
         // Safe because pool exists and function accepts any string
         unsafe {
             StringId(ffi::pool_strn2id(
-                self.0.as_mut(),
+                pool.0.as_mut(),
                 c_str.as_ptr(),
                 length.try_into().expect("string too large"),
                 1,
             ))
         }
     }
-
-    pub fn id_to_string(&mut self, id: StringId) -> &str {
-        unsafe {
-            let c_str = ffi::pool_id2str(self.0.as_mut(), id.0);
-            CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
-        }
-    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::Pool;
+    use super::Intern;
+    use crate::libsolv::{ffi, Pool, StringId};
 
     #[test]
     fn test_pool_creation() {
@@ -67,8 +81,8 @@ mod test {
     fn test_pool_string_interning() {
         let mut pool = Pool::default();
         let to_intern = "foobar";
-        let id = pool.string_to_id(to_intern);
-        let outcome = pool.id_to_string(id);
+        let id = to_intern.intern(&mut pool);
+        let outcome = id.resolve(&pool);
         assert_eq!(to_intern, outcome);
     }
 
@@ -86,8 +100,8 @@ mod test {
 
         let mut pool = Pool::default();
         for in_s in strings {
-            let id = pool.string_to_id(in_s);
-            let outcome = pool.id_to_string(id);
+            let id = in_s.intern(&mut pool);
+            let outcome = id.resolve(&pool);
             assert_eq!(in_s, outcome);
         }
     }
