@@ -23,7 +23,7 @@ const ALLOWED_FUNC_PREFIX: &[&str] = &[
 ];
 
 fn build_libsolv() -> Result<PathBuf> {
-    let p = path::PathBuf::from("./libsolv/CMakeLists.txt");
+    let p = path::PathBuf::from("./../../libsolv/CMakeLists.txt");
     if !p.is_file() {
         return Err(anyhow!(
             "Bundled libsolv not found, please do `git submodule update --init`."
