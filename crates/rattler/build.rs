@@ -33,7 +33,7 @@ fn build_libsolv() -> Result<PathBuf> {
         .define("ENABLE_CONDA", "ON")
         .define("ENABLE_STATIC", "ON")
         .define("DISABLE_SHARED", "ON")
-        .target(&std::env::var("CMAKE_TARGET").unwrap_or(std::env::var("TARGET").unwrap()))
+        .target(&std::env::var("CMAKE_TARGET").unwrap_or_else(|_| std::env::var("TARGET").unwrap()))
         .build();
     println!(
         "cargo:rustc-link-search=native={}",

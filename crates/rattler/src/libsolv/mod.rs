@@ -1,1 +1,1 @@
-mod ffi;
+pub mod ffi;
