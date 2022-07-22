@@ -1,7 +1,7 @@
 [package]
 name = "rattler"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -9,7 +9,7 @@ edition = "2018"
 anyhow = "1.0.44"
 clap = { version="3.2.14", features=["derive"] }
 tokio = { version = "1.12.0", features = ["full", "io-util"] }
-tokio-util = { version = "0.7.3", features = ["codec"] }
+tokio-util = { version = "0.7.3", features = ["codec", "io"] }
 futures = "0.3.17"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version="1.0.68", features=["raw_value"] }
@@ -23,7 +23,7 @@ http-cache-reqwest = "0.5.0"
 thiserror = "1.0.30"
 url = { version = "2.2.2", features = ["serde"] }
 regex = "1.5.4"
-indicatif = "0.17.0-rc.6"
+indicatif = { version="0.17.0-rc.6", features=["improved_unicode"] }
 bytes = "1.1.0"
 smallvec = { version="1.8.0", features=["serde", "const_new", "const_generics", "union"] }
 itertools = "0.10.3"
@@ -34,11 +34,17 @@ derive_more = "0.99.16"
 void = "1.0.2"
 nom = "7.1.0"
 dirs = "4.0.0"
-async-compression = {version="0.3.12", features=["gzip", "futures-bufread"] }
+async-compression = {version="0.3.12", features=["gzip", "futures-bufread", "tokio"] }
 log = "0.4.14"
 pretty_env_logger = "0.4.0"
+tempfile = "3.3.0"
+pin-project-lite = "0.2.9"
+extendhash = "1.0.9"
 
 [dev-dependencies]
 rand = "0.8.4"
 insta = "1.16.0"
 proptest = "1.0.0"
+axum = "0.5.13"
+tower-http = { version="0.3.4", features=["fs", "compression-gzip"] }
+tokio-test = "0.4.2"

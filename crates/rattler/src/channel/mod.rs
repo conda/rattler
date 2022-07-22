@@ -20,7 +20,7 @@ mod fetch;
 /// users only use channels from one particular server. Conda solves this by allowing users not to
 /// specify a full Url but instead only specify the name of the channel and reading the primary
 /// server address from a configuration file (e.g. `.condarc`).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
     /// the `https://conda.anaconda.org` server but users are free to change this. This allows
@@ -41,7 +41,7 @@ impl Default for ChannelConfig {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
     /// specified.
@@ -91,14 +91,6 @@ impl Channel {
         let path = url.path().trim_end_matches('/');
 
         // Case 1: No path give, channel name is ""
-        if path.is_empty() {
-            return Self {
-                platforms: platforms.map(Into::into),
-                scheme: url.scheme().to_owned(),
-                location: url.host_str().unwrap_or("").to_owned(),
-                name: String::from(""),
-            };
-        }
 
         // Case 2: migrated_custom_channels
         // Case 3: migrated_channel_aliases
@@ -165,9 +157,9 @@ impl Channel {
 
     /// Returns the Urls for the given platform
     pub fn platform_url(&self, platform: Platform) -> Url {
-        let mut base_url = self.base_url();
-        base_url.set_path(&format!("{}/{}/", base_url.path(), platform.as_str()));
-        base_url
+        self.base_url()
+            .join(&format!("{}/", platform.as_str())) // trailing slash is important here as this signifies a directory
+            .expect("platform is a valid url fragment")
     }
 
     /// Returns the Urls for all the supported platforms of this package.
@@ -299,6 +291,20 @@ mod tests {
         assert_eq!(channel.location, "conda.anaconda.org");
         assert_eq!(channel.name, "conda-forge");
         assert_eq!(channel.platforms, None);
+    }
+
+    #[test]
+    fn parse_url_only() {
+        let config = ChannelConfig::default();
+
+        let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
+        assert_eq!(channel.scheme, "http");
+        assert_eq!(channel.location, "localhost:1234");
+        assert_eq!(channel.name, "");
+        assert_eq!(channel.platforms, None);
+
+        let noarch_url = channel.platform_url(Platform::NoArch);
+        assert_eq!(noarch_url.to_string(), "http://localhost:1234/noarch/");
     }
 
     #[test]

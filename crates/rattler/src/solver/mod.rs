@@ -165,86 +165,86 @@ impl From<VersionSpec> for Range<Version> {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::MatchSpecConstraints;
-    use crate::{ChannelConfig, MatchSpec, RepoData};
-    use itertools::Itertools;
-    use pubgrub::version_set::VersionSet;
-    use std::fs::File;
-    use std::io::BufReader;
-    use std::path::PathBuf;
-
-    fn repo_data() -> RepoData {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let repo_data_path = manifest_dir.join("resources/conda_forge_noarch_repodata.json");
-
-        let reader = BufReader::new(File::open(repo_data_path).unwrap());
-        serde_json::from_reader(reader).unwrap()
-    }
-
-    #[test]
-    fn test_versions() {
-        let repo_data = repo_data();
-        let all_versions = repo_data.packages.values();
-        for record in all_versions {
-            assert!(!MatchSpecConstraints::empty().contains(record));
-            assert!(MatchSpecConstraints::full().contains(record));
-            assert!(MatchSpecConstraints::singleton(record.clone()).contains(&record));
-            assert!(!MatchSpecConstraints::singleton(record.clone())
-                .complement()
-                .contains(&record));
-        }
-    }
-
-    #[test]
-    fn test_version_compare() {
-        let repo_data = repo_data();
-        for record in repo_data.packages.values().take(100) {
-            for record2 in repo_data.packages.values().take(100) {
-                assert_ne!(record2 < record, record2 >= record);
-                assert_ne!(record2 <= record, record2 > record);
-                assert_ne!(record2 == record, record2 != record);
-                assert_ne!(record2 >= record, record2 < record);
-                assert_ne!(record2 > record, record2 <= record);
-            }
-        }
-    }
-
-    #[test]
-    fn test_version_and_set() {
-        let repo_data = repo_data();
-        let sets = repo_data
-            .packages
-            .values()
-            .flat_map(|p| p.depends.iter())
-            .map(|d| {
-                MatchSpecConstraints::from(
-                    MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap(),
-                )
-            })
-            .take(100);
-        let versions = repo_data.packages.values().take(100).collect_vec();
-        for set in sets {
-            assert_eq!(
-                MatchSpecConstraints::empty(),
-                set.complement().intersection(&set)
-            );
-            assert_eq!(MatchSpecConstraints::full(), set.complement().union(&set));
-
-            for version in versions.iter() {
-                assert_eq!(set.contains(&version), !set.complement().contains(&version));
-            }
-        }
-        for record in repo_data.packages.values().take(100) {
-            for record2 in repo_data.packages.values().take(100) {
-                assert_ne!(record2 < record, record2 >= record);
-                assert_ne!(record2 <= record, record2 > record);
-                assert_ne!(record2 == record, record2 != record);
-                assert_ne!(record2 >= record, record2 < record);
-                assert_ne!(record2 > record, record2 <= record);
-            }
-        }
-    }
-}
+//
+// #[cfg(test)]
+// mod tests {
+//     use crate::MatchSpecConstraints;
+//     use crate::{ChannelConfig, MatchSpec, RepoData};
+//     use itertools::Itertools;
+//     use pubgrub::version_set::VersionSet;
+//     use std::fs::File;
+//     use std::io::BufReader;
+//     use std::path::PathBuf;
+//
+//     fn repo_data() -> RepoData {
+//         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+//         let repo_data_path = manifest_dir.join("resources/conda_forge_noarch_repodata.json");
+//
+//         let reader = BufReader::new(File::open(repo_data_path).unwrap());
+//         serde_json::from_reader(reader).unwrap()
+//     }
+//
+//     #[test]
+//     fn test_versions() {
+//         let repo_data = repo_data();
+//         let all_versions = repo_data.packages.values();
+//         for record in all_versions {
+//             assert!(!MatchSpecConstraints::empty().contains(record));
+//             assert!(MatchSpecConstraints::full().contains(record));
+//             assert!(MatchSpecConstraints::singleton(record.clone()).contains(&record));
+//             assert!(!MatchSpecConstraints::singleton(record.clone())
+//                 .complement()
+//                 .contains(&record));
+//         }
+//     }
+//
+//     #[test]
+//     fn test_version_compare() {
+//         let repo_data = repo_data();
+//         for record in repo_data.packages.values().take(100) {
+//             for record2 in repo_data.packages.values().take(100) {
+//                 assert_ne!(record2 < record, record2 >= record);
+//                 assert_ne!(record2 <= record, record2 > record);
+//                 assert_ne!(record2 == record, record2 != record);
+//                 assert_ne!(record2 >= record, record2 < record);
+//                 assert_ne!(record2 > record, record2 <= record);
+//             }
+//         }
+//     }
+//
+//     #[test]
+//     fn test_version_and_set() {
+//         let repo_data = repo_data();
+//         let sets = repo_data
+//             .packages
+//             .values()
+//             .flat_map(|p| p.depends.iter())
+//             .map(|d| {
+//                 MatchSpecConstraints::from(
+//                     MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap(),
+//                 )
+//             })
+//             .take(100);
+//         let versions = repo_data.packages.values().take(100).collect_vec();
+//         for set in sets {
+//             assert_eq!(
+//                 MatchSpecConstraints::empty(),
+//                 set.complement().intersection(&set)
+//             );
+//             assert_eq!(MatchSpecConstraints::full(), set.complement().union(&set));
+//
+//             for version in versions.iter() {
+//                 assert_eq!(set.contains(&version), !set.complement().contains(&version));
+//             }
+//         }
+//         for record in repo_data.packages.values().take(100) {
+//             for record2 in repo_data.packages.values().take(100) {
+//                 assert_ne!(record2 < record, record2 >= record);
+//                 assert_ne!(record2 <= record, record2 > record);
+//                 assert_ne!(record2 == record, record2 != record);
+//                 assert_ne!(record2 >= record, record2 < record);
+//                 assert_ne!(record2 > record, record2 <= record);
+//             }
+//         }
+//     }
+// }

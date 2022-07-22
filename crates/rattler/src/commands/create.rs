@@ -1,20 +1,14 @@
+use itertools::Itertools;
+use pubgrub::{
+    error::PubGrubError,
+    report::{DefaultStringReporter, Reporter},
+    solver::resolve,
+};
 use std::str::FromStr;
 
-use http_cache_reqwest::{CACacheManager, Cache, CacheMode, HttpCache};
-use indicatif::{ProgressBar, ProgressStyle};
-use itertools::Itertools;
-use pubgrub::error::PubGrubError;
-use pubgrub::report::{DefaultStringReporter, Reporter};
-use pubgrub::solver::resolve;
-use reqwest_middleware::ClientBuilder;
-use reqwest_retry::policies::ExponentialBackoff;
-use reqwest_retry::RetryTransientMiddleware;
-use thiserror::Error;
-use tokio::spawn;
-
 use rattler::{
-    Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, PackageIndex, PackageRecord,
-    RepoData, SolverIndex, Version,
+    repo_data::fetch::{terminal_progress, MultiRequestRepoDataBuilder},
+    Channel, ChannelConfig, PackageIndex, PackageRecord, SolverIndex, Version,
 };
 
 #[derive(Debug, clap::Parser)]
@@ -29,6 +23,13 @@ pub struct Opt {
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
+    // Get the cache directory
+    let cache_dir = dirs::cache_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
+        .join("rattler/cache");
+    std::fs::create_dir_all(&cache_dir)
+        .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
+
     // Get the channels to download
     let channels = opt
         .channels
@@ -38,7 +39,20 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // Download all repo data from the channels and create an index
-    let repo_data = load_channels(&channels).await?;
+    let repo_data_per_source = MultiRequestRepoDataBuilder::default()
+        .set_cache_dir(&cache_dir)
+        .set_listener(terminal_progress())
+        .set_fail_fast(false)
+        .add_channels(channels)
+        .request()
+        .await;
+
+    // Error out if fetching one of the sources resulted in an error.
+    let repo_data = repo_data_per_source
+        .into_iter()
+        .map(|(_, _, result)| result)
+        .collect::<Result<Vec<_>, _>>()?;
+
     let index = PackageIndex::from(repo_data);
 
     let mut solve_index = SolverIndex::new(index);
@@ -59,6 +73,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         constrains: vec![],
         track_features: None,
         features: None,
+        noarch: None,
         preferred_env: None,
         license: None,
         license_family: None,
@@ -99,124 +114,4 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     }
 
     Ok(())
-}
-
-#[derive(Error, Debug)]
-enum LoadChannelsError {
-    #[error("error fetching repodata")]
-    FetchErrors(Vec<FetchRepoDataError>),
-    #[error("{0}")]
-    IoError(#[from] std::io::Error),
-    #[error("{0}")]
-    Other(#[from] anyhow::Error),
-}
-
-/// Interactively loads the [`RepoData`] of the specified channels.
-async fn load_channels<'c, I: IntoIterator<Item = &'c Channel> + 'c>(
-    channels: I,
-) -> Result<Vec<RepoData>, LoadChannelsError> {
-    // Get the cache directory
-    let http_cache_dir = dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/cache");
-    std::fs::create_dir_all(&http_cache_dir)
-        .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
-
-    // Construct a client with a cache and retry policy
-    let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
-    let client = ClientBuilder::new(reqwest::Client::new())
-        .with(Cache(HttpCache {
-            mode: CacheMode::Default,
-            manager: CACacheManager {
-                path: http_cache_dir.to_string_lossy().to_string(),
-            },
-            options: None,
-        }))
-        .with(RetryTransientMiddleware::new_with_policy(retry_policy))
-        .build();
-
-    // Setup the progress bar
-    let multi_progress = indicatif::MultiProgress::new();
-    let default_progress_style = ProgressStyle::default_bar()
-        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:30.green/blue}] {bytes:>8}/{total_bytes:<8} @ {bytes_per_sec:8}").unwrap()
-        .progress_chars("=> ");
-    let finished_progress_tyle = ProgressStyle::default_bar()
-        .template("  {prefix:20!} [{elapsed_precise}] {msg:.bold}")
-        .unwrap();
-    let errorred_progress_tyle = ProgressStyle::default_bar()
-        .template("  {prefix:20!} [{elapsed_precise}] {msg:.red/bold}")
-        .unwrap();
-
-    // Iterate over all channel and platform permutations
-    let (repo_datas, errors): (Vec<_>, Vec<_>) = futures::future::join_all(
-        channels
-            .into_iter()
-            .flat_map(move |channel| {
-                channel
-                    .platforms_or_default()
-                    .iter()
-                    .map(move |platform| (channel, *platform))
-            })
-            .map(move |(channel, platform)| {
-                // Create progress bar
-                let progress_bar = multi_progress.add(ProgressBar::new(1));
-                progress_bar.set_style(default_progress_style.clone());
-                progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-
-                // progress_bar.enable_steady_tick(Duration::from_millis(100));
-                let client = client.clone();
-                let async_channel = channel.clone();
-                let async_progress_bar = progress_bar.clone();
-                let errorred_progress_tyle = errorred_progress_tyle.clone();
-                let finished_progress_tyle = finished_progress_tyle.clone();
-                async move {
-                    match spawn(async move {
-                        async_channel
-                            .fetch_repo_data(&client, platform, |progress| {
-                                if let FetchRepoDataProgress::Downloading {
-                                    progress,
-                                    total: Some(total),
-                                } = progress
-                                {
-                                    async_progress_bar.set_length(total as u64);
-                                    async_progress_bar.set_position(progress as u64);
-                                    async_progress_bar.tick();
-                                }
-                            })
-                            .await
-                    })
-                    .await
-                    {
-                        Ok(Ok(repo_data)) => {
-                            progress_bar.set_style(finished_progress_tyle.clone());
-                            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-                            progress_bar.set_message("Done!");
-                            progress_bar.finish();
-                            Ok(repo_data)
-                        }
-                        Ok(Err(err)) => {
-                            progress_bar.set_style(errorred_progress_tyle.clone());
-                            progress_bar.set_prefix(format!("{}/{}", &channel.name, platform));
-                            progress_bar.set_message("Error!");
-                            progress_bar.finish();
-                            Err(err)
-                        }
-                        Err(_) => Err(FetchRepoDataError::MiddlewareError(anyhow::anyhow!(
-                            "join error"
-                        ))),
-                    }
-                }
-            }),
-    )
-    .await
-    .into_iter()
-    .partition(Result::is_ok);
-
-    if !errors.is_empty() {
-        Err(LoadChannelsError::FetchErrors(
-            errors.into_iter().map(Result::unwrap_err).collect(),
-        ))
-    } else {
-        Ok(repo_datas.into_iter().map(Result::unwrap).collect())
-    }
 }
