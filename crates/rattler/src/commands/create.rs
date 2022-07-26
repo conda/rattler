@@ -9,7 +9,6 @@ use pubgrub::solver::resolve;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use structopt::StructOpt;
 use thiserror::Error;
 use tokio::spawn;
 
@@ -18,12 +17,12 @@ use rattler::{
     RepoData, SolverIndex, Version,
 };
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, clap::Parser)]
 pub struct Opt {
-    #[structopt(short)]
+    #[clap(short)]
     channels: Option<Vec<String>>,
 
-    #[structopt(required = true)]
+    #[clap(required = true)]
     specs: Vec<String>,
 }
 
