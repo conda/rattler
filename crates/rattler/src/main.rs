@@ -1,17 +1,18 @@
-use structopt::StructOpt;
+use clap::Parser;
 
 mod commands;
 mod libsolv;
 
 /// Command line options available through the `rattler` cli.
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Parser)]
+#[clap(author, version, about, long_about = None)]
 struct Opt {
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     command: Command,
 }
 
 /// Different commands supported by `rattler`.
-#[derive(Debug, StructOpt)]
+#[derive(Debug, clap::Subcommand)]
 enum Command {
     Create(commands::create::Opt),
 }
@@ -21,7 +22,7 @@ enum Command {
 async fn main() -> anyhow::Result<()> {
     pretty_env_logger::init();
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     match opt.command {
         Command::Create(opt) => commands::create::create(opt).await,
     }

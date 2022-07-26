@@ -9,7 +9,6 @@ use pubgrub::solver::resolve;
 use reqwest_middleware::ClientBuilder;
 use reqwest_retry::policies::ExponentialBackoff;
 use reqwest_retry::RetryTransientMiddleware;
-use structopt::StructOpt;
 use thiserror::Error;
 use tokio::spawn;
 
@@ -18,12 +17,12 @@ use rattler::{
     RepoData, SolverIndex, Version,
 };
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, clap::Parser)]
 pub struct Opt {
-    #[structopt(short)]
+    #[clap(short)]
     channels: Option<Vec<String>>,
 
-    #[structopt(required = true)]
+    #[clap(required = true)]
     specs: Vec<String>,
 }
 
@@ -139,13 +138,13 @@ async fn load_channels<'c, I: IntoIterator<Item = &'c Channel> + 'c>(
     // Setup the progress bar
     let multi_progress = indicatif::MultiProgress::new();
     let default_progress_style = ProgressStyle::default_bar()
-        .template("{{spinner:.green}} {{prefix:20!}} [{{elapsed_precise}}] [{{bar:30.green/blue}}] {{bytes:>8}}/{{total_bytes:<8}} @ {{bytes_per_sec:8}}").unwrap()
+        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:30.green/blue}] {bytes:>8}/{total_bytes:<8} @ {bytes_per_sec:8}").unwrap()
         .progress_chars("=> ");
     let finished_progress_tyle = ProgressStyle::default_bar()
-        .template("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}")
+        .template("  {prefix:20!} [{elapsed_precise}] {msg:.bold}")
         .unwrap();
     let errorred_progress_tyle = ProgressStyle::default_bar()
-        .template("  {{prefix:20!}} [{{elapsed_precise}}] {{msg:.red/bold}}")
+        .template("  {prefix:20!} [{elapsed_precise}] {msg:.red/bold}")
         .unwrap();
 
     // Iterate over all channel and platform permutations
