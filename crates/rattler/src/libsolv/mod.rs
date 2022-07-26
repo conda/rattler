@@ -1,4 +1,3 @@
-use serde_with::As;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::ptr::NonNull;
@@ -26,10 +25,11 @@ impl Drop for Pool {
     }
 }
 
-/// Interns from Target to Id
+/// Interns from Target tyoe to Id
 trait Intern {
     type Id;
 
+    /// Intern the type in the [`Pool`]
     fn intern(&self, pool: &mut Pool) -> Self::Id;
 }
 
@@ -44,6 +44,7 @@ impl StringId {
     }
 }
 
+/// Blanket implementation for string types
 impl<T: AsRef<str>> Intern for T {
     type Id = StringId;
 
@@ -69,7 +70,7 @@ impl<T: AsRef<str>> Intern for T {
 #[cfg(test)]
 mod test {
     use super::Intern;
-    use crate::libsolv::{ffi, Pool, StringId};
+    use crate::libsolv::Pool;
 
     #[test]
     fn test_pool_creation() {
@@ -81,13 +82,16 @@ mod test {
     fn test_pool_string_interning() {
         let mut pool = Pool::default();
         let to_intern = "foobar";
+        // Intern the string
         let id = to_intern.intern(&mut pool);
+        // Get it back
         let outcome = id.resolve(&pool);
         assert_eq!(to_intern, outcome);
     }
 
     #[test]
     fn test_pool_string_interning_utf8() {
+        // Some interesting utf-8 strings to test
         let strings = [
             "いろはにほへとちりぬるを
             わかよたれそつねならむ
