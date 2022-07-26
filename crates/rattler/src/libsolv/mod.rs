@@ -1,11 +1,18 @@
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
+use std::fs::File;
+use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 mod ffi;
 
-/// Wrapper for libsolv Pool
+/// Wrapper for libsolv Pool which is an interning datastructure used by libsolv
 pub struct Pool(NonNull<ffi::Pool>);
+
+/// Representation of a repo containing package data in libsolv
+/// This corresponds to a repo_data json
+/// Lifetime of this object is coupled to the Pool on creation
+struct Repo<'pool>(NonNull<ffi::Repo>, PhantomData<&'pool ffi::Pool>);
 
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
@@ -18,10 +25,34 @@ impl Default for Pool {
     }
 }
 
+/// Destroy c side of things when pool is dropped
 impl Drop for Pool {
     fn drop(&mut self) {
         // Safe because we know that the pool exists at this point
         unsafe { ffi::pool_free(self.0.as_mut()) }
+    }
+}
+
+/// Destroy c side of things when repo is dropped
+impl Drop for Repo<'_> {
+    /// Safe because we have coupled Repo lifetime to Pool lifetime
+    fn drop(&mut self) {
+        unsafe { ffi::repo_free(self.0.as_mut(), 1) }
+    }
+}
+
+impl Pool {
+    /// Create repo from a pool
+    fn create_repo<S: AsRef<str>>(&mut self, url: S) -> Repo {
+        unsafe {
+            let c_url =
+                CString::new(url.as_ref()).expect("could never be null because of trait-bound");
+            Repo(
+                NonNull::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr()))
+                    .expect("could not create repo object"),
+                PhantomData,
+            )
+        }
     }
 }
 
@@ -74,7 +105,9 @@ mod test {
 
     #[test]
     fn test_pool_creation() {
-        let pool = Pool::default();
+        let mut pool = Pool::default();
+        let repo = pool.create_repo("conda-forge");
+        drop(repo);
         drop(pool);
     }
 
