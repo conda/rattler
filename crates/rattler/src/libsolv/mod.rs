@@ -18,6 +18,10 @@ struct Repo<'pool>(NonNull<ffi::Repo>, PhantomData<&'pool ffi::Pool>);
 #[derive(Copy, Clone)]
 pub struct StringId(ffi::Id);
 
+fn c_string<T: AsRef<str>>(str: T) -> CString {
+    CString::new(str.as_ref()).expect("could never be null because of trait-bound")
+}
+
 impl Default for Pool {
     fn default() -> Self {
         // Safe because the pool create failure is handled with expect
@@ -35,9 +39,22 @@ impl Drop for Pool {
 
 /// Destroy c side of things when repo is dropped
 impl Drop for Repo<'_> {
-    /// Safe because we have coupled Repo lifetime to Pool lifetime
+    // Safe because we have coupled Repo lifetime to Pool lifetime
     fn drop(&mut self) {
         unsafe { ffi::repo_free(self.0.as_mut(), 1) }
+    }
+}
+
+impl Repo<'_> {
+
+    /// Add conda json to the repo
+    pub fn add_conda_json<T: AsRef<str>>(&mut self, json_path: T) {
+        let c_json = c_string(json_path);
+        let mode = c_string("r");
+        unsafe {
+            let file = libc::fopen(c_json.as_ptr(), mode.as_ptr()) as *mut ffi::FILE;
+            ffi::repo_add_conda(self.0.as_mut(), file, 0);
+        }
     }
 }
 
@@ -45,13 +62,20 @@ impl Pool {
     /// Create repo from a pool
     fn create_repo<S: AsRef<str>>(&mut self, url: S) -> Repo {
         unsafe {
-            let c_url =
-                CString::new(url.as_ref()).expect("could never be null because of trait-bound");
+            let c_url = c_string(url);
             Repo(
                 NonNull::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr()))
                     .expect("could not create repo object"),
                 PhantomData,
             )
+        }
+    }
+
+    /// Create the whatprovides on the pool which is needed for solving
+    fn create_whatprovides(&mut self) {
+        // Safe because pointer must exist
+        unsafe {
+            ffi::pool_createwhatprovides(self.0.as_mut());
         }
     }
 }
