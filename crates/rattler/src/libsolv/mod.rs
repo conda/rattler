@@ -53,7 +53,10 @@ impl Repo<'_> {
         let mode = c_string("r");
         unsafe {
             let file = libc::fopen(c_json.as_ptr(), mode.as_ptr()) as *mut ffi::FILE;
-            ffi::repo_add_conda(self.0.as_mut(), file, 0);
+            let ret = ffi::repo_add_conda(self.0.as_mut(), file, 0);
+            if ret != 0 {
+                panic!("could not add conda")
+            }
         }
     }
 }
@@ -124,6 +127,7 @@ impl<T: AsRef<str>> Intern for T {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
     use super::Intern;
     use crate::libsolv::Pool;
 
@@ -165,5 +169,13 @@ mod test {
             let outcome = id.resolve(&pool);
             assert_eq!(in_s, outcome);
         }
+    }
+
+    #[test]
+    fn test_conda_read_repodata() {
+        let json_file = format!("{}/{}", env!("CARGO_MANIFEST_DIR"), "resources/conda_forge_noarch_repodata.json");
+        let mut pool = Pool::default();
+        let mut repo = pool.create_repo("conda-forge");
+        repo.add_conda_json(json_file);
     }
 }
