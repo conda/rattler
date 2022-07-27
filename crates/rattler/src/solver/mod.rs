@@ -191,10 +191,10 @@ mod tests {
         for record in all_versions {
             assert!(!MatchSpecConstraints::empty().contains(record));
             assert!(MatchSpecConstraints::full().contains(record));
-            assert!(MatchSpecConstraints::singleton(record.clone()).contains(&record));
+            assert!(MatchSpecConstraints::singleton(record.clone()).contains(record));
             assert!(!MatchSpecConstraints::singleton(record.clone())
                 .complement()
-                .contains(&record));
+                .contains(record));
         }
     }
 
@@ -221,7 +221,7 @@ mod tests {
             .flat_map(|p| p.depends.iter())
             .map(|d| {
                 MatchSpecConstraints::from(
-                    MatchSpec::from_str(&d, &ChannelConfig::default()).unwrap(),
+                    MatchSpec::from_str(d, &ChannelConfig::default()).unwrap(),
                 )
             })
             .take(100);
@@ -234,7 +234,7 @@ mod tests {
             assert_eq!(MatchSpecConstraints::full(), set.complement().union(&set));
 
             for version in versions.iter() {
-                assert_eq!(set.contains(&version), !set.complement().contains(&version));
+                assert_eq!(set.contains(version), !set.complement().contains(version));
             }
         }
         for record in repo_data.packages.values().take(100) {
