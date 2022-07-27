@@ -1,7 +1,8 @@
-use std::ffi::{CString};
+use std::ffi::CString;
 
 mod ffi;
 mod pool;
+mod queue;
 mod repo;
 
 /// Convenience method to convert from a string reference to a CString

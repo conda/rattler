@@ -26,6 +26,7 @@ impl Repo<'_> {
         unsafe {
             // Cast needed because types do not match in bindgen
             // TODO: see if lib types could be used in bindgen
+            // Safe because we check nullptr
             let file = libc::fopen(c_json.as_ptr(), mode.as_ptr()) as *mut ffi::FILE;
             if file.is_null() {
                 return Err(anyhow::anyhow!(
@@ -33,7 +34,7 @@ impl Repo<'_> {
                     json_path.as_ref()
                 ));
             }
-            // Add it to conda
+            // This line could crash if the json is malformed
             let ret = ffi::repo_add_conda(self.0.as_mut(), file, 0);
             if ret != 0 {
                 return Err(anyhow::anyhow!(
