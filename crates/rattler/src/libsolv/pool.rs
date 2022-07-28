@@ -3,7 +3,6 @@ use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
-use std::fmt::format;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
@@ -60,7 +59,7 @@ trait Intern {
 pub struct StringId(ffi::Id);
 
 impl StringId {
-    /// Resolve to the interned type
+    /// Resolve to the interned type returns a string reference
     fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
@@ -88,6 +87,7 @@ fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
     }
 }
 
+/// Intern implementation for string reference
 impl<'s> Intern for &'s str {
     type Id = StringId;
 
@@ -96,6 +96,7 @@ impl<'s> Intern for &'s str {
     }
 }
 
+/// Intern implementation for owned Strings
 impl<'s> Intern for &'s String {
     type Id = StringId;
 
@@ -111,15 +112,15 @@ impl Intern for MatchSpec {
     type Id = MatchSpecId;
 
     fn intern(&self, pool: &mut Pool) -> Self::Id {
-        // let c_str =
-        //     CString::new(self.as_ref()).expect("could never be null because of trait-bound");
-        // let c_str = c_str.as_c_str();
-
         let name = self
             .name
             .as_ref()
             .expect("matchspec should have a name")
             .clone();
+
+        // Put the matchspec in conda build form
+        // This is also used by mamba to add matchspecs to libsolv
+        // See: https://github.dev/mamba-org/mamba/blob/master/libmamba/src/core/match_spec.cpp
         let conda_build_form = if self.version.is_some() {
             let version = self.version.as_ref().unwrap().clone();
             if self.build.is_some() {
@@ -135,13 +136,16 @@ impl Intern for MatchSpec {
         } else {
             name
         };
-        MatchSpecId(3)
+
+        let c_str = c_string(conda_build_form);
+        unsafe { MatchSpecId(ffi::pool_conda_matchspec(pool.0.as_mut(), c_str.as_ptr())) }
     }
 }
 
 #[cfg(test)]
 mod test {
     use crate::libsolv::pool::{Intern, Pool};
+    use rattler::{ChannelConfig, MatchSpec};
 
     #[test]
     fn test_pool_creation() {
@@ -181,5 +185,16 @@ mod test {
             let outcome = id.resolve(&pool);
             assert_eq!(in_s, outcome);
         }
+    }
+
+    #[test]
+    fn test_matchspec_interning() {
+        // Create a matchspec
+        let channel_config = ChannelConfig::default();
+        let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
+        // Intern it into the pool
+        let mut pool = Pool::default();
+        spec.intern(&mut pool);
+        // Don't think libsolv has an API to get it back
     }
 }

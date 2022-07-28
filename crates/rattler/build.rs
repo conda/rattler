@@ -78,6 +78,7 @@ fn generate_bindings(include_path: &Path) -> Result<()> {
         .header(include_path.join("pool.h").to_str().unwrap())
         .header(include_path.join("selection.h").to_str().unwrap())
         .header(include_path.join("knownid.h").to_str().unwrap())
+        .header(include_path.join("conda.h").to_str().unwrap())
         .header(include_path.join("repo_conda.h").to_str().unwrap())
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(".*")

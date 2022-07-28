@@ -41,6 +41,10 @@ impl Repo<'_> {
                     "internal libsolv error while adding repodata to libsolv"
                 ));
             }
+
+            // Libsolv needs this function to be called so we can work with the repo later
+            // TODO: maybe wolf knows more about this function
+            ffi::repo_internalize(self.0.as_mut());
         }
         Ok(())
     }
