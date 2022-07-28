@@ -1,10 +1,13 @@
 use crate::libsolv::ffi;
+use crate::libsolv::ffi::Id;
+use crate::libsolv::pool::StringId;
+use std::marker::PhantomData;
 
 /// Wrapper for libsolv queue type. This type is used by libsolv in the solver
 /// to solve for different conda matchspecs
-pub struct Queue(ffi::Queue);
+pub struct Queue<T>(ffi::Queue, PhantomData<T>);
 
-impl Default for Queue {
+impl<T: Into<ffi::Id>> Default for Queue<T> {
     fn default() -> Self {
         // Safe because we know for a fact that the queue exists
         unsafe {
@@ -17,12 +20,21 @@ impl Default for Queue {
             };
             // This initializes some internal libsolv stuff
             ffi::queue_init(&mut queue as *mut ffi::Queue);
-            Self(queue)
+            Self(queue, PhantomData)
         }
     }
 }
 
-impl Queue {
+impl<T> Drop for Queue<T> {
+    fn drop(&mut self) {
+        // Safe because this pointer exists
+        unsafe {
+            ffi::queue_free(self.as_inner_mut());
+        }
+    }
+}
+
+impl<T> Queue<T> {
     /// Returns the ffi::Queue as a mutable pointer
     pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
         &mut self.0 as *mut ffi::Queue
@@ -34,21 +46,13 @@ impl Queue {
     }
 }
 
-impl Drop for Queue {
-    fn drop(&mut self) {
-        // Safe because this pointer exists
-        unsafe {
-            ffi::queue_free(self.as_inner_mut());
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use crate::libsolv::pool::StringId;
     use crate::libsolv::queue::Queue;
 
     #[test]
     fn create_queue() {
-        let queue = Queue::default();
+        let queue = Queue::<StringId>::default();
     }
 }

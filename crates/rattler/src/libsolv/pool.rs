@@ -105,6 +105,13 @@ impl<'s> Intern for &'s String {
     }
 }
 
+/// Conversion to [`ffi::Id`]
+impl From<StringId> for ffi::Id {
+    fn from(id: StringId) -> Self {
+        id.0
+    }
+}
+
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
 pub struct MatchSpecId(ffi::Id);
@@ -139,6 +146,13 @@ impl Intern for MatchSpec {
 
         let c_str = c_string(conda_build_form);
         unsafe { MatchSpecId(ffi::pool_conda_matchspec(pool.0.as_mut(), c_str.as_ptr())) }
+    }
+}
+
+/// Conversion to [`ffi::Id`]
+impl From<MatchSpecId> for ffi::Id {
+    fn from(id: MatchSpecId) -> Self {
+        id.0
     }
 }
 
