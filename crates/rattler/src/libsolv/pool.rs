@@ -1,7 +1,9 @@
 use crate::libsolv::repo::Repo;
 use crate::libsolv::{c_string, ffi};
+use rattler::MatchSpec;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
+use std::fmt::format;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
@@ -68,26 +70,72 @@ impl StringId {
     }
 }
 
-/// Blanket implementation for string types
-impl<T: AsRef<str>> Intern for T {
+/// Intern string like types
+fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
+    // Safe because conversion is valid
+    let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
+    let length = c_str.as_bytes().len();
+    let c_str = c_str.as_c_str();
+
+    // Safe because pool exists and function accepts any string
+    unsafe {
+        StringId(ffi::pool_strn2id(
+            pool.0.as_mut(),
+            c_str.as_ptr(),
+            length.try_into().expect("string too large"),
+            1,
+        ))
+    }
+}
+
+impl<'s> Intern for &'s str {
     type Id = StringId;
 
     fn intern(&self, pool: &mut Pool) -> Self::Id {
-        // Safe because conversion is valid
-        let c_str =
-            CString::new(self.as_ref()).expect("could never be null because of trait-bound");
-        let length = c_str.as_bytes().len();
-        let c_str = c_str.as_c_str();
+        intern_str(pool, self)
+    }
+}
 
-        // Safe because pool exists and function accepts any string
-        unsafe {
-            StringId(ffi::pool_strn2id(
-                pool.0.as_mut(),
-                c_str.as_ptr(),
-                length.try_into().expect("string too large"),
-                1,
-            ))
-        }
+impl<'s> Intern for &'s String {
+    type Id = StringId;
+
+    fn intern(&self, pool: &mut Pool) -> Self::Id {
+        intern_str(pool, self)
+    }
+}
+
+/// Wrapper for the StringId of libsolv
+#[derive(Copy, Clone)]
+pub struct MatchSpecId(ffi::Id);
+impl Intern for MatchSpec {
+    type Id = MatchSpecId;
+
+    fn intern(&self, pool: &mut Pool) -> Self::Id {
+        // let c_str =
+        //     CString::new(self.as_ref()).expect("could never be null because of trait-bound");
+        // let c_str = c_str.as_c_str();
+
+        let name = self
+            .name
+            .as_ref()
+            .expect("matchspec should have a name")
+            .clone();
+        let conda_build_form = if self.version.is_some() {
+            let version = self.version.as_ref().unwrap().clone();
+            if self.build.is_some() {
+                format!(
+                    "{} {} {}",
+                    name,
+                    version,
+                    self.build.as_ref().unwrap().clone()
+                )
+            } else {
+                format!("{} {}", name, version)
+            }
+        } else {
+            name
+        };
+        MatchSpecId(3)
     }
 }
 

@@ -74,8 +74,11 @@ fn generate_bindings(include_path: &Path) -> Result<()> {
     let generator = bindgen::Builder::default()
         .header(include_path.join("solver.h").to_str().unwrap())
         .header(include_path.join("solverdebug.h").to_str().unwrap())
+        .header(include_path.join("queue.h").to_str().unwrap())
+        .header(include_path.join("pool.h").to_str().unwrap())
         .header(include_path.join("selection.h").to_str().unwrap())
         .header(include_path.join("knownid.h").to_str().unwrap())
+        .header(include_path.join("repo_conda.h").to_str().unwrap())
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(".*")
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")));
