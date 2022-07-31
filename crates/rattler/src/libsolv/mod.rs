@@ -54,5 +54,8 @@ mod test {
         let id = matchspec.intern(&mut pool);
         queue.push2(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
         // Solver
+        let mut solver = pool.create_solver();
+        // solve
+        solver.solve(&mut queue).expect("unable to solve");
     }
 }

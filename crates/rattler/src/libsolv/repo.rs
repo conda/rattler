@@ -6,19 +6,19 @@ use std::ptr::NonNull;
 /// Representation of a repo containing package data in libsolv
 /// This corresponds to a repo_data json
 /// Lifetime of this object is coupled to the Pool on creation
-pub struct Repo<'pool>(pub(super) RepoWrapper, pub(super) PhantomData<&'pool Pool>);
+pub struct Repo<'pool>(pub(super) RepoOwnedPtr, pub(super) PhantomData<&'pool Pool>);
 
 /// Wrapper type so we do not use lifetime in the drop
-pub(super) struct RepoWrapper(NonNull<ffi::Repo>);
+pub(super) struct RepoOwnedPtr(NonNull<ffi::Repo>);
 
-impl RepoWrapper {
-    pub fn new(repo: *mut ffi::Repo) -> RepoWrapper {
+impl RepoOwnedPtr {
+    pub fn new(repo: *mut ffi::Repo) -> RepoOwnedPtr {
         Self(NonNull::new(repo).expect("Could not create repo object"))
     }
 }
 
 /// Destroy c-side of things when repo is dropped
-impl Drop for RepoWrapper {
+impl Drop for RepoOwnedPtr {
     // Safe because we have coupled Repo lifetime to Pool lifetime
     fn drop(&mut self) {
         unsafe { ffi::repo_free(self.0.as_mut(), 1) }

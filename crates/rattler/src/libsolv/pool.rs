@@ -1,5 +1,5 @@
-use crate::libsolv::repo::{Repo, RepoWrapper};
-use crate::libsolv::solver::Solver;
+use crate::libsolv::repo::{Repo, RepoOwnedPtr};
+use crate::libsolv::solver::{Solver, SolverOwnedPtr};
 use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
 use std::convert::TryInto;
@@ -31,7 +31,7 @@ impl Pool {
         unsafe {
             let c_url = c_string(url);
             Repo(
-                RepoWrapper::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr())),
+                RepoOwnedPtr::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr())),
                 PhantomData,
             )
         }
@@ -41,8 +41,7 @@ impl Pool {
     pub fn create_solver(&mut self) -> Solver {
         unsafe {
             Solver(
-                NonNull::new(ffi::solver_create(self.0.as_mut()))
-                    .expect("could not create solver object"),
+                SolverOwnedPtr::new(ffi::solver_create(self.0.as_mut())),
                 PhantomData,
             )
         }
