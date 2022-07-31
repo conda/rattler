@@ -1,4 +1,4 @@
-use crate::libsolv::repo::Repo;
+use crate::libsolv::repo::{Repo, RepoWrapper};
 use crate::libsolv::solver::Solver;
 use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
@@ -31,8 +31,7 @@ impl Pool {
         unsafe {
             let c_url = c_string(url);
             Repo(
-                NonNull::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr()))
-                    .expect("could not create repo object"),
+                RepoWrapper::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr())),
                 PhantomData,
             )
         }

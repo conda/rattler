@@ -6,13 +6,19 @@ use std::ptr::NonNull;
 /// Representation of a repo containing package data in libsolv
 /// This corresponds to a repo_data json
 /// Lifetime of this object is coupled to the Pool on creation
-pub struct Repo<'pool>(
-    pub(super) NonNull<ffi::Repo>,
-    pub(super) PhantomData<&'pool Pool>,
-);
+pub struct Repo<'pool>(pub(super) RepoWrapper, pub(super) PhantomData<&'pool Pool>);
 
-/// Destroy c side of things when repo is dropped
-impl Drop for Repo<'_> {
+/// Wrapper type so we do not use lifetime in the drop
+pub(super) struct RepoWrapper(NonNull<ffi::Repo>);
+
+impl RepoWrapper {
+    pub fn new(repo: *mut ffi::Repo) -> RepoWrapper {
+        Self(NonNull::new(repo).expect("Could not create repo object"))
+    }
+}
+
+/// Destroy c-side of things when repo is dropped
+impl Drop for RepoWrapper {
     // Safe because we have coupled Repo lifetime to Pool lifetime
     fn drop(&mut self) {
         unsafe { ffi::repo_free(self.0.as_mut(), 1) }
@@ -36,7 +42,7 @@ impl Repo<'_> {
                 ));
             }
             // This line could crash if the json is malformed
-            let ret = ffi::repo_add_conda(self.0.as_mut(), file, 0);
+            let ret = ffi::repo_add_conda(self.0 .0.as_mut(), file, 0);
             if ret != 0 {
                 return Err(anyhow::anyhow!(
                     "internal libsolv error while adding repodata to libsolv"
@@ -45,7 +51,7 @@ impl Repo<'_> {
 
             // Libsolv needs this function to be called so we can work with the repo later
             // TODO: maybe wolf knows more about this function
-            ffi::repo_internalize(self.0.as_mut());
+            ffi::repo_internalize(self.0 .0.as_mut());
         }
         Ok(())
     }

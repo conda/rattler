@@ -39,11 +39,9 @@ mod test {
             "resources/conda_forge_noarch_repodata.json"
         );
         let mut pool = Pool::default();
-        {
-            let mut repo = pool.create_repo("conda-forge");
-            repo.add_conda_json(json_file)
-                .expect("could not add repodata to Repo");
-        }
+        let mut repo = pool.create_repo("conda-forge");
+        repo.add_conda_json(json_file)
+            .expect("could not add repodata to Repo");
         // Create datastructures for solving
         pool.create_whatprovides();
         let channel_config = ChannelConfig::default();
