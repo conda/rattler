@@ -1,11 +1,15 @@
 use crate::libsolv::ffi;
-use crate::libsolv::ffi::Id;
-use crate::libsolv::pool::StringId;
 use std::marker::PhantomData;
+use std::os::raw::c_int;
 
 /// Wrapper for libsolv queue type. This type is used by libsolv in the solver
 /// to solve for different conda matchspecs
-pub struct Queue<T>(ffi::Queue, PhantomData<T>);
+/// This is a type-safe implementation that is coupled to a specific Id type
+pub struct Queue<T> {
+    queue: ffi::Queue,
+    // Makes this queue typesafe
+    _data: PhantomData<T>,
+}
 
 impl<T: Into<ffi::Id>> Default for Queue<T> {
     fn default() -> Self {
@@ -20,11 +24,15 @@ impl<T: Into<ffi::Id>> Default for Queue<T> {
             };
             // This initializes some internal libsolv stuff
             ffi::queue_init(&mut queue as *mut ffi::Queue);
-            Self(queue, PhantomData)
+            Self {
+                queue,
+                _data: PhantomData,
+            }
         }
     }
 }
 
+/// This drop implementation drops the internal libsolv queue
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         // Safe because this pointer exists
@@ -37,17 +45,39 @@ impl<T> Drop for Queue<T> {
 impl<T> Queue<T> {
     /// Returns the ffi::Queue as a mutable pointer
     pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
-        &mut self.0 as *mut ffi::Queue
+        &mut self.queue as *mut ffi::Queue
     }
 
     /// Returns the ffi::Queue as a const pointer
     pub fn as_inner_ptr(&self) -> *const ffi::Queue {
-        &self.0 as *const ffi::Queue
+        &self.queue as *const ffi::Queue
+    }
+}
+
+impl<T: Into<ffi::Id>> Queue<T> {
+    /// Push a single id into the queue
+    pub fn push(&mut self, id: T) {
+        unsafe {
+            ffi::queue_insert(self.as_inner_mut(), self.queue.count, id.into());
+        }
+    }
+
+    /// Push multiple id's into the queue
+    pub fn push2(&mut self, id: T, flags: i32) {
+        unsafe {
+            ffi::queue_insert2(
+                self.as_inner_mut(),
+                self.queue.count,
+                flags as c_int,
+                id.into(),
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::libsolv::ffi;
     use crate::libsolv::pool::StringId;
     use crate::libsolv::queue::Queue;
 

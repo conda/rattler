@@ -1,4 +1,5 @@
 use crate::libsolv::repo::Repo;
+use crate::libsolv::solver::Solver;
 use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
 use std::convert::TryInto;
@@ -37,34 +38,22 @@ impl Pool {
         }
     }
 
+    /// Create the solver
+    pub fn create_solver(&mut self) -> Solver {
+        unsafe {
+            Solver(
+                NonNull::new(ffi::solver_create(self.0.as_mut()))
+                    .expect("could not create solver object"),
+                PhantomData,
+            )
+        }
+    }
+
     /// Create the whatprovides on the pool which is needed for solving
     pub fn create_whatprovides(&mut self) {
         // Safe because pointer must exist
         unsafe {
             ffi::pool_createwhatprovides(self.0.as_mut());
-        }
-    }
-}
-
-/// Interns from Target tyoe to Id
-trait Intern {
-    type Id;
-
-    /// Intern the type in the [`Pool`]
-    fn intern(&self, pool: &mut Pool) -> Self::Id;
-}
-
-/// Wrapper for the StringId of libsolv
-#[derive(Copy, Clone)]
-pub struct StringId(ffi::Id);
-
-impl StringId {
-    /// Resolve to the interned type returns a string reference
-    fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
-        // Safe because the new-type wraps the ffi::id and cant be created otherwise
-        unsafe {
-            let c_str = ffi::pool_id2str(pool.0.as_ptr(), self.0);
-            CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
         }
     }
 }
@@ -84,6 +73,29 @@ fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
             length.try_into().expect("string too large"),
             1,
         ))
+    }
+}
+
+/// Interns from Target tyoe to Id
+pub trait Intern {
+    type Id;
+
+    /// Intern the type in the [`Pool`]
+    fn intern(&self, pool: &mut Pool) -> Self::Id;
+}
+
+/// Wrapper for the StringId of libsolv
+#[derive(Copy, Clone)]
+pub struct StringId(ffi::Id);
+
+impl StringId {
+    /// Resolve to the interned type returns a string reference
+    fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
+        // Safe because the new-type wraps the ffi::id and cant be created otherwise
+        unsafe {
+            let c_str = ffi::pool_id2str(pool.0.as_ptr(), self.0);
+            CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
+        }
     }
 }
 

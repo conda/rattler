@@ -1,3 +1,4 @@
+use crate::libsolv::pool::Pool;
 use crate::libsolv::{c_string, ffi};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -7,7 +8,7 @@ use std::ptr::NonNull;
 /// Lifetime of this object is coupled to the Pool on creation
 pub struct Repo<'pool>(
     pub(super) NonNull<ffi::Repo>,
-    pub(super) PhantomData<&'pool ffi::Pool>,
+    pub(super) PhantomData<&'pool Pool>,
 );
 
 /// Destroy c side of things when repo is dropped
