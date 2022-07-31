@@ -4,6 +4,7 @@ mod ffi;
 mod pool;
 mod queue;
 mod repo;
+mod solvable;
 mod solver;
 
 /// Convenience method to convert from a string reference to a CString

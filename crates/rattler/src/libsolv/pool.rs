@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 /// Wrapper for libsolv Pool which is an interning datastructure used by libsolv
-pub struct Pool(NonNull<ffi::Pool>);
+pub struct Pool(pub(super) NonNull<ffi::Pool>);
 
 impl Default for Pool {
     fn default() -> Self {

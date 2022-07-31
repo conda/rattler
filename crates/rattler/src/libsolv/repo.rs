@@ -1,4 +1,5 @@
 use crate::libsolv::pool::Pool;
+use crate::libsolv::solvable::{Solvable, SolvableId};
 use crate::libsolv::{c_string, ffi};
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -54,5 +55,10 @@ impl Repo<'_> {
             ffi::repo_internalize(self.0 .0.as_mut());
         }
         Ok(())
+    }
+
+    /// Add a solvable to the Repo
+    pub fn add_solvable(&mut self) -> SolvableId {
+        unsafe { SolvableId(ffi::repo_add_solvable(self.0 .0.as_mut())) }
     }
 }
