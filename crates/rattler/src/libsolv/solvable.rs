@@ -27,3 +27,16 @@ impl SolvableId {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::libsolv::pool::Pool;
+
+    #[test]
+    pub fn test_solvable_creation() {
+        let mut pool = Pool::default();
+        let mut repo = pool.create_repo("bla");
+        let solvable_id = repo.add_solvable();
+        let solvable = solvable_id.resolve(&pool);
+    }
+}
