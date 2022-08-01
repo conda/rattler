@@ -37,6 +37,6 @@ mod tests {
         let mut pool = Pool::default();
         let mut repo = pool.create_repo("bla");
         let solvable_id = repo.add_solvable();
-        let solvable = solvable_id.resolve(&pool);
+        let _solvable = solvable_id.resolve(&pool);
     }
 }

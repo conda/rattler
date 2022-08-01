@@ -11,7 +11,7 @@ pub struct Queue<T> {
     _data: PhantomData<T>,
 }
 
-impl<T: Into<ffi::Id>> Default for Queue<T> {
+impl<T> Default for Queue<T> {
     fn default() -> Self {
         // Safe because we know for a fact that the queue exists
         unsafe {

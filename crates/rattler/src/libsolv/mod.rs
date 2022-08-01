@@ -49,7 +49,7 @@ mod test {
 
         // Creat python as a matchspec
         let matchspec =
-            MatchSpec::from_str("python", &channel_config).expect("can't create matchspec");
+            MatchSpec::from_str("aadict", &channel_config).expect("can't create matchspec");
         // Add matchspec to the queue
         let mut queue = Queue::default();
         let id = matchspec.intern(&mut pool);
