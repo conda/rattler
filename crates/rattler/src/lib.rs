@@ -13,7 +13,7 @@ mod channel;
 mod match_spec;
 mod match_spec_constraints;
 mod platform;
-mod repo_data;
+pub mod repo_data;
 mod solver;
 pub(crate) mod utils;
 mod version;
@@ -25,7 +25,20 @@ pub use channel::{
 pub use match_spec::MatchSpec;
 pub use match_spec_constraints::MatchSpecConstraints;
 pub use platform::{ParsePlatformError, Platform};
-pub use repo_data::{ChannelInfo, NoArchType, PackageRecord, RepoData};
+pub use repo_data::{NoArchType, PackageRecord, RepoData};
 pub use solver::{PackageIndex, SolverIndex};
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
+
+/// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
+/// that is bundled with this repository.
+#[cfg(any(doctest, test))]
+pub fn empty_channel() -> Channel {
+    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let channel_path = manifest_dir.join("resources/channels/empty");
+    Channel::from_str(
+        &format!("file://{}[noarch]", channel_path.display()),
+        &ChannelConfig::default(),
+    )
+    .unwrap()
+}
