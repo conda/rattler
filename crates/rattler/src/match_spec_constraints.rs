@@ -248,6 +248,7 @@ mod tests {
             constrains: vec![],
             track_features: None,
             features: None,
+            noarch: None,
             preferred_env: None,
             license: None,
             license_family: None,

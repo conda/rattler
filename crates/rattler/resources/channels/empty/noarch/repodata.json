@@ -1,0 +1,11 @@
+{
+  "info": {
+    "platform": null,
+    "default_python_version": "2.7",
+    "arch": null,
+    "subdir": "noarch",
+    "default_numpy_version": "1.7"
+  },
+  "packages.conda": {},
+  "packages": {}
+}
