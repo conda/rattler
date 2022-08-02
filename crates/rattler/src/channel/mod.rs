@@ -55,7 +55,7 @@ pub struct Channel {
     pub location: String,
 
     /// The name of the channel
-    pub name: String,
+    pub name: Option<String>,
 }
 
 impl Channel {
@@ -104,11 +104,16 @@ impl Channel {
             } else {
                 host.to_owned()
             };
+            let name = path.trim_start_matches('/');
             Self {
                 platforms: platforms.map(Into::into),
                 scheme: url.scheme().to_owned(),
                 location,
-                name: path.trim_start_matches('/').to_owned(),
+                name: if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_owned())
+                },
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
@@ -120,7 +125,11 @@ impl Channel {
                 platforms: platforms.map(Into::into),
                 scheme: String::from("file"),
                 location: location.to_owned(),
-                name: name.to_owned(),
+                name: if name.is_empty() {
+                    None
+                } else {
+                    Some(name.to_owned())
+                },
             }
         }
     }
@@ -142,17 +151,21 @@ impl Channel {
             )
             .trim_end_matches('/')
             .to_owned(),
-            name: name.to_owned(),
+            name: Some(name.to_owned()),
         }
     }
 
     /// Returns the base Url of the channel. This does not include the platform part.
     pub fn base_url(&self) -> Url {
-        Url::from_str(&format!(
-            "{}://{}/{}",
-            self.scheme, self.location, self.name
-        ))
-        .expect("could not construct base_url for channel")
+        let url = Url::from_str(&format!("{}://{}", self.scheme, self.location,))
+            .expect("could not construct base_url for channel");
+
+        if let Some(name) = &self.name {
+            url.join(&format!("{name}/"))
+                .expect("name must be a valid Url path")
+        } else {
+            url
+        }
     }
 
     /// Returns the Urls for the given platform
@@ -182,7 +195,12 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        format!("{}://{}/{}", self.scheme, self.location, self.name)
+        let result = format!("{}://{}", self.scheme, self.location);
+        if let Some(name) = &self.name {
+            format!("{result}/{name}")
+        } else {
+            result
+        }
     }
 }
 
@@ -289,8 +307,12 @@ mod tests {
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.org");
-        assert_eq!(channel.name, "conda-forge");
+        assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.platforms, None);
+        assert_eq!(
+            channel.base_url().to_string(),
+            "https://conda.anaconda.org/conda-forge/"
+        );
     }
 
     #[test]
@@ -300,7 +322,7 @@ mod tests {
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(channel.scheme, "http");
         assert_eq!(channel.location, "localhost:1234");
-        assert_eq!(channel.name, "");
+        assert_eq!(channel.name, None);
         assert_eq!(channel.platforms, None);
 
         let noarch_url = channel.platform_url(Platform::NoArch);
@@ -319,7 +341,7 @@ mod tests {
         .unwrap();
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "conda.anaconda.com");
-        assert_eq!(channel.name, "conda-forge");
+        assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.platforms, Some(smallvec![platform]));
 
         let channel = Channel::from_str(
@@ -329,7 +351,7 @@ mod tests {
         .unwrap();
         assert_eq!(channel.scheme, "https");
         assert_eq!(channel.location, "repo.anaconda.com");
-        assert_eq!(channel.name, "pkgs/main");
+        assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
         assert_eq!(channel.platforms, Some(smallvec![platform]));
     }
 }
