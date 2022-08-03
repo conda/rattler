@@ -54,7 +54,6 @@ jobs:
           args: --all -- --check
 
   clippy:
-    name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -63,8 +62,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
+          components: clippy
+      - uses: actions-rs/clippy-check@v1
         with:
-          command: clippy
-          args: -- -D warnings
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features -- -D warnings
