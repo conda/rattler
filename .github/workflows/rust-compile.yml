@@ -5,6 +5,10 @@ on:
 
 name: Continuous integration
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUSTFLAGS: -Dwarnings
 
