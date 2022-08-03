@@ -47,8 +47,15 @@ impl Platform {
             #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
             compile_error!("unsupported windows architecture");
         }
+        #[cfg(target_os = "macos")]
+        {
+            #[cfg(target_arch = "x86_64")]
+            return Platform::Osx64;
 
-        #[cfg(not(any(target_os = "linux", windows)))]
+            #[cfg(target_arch = "aarch64")]
+            return Platform::OsxArm64;
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
         compile_error!("unsupported target os");
     }
 
