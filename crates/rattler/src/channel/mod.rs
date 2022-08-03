@@ -109,11 +109,7 @@ impl Channel {
                 platforms: platforms.map(Into::into),
                 scheme: url.scheme().to_owned(),
                 location,
-                name: if name.is_empty() {
-                    None
-                } else {
-                    Some(name.to_owned())
-                },
+                name: (!name.is_empty()).then(|| name).map(str::to_owned),
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
@@ -125,11 +121,7 @@ impl Channel {
                 platforms: platforms.map(Into::into),
                 scheme: String::from("file"),
                 location: location.to_owned(),
-                name: if name.is_empty() {
-                    None
-                } else {
-                    Some(name.to_owned())
-                },
+                name: (!name.is_empty()).then(|| name).map(str::to_owned),
             }
         }
     }
@@ -151,7 +143,7 @@ impl Channel {
             )
             .trim_end_matches('/')
             .to_owned(),
-            name: Some(name.to_owned()),
+            name: (!name.is_empty()).then(|| name).map(str::to_owned),
         }
     }
 
