@@ -1,9 +1,17 @@
-on: [push, pull_request]
+on:
+  push:
+    branches: [ $default-branch ]
+  pull_request:
 
 name: Continuous integration
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   RUSTFLAGS: -Dwarnings
+  CARGO_TERM_COLOR: always
 
 jobs:
   check:
@@ -22,7 +30,15 @@ jobs:
 
   test:
     name: Test Suite
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macOS-latest"]
+        include:
+          - os: "windows-latest"
+            RUSTFLAGS: "$RUSTFLAGS -Ctarget-feature=+crt-static"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -51,7 +67,6 @@ jobs:
           args: --all -- --check
 
   clippy:
-    name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -60,8 +75,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-      - run: rustup component add clippy
-      - uses: actions-rs/cargo@v1
+          components: clippy
+      - uses: actions-rs/clippy-check@v1
         with:
-          command: clippy
-          args: -- -D warnings
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features -- -D warnings
