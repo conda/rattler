@@ -37,7 +37,15 @@ pub fn terminal_progress() -> MultiRequestRepoDataListener {
                     let progress_bar = multi_progress.add(
                         ProgressBar::new(1)
                             .with_finish(ProgressFinish::AndLeave)
-                            .with_prefix(format!("{}/{}", &channel.name, platform))
+                            .with_prefix(format!(
+                                "{}/{}",
+                                channel
+                                    .name
+                                    .as_ref()
+                                    .map(String::from)
+                                    .unwrap_or_else(|| channel.canonical_name()),
+                                platform
+                            ))
                             .with_style(default_progress_style()),
                     );
                     progress_bar.enable_steady_tick(Duration::from_millis(100));
