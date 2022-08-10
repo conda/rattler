@@ -456,8 +456,8 @@ mod tests {
         );
 
         let current_dir = std::env::current_dir().expect("no current dir?");
-        let channel = Channel::from_str("./dir\\does/not_exist", &config).unwrap();
-        assert_eq!(channel.name.as_deref(), Some("./dir\\does/not_exist"));
+        let channel = Channel::from_str("./dir/does/not_exist", &config).unwrap();
+        assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
         assert_eq!(channel.platforms, None);
         assert_eq!(
             channel.base_url().to_file_path().unwrap(),
