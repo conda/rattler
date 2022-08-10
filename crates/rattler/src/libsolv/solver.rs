@@ -1,5 +1,7 @@
 use crate::libsolv::ffi;
 use crate::libsolv::queue::Queue;
+use crate::libsolv::transaction::Transaction;
+use crate::libsolv::transaction::TransactionOwnedPtr;
 use anyhow::anyhow;
 use std::ffi::CStr;
 use std::fmt::Write;
@@ -17,9 +19,15 @@ pub struct Solver<'pool>(
 /// Wrapper type so we do not use lifetime in the drop
 pub(super) struct SolverOwnedPtr(NonNull<ffi::Solver>);
 
+impl Drop for SolverOwnedPtr {
+    fn drop(&mut self) {
+        unsafe { ffi::solver_free(self.0.as_mut()) }
+    }
+}
+
 impl SolverOwnedPtr {
     pub fn new(solver: *mut ffi::Solver) -> SolverOwnedPtr {
-        Self(NonNull::new(solver).expect("Could not create solver object"))
+        Self(NonNull::new(solver).expect("could not create solver object"))
     }
 }
 
@@ -30,7 +38,7 @@ impl Solver<'_> {
         let count = unsafe { ffi::solver_problem_count(self.0 .0.as_ptr()) as u32 };
         let mut output = String::default();
         for i in 1..=count {
-            problem_queue.push(i as ffi::Id);
+            problem_queue.push_id(i as ffi::Id);
             let problem = unsafe {
                 let problem = ffi::solver_problem2str(self.0 .0.as_ptr(), i as ffi::Id);
                 CStr::from_ptr(problem)
@@ -58,5 +66,10 @@ impl Solver<'_> {
                 self.solver_problems()
             ))
         }
+    }
+
+    pub fn create_transaction(&mut self) -> Transaction {
+        let transaction = unsafe { ffi::solver_create_transaction(self.0 .0.as_mut()) };
+        Transaction(TransactionOwnedPtr::new(transaction), PhantomData)
     }
 }

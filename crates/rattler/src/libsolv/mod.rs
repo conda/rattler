@@ -6,10 +6,11 @@ mod queue;
 mod repo;
 mod solvable;
 mod solver;
+mod transaction;
 
 /// Convenience method to convert from a string reference to a CString
 fn c_string<T: AsRef<str>>(str: T) -> CString {
-    CString::new(str.as_ref()).expect("could never be null because of trait-bound")
+    CString::new(str.as_ref()).expect("should be convertable from string")
 }
 
 #[cfg(test)]
@@ -53,7 +54,7 @@ mod test {
         // Add matchspec to the queue
         let mut queue = Queue::default();
         let id = matchspec.intern(&mut pool);
-        queue.push2(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
+        queue.push_id_and_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
         // Solver
         let mut solver = pool.create_solver();
         // solve
