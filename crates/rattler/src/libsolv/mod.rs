@@ -37,7 +37,7 @@ mod test {
         let json_file = format!(
             "{}/{}",
             env!("CARGO_MANIFEST_DIR"),
-            "resources/conda_forge_noarch_repodata.json"
+            "resources/channels/conda-forge/linux-64/repodata.json"
         );
         let mut pool = Pool::default();
         let mut repo = pool.create_repo("conda-forge");
@@ -49,7 +49,7 @@ mod test {
 
         // Creat python as a matchspec
         let matchspec =
-            MatchSpec::from_str("aadict", &channel_config).expect("can't create matchspec");
+            MatchSpec::from_str("python", &channel_config).expect("can't create matchspec");
         // Add matchspec to the queue
         let mut queue = Queue::default();
         let id = matchspec.intern(&mut pool);
