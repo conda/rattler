@@ -6,6 +6,7 @@ use std::ptr::NonNull;
 pub struct Solvable(NonNull<ffi::Solvable>);
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
+#[derive(Copy, Clone)]
 pub struct SolvableId(pub(super) ffi::Id);
 
 impl From<SolvableId> for ffi::Id {
@@ -16,7 +17,7 @@ impl From<SolvableId> for ffi::Id {
 
 impl SolvableId {
     /// Resolve to the interned type returns a Solvable
-    fn resolve(&self, pool: &Pool) -> Solvable {
+    pub fn resolve(&self, pool: &Pool) -> Solvable {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
             // Re-implement pool_id2solvable, as it's a static inline function, we can't use it :(

@@ -62,3 +62,14 @@ impl Repo<'_> {
         unsafe { SolvableId(ffi::repo_add_solvable(self.0 .0.as_mut())) }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::libsolv::pool::Pool;
+
+    #[test]
+    fn test_repo_creation() {
+        let mut pool = Pool::default();
+        let mut repo = pool.create_repo("conda-forge");
+    }
+}

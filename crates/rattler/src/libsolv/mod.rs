@@ -20,13 +20,17 @@ mod test {
     use crate::libsolv::queue::Queue;
     use rattler::{ChannelConfig, MatchSpec};
 
-    #[test]
-    fn test_conda_read_repodata() {
-        let json_file = format!(
+    fn conda_json_path() -> String {
+        format!(
             "{}/{}",
             env!("CARGO_MANIFEST_DIR"),
-            "resources/conda_forge_noarch_repodata.json"
-        );
+            "resources/channels/conda-forge/linux-64/repodata.json"
+        )
+    }
+
+    #[test]
+    fn test_conda_read_repodata() {
+        let json_file = conda_json_path();
         let mut pool = Pool::default();
         let mut repo = pool.create_repo("conda-forge");
         repo.add_conda_json(json_file)
@@ -35,11 +39,7 @@ mod test {
 
     #[test]
     fn test_solve_python() {
-        let json_file = format!(
-            "{}/{}",
-            env!("CARGO_MANIFEST_DIR"),
-            "resources/channels/conda-forge/linux-64/repodata.json"
-        );
+        let json_file = conda_json_path();
         let mut pool = Pool::default();
         let mut repo = pool.create_repo("conda-forge");
         repo.add_conda_json(json_file)
@@ -59,5 +59,8 @@ mod test {
         let mut solver = pool.create_solver();
         // solve
         solver.solve(&mut queue).expect("unable to solve");
+
+        let mut transaction = solver.create_transaction();
+        let solvable_operations = transaction.get_solvable_operations();
     }
 }

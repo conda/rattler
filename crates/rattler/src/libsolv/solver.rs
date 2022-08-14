@@ -32,7 +32,9 @@ impl SolverOwnedPtr {
 }
 
 impl Solver<'_> {
-    /// Solver problems to string
+    /// Creates a string of 'problems' that the solver still has
+    /// which it encountered while solving the matchspecs
+    /// use this function to print the existing problems to string
     fn solver_problems(&self) -> String {
         let mut problem_queue = Queue::default();
         let count = unsafe { ffi::solver_problem_count(self.0 .0.as_ptr()) as u32 };
@@ -68,6 +70,7 @@ impl Solver<'_> {
         }
     }
 
+    /// Create a transaction from the solver
     pub fn create_transaction(&mut self) -> Transaction {
         let transaction = unsafe { ffi::solver_create_transaction(self.0 .0.as_mut()) };
         Transaction(TransactionOwnedPtr::new(transaction), PhantomData)
