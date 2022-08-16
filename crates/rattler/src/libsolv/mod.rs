@@ -62,7 +62,6 @@ mod test {
 
         let mut transaction = solver.create_transaction();
         let solvable_operations = transaction.get_solvable_operations();
-
         for operation in solvable_operations.iter() {
             println!(
                 "{:?} - {:?}",

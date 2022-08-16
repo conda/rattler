@@ -1,7 +1,9 @@
 use crate::libsolv::ffi;
-use crate::libsolv::pool::{Pool, StringId};
+use crate::libsolv::pool::{Intern, Pool, StringId};
 use crate::libsolv::repo::{Repo, RepoOwnedPtr};
+use std::ffi::{CStr, CString};
 use std::mem::ManuallyDrop;
+use std::ops::DerefMut;
 use std::ptr::NonNull;
 
 /// Solvable in libsolv
@@ -36,6 +38,8 @@ impl SolvableId {
 pub struct SolvableInfo {
     name: String,
     version: String,
+    build_string: Option<String>,
+    build_number: Option<String>,
 }
 
 impl Solvable {
@@ -45,18 +49,50 @@ impl Solvable {
         ManuallyDrop::new(unsafe { std::mem::transmute(repo) })
     }
 
+    /// Returns a solvable info from a solvable
     pub fn solvable_info(&self) -> SolvableInfo {
-        let pool = self.repo().pool();
-        let (name, version) = unsafe {
-            let id = StringId((*self.0.as_ptr()).name);
-            let version = StringId((*self.0.as_ptr()).evr);
-
-            (id.resolve(&pool), version.resolve(&pool))
+        let mut pool = self.repo().pool();
+        let (name, version, build_string, build_number) = unsafe {
+            let solvable = self.0.as_ptr();
+            let id = StringId((*solvable).name);
+            let version = StringId((*solvable).evr);
+            let solvable_build_version = "solvable:buildversion".intern(pool.deref_mut());
+            let build_str = ffi::solvable_lookup_str(solvable, solvable_build_version.into());
+            let build_string = if !build_str.is_null() {
+                Some(
+                    CStr::from_ptr(build_str)
+                        .to_str()
+                        .expect("could not decode string")
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            let solvable_build_flavor = "solvable:buildflavor".intern(pool.deref_mut());
+            let build_number = ffi::solvable_lookup_str(solvable, solvable_build_flavor.into());
+            let build_number = if !build_number.is_null() {
+                Some(
+                    CStr::from_ptr(build_number)
+                        .to_str()
+                        .expect("could not decode string")
+                        .to_string(),
+                )
+            } else {
+                None
+            };
+            (
+                id.resolve(&pool),
+                version.resolve(&pool),
+                build_string,
+                build_number,
+            )
         };
 
         SolvableInfo {
             name: name.to_string(),
             version: name.to_string(),
+            build_string,
+            build_number,
         }
     }
 }
