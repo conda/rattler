@@ -85,11 +85,11 @@ pub trait Intern {
 
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
-pub struct StringId(ffi::Id);
+pub struct StringId(pub(super) ffi::Id);
 
 impl StringId {
     /// Resolve to the interned type returns a string reference
-    fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
+    pub fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
             let c_str = ffi::pool_id2str(pool.0.as_ptr(), self.0);

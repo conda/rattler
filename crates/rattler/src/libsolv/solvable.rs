@@ -1,8 +1,11 @@
 use crate::libsolv::ffi;
-use crate::libsolv::pool::Pool;
+use crate::libsolv::pool::{Pool, StringId};
+use crate::libsolv::repo::{Repo, RepoOwnedPtr};
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 /// Solvable in libsolv
+#[repr(transparent)]
 pub struct Solvable(NonNull<ffi::Solvable>);
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
@@ -25,6 +28,35 @@ impl SolvableId {
             // Apparently the solvable is offset by the id from the first solvable
             let solvable = solvable.offset(self.0 as isize);
             Solvable(NonNull::new(solvable).expect("solvable cannot be null"))
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct SolvableInfo {
+    name: String,
+    version: String,
+}
+
+impl Solvable {
+    /// Access the inner repo
+    pub(super) fn repo(&self) -> ManuallyDrop<RepoOwnedPtr> {
+        let repo = unsafe { *self.0.as_ptr() }.repo;
+        ManuallyDrop::new(unsafe { std::mem::transmute(repo) })
+    }
+
+    pub fn solvable_info(&self) -> SolvableInfo {
+        let pool = self.repo().pool();
+        let (name, version) = unsafe {
+            let id = StringId((*self.0.as_ptr()).name);
+            let version = StringId((*self.0.as_ptr()).evr);
+
+            (id.resolve(&pool), version.resolve(&pool))
+        };
+
+        SolvableInfo {
+            name: name.to_string(),
+            version: name.to_string(),
         }
     }
 }

@@ -40,14 +40,15 @@ impl<'solver> Transaction<'solver> {
         self.0 .0.as_ptr()
     }
 
-    /// Access the pool
-    fn pool(&self) -> ManuallyDrop<Pool> {
+    /// Access the inner pool
+    pub(super) fn pool(&self) -> ManuallyDrop<Pool> {
         let pool = (unsafe { *self.as_raw() }).pool;
         ManuallyDrop::new(unsafe { std::mem::transmute::<*mut ffi::Pool, Pool>(pool) })
     }
 }
 
-enum InstallOperation {
+#[derive(Debug)]
+pub enum InstallOperation {
     Install,
     Reinstall,
     Remove,
@@ -60,6 +61,7 @@ impl From<u32> for InstallOperation {
         match data {
             ffi::SOLVER_TRANSACTION_DOWNGRADED
             | ffi::SOLVER_TRANSACTION_UPGRADED
+            | ffi::SOLVER_TRANSACTION_INSTALL
             | ffi::SOLVER_TRANSACTION_CHANGED => InstallOperation::Install,
             ffi::SOLVER_TRANSACTION_REINSTALL => InstallOperation::Reinstall,
             ffi::SOLVER_TRANSACTION_ERASE => InstallOperation::Remove,
@@ -70,8 +72,8 @@ impl From<u32> for InstallOperation {
 }
 
 pub struct OperationOnSolvable {
-    solvable: Solvable,
-    operation: InstallOperation,
+    pub solvable: Solvable,
+    pub operation: InstallOperation,
 }
 
 impl Transaction<'_> {

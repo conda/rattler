@@ -2,6 +2,7 @@ use crate::libsolv::pool::Pool;
 use crate::libsolv::solvable::{Solvable, SolvableId};
 use crate::libsolv::{c_string, ffi};
 use std::marker::PhantomData;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 
 /// Representation of a repo containing package data in libsolv
@@ -10,11 +11,18 @@ use std::ptr::NonNull;
 pub struct Repo<'pool>(pub(super) RepoOwnedPtr, pub(super) PhantomData<&'pool Pool>);
 
 /// Wrapper type so we do not use lifetime in the drop
+#[repr(transparent)]
 pub(super) struct RepoOwnedPtr(NonNull<ffi::Repo>);
 
 impl RepoOwnedPtr {
     pub fn new(repo: *mut ffi::Repo) -> RepoOwnedPtr {
         Self(NonNull::new(repo).expect("Could not create repo object"))
+    }
+
+    /// Access the inner pool
+    pub(super) fn pool(&self) -> ManuallyDrop<Pool> {
+        let pool = (unsafe { *self.0.as_ptr() }).pool;
+        ManuallyDrop::new(unsafe { std::mem::transmute(pool) })
     }
 }
 
