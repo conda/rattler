@@ -19,9 +19,7 @@ pub(crate) mod utils;
 mod version;
 mod version_spec;
 
-pub use channel::{
-    Channel, ChannelConfig, FetchRepoDataError, FetchRepoDataProgress, ParseChannelError,
-};
+pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use match_spec::MatchSpec;
 pub use match_spec_constraints::MatchSpecConstraints;
 pub use platform::{ParsePlatformError, Platform};

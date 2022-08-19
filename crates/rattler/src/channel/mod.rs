@@ -1,4 +1,6 @@
-use std::path::PathBuf;
+use crate::utils::regex;
+use std::borrow::Cow;
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -6,11 +8,7 @@ use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
 
-pub use fetch::{FetchRepoDataError, FetchRepoDataProgress};
-
 use super::{ParsePlatformError, Platform};
-
-mod fetch;
 
 /// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
 /// channel URLs.
@@ -48,11 +46,8 @@ pub struct Channel {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platforms: Option<SmallVec<[Platform; 2]>>,
 
-    /// The Url scheme of the channel. Usually http, https or file.
-    pub scheme: String,
-
-    /// The server and path part of the Url.
-    pub location: String,
+    /// Base URL of the channel, everything is relative to this url.
+    pub base_url: Url,
 
     /// The name of the channel
     pub name: Option<String>,
@@ -72,9 +67,14 @@ impl Channel {
             Channel::from_url(url, platforms, config)
         } else if is_path(channel) {
             let path = PathBuf::from(channel);
-            let url =
-                Url::from_file_path(&path).map_err(|_| ParseChannelError::InvalidPath(path))?;
-            Channel::from_url(url, platforms, config)
+            let absolute_path = absolute_path(&path);
+            let url = Url::from_directory_path(&absolute_path)
+                .map_err(|_| ParseChannelError::InvalidPath(path))?;
+            Self {
+                platforms,
+                base_url: url,
+                name: Some(channel.to_owned()),
+            }
         } else {
             Channel::from_name(channel, platforms, config)
         };
@@ -88,7 +88,17 @@ impl Channel {
         platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
         _config: &ChannelConfig,
     ) -> Self {
+        // Get the path part of the URL but trim the directory suffix
         let path = url.path().trim_end_matches('/');
+
+        // Ensure that the base_url does always ends in a `/`
+        let base_url = if !url.path().ends_with('/') {
+            let mut url = url.clone();
+            url.set_path(&format!("{path}/"));
+            url
+        } else {
+            url.clone()
+        };
 
         // Case 1: No path give, channel name is ""
 
@@ -97,31 +107,24 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
-        if let Some(host) = url.host_str() {
+        if base_url.has_host() {
             // Case 7: Fallback
-            let location = if let Some(port) = url.port() {
-                format!("{}:{}", host, port)
-            } else {
-                host.to_owned()
-            };
             let name = path.trim_start_matches('/');
             Self {
                 platforms: platforms.map(Into::into),
-                scheme: url.scheme().to_owned(),
-                location,
                 name: (!name.is_empty()).then(|| name).map(str::to_owned),
+                base_url,
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
-            let (location, name) = url
-                .path()
+            let name = path
                 .rsplit_once('/')
-                .unwrap_or_else(|| ("/", url.path()));
+                .map(|(_, path_part)| path_part)
+                .unwrap_or_else(|| base_url.path());
             Self {
                 platforms: platforms.map(Into::into),
-                scheme: String::from("file"),
-                location: location.to_owned(),
                 name: (!name.is_empty()).then(|| name).map(str::to_owned),
+                base_url,
             }
         }
     }
@@ -129,35 +132,31 @@ impl Channel {
     /// Construct a channel from a name, platform and configuration.
     pub fn from_name(
         name: &str,
-        platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
+        platforms: Option<SmallVec<[Platform; 2]>>,
         config: &ChannelConfig,
     ) -> Self {
         // TODO: custom channels
+
+        let dir_name = if !name.ends_with('/') {
+            Cow::Owned(format!("{name}/"))
+        } else {
+            Cow::Borrowed(name)
+        };
+
+        let name = name.trim_end_matches('/');
         Self {
-            platforms: platforms.map(Into::into),
-            scheme: config.channel_alias.scheme().to_owned(),
-            location: format!(
-                "{}/{}",
-                config.channel_alias.host_str().unwrap_or("/").to_owned(),
-                config.channel_alias.path()
-            )
-            .trim_end_matches('/')
-            .to_owned(),
+            platforms,
+            base_url: config
+                .channel_alias
+                .join(dir_name.as_ref())
+                .expect("name is not a valid Url"),
             name: (!name.is_empty()).then(|| name).map(str::to_owned),
         }
     }
 
     /// Returns the base Url of the channel. This does not include the platform part.
-    pub fn base_url(&self) -> Url {
-        let url = Url::from_str(&format!("{}://{}", self.scheme, self.location,))
-            .expect("could not construct base_url for channel");
-
-        if let Some(name) = &self.name {
-            url.join(&format!("{name}/"))
-                .expect("name must be a valid Url path")
-        } else {
-            url
-        }
+    pub fn base_url(&self) -> &Url {
+        &self.base_url
     }
 
     /// Returns the Urls for the given platform
@@ -187,12 +186,7 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        let result = format!("{}://{}", self.scheme, self.location);
-        if let Some(name) = &self.name {
-            format!("{result}/{name}")
-        } else {
-            result
-        }
+        self.base_url.to_string()
     }
 }
 
@@ -228,12 +222,18 @@ fn parse_platforms(
     if channel.rfind(']').is_some() {
         if let Some(start_platform_idx) = channel.find('[') {
             let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms = platform_part
+            let platforms: SmallVec<_> = platform_part
                 .split(',')
                 .map(str::trim)
+                .filter(|s| !s.is_empty())
                 .map(FromStr::from_str)
                 .collect::<Result<_, _>>()?;
-            return Ok((Some(platforms), &channel[0..start_platform_idx]));
+            let platforms = if platforms.is_empty() {
+                None
+            } else {
+                Some(platforms)
+            };
+            return Ok((platforms, &channel[0..start_platform_idx]));
         }
     }
 
@@ -274,15 +274,123 @@ fn parse_scheme(channel: &str) -> Option<&str> {
 
 /// Returns true if the specified string is considered to be a path
 fn is_path(path: &str) -> bool {
-    let re = regex::Regex::new(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").unwrap();
-    re.is_match(path)
+    regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
+}
+
+/// Normalizes a file path by eliminating `..` and `.`.
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
+/// Returns the specified path as an absolute path
+fn absolute_path(path: &Path) -> Cow<'_, Path> {
+    if path.is_absolute() {
+        return Cow::Borrowed(path);
+    }
+
+    let current_dir = std::env::current_dir().expect("missing current directory?");
+    let absolute_dir = current_dir.join(path);
+    Cow::Owned(normalize_path(&absolute_dir))
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::channel::{absolute_path, normalize_path, parse_platforms};
+    use crate::{ParseChannelError, ParsePlatformError};
     use smallvec::smallvec;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
+    use url::Url;
 
     use super::{parse_scheme, Channel, ChannelConfig, Platform};
+
+    #[test]
+    fn test_parse_platforms() {
+        assert_eq!(
+            parse_platforms("[noarch, linux-64]"),
+            Ok((Some(smallvec![Platform::NoArch, Platform::Linux64]), ""))
+        );
+        assert_eq!(
+            parse_platforms("sometext[noarch]"),
+            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+        );
+        assert_eq!(
+            parse_platforms("sometext[noarch,]"),
+            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+        );
+        assert_eq!(parse_platforms("sometext[]"), Ok((None, "sometext")));
+        assert!(matches!(
+            parse_platforms("[notaplatform]"),
+            Err(ParsePlatformError { .. })
+        ));
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        assert_eq!(
+            normalize_path(Path::new("foo/bar")),
+            PathBuf::from("foo/bar")
+        );
+        assert_eq!(
+            normalize_path(Path::new("foo/bar/")),
+            PathBuf::from("foo/bar/")
+        );
+        assert_eq!(
+            normalize_path(Path::new("./foo/bar")),
+            PathBuf::from("foo/bar")
+        );
+        assert_eq!(
+            normalize_path(Path::new("./foo/../bar")),
+            PathBuf::from("bar")
+        );
+        assert_eq!(
+            normalize_path(Path::new("./foo/../bar/..")),
+            PathBuf::from("")
+        );
+    }
+
+    #[test]
+    fn test_absolute_path() {
+        let current_dir = std::env::current_dir().expect("no current dir?");
+        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
+        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
+        assert_eq!(
+            absolute_path(Path::new("foo")).as_ref(),
+            &current_dir.join("foo")
+        );
+
+        let mut parent_dir = current_dir.clone();
+        assert!(parent_dir.pop());
+
+        assert_eq!(absolute_path(Path::new("..")).as_ref(), &parent_dir);
+        assert_eq!(
+            absolute_path(Path::new("../foo")).as_ref(),
+            &parent_dir.join("foo")
+        );
+    }
 
     #[test]
     fn test_parse_scheme() {
@@ -290,6 +398,12 @@ mod tests {
         assert_eq!(parse_scheme("http://google.com"), Some("http"));
         assert_eq!(parse_scheme("google.com"), None);
         assert_eq!(parse_scheme(""), None);
+        assert_eq!(parse_scheme("waytoolongscheme://"), None);
+        assert_eq!(parse_scheme("1nv4l1d://"), None);
+        assert_eq!(parse_scheme("sch3m3://"), Some("sch3m3"));
+        assert_eq!(parse_scheme("scheme://"), Some("scheme"));
+        assert_eq!(parse_scheme("$ch3m3://"), None);
+        assert_eq!(parse_scheme("sch#me://"), None);
     }
 
     #[test]
@@ -297,8 +411,26 @@ mod tests {
         let config = ChannelConfig::default();
 
         let channel = Channel::from_str("conda-forge", &config).unwrap();
-        assert_eq!(channel.scheme, "https");
-        assert_eq!(channel.location, "conda.anaconda.org");
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+        );
+        assert_eq!(channel.name.as_deref(), Some("conda-forge"));
+        assert_eq!(channel.platforms, None);
+
+        assert_eq!(channel, Channel::from_name("conda-forge/", None, &config));
+    }
+
+    #[test]
+    fn parse_from_url() {
+        let config = ChannelConfig::default();
+
+        let channel =
+            Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+        );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.platforms, None);
         assert_eq!(
@@ -308,17 +440,50 @@ mod tests {
     }
 
     #[test]
+    fn parse_from_file_path() {
+        let config = ChannelConfig::default();
+
+        let channel = Channel::from_str("file:///var/channels/conda-forge", &config).unwrap();
+        assert_eq!(channel.name.as_deref(), Some("conda-forge"));
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("file:///var/channels/conda-forge/").unwrap()
+        );
+        assert_eq!(channel.platforms, None);
+        assert_eq!(
+            channel.base_url().to_string(),
+            "file:///var/channels/conda-forge/"
+        );
+
+        let current_dir = std::env::current_dir().expect("no current dir?");
+        let channel = Channel::from_str("./dir/does/not_exist", &config).unwrap();
+        assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
+        assert_eq!(channel.platforms, None);
+        assert_eq!(
+            channel.base_url().to_file_path().unwrap(),
+            current_dir.join("dir/does/not_exist")
+        );
+    }
+
+    #[test]
     fn parse_url_only() {
         let config = ChannelConfig::default();
 
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
-        assert_eq!(channel.scheme, "http");
-        assert_eq!(channel.location, "localhost:1234");
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("http://localhost:1234/").unwrap()
+        );
         assert_eq!(channel.name, None);
         assert_eq!(channel.platforms, None);
 
         let noarch_url = channel.platform_url(Platform::NoArch);
         assert_eq!(noarch_url.to_string(), "http://localhost:1234/noarch/");
+
+        assert!(matches!(
+            Channel::from_str("http://1000.0000.0001.294", &config),
+            Err(ParseChannelError::ParseUrlError(_))
+        ));
     }
 
     #[test]
@@ -327,22 +492,26 @@ mod tests {
         let config = ChannelConfig::default();
 
         let channel = Channel::from_str(
-            format!("https://conda.anaconda.com/conda-forge[{platform}]"),
+            format!("https://conda.anaconda.org/conda-forge[{platform}]"),
             &config,
         )
         .unwrap();
-        assert_eq!(channel.scheme, "https");
-        assert_eq!(channel.location, "conda.anaconda.com");
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
+        );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
         assert_eq!(channel.platforms, Some(smallvec![platform]));
 
         let channel = Channel::from_str(
-            format!("https://repo.anaconda.com/pkgs/main[{platform}]"),
+            format!("https://conda.anaconda.org/pkgs/main[{platform}]"),
             &config,
         )
         .unwrap();
-        assert_eq!(channel.scheme, "https");
-        assert_eq!(channel.location, "repo.anaconda.com");
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("https://conda.anaconda.org/pkgs/main/").unwrap()
+        );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
         assert_eq!(channel.platforms, Some(smallvec![platform]));
     }
