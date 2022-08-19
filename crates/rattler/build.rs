@@ -33,6 +33,8 @@ fn build_libsolv() -> Result<PathBuf> {
         .define("ENABLE_CONDA", "ON")
         .define("ENABLE_STATIC", "ON")
         .define("DISABLE_SHARED", "ON")
+        .define("MULTI_SEMANTICS", "ON")
+        .define("WITHOUT_COOKIEOPEN", "ON")
         .target(&std::env::var("CMAKE_TARGET").unwrap_or_else(|_| std::env::var("TARGET").unwrap()))
         .build();
     println!(
