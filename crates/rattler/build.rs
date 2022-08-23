@@ -23,6 +23,9 @@ const ALLOWED_FUNC_PREFIX: &[&str] = &[
 ];
 
 fn build_libsolv() -> Result<PathBuf> {
+    let target = std::env::var("TARGET").unwrap();
+    let is_windows = target.contains("windows");
+
     let p = path::PathBuf::from("./../../libsolv/CMakeLists.txt");
     if !p.is_file() {
         return Err(anyhow!(
@@ -35,6 +38,7 @@ fn build_libsolv() -> Result<PathBuf> {
         .define("DISABLE_SHARED", "ON")
         .define("MULTI_SEMANTICS", "ON")
         .define("WITHOUT_COOKIEOPEN", "ON")
+        .register_dep("z")
         .target(&std::env::var("CMAKE_TARGET").unwrap_or_else(|_| std::env::var("TARGET").unwrap()))
         .build();
     println!(
@@ -45,9 +49,14 @@ fn build_libsolv() -> Result<PathBuf> {
         "cargo:rustc-link-search=native={}",
         out.join("lib64").display()
     );
-    println!("cargo:rustc-link-lib=static=solv");
-    println!("cargo:rustc-link-lib=static=solvext");
-    println!("cargo:rustc-link-lib=z");
+
+    if is_windows {
+        println!("cargo:rustc-link-lib=static=solv_static");
+        println!("cargo:rustc-link-lib=static=solvext_static");
+    } else {
+        println!("cargo:rustc-link-lib=static=solv");
+        println!("cargo:rustc-link-lib=static=solvext");
+    }
 
     Ok(out.join("include/solv"))
 }
