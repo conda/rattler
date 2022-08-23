@@ -1,30 +1,34 @@
-use crate::libsolv::pool::Pool;
-use crate::libsolv::solvable::{Solvable, SolvableId};
-use crate::libsolv::{c_string, ffi};
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
-/// Representation of a repo containing package data in libsolv
-/// This corresponds to a repo_data json
-/// Lifetime of this object is coupled to the Pool on creation
-pub struct Repo<'pool>(pub(super) RepoOwnedPtr, pub(super) PhantomData<&'pool Pool>);
+use crate::libsolv::pool::PoolRef;
+use crate::libsolv::solvable::SolvableId;
+use crate::libsolv::{c_string, ffi};
 
-/// Wrapper type so we do not use lifetime in the drop
+/// Representation of a repo containing package data in libsolv. This corresponds to a repo_data
+/// json. Lifetime of this object is coupled to the Pool on creation
+pub struct Repo<'pool>(RepoOwnedPtr, PhantomData<&'pool ffi::Repo>);
+
 #[repr(transparent)]
-pub(super) struct RepoOwnedPtr(NonNull<ffi::Repo>);
+pub struct RepoRef(ffi::Repo);
 
-impl RepoOwnedPtr {
-    pub fn new(repo: *mut ffi::Repo) -> RepoOwnedPtr {
-        Self(NonNull::new(repo).expect("Could not create repo object"))
-    }
+impl<'pool> Deref for Repo<'pool> {
+    type Target = RepoRef;
 
-    /// Access the inner pool
-    pub(super) fn pool(&self) -> ManuallyDrop<Pool> {
-        let pool = (unsafe { *self.0.as_ptr() }).pool;
-        ManuallyDrop::new(unsafe { std::mem::transmute(pool) })
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0 .0.cast().as_ref() }
     }
 }
+
+impl<'pool> DerefMut for Repo<'pool> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0 .0.cast().as_mut() }
+    }
+}
+
+/// Wrapper type so we do not use lifetime in the drop
+struct RepoOwnedPtr(NonNull<ffi::Repo>);
 
 /// Destroy c-side of things when repo is dropped
 impl Drop for RepoOwnedPtr {
@@ -34,7 +38,31 @@ impl Drop for RepoOwnedPtr {
     }
 }
 
-impl Repo<'_> {
+impl RepoRef {
+    /// Converts from a pointer to an `ffi::Repo` to a reference of Self.
+    pub(super) fn from_ptr<'pool>(repo: NonNull<ffi::Repo>) -> &'pool Self {
+        // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
+        unsafe { std::mem::transmute(repo.as_ref()) }
+    }
+
+    /// Returns a pointer to the wrapped `ffi::Repo`
+    fn as_ptr(&self) -> NonNull<ffi::Repo> {
+        // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
+        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
+    }
+
+    /// Returns a reference to the wrapped `ffi::Repo`.
+    fn as_ref(&self) -> &ffi::Repo {
+        // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
+        unsafe { std::mem::transmute(self) }
+    }
+
+    /// Returns the pool that created this instance
+    pub fn pool(&self) -> &PoolRef {
+        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
+        unsafe { &*(self.as_ref().pool as *const PoolRef) }
+    }
+
     /// Add conda json to the repo
     pub fn add_conda_json<T: AsRef<str>>(&mut self, json_path: T) -> anyhow::Result<()> {
         let c_json = c_string(json_path.as_ref());
@@ -51,7 +79,7 @@ impl Repo<'_> {
                 ));
             }
             // This line could crash if the json is malformed
-            let ret = ffi::repo_add_conda(self.0 .0.as_mut(), file, 0);
+            let ret = ffi::repo_add_conda(self.as_ptr().as_mut(), file, 0);
             if ret != 0 {
                 return Err(anyhow::anyhow!(
                     "internal libsolv error while adding repodata to libsolv"
@@ -60,14 +88,21 @@ impl Repo<'_> {
 
             // Libsolv needs this function to be called so we can work with the repo later
             // TODO: maybe wolf knows more about this function
-            ffi::repo_internalize(self.0 .0.as_mut());
+            ffi::repo_internalize(self.as_ptr().as_mut());
         }
         Ok(())
     }
 
     /// Add a solvable to the Repo
     pub fn add_solvable(&mut self) -> SolvableId {
-        unsafe { SolvableId(ffi::repo_add_solvable(self.0 .0.as_mut())) }
+        unsafe { SolvableId(ffi::repo_add_solvable(self.as_ptr().as_ptr())) }
+    }
+}
+
+impl Repo<'_> {
+    /// Constructs a new instance
+    pub(super) fn new(ptr: NonNull<ffi::Repo>) -> Self {
+        Repo(RepoOwnedPtr(ptr), PhantomData::default())
     }
 }
 
@@ -78,6 +113,6 @@ mod tests {
     #[test]
     fn test_repo_creation() {
         let mut pool = Pool::default();
-        let mut repo = pool.create_repo("conda-forge");
+        let mut _repo = pool.create_repo("conda-forge");
     }
 }

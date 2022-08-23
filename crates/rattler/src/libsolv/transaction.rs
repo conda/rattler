@@ -1,13 +1,13 @@
 use crate::libsolv::ffi;
-use crate::libsolv::pool::Pool;
+use crate::libsolv::pool::PoolRef;
 use crate::libsolv::solvable::{Solvable, SolvableId};
 use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
-/// Wrapper type so we do not use lifetime in the drop
+/// Wraps a pointer to an `ffi::Transaction` which is freed when the instance is dropped.
 #[repr(transparent)]
-pub(super) struct TransactionOwnedPtr(NonNull<ffi::Transaction>);
+struct TransactionOwnedPtr(NonNull<ffi::Transaction>);
 
 impl Drop for TransactionOwnedPtr {
     fn drop(&mut self) {
@@ -15,35 +15,30 @@ impl Drop for TransactionOwnedPtr {
         unsafe { ffi::transaction_free(self.0.as_mut()) }
     }
 }
-impl TransactionOwnedPtr {
-    pub fn new(transaction: *mut ffi::Transaction) -> Self {
-        Self(NonNull::new(transaction).expect("could not create transaction object"))
+
+/// This represents a transaction in libsolv which is a abstraction over changes that need to be
+/// done to satisfy the dependency constraint.
+pub struct Transaction<'solver>(TransactionOwnedPtr, PhantomData<&'solver ffi::Transaction>);
+
+/// A `TransactionRef` is a wrapper around an `ffi::Transaction` that provides a safe abstraction
+/// over its functionality.
+///
+/// A `TransactionRef` can not be constructed by itself but is instead returned by dereferencing a
+/// [`Transaction`].
+#[repr(transparent)]
+pub struct TransactionRef(ffi::Transaction);
+
+impl Deref for Transaction<'_> {
+    type Target = TransactionRef;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0 .0.cast().as_ref() }
     }
 }
 
-/// This represents a transaction in libsolv
-/// which is a abstraction over changes that need to be done
-/// to satisfy the dependency constraint
-pub struct Transaction<'solver>(
-    pub(super) TransactionOwnedPtr,
-    pub(super) PhantomData<&'solver ffi::Solver>,
-);
-
-impl<'solver> Transaction<'solver> {
-    /// Get the inner pointer as a raw mutable pointer
-    fn as_raw_mut(&mut self) -> *mut ffi::Transaction {
-        self.0 .0.as_ptr()
-    }
-
-    /// Get the inner pointer as a raw pointer
-    fn as_raw(&self) -> *const ffi::Transaction {
-        self.0 .0.as_ptr()
-    }
-
-    /// Access the inner pool
-    pub(super) fn pool(&self) -> ManuallyDrop<Pool> {
-        let pool = (unsafe { *self.as_raw() }).pool;
-        ManuallyDrop::new(unsafe { std::mem::transmute::<*mut ffi::Pool, Pool>(pool) })
+impl DerefMut for Transaction<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0 .0.cast().as_mut() }
     }
 }
 
@@ -76,15 +71,33 @@ pub struct OperationOnSolvable {
     pub operation: InstallOperation,
 }
 
-impl Transaction<'_> {
+impl TransactionRef {
+    /// Returns a pointer to the wrapped `ffi::Transaction`
+    fn as_ptr(&self) -> NonNull<ffi::Transaction> {
+        // Safe because a `TransactionRef` is a transparent wrapper around `ffi::Transaction`
+        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
+    }
+
+    /// Returns a reference to the wrapped `ffi::Transaction`.
+    fn as_ref(&self) -> &ffi::Transaction {
+        // Safe because a `TransactionRef` is a transparent wrapper around `ffi::Transaction`
+        unsafe { std::mem::transmute(self) }
+    }
+
+    /// Returns the pool that owns this instance.
+    pub fn pool(&self) -> &PoolRef {
+        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
+        unsafe { &*(self.as_ref().pool as *const PoolRef) }
+    }
+
     /// Return the solvable operations
     pub fn get_solvable_operations(&mut self) -> Vec<OperationOnSolvable> {
         let mut solvable_operations = Vec::default();
         // Get inner transaction type
-        let inner = unsafe { *self.as_raw_mut() };
+        let inner = self.as_ref();
         // Number of transaction details
         let count = inner.steps.count as usize;
-        let pool = self.pool();
+        // let pool = self.pool();
         for index in 0..count {
             let (solvable, operation) = unsafe {
                 // Get the id for the current solvable
@@ -93,12 +106,15 @@ impl Transaction<'_> {
                 let id = SolvableId(id);
                 // Get the transaction type
                 let id_type = ffi::transaction_type(
-                    self.0 .0.as_mut(),
+                    self.as_ptr().as_ptr(),
                     id.into(),
                     ffi::SOLVER_TRANSACTION_SHOW_ALL as std::os::raw::c_int,
                 );
                 // Get the solvable from the pool
-                (id.resolve(&pool), InstallOperation::from(id_type as u32))
+                (
+                    id.resolve(self.pool()),
+                    InstallOperation::from(id_type as u32),
+                )
             };
             solvable_operations.push(OperationOnSolvable {
                 solvable,
@@ -106,5 +122,12 @@ impl Transaction<'_> {
             });
         }
         solvable_operations
+    }
+}
+
+impl Transaction<'_> {
+    /// Constructs a new instance
+    pub(super) fn new(ptr: NonNull<ffi::Transaction>) -> Self {
+        Transaction(TransactionOwnedPtr(ptr), PhantomData::default())
     }
 }

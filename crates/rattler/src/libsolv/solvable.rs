@@ -1,10 +1,9 @@
-use crate::libsolv::ffi;
-use crate::libsolv::pool::{Intern, Pool, StringId};
-use crate::libsolv::repo::{Repo, RepoOwnedPtr};
-use std::ffi::{CStr, CString};
-use std::mem::ManuallyDrop;
-use std::ops::DerefMut;
+use std::ffi::CStr;
 use std::ptr::NonNull;
+
+use crate::libsolv::ffi;
+use crate::libsolv::pool::{FindInterned, PoolRef, StringId};
+use crate::libsolv::repo::RepoRef;
 
 /// Solvable in libsolv
 #[repr(transparent)]
@@ -21,14 +20,14 @@ impl From<SolvableId> for ffi::Id {
 }
 
 impl SolvableId {
-    /// Resolve to the interned type returns a Solvable
-    pub fn resolve(&self, pool: &Pool) -> Solvable {
+    /// Resolves to the interned type returns a Solvable
+    pub fn resolve(&self, pool: &PoolRef) -> Solvable {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
             // Re-implement pool_id2solvable, as it's a static inline function, we can't use it :(
-            let solvable = (*pool.0.as_ptr()).solvables;
+            let solvables = pool.as_ref().solvables;
             // Apparently the solvable is offset by the id from the first solvable
-            let solvable = solvable.offset(self.0 as isize);
+            let solvable = solvables.offset(self.0 as isize);
             Solvable(NonNull::new(solvable).expect("solvable cannot be null"))
         }
     }
@@ -36,61 +35,64 @@ impl SolvableId {
 
 #[derive(Debug)]
 pub struct SolvableInfo {
-    name: String,
-    version: String,
-    build_string: Option<String>,
-    build_number: Option<String>,
+    pub name: String,
+    pub version: String,
+    pub build_string: Option<String>,
+    pub build_number: Option<usize>,
 }
 
 impl Solvable {
-    /// Access the inner repo
-    pub(super) fn repo(&self) -> ManuallyDrop<RepoOwnedPtr> {
-        let repo = unsafe { *self.0.as_ptr() }.repo;
-        ManuallyDrop::new(unsafe { std::mem::transmute(repo) })
+    /// Returns a reference to the Repo that created this instance.
+    pub fn repo(&self) -> &RepoRef {
+        RepoRef::from_ptr(
+            NonNull::new(unsafe { self.0.as_ref() }.repo)
+                .expect("the `repo` field of an ffi::Solvable is null"),
+        )
+    }
+
+    /// Lookup a certain string from the solvable.
+    fn lookup_str(&self, string_id: StringId) -> Option<&str> {
+        let str = unsafe { ffi::solvable_lookup_str(self.0.as_ptr(), string_id.into()) };
+        if str.is_null() {
+            None
+        } else {
+            unsafe {
+                Some(
+                    CStr::from_ptr(str)
+                        .to_str()
+                        .expect("could not decode string"),
+                )
+            }
+        }
     }
 
     /// Returns a solvable info from a solvable
     pub fn solvable_info(&self) -> SolvableInfo {
-        let mut pool = self.repo().pool();
-        let (name, version, build_string, build_number) = unsafe {
-            let solvable = self.0.as_ptr();
-            let id = StringId((*solvable).name);
-            let version = StringId((*solvable).evr);
-            let solvable_build_version = "solvable:buildversion".intern(pool.deref_mut());
-            let build_str = ffi::solvable_lookup_str(solvable, solvable_build_version.into());
-            let build_string = if !build_str.is_null() {
-                Some(
-                    CStr::from_ptr(build_str)
-                        .to_str()
-                        .expect("could not decode string")
-                        .to_string(),
-                )
-            } else {
-                None
-            };
-            let solvable_build_flavor = "solvable:buildflavor".intern(pool.deref_mut());
-            let build_number = ffi::solvable_lookup_str(solvable, solvable_build_flavor.into());
-            let build_number = if !build_number.is_null() {
-                Some(
-                    CStr::from_ptr(build_number)
-                        .to_str()
-                        .expect("could not decode string")
-                        .to_string(),
-                )
-            } else {
-                None
-            };
-            (
-                id.resolve(&pool),
-                version.resolve(&pool),
-                build_string,
-                build_number,
-            )
-        };
+        let pool = self.repo().pool();
+        let solvable = self.0.as_ptr();
+
+        let id = StringId(unsafe { (*solvable).name });
+        let version = StringId(unsafe { (*solvable).evr });
+
+        let solvable_build_flavor = "solvable:buildflavor"
+            .find_interned_id(pool)
+            .expect("\"solvable:buildflavor\" was not found in the string pool");
+        let build_string = self
+            .lookup_str(solvable_build_flavor)
+            .map(ToOwned::to_owned);
+
+        let solvable_build_version = "solvable:buildversion"
+            .find_interned_id(pool)
+            .expect("\"solvable:buildversion\" was not found in the string pool");
+        let build_number = self.lookup_str(solvable_build_version).map(|num_str| {
+            num_str.parse().unwrap_or_else(|e| {
+                panic!("could not convert build_number '{num_str}' to number: {e}")
+            })
+        });
 
         SolvableInfo {
-            name: name.to_string(),
-            version: name.to_string(),
+            name: id.resolve(pool).to_string(),
+            version: version.resolve(pool).to_string(),
             build_string,
             build_number,
         }

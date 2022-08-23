@@ -1,15 +1,37 @@
-use crate::libsolv::repo::{Repo, RepoOwnedPtr};
-use crate::libsolv::solver::{Solver, SolverOwnedPtr};
+use crate::libsolv::repo::Repo;
+use crate::libsolv::solver::Solver;
 use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
-/// Wrapper for libsolv Pool which is an interning datastructure used by libsolv
+/// Wrapper for libsolv Pool which is an interning datastructure used by libsolv.
 #[repr(transparent)]
 pub struct Pool(pub(super) NonNull<ffi::Pool>);
+
+/// A `PoolRef` is a wrapper around an `ffi::Pool` that provides a safe abstraction over its
+/// functionality.
+///
+/// A `PoolRef` can not be constructed by itself but is instead returned by dereferencing a
+/// [`Pool`].
+#[repr(transparent)]
+pub struct PoolRef(ffi::Pool);
+
+impl Deref for Pool {
+    type Target = PoolRef;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.0.cast().as_ref() }
+    }
+}
+
+impl DerefMut for Pool {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { self.0.cast().as_mut() }
+    }
+}
 
 impl Default for Pool {
     fn default() -> Self {
@@ -26,39 +48,47 @@ impl Drop for Pool {
     }
 }
 
-impl Pool {
+impl PoolRef {
+    /// Returns a pointer to the wrapped `ffi::Pool`
+    pub(super) fn as_ptr(&self) -> NonNull<ffi::Pool> {
+        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
+    }
+
+    /// Returns a reference to the wrapped `ffi::Pool`.
+    pub(super) fn as_ref(&self) -> &ffi::Pool {
+        // Safe because RepoRef is a transparent wrapper around ffi::Repo
+        unsafe { std::mem::transmute(self) }
+    }
+
     /// Create repo from a pool
     pub fn create_repo<S: AsRef<str>>(&mut self, url: S) -> Repo {
         unsafe {
             let c_url = c_string(url);
-            Repo(
-                RepoOwnedPtr::new(ffi::repo_create(self.0.as_mut(), c_url.as_ptr())),
-                PhantomData,
+            Repo::new(
+                NonNull::new(ffi::repo_create(self.as_ptr().as_mut(), c_url.as_ptr()))
+                    .expect("libsolv repo_create returned nullptr"),
             )
         }
     }
 
     /// Create the solver
     pub fn create_solver(&mut self) -> Solver {
-        unsafe {
-            Solver(
-                SolverOwnedPtr::new(ffi::solver_create(self.0.as_mut())),
-                PhantomData,
-            )
-        }
+        let solver = NonNull::new(unsafe { ffi::solver_create(self.as_ptr().as_mut()) })
+            .expect("solver_create returned a nullptr");
+        Solver::new(solver)
     }
 
     /// Create the whatprovides on the pool which is needed for solving
     pub fn create_whatprovides(&mut self) {
         // Safe because pointer must exist
         unsafe {
-            ffi::pool_createwhatprovides(self.0.as_mut());
+            ffi::pool_createwhatprovides(self.as_ptr().as_mut());
         }
     }
 }
 
 /// Intern string like types
-fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
+fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
     let length = c_str.as_bytes().len();
@@ -67,7 +97,7 @@ fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
     // Safe because pool exists and function accepts any string
     unsafe {
         StringId(ffi::pool_strn2id(
-            pool.0.as_mut(),
+            pool.as_ptr().as_mut(),
             c_str.as_ptr(),
             length.try_into().expect("string too large"),
             1,
@@ -75,12 +105,40 @@ fn intern_str<T: AsRef<str>>(pool: &mut Pool, str: T) -> StringId {
     }
 }
 
-/// Interns from Target tyoe to Id
+/// Finds a previously interned string or returns `None` if it wasnt found.
+fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
+    // Safe because conversion is valid
+    let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
+    let length = c_str.as_bytes().len();
+    let c_str = c_str.as_c_str();
+
+    // Safe because pool exists and function accepts any string
+    unsafe {
+        let id = ffi::pool_strn2id(
+            pool.as_ptr().as_ptr(),
+            c_str.as_ptr(),
+            length.try_into().expect("string too large"),
+            0,
+        );
+        if id == 0 {
+            None
+        } else {
+            Some(StringId(id))
+        }
+    }
+}
+
+/// Interns from Target type to Id
 pub trait Intern {
     type Id;
 
-    /// Intern the type in the [`Pool`]
-    fn intern(&self, pool: &mut Pool) -> Self::Id;
+    /// Interns the type in the [`Pool`]
+    fn intern(&self, pool: &mut PoolRef) -> Self::Id;
+}
+
+pub trait FindInterned: Intern {
+    /// Finds a previously interned instance in the specified [`Pool`]
+    fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id>;
 }
 
 /// Wrapper for the StringId of libsolv
@@ -89,10 +147,10 @@ pub struct StringId(pub(super) ffi::Id);
 
 impl StringId {
     /// Resolve to the interned type returns a string reference
-    pub fn resolve<'a>(&self, pool: &'a Pool) -> &'a str {
+    pub fn resolve<'a>(&self, pool: &'a PoolRef) -> &'a str {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
-            let c_str = ffi::pool_id2str(pool.0.as_ptr(), self.0);
+            let c_str = ffi::pool_id2str(pool.as_ptr().as_ptr(), self.0);
             CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
         }
     }
@@ -102,8 +160,14 @@ impl StringId {
 impl<'s> Intern for &'s str {
     type Id = StringId;
 
-    fn intern(&self, pool: &mut Pool) -> Self::Id {
+    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
         intern_str(pool, self)
+    }
+}
+
+impl<'s> FindInterned for &'s str {
+    fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id> {
+        find_intern_str(pool, self)
     }
 }
 
@@ -111,8 +175,14 @@ impl<'s> Intern for &'s str {
 impl<'s> Intern for &'s String {
     type Id = StringId;
 
-    fn intern(&self, pool: &mut Pool) -> Self::Id {
+    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
         intern_str(pool, self)
+    }
+}
+
+impl<'s> FindInterned for &'s String {
+    fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id> {
+        find_intern_str(pool, self)
     }
 }
 
@@ -129,7 +199,7 @@ pub struct MatchSpecId(ffi::Id);
 impl Intern for MatchSpec {
     type Id = MatchSpecId;
 
-    fn intern(&self, pool: &mut Pool) -> Self::Id {
+    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
         let name = self
             .name
             .as_ref()
@@ -156,7 +226,12 @@ impl Intern for MatchSpec {
         };
 
         let c_str = c_string(conda_build_form);
-        unsafe { MatchSpecId(ffi::pool_conda_matchspec(pool.0.as_mut(), c_str.as_ptr())) }
+        unsafe {
+            MatchSpecId(ffi::pool_conda_matchspec(
+                pool.as_ptr().as_mut(),
+                c_str.as_ptr(),
+            ))
+        }
     }
 }
 

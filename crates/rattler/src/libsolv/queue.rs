@@ -2,9 +2,9 @@ use crate::libsolv::ffi;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
-/// Wrapper for libsolv queue type. This type is used by libsolv in the solver
-/// to solve for different conda matchspecs
-/// This is a type-safe implementation that is coupled to a specific Id type
+/// Wrapper for libsolv queue type. This type is used by libsolv in the solver to solve for
+/// different conda matchspecs. This is a type-safe implementation that is coupled to a specific Id
+/// type
 pub struct Queue<T> {
     queue: ffi::Queue,
     // Makes this queue typesafe
@@ -77,12 +77,11 @@ impl<T: Into<ffi::Id>> Queue<T> {
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::ffi;
     use crate::libsolv::pool::StringId;
     use crate::libsolv::queue::Queue;
 
     #[test]
     fn create_queue() {
-        let queue = Queue::<StringId>::default();
+        let _queue = Queue::<StringId>::default();
     }
 }
