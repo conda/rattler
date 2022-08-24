@@ -105,7 +105,7 @@ fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
     }
 }
 
-/// Finds a previously interned string or returns `None` if it wasnt found.
+/// Finds a previously interned string or returns `None` if it wasn't found.
 fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
