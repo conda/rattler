@@ -50,7 +50,7 @@ impl Solvable {
         )
     }
 
-    /// Lookup a certain string from the solvable.
+    /// Looks up a string value associated with this instance with the given `key`.
     fn lookup_str(&self, string_id: StringId) -> Option<&str> {
         let str = unsafe { ffi::solvable_lookup_str(self.0.as_ptr(), string_id.into()) };
         if str.is_null() {
