@@ -62,7 +62,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
         }
     }
 
-    /// Push multiple id's into the queue
+    /// Push and id and flag into the queue
     pub fn push_id_and_flags(&mut self, id: T, flags: i32) {
         unsafe {
             ffi::queue_insert2(
