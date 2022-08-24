@@ -66,7 +66,7 @@ impl SolverRef {
     }
 
     /// Creates a string of 'problems' that the solver still has which it encountered while solving
-    /// the matchspecs use this function to print the existing problems to string
+    /// the matchspecs. Use this function to print the existing problems to string.
     fn solver_problems(&self) -> String {
         let mut problem_queue = Queue::default();
         let count = unsafe { ffi::solver_problem_count(self.as_ptr().as_ptr()) as u32 };
