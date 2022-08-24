@@ -157,7 +157,6 @@ impl StringId {
     }
 }
 
-/// Intern implementation for string reference
 impl<'s> Intern for &'s str {
     type Id = StringId;
 
