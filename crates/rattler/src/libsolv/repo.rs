@@ -63,7 +63,7 @@ impl RepoRef {
         unsafe { &*(self.as_ref().pool as *const PoolRef) }
     }
 
-    /// Add conda json to the repo
+    /// Reads the content of the file pointed to by `json_path` and adds it to the instance.
     pub fn add_conda_json<T: AsRef<str>>(&mut self, json_path: T) -> anyhow::Result<()> {
         let c_json = c_string(json_path.as_ref());
         let mode = c_string("r");
