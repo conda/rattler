@@ -42,6 +42,7 @@ impl DerefMut for Transaction<'_> {
     }
 }
 
+/// Enumeration of all install-like operations
 #[derive(Debug)]
 pub enum InstallOperation {
     Install,
@@ -66,6 +67,7 @@ impl From<u32> for InstallOperation {
     }
 }
 
+/// Describes what operation should happe
 pub struct OperationOnSolvable {
     pub solvable: Solvable,
     pub operation: InstallOperation,
