@@ -55,7 +55,7 @@ impl<T> Queue<T> {
 }
 
 impl<T: Into<ffi::Id>> Queue<T> {
-    /// Push a single id into the queue
+    /// Pushes a single id to the back of the queue
     pub fn push_id(&mut self, id: T) {
         unsafe {
             ffi::queue_insert(self.as_inner_mut(), self.queue.count, id.into());
