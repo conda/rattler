@@ -270,7 +270,6 @@ mod test {
         assert_eq!(to_intern, outcome.unwrap());
 
         let outcome2 = id.resolve(&pool2);
-        dbg!(&outcome2);
         assert!(outcome2.is_none());
     }
 
