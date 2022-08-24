@@ -84,7 +84,7 @@ impl SolverRef {
         output
     }
 
-    /// Run the libsolv solver that solves the problems, which are probably matchspecs in the pool
+    /// Solves all the problems in the `queue`, or returns an error if problems remain.
     pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<()> {
         let result = unsafe {
             // Run the solve method
