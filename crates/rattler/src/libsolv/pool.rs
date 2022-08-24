@@ -124,8 +124,8 @@ fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
     }
 }
 
-/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data. 
-/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing 
+/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data.
+/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing
 /// the same `Id`. However, a `Pool` also only releases memory when explicitly asked to do so or on
 /// destruction.
 pub trait Intern {
@@ -148,11 +148,16 @@ pub struct StringId(pub(super) ffi::Id);
 
 impl StringId {
     /// Resolve to the interned type returns a string reference
-    pub fn resolve<'a>(&self, pool: &'a PoolRef) -> &'a str {
+    pub fn resolve<'a>(&self, pool: &'a PoolRef) -> Option<&'a str> {
         // Safe because the new-type wraps the ffi::id and cant be created otherwise
         unsafe {
             let c_str = ffi::pool_id2str(pool.as_ptr().as_ptr(), self.0);
-            CStr::from_ptr(c_str).to_str().expect("utf-8 parse error")
+            let c_str = CStr::from_ptr(c_str).to_str().expect("utf-8 parse error");
+            if c_str == "<NULL>" {
+                None
+            } else {
+                Some(c_str)
+            }
         }
     }
 }
@@ -171,7 +176,6 @@ impl<'s> FindInterned for &'s str {
     }
 }
 
-/// Intern implementation for owned Strings
 impl<'s> Intern for &'s String {
     type Id = StringId;
 
@@ -186,7 +190,6 @@ impl<'s> FindInterned for &'s String {
     }
 }
 
-/// Conversion to [`ffi::Id`]
 impl From<StringId> for ffi::Id {
     fn from(id: StringId) -> Self {
         id.0
@@ -258,12 +261,17 @@ mod test {
     #[test]
     fn test_pool_string_interning() {
         let mut pool = Pool::default();
+        let mut pool2 = Pool::default();
         let to_intern = "foobar";
         // Intern the string
         let id = to_intern.intern(&mut pool);
         // Get it back
         let outcome = id.resolve(&pool);
-        assert_eq!(to_intern, outcome);
+        assert_eq!(to_intern, outcome.unwrap());
+
+        let outcome2 = id.resolve(&pool2);
+        dbg!(&outcome2);
+        assert!(outcome2.is_none());
     }
 
     #[test]
@@ -283,7 +291,7 @@ mod test {
         for in_s in strings {
             let id = in_s.intern(&mut pool);
             let outcome = id.resolve(&pool);
-            assert_eq!(in_s, outcome);
+            assert_eq!(in_s, outcome.unwrap());
         }
     }
 

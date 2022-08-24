@@ -91,8 +91,14 @@ impl Solvable {
         });
 
         SolvableInfo {
-            name: id.resolve(pool).to_string(),
-            version: version.resolve(pool).to_string(),
+            name: id
+                .resolve(pool)
+                .expect("string not found in pool")
+                .to_string(),
+            version: version
+                .resolve(pool)
+                .expect("string not found in pool")
+                .to_string(),
             build_string,
             build_number,
         }
