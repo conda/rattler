@@ -87,7 +87,7 @@ impl PoolRef {
     }
 }
 
-/// Intern string like types
+/// Interns string like types into a `Pool` returning a `StringId`
 fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
