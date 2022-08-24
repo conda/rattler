@@ -92,11 +92,6 @@ impl RepoRef {
         }
         Ok(())
     }
-
-    /// Adds a `Solvable` to this instance
-    pub fn add_solvable(&mut self) -> SolvableId {
-        unsafe { SolvableId(ffi::repo_add_solvable(self.as_ptr().as_ptr())) }
-    }
 }
 
 impl Repo<'_> {
