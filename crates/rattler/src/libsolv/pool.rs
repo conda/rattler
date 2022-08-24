@@ -135,6 +135,8 @@ pub trait Intern {
     fn intern(&self, pool: &mut PoolRef) -> Self::Id;
 }
 
+/// Enables retrieving the `Id` of previously interned instances of `Self` through the `Intern`
+/// trait.
 pub trait FindInterned: Intern {
     /// Finds a previously interned instance in the specified [`Pool`]
     fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id>;
