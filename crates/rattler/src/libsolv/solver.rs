@@ -102,7 +102,7 @@ impl SolverRef {
         }
     }
 
-    /// Create a transaction from the solver
+    /// Creates a transaction from the solutions found by the solver.
     pub fn create_transaction(&mut self) -> Transaction {
         let transaction =
             NonNull::new(unsafe { ffi::solver_create_transaction(self.as_ptr().as_mut()) })
