@@ -128,7 +128,10 @@ fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
     }
 }
 
-/// Interns from Target type to Id
+/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data. 
+/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing 
+/// the same `Id`. However, a `Pool` also only releases memory when explicitly asked to do so or on
+/// destruction.
 pub trait Intern {
     type Id;
 
