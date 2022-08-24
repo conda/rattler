@@ -87,7 +87,7 @@ impl PoolRef {
     }
 }
 
-/// Intern string like types
+/// Interns string like types into a `Pool` returning a `StringId`
 fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
@@ -105,7 +105,7 @@ fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
     }
 }
 
-/// Finds a previously interned string or returns `None` if it wasnt found.
+/// Finds a previously interned string or returns `None` if it wasn't found.
 fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
@@ -120,15 +120,14 @@ fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
             length.try_into().expect("string too large"),
             0,
         );
-        if id == 0 {
-            None
-        } else {
-            Some(StringId(id))
-        }
+        (id != 0).then(|| StringId(id))
     }
 }
 
-/// Interns from Target type to Id
+/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data. 
+/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing 
+/// the same `Id`. However, a `Pool` also only releases memory when explicitly asked to do so or on
+/// destruction.
 pub trait Intern {
     type Id;
 
@@ -136,6 +135,8 @@ pub trait Intern {
     fn intern(&self, pool: &mut PoolRef) -> Self::Id;
 }
 
+/// Enables retrieving the `Id` of previously interned instances of `Self` through the `Intern`
+/// trait.
 pub trait FindInterned: Intern {
     /// Finds a previously interned instance in the specified [`Pool`]
     fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id>;
@@ -156,7 +157,6 @@ impl StringId {
     }
 }
 
-/// Intern implementation for string reference
 impl<'s> Intern for &'s str {
     type Id = StringId;
 

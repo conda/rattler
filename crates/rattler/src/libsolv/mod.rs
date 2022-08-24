@@ -8,7 +8,7 @@ mod solvable;
 mod solver;
 mod transaction;
 
-/// Convenience method to convert from a string reference to a CString
+/// Convenience method that converts a string reference to a CString
 fn c_string<T: AsRef<str>>(str: T) -> CString {
     CString::new(str.as_ref()).expect("should be convertable from string")
 }

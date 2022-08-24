@@ -92,7 +92,7 @@ impl TransactionRef {
         unsafe { &*(self.as_ref().pool as *const PoolRef) }
     }
 
-    /// Return the solvable operations
+    /// Returns the solvable operations
     pub fn get_solvable_operations(&mut self) -> Vec<OperationOnSolvable> {
         let mut solvable_operations = Vec::default();
         // Get inner transaction type
