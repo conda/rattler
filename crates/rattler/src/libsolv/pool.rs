@@ -147,17 +147,30 @@ pub trait FindInterned: Intern {
 pub struct StringId(pub(super) ffi::Id);
 
 impl StringId {
-    /// Resolve to the interned type returns a string reference
+    /// Resolves to the interned type returns a string reference.
+    ///
+    /// ```rust
+    /// let pool = Pool::default();
+    /// let string = "Hello, world!";
+    /// let id = string.intern(pool);
+    /// assert_eq!(id.resolve(pool), Some(string));
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// This function does not result in undefined behavior if an Id is passsed that was not
+    /// interned by the passed `pool`. However, if the `pool` is different from the one that
+    /// returned the `StringId` while interning the result might be unexpected.
     pub fn resolve<'a>(&self, pool: &'a PoolRef) -> Option<&'a str> {
-        // Safe because the new-type wraps the ffi::id and cant be created otherwise
-        unsafe {
-            let c_str = ffi::pool_id2str(pool.as_ptr().as_ptr(), self.0);
-            let c_str = CStr::from_ptr(c_str).to_str().expect("utf-8 parse error");
-            if c_str == "<NULL>" {
-                None
-            } else {
-                Some(c_str)
-            }
+        if self.0 >= pool.as_ref().ss.nstrings {
+            None
+        } else {
+            // Safe because we check if the stringpool can actually contain the given id.
+            let c_str = unsafe { ffi::pool_id2str(pool.as_ptr().as_ptr(), self.0) };
+            let c_str = unsafe { CStr::from_ptr(c_str) }
+                .to_str()
+                .expect("utf-8 parse error");
+            Some(c_str)
         }
     }
 }
