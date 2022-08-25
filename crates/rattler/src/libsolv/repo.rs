@@ -3,7 +3,6 @@ use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
 use crate::libsolv::pool::PoolRef;
-use crate::libsolv::solvable::SolvableId;
 use crate::libsolv::{c_string, ffi};
 
 /// Representation of a repo containing package data in libsolv. This corresponds to a repo_data

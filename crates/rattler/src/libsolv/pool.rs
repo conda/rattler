@@ -176,7 +176,7 @@ impl<'s> FindInterned for &'s str {
     }
 }
 
-impl<'s> Intern for &'s String {
+impl Intern for String {
     type Id = StringId;
 
     fn intern(&self, pool: &mut PoolRef) -> Self::Id {
@@ -184,7 +184,7 @@ impl<'s> Intern for &'s String {
     }
 }
 
-impl<'s> FindInterned for &'s String {
+impl FindInterned for String {
     fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id> {
         find_intern_str(pool, self)
     }
@@ -261,7 +261,7 @@ mod test {
     #[test]
     fn test_pool_string_interning() {
         let mut pool = Pool::default();
-        let mut pool2 = Pool::default();
+        let pool2 = Pool::default();
         let to_intern = "foobar";
         // Intern the string
         let id = to_intern.intern(&mut pool);
