@@ -45,7 +45,7 @@ impl Default for Pool {
 impl Drop for Pool {
     fn drop(&mut self) {
         // Safe because we know that the pool exists at this point
-        unsafe { 
+        unsafe {
             ffi::pool_free(self.0.as_mut());
             let ptr = (*self.0.as_ptr()).debugcallbackdata;
             if !ptr.is_null() {
@@ -57,16 +57,21 @@ impl Drop for Pool {
 }
 
 #[no_mangle]
-extern "C" fn log_callback(pool: *mut ffi::Pool, user_data: *mut c_void, t: i32, str: *const i8) {
+extern "C" fn log_callback(
+    _pool: *mut ffi::Pool,
+    user_data: *mut c_void,
+    _level: i32,
+    str: *const i8,
+) {
     unsafe {
         // Get the box back
-        let closure: &mut Box<dyn FnMut(&str) -> bool> = std::mem::transmute(user_data);
+        let closure: &mut Box<dyn FnMut(&str) -> bool> =
+            &mut *(user_data as *mut std::boxed::Box<dyn for<'r> std::ops::FnMut(&'r str) -> bool>);
         // Convert the string
         let str = CStr::from_ptr(str);
         // Call the callback
         closure(str.to_str().expect("utf-8 error"));
     }
-
 }
 
 /// Logging verbosity for libsolv
@@ -91,12 +96,16 @@ impl PoolRef {
 
     /// Add debug callback to the pool
     pub fn set_debug_callback<F: FnMut(&str) + 'static>(&mut self, callback: F) {
-        let box_callback: Box<Box<dyn FnMut(&str) + 'static>> = Box::new(Box::new(callback)); 
+        let box_callback: Box<Box<dyn FnMut(&str) + 'static>> = Box::new(Box::new(callback));
         unsafe {
             // Sets the debug callback into the pool
             // Double box because file because the Box<Fn> is a fat pointer and have a different
             // size compared to c_void
-            ffi::pool_setdebugcallback(self.as_ptr().as_ptr(), Some(log_callback), Box::into_raw(box_callback) as *mut _);
+            ffi::pool_setdebugcallback(
+                self.as_ptr().as_ptr(),
+                Some(log_callback),
+                Box::into_raw(box_callback) as *mut _,
+            );
         }
     }
 
@@ -250,6 +259,22 @@ impl Intern for String {
     }
 }
 
+impl Intern for StringId {
+    type Id = Self;
+
+    fn intern(&self, _: &mut PoolRef) -> Self::Id {
+        *self
+    }
+}
+
+impl<T: Intern> Intern for &T {
+    type Id = T::Id;
+
+    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
+        (*self).intern(pool)
+    }
+}
+
 impl FindInterned for String {
     fn find_interned_id(&self, pool: &PoolRef) -> Option<Self::Id> {
         find_intern_str(pool, self)
@@ -386,6 +411,5 @@ mod test {
         unsafe { super::ffi::pool_debug(pool.as_ptr().as_ptr(), 1 << 5, msg.as_ptr()) };
 
         assert_eq!(rx.recv().unwrap(), "foo");
-
     }
 }

@@ -42,6 +42,16 @@ pub struct SolvableInfo {
 }
 
 impl Solvable {
+    /// Returns a pointer to the wrapped `ffi::Pool`
+    pub(super) fn as_ptr(&self) -> NonNull<ffi::Solvable> {
+        self.0
+    }
+
+    /// Returns the pool the which this solvable belongs.
+    pub fn pool(&self) -> &PoolRef {
+        self.repo().pool()
+    }
+
     /// Returns a reference to the Repo that created this instance.
     pub fn repo(&self) -> &RepoRef {
         RepoRef::from_ptr(

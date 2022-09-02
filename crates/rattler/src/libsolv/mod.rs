@@ -20,6 +20,8 @@ mod test {
     use crate::libsolv::queue::Queue;
     use rattler::{ChannelConfig, MatchSpec};
 
+    use super::pool::Verbosity;
+
     fn conda_json_path() -> String {
         format!(
             "{}/{}",
@@ -50,12 +52,22 @@ mod test {
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
         let mut pool = Pool::default();
-        pool.set_debug_callback(|msg| eprintln!("{}", msg));
+        pool.set_debug_callback(|msg| eprintln!("{}", msg.trim()));
+        pool.set_debug_level(Verbosity::Low);
         let mut repo = pool.create_repo("conda-forge");
-        repo.add_conda_json(json_file)
-            .expect("could not add repodata to Repo");
-        repo.add_conda_json(json_file_noarch)
-            .expect("could not add repodata (noarch) to Repo");
+        repo.add_repodata(
+            &serde_json::from_str(&std::fs::read_to_string(json_file).expect("couldnt read"))
+                .expect("couldnt parse"),
+        )
+        .expect("cannot add repodata");
+        repo.add_repodata(
+            &serde_json::from_str(&std::fs::read_to_string(json_file_noarch).unwrap()).unwrap(),
+        )
+        .unwrap();
+        // repo.add_conda_json(json_file)
+        //     .expect("could not add repodata to Repo");
+        // repo.add_conda_json(json_file_noarch)
+        //     .expect("could not add repodata (noarch) to Repo");
         // Create datastructures for solving
         pool.create_whatprovides();
         let channel_config = ChannelConfig::default();

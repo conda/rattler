@@ -246,7 +246,7 @@ mod tests {
             platform: None,
             depends: vec![],
             constrains: vec![],
-            track_features: None,
+            track_features: vec![],
             features: None,
             noarch: None,
             preferred_env: None,

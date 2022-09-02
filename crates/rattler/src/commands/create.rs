@@ -71,7 +71,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         platform: None,
         depends: opt.specs,
         constrains: vec![],
-        track_features: None,
+        track_features: vec![],
         features: None,
         noarch: None,
         preferred_env: None,
