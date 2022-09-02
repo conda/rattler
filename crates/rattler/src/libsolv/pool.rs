@@ -313,6 +313,8 @@ impl From<MatchSpecId> for ffi::Id {
 
 #[cfg(test)]
 mod test {
+    use std::ffi::{CString, CStr};
+
     use crate::libsolv::pool::{Intern, Pool};
     use rattler::{ChannelConfig, MatchSpec};
 
@@ -374,9 +376,16 @@ mod test {
     #[test]
     fn test_pool_callback() {
         let mut pool = Pool::default();
-        pool.set_debug_level(super::Verbosity::Medium);
-        pool.set_debug_callback(|msg| { println!("{}", msg) });
-        "Hello".intern(&mut pool);
-        "Goodbye".intern(&mut pool);
+        let (tx, rx) = std::sync::mpsc::sync_channel(10);
+        // Set the debug level
+        pool.set_debug_level(super::Verbosity::Extreme);
+        pool.set_debug_callback(move |msg| { tx.send(msg.to_owned()).unwrap(); });
+
+        // Log something in the pool
+        let msg = CString::new("foo").unwrap();
+        unsafe { super::ffi::pool_debug(pool.as_ptr().as_ptr(), 1 << 5, msg.as_ptr()) };
+
+        assert_eq!(rx.recv().unwrap(), "foo");
+
     }
 }
