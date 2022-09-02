@@ -99,7 +99,6 @@ impl TransactionRef {
         let inner = self.as_ref();
         // Number of transaction details
         let count = inner.steps.count as usize;
-        // let pool = self.pool();
         for index in 0..count {
             let (solvable, operation) = unsafe {
                 // Get the id for the current solvable

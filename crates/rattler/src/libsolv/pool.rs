@@ -5,6 +5,7 @@ use rattler::MatchSpec;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
+use std::os::raw::c_void;
 use std::ptr::NonNull;
 
 /// Wrapper for libsolv Pool which is an interning datastructure used by libsolv.
@@ -44,7 +45,42 @@ impl Default for Pool {
 impl Drop for Pool {
     fn drop(&mut self) {
         // Safe because we know that the pool exists at this point
-        unsafe { ffi::pool_free(self.0.as_mut()) }
+        unsafe { 
+            ffi::pool_free(self.0.as_mut());
+            let ptr = (*self.0.as_ptr()).debugcallbackdata;
+            if !ptr.is_null() {
+                // Free the callbackdata by reconstructing it
+                let _: Box<Box<dyn Fn(&str)>> = Box::from_raw(ptr as *mut _);
+            }
+        }
+    }
+}
+
+#[no_mangle]
+extern "C" fn log_callback(pool: *mut ffi::Pool, user_data: *mut c_void, t: i32, str: *const i8) {
+    unsafe {
+        // Get the box back
+        let closure: &mut Box<dyn FnMut(&str) -> bool> = std::mem::transmute(user_data);
+        // Convert the string
+        let str = CStr::from_ptr(str);
+        // Call the callback
+        closure(str.to_str().expect("utf-8 error"));
+    }
+
+}
+
+impl Pool {
+    /// Add debug callback to the pool
+    pub fn add_debug_callback<F: FnMut(&str) + 'static>(&mut self, callback: F) {
+
+        let box_callback = Box::new(Box::new(callback)); 
+        unsafe {
+            // Sets the debug callback into the pool
+            // Double box because file because the Box<Fn> is a fat pointer and have a different
+            // size compared to c_void
+            println!("Bla");
+            ffi::pool_setdebugcallback(self.0.as_ptr(), Some(log_callback), Box::into_raw(box_callback) as *mut _);
+        }
     }
 }
 
@@ -316,5 +352,13 @@ mod test {
         let mut pool = Pool::default();
         spec.intern(&mut pool);
         // Don't think libsolv has an API to get it back
+    }
+
+    #[test]
+    fn test_pool_callback() {
+        let mut pool = Pool::default();
+        pool.add_debug_callback(|msg| { println!("{}", msg) });
+        // "Hello".intern(&mut pool);
+        // "Goodbye".intern(&mut pool);
     }
 }

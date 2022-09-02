@@ -41,6 +41,7 @@ mod test {
     fn test_solve_python() {
         let json_file = conda_json_path();
         let mut pool = Pool::default();
+
         let mut repo = pool.create_repo("conda-forge");
         repo.add_conda_json(json_file)
             .expect("could not add repodata to Repo");
