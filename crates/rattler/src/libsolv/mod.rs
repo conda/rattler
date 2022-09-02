@@ -28,6 +28,14 @@ mod test {
         )
     }
 
+    fn conda_json_path_noarch() -> String {
+        format!(
+            "{}/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            "resources/channels/conda-forge/noarch/repodata.json"
+        )
+    }
+
     #[test]
     fn test_conda_read_repodata() {
         let json_file = conda_json_path();
@@ -40,18 +48,21 @@ mod test {
     #[test]
     fn test_solve_python() {
         let json_file = conda_json_path();
+        let json_file_noarch = conda_json_path_noarch();
         let mut pool = Pool::default();
-
+        pool.set_debug_callback(|msg| eprintln!("{}", msg));
         let mut repo = pool.create_repo("conda-forge");
         repo.add_conda_json(json_file)
             .expect("could not add repodata to Repo");
+        repo.add_conda_json(json_file_noarch)
+            .expect("could not add repodata (noarch) to Repo");
         // Create datastructures for solving
         pool.create_whatprovides();
         let channel_config = ChannelConfig::default();
 
         // Creat python as a matchspec
         let matchspec =
-            MatchSpec::from_str("python", &channel_config).expect("can't create matchspec");
+            MatchSpec::from_str("python=3.9", &channel_config).expect("can't create matchspec");
         // Add matchspec to the queue
         let mut queue = Queue::default();
         let id = matchspec.intern(&mut pool);

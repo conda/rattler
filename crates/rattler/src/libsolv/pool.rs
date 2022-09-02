@@ -69,8 +69,12 @@ extern "C" fn log_callback(pool: *mut ffi::Pool, user_data: *mut c_void, t: i32,
 
 }
 
-impl Pool {
-    
+/// Logging verbosity for libsolv
+pub enum Verbosity {
+    None,
+    Low,
+    Medium,
+    Extreme,
 }
 
 impl PoolRef {
@@ -93,6 +97,19 @@ impl PoolRef {
             // Double box because file because the Box<Fn> is a fat pointer and have a different
             // size compared to c_void
             ffi::pool_setdebugcallback(self.as_ptr().as_ptr(), Some(log_callback), Box::into_raw(box_callback) as *mut _);
+        }
+    }
+
+    /// Set debug level for libsolv
+    pub fn set_debug_level(&mut self, verbosity: Verbosity) {
+        let verbosity: libc::c_int = match verbosity {
+            Verbosity::None => 0,
+            Verbosity::Low => 1,
+            Verbosity::Medium => 2,
+            Verbosity::Extreme => 3,
+        };
+        unsafe {
+            ffi::pool_setdebuglevel(self.as_ptr().as_ptr(), verbosity);
         }
     }
 
@@ -357,8 +374,9 @@ mod test {
     #[test]
     fn test_pool_callback() {
         let mut pool = Pool::default();
+        pool.set_debug_level(super::Verbosity::Medium);
         pool.set_debug_callback(|msg| { println!("{}", msg) });
-        // "Hello".intern(&mut pool);
-        // "Goodbye".intern(&mut pool);
+        "Hello".intern(&mut pool);
+        "Goodbye".intern(&mut pool);
     }
 }
