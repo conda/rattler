@@ -86,7 +86,7 @@ impl FromStr for Constraint {
                         // return Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
                         //     op,
                         // ))
-                        log::warn!("Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was {version_str}.*, but conda is ignoring the .* and treating it as {version_str}");
+                        tracing::warn!("Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was {version_str}.*, but conda is ignoring the .* and treating it as {version_str}");
                         (version_str, op)
                     }
                 }
