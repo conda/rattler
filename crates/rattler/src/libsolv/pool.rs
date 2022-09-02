@@ -46,20 +46,18 @@ impl Drop for Pool {
     fn drop(&mut self) {
         // Safe because we know that the pool exists at this point
         unsafe { 
+            ffi::pool_free(self.0.as_mut());
             let ptr = (*self.0.as_ptr()).debugcallbackdata;
             if !ptr.is_null() {
-                // Reset the data
-                ffi::pool_setdebugcallback(self.0.as_ptr(), None, std::ptr::null_mut());
                 // Free the callbackdata by reconstructing it
-                let _: Box<Box<dyn FnMut(&str)>> = Box::from_raw(ptr as *mut _);
+                let _: Box<Box<dyn Fn(&str)>> = Box::from_raw(ptr as *mut _);
             }
-            ffi::pool_free(self.0.as_mut());
         }
     }
 }
 
 #[no_mangle]
-extern "C" fn log_callback(_: *mut ffi::Pool, user_data: *mut c_void, t: i32, str: *const i8) {
+extern "C" fn log_callback(pool: *mut ffi::Pool, user_data: *mut c_void, t: i32, str: *const i8) {
     unsafe {
         // Get the box back
         let closure: &mut Box<dyn FnMut(&str) -> bool> = std::mem::transmute(user_data);
@@ -72,17 +70,7 @@ extern "C" fn log_callback(_: *mut ffi::Pool, user_data: *mut c_void, t: i32, st
 }
 
 impl Pool {
-    /// Add debug callback to the pool
-    pub fn add_debug_callback<F: FnMut(&str) + 'static>(&mut self, callback: F) {
-
-        let box_callback = Box::new(Box::new(callback)); 
-        unsafe {
-            // Sets the debug callback into the pool
-            // Double box because file because the Box<Fn> is a fat pointer and have a different
-            // size compared to c_void
-            ffi::pool_setdebugcallback(self.0.as_ptr(), Some(log_callback), Box::into_raw(box_callback) as *mut _);
-        }
-    }
+    
 }
 
 impl PoolRef {
@@ -95,6 +83,17 @@ impl PoolRef {
     pub(super) fn as_ref(&self) -> &ffi::Pool {
         // Safe because RepoRef is a transparent wrapper around ffi::Repo
         unsafe { std::mem::transmute(self) }
+    }
+
+    /// Add debug callback to the pool
+    pub fn set_debug_callback<F: FnMut(&str) + 'static>(&mut self, callback: F) {
+        let box_callback: Box<Box<dyn FnMut(&str) + 'static>> = Box::new(Box::new(callback)); 
+        unsafe {
+            // Sets the debug callback into the pool
+            // Double box because file because the Box<Fn> is a fat pointer and have a different
+            // size compared to c_void
+            ffi::pool_setdebugcallback(self.as_ptr().as_ptr(), Some(log_callback), Box::into_raw(box_callback) as *mut _);
+        }
     }
 
     /// Create repo from a pool
@@ -358,7 +357,7 @@ mod test {
     #[test]
     fn test_pool_callback() {
         let mut pool = Pool::default();
-        pool.add_debug_callback(|msg| { println!("{}", msg) });
+        pool.set_debug_callback(|msg| { println!("{}", msg) });
         // "Hello".intern(&mut pool);
         // "Goodbye".intern(&mut pool);
     }
