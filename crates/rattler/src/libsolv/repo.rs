@@ -1,9 +1,11 @@
+use rattler::RepoData;
+use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::os::raw::c_ulonglong;
 use std::ptr::NonNull;
-
-use rattler::RepoData;
 
 use crate::libsolv::pool::PoolRef;
 use crate::libsolv::{c_string, ffi, solvable::SolvableId};
@@ -19,7 +21,7 @@ use super::pool::{FindInterned, Intern};
 // const SOLVABLE_URL: &str = "solvable:url";
 // const SOLVABLE_KEYWORDS: &str = "solvable:keywords";
 const SOLVABLE_LICENSE: &str = "solvable:license";
-// const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
+const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
 // const SOLVABLE_BUILDHOST: &str = "solvable:buildhost";
 // const SOLVABLE_EULA: &str = "solvable:eula";
 // const SOLVABLE_CPEID: &str = "solvable:cpeid";
@@ -33,7 +35,7 @@ const SOLVABLE_LICENSE: &str = "solvable:license";
 // const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
 // const SOLVABLE_MEDIANR: &str = "solvable:medianr";
 // const SOLVABLE_MEDIABASE: &str = "solvable:mediabase"; /* <location xml:base=... > */
-// const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
+const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
 // const SOLVABLE_SOURCEARCH: &str = "solvable:sourcearch";
 // const SOLVABLE_SOURCENAME: &str = "solvable:sourcename";
 // const SOLVABLE_SOURCEEVR: &str = "solvable:sourceevr";
@@ -127,8 +129,11 @@ impl RepoRef {
 
         // Get all the IDs
         let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
+        let solvable_buildtime_id = SOLVABLE_BUILDTIME.find_interned_id(self.pool()).unwrap();
         let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
         let solvable_constraints = SOLVABLE_CONSTRAINS.find_interned_id(self.pool()).unwrap();
+        let solvable_download_size_id =
+            SOLVABLE_DOWNLOADSIZE.find_interned_id(self.pool()).unwrap();
         let solvable_license_id = SOLVABLE_LICENSE.find_interned_id(self.pool()).unwrap();
         let solvable_pkg_id = SOLVABLE_PKGID.find_interned_id(self.pool()).unwrap();
         let solvable_checksum = SOLVABLE_CHECKSUM.find_interned_id(self.pool()).unwrap();
@@ -137,6 +142,9 @@ impl RepoRef {
             .unwrap();
         let repo_type_md5 = REPOKEY_TYPE_MD5.find_interned_id(self.pool()).unwrap();
         let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(self.pool()).unwrap();
+
+        // Keeps a mapping from packages added to the repo to the type and solvable
+        let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
         for (filename, record) in repo_data.packages.iter() {
@@ -234,6 +242,36 @@ impl RepoRef {
                 }
             }
 
+            // Timestamp
+            if let Some(timestamp) = record.timestamp {
+                // Fixup the timestamp
+                let timestamp = if timestamp > 253402300799 {
+                    timestamp / 253402300799
+                } else {
+                    timestamp
+                };
+                unsafe {
+                    ffi::repodata_set_num(
+                        data,
+                        solvable_id.into(),
+                        solvable_buildtime_id.into(),
+                        timestamp as c_ulonglong,
+                    );
+                }
+            }
+
+            // Size
+            if let Some(size) = record.size {
+                unsafe {
+                    ffi::repodata_set_num(
+                        data,
+                        solvable_id.into(),
+                        solvable_download_size_id.into(),
+                        size as c_ulonglong,
+                    );
+                }
+            }
+
             // Build string
             unsafe {
                 ffi::repodata_add_poolstr_array(
@@ -291,6 +329,58 @@ impl RepoRef {
                     )
                 }
             }
+
+            // Get the name of the package
+            if let Some((filename, package_type)) = extract_known_filename_extension(filename) {
+                if let Some(&(other_package_type, other_solvable_id)) =
+                    package_to_type.get(filename)
+                {
+                    // A previous package that we already stored is actually a package of a better "type" so we'll just use that instead.
+                    match package_type.cmp(&other_package_type) {
+                        Ordering::Less => {
+                            unsafe {
+                                ffi::repo_free_solvable(
+                                    self.as_ptr().as_ptr(),
+                                    solvable_id.into(),
+                                    1,
+                                )
+                            };
+                            continue;
+                            // A previous package has a worse package "type", we'll reuse the handle but overwrite its attributes.
+                        }
+                        Ordering::Greater => {
+                            // Swap the "old" and "new" solvables reusing the old solvable
+                            unsafe {
+                                let pool: &mut ffi::Pool = &mut *(self.as_ref().pool);
+                                let solvables = std::slice::from_raw_parts_mut(
+                                    pool.solvables,
+                                    pool.nsolvables as _,
+                                );
+                                solvables.swap(solvable_id.0 as _, other_solvable_id.0 as _);
+                                ffi::repodata_swap_attrs(
+                                    data,
+                                    solvable_id.into(),
+                                    other_solvable_id.into(),
+                                );
+                                ffi::repo_free_solvable(
+                                    self.as_ptr().as_ptr(),
+                                    solvable_id.into(),
+                                    1,
+                                );
+                            }
+                            package_to_type.insert(filename, (package_type, other_solvable_id));
+                        }
+                        Ordering::Equal => {
+                            // They both have the same extension? Keep them both I guess?
+                            unimplemented!("found a duplicate package")
+                        }
+                    }
+                } else {
+                    package_to_type.insert(filename, (package_type, solvable_id));
+                };
+            } else {
+                tracing::warn!("unknown package extension: {}", filename);
+            }
         }
 
         // TODO: What does this do?
@@ -334,6 +424,24 @@ impl Repo<'_> {
     /// Constructs a new instance
     pub(super) fn new(ptr: NonNull<ffi::Repo>) -> Self {
         Repo(RepoOwnedPtr(ptr), PhantomData::default())
+    }
+}
+
+#[derive(Copy, Clone, Ord, PartialEq, PartialOrd, Eq)]
+enum PackageExtension {
+    TarBz2,
+    Conda,
+}
+
+/// Given a package filename, extracts the filename and the extension if the extension is a known
+/// package extension.
+fn extract_known_filename_extension(filename: &str) -> Option<(&str, PackageExtension)> {
+    if let Some(filename) = filename.strip_suffix(".conda") {
+        Some((filename, PackageExtension::Conda))
+    } else {
+        filename
+            .strip_suffix(".tar.bz2")
+            .map(|filename| (filename, PackageExtension::TarBz2))
     }
 }
 
