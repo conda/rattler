@@ -255,6 +255,7 @@ mod tests {
             timestamp: None,
             date: None,
             size: None,
+            filename: None,
         };
 
         let constraint = MatchSpecConstraints::singleton(record.clone());

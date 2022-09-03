@@ -78,7 +78,9 @@ pub struct PackageRecord {
 
     //pub channel: Channel,
     pub subdir: String,
-    //pub filename: String
+    #[serde(default, rename = "fn", skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+
     pub md5: Option<String>,
     //pub legacy_bz2_md5: Option<String>,
     //pub legacy_bz2_size: Option<usize>,

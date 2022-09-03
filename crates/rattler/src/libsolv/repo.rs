@@ -139,7 +139,7 @@ impl RepoRef {
         let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(self.pool()).unwrap();
 
         // Iterate over all packages
-        for (_filename, record) in repo_data.packages.iter() {
+        for (filename, record) in repo_data.packages.iter() {
             // Create a solvable for the package.
             let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
             let solvable = solvable_id.resolve(self.pool());
@@ -163,6 +163,22 @@ impl RepoRef {
                     0,
                 )
             };
+
+            // Location (filename (fn) and subdir)
+            let filename = record
+                .filename
+                .as_deref()
+                .unwrap_or_else(|| filename.as_ref());
+            let subdir = record.subdir.as_str();
+            unsafe {
+                ffi::repodata_set_location(
+                    data,
+                    solvable_id.into(),
+                    0,
+                    CString::new(subdir)?.as_ptr(),
+                    CString::new(filename)?.as_ptr(),
+                );
+            }
 
             // Dependencies
             // TODO: Add requires

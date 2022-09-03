@@ -80,6 +80,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         timestamp: None,
         date: None,
         size: None,
+        filename: None,
     };
 
     solve_index.add(root_package.clone());
