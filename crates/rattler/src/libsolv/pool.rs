@@ -3,7 +3,7 @@ use crate::libsolv::solver::Solver;
 use crate::libsolv::{c_string, ffi};
 use rattler::MatchSpec;
 use std::convert::TryInto;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
 use std::os::raw::c_void;
 use std::ptr::NonNull;
@@ -338,7 +338,7 @@ impl From<MatchSpecId> for ffi::Id {
 
 #[cfg(test)]
 mod test {
-    use std::ffi::{CStr, CString};
+    use std::ffi::CString;
 
     use crate::libsolv::pool::{Intern, Pool};
     use rattler::{ChannelConfig, MatchSpec};
