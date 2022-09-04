@@ -1,7 +1,7 @@
-use crate::libsolv::repo::Repo;
-use crate::libsolv::solver::Solver;
-use crate::libsolv::{c_string, ffi};
-use rattler::MatchSpec;
+use super::repo::Repo;
+use super::solver::Solver;
+use super::{c_string, ffi};
+use crate::MatchSpec;
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
@@ -60,17 +60,17 @@ impl Drop for Pool {
 extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
     user_data: *mut c_void,
-    _level: i32,
+    flags: i32,
     str: *const i8,
 ) {
     unsafe {
         // Get the box back
-        let closure: &mut Box<dyn FnMut(&str) -> bool> =
-            &mut *(user_data as *mut std::boxed::Box<dyn for<'r> std::ops::FnMut(&'r str) -> bool>);
+        let closure: &mut Box<dyn FnMut(&str, i32) -> bool> = &mut *(user_data
+            as *mut std::boxed::Box<dyn for<'r> std::ops::FnMut(&'r str, i32) -> bool>);
         // Convert the string
         let str = CStr::from_ptr(str);
         // Call the callback
-        closure(str.to_str().expect("utf-8 error"));
+        closure(str.to_str().expect("utf-8 error"), flags);
     }
 }
 
@@ -95,8 +95,8 @@ impl PoolRef {
     }
 
     /// Add debug callback to the pool
-    pub fn set_debug_callback<F: FnMut(&str) + 'static>(&mut self, callback: F) {
-        let box_callback: Box<Box<dyn FnMut(&str) + 'static>> = Box::new(Box::new(callback));
+    pub fn set_debug_callback<F: FnMut(&str, i32) + 'static>(&mut self, callback: F) {
+        let box_callback: Box<Box<dyn FnMut(&str, i32) + 'static>> = Box::new(Box::new(callback));
         unsafe {
             // Sets the debug callback into the pool
             // Double box because file because the Box<Fn> is a fat pointer and have a different
@@ -340,8 +340,8 @@ impl From<MatchSpecId> for ffi::Id {
 mod test {
     use std::ffi::CString;
 
-    use crate::libsolv::pool::{Intern, Pool};
-    use rattler::{ChannelConfig, MatchSpec};
+    use super::super::pool::{Intern, Pool};
+    use crate::{ChannelConfig, MatchSpec};
 
     #[test]
     fn test_pool_creation() {

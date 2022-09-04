@@ -1,4 +1,4 @@
-use crate::libsolv::ffi;
+use super::ffi;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 

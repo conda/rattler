@@ -1,4 +1,4 @@
-use rattler::RepoData;
+use crate::RepoData;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -7,8 +7,8 @@ use std::ops::{Deref, DerefMut};
 use std::os::raw::c_ulonglong;
 use std::ptr::NonNull;
 
-use crate::libsolv::pool::PoolRef;
-use crate::libsolv::{c_string, ffi, solvable::SolvableId};
+use super::pool::PoolRef;
+use super::{c_string, ffi, solvable::SolvableId};
 
 use super::pool::{FindInterned, Intern};
 
@@ -64,6 +64,10 @@ const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features"; /* conda */
 /// json. Lifetime of this object is coupled to the Pool on creation
 pub struct Repo<'pool>(RepoOwnedPtr, PhantomData<&'pool ffi::Repo>);
 
+/// An Id to uniquely identify a Repo. This is not meant to be used a way to access a repo.
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+pub struct RepoId(NonNull<ffi::Repo>);
+
 #[repr(transparent)]
 pub struct RepoRef(ffi::Repo);
 
@@ -93,10 +97,9 @@ impl Drop for RepoOwnedPtr {
 }
 
 impl RepoRef {
-    /// Converts from a pointer to an `ffi::Repo` to a reference of Self.
-    pub(super) fn from_ptr<'pool>(repo: NonNull<ffi::Repo>) -> &'pool Self {
-        // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
-        unsafe { std::mem::transmute(repo.as_ref()) }
+    /// Returns the id of the Repo
+    pub fn id(&self) -> RepoId {
+        RepoId(self.as_ptr())
     }
 
     /// Returns a pointer to the wrapped `ffi::Repo`

@@ -1,9 +1,9 @@
 use std::ffi::CStr;
 use std::ptr::NonNull;
 
-use crate::libsolv::ffi;
-use crate::libsolv::pool::{FindInterned, PoolRef, StringId};
-use crate::libsolv::repo::RepoRef;
+use super::ffi;
+use super::pool::{FindInterned, PoolRef, StringId};
+use super::repo::RepoRef;
 
 /// Solvable in libsolv
 #[repr(transparent)]
@@ -52,14 +52,6 @@ impl Solvable {
         self.repo().pool()
     }
 
-    /// Returns a reference to the Repo that created this instance.
-    pub fn repo(&self) -> &RepoRef {
-        RepoRef::from_ptr(
-            NonNull::new(unsafe { self.0.as_ref() }.repo)
-                .expect("the `repo` field of an ffi::Solvable is null"),
-        )
-    }
-
     /// Looks up a string value associated with this instance with the given `key`.
     fn lookup_str(&self, key: StringId) -> Option<&str> {
         let str = unsafe { ffi::solvable_lookup_str(self.0.as_ptr(), key.into()) };
@@ -73,6 +65,23 @@ impl Solvable {
                         .expect("could not decode string"),
                 )
             }
+        }
+    }
+
+    /// Get the repo to which this solvable belongs.
+    pub fn repo(&self) -> &RepoRef {
+        // Safe because a `RepoRef` is a wrapper around `ffi::Repo`
+        unsafe { &*(self.as_ptr().as_ref().repo as *const RepoRef) }
+    }
+
+    /// Returns the location of the solvable which is defined by the subdirectory and the filename of the package.
+    pub fn location(&self) -> String {
+        unsafe {
+            let loc = ffi::solvable_get_location(self.as_ptr().as_ptr(), std::ptr::null_mut());
+            CStr::from_ptr(loc)
+                .to_str()
+                .expect("invalid utf8 in location")
+                .to_owned()
         }
     }
 

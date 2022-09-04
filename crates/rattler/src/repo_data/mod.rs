@@ -77,6 +77,7 @@ pub struct PackageRecord {
     pub build_number: usize,
 
     //pub channel: Channel,
+    #[serde(default)]
     pub subdir: String,
     #[serde(default, rename = "fn", skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,

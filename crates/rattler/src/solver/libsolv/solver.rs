@@ -6,10 +6,10 @@ use std::ptr::NonNull;
 
 use anyhow::anyhow;
 
-use crate::libsolv::ffi;
-use crate::libsolv::pool::PoolRef;
-use crate::libsolv::queue::Queue;
-use crate::libsolv::transaction::Transaction;
+use super::ffi;
+use super::pool::PoolRef;
+use super::queue::Queue;
+use super::transaction::Transaction;
 
 /// Wraps a pointer to an `ffi::Solver` which is freed when the instance is dropped.
 struct SolverOwnedPtr(NonNull<ffi::Solver>);

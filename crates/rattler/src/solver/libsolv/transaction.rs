@@ -1,6 +1,6 @@
-use crate::libsolv::ffi;
-use crate::libsolv::pool::PoolRef;
-use crate::libsolv::solvable::{Solvable, SolvableId};
+use super::ffi;
+use super::pool::PoolRef;
+use super::solvable::{Solvable, SolvableId};
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
@@ -43,7 +43,7 @@ impl DerefMut for Transaction<'_> {
 }
 
 /// Enumeration of all install-like operations
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum InstallOperation {
     Install,
     Reinstall,

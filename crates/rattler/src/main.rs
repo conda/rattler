@@ -4,7 +4,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
 mod commands;
-mod libsolv;
 
 /// Command line options available through the `rattler` cli.
 #[derive(Debug, Parser)]

@@ -8,6 +8,14 @@ mod solvable;
 mod solver;
 mod transaction;
 
+pub use pool::{Intern, Pool, PoolRef, Verbosity};
+pub use queue::Queue;
+pub use repo::Repo;
+pub use solver::Solver;
+pub use transaction::{InstallOperation, Transaction, TransactionRef};
+
+pub use ffi::{SOLVER_INSTALL, SOLVER_SOLVABLE_PROVIDES};
+
 /// Convenience method that converts a string reference to a CString
 fn c_string<T: AsRef<str>>(str: T) -> CString {
     CString::new(str.as_ref()).expect("should be convertable from string")
