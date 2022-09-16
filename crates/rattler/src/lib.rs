@@ -10,7 +10,11 @@
 //! candidate for a reimplementation.
 
 mod channel;
+mod environment;
 mod match_spec;
+mod no_arch_type;
+mod package_archive;
+mod package_cache;
 mod platform;
 pub mod repo_data;
 pub mod solver;
@@ -19,9 +23,11 @@ mod version;
 mod version_spec;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
+pub use environment::Environment;
 pub use match_spec::MatchSpec;
+pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
-pub use repo_data::{NoArchType, PackageRecord, RepoData};
+pub use repo_data::{PackageRecord, RepoData};
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
 

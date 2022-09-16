@@ -5,6 +5,9 @@ use url::Url;
 pub use encoding::{AsyncEncoding, Encoding};
 
 mod encoding;
+mod lock_file;
+
+pub use lock_file::LockFile;
 
 #[cfg(test)]
 pub(crate) mod simple_channel_server;

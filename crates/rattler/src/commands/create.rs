@@ -1,8 +1,10 @@
+use anyhow::Context;
 use rattler::{
     repo_data::fetch::{terminal_progress, MultiRequestRepoDataBuilder},
     solver::SolverProblem,
-    Channel, ChannelConfig, MatchSpec,
+    Channel, ChannelConfig, Environment, MatchSpec,
 };
+use url::Url;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -15,6 +17,14 @@ pub struct Opt {
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
+
+    // Determine the prefix directory
+    let prefix = std::env::current_dir()
+        .with_context(|| "while determining current directory")?
+        .join(".env");
+    if prefix.is_file() {
+        anyhow::bail!("the '.env' folder exists and is a file");
+    }
 
     // Parse the match specs
     let specs = opt
@@ -62,7 +72,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     };
 
     let result = solver_problem.solve()?;
-    println!("{:#?}", result);
+
+    // Construct the environment definition
+    let environment = Environment::create(
+        prefix,
+        result.into_iter().map(|entry| {
+            Url::parse(&format!("{}/{}", entry.channel, entry.location))
+                .expect("install must result in valid package locations")
+        }),
+    )
+    .await?;
 
     Ok(())
 }
