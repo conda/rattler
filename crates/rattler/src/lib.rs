@@ -11,20 +11,17 @@
 
 mod channel;
 mod match_spec;
-mod match_spec_constraints;
 mod platform;
 pub mod repo_data;
-mod solver;
+pub mod solver;
 pub(crate) mod utils;
 mod version;
 mod version_spec;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use match_spec::MatchSpec;
-pub use match_spec_constraints::MatchSpecConstraints;
 pub use platform::{ParsePlatformError, Platform};
 pub use repo_data::{NoArchType, PackageRecord, RepoData};
-pub use solver::{PackageIndex, SolverIndex};
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
 

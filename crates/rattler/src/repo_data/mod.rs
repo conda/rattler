@@ -4,7 +4,10 @@
 //! See the [`fetch`] module for functionality to download this information from a
 //! [`crate::Channel`].
 
-use std::fmt::{Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    marker::PhantomData,
+};
 
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Deserializer};
@@ -74,8 +77,11 @@ pub struct PackageRecord {
     pub build_number: usize,
 
     //pub channel: Channel,
+    #[serde(default)]
     pub subdir: String,
-    //pub filename: String
+    #[serde(default, rename = "fn", skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+
     pub md5: Option<String>,
     //pub legacy_bz2_md5: Option<String>,
     //pub legacy_bz2_size: Option<usize>,
@@ -89,8 +95,12 @@ pub struct PackageRecord {
     #[serde(default)]
     pub constrains: Vec<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub track_features: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        deserialize_with = "deserialize_track_features"
+    )]
+    pub track_features: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Option<String>,
 
@@ -183,4 +193,37 @@ where
         NoArchSerde::NewFormat(NoArchTypeSerde::Python) => Some(NoArchType::Python),
         NoArchSerde::NewFormat(NoArchTypeSerde::Generic) => Some(NoArchType::GenericV2),
     }))
+}
+
+fn deserialize_track_features<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de;
+
+    struct StringOrVec(PhantomData<Vec<String>>);
+
+    impl<'de> de::Visitor<'de> for StringOrVec {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string or list of strings")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            Ok(vec![value.to_owned()])
+        }
+
+        fn visit_seq<S>(self, visitor: S) -> Result<Self::Value, S::Error>
+        where
+            S: de::SeqAccess<'de>,
+        {
+            Deserialize::deserialize(de::value::SeqAccessDeserializer::new(visitor))
+        }
+    }
+
+    deserializer.deserialize_any(StringOrVec(PhantomData))
 }

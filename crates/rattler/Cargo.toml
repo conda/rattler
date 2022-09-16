@@ -30,11 +30,13 @@ derive_more = "0.99.16"
 nom = "7.1.0"
 dirs = "4.0.0"
 async-compression = {version="0.3.12", features=["gzip", "futures-bufread", "tokio"] }
-log = "0.4.14"
 pretty_env_logger = "0.4.0"
+libc = "0.2"
 tempfile = "3.3.0"
 pin-project-lite = "0.2.9"
 extendhash = "1.0.9"
+libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
+tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 
 [dev-dependencies]
 rand = "0.8.4"
@@ -43,3 +45,9 @@ proptest = "1.0.0"
 axum = "0.5.13"
 tower-http = { version="0.3.4", features=["fs", "compression-gzip"] }
 tokio-test = "0.4.2"
+
+[build-dependencies]
+cc = "1"
+anyhow = "1"
+bindgen = "0.60"
+cmake = "0.1"
