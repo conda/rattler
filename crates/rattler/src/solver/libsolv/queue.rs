@@ -63,7 +63,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
     }
 
     /// Push and id and flag into the queue
-    pub fn push_id_and_flags(&mut self, id: T, flags: i32) {
+    pub fn push_id_with_flags(&mut self, id: T, flags: i32) {
         unsafe {
             ffi::queue_insert2(
                 self.as_inner_mut(),
@@ -77,8 +77,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::pool::StringId;
-    use crate::libsolv::queue::Queue;
+    use super::{super::pool::StringId, Queue};
 
     #[test]
     fn create_queue() {

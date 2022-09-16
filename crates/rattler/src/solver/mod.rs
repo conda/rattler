@@ -63,7 +63,7 @@ impl<'c> SolverProblem<'c> {
         let mut queue = Queue::default();
         for spec in self.specs {
             let id = spec.intern(&mut pool);
-            queue.push_id_and_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
+            queue.push_id_with_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
         }
 
         // Construct a solver and solve the problems in the queue

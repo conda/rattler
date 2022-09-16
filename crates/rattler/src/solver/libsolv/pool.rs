@@ -211,13 +211,6 @@ pub struct StringId(pub(super) ffi::Id);
 impl StringId {
     /// Resolves to the interned type returns a string reference.
     ///
-    /// ```rust
-    /// let pool = Pool::default();
-    /// let string = "Hello, world!";
-    /// let id = string.intern(pool);
-    /// assert_eq!(id.resolve(pool), Some(string));
-    /// ```
-    ///
     /// # Safety
     ///
     /// This function does not result in undefined behavior if an Id is passsed that was not
@@ -404,7 +397,7 @@ mod test {
         let (tx, rx) = std::sync::mpsc::sync_channel(10);
         // Set the debug level
         pool.set_debug_level(super::Verbosity::Extreme);
-        pool.set_debug_callback(move |msg| {
+        pool.set_debug_callback(move |msg, _level| {
             tx.send(msg.to_owned()).unwrap();
         });
 

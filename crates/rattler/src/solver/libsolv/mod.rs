@@ -23,10 +23,10 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::ffi::{SOLVER_INSTALL, SOLVER_SOLVABLE_PROVIDES};
-    use crate::libsolv::pool::{Intern, Pool};
-    use crate::libsolv::queue::Queue;
-    use rattler::{ChannelConfig, MatchSpec};
+    use super::ffi::{SOLVER_INSTALL, SOLVER_SOLVABLE_PROVIDES};
+    use super::pool::{Intern, Pool};
+    use super::queue::Queue;
+    use crate::{ChannelConfig, MatchSpec};
 
     use super::pool::Verbosity;
 
@@ -60,7 +60,7 @@ mod test {
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
         let mut pool = Pool::default();
-        pool.set_debug_callback(|msg| eprintln!("{}", msg.trim()));
+        pool.set_debug_callback(|msg, _level| eprintln!("{}", msg.trim()));
         pool.set_debug_level(Verbosity::Low);
         let mut repo = pool.create_repo("conda-forge");
         repo.add_repodata(
@@ -86,7 +86,7 @@ mod test {
         // Add matchspec to the queue
         let mut queue = Queue::default();
         let id = matchspec.intern(&mut pool);
-        queue.push_id_and_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
+        queue.push_id_with_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
         // Solver
         let mut solver = pool.create_solver();
         // solve

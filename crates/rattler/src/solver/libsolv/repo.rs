@@ -450,7 +450,7 @@ fn extract_known_filename_extension(filename: &str) -> Option<(&str, PackageExte
 
 #[cfg(test)]
 mod tests {
-    use crate::libsolv::pool::Pool;
+    use super::super::pool::Pool;
 
     #[test]
     fn test_repo_creation() {
