@@ -10,16 +10,19 @@ pub enum Platform {
     Linux32,
     Linux64,
     LinuxAarch64,
-    LinuxArmV61,
-    LinuxArmV71,
+    LinuxArmV6l,
+    LinuxArmV7l,
     LinuxPpc64le,
     LinuxPpc64,
+    LinuxS390X,
 
     Osx64,
     OsxArm64,
 
     Win32,
     Win64,
+
+    Emscripten32,
 }
 
 impl Platform {
@@ -81,14 +84,16 @@ impl FromStr for Platform {
             "linux-32" => Platform::Linux32,
             "linux-64" => Platform::Linux64,
             "linux-aarch64" => Platform::LinuxAarch64,
-            "linux-armv61" => Platform::LinuxArmV61,
-            "linux-armv71" => Platform::LinuxArmV71,
-            "linux-ppc64l1" => Platform::LinuxPpc64le,
+            "linux-armv6l" => Platform::LinuxArmV6l,
+            "linux-armv7l" => Platform::LinuxArmV7l,
+            "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
+            "linux-s390x" => Platform::LinuxS390X,
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
             "win-32" => Platform::Win32,
             "win-64" => Platform::Win64,
+            "emscripten-32" => Platform::Emscripten32,
             string => {
                 return Err(ParsePlatformError {
                     string: string.to_owned(),
@@ -105,14 +110,16 @@ impl From<Platform> for &'static str {
             Platform::Linux32 => "linux-32",
             Platform::Linux64 => "linux-64",
             Platform::LinuxAarch64 => "linux-aarch64",
-            Platform::LinuxArmV61 => "linux-armv61",
-            Platform::LinuxArmV71 => "linux-armv71",
+            Platform::LinuxArmV6l => "linux-armv6l",
+            Platform::LinuxArmV7l => "linux-armv7l",
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
+            Platform::LinuxS390X => "linux-s390x",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
+            Platform::Emscripten32 => "emscripten-32",
         }
     }
 }

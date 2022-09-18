@@ -7,7 +7,7 @@ use rattler::{
 use url::Url;
 
 #[derive(Debug, clap::Parser)]
-pub struct Opt {
+pub struct Opts {
     #[clap(short)]
     channels: Option<Vec<String>>,
 
@@ -15,7 +15,7 @@ pub struct Opt {
     specs: Vec<String>,
 }
 
-pub async fn create(opt: Opt) -> anyhow::Result<()> {
+pub async fn create(opt: Opts) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
     // Determine the prefix directory

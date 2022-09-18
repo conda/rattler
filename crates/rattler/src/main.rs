@@ -8,7 +8,7 @@ mod commands;
 /// Command line options available through the `rattler` cli.
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
-struct Opt {
+struct Opts {
     /// The subcommand to execute
     #[clap(subcommand)]
     command: Command,
@@ -21,18 +21,19 @@ struct Opt {
 /// Different commands supported by `rattler`.
 #[derive(Debug, clap::Subcommand)]
 enum Command {
-    Create(commands::create::Opt),
+    Create(commands::create::Opts),
+    ExtractMetadata(commands::extract_metadata::Opts),
 }
 
 /// Entry point of the `rattler` cli.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Parse the command line arguments
-    let opt = Opt::parse();
+    let opts = Opts::parse();
 
     // Determine the logging level based on the the verbose flag and the RUST_LOG environment
     // variable.
-    let default_filter = opt
+    let default_filter = opts
         .verbose
         .then_some(LevelFilter::DEBUG)
         .unwrap_or(LevelFilter::INFO);
@@ -48,7 +49,8 @@ async fn main() -> anyhow::Result<()> {
         .try_init()?;
 
     // Dispatch the selected comment
-    match opt.command {
-        Command::Create(opt) => commands::create::create(opt).await,
+    match opts.command {
+        Command::Create(opts) => commands::create::create(opts).await,
+        Command::ExtractMetadata(opts) => commands::extract_metadata::extract_metadata(opts).await,
     }
 }
