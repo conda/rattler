@@ -8,7 +8,7 @@ use std::fmt::{Display, Formatter};
 
 use fxhash::{FxHashMap, FxHashSet};
 use serde::Deserialize;
-use serde_with::{serde_as, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use crate::{NoArchType, Version};
 
@@ -34,6 +34,7 @@ pub struct ChannelInfo {
 /// A single record in the Conda repodata. A single record refers to a single binary distribution
 /// of a package on a Conda channel.
 #[serde_as]
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Eq, PartialEq, Ord, PartialOrd, Clone)]
 pub struct PackageRecord {
     pub name: String,
@@ -48,7 +49,7 @@ pub struct PackageRecord {
     //pub channel: Channel,
     #[serde(default)]
     pub subdir: String,
-    #[serde(default, rename = "fn", skip_serializing_if = "Option::is_none")]
+    #[serde(default, rename = "fn")]
     pub filename: Option<String>,
 
     pub md5: Option<String>,
@@ -64,34 +65,24 @@ pub struct PackageRecord {
     #[serde(default)]
     pub constrains: Vec<String>,
 
-    #[serde(
-        default,
-        skip_serializing_if = "Vec::is_empty",
-        deserialize_with = "crate::package_archive::deserialize_track_features"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde_as(as = "OneOrMany<_>")]
     pub track_features: Vec<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Option<String>,
 
     pub noarch: NoArchType,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_env: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license_family: Option<String>,
 
     // pub package_type: ?
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<usize>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<usize>,
 }
 

@@ -29,6 +29,7 @@ pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use environment::Environment;
 pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
+pub use package_archive::PackageArchiveFormat;
 pub use platform::{ParsePlatformError, Platform};
 pub use repo_data::{PackageRecord, RepoData};
 pub use run_export::{RunExportKind, RunExports};

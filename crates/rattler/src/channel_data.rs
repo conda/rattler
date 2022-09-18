@@ -1,6 +1,6 @@
 use crate::{RunExports, Version};
 use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, DeserializeAs, DisplayFromStr, OneOrMany, Same};
+use serde_with::{serde_as, skip_serializing_none, DeserializeAs, DisplayFromStr, OneOrMany, Same};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use url::Url;
@@ -20,6 +20,7 @@ pub struct ChannelData {
 
 /// Information on a package in a channel.
 #[serde_as]
+#[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct ChannelDataPackage {
     /// True if this package has activation scripts
@@ -70,7 +71,6 @@ pub struct ChannelDataPackage {
     pub source_url: Vec<Url>,
 
     /// Package license
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
 
     /// Whether the package has post link scripts
@@ -93,7 +93,6 @@ pub struct ChannelDataPackage {
     pub subdirs: Vec<String>,
 
     /// The summary description of the package
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
 
     /// True if this package contains text files that contain the build prefix.

@@ -1,10 +1,9 @@
 use crate::{ChannelConfig, MatchSpec, NoArchType, Version};
 use serde::{Deserialize, Deserializer};
-use serde_with::{serde_as, DeserializeAs, DisplayFromStr};
-use std::fmt;
-use std::marker::PhantomData;
+use serde_with::{serde_as, skip_serializing_none, DeserializeAs, DisplayFromStr, OneOrMany};
 
 #[serde_as]
+#[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize)]
 pub struct Index {
     /// The architecture of the package
@@ -43,50 +42,12 @@ pub struct Index {
     pub depends: Vec<MatchSpec>,
 
     /// Any tracked features
-    #[serde(
-        default,
-        skip_serializing_if = "Vec::is_empty",
-        deserialize_with = "deserialize_track_features"
-    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde_as(as = "OneOrMany<_>")]
     pub track_features: Vec<String>,
 
     /// The features defined by the package
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub features: Option<String>,
-}
-
-/// Parses the `track_features` in a package record.
-pub(crate) fn deserialize_track_features<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de;
-
-    struct StringOrVec(PhantomData<Vec<String>>);
-
-    impl<'de> de::Visitor<'de> for StringOrVec {
-        type Value = Vec<String>;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("string or list of strings")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            Ok(vec![value.to_owned()])
-        }
-
-        fn visit_seq<S>(self, visitor: S) -> Result<Self::Value, S::Error>
-        where
-            S: de::SeqAccess<'de>,
-        {
-            Deserialize::deserialize(de::value::SeqAccessDeserializer::new(visitor))
-        }
-    }
-
-    deserializer.deserialize_any(StringOrVec(PhantomData))
 }
 
 pub(crate) struct MatchSpecStr;
@@ -101,5 +62,29 @@ impl<'de> DeserializeAs<'de, MatchSpec> for MatchSpecStr {
             &ChannelConfig::default(),
         )
         .map_err(serde::de::Error::custom)
+    }
+}
+
+/// All supported package archives supported by Rattler.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum PackageArchiveFormat {
+    TarBz2,
+    TarZst,
+    Conda,
+}
+
+impl PackageArchiveFormat {
+    /// Determine the format of an archive based on the file name of a package. Returns the format
+    /// and the original name of the package (without archive extension).
+    pub fn from_file_name(file_name: &str) -> Option<(&str, Self)> {
+        if let Some(name) = file_name.strip_suffix(".tar.bz2") {
+            Some((name, PackageArchiveFormat::TarBz2))
+        } else if let Some(name) = file_name.strip_suffix(".conda") {
+            Some((name, PackageArchiveFormat::Conda))
+        } else if let Some(name) = file_name.strip_suffix(".tar.zst") {
+            Some((name, PackageArchiveFormat::TarZst))
+        } else {
+            None
+        }
     }
 }
