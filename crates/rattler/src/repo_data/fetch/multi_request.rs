@@ -93,7 +93,7 @@ impl MultiRequestRepoDataBuilder {
     }
 
     /// Sets a default cache directory that will be used for caching requests.
-    pub fn set_default_cache_dir(mut self) -> anyhow::Result<Self> {
+    pub fn set_default_cache_dir(self) -> anyhow::Result<Self> {
         let cache_dir = dirs::cache_dir()
             .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
             .join("rattler/cache");

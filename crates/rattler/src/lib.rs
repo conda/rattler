@@ -24,7 +24,6 @@ mod version_spec;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
-pub use environment::Environment;
 pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use package_archive::PackageArchiveFormat;
