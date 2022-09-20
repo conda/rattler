@@ -119,7 +119,7 @@ where
     {
         Ok(I::deserialize_as(deserializer)?
             .into_iter()
-            .filter_map(std::convert::identity)
+            .flatten()
             .collect())
     }
 }

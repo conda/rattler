@@ -382,7 +382,7 @@ mod tests {
             &current_dir.join("foo")
         );
 
-        let mut parent_dir = current_dir.clone();
+        let mut parent_dir = current_dir;
         assert!(parent_dir.pop());
 
         assert_eq!(absolute_path(Path::new("..")).as_ref(), &parent_dir);
