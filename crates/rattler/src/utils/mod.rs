@@ -1,5 +1,5 @@
 use std::fmt::Write;
-
+use std::path::PathBuf;
 use url::Url;
 
 pub use encoding::{AsyncEncoding, Encoding};
@@ -8,6 +8,13 @@ mod encoding;
 
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
+
+/// Returns the default cache directory used by rattler.
+pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
+    Ok(dirs::cache_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
+        .join("rattler/cache"))
+}
 
 /// Convert a URL to a cache filename
 pub fn url_to_cache_filename(url: &Url) -> String {
