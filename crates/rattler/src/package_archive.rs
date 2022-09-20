@@ -81,6 +81,10 @@ impl PackageArchiveFormat {
             Some((name, PackageArchiveFormat::TarBz2))
         } else if let Some(name) = file_name.strip_suffix(".conda") {
             Some((name, PackageArchiveFormat::Conda))
-        } else { file_name.strip_suffix(".tar.zst").map(|name| (name, PackageArchiveFormat::TarZst)) }
+        } else {
+            file_name
+                .strip_suffix(".tar.zst")
+                .map(|name| (name, PackageArchiveFormat::TarZst))
+        }
     }
 }
