@@ -1,6 +1,9 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
-use crate::{utils::LossyUrl, RunExports, Version};
+use crate::{
+    utils::{LossyUrl, MultiLineString},
+    RunExports, Version,
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::collections::HashMap;
@@ -63,6 +66,7 @@ pub struct About {
     pub description: Option<String>,
 
     /// Short summary description
+    #[serde_as(deserialize_as = "Option<MultiLineString>")]
     pub summary: Option<String>,
 
     /// Optionally, the license

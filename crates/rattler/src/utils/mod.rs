@@ -98,6 +98,28 @@ impl<'de> DeserializeAs<'de, Option<Url>> for LossyUrl {
     }
 }
 
+/// A helper type that parses a string either as a string or a vector of strings.
+pub struct MultiLineString;
+
+impl<'de> DeserializeAs<'de, String> for MultiLineString {
+    fn deserialize_as<D>(deserializer: D) -> Result<String, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Inner {
+            String(String),
+            Multi(Vec<String>),
+        }
+
+        Ok(match Inner::deserialize(deserializer)? {
+            Inner::String(s) => s,
+            Inner::Multi(s) => s.join("\n"),
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
     use url::Url;
