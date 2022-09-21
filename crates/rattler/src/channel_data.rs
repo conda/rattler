@@ -1,8 +1,10 @@
-use crate::{RunExports, Version};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DeserializeAs, DisplayFromStr, OneOrMany, Same};
+use crate::{
+    utils::{LossyUrl, VecSkipNone},
+    RunExports, Version,
+};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use url::Url;
 
 /// [`ChannelData`] is an index of subdirectories and packages stored within a Channel.
@@ -86,6 +88,7 @@ pub struct ChannelDataPackage {
     pub has_pre_unlink_scripts: bool,
 
     /// Any run_exports contained within the package.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[serde_as(as = "HashMap<DisplayFromStr, _>")]
     pub run_exports: HashMap<Version, RunExports>,
 
@@ -104,45 +107,4 @@ pub struct ChannelDataPackage {
     /// Latest version
     #[serde_as(as = "DisplayFromStr")]
     pub version: Version,
-}
-
-/// Deserialize a sequence into `Vec<T>` but filter `None` values.
-pub struct VecSkipNone<T>(PhantomData<T>);
-
-impl<'de, T, I> DeserializeAs<'de, Vec<T>> for VecSkipNone<I>
-where
-    I: DeserializeAs<'de, Vec<Option<T>>>,
-{
-    fn deserialize_as<D>(deserializer: D) -> Result<Vec<T>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(I::deserialize_as(deserializer)?
-            .into_iter()
-            .flatten()
-            .collect())
-    }
-}
-
-/// A helper type parser that tries to parse Urls that could be malformed.
-struct LossyUrl;
-
-impl<'de> DeserializeAs<'de, Option<Url>> for LossyUrl {
-    fn deserialize_as<D>(deserializer: D) -> Result<Option<Url>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let str = match Option::<String>::deserialize(deserializer)? {
-            Some(url) => url,
-            None => return Ok(None),
-        };
-        let url = match Url::parse(&str) {
-            Ok(url) => url,
-            Err(e) => {
-                tracing::warn!("unable to parse '{}' as an URL: {e}. Skipping...", str);
-                return Ok(None);
-            }
-        };
-        Ok(Some(url))
-    }
 }

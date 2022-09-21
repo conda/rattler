@@ -14,6 +14,7 @@ mod channel_data;
 mod match_spec;
 mod no_arch_type;
 mod package_archive;
+pub mod package_info;
 mod platform;
 pub mod repo_data;
 mod run_export;
