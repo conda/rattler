@@ -63,6 +63,7 @@ pub struct Index {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct About {
     /// Description of the package
+    #[serde_as(deserialize_as = "Option<MultiLineString>")]
     pub description: Option<String>,
 
     /// Short summary description
