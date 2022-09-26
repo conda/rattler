@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ['native-tls']
+native-tls = ['reqwest/native-tls']
+rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
@@ -17,7 +21,7 @@ serde_json = { version="1.0.68", features=["raw_value"] }
 fxhash = "0.2.1"
 serde_with="2.0.0"
 pubgrub = { git="https://github.com/baszalmstra/pubgrub.git", branch="feat/inclusive_range" }
-reqwest = { version = "0.11.6", default-features = false, features = ["stream", "json", "gzip", "rustls"] }
+reqwest = { version = "0.11.6", default-features = false, features = ["stream", "json", "gzip"] }
 thiserror = "1.0.30"
 url = { version = "2.2.2", features = ["serde"] }
 regex = "1.5.4"
