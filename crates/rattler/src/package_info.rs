@@ -1,11 +1,11 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
 use crate::{
-    utils::{LossyUrl, MultiLineString},
+    utils::{LossyUrl, VecSkipNone, MultiLineString},
     RunExports, Version,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, Same, OneOrMany};
 use std::collections::HashMap;
 use url::Url;
 
@@ -77,19 +77,28 @@ pub struct About {
     pub license_family: Option<String>,
 
     /// URL to the development page of the package
-    #[serde(default)]
-    #[serde_as(deserialize_as = "LossyUrl")]
-    pub dev_url: Option<Url>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde_as(
+        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
+        serialize_as = "OneOrMany<Same>"
+    )]
+    pub dev_url: Vec<Url>,
 
     /// URL to the documentation of the package
-    #[serde(default)]
-    #[serde_as(deserialize_as = "LossyUrl")]
-    pub doc_url: Option<Url>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde_as(
+        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
+        serialize_as = "OneOrMany<Same>"
+    )]
+    pub doc_url: Vec<Url>,
 
     /// URL to the homepage of the package
-    #[serde(default)]
-    #[serde_as(deserialize_as = "LossyUrl")]
-    pub home: Option<Url>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    #[serde_as(
+        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
+        serialize_as = "OneOrMany<Same>"
+    )]
+    pub home: Vec<Url>,
 
     /// URL to the latest source code of the package
     #[serde(default)]
