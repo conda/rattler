@@ -1,11 +1,11 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
 use crate::{
-    utils::{LossyUrl, VecSkipNone, MultiLineString},
+    utils::{LossyUrl, MultiLineString, VecSkipNone},
     RunExports, Version,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, Same, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
 use std::collections::HashMap;
 use url::Url;
 

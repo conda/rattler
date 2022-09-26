@@ -50,11 +50,14 @@ impl Drop for Pool {
             let ptr = (*self.0.as_ptr()).debugcallbackdata;
             if !ptr.is_null() {
                 // Free the callbackdata by reconstructing it
-                let _: Box<Box<dyn Fn(&str)>> = Box::from_raw(ptr as *mut _);
+                let _: Box<BoxedLogCallback> = Box::from_raw(ptr as *mut _);
             }
         }
     }
 }
+
+/// A boxed closure used for log callbacks
+type BoxedLogCallback = Box<dyn FnMut(&str, i32) + 'static>;
 
 #[no_mangle]
 extern "C" fn log_callback(
@@ -65,8 +68,7 @@ extern "C" fn log_callback(
 ) {
     unsafe {
         // Get the box back
-        let closure: &mut Box<dyn FnMut(&str, i32) -> bool> = &mut *(user_data
-            as *mut std::boxed::Box<dyn for<'r> std::ops::FnMut(&'r str, i32) -> bool>);
+        let closure: &mut BoxedLogCallback = &mut *(user_data as *mut BoxedLogCallback);
         // Convert the string
         let str = CStr::from_ptr(str);
         // Call the callback
@@ -96,7 +98,7 @@ impl PoolRef {
 
     /// Add debug callback to the pool
     pub fn set_debug_callback<F: FnMut(&str, i32) + 'static>(&mut self, callback: F) {
-        let box_callback: Box<Box<dyn FnMut(&str, i32) + 'static>> = Box::new(Box::new(callback));
+        let box_callback: Box<BoxedLogCallback> = Box::new(Box::new(callback));
         unsafe {
             // Sets the debug callback into the pool
             // Double box because file because the Box<Fn> is a fat pointer and have a different
