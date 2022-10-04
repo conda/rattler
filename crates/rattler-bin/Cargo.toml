@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.44"
-clap = { version="3.2.14", features=["derive"] }
+clap = { version="4.0.9", features=["derive"] }
 dirs = "4.0.0"
 rattler = { path="../rattler" }
 tokio = { version = "1.21.1", features=["rt-multi-thread", "macros"]}
