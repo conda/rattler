@@ -10,18 +10,27 @@
 //! candidate for a reimplementation.
 
 mod channel;
+mod channel_data;
 mod match_spec;
+mod no_arch_type;
+mod package_archive;
+pub mod package_info;
 mod platform;
 pub mod repo_data;
+mod run_export;
 pub mod solver;
 pub(crate) mod utils;
 mod version;
 mod version_spec;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
+pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use match_spec::MatchSpec;
+pub use no_arch_type::{NoArchKind, NoArchType};
+pub use package_archive::PackageArchiveFormat;
 pub use platform::{ParsePlatformError, Platform};
-pub use repo_data::{NoArchType, PackageRecord, RepoData};
+pub use repo_data::{PackageRecord, RepoData};
+pub use run_export::{RunExportKind, RunExports};
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
 

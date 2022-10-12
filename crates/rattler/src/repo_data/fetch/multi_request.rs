@@ -1,6 +1,7 @@
 //! Defines the [`MultiRequestRepoDataBuilder`] struct. This struct enables async fetching channel
 //! repodata from multiple source in parallel.
 
+use crate::utils::default_cache_dir;
 use crate::{
     repo_data::fetch::request::{
         RepoDataRequestState, RequestRepoDataBuilder, RequestRepoDataError, RequestRepoDataListener,
@@ -90,6 +91,13 @@ impl MultiRequestRepoDataBuilder {
             }
         }
         self
+    }
+
+    /// Sets a default cache directory that will be used for caching requests.
+    pub fn set_default_cache_dir(self) -> anyhow::Result<Self> {
+        let cache_dir = default_cache_dir()?;
+        std::fs::create_dir_all(&cache_dir)?;
+        Ok(self.set_cache_dir(cache_dir))
     }
 
     /// Sets the directory that will be used for caching requests.

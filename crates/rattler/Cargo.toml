@@ -4,16 +4,21 @@ version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ['native-tls']
+native-tls = ['reqwest/native-tls']
+rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
-async-compression = {version="0.3.12", features=["gzip", "futures-bufread", "tokio"] }
+async-compression = {version="0.3.12", features=["gzip", "futures-bufread", "tokio", "bzip2"] }
 bytes = "1.1.0"
 derive_more = "0.99.16"
+dirs = "4.0.0"
 extendhash = "1.0.9"
 futures = "0.3.17"
 fxhash = "0.2.1"
-indicatif = { version="0.17.0-rc.6", features=["improved_unicode"] }
+indicatif = { version="0.17.1", features=["improved_unicode"] }
 itertools = "0.10.3"
 libc = "0.2"
 libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
@@ -21,7 +26,7 @@ nom = "7.1.0"
 once_cell = "1.8.0"
 pin-project-lite = "0.2.9"
 regex = "1.5.4"
-reqwest = { version = "0.11.6", features = ["stream"] }
+reqwest = { version = "0.11.6", default-features = false, features = ["stream", "json", "gzip"] }
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = { version="1.0.68", features=["raw_value"] }
 serde_with="2.0.0"
@@ -29,6 +34,7 @@ smallvec = { version="1.8.0", features=["serde", "const_new", "const_generics", 
 tempfile = "3.3.0"
 thiserror = "1.0.30"
 tokio = { version = "1.12.0", features = ["rt", "io-util"] }
+tokio-tar = { version="0.3.0", git="https://github.com/baszalmstra/tokio-tar", branch="fix/attempt_to_subtract_with_overflow"}
 tokio-util = { version = "0.7.3", features = ["codec", "io"] }
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }

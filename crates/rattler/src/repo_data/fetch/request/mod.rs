@@ -9,6 +9,7 @@
 mod file;
 mod http;
 
+use crate::utils::default_cache_dir;
 use crate::{Channel, Platform, RepoData};
 use std::{io, path::PathBuf};
 use tempfile::PersistError;
@@ -159,6 +160,13 @@ impl RequestRepoDataBuilder {
             http_client: None,
             listener: None,
         }
+    }
+
+    /// Sets a default cache directory that will be used for caching requests.
+    pub fn set_default_cache_dir(self) -> anyhow::Result<Self> {
+        let cache_dir = default_cache_dir()?;
+        std::fs::create_dir_all(&cache_dir)?;
+        Ok(self.set_cache_dir(cache_dir))
     }
 
     /// Sets the directory that will be used for caching requests.

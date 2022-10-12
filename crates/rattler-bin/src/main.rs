@@ -49,6 +49,6 @@ async fn main() -> anyhow::Result<()> {
 
     // Dispatch the selected comment
     match opt.command {
-        Command::Create(opt) => commands::create::create(opt).await,
+        Command::Create(opts) => commands::create::create(opts).await,
     }
 }
