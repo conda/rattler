@@ -8,9 +8,9 @@ mod no_arch_type;
 mod platform;
 mod repo_data;
 mod run_export;
+mod utils;
 mod version;
 mod version_spec;
-mod utils;
 
 pub mod package;
 

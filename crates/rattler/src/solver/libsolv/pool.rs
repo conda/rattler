@@ -1,16 +1,11 @@
-use super::{
-    repo::Repo,
-    solver::Solver,
-    c_string,
-    ffi
-};
+use super::{c_string, ffi, repo::Repo, solver::Solver};
 use rattler_conda_types::MatchSpec;
 use std::{
     convert::TryInto,
     ffi::{CStr, CString},
     ops::{Deref, DerefMut},
     os::raw::c_void,
-    ptr::NonNull
+    ptr::NonNull,
 };
 
 /// Wrapper for libsolv Pool which is an interning datastructure used by libsolv.

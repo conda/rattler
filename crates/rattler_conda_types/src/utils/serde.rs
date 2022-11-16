@@ -1,18 +1,18 @@
-use std::marker::PhantomData;
 use serde::{Deserialize, Deserializer};
 use serde_with::DeserializeAs;
+use std::marker::PhantomData;
 use url::Url;
 
 /// Deserialize a sequence into `Vec<T>` but filter `None` values.
 pub(crate) struct VecSkipNone<T>(PhantomData<T>);
 
 impl<'de, T, I> DeserializeAs<'de, Vec<T>> for VecSkipNone<I>
-    where
-        I: DeserializeAs<'de, Vec<Option<T>>>,
+where
+    I: DeserializeAs<'de, Vec<Option<T>>>,
 {
     fn deserialize_as<D>(deserializer: D) -> Result<Vec<T>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         Ok(I::deserialize_as(deserializer)?
             .into_iter()
@@ -26,8 +26,8 @@ pub(crate) struct LossyUrl;
 
 impl<'de> DeserializeAs<'de, Option<Url>> for LossyUrl {
     fn deserialize_as<D>(deserializer: D) -> Result<Option<Url>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let str = match Option::<String>::deserialize(deserializer)? {
             Some(url) => url,
@@ -49,8 +49,8 @@ pub(crate) struct MultiLineString;
 
 impl<'de> DeserializeAs<'de, String> for MultiLineString {
     fn deserialize_as<D>(deserializer: D) -> Result<String, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
         #[serde(untagged)]

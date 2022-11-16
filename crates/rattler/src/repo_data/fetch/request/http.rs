@@ -20,7 +20,7 @@ use url::Url;
 
 use crate::{
     repo_data::fetch::{DoneState, DownloadingState, RepoDataRequestState, RequestRepoDataError},
-    utils::{url_to_cache_filename, AsyncEncoding, Encoding}
+    utils::{url_to_cache_filename, AsyncEncoding, Encoding},
 };
 use rattler_conda_types::RepoData;
 
@@ -333,9 +333,7 @@ mod test {
 
     use super::{create_cache_file, fetch_repodata, read_cache_file, RepoDataMetadata};
     use crate::repo_data::fetch::request::REPODATA_CHANNEL_PATH;
-    use crate::{
-        utils::simple_channel_server::SimpleChannelServer
-    };
+    use crate::utils::simple_channel_server::SimpleChannelServer;
     use rattler_conda_types::{Channel, ChannelConfig, Platform};
 
     #[tokio::test]

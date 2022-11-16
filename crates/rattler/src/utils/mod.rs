@@ -1,7 +1,4 @@
-use std::{
-    fmt::Write,
-    path::PathBuf
-};
+use std::{fmt::Write, path::PathBuf};
 use url::Url;
 
 pub use encoding::{AsyncEncoding, Encoding};

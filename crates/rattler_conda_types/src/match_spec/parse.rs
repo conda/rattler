@@ -330,11 +330,7 @@ fn parse(input: &str, channel_config: &ChannelConfig) -> Result<MatchSpec, Parse
 #[cfg(test)]
 mod tests {
     use super::{
-        strip_brackets,
-        split_version_and_build,
-        BracketVec,
-        ParseMatchSpecError,
-        MatchSpec
+        split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::ChannelConfig;
     use smallvec::smallvec;
