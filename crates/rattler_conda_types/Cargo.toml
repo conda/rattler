@@ -1,0 +1,28 @@
+[package]
+name = "rattler_conda_types"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Rust data types for common types used within the Conda ecosystem"
+categories = ["conda"]
+homepage = "https://github.com/baszalmstra/rattler"
+repository = "https://github.com/baszalmstra/rattler"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fxhash = "0.2.1"
+itertools = "0.10.3"
+lazy-regex = "2.3.1"
+nom = "7.1.0"
+regex = "1.7.0"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_with="2.0.0"
+smallvec = { version = "1.10.0", features = ["serde", "const_new", "const_generics", "union"] }
+thiserror = "1.0.37"
+tracing = "0.1.29"
+url = { version = "2.2.2", features = ["serde"] }
+
+[dev-dependencies]
+rand = "0.8.4"
+insta = { version="1.16.0", features=["yaml"] }

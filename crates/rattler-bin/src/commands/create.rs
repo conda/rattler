@@ -1,8 +1,8 @@
 use rattler::{
     repo_data::fetch::{terminal_progress, MultiRequestRepoDataBuilder},
     solver::SolverProblem,
-    Channel, ChannelConfig, MatchSpec,
 };
+use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {

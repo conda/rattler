@@ -1,5 +1,4 @@
 use super::MatchSpec;
-use crate::utils::regex;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{Channel, ChannelConfig, ParseChannelError, VersionSpec};
 use nom::branch::alt;
@@ -142,7 +141,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
 /// Strips the brackets part of the matchspec returning the rest of the matchspec and  the contents
 /// of the brackets as a `Vec<&str>`.
 fn strip_brackets<'a>(input: &'a str) -> Result<(Cow<'a, str>, BracketVec), ParseMatchSpecError> {
-    if let Some(matches) = regex!(r#".*(?:(\[.*\]))"#).captures(input) {
+    if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
 
@@ -330,9 +329,13 @@ fn parse(input: &str, channel_config: &ChannelConfig) -> Result<MatchSpec, Parse
 
 #[cfg(test)]
 mod tests {
-    use super::strip_brackets;
-    use crate::match_spec::parse::{split_version_and_build, BracketVec, ParseMatchSpecError};
-    use crate::match_spec::MatchSpec;
+    use super::{
+        strip_brackets,
+        split_version_and_build,
+        BracketVec,
+        ParseMatchSpecError,
+        MatchSpec
+    };
     use crate::ChannelConfig;
     use smallvec::smallvec;
 

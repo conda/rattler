@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use libsolv::{Intern, Pool, Queue, Verbosity, SOLVER_INSTALL, SOLVER_SOLVABLE_PROVIDES};
 
-use crate::{MatchSpec, RepoData};
+use rattler_conda_types::{MatchSpec, RepoData};
 
 use self::libsolv::InstallOperation;
 

@@ -1,4 +1,3 @@
-use crate::utils::regex;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
@@ -274,7 +273,7 @@ fn parse_scheme(channel: &str) -> Option<&str> {
 
 /// Returns true if the specified string is considered to be a path
 fn is_path(path: &str) -> bool {
-    regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
+    lazy_regex::regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
 }
 
 /// Normalizes a file path by eliminating `..` and `.`.

@@ -1,9 +1,7 @@
 //! Defines the [`fetch_repodata`] function which reads repodata information from disk.
 
-use crate::{
-    repo_data::fetch::{DoneState, RepoDataRequestState, RequestRepoDataError},
-    RepoData,
-};
+use crate::repo_data::fetch::{DoneState, RepoDataRequestState, RequestRepoDataError};
+use rattler_conda_types::RepoData;
 use std::{
     fs::OpenOptions,
     io::{BufReader, Read},

@@ -10,7 +10,7 @@ mod file;
 mod http;
 
 use crate::utils::default_cache_dir;
-use crate::{Channel, Platform, RepoData};
+use rattler_conda_types::{Channel, Platform, RepoData};
 use std::{io, path::PathBuf};
 use tempfile::PersistError;
 use tokio::task::JoinError;

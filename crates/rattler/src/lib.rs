@@ -9,40 +9,22 @@
 //! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefor a good
 //! candidate for a reimplementation.
 
-mod channel;
-mod channel_data;
-mod match_spec;
-mod no_arch_type;
 mod package_archive;
-pub mod package_info;
-mod platform;
 pub mod repo_data;
-mod run_export;
 pub mod solver;
 pub(crate) mod utils;
-mod version;
-mod version_spec;
 
-pub use channel::{Channel, ChannelConfig, ParseChannelError};
-pub use channel_data::{ChannelData, ChannelDataPackage};
-pub use match_spec::MatchSpec;
-pub use no_arch_type::{NoArchKind, NoArchType};
 pub use package_archive::PackageArchiveFormat;
-pub use platform::{ParsePlatformError, Platform};
-pub use repo_data::{PackageRecord, RepoData};
-pub use run_export::{RunExportKind, RunExports};
-pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
-pub use version_spec::VersionSpec;
 
 /// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
 /// that is bundled with this repository.
 #[cfg(any(doctest, test))]
-pub fn empty_channel() -> Channel {
+pub fn empty_channel() -> rattler_conda_types::Channel {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let channel_path = manifest_dir.join("resources/channels/empty");
-    Channel::from_str(
+    rattler_conda_types::Channel::from_str(
         &format!("file://{}[noarch]", channel_path.display()),
-        &ChannelConfig::default(),
+        &rattler_conda_types::ChannelConfig::default(),
     )
     .unwrap()
 }

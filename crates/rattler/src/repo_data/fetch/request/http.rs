@@ -20,9 +20,9 @@ use url::Url;
 
 use crate::{
     repo_data::fetch::{DoneState, DownloadingState, RepoDataRequestState, RequestRepoDataError},
-    utils::{url_to_cache_filename, AsyncEncoding, Encoding},
-    RepoData,
+    utils::{url_to_cache_filename, AsyncEncoding, Encoding}
 };
+use rattler_conda_types::RepoData;
 
 /// Information stored along the repodata json that defines some caching properties.
 #[serde_as]
@@ -334,8 +334,9 @@ mod test {
     use super::{create_cache_file, fetch_repodata, read_cache_file, RepoDataMetadata};
     use crate::repo_data::fetch::request::REPODATA_CHANNEL_PATH;
     use crate::{
-        utils::simple_channel_server::SimpleChannelServer, Channel, ChannelConfig, Platform,
+        utils::simple_channel_server::SimpleChannelServer
     };
+    use rattler_conda_types::{Channel, ChannelConfig, Platform};
 
     #[tokio::test]
     async fn test_fetch_http() {
