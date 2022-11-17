@@ -47,8 +47,8 @@ impl<'c> SolverProblem<'c> {
         // Create repos for all channels
         let mut channel_mapping = HashMap::new();
         for (channel, repodata) in self.channels.iter() {
-            let mut repo = pool.create_repo(&channel);
-            repo.add_repodata(*repodata)
+            let mut repo = pool.create_repo(channel);
+            repo.add_repodata(repodata)
                 .map_err(SolveError::ErrorAddingRepodata)?;
             channel_mapping.insert(repo.id(), channel);
 

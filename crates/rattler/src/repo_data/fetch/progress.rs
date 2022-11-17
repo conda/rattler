@@ -11,7 +11,7 @@ use rattler_conda_types::{Channel, Platform};
 /// progress as several progress bars.
 ///
 /// ```rust,no_run
-/// # use rattler::{Channel, repo_data::fetch::{ terminal_progress, MultiRequestRepoDataBuilder}, ChannelConfig};
+/// # use rattler::{repo_data::fetch::{ terminal_progress, MultiRequestRepoDataBuilder}};
 /// # use rattler_conda_types::{Channel, ChannelConfig};
 /// # tokio_test::block_on(async {
 /// let _ = MultiRequestRepoDataBuilder::default()

@@ -184,7 +184,7 @@ fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
             length.try_into().expect("string too large"),
             0,
         );
-        (id != 0).then(|| StringId(id))
+        (id != 0).then_some(StringId(id))
     }
 }
 

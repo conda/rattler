@@ -140,7 +140,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
 
 /// Strips the brackets part of the matchspec returning the rest of the matchspec and  the contents
 /// of the brackets as a `Vec<&str>`.
-fn strip_brackets<'a>(input: &'a str) -> Result<(Cow<'a, str>, BracketVec), ParseMatchSpecError> {
+fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec), ParseMatchSpecError> {
     if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;

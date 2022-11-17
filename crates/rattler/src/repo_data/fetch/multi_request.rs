@@ -20,7 +20,8 @@ use std::path::PathBuf;
 ///
 /// ```rust,no_run
 /// # use std::path::PathBuf;
-/// # use rattler::{repo_data::fetch::MultiRequestRepoDataBuilder, Channel, Platform, ChannelConfig};
+/// # use rattler::{repo_data::fetch::MultiRequestRepoDataBuilder};
+/// # use rattler_conda_types::{Channel, Platform, ChannelConfig};
 /// # tokio_test::block_on(async {
 /// let _repo_data = MultiRequestRepoDataBuilder::default()
 ///     .add_channel(Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap())

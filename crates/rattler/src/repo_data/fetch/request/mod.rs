@@ -116,7 +116,8 @@ impl From<DoneState> for RepoDataRequestState {
 ///
 /// ```rust,no_run
 /// # use std::path::PathBuf;
-/// # use rattler::{repo_data::fetch::RequestRepoDataBuilder, Channel, Platform, ChannelConfig};
+/// # use rattler::{repo_data::fetch::RequestRepoDataBuilder};
+/// # use rattler_conda_types::{Channel, Platform, ChannelConfig};
 /// # tokio_test::block_on(async {
 /// let channel = Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap();
 /// let _repo_data = RequestRepoDataBuilder::new(channel, Platform::NoArch)

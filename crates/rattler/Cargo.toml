@@ -44,6 +44,7 @@ insta = { version = "1.16.0", features = ["yaml"] }
 proptest = "1.0.0"
 axum = "0.5.13"
 tower-http = { version = "0.3.4", features = ["fs", "compression-gzip"] }
+tokio-test = "0.4.2"
 
 [build-dependencies]
 cc = "1"
