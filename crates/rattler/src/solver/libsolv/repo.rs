@@ -1,16 +1,20 @@
-use crate::RepoData;
-use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::ffi::CString;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::os::raw::c_ulonglong;
-use std::ptr::NonNull;
+use rattler_conda_types::RepoData;
+use std::{
+    cmp::Ordering,
+    collections::HashMap,
+    ffi::CString,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    os::raw::c_ulonglong,
+    ptr::NonNull,
+};
 
-use super::pool::PoolRef;
-use super::{c_string, ffi, solvable::SolvableId};
-
-use super::pool::{FindInterned, Intern};
+use super::{
+    c_string, ffi,
+    pool::PoolRef,
+    pool::{FindInterned, Intern},
+    solvable::SolvableId,
+};
 
 // const SOLVABLE_SUMMARY: &str = "solvable:summary";
 // const SOLVABLE_DESCRIPTION: &str = "solvable:description";

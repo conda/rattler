@@ -1,12 +1,12 @@
-use super::repo::Repo;
-use super::solver::Solver;
-use super::{c_string, ffi};
-use crate::MatchSpec;
-use std::convert::TryInto;
-use std::ffi::{CStr, CString};
-use std::ops::{Deref, DerefMut};
-use std::os::raw::c_void;
-use std::ptr::NonNull;
+use super::{c_string, ffi, repo::Repo, solver::Solver};
+use rattler_conda_types::MatchSpec;
+use std::{
+    convert::TryInto,
+    ffi::{CStr, CString},
+    ops::{Deref, DerefMut},
+    os::raw::c_void,
+    ptr::NonNull,
+};
 
 /// Wrapper for libsolv Pool which is an interning datastructure used by libsolv.
 #[repr(transparent)]
@@ -184,7 +184,7 @@ fn find_intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> Option<StringId> {
             length.try_into().expect("string too large"),
             0,
         );
-        (id != 0).then(|| StringId(id))
+        (id != 0).then_some(StringId(id))
     }
 }
 
@@ -336,7 +336,7 @@ mod test {
     use std::ffi::CString;
 
     use super::super::pool::{Intern, Pool};
-    use crate::{ChannelConfig, MatchSpec};
+    use rattler_conda_types::{ChannelConfig, MatchSpec};
 
     #[test]
     fn test_pool_creation() {

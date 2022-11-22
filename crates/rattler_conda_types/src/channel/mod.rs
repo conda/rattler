@@ -1,4 +1,3 @@
-use crate::utils::regex;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
@@ -112,7 +111,7 @@ impl Channel {
             let name = path.trim_start_matches('/');
             Self {
                 platforms: platforms.map(Into::into),
-                name: (!name.is_empty()).then(|| name).map(str::to_owned),
+                name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
         } else {
@@ -123,7 +122,7 @@ impl Channel {
                 .unwrap_or_else(|| base_url.path());
             Self {
                 platforms: platforms.map(Into::into),
-                name: (!name.is_empty()).then(|| name).map(str::to_owned),
+                name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
         }
@@ -150,7 +149,7 @@ impl Channel {
                 .channel_alias
                 .join(dir_name.as_ref())
                 .expect("name is not a valid Url"),
-            name: (!name.is_empty()).then(|| name).map(str::to_owned),
+            name: (!name.is_empty()).then_some(name).map(str::to_owned),
         }
     }
 
@@ -274,7 +273,7 @@ fn parse_scheme(channel: &str) -> Option<&str> {
 
 /// Returns true if the specified string is considered to be a path
 fn is_path(path: &str) -> bool {
-    regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
+    lazy_regex::regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
 }
 
 /// Normalizes a file path by eliminating `..` and `.`.

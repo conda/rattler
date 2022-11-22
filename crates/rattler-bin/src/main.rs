@@ -32,10 +32,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Determine the logging level based on the the verbose flag and the RUST_LOG environment
     // variable.
-    let default_filter = opt
-        .verbose
-        .then_some(LevelFilter::DEBUG)
-        .unwrap_or(LevelFilter::INFO);
+    let default_filter = if opt.verbose {
+        LevelFilter::DEBUG
+    } else {
+        LevelFilter::INFO
+    };
     let env_filter = EnvFilter::builder()
         .with_default_directive(default_filter.into())
         .from_env()?;

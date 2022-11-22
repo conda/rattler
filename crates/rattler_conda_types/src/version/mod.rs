@@ -77,11 +77,23 @@ impl Hash for Version {
 }
 
 /// Either a number, literal or the infinity.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, derive_more::From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 enum NumeralOrOther {
     Numeral(usize),
     Other(String),
     Infinity,
+}
+
+impl From<usize> for NumeralOrOther {
+    fn from(num: usize) -> Self {
+        NumeralOrOther::Numeral(num)
+    }
+}
+
+impl From<String> for NumeralOrOther {
+    fn from(other: String) -> Self {
+        NumeralOrOther::Other(other)
+    }
 }
 
 impl Default for NumeralOrOther {

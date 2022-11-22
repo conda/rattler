@@ -1,5 +1,12 @@
+//! Datastructures that are present in a `channeldata.json` file. Some channels on anaconda.org
+//! contain a `channeldata.json` file which describes the subdirs the channel contains, the packages
+//! stored in the channel and additional data about them like their latest version.
+//!
+//! The [`ChannelData`] struct represents the data found within the `channeldata.json` file. The
+//! [`ChannelDataPackage`] contains information about a package.
+
 use crate::{
-    utils::{LossyUrl, VecSkipNone},
+    utils::serde::{LossyUrl, VecSkipNone},
     RunExports, Version,
 };
 use serde::{Deserialize, Serialize};
@@ -20,7 +27,7 @@ pub struct ChannelData {
     pub subdirs: Vec<String>,
 }
 
-/// Information on a package in a channel.
+/// Information on a single package in a channel.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]

@@ -1,5 +1,4 @@
 use super::{NumeralOrOther, Version, VersionComponent};
-use crate::utils::regex;
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -169,7 +168,7 @@ impl FromStr for Version {
         ) -> Result<VersionComponent, ParseVersionErrorKind> {
             let mut result = VersionComponent::default();
             for component in split_iter {
-                let version_split_re = regex!(r#"([0-9]+|[^0-9]+)"#);
+                let version_split_re = lazy_regex::regex!(r#"([0-9]+|[^0-9]+)"#);
                 let mut numeral_or_alpha_split = version_split_re.find_iter(component).peekable();
                 if numeral_or_alpha_split.peek().is_none() {
                     return Err(ParseVersionErrorKind::EmptyVersionComponent);

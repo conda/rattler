@@ -1,4 +1,4 @@
-use crate::{ChannelConfig, MatchSpec, NoArchType, Version};
+use rattler_conda_types::{ChannelConfig, MatchSpec, NoArchType, Version};
 use serde::{Deserialize, Deserializer};
 use serde_with::{serde_as, skip_serializing_none, DeserializeAs, DisplayFromStr, OneOrMany};
 

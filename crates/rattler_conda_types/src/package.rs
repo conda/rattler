@@ -1,7 +1,7 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
 use crate::{
-    utils::{LossyUrl, MultiLineString, VecSkipNone},
+    utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
     RunExports, Version,
 };
 use serde::{Deserialize, Serialize};

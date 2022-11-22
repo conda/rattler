@@ -11,14 +11,13 @@ rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
-async-compression = {version="0.3.12", features=["gzip", "futures-bufread", "tokio", "bzip2"] }
+async-compression = { version = "0.3.12", features = ["gzip", "futures-bufread", "tokio", "bzip2"] }
 bytes = "1.1.0"
-derive_more = "0.99.16"
 dirs = "4.0.0"
 extendhash = "1.0.9"
 futures = "0.3.17"
 fxhash = "0.2.1"
-indicatif = { version="0.17.1", features=["improved_unicode"] }
+indicatif = { version = "0.17.1", features = ["improved_unicode"] }
 itertools = "0.10.3"
 libc = "0.2"
 libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
@@ -28,23 +27,23 @@ pin-project-lite = "0.2.9"
 regex = "1.5.4"
 reqwest = { version = "0.11.6", default-features = false, features = ["stream", "json", "gzip"] }
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = { version="1.0.68", features=["raw_value"] }
-serde_with="2.0.0"
-smallvec = { version="1.8.0", features=["serde", "const_new", "const_generics", "union"] }
+serde_json = { version = "1.0.68", features = ["raw_value"] }
+serde_with = "2.0.0"
+smallvec = { version = "1.8.0", features = ["serde", "const_new", "const_generics", "union"] }
 tempfile = "3.3.0"
 thiserror = "1.0.30"
-tokio = { version = "1.12.0", features = ["rt", "io-util"] }
-tokio-tar = { version="0.3.0", git="https://github.com/baszalmstra/tokio-tar", branch="fix/attempt_to_subtract_with_overflow"}
+tokio = { version = "1.12.0", features = ["rt", "io-util", "macros"] }
 tokio-util = { version = "0.7.3", features = ["codec", "io"] }
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
 
 [dev-dependencies]
 rand = "0.8.4"
-insta = { version="1.16.0", features=["yaml"] }
+insta = { version = "1.16.0", features = ["yaml"] }
 proptest = "1.0.0"
 axum = "0.5.13"
-tower-http = { version="0.3.4", features=["fs", "compression-gzip"] }
+tower-http = { version = "0.3.4", features = ["fs", "compression-gzip"] }
 tokio-test = "0.4.2"
 
 [build-dependencies]

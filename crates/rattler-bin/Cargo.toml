@@ -16,3 +16,4 @@ dirs = "4.0.0"
 rattler = { path="../rattler" }
 tokio = { version = "1.21.1", features=["rt-multi-thread", "macros"]}
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }

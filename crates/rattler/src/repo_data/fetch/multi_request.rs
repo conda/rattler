@@ -1,14 +1,12 @@
 //! Defines the [`MultiRequestRepoDataBuilder`] struct. This struct enables async fetching channel
 //! repodata from multiple source in parallel.
 
-use crate::utils::default_cache_dir;
-use crate::{
-    repo_data::fetch::request::{
-        RepoDataRequestState, RequestRepoDataBuilder, RequestRepoDataError, RequestRepoDataListener,
-    },
-    Channel, Platform, RepoData,
+use crate::repo_data::fetch::request::{
+    RepoDataRequestState, RequestRepoDataBuilder, RequestRepoDataError, RequestRepoDataListener,
 };
+use crate::utils::default_cache_dir;
 use futures::{stream::FuturesUnordered, StreamExt};
+use rattler_conda_types::{Channel, Platform, RepoData};
 use std::path::PathBuf;
 
 /// The `MultiRequestRepoDataBuilder` handles fetching data from multiple conda channels and
@@ -22,7 +20,8 @@ use std::path::PathBuf;
 ///
 /// ```rust,no_run
 /// # use std::path::PathBuf;
-/// # use rattler::{repo_data::fetch::MultiRequestRepoDataBuilder, Channel, Platform, ChannelConfig};
+/// # use rattler::{repo_data::fetch::MultiRequestRepoDataBuilder};
+/// # use rattler_conda_types::{Channel, Platform, ChannelConfig};
 /// # tokio_test::block_on(async {
 /// let _repo_data = MultiRequestRepoDataBuilder::default()
 ///     .add_channel(Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap())

@@ -27,7 +27,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
     type Error = ParseVersionTreeError;
 
     fn try_from(input: &'a str) -> Result<Self, Self::Error> {
-        let version_spec_tokens = crate::utils::regex!("\\s*[()|,]|[^()|,]+");
+        let version_spec_tokens = lazy_regex::regex!("\\s*[()|,]|[^()|,]+");
         let tokens = version_spec_tokens
             .find_iter(input)
             .map(|m| match m.as_str() {

@@ -26,7 +26,7 @@ mod test {
     use super::ffi::{SOLVER_INSTALL, SOLVER_SOLVABLE_PROVIDES};
     use super::pool::{Intern, Pool};
     use super::queue::Queue;
-    use crate::{ChannelConfig, MatchSpec};
+    use rattler_conda_types::{ChannelConfig, MatchSpec};
 
     use super::pool::Verbosity;
 
