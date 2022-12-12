@@ -5,6 +5,9 @@ use std::path::Path;
 #[cfg(feature = "sync")]
 pub mod read;
 
+#[cfg(feature = "sync")]
+pub mod seek;
+
 /// An error that can occur when extracting a package archive.
 #[derive(thiserror::Error, Debug)]
 pub enum ExtractError {
@@ -16,6 +19,12 @@ pub enum ExtractError {
 
     #[error("invalid zip archive")]
     ZipError(#[from] zip::result::ZipError),
+
+    #[error("a component is missing from the Conda archive")]
+    MissingComponent,
+
+    #[error("unsupported compression method")]
+    UnsupportedCompressionMethod,
 }
 
 /// Describes the type of package archive. This can be derived from the file extension of a package.

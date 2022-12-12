@@ -13,7 +13,7 @@ fn find_all_archives() -> impl Iterator<Item = PathBuf> {
 }
 
 #[test]
-fn text_extract_conda() {
+fn test_extract_conda() {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
 
@@ -28,7 +28,30 @@ fn text_extract_conda() {
 }
 
 #[test]
-fn text_extract_tar_bz2() {
+fn test_stream_info() {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+
+    for file_path in
+        find_all_archives().filter(|path| ArchiveType::try_from(path) == Some(ArchiveType::Conda))
+    {
+        println!("Name: {}", file_path.display());
+
+        let mut info_stream =
+            rattler_package_streaming::seek::stream_conda_info(File::open(&file_path).unwrap())
+                .unwrap();
+
+        let target_dir = temp_dir.join(format!(
+            "{}-info",
+            file_path.file_stem().unwrap().to_string_lossy().as_ref()
+        ));
+
+        info_stream.unpack(target_dir).unwrap();
+    }
+}
+
+#[test]
+fn test_extract_tar_bz2() {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
 
@@ -43,7 +66,7 @@ fn text_extract_tar_bz2() {
 }
 
 #[test]
-fn text_extract_tar_parallel() {
+fn test_extract_tar_parallel() {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
 
