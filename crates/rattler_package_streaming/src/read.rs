@@ -1,4 +1,5 @@
 use super::ExtractError;
+use std::ffi::OsStr;
 use std::{io::Read, path::Path};
 use zip::read::read_zipfile_from_stream;
 
@@ -67,7 +68,12 @@ pub fn extract_conda(mut reader: impl Read, destination: &Path) -> Result<(), Ex
 
     // Iterate over all entries in the zip-file and extract them one-by-one
     while let Some(file) = read_zipfile_from_stream(&mut reader)? {
-        if file.mangled_name().ends_with(".tar.zst") {
+        if file
+            .mangled_name()
+            .file_name()
+            .map(OsStr::to_string_lossy)
+            .map_or(false, |file_name| file_name.ends_with(".tar.zst"))
+        {
             stream_tar_zst(file)?.unpack(destination)?;
         }
     }

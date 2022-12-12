@@ -31,9 +31,10 @@ pub enum ArchiveType {
 impl ArchiveType {
     /// Tries to determine the type of a Conda archive from its filename.
     pub fn try_from(path: &Path) -> Option<ArchiveType> {
-        if path.ends_with(".conda") {
+        let file_name = path.file_name()?.to_string_lossy();
+        if file_name.ends_with(".conda") {
             Some(ArchiveType::Conda)
-        } else if path.ends_with(".tar.bz2") {
+        } else if file_name.ends_with(".tar.bz2") {
             Some(ArchiveType::TarBz2)
         } else {
             None
