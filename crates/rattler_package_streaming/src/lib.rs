@@ -2,10 +2,7 @@
 
 use std::path::Path;
 
-#[cfg(feature = "sync")]
 pub mod read;
-
-#[cfg(feature = "sync")]
 pub mod seek;
 
 /// An error that can occur when extracting a package archive.

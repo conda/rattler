@@ -11,14 +11,10 @@ repository = "https://github.com/baszalmstra/rattler"
 [dependencies]
 async-trait = "0.1.59"
 thiserror = "1.0.37"
-tar = { version = "0.4.38", optional = true }
-bzip2-rs = { version = "0.1.2", git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rustc_1_55"], optional = true }
-zip = { version = "0.6.3", optional = true }
+tar = { version = "0.4.38" }
+bzip2 = { version = "0.4" }
+zip = { version = "0.6.3" }
 zstd = "0.12.1"
 
 [features]
-default = ["sync", "rayon"]
-sync = ["tar", "zip", "bzip2-rs", "zip"]
-async = []
-rayon = ["bzip2-rs/rayon"]
-
+tokio = ["bzip2/tokio"]
