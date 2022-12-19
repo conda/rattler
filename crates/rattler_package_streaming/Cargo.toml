@@ -1,0 +1,20 @@
+[package]
+name = "rattler_package_streaming"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Extract and stream of Conda package archives"
+categories = ["conda"]
+homepage = "https://github.com/baszalmstra/rattler"
+repository = "https://github.com/baszalmstra/rattler"
+
+[dependencies]
+async-trait = "0.1.59"
+thiserror = "1.0.37"
+tar = { version = "0.4.38" }
+bzip2 = { version = "0.4" }
+zip = { version = "0.6.3" }
+zstd = "0.12.1"
+
+[features]
+tokio = ["bzip2/tokio"]
