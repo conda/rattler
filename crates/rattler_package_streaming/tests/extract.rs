@@ -64,3 +64,22 @@ fn test_extract_tar_bz2() {
         extract_tar_bz2(File::open(&file_path).unwrap(), &target_dir).unwrap();
     }
 }
+
+#[cfg(feature = "reqwest")]
+#[test]
+fn test_extract_url() {
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+
+    for url in [
+        "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.205-py39h5b3f8fb_0.conda",
+        "https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2",
+    ] {
+        let (_, filename) = url.rsplit_once('/').unwrap();
+        let name = Path::new(filename);
+        println!("Name: {}", name.display());
+
+        let target_dir = temp_dir.join(name);
+        rattler_package_streaming::reqwest::extract(Default::default(), url, &target_dir).unwrap();
+    }
+}
