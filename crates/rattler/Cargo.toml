@@ -49,7 +49,7 @@ tokio-test = "0.4.2"
 [build-dependencies]
 cc = "1"
 anyhow = "1"
-bindgen = "0.60"
+bindgen = "0.63"
 cmake = "0.1"
 
 [package.metadata.cargo-udeps.ignore]
