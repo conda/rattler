@@ -5,6 +5,9 @@ use std::path::Path;
 pub mod read;
 pub mod seek;
 
+#[cfg(feature = "reqwest")]
+pub mod reqwest;
+
 /// An error that can occur when extracting a package archive.
 #[derive(thiserror::Error, Debug)]
 pub enum ExtractError {
@@ -22,6 +25,13 @@ pub enum ExtractError {
 
     #[error("unsupported compression method")]
     UnsupportedCompressionMethod,
+
+    #[cfg(feature = "reqwest")]
+    #[error(transparent)]
+    ReqwestError(::reqwest::Error),
+
+    #[error("unsupported package archive format")]
+    UnsupportedArchiveType,
 }
 
 /// Describes the type of package archive. This can be derived from the file extension of a package.
