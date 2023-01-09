@@ -19,7 +19,7 @@ regex = "1.7.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_with="2.0.0"
 smallvec = { version = "1.10.0", features = ["serde", "const_new", "const_generics", "union"] }
-strum = {version = "0.24.1", features = ["derive"]}
+strum = { version = "0.24.1", features = ["derive"] }
 thiserror = "1.0.37"
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
