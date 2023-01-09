@@ -1,9 +1,10 @@
 use serde::{Deserializer, Serializer};
 use std::{fmt, fmt::Formatter, str::FromStr};
+use strum::EnumIter;
 use thiserror::Error;
 
 /// A platform supported by Conda.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
 
