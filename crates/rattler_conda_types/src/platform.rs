@@ -1,9 +1,10 @@
 use serde::{Deserializer, Serializer};
 use std::{fmt, fmt::Formatter, str::FromStr};
+use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// A platform supported by Conda.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
 
@@ -65,6 +66,11 @@ impl Platform {
     /// Returns a string representation of the platform.
     pub fn as_str(self) -> &'static str {
         self.into()
+    }
+
+    /// Iterate over all Platform variants
+    pub fn all() -> impl Iterator<Item = Self> {
+        Platform::iter()
     }
 }
 
