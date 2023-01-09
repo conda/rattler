@@ -1,6 +1,6 @@
 use serde::{Deserializer, Serializer};
 use std::{fmt, fmt::Formatter, str::FromStr};
-use strum::EnumIter;
+use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// A platform supported by Conda.
@@ -66,6 +66,11 @@ impl Platform {
     /// Returns a string representation of the platform.
     pub fn as_str(self) -> &'static str {
         self.into()
+    }
+
+    /// Iterate over all Platform variants
+    pub fn all() -> PlatformIter {
+        Platform::iter()
     }
 }
 
