@@ -69,7 +69,7 @@ impl Platform {
     }
 
     /// Iterate over all Platform variants
-    pub fn all() -> PlatformIter {
+    pub fn all() -> impl Iterator<Item = Self> {
         Platform::iter()
     }
 }
