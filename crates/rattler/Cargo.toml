@@ -42,7 +42,7 @@ rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
 rand = "0.8.4"
 insta = { version = "1.16.0", features = ["yaml"] }
 proptest = "1.0.0"
-axum = "0.5.13"
+axum = "0.6.2"
 tower-http = { version = "0.3.4", features = ["fs", "compression-gzip"] }
 tokio-test = "0.4.2"
 
