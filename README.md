@@ -2,7 +2,7 @@
 
 [![Build Status][build-badge]][build]
 
-[build-badge]: https://img.shields.io/github/workflow/status/baszalmstra/rattler/Continuous%20integration?style=flat-square
+[build-badge]: https://img.shields.io/github/actions/workflow/status/baszalmstra/rattler/rust-compile.yml?style=flat-square&branch=main
 [build]: https://github.com/baszalmstra/rattler/actions
 
 Rattler is a suite of libraries that provides common Conda functionalities. 
