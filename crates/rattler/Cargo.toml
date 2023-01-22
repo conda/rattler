@@ -43,7 +43,7 @@ rand = "0.8.4"
 insta = { version = "1.16.0", features = ["yaml"] }
 proptest = "1.0.0"
 axum = "0.6.2"
-tower-http = { version = "0.3.4", features = ["fs", "compression-gzip"] }
+tower-http = { version = "0.3.5", features = ["fs", "compression-gzip"] }
 tokio-test = "0.4.2"
 
 [build-dependencies]
