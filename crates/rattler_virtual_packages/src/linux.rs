@@ -55,7 +55,7 @@ const fn try_detect_linux_version() -> Result<Option<Version>, ParseLinuxVersion
     Ok(None)
 }
 
-#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum ParseLinuxVersionError {
     #[error("error parsing linux version")]
     ParseError,
@@ -122,6 +122,6 @@ mod test {
     #[cfg(target_os = "linux")]
     pub fn doesnt_crash() {
         let version = super::try_detect_linux_version();
-        println!("{:?}", version);
+        println!("Linux {:?}", version);
     }
 }

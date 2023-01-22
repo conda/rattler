@@ -80,7 +80,7 @@ impl Platform {
 
     /// Returns true if the platform is a unix based platform.
     pub const fn is_unix(self) -> bool {
-        self.is_linux() || self.is_macos()
+        self.is_linux() || self.is_osx()
     }
 
     /// Returns true if the platform is a linux based platform.
@@ -99,7 +99,7 @@ impl Platform {
     }
 
     /// Returns true if the platform is an macOS based platform.
-    pub const fn is_macos(self) -> bool {
+    pub const fn is_osx(self) -> bool {
         matches!(self, Platform::Osx64 | Platform::OsxArm64)
     }
 }

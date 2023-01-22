@@ -3,11 +3,13 @@
 mod cuda;
 mod libc;
 mod linux;
+mod osx;
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{Platform, Version};
 use std::str::FromStr;
 
+use crate::osx::ParseOsxVersionError;
 pub use libc::DetectLibCError;
 pub use linux::ParseLinuxVersionError;
 
@@ -20,7 +22,7 @@ pub struct GenericVirtualPackage {
     pub build_string: String,
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
     /// Available on windows
     Win,
@@ -30,6 +32,9 @@ pub enum VirtualPackage {
 
     /// Available when running on Linux
     Linux(Linux),
+
+    /// Available when running on OSX
+    Osx(Osx),
 
     /// Available LibC family and version
     LibC(LibC),
@@ -55,6 +60,7 @@ impl From<VirtualPackage> for GenericVirtualPackage {
                 build_string: "0".into(),
             },
             VirtualPackage::Linux(linux) => linux.into(),
+            VirtualPackage::Osx(osx) => osx.into(),
             VirtualPackage::LibC(libc) => libc.into(),
             VirtualPackage::Cuda(cuda) => cuda.into(),
             VirtualPackage::Archspec(spec) => spec.into(),
@@ -71,10 +77,13 @@ impl VirtualPackage {
     }
 }
 
-#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+#[derive(Debug, thiserror::Error)]
 pub enum DetectVirtualPackageError {
     #[error(transparent)]
     ParseLinuxVersion(#[from] ParseLinuxVersionError),
+
+    #[error(transparent)]
+    ParseMacOsVersion(#[from] ParseOsxVersionError),
 
     #[error(transparent)]
     DetectLibC(#[from] DetectLibCError),
@@ -102,6 +111,12 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
         }
     }
 
+    if platform.is_osx() {
+        if let Some(osx) = Osx::current()? {
+            result.push(osx.into());
+        }
+    }
+
     if let Some(cuda) = Cuda::current() {
         result.push(cuda.into())
     }
@@ -114,7 +129,7 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
 }
 
 /// Linux virtual package description
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Linux {
     pub version: Version,
 }
@@ -146,7 +161,7 @@ impl From<Linux> for VirtualPackage {
 }
 
 /// LibC virtual package description
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct LibC {
     pub family: String,
     pub version: Version,
@@ -179,7 +194,7 @@ impl From<LibC> for VirtualPackage {
 }
 
 /// Cuda virtual package description
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Cuda {
     pub version: Version,
 }
@@ -208,7 +223,7 @@ impl From<Cuda> for VirtualPackage {
 }
 
 /// Archspec describes the CPU architecture
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Archspec {
     pub spec: String,
 }
@@ -253,5 +268,48 @@ impl From<Archspec> for GenericVirtualPackage {
 impl From<Archspec> for VirtualPackage {
     fn from(archspec: Archspec) -> Self {
         VirtualPackage::Archspec(archspec)
+    }
+}
+
+/// OSX virtual package description
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Osx {
+    pub version: Version,
+}
+
+impl Osx {
+    /// Returns the OSX version of the current platform.
+    ///
+    /// Returns an error if determining the OSX version resulted in an error. Returns `None` if
+    /// the current platform is not an OSX based platform.
+    pub fn current() -> Result<Option<Self>, ParseOsxVersionError> {
+        Ok(osx::osx_version()?.map(|version| Self { version }))
+    }
+}
+
+impl From<Osx> for GenericVirtualPackage {
+    fn from(osx: Osx) -> Self {
+        GenericVirtualPackage {
+            name: "__osx".into(),
+            version: osx.version,
+            build_string: "0".into(),
+        }
+    }
+}
+
+impl From<Osx> for VirtualPackage {
+    fn from(osx: Osx) -> Self {
+        VirtualPackage::Osx(osx)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::VirtualPackage;
+
+    #[test]
+    fn doesnt_crash() {
+        let virtual_packages = VirtualPackage::current().unwrap();
+        println!("{:?}", virtual_packages);
     }
 }

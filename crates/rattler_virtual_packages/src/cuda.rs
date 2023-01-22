@@ -79,6 +79,6 @@ mod test {
     #[test]
     pub fn doesnt_crash() {
         let version = detect_cuda_version();
-        println!("{:?}", version);
+        println!("Cuda {:?}", version);
     }
 }
