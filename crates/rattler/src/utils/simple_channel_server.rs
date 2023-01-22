@@ -33,7 +33,7 @@ impl SimpleChannelServer {
         );
 
         // Create a router that will serve the static files from the channel.
-        let app = axum::Router::new().nest("/", service);
+        let app = axum::Router::new().fallback_service(service);
 
         // Construct the server that will listen on localhost but with a *random port*. The random
         // port is very important because it enables creating multiple instances at the same time.
