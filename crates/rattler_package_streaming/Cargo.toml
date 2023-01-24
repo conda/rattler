@@ -16,7 +16,13 @@ bzip2 = { version = "0.4" }
 zip = { version = "0.6.3" }
 zstd = "0.12.1"
 reqwest = { version = "0.11.13", optional = true }
+tokio = { version = "1", optional = true }
+tokio-util = { version = "0.7", optional = true }
+futures-util = { version = "0.3.25", optional = true }
 
 [features]
-tokio = ["bzip2/tokio"]
+tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream"]
 reqwest = ["reqwest/blocking"]
+
+[dev-dependencies]
+tokio = { version = "1", features=["rt", "macros"]}
