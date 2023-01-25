@@ -72,6 +72,36 @@ impl Platform {
     pub fn all() -> impl Iterator<Item = Self> {
         Platform::iter()
     }
+
+    /// Returns true if the platform is a windows based platform.
+    pub const fn is_windows(self) -> bool {
+        matches!(self, Platform::Win32 | Platform::Win64)
+    }
+
+    /// Returns true if the platform is a unix based platform.
+    pub const fn is_unix(self) -> bool {
+        self.is_linux() || self.is_osx()
+    }
+
+    /// Returns true if the platform is a linux based platform.
+    pub const fn is_linux(self) -> bool {
+        matches!(
+            self,
+            Platform::Linux32
+                | Platform::Linux64
+                | Platform::LinuxAarch64
+                | Platform::LinuxArmV6l
+                | Platform::LinuxArmV7l
+                | Platform::LinuxPpc64le
+                | Platform::LinuxPpc64
+                | Platform::LinuxS390X
+        )
+    }
+
+    /// Returns true if the platform is an macOS based platform.
+    pub const fn is_osx(self) -> bool {
+        matches!(self, Platform::Osx64 | Platform::OsxArm64)
+    }
 }
 
 /// An error that can occur when parsing a platform from a string.

@@ -1,0 +1,21 @@
+[package]
+name = "rattler_virtual_packages"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Conda virtual package library"
+categories = ["conda"]
+homepage = "https://github.com/baszalmstra/rattler"
+repository = "https://github.com/baszalmstra/rattler"
+
+[dependencies]
+cfg-if = "1.0.0"
+libloading = "0.7.4"
+nom = "7.1.3"
+once_cell = "1.17.0"
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
+thiserror = "1.0.38"
+tracing = "0.1.37"
+
+[target.'cfg(target_os="macos")'.dependencies]
+plist = "1"
