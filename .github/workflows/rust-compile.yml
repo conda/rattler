@@ -36,9 +36,6 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macOS-latest"]
-        include:
-          - os: "windows-latest"
-            RUSTFLAGS: "$RUSTFLAGS -Ctarget-feature=+crt-static"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -51,7 +48,7 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features
+          args: --all-features -- --nocapture
 
   fmt:
     name: Rustfmt

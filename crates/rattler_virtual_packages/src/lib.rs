@@ -1,17 +1,43 @@
 //! A library to detect Conda virtual packages present on a system.
+//!
+//! A virtual package represents a package that is injected into the solver to provide system
+//! information to packages. This allows packages to add dependencies on specific system features,
+//! like the platform version, the machines architecture, or the availability of a Cuda driver
+//! with a specific version.
+//!
+//! This library provides both a low- and high level API to detect versions of virtual packages for
+//! the host system.
+//!
+//! To detect all virtual packages for the host system use the [`VirtualPackage::current`] method
+//! which will return a memoized slice of all detected virtual packages. The `VirtualPackage` enum
+//! represents all available virtual package types. Using it provides some flexibility to the
+//! user to not care about which exact virtual packages exist but still allows users to override
+//! specific virtual package behavior. Say for instance you just want to detect the capabilities of
+//! the host system but you still want to restrict the targeted linux version. You can convert an
+//! instance of `VirtualPackage` to `GenericVirtualPackage` which erases any typing for specific
+//! virtual packages.
+//!
+//! Each virtual package is also represented by a struct which can be used to detect the specifics
+//! of one virtual package. For instance the [`Linux::current`] method returns an instance of
+//! `Linux` which contains the current Linux version. It also provides conversions to the higher
+//! level API.
+//!
+//! Finally at the core of the library are detection functions to perform specific capability
+//! detections that are not tied to anything related to virtual packages. See
+//! [`cuda::detect_cuda_version_via_libcuda`] as an example.
 
-mod cuda;
-mod libc;
-mod linux;
-mod osx;
+pub mod cuda;
+pub mod libc;
+pub mod linux;
+pub mod osx;
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{Platform, Version};
 use std::str::FromStr;
 
 use crate::osx::ParseOsxVersionError;
-pub use libc::DetectLibCError;
-pub use linux::ParseLinuxVersionError;
+use libc::DetectLibCError;
+use linux::ParseLinuxVersionError;
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
 /// `version` and a `build_string`. See [`VirtualPackage`] for available virtual packages.
@@ -22,6 +48,7 @@ pub struct GenericVirtualPackage {
     pub build_string: String,
 }
 
+/// An enum that represents all virtual package types provide by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
     /// Available on windows
