@@ -20,7 +20,7 @@ Why Rust?
 * Strong memory- & thread safety guarantees.
 * Very easy to generate statically linked binaries.
 * Strongly typed. This ensures commonly used data formats have a formal specification.
-
+* Support for binding to [Python](https://github.com/PyO3/pyo3), [C](https://github.com/eqrion/cbindgen), [C++](https://github.com/dtolnay/cxx), [Javascript](https://napi.rs/) and other languages.
 
 ## Features and plans
 
