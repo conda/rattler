@@ -7,6 +7,7 @@ description = "Extract and stream of Conda package archives"
 categories = ["conda"]
 homepage = "https://github.com/baszalmstra/rattler"
 repository = "https://github.com/baszalmstra/rattler"
+license = "BSD-3-Clause"
 
 [dependencies]
 async-trait = "0.1.59"
