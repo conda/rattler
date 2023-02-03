@@ -8,6 +8,7 @@ pub mod seek;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 
+pub mod fs;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
