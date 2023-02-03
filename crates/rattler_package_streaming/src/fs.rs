@@ -2,7 +2,7 @@ use crate::{ArchiveType, ExtractError};
 use std::fs::File;
 use std::path::Path;
 
-/// Extracts the contents a `.tar.bz2` package archive from the specified remote location.
+/// Extracts the contents a `.tar.bz2` package archive at the specified path to a directory.
 ///
 /// ```rust,no_run
 /// # use std::path::Path;
@@ -17,7 +17,7 @@ pub fn extract_tar_bz2(archive: &Path, destination: &Path) -> Result<(), Extract
     crate::read::extract_tar_bz2(file, destination)
 }
 
-/// Extracts the contents a `.conda` package archive at the specified path.
+/// Extracts the contents a `.conda` package archive at the specified path to a directory.
 ///
 /// ```rust,no_run
 /// # use std::path::Path;
@@ -32,8 +32,8 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<(), ExtractEr
     crate::read::extract_conda(file, destination)
 }
 
-/// Extracts the contents a package archive from the specified remote location. The type of package
-/// is determined based on the path of the url.
+/// Extracts the contents a package archive at the specified path to a directory. The type of
+/// package is determined based on the file extension of the archive path.
 ///
 /// ```rust,no_run
 /// # use std::path::Path;
