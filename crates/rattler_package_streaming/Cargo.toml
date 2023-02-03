@@ -22,7 +22,7 @@ tokio-util = { version = "0.7", optional = true }
 futures-util = { version = "0.3.25", optional = true }
 
 [features]
-tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream"]
+tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]
 reqwest = ["reqwest/blocking"]
 
 [dev-dependencies]

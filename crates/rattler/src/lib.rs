@@ -10,6 +10,7 @@
 //! candidate for a reimplementation.
 
 mod package_archive;
+mod package_store;
 pub mod repo_data;
 pub mod solver;
 pub(crate) mod utils;
