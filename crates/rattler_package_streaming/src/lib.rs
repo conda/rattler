@@ -8,9 +8,9 @@ pub mod seek;
 #[cfg(feature = "reqwest")]
 pub mod reqwest;
 
+pub mod fs;
 #[cfg(feature = "tokio")]
 pub mod tokio;
-pub mod fs;
 
 /// An error that can occur when extracting a package archive.
 #[derive(thiserror::Error, Debug)]
