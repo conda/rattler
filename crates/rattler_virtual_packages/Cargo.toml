@@ -7,7 +7,7 @@ description = "Library to work with and detect Conda virtual packages"
 categories = ["conda"]
 homepage = "https://github.com/baszalmstra/rattler"
 repository = "https://github.com/baszalmstra/rattler"
-license = "MIT OR Apache-2.0"
+license = "BSD-3-Clause"
 
 [dependencies]
 cfg-if = "1.0.0"
