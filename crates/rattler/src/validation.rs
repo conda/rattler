@@ -179,6 +179,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use rattler_conda_types::package::{PathType, PathsJson};
+    use rstest::*;
     use std::{
         io::Write,
         path::{Path, PathBuf},
@@ -189,7 +190,7 @@ mod test {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
     }
 
-    #[rstest::rstest]
+    #[rstest]
     #[case(
         "1234567890",
         "c775e7b757ede630cd0aa1113bd102661ab38829ca52a6422ab782862f268646"
@@ -210,7 +211,7 @@ mod test {
         assert_eq!(format!("{hash:x}"), expected_hash)
     }
 
-    #[rstest::rstest]
+    #[rstest]
     #[case("conda-22.9.0-py38haa244fe_2.tar.bz2")]
     #[case("pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2")]
     #[case("conda-22.11.1-py38haa244fe_1.conda")]
@@ -250,6 +251,46 @@ mod test {
             Err(PackageValidationError::CorruptedEntry(
                 path,
                 PackageEntryValidationError::HashMismatch(_, _)
+            )) if path == entry.relative_path
+        );
+    }
+
+    #[rstest]
+    #[cfg(unix)]
+    #[case("linux/python-3.10.6-h2c4edbf_0_cpython.tar.bz2")]
+    fn test_validate_package_files_symlink(#[case] package: &str) {
+        // Create a temporary directory and extract the given package.
+        let temp_dir = tempfile::tempdir().unwrap();
+        rattler_package_streaming::fs::extract(&test_data_path().join(package), temp_dir.path())
+            .unwrap();
+
+        // Validate that the extracted package is correct. Since it's just been extracted this should
+        // work.
+        let result = validate_package_files(temp_dir.path());
+        if let Err(e) = result {
+            panic!("{e}");
+        }
+
+        // Read the paths.json file and select the first symlink in the archive.
+        let paths = PathsJson::from_path(&temp_dir.path().join("info/paths.json")).unwrap();
+        let entry = paths
+            .paths
+            .iter()
+            .find(|e| e.path_type == PathType::SoftLink)
+            .expect("package does not contain a file");
+
+        // Replace the symlink with its content
+        let entry_path = temp_dir.path().join(&entry.relative_path);
+        let contents = std::fs::read(&entry_path).unwrap();
+        std::fs::remove_file(&entry_path).unwrap();
+        std::fs::write(entry_path, contents).unwrap();
+
+        // Revalidate the package, given that we replaced the symlink, it should fail.
+        assert_matches!(
+            validate_package_files(temp_dir.path()),
+            Err(PackageValidationError::CorruptedEntry(
+                path,
+                PackageEntryValidationError::ExpectedSymlink
             )) if path == entry.relative_path
         );
     }
