@@ -7,6 +7,10 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use url::Url;
 
 #[serde_as]
@@ -108,4 +112,110 @@ pub struct About {
     /// A list of channels that where used during the build
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub channels: Vec<String>,
+}
+
+/// A representation of the `paths.json` file found in package archives.
+///
+/// The `paths.json` file contains information about every file included with the package.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PathsJson {
+    /// The version of the file
+    pub paths_version: usize,
+
+    /// All entries included in the package.
+    pub paths: Vec<PathsEntry>,
+}
+
+impl PathsJson {
+    /// Parses a `paths.json` file from a reader.
+    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
+        let mut str = String::new();
+        reader.read_to_string(&mut str)?;
+        Self::from_str(&str)
+    }
+
+    /// Parses a `paths.json` file from a file.
+    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+        Self::from_reader(File::open(path)?)
+    }
+}
+
+impl FromStr for PathsJson {
+    type Err = std::io::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map_err(Into::into)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct PathsEntry {
+    /// The relative path from the root of the package
+    #[serde(rename = "_path")]
+    pub relative_path: PathBuf,
+
+    /// Determines how to include the file when installing the package
+    pub path_type: PathType,
+
+    /// The type of the file, either binary or text.
+    #[serde(default, skip_serializing_if = "FileMode::is_binary")]
+    pub file_mode: FileMode,
+
+    /// Optionally the placeholder prefix used in the file. If this value is `None` the prefix is not
+    /// present in the file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix_placeholder: Option<String>,
+
+    /// Whether or not this file should be linked or not when installing the package.
+    #[serde(
+        default = "no_link_default",
+        skip_serializing_if = "is_no_link_default"
+    )]
+    pub no_link: bool,
+
+    /// A hex representation of the SHA256 hash of the contents of the file.
+    /// This entry is only present in version 1 of the paths.json file.
+    pub sha256: Option<String>,
+
+    /// The size of the file in bytes
+    /// This entry is only present in version 1 of the paths.json file.
+    pub size_in_bytes: Option<u64>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum FileMode {
+    Binary,
+    Text,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde(rename_all = "lowercase")]
+pub enum PathType {
+    HardLink,
+    SoftLink,
+    Directory,
+}
+
+impl Default for FileMode {
+    fn default() -> Self {
+        FileMode::Binary
+    }
+}
+
+impl FileMode {
+    /// Returns `true` if the file type is a binary file.
+    pub fn is_binary(&self) -> bool {
+        matches!(self, FileMode::Binary)
+    }
+}
+
+/// Returns the default value for the "no_link" value of a [`PathsEntry`]
+fn no_link_default() -> bool {
+    false
+}
+
+/// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
+fn is_no_link_default(value: &bool) -> bool {
+    *value == no_link_default()
 }

@@ -6,7 +6,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 fn find_all_archives() -> impl Iterator<Item = PathBuf> {
-    std::fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("data"))
+    std::fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"))
         .unwrap()
         .filter_map(Result::ok)
         .map(|d| d.path())
