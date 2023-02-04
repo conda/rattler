@@ -7,6 +7,7 @@ description = "Rust data types for common types used within the Conda ecosystem"
 categories = ["conda"]
 homepage = "https://github.com/baszalmstra/rattler"
 repository = "https://github.com/baszalmstra/rattler"
+license = "BSD-3-Clause"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
