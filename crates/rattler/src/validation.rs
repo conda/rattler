@@ -257,8 +257,8 @@ mod test {
 
     #[rstest]
     #[cfg(unix)]
-    #[case::python_3_10_6("linux/python-3.10.6-h2c4edbf_0_cpython.tar.bz2")]
-    #[case::cph_test_data_0_0_1("linux/cph_test_data-0.0.1-0.tar.bz2")]
+    #[case::python_3_10_6("with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2")]
+    #[case::cph_test_data_0_0_1("with-symlinks/cph_test_data-0.0.1-0.tar.bz2")]
     fn test_validate_package_files_symlink(#[case] package: &str) {
         // Create a temporary directory and extract the given package.
         let temp_dir = tempfile::tempdir().unwrap();
