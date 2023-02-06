@@ -1,20 +1,35 @@
-//! Functionality to validate the contents of a Conda package archive.
+//! Functionality to validate the contents of a Conda package.
 //!
-//! All Conda packages contain a file `info/paths.json` that describes all the files the package contains.
-//! The [`validate_package_files`] function validates that a directory containing an extracted Conda
-//! package archive actually contains the files as described by the `paths.json` file.
+//! Almost all Conda packages contain a file `info/paths.json` that describes all the files the
+//! package contains. The [`validate_package_directory`] function validates that a directory
+//! containing an extracted Conda package archive actually contains the files as described by the
+//! `paths.json` file.
+//!
+//! Very old Conda packages do not contain a `paths.json` file. These packages contain a
+//! (deprecated) `files` file as well as optionally a `has_prefix` and some other files. If the
+//! `paths.json` file is missing these deprecated files are used instead to reconstruct a
+//! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
 use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
 use sha2::{Digest, Sha256};
-use std::fs::{File, Metadata};
-use std::path::{Path, PathBuf};
+use std::{
+    fs::{File, Metadata},
+    io::ErrorKind,
+    path::{Path, PathBuf},
+};
 
-/// An error that is returned by [`validate_package_files`] if the contents of the directory seems to be
+/// An error that is returned by [`validate_package_directory`] if the contents of the directory seems to be
 /// corrupted.
 #[derive(Debug, thiserror::Error)]
 pub enum PackageValidationError {
+    #[error("neither a 'paths.json' or a deprecated 'files' file was found")]
+    MetadataMissing,
+
     #[error("failed to read 'paths.json' file")]
     ReadPathsJsonError(#[source] std::io::Error),
+
+    #[error("failed to read validation data from deprecated files")]
+    ReadDeprecatedPathsJsonError(#[source] std::io::Error),
 
     #[error("the path '{0}' seems to be corrupted")]
     CorruptedEntry(PathBuf, #[source] PackageEntryValidationError),
@@ -47,15 +62,46 @@ pub enum PackageEntryValidationError {
 
 /// Determine whether the files in the specified directory match what is expected according to the
 /// `info/paths.json` file in the same directory.
-pub fn validate_package_files(package_dir: &Path) -> Result<(), PackageValidationError> {
-    // Read the 'paths.json' file which describes all files that should be present
-    let paths = PathsJson::from_path(&package_dir.join("info/paths.json"))
-        .map_err(PackageValidationError::ReadPathsJsonError)?;
+///
+/// If the `info/paths.json` file could not be found this function tries to reconstruct the
+/// information from older deprecated methods. See [`PathsJson::from_deprecated_package_directory`].
+///
+/// If validation succeeds the parsed [`PathsJson`] object is returned which contains information
+/// about the files in the archive.
+pub fn validate_package_directory(package_dir: &Path) -> Result<PathsJson, PackageValidationError> {
+    // Read the 'paths.json' file which describes all files that should be present. If the file
+    // could not be found try reconstructing the paths information from deprecated files in the
+    // package directory.
+    let paths = match PathsJson::from_package_directory(package_dir) {
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            match PathsJson::from_deprecated_package_directory(package_dir) {
+                Ok(paths) => paths,
+                Err(e) if e.kind() == ErrorKind::NotFound => {
+                    return Err(PackageValidationError::MetadataMissing)
+                }
+                Err(e) => return Err(PackageValidationError::ReadDeprecatedPathsJsonError(e)),
+            }
+        }
+        Err(e) => return Err(PackageValidationError::ReadPathsJsonError(e)),
+        Ok(paths) => paths,
+    };
 
-    // Check every entry
-    for entry in paths.paths {
-        validate_package_entry(package_dir, &entry)
-            .map_err(|e| PackageValidationError::CorruptedEntry(entry.relative_path, e))?;
+    // Validate all the entries
+    validate_package_directory_from_paths(package_dir, &paths)
+        .map_err(|(path, err)| PackageValidationError::CorruptedEntry(path, err))?;
+
+    Ok(paths)
+}
+
+/// Determine whether the files in the specified directory match wat is expected according to the
+/// passed in [`PathsJson`].
+pub fn validate_package_directory_from_paths(
+    package_dir: &Path,
+    paths: &PathsJson,
+) -> Result<(), (PathBuf, PackageEntryValidationError)> {
+    // Check every entry in the PathsJson object
+    for entry in paths.paths.iter() {
+        validate_package_entry(package_dir, entry).map_err(|e| (entry.relative_path.clone(), e))?;
     }
 
     Ok(())
@@ -71,8 +117,8 @@ fn validate_package_entry(
     // Get the metadata for the entry
     let metadata = match std::fs::symlink_metadata(&path) {
         Ok(metadata) => metadata,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(PackageEntryValidationError::NotFound)
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            return Err(PackageEntryValidationError::NotFound);
         }
         Err(e) => return Err(PackageEntryValidationError::GetMetadataFailed(e)),
     };
@@ -139,7 +185,10 @@ fn validate_package_soft_link_entry(
         return Err(PackageEntryValidationError::ExpectedSymlink);
     }
 
-    // TODO: Validate symlink content
+    // TODO: Validate symlink content. Dont validate the SHA256 hash of the file because since a
+    // symlink will most likely point to another file added as a hardlink by the package this is
+    // double work. Instead check that the symlink is correct e.g. `../a` points to the same file as
+    // `b/../../a` but they are different.
 
     Ok(())
 }
@@ -174,8 +223,8 @@ fn compute_file_sha256(path: &Path) -> Result<sha2::digest::Output<sha2::Sha256>
 #[cfg(test)]
 mod test {
     use super::{
-        compute_file_sha256, validate_package_files, PackageEntryValidationError,
-        PackageValidationError,
+        compute_file_sha256, validate_package_directory, validate_package_directory_from_paths,
+        PackageEntryValidationError, PackageValidationError,
     };
     use assert_matches::assert_matches;
     use rattler_conda_types::package::{PathType, PathsJson};
@@ -224,13 +273,15 @@ mod test {
 
         // Validate that the extracted package is correct. Since it's just been extracted this should
         // work.
-        let result = validate_package_files(temp_dir.path());
+        let result = validate_package_directory(temp_dir.path());
         if let Err(e) = result {
             panic!("{e}");
         }
 
         // Read the paths.json file and select the first file in the archive.
-        let paths = PathsJson::from_path(&temp_dir.path().join("info/paths.json")).unwrap();
+        let paths = PathsJson::from_package_directory(temp_dir.path())
+            .or_else(|_| PathsJson::from_deprecated_package_directory(temp_dir.path()))
+            .unwrap();
         let entry = paths
             .paths
             .iter()
@@ -247,8 +298,8 @@ mod test {
 
         // Revalidate the package, given that we changed a file it should now fail with mismatched hashes.
         assert_matches!(
-            validate_package_files(temp_dir.path()),
-            Err(PackageValidationError::CorruptedEntry(
+            validate_package_directory_from_paths(temp_dir.path(), &paths),
+            Err((
                 path,
                 PackageEntryValidationError::HashMismatch(_, _)
             )) if path == entry.relative_path
@@ -259,6 +310,7 @@ mod test {
     #[cfg(unix)]
     #[case::python_3_10_6("with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2")]
     #[case::cph_test_data_0_0_1("with-symlinks/cph_test_data-0.0.1-0.tar.bz2")]
+    #[case::zlib_1_2_8("with-symlinks/zlib-1.2.8-3.tar.bz2")] // Very old file with deprecated paths.json
     fn test_validate_package_files_symlink(#[case] package: &str) {
         // Create a temporary directory and extract the given package.
         let temp_dir = tempfile::tempdir().unwrap();
@@ -267,13 +319,15 @@ mod test {
 
         // Validate that the extracted package is correct. Since it's just been extracted this should
         // work.
-        let result = validate_package_files(temp_dir.path());
+        let result = validate_package_directory(temp_dir.path());
         if let Err(e) = result {
             panic!("{e}");
         }
 
         // Read the paths.json file and select the first symlink in the archive.
-        let paths = PathsJson::from_path(&temp_dir.path().join("info/paths.json")).unwrap();
+        let paths = PathsJson::from_package_directory(temp_dir.path())
+            .or_else(|_| PathsJson::from_deprecated_package_directory(temp_dir.path()))
+            .unwrap();
         let entry = paths
             .paths
             .iter()
@@ -288,11 +342,20 @@ mod test {
 
         // Revalidate the package, given that we replaced the symlink, it should fail.
         assert_matches!(
-            validate_package_files(temp_dir.path()),
-            Err(PackageValidationError::CorruptedEntry(
+            validate_package_directory_from_paths(temp_dir.path(), &paths),
+            Err((
                 path,
                 PackageEntryValidationError::ExpectedSymlink
             )) if path == entry.relative_path
+        );
+    }
+
+    #[test]
+    fn test_missing_metadata() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        assert_matches!(
+            validate_package_directory(temp_dir.path()),
+            Err(PackageValidationError::MetadataMissing)
         );
     }
 }
