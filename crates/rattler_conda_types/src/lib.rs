@@ -23,3 +23,11 @@ pub use repo_data::{PackageRecord, RepoData};
 pub use run_export::{RunExportKind, RunExports};
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
+
+#[cfg(test)]
+use std::path::{Path, PathBuf};
+
+#[cfg(test)]
+pub(crate) fn get_test_data_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+}
