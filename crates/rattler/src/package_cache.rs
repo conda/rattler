@@ -1,10 +1,14 @@
+//! This module provides functionality to cache extracted Conda packages. See [`PackageCache`].
+
 use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use reqwest::Client;
-use std::fmt::{Display, Formatter};
-use std::future::Future;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::{
+    fmt::{Display, Formatter},
+    future::Future,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::broadcast;
 use url::Url;
 
