@@ -37,8 +37,8 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<(), ExtractEr
 ///
 /// ```rust,no_run
 /// # use std::path::Path;
-/// use rattler_package_streaming::fs::extract_conda;
-/// let _ = extract_conda(
+/// use rattler_package_streaming::fs::extract;
+/// let _ = extract(
 ///     Path::new("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda"),
 ///     Path::new("/tmp"))
 ///     .unwrap();

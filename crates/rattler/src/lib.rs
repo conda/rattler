@@ -10,7 +10,7 @@
 //! candidate for a reimplementation.
 
 mod package_archive;
-mod package_store;
+pub mod package_cache;
 pub mod repo_data;
 pub mod solver;
 pub(crate) mod utils;
@@ -29,4 +29,12 @@ pub fn empty_channel() -> rattler_conda_types::Channel {
         &rattler_conda_types::ChannelConfig::default(),
     )
     .unwrap()
+}
+
+#[cfg(test)]
+use std::path::{Path, PathBuf};
+
+#[cfg(test)]
+pub(crate) fn get_test_data_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
 }

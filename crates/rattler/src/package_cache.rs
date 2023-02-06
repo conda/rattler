@@ -1,3 +1,4 @@
+use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use reqwest::Client;
 use std::fmt::{Display, Formatter};
@@ -153,7 +154,7 @@ impl PackageCache {
             }
         };
 
-        Ok(rx.recv().await.expect("in-flight request has died")?)
+        rx.recv().await.expect("in-flight request has died")
     }
 
     /// Returns the directory that contains the specified package.
@@ -184,7 +185,20 @@ where
     Fut: Future<Output = Result<(), E>> + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    // TODO: Validate the contents of the directory
+    // If the directory already exists validate the contents of the package
+    if path.is_dir() {
+        tracing::trace!("validating '{}'", path.display());
+        let path_inner = path.clone();
+        match tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await {
+            Ok(Ok(_)) => return Ok(()),
+            Ok(Err(e)) => tracing::warn!("failed to validate '{}': {e}", path.display()),
+            Err(e) => {
+                if let Ok(panic) = e.try_into_panic() {
+                    std::panic::resume_unwind(panic)
+                }
+            }
+        }
+    }
 
     // Otherwise, defer to populate method to fill our cache.
     fetch(path)
@@ -194,23 +208,53 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::package_store::{PackageCache, PackageInfo};
+    use super::{PackageCache, PackageInfo};
+    use crate::{get_test_data_dir, validation::validate_package_directory};
+    use rattler_conda_types::package::PathsJson;
+    use std::{fs::File, path::Path};
     use tempfile::tempdir;
-    use url::Url;
 
     #[tokio::test]
     pub async fn test_package_cache() {
+        let tar_archive_path =
+            get_test_data_dir().join("ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2");
+
+        // Read the paths.json file straight from the tar file.
+        let paths = {
+            let tar_reader = File::open(&tar_archive_path).unwrap();
+            let mut tar_archive = rattler_package_streaming::read::stream_tar_bz2(tar_reader);
+            let tar_entries = tar_archive.entries().unwrap();
+            let paths_entry = tar_entries
+                .map(Result::unwrap)
+                .find(|entry| entry.path().unwrap().as_ref() == Path::new("info/paths.json"))
+                .unwrap();
+            PathsJson::from_reader(paths_entry).unwrap()
+        };
+
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
-        cache.get_or_fetch_from_url(PackageInfo {
-            name: "python".to_string(),
-            version: "3.11.0".to_string(),
-            build_string: "h9a09f29_0_cpython".to_string(),
-        },
-                                    Url::parse("https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-h9a09f29_0_cpython.tar.bz2").unwrap(),
-                                    Default::default())
+        // Get the package to the cache
+        let package_dir = cache
+            .get_or_fetch(
+                PackageInfo {
+                    name: "python".to_string(),
+                    version: "3.11.0".to_string(),
+                    build_string: "h9a09f29_0_cpython".to_string(),
+                },
+                move |destination| async move {
+                    rattler_package_streaming::tokio::fs::extract(&tar_archive_path, &destination)
+                        .await
+                },
+            )
             .await
             .unwrap();
+
+        // Validate the contents of the package
+        let current_paths = validate_package_directory(&package_dir).unwrap();
+
+        // Make sure that the paths are the same as what we would expect from the original tar
+        // archive.
+        assert_eq!(current_paths, paths);
     }
 }
