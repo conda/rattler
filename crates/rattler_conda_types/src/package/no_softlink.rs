@@ -1,8 +1,8 @@
 use std::{
     fs::File,
-    path::{Path, PathBuf},
     io::Read,
-    str::FromStr
+    path::{Path, PathBuf},
+    str::FromStr,
 };
 
 /// Representation of the `info/no_softlink` file in older package archives. This file contains a list

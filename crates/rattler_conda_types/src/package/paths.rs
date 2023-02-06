@@ -139,7 +139,7 @@ impl PathsJson {
         };
 
         Self::from_deprecated(files, has_prefix, no_link, no_softlink, |p| {
-            path.join(p).symlink_metadata().map(|metadata|
+            path.join(p).symlink_metadata().map(|metadata| {
                 if metadata.is_symlink() {
                     PathType::SoftLink
                 } else if metadata.is_dir() {
@@ -147,7 +147,7 @@ impl PathsJson {
                 } else {
                     PathType::HardLink
                 }
-            )
+            })
         })
     }
 }
@@ -180,8 +180,8 @@ pub struct PathsEntry {
 
     /// Whether or not this file should be linked or not when installing the package.
     #[serde(
-    default = "no_link_default",
-    skip_serializing_if = "is_no_link_default"
+        default = "no_link_default",
+        skip_serializing_if = "is_no_link_default"
     )]
     pub no_link: bool,
 
@@ -245,11 +245,12 @@ mod test {
             &crate::get_test_data_dir().join("zlib-1.2.8-vc10_0.tar.bz2"),
             package_dir.path(),
         )
-            .unwrap();
+        .unwrap();
 
-        insta::assert_yaml_snapshot!(
-            PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()
-        );
+        insta::assert_yaml_snapshot!(PathsJson::from_deprecated_package_directory(
+            package_dir.path()
+        )
+        .unwrap());
     }
 
     #[test]
@@ -260,7 +261,7 @@ mod test {
             &crate::get_test_data_dir().join("with-symlinks/zlib-1.2.8-3.tar.bz2"),
             package_dir.path(),
         )
-            .unwrap();
+        .unwrap();
 
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());

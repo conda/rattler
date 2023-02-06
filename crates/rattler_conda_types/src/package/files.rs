@@ -1,8 +1,8 @@
 use std::{
-    path::{Path, PathBuf},
-    io::Read,
     fs::File,
-    str::FromStr
+    io::Read,
+    path::{Path, PathBuf},
+    str::FromStr,
 };
 
 /// Representation of the `info/files` file in older package archives.

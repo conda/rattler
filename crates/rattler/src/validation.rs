@@ -4,10 +4,10 @@
 //! The [`validate_package_files`] function validates that a directory containing an extracted Conda
 //! package archive actually contains the files as described by the `paths.json` file.
 
+use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
 use sha2::{Digest, Sha256};
 use std::fs::{File, Metadata};
 use std::path::{Path, PathBuf};
-use rattler_conda_types::package::{PathsEntry, PathsJson, PathType};
 
 /// An error that is returned by [`validate_package_files`] if the contents of the directory seems to be
 /// corrupted.
@@ -174,16 +174,16 @@ fn compute_file_sha256(path: &Path) -> Result<sha2::digest::Output<sha2::Sha256>
 #[cfg(test)]
 mod test {
     use super::{
-        compute_file_sha256, PackageEntryValidationError, PackageValidationError,
-        validate_package_files,
+        compute_file_sha256, validate_package_files, PackageEntryValidationError,
+        PackageValidationError,
     };
     use assert_matches::assert_matches;
+    use rattler_conda_types::package::{PathType, PathsJson};
     use rstest::*;
     use std::{
         io::Write,
         path::{Path, PathBuf},
     };
-    use rattler_conda_types::package::{PathsJson, PathType};
 
     /// Returns the path to the test data directory
     fn test_data_path() -> PathBuf {
