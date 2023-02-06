@@ -30,3 +30,4 @@ url = { version = "2.2.2", features = ["serde"] }
 rand = "0.8.4"
 insta = { version = "1.16.0", features = ["yaml"] }
 rattler_package_streaming = { path = "../rattler_package_streaming" }
+tempfile = "3.3.0"

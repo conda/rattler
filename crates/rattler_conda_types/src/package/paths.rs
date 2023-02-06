@@ -139,13 +139,15 @@ impl PathsJson {
         };
 
         Self::from_deprecated(files, has_prefix, no_link, no_softlink, |p| {
-            if p.is_symlink() {
-                Ok(PathType::SoftLink)
-            } else if p.is_dir() {
-                Ok(PathType::Directory)
-            } else {
-                Ok(PathType::HardLink)
-            }
+            path.join(p).symlink_metadata().map(|metadata|
+                if metadata.is_symlink() {
+                    PathType::SoftLink
+                } else if metadata.is_dir() {
+                    PathType::Directory
+                } else {
+                    PathType::HardLink
+                }
+            )
         })
     }
 }
@@ -178,8 +180,8 @@ pub struct PathsEntry {
 
     /// Whether or not this file should be linked or not when installing the package.
     #[serde(
-        default = "no_link_default",
-        skip_serializing_if = "is_no_link_default"
+    default = "no_link_default",
+    skip_serializing_if = "is_no_link_default"
     )]
     pub no_link: bool,
 
@@ -235,31 +237,33 @@ fn is_no_link_default(value: &bool) -> bool {
 #[cfg(test)]
 mod test {
     use super::PathsJson;
-    use std::env::temp_dir;
 
     #[test]
     pub fn test_reconstruct_paths_json() {
-        let package_dir = temp_dir();
+        let package_dir = tempfile::tempdir().unwrap();
         rattler_package_streaming::fs::extract(
             &crate::get_test_data_dir().join("zlib-1.2.8-vc10_0.tar.bz2"),
-            &package_dir,
+            package_dir.path(),
         )
-        .unwrap();
+            .unwrap();
 
         insta::assert_yaml_snapshot!(
-            PathsJson::from_deprecated_package_directory(&package_dir).unwrap()
+            PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()
         );
     }
 
     #[test]
     #[cfg(unix)]
     pub fn test_reconstruct_paths_json_with_symlinks() {
-        let package_dir = temp_dir();
+        let package_dir = tempfile::tempdir().unwrap();
         rattler_package_streaming::fs::extract(
             &crate::get_test_data_dir().join("with-symlinks/zlib-1.2.8-3.tar.bz2"),
-            &package_dir,
+            package_dir.path(),
         )
             .unwrap();
+
+        let package_dir = package_dir.into_path();
+        println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(
             PathsJson::from_deprecated_package_directory(&package_dir).unwrap()
