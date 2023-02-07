@@ -2,6 +2,7 @@
 
 use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
+use itertools::Itertools;
 use reqwest::Client;
 use std::{
     fmt::{Display, Formatter},
@@ -62,11 +63,47 @@ struct Package {
 }
 
 /// Required information about a package we want to retrieve or store in the cache.
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PackageInfo {
     pub name: String,
     pub version: String,
     pub build_string: String,
+}
+
+impl Display for PackageInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
+    }
+}
+
+impl PackageInfo {
+    /// Try to convert the specified filename into a [`PackageInfo`].
+    pub fn try_from_filename(filename: &str) -> Option<PackageInfo> {
+        // Filenames in the form of: <name>-<version>-<build>(.ext)
+        let (build_string, version, name) = filename.rsplitn(3, '-').next_tuple()?;
+
+        // Remove the file extension from the build string
+        let build_string = build_string
+            .split_once('.')
+            .map(|(f, _)| f)
+            .unwrap_or(build_string);
+
+        Some(PackageInfo {
+            name: name.to_owned(),
+            version: version.to_owned(),
+            build_string: build_string.to_owned(),
+        })
+    }
+
+    /// Try to convert a [`Url`] into a [`PackageInfo`].
+    pub fn try_from_url(url: &Url) -> Option<PackageInfo> {
+        let filename = url
+            .path()
+            .rsplit_once(['/', '\\'])
+            .map(|(_, filename)| filename)
+            .unwrap_or(url.path());
+        Self::try_from_filename(filename)
+    }
 }
 
 /// An error that might be returned from one of the caching function of the [`PackageCache`].
@@ -172,6 +209,7 @@ impl PackageCache {
         client: Client,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
+            tracing::info!("downloading {} to {}", &url, destination.display());
             rattler_package_streaming::reqwest::tokio::extract(client, url, &destination).await
         })
         .await
@@ -260,5 +298,19 @@ mod test {
         // Make sure that the paths are the same as what we would expect from the original tar
         // archive.
         assert_eq!(current_paths, paths);
+    }
+
+    #[test]
+    pub fn test_package_info_from_filename() {
+        assert_eq!(
+            PackageInfo::try_from_filename(
+                "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2"
+            ),
+            Some(PackageInfo {
+                name: String::from("ros-noetic-rosbridge-suite"),
+                version: String::from("0.11.14"),
+                build_string: String::from("py39h6fdeb60_14")
+            })
+        )
     }
 }

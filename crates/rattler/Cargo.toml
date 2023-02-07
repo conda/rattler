@@ -51,6 +51,7 @@ rand = "0.8.4"
 rstest = "0.16.0"
 tokio-test = "0.4.2"
 tower-http = { version = "0.3.5", features = ["fs", "compression-gzip"] }
+tracing-test = "0.2.4"
 
 [build-dependencies]
 cc = "1"
