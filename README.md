@@ -2,8 +2,8 @@
 
 [![Build Status][build-badge]][build]
 
-[build-badge]: https://img.shields.io/github/actions/workflow/status/baszalmstra/rattler/rust-compile.yml?style=flat-square&branch=main
-[build]: https://github.com/baszalmstra/rattler/actions
+[build-badge]: https://img.shields.io/github/actions/workflow/status/mamba-org/rattler/rust-compile.yml?style=flat-square&branch=main
+[build]: https://github.com/mamba-org/rattler/actions
 
 Rattler is a library that provides common functionality used within the Conda ecosystem.
 The goal of the library is to enable programs and other libraries to easily interact with the Conda ecosystem without being dependent on Python.

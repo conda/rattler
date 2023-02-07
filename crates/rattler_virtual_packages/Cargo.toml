@@ -5,8 +5,8 @@ edition = "2021"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Library to work with and detect Conda virtual packages"
 categories = ["conda"]
-homepage = "https://github.com/baszalmstra/rattler"
-repository = "https://github.com/baszalmstra/rattler"
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
 license = "BSD-3-Clause"
 
 [dependencies]
