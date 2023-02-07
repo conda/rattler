@@ -1,0 +1,9 @@
+---
+source: crates/rattler_conda_types/src/explicit_environment_spec.rs
+expression: env
+---
+platform: win-64
+packages:
+  - "https://repo.anaconda.com/pkgs/main/win-64/vc-14.1-h0510ff6_4.conda#dc9507a39ab328597820486c729cd279"
+  - "https://repo.anaconda.com/pkgs/main/win-64/vs2015_runtime-14.16.27012-hf0eaf9b_3.conda#a98ea1e3abfdbbd201d60ff6b43ea7e4"
+

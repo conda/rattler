@@ -3,6 +3,7 @@
 
 mod channel;
 mod channel_data;
+mod explicit_environment_spec;
 mod match_spec;
 mod no_arch_type;
 mod platform;
@@ -16,6 +17,10 @@ pub mod package;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
+pub use explicit_environment_spec::{
+    ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
+    ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
+};
 pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
