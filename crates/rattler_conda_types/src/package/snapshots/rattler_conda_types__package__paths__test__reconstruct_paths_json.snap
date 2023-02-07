@@ -1,0 +1,35 @@
+---
+source: crates/rattler_conda_types/src/package/paths.rs
+expression: "PathsJson::from_deprecated_package_directory(&package_dir).unwrap()"
+---
+paths_version: 1
+paths:
+  - _path: Library/bin/zlib.dll
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/include/zconf.h
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/include/zlib.h
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/lib/z.lib
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/lib/zdll.lib
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/lib/zlib.lib
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/lib/zlibstatic.lib
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/share/man/man3/zlib.3
+    path_type: hardlink
+    file_mode: text
+  - _path: Library/share/pkgconfig/zlib.pc
+    path_type: hardlink
+    file_mode: text
+    prefix_placeholder: "C:/conda/envs/_build"
+

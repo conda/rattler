@@ -9,6 +9,20 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Sam
 use std::collections::HashMap;
 use url::Url;
 
+mod files;
+mod has_prefix;
+mod no_link;
+mod no_softlink;
+mod paths;
+
+pub use {
+    files::Files,
+    has_prefix::HasPrefix,
+    no_link::NoLink,
+    no_softlink::NoSoftlink,
+    paths::{FileMode, PathType, PathsEntry, PathsJson},
+};
+
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]

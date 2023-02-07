@@ -13,6 +13,7 @@ mod package_archive;
 pub mod repo_data;
 pub mod solver;
 pub(crate) mod utils;
+pub mod validation;
 
 pub use package_archive::PackageArchiveFormat;
 
