@@ -2,6 +2,9 @@ use std::{fmt::Write, path::PathBuf};
 use url::Url;
 
 pub use encoding::{AsyncEncoding, Encoding};
+use sha2::{Digest, Sha256};
+use std::fs::File;
+use std::path::Path;
 
 mod encoding;
 
@@ -44,11 +47,46 @@ pub fn url_to_cache_filename(url: &Url) -> String {
     result
 }
 
+/// Compute the SHA256 hash of the file at the specified location.
+pub fn compute_file_sha256(
+    path: &Path,
+) -> Result<sha2::digest::Output<sha2::Sha256>, std::io::Error> {
+    // Open the file for reading
+    let mut file = File::open(path)?;
+
+    // Determine the hash of the file on disk
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+
+    Ok(hasher.finalize())
+}
+
 #[cfg(test)]
 mod test {
+    use super::{compute_file_sha256, url_to_cache_filename};
+    use rstest::rstest;
     use url::Url;
 
-    use crate::utils::url_to_cache_filename;
+    #[rstest]
+    #[case(
+        "1234567890",
+        "c775e7b757ede630cd0aa1113bd102661ab38829ca52a6422ab782862f268646"
+    )]
+    #[case(
+        "Hello, world!",
+        "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
+    )]
+    fn test_compute_file_sha256(#[case] input: &str, #[case] expected_hash: &str) {
+        // Write a known value to a temporary file and verify that the compute hash matches what we would
+        // expect.
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("test");
+        std::fs::write(&file_path, input).unwrap();
+        let hash = compute_file_sha256(&file_path).unwrap();
+
+        assert_eq!(format!("{hash:x}"), expected_hash)
+    }
 
     #[test]
     fn test_url_to_cache_filename() {

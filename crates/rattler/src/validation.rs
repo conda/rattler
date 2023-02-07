@@ -10,10 +10,11 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
+use crate::utils;
 use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 use std::{
-    fs::{File, Metadata},
+    fs::Metadata,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
@@ -152,7 +153,7 @@ fn validate_package_hard_link_entry(
     // Check the SHA256 hash of the file
     if let Some(hash_str) = entry.sha256.as_deref() {
         // Determine the hash of the file on disk
-        let hash = compute_file_sha256(&path)?;
+        let hash = utils::compute_file_sha256(&path)?;
 
         // Convert the hash to bytes.
         let mut expected_hash = <sha2::digest::Output<Sha256>>::default();
@@ -208,22 +209,10 @@ fn validate_package_directory_entry(
     }
 }
 
-/// Compute the SHA256 hash of the file at the specified location.
-fn compute_file_sha256(path: &Path) -> Result<sha2::digest::Output<sha2::Sha256>, std::io::Error> {
-    // Open the file for reading
-    let mut file = File::open(path)?;
-
-    // Determine the hash of the file on disk
-    let mut hasher = Sha256::new();
-    std::io::copy(&mut file, &mut hasher)?;
-
-    Ok(hasher.finalize())
-}
-
 #[cfg(test)]
 mod test {
     use super::{
-        compute_file_sha256, validate_package_directory, validate_package_directory_from_paths,
+        validate_package_directory, validate_package_directory_from_paths,
         PackageEntryValidationError, PackageValidationError,
     };
     use assert_matches::assert_matches;
@@ -237,27 +226,6 @@ mod test {
     /// Returns the path to the test data directory
     fn test_data_path() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
-    }
-
-    #[rstest]
-    #[case(
-        "1234567890",
-        "c775e7b757ede630cd0aa1113bd102661ab38829ca52a6422ab782862f268646"
-    )]
-    #[case(
-        "Hello, world!",
-        "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
-    )]
-    fn test_compute_file_sha256(#[case] input: &str, #[case] expected_hash: &str) {
-        // Write a known value to a temporary file and verify that the compute hash matches what we would
-        // expect.
-
-        let temp_dir = tempfile::tempdir().unwrap();
-        let file_path = temp_dir.path().join("test");
-        std::fs::write(&file_path, input).unwrap();
-        let hash = compute_file_sha256(&file_path).unwrap();
-
-        assert_eq!(format!("{hash:x}"), expected_hash)
     }
 
     #[rstest]

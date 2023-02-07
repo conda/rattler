@@ -1,11 +1,27 @@
+mod link;
+
 use rattler_conda_types::package::PathsJson;
 use std::path::{Path, PathBuf};
+use tokio::task::JoinError;
 
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
+    #[error("the operation was cancelled")]
+    Cancelled,
+
     #[error("failed to read 'paths.json'")]
     FailedToReadPathsJson(#[source] std::io::Error),
+}
+
+impl From<JoinError> for InstallError {
+    fn from(err: JoinError) -> Self {
+        if let Ok(panic) = err.try_into_panic() {
+            std::panic::resume_unwind(panic)
+        } else {
+            InstallError::Cancelled
+        }
+    }
 }
 
 /// Additional options to pass to [`install_package`] to modify the installation process.
@@ -37,23 +53,26 @@ pub async fn install_package(
     // Use the passed in paths.json or read it from the package directory.
     let paths_json = match options.paths_json {
         Some(paths) => paths,
-        None => read_paths_from_package_dir(package_dir)
-            .await
-            .map_err(InstallError::FailedToReadPathsJson)?,
+        None => read_paths_from_package_dir(package_dir).await?,
     };
 
     // Iterate over all files advertised in the paths.json file.
+    for path in paths_json.paths {}
 
     Ok(())
 }
 
-async fn read_paths_from_package_dir(package_dir: &Path) -> Result<PathsJson, std::io::Error> {
+/// Async version of reading the [`PathsJson`] information from a package directory.
+async fn read_paths_from_package_dir(package_dir: &Path) -> Result<PathsJson, InstallError> {
     let package_dir = package_dir.to_owned();
     Ok(tokio::task::spawn_blocking(move || {
         PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
     })
-    .await??)
+    .await?
+    .map_err(InstallError::FailedToReadPathsJson)?)
 }
+
+///
 
 #[cfg(test)]
 mod test {
