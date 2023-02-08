@@ -55,7 +55,7 @@ tower-http = { version = "0.3.5", features = ["fs", "compression-gzip"] }
 [build-dependencies]
 cc = "1"
 anyhow = "1"
-bindgen = "0.63"
+bindgen = "0.64"
 cmake = "0.1"
 
 [package.metadata.cargo-udeps.ignore]
