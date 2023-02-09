@@ -4,6 +4,7 @@ use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use reqwest::Client;
+use std::error::Error;
 use std::{
     fmt::{Display, Formatter},
     future::Future,
@@ -11,6 +12,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::broadcast;
+use tracing::Instrument;
 use url::Url;
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
@@ -172,7 +174,11 @@ impl PackageCache {
 
                 let package = package.clone();
                 tokio::spawn(async move {
-                    let result = validate_or_fetch_to_cache(pkg_cache_dir.clone(), fetch).await;
+                    let result = validate_or_fetch_to_cache(pkg_cache_dir.clone(), fetch)
+                        .instrument(
+                            tracing::debug_span!("validating", path = %pkg_cache_dir.display()),
+                        )
+                        .await;
 
                     {
                         // only sync code in this block
@@ -229,11 +235,22 @@ where
 {
     // If the directory already exists validate the contents of the package
     if path.is_dir() {
-        tracing::trace!("validating '{}'", path.display());
         let path_inner = path.clone();
         match tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await {
-            Ok(Ok(_)) => return Ok(()),
-            Ok(Err(e)) => tracing::warn!("failed to validate '{}': {e}", path.display()),
+            Ok(Ok(_)) => {
+                tracing::debug!("validation succeeded");
+                return Ok(());
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("validation failed: {e}",);
+                if let Some(cause) = e.source() {
+                    tracing::debug!(
+                        "  Caused by: {}",
+                        std::iter::successors(Some(cause), |e| (*e).source())
+                            .format("\n  Caused by: ")
+                    );
+                }
+            }
             Err(e) => {
                 if let Ok(panic) = e.try_into_panic() {
                     std::panic::resume_unwind(panic)
