@@ -140,7 +140,11 @@ pub async fn link_package(
 async fn can_create_symlinks(target_dir: &Path) -> bool {
     let uuid = uuid::Uuid::new_v4();
     let symlink_path = target_dir.join(format!("symtest_{}", uuid));
-    match tokio::fs::symlink_file("./", &symlink_path).await {
+    #[cfg(windows)]
+    let result = tokio::fs::symlink_file("./", &symlink_path).await;
+    #[cfg(unix)]
+    let result = tokio::fs::symlink("./", &symlink_path).await;
+    match result {
         Ok(_) => {
             if let Err(e) = tokio::fs::remove_file(&symlink_path).await {
                 tracing::warn!(
