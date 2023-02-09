@@ -14,8 +14,14 @@ pub enum LinkFileError {
     #[error("could not open source file")]
     FailedToOpenSourceFile(#[source] std::io::Error),
 
+    #[error("could not source file metadata")]
+    FailedToReadSourceFileMetadata(#[source] std::io::Error),
+
     #[error("could not open destination file for writing")]
     FailedToOpenDestinationFile(#[source] std::io::Error),
+
+    #[error("could not update destination file permissions")]
+    FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 }
 
 /// The successful result of calling [`link_file`].
@@ -64,7 +70,7 @@ pub fn link_file(
         // bytes which makes it easier to search for the placeholder prefix.
         let source = {
             let file =
-                std::fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
+                std::fs::File::open(&source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
             unsafe { memmap2::Mmap::map(&file).map_err(LinkFileError::FailedToOpenSourceFile)? }
         };
 
@@ -94,6 +100,15 @@ pub fn link_file(
         }
 
         let (_, hash) = destination_writer.finalize();
+
+        // Copy over filesystem permissions for binary files
+        if file_mode == FileMode::Binary {
+            let metadata = std::fs::symlink_metadata(&source_path)
+                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+            std::fs::set_permissions(&destination_path, metadata.permissions())
+                .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        }
+
         Some(hash)
     } else if path_type == PathType::HardLink && allow_hard_links {
         std::fs::hard_link(&source_path, &destination_path)?;
