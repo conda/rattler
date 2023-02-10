@@ -3,6 +3,7 @@
 use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use itertools::Itertools;
+use rattler_package_streaming::ArchiveType;
 use reqwest::Client;
 use std::error::Error;
 use std::{
@@ -81,14 +82,13 @@ impl Display for PackageInfo {
 impl PackageInfo {
     /// Try to convert the specified filename into a [`PackageInfo`].
     pub fn try_from_filename(filename: &str) -> Option<PackageInfo> {
-        // Filenames in the form of: <name>-<version>-<build>(.ext)
-        let (build_string, version, name) = filename.rsplitn(3, '-').next_tuple()?;
+        // Strip the suffix from the filename
+        let filename_without_ext = ArchiveType::split_str(filename)
+            .map(|(str, _)| str)
+            .unwrap_or(filename);
 
-        // Remove the file extension from the build string
-        let build_string = build_string
-            .strip_suffix(".tar.bz2")
-            .or_else(|| build_string.strip_suffix(".conda"))
-            .unwrap_or(build_string);
+        // Filename is in the form of: <name>-<version>-<build>
+        let (build_string, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple()?;
 
         Some(PackageInfo {
             name: name.to_owned(),
