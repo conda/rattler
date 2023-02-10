@@ -86,8 +86,8 @@ impl PackageInfo {
 
         // Remove the file extension from the build string
         let build_string = build_string
-            .split_once('.')
-            .map(|(f, _)| f)
+            .strip_suffix(".tar.bz2")
+            .or_else(|| build_string.strip_suffix(".conda"))
             .unwrap_or(build_string);
 
         Some(PackageInfo {
@@ -328,6 +328,17 @@ mod test {
                 version: String::from("0.11.14"),
                 build_string: String::from("py39h6fdeb60_14")
             })
-        )
+        );
+
+        assert_eq!(
+            PackageInfo::try_from_filename(
+                "clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.tar.bz2"
+            ),
+            Some(PackageInfo {
+                name: String::from("clangdev"),
+                version: String::from("9.0.1"),
+                build_string: String::from("cling_v0.9_hd1e6b3a_3")
+            })
+        );
     }
 }
