@@ -105,14 +105,16 @@ pub fn link_file(
 
         let (_, current_hash) = destination_writer.finalize();
 
-        // Copy over filesystem permissions for binary files
+        // In case of binary files we have to take care of reconstructing permissions and resigning
+        // executables.
         if path_json_entry.file_mode == FileMode::Binary {
+            // Copy over filesystem permissions for binary files
             let metadata = std::fs::symlink_metadata(&source_path)
                 .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
             std::fs::set_permissions(&destination_path, metadata.permissions())
                 .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
-            // (re)sign the binary?
+            // (re)sign the binary if the file is executable
             if has_executable_permissions(&metadata.permissions())
                 && target_platform == Platform::OsxArm64
             {
