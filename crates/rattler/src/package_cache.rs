@@ -331,9 +331,7 @@ mod test {
         );
 
         assert_eq!(
-            PackageInfo::try_from_filename(
-                "clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.tar.bz2"
-            ),
+            PackageInfo::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.tar.bz2"),
             Some(PackageInfo {
                 name: String::from("clangdev"),
                 version: String::from("9.0.1"),
