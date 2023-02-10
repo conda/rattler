@@ -6,6 +6,7 @@ pub use link::LinkFileError;
 
 use futures::{stream, FutureExt, StreamExt, TryStreamExt};
 use rattler_conda_types::package::PathsJson;
+use rattler_conda_types::Platform;
 use std::future::ready;
 use std::path::{Path, PathBuf};
 use tokio::task::JoinError;
@@ -78,6 +79,11 @@ pub struct InstallOptions {
     /// Hard links are supported by most OSes but often require that the hard link and its content
     /// are on the same filesystem.
     allow_hard_links: Option<bool>,
+
+    /// The platform for which the package is installed. Some operations like signing require
+    /// different behavior depending on the platform. If the field is set to `None` the current
+    /// platform is used.
+    platform: Option<Platform>,
 }
 
 /// Given an extracted package archive (`package_dir`), install its files to the `target_dir`.
@@ -121,6 +127,8 @@ pub async fn link_package(
         }
     );
 
+    let platform = options.platform.unwrap_or(Platform::current());
+
     // Link all package files in parallel
     stream::iter(paths_json.paths)
         .map(Ok)
@@ -136,6 +144,7 @@ pub async fn link_package(
                     &target_prefix,
                     allow_symbolic_links,
                     allow_hard_links,
+                    platform,
                 )
                 .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
                 .map(|_| ())

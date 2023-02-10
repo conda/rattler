@@ -10,9 +10,8 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
-use crate::utils;
+use crate::{utils, utils::parse_sha256_from_hex};
 use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
-use sha2::Sha256;
 use std::{
     fs::Metadata,
     io::ErrorKind,
@@ -156,8 +155,7 @@ fn validate_package_hard_link_entry(
         let hash = utils::compute_file_sha256(&path)?;
 
         // Convert the hash to bytes.
-        let mut expected_hash = <sha2::digest::Output<Sha256>>::default();
-        hex::decode_to_slice(hash_str, &mut expected_hash).map_err(|_| {
+        let expected_hash = parse_sha256_from_hex(hash_str).ok_or_else(|| {
             PackageEntryValidationError::HashMismatch(hash_str.to_owned(), format!("{:x}", hash))
         })?;
 

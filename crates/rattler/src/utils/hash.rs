@@ -16,6 +16,15 @@ pub fn compute_file_sha256(path: &Path) -> Result<sha2::digest::Output<Sha256>, 
     Ok(hasher.finalize())
 }
 
+/// Parses a SHA256 hex string to a digest.
+pub fn parse_sha256_from_hex(str: &str) -> Option<Output<Sha256>> {
+    let mut sha256 = <Output<Sha256>>::default();
+    match hex::decode_to_slice(str, &mut sha256) {
+        Ok(_) => Some(sha256),
+        Err(_) => None,
+    }
+}
+
 /// A simple object that provides a [`Write`] implementation that also immediately hashes the bytes
 /// written to it.
 pub struct HashingWriter<W: Write, D: Digest> {

@@ -1,5 +1,7 @@
-use crate::utils::Sha256HashingWriter;
+use crate::utils::{parse_sha256_from_hex, Sha256HashingWriter};
+use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
+use rattler_conda_types::Platform;
 use std::io::Write;
 use std::path::Path;
 
@@ -22,6 +24,9 @@ pub enum LinkFileError {
 
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
+
+    #[error("failed to sign Apple binary")]
+    FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
 }
 
 /// The successful result of calling [`link_file`].
@@ -48,6 +53,7 @@ pub fn link_file(
     target_prefix: &str,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
+    target_platform: Platform,
 ) -> Result<LinkedFile, LinkFileError> {
     let destination_path = target_dir.join(&path_json_entry.relative_path);
     let source_path = package_dir.join(&path_json_entry.relative_path);
@@ -104,6 +110,22 @@ pub fn link_file(
                 .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
             std::fs::set_permissions(&destination_path, metadata.permissions())
                 .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        }
+
+        // (re)sign the binary?
+        if target_platform == Platform::OsxArm64 && path_json_entry.file_mode == FileMode::Binary {
+            // Did the binary actually change?
+            let sha256 = path_json_entry
+                .sha256
+                .as_deref()
+                .and_then(parse_sha256_from_hex);
+            let content_changed = sha256.map(|sha256| sha256 == hash).unwrap_or(false);
+
+            // If the binary changed it requires resigning.
+            if content_changed {
+                let signer = UnifiedSigner::new(SigningSettings::default());
+                signer.sign_path_in_place(destination_path)?
+            }
         }
 
         Some(hash)

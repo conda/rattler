@@ -1,5 +1,5 @@
 pub use encoding::{AsyncEncoding, Encoding};
-pub use hash::{compute_file_sha256, HashingWriter, Sha256HashingWriter};
+pub use hash::{compute_file_sha256, parse_sha256_from_hex, HashingWriter, Sha256HashingWriter};
 use std::{fmt::Write, path::PathBuf};
 use url::Url;
 

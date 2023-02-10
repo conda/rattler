@@ -12,6 +12,7 @@ rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
+apple-codesign = "0.22.0"
 async-compression = { version = "0.3.12", features = ["gzip", "futures-bufread", "tokio", "bzip2"] }
 bytes = "1.1.0"
 digest = "0.10.6"
