@@ -179,7 +179,7 @@ fn copy_and_replace_textual_placeholder(
         } else {
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
-            destination.write_all(&source_bytes)?;
+            destination.write_all(source_bytes)?;
 
             return Ok(());
         }
@@ -208,13 +208,13 @@ fn copy_and_replace_cstring_placeholder(
     // prefix is longer than the new one we need to add padding to ensure that the entire part
     // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
     // ensures that the text will remain a valid nul-terminated string.
-    let padding = vec!['\0' as u8; old_prefix.len().saturating_sub(new_prefix.len())];
+    let padding = vec![b'\0'; old_prefix.len().saturating_sub(new_prefix.len())];
 
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
             // Find the end of the c-style string. The nul terminator basically.
             let mut end = index + old_prefix.len();
-            while end < source_bytes.len() && source_bytes[end] != '\0' as u8 {
+            while end < source_bytes.len() && source_bytes[end] != b'\0' {
                 end += 1;
             }
 
@@ -238,7 +238,7 @@ fn copy_and_replace_cstring_placeholder(
         } else {
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
-            destination.write_all(&source_bytes)?;
+            destination.write_all(source_bytes)?;
 
             return Ok(());
         }
@@ -252,6 +252,7 @@ fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     return std::os::unix::fs::symlink(source_path, destination_path);
 }
 
+#[allow(unused_variables)]
 fn has_executable_permissions(permissions: &Permissions) -> bool {
     #[cfg(windows)]
     return false;

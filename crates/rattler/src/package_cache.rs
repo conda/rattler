@@ -103,7 +103,7 @@ impl PackageInfo {
             .path()
             .rsplit_once(['/', '\\'])
             .map(|(_, filename)| filename)
-            .unwrap_or(url.path());
+            .unwrap_or_else(|| url.path());
         Self::try_from_filename(filename)
     }
 }

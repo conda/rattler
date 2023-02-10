@@ -98,9 +98,9 @@ pub async fn link_package(
     let target_prefix = options
         .target_prefix
         .as_deref()
-        .unwrap_or(&target_dir)
+        .unwrap_or(target_dir)
         .to_str()
-        .ok_or_else(|| InstallError::TargetPrefixIsNotUtf8)?
+        .ok_or(InstallError::TargetPrefixIsNotUtf8)?
         .to_owned();
 
     // Ensure target directory exists
@@ -111,7 +111,15 @@ pub async fn link_package(
     // Reuse or read the `paths.json` file from the package directory
     let paths_json = match options.paths_json {
         Some(paths) => paths,
-        None => read_paths_from_package_dir(&package_dir).await?,
+        None => {
+            let package_dir = package_dir.to_owned();
+            driver
+                .spawn_throttled(move || {
+                    PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
+                        .map_err(InstallError::FailedToReadPathsJson)
+                })
+                .await?
+        }
     };
 
     let (allow_symbolic_links, allow_hard_links) = tokio::join!(
@@ -215,17 +223,6 @@ async fn can_create_hardlinks(
     )
     .await
     .unwrap_or(false)
-}
-
-/// Async version of reading the [`PathsJson`] information from a package directory by spawning
-/// a new blocking task. This makes sense because reading the info from disk takes time.
-async fn read_paths_from_package_dir(package_dir: &Path) -> Result<PathsJson, InstallError> {
-    let package_dir = package_dir.to_owned();
-    Ok(tokio::task::spawn_blocking(move || {
-        PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
-    })
-    .await?
-    .map_err(InstallError::FailedToReadPathsJson)?)
 }
 
 #[cfg(test)]

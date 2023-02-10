@@ -14,7 +14,7 @@ struct InstallDriverInner {
     join_handle: JoinHandle<()>,
 }
 
-type Task = Box<dyn FnOnce() -> () + Send + 'static>;
+type Task = Box<dyn FnOnce() + Send + 'static>;
 
 impl Default for InstallDriver {
     fn default() -> Self {
@@ -60,12 +60,16 @@ impl InstallDriver {
         let (tx, rx) = oneshot::channel();
         {
             let inner = self.inner.lock().await;
-            if let Err(_) = inner.tx.send(Box::new(move || {
-                if !tx.is_closed() {
-                    let result = f();
-                    let _ = tx.send(result);
-                }
-            })) {
+            if inner
+                .tx
+                .send(Box::new(move || {
+                    if !tx.is_closed() {
+                        let result = f();
+                        let _ = tx.send(result);
+                    }
+                }))
+                .is_err()
+            {
                 unreachable!(
                     "if a send error occurs here it means the task processor is dropped. \
                 Since this only happens when dropping this object there cannot be another call to \
