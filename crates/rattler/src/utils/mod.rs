@@ -1,10 +1,11 @@
+pub use encoding::{AsyncEncoding, Encoding};
+pub use hash::{compute_file_sha256, parse_sha256_from_hex, HashingWriter, Sha256HashingWriter};
 use std::{fmt::Write, path::PathBuf};
 use url::Url;
 
-pub use encoding::{AsyncEncoding, Encoding};
-
 mod encoding;
 
+mod hash;
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
 
@@ -46,9 +47,8 @@ pub fn url_to_cache_filename(url: &Url) -> String {
 
 #[cfg(test)]
 mod test {
+    use super::url_to_cache_filename;
     use url::Url;
-
-    use crate::utils::url_to_cache_filename;
 
     #[test]
     fn test_url_to_cache_filename() {

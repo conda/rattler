@@ -2,7 +2,10 @@
 
 use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
+use itertools::Itertools;
+use rattler_package_streaming::ArchiveType;
 use reqwest::Client;
+use std::error::Error;
 use std::{
     fmt::{Display, Formatter},
     future::Future,
@@ -10,6 +13,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::broadcast;
+use tracing::Instrument;
 use url::Url;
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
@@ -62,11 +66,46 @@ struct Package {
 }
 
 /// Required information about a package we want to retrieve or store in the cache.
-#[derive(Debug)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct PackageInfo {
     pub name: String,
     pub version: String,
     pub build_string: String,
+}
+
+impl Display for PackageInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
+    }
+}
+
+impl PackageInfo {
+    /// Try to convert the specified filename into a [`PackageInfo`].
+    pub fn try_from_filename(filename: &str) -> Option<PackageInfo> {
+        // Strip the suffix from the filename
+        let filename_without_ext = ArchiveType::split_str(filename)
+            .map(|(str, _)| str)
+            .unwrap_or(filename);
+
+        // Filename is in the form of: <name>-<version>-<build>
+        let (build_string, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple()?;
+
+        Some(PackageInfo {
+            name: name.to_owned(),
+            version: version.to_owned(),
+            build_string: build_string.to_owned(),
+        })
+    }
+
+    /// Try to convert a [`Url`] into a [`PackageInfo`].
+    pub fn try_from_url(url: &Url) -> Option<PackageInfo> {
+        let filename = url
+            .path()
+            .rsplit_once(['/', '\\'])
+            .map(|(_, filename)| filename)
+            .unwrap_or_else(|| url.path());
+        Self::try_from_filename(filename)
+    }
 }
 
 /// An error that might be returned from one of the caching function of the [`PackageCache`].
@@ -135,7 +174,11 @@ impl PackageCache {
 
                 let package = package.clone();
                 tokio::spawn(async move {
-                    let result = validate_or_fetch_to_cache(pkg_cache_dir.clone(), fetch).await;
+                    let result = validate_or_fetch_to_cache(pkg_cache_dir.clone(), fetch)
+                        .instrument(
+                            tracing::debug_span!("validating", path = %pkg_cache_dir.display()),
+                        )
+                        .await;
 
                     {
                         // only sync code in this block
@@ -172,6 +215,7 @@ impl PackageCache {
         client: Client,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
+            tracing::info!("downloading {} to {}", &url, destination.display());
             rattler_package_streaming::reqwest::tokio::extract(client, url, &destination).await
         })
         .await
@@ -191,11 +235,22 @@ where
 {
     // If the directory already exists validate the contents of the package
     if path.is_dir() {
-        tracing::trace!("validating '{}'", path.display());
         let path_inner = path.clone();
         match tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await {
-            Ok(Ok(_)) => return Ok(()),
-            Ok(Err(e)) => tracing::warn!("failed to validate '{}': {e}", path.display()),
+            Ok(Ok(_)) => {
+                tracing::debug!("validation succeeded");
+                return Ok(());
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("validation failed: {e}",);
+                if let Some(cause) = e.source() {
+                    tracing::debug!(
+                        "  Caused by: {}",
+                        std::iter::successors(Some(cause), |e| (*e).source())
+                            .format("\n  Caused by: ")
+                    );
+                }
+            }
             Err(e) => {
                 if let Ok(panic) = e.try_into_panic() {
                     std::panic::resume_unwind(panic)
@@ -260,5 +315,28 @@ mod test {
         // Make sure that the paths are the same as what we would expect from the original tar
         // archive.
         assert_eq!(current_paths, paths);
+    }
+
+    #[test]
+    pub fn test_package_info_from_filename() {
+        assert_eq!(
+            PackageInfo::try_from_filename(
+                "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2"
+            ),
+            Some(PackageInfo {
+                name: String::from("ros-noetic-rosbridge-suite"),
+                version: String::from("0.11.14"),
+                build_string: String::from("py39h6fdeb60_14")
+            })
+        );
+
+        assert_eq!(
+            PackageInfo::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.tar.bz2"),
+            Some(PackageInfo {
+                name: String::from("clangdev"),
+                version: String::from("9.0.1"),
+                build_string: String::from("cling_v0.9_hd1e6b3a_3")
+            })
+        );
     }
 }

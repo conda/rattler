@@ -1,0 +1,12 @@
+name: python
+channels:
+  - conda-forge
+dependencies:
+  - python =3.11.0
+platforms:
+  - linux-64
+  - linux-aarch64 # aka arm64, use for Docker on Apple Silicon
+  - linux-ppc64le
+  - osx-64
+  - osx-arm64 # For Apple Silicon, e.g. M1/M2
+  - win-64
