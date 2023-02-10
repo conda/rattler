@@ -67,6 +67,7 @@ impl ArchiveType {
     }
 
     /// Split the given string into its filename and archive, removing the extension.
+    #[allow(clippy::manual_map)]
     pub fn split_str(path: &str) -> Option<(&str, ArchiveType)> {
         if let Some(path) = path.strip_suffix(".conda") {
             Some((path, ArchiveType::Conda))
