@@ -1,10 +1,17 @@
-use crate::install::InstallError;
+use super::InstallError;
 use futures::StreamExt;
 use std::sync::Arc;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-use tokio::sync::{oneshot, Mutex};
-use tokio::task::JoinHandle;
+use tokio::{
+    sync::mpsc::{unbounded_channel, UnboundedSender},
+    sync::{oneshot, Mutex},
+    task::JoinHandle,
+};
 
+/// Packages can mostly be installed in isolation and therefor in parallel. However, when installing
+/// a large number of packages at the same time the different installation tasks start competing for
+/// resources. The [`InstallDriver`] helps to assist in making sure that tasks dont starve
+/// each other from resource as well as making sure that due to the large number of requests the
+/// process doesnt try to acquire more resources than the system has available.
 pub struct InstallDriver {
     inner: Arc<Mutex<InstallDriverInner>>,
 }
@@ -23,6 +30,9 @@ impl Default for InstallDriver {
 }
 
 impl InstallDriver {
+    /// Constructs a new [`InstallDriver`] with a given maximum number of concurrent tasks. This is
+    /// the number of tasks spawned through the driver that can run concurrently. This is especially
+    /// useful to make sure no filesystem limits are encountered.
     pub fn new(concurrency_limit: usize) -> Self {
         let (tx, rx) = unbounded_channel::<Task>();
         let task_stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);

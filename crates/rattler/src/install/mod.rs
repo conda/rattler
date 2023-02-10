@@ -2,13 +2,14 @@ mod driver;
 pub(crate) mod link;
 
 pub use driver::InstallDriver;
-pub use link::LinkFileError;
+pub use link::{link_file, LinkFileError};
 
 use futures::{stream, FutureExt, StreamExt, TryStreamExt};
-use rattler_conda_types::package::PathsJson;
-use rattler_conda_types::Platform;
-use std::future::ready;
-use std::path::{Path, PathBuf};
+use rattler_conda_types::{package::PathsJson, Platform};
+use std::{
+    future::ready,
+    path::{Path, PathBuf},
+};
 use tokio::task::JoinError;
 use tracing::instrument;
 
@@ -145,7 +146,7 @@ pub async fn link_package(
             let target_dir = target_dir.to_owned();
             let target_prefix = target_prefix.to_owned();
             driver.spawn_throttled(move || {
-                link::link_file(
+                link_file(
                     &entry,
                     &package_dir,
                     &target_dir,
