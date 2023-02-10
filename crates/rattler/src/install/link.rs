@@ -2,6 +2,7 @@ use crate::utils::{parse_sha256_from_hex, Sha256HashingWriter};
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
 use rattler_conda_types::Platform;
+use std::fs::Permissions;
 use std::io::Write;
 use std::path::Path;
 
@@ -102,7 +103,7 @@ pub fn link_file(
             }
         }
 
-        let (_, hash) = destination_writer.finalize();
+        let (_, current_hash) = destination_writer.finalize();
 
         // Copy over filesystem permissions for binary files
         if path_json_entry.file_mode == FileMode::Binary {
@@ -110,25 +111,27 @@ pub fn link_file(
                 .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
             std::fs::set_permissions(&destination_path, metadata.permissions())
                 .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
-        }
 
-        // (re)sign the binary?
-        if target_platform == Platform::OsxArm64 && path_json_entry.file_mode == FileMode::Binary {
-            // Did the binary actually change?
-            let sha256 = path_json_entry
-                .sha256
-                .as_deref()
-                .and_then(parse_sha256_from_hex);
-            let content_changed = sha256.map(|sha256| sha256 == hash).unwrap_or(false);
+            // (re)sign the binary?
+            if has_executable_permissions(&metadata.permissions())
+                && target_platform == Platform::OsxArm64
+            {
+                // Did the binary actually change?
+                let original_hash = path_json_entry
+                    .sha256
+                    .as_deref()
+                    .and_then(parse_sha256_from_hex);
+                let content_changed = original_hash != Some(current_hash);
 
-            // If the binary changed it requires resigning.
-            if content_changed {
-                let signer = UnifiedSigner::new(SigningSettings::default());
-                signer.sign_path_in_place(destination_path)?
+                // If the binary changed it requires resigning.
+                if content_changed {
+                    let signer = UnifiedSigner::new(SigningSettings::default());
+                    signer.sign_path_in_place(destination_path)?
+                }
             }
         }
 
-        Some(hash)
+        Some(current_hash)
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         std::fs::hard_link(&source_path, &destination_path)?;
         None
@@ -240,14 +243,18 @@ fn copy_and_replace_cstring_placeholder(
     }
 }
 
-#[cfg(windows)]
 fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
-    std::os::windows::fs::symlink_file(source_path, destination_path)
+    #[cfg(windows)]
+    return std::os::windows::fs::symlink_file(source_path, destination_path);
+    #[cfg(unix)]
+    return std::os::unix::fs::symlink(source_path, destination_path);
 }
 
-#[cfg(unix)]
-fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
-    std::os::unix::fs::symlink(source_path, destination_path)
+fn has_executable_permissions(permissions: &Permissions) -> bool {
+    #[cfg(windows)]
+    return false;
+    #[cfg(unix)]
+    return std::os::unix::fs::PermissionsExt::mode(permissions) & 0o111 != 0;
 }
 
 #[cfg(test)]
