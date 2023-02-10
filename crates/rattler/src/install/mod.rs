@@ -1,7 +1,10 @@
-mod link;
+mod driver;
+pub(crate) mod link;
 
-pub use crate::install::link::LinkFileError;
-use futures::FutureExt;
+pub use driver::InstallDriver;
+pub use link::LinkFileError;
+
+use futures::{stream, FutureExt, StreamExt, TryStreamExt};
 use rattler_conda_types::package::PathsJson;
 use std::future::ready;
 use std::path::{Path, PathBuf};
@@ -82,6 +85,7 @@ pub struct InstallOptions {
 pub async fn link_package(
     package_dir: &Path,
     target_dir: &Path,
+    driver: &InstallDriver,
     options: InstallOptions,
 ) -> Result<(), InstallError> {
     // Determine the target prefix for linking
@@ -117,21 +121,27 @@ pub async fn link_package(
         }
     );
 
-    // Link all package files. Filesystem operations are blocking so we run all of them on another
-    // tokio thread.
-    let package_dir = package_dir.to_owned();
-    let target_dir = target_dir.to_owned();
-    tokio::task::spawn_blocking(move || {
-        link_package_files(
-            &package_dir,
-            &target_dir,
-            paths_json,
-            allow_symbolic_links,
-            allow_hard_links,
-            &target_prefix,
-        )
-    })
-    .await??;
+    // Link all package files in parallel
+    stream::iter(paths_json.paths)
+        .map(Ok)
+        .try_for_each_concurrent(None, |entry| {
+            let package_dir = package_dir.to_owned();
+            let target_dir = target_dir.to_owned();
+            let target_prefix = target_prefix.to_owned();
+            driver.spawn_throttled(move || {
+                link::link_file(
+                    &entry,
+                    &package_dir,
+                    &target_dir,
+                    &target_prefix,
+                    allow_symbolic_links,
+                    allow_hard_links,
+                )
+                .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
+                .map(|_| ())
+            })
+        })
+        .await?;
 
     Ok(())
 }
@@ -198,33 +208,6 @@ async fn can_create_hardlinks(
     .unwrap_or(false)
 }
 
-/// A blocking function to link all files in a package to a target directory.
-fn link_package_files(
-    package_dir: &PathBuf,
-    target_dir: &PathBuf,
-    paths_json: PathsJson,
-    allow_symbolic_links: bool,
-    allow_hard_links: bool,
-    target_prefix: &str,
-) -> Result<(), InstallError> {
-    for entry in paths_json.paths {
-        link::link_file(
-            &entry.relative_path,
-            &package_dir,
-            &target_dir,
-            &target_prefix,
-            entry.prefix_placeholder.as_deref(),
-            entry.path_type,
-            entry.file_mode,
-            allow_symbolic_links,
-            allow_hard_links,
-        )
-        .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))?;
-    }
-
-    Ok(())
-}
-
 /// Async version of reading the [`PathsJson`] information from a package directory by spawning
 /// a new blocking task. This makes sense because reading the info from disk takes time.
 async fn read_paths_from_package_dir(package_dir: &Path) -> Result<PathsJson, InstallError> {
@@ -238,6 +221,7 @@ async fn read_paths_from_package_dir(package_dir: &Path) -> Result<PathsJson, In
 
 #[cfg(test)]
 mod test {
+    use crate::install::InstallDriver;
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallOptions},
@@ -246,11 +230,12 @@ mod test {
     use futures::{stream, StreamExt};
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform};
     use reqwest::Client;
-    use std::{env::temp_dir, process::Command};
+    use std::env::temp_dir;
+    use std::process::Command;
     use tempfile::tempdir;
 
     #[tracing_test::traced_test]
-    #[tokio::test(flavor = "current_thread")]
+    #[tokio::test]
     pub async fn test_install_python() {
         // Load a prepared explicit environment file for the current platform.
         let current_platform = Platform::current();
@@ -269,12 +254,14 @@ mod test {
         let client = Client::new();
 
         // Download and install each layer into an environment.
+        let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
         stream::iter(env.packages)
             .for_each_concurrent(Some(50), |package_url| {
                 let prefix_path = target_dir.path();
                 let client = client.clone();
                 let package_cache = &package_cache;
+                let install_driver = &install_driver;
                 async move {
                     // Populate the cache
                     let package_info = PackageInfo::try_from_url(&package_url.url).unwrap();
@@ -284,9 +271,14 @@ mod test {
                         .unwrap();
 
                     // Install the package to the prefix
-                    link_package(&package_dir, prefix_path, InstallOptions::default())
-                        .await
-                        .unwrap();
+                    link_package(
+                        &package_dir,
+                        prefix_path,
+                        install_driver,
+                        InstallOptions::default(),
+                    )
+                    .await
+                    .unwrap();
                 }
             })
             .await;

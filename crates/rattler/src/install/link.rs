@@ -1,5 +1,5 @@
 use crate::utils::Sha256HashingWriter;
-use rattler_conda_types::package::{FileMode, PathType};
+use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
 use std::io::Write;
 use std::path::Path;
 
@@ -42,18 +42,15 @@ pub struct LinkedFile {
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`super::InstallOptions::target_prefix`] for more information.
 pub fn link_file(
-    relative_path: &Path,
+    path_json_entry: &PathsEntry,
     package_dir: &Path,
     target_dir: &Path,
     target_prefix: &str,
-    prefix_placeholder: Option<&str>,
-    path_type: PathType,
-    file_mode: FileMode,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
 ) -> Result<LinkedFile, LinkFileError> {
-    let destination_path = target_dir.join(relative_path);
-    let source_path = package_dir.join(relative_path);
+    let destination_path = target_dir.join(&path_json_entry.relative_path);
+    let source_path = package_dir.join(&path_json_entry.relative_path);
 
     // Ensure that all directories up to the path exist.
     if let Some(parent) = destination_path.parent() {
@@ -65,7 +62,7 @@ pub fn link_file(
     // caller that this is the case but there is no special handling here.
     let clobbered = destination_path.is_file();
 
-    let sha256 = if let Some(prefix_placeholder) = prefix_placeholder {
+    let sha256 = if let Some(prefix_placeholder) = path_json_entry.prefix_placeholder.as_deref() {
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = {
@@ -80,7 +77,7 @@ pub fn link_file(
         let mut destination_writer = Sha256HashingWriter::new(destination);
 
         // Replace the prefix placeholder in the file with the new placeholder
-        match file_mode {
+        match path_json_entry.file_mode {
             FileMode::Text => {
                 copy_and_replace_textual_placeholder(
                     source.as_ref(),
@@ -102,7 +99,7 @@ pub fn link_file(
         let (_, hash) = destination_writer.finalize();
 
         // Copy over filesystem permissions for binary files
-        if file_mode == FileMode::Binary {
+        if path_json_entry.file_mode == FileMode::Binary {
             let metadata = std::fs::symlink_metadata(&source_path)
                 .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
             std::fs::set_permissions(&destination_path, metadata.permissions())
@@ -110,10 +107,10 @@ pub fn link_file(
         }
 
         Some(hash)
-    } else if path_type == PathType::HardLink && allow_hard_links {
+    } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         std::fs::hard_link(&source_path, &destination_path)?;
         None
-    } else if path_type == PathType::SoftLink && allow_symbolic_links {
+    } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
         let linked_path = source_path
             .read_link()
             .map_err(LinkFileError::FailedToOpenSourceFile)?;
