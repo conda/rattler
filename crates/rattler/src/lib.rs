@@ -15,8 +15,6 @@ pub mod repo_data;
 pub mod solver;
 pub mod validation;
 
-pub use package_archive::PackageArchiveFormat;
-
 pub(crate) mod utils;
 
 /// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
