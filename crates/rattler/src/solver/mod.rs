@@ -36,7 +36,7 @@ pub struct SolverProblem<'c> {
 impl<'c> SolverProblem<'c> {
     pub fn solve(self) -> Result<Vec<Entry>, SolveError> {
         // Construct a default libsolv pool
-        let mut pool = Pool::default();
+        let pool = Pool::default();
 
         // Setup proper logging for the pool
         pool.set_debug_callback(|msg, flags| {
@@ -47,7 +47,7 @@ impl<'c> SolverProblem<'c> {
         // Create repos for all channels
         let mut channel_mapping = HashMap::new();
         for (channel, repodata) in self.channels.iter() {
-            let mut repo = pool.create_repo(channel);
+            let repo = pool.create_repo(channel);
             repo.add_repodata(repodata)
                 .map_err(SolveError::ErrorAddingRepodata)?;
             channel_mapping.insert(repo.id(), channel);
@@ -62,7 +62,7 @@ impl<'c> SolverProblem<'c> {
         // Add matchspec to the queue
         let mut queue = Queue::default();
         for spec in self.specs {
-            let id = spec.intern(&mut pool);
+            let id = spec.intern(&pool);
             queue.push_id_with_flags(id, (SOLVER_INSTALL | SOLVER_SOLVABLE_PROVIDES) as i32);
         }
 
