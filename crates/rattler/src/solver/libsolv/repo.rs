@@ -124,14 +124,8 @@ impl RepoRef {
         unsafe { &*(self.as_ref().pool as *const PoolRef) }
     }
 
-    /// Returns the pool that created this instance
-    pub fn pool_mut(&mut self) -> &mut PoolRef {
-        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
-        unsafe { &mut *(self.as_ref().pool as *mut PoolRef) }
-    }
-
     /// Adds [`RepoData`] to this instance
-    pub fn add_repodata(&mut self, repo_data: &RepoData) -> anyhow::Result<()> {
+    pub fn add_repodata(&self, repo_data: &RepoData) -> anyhow::Result<()> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
         // Get all the IDs
@@ -162,8 +156,8 @@ impl RepoRef {
             let solvable = unsafe { solvable.as_ptr().as_mut() };
 
             // Name and version
-            solvable.name = record.name.intern(self.pool_mut()).into();
-            solvable.evr = record.version.to_string().intern(self.pool_mut()).into();
+            solvable.name = record.name.intern(self.pool()).into();
+            solvable.evr = record.version.to_string().intern(self.pool()).into();
             solvable.provides = unsafe {
                 ffi::repo_addid_dep(
                     self.as_ptr().as_ptr(),
@@ -243,7 +237,7 @@ impl RepoRef {
                             data,
                             solvable_id.into(),
                             solvable_track_features.into(),
-                            track_features.trim().intern(self.pool_mut()).into(),
+                            track_features.trim().intern(self.pool()).into(),
                         );
                     }
                 }
@@ -397,7 +391,7 @@ impl RepoRef {
     }
 
     /// Reads the content of the file pointed to by `json_path` and adds it to the instance.
-    pub fn add_conda_json<T: AsRef<str>>(&mut self, json_path: T) -> anyhow::Result<()> {
+    pub fn add_conda_json<T: AsRef<str>>(&self, json_path: T) -> anyhow::Result<()> {
         let c_json = c_string(json_path.as_ref());
         let mode = c_string("r");
         unsafe {
@@ -458,7 +452,7 @@ mod tests {
 
     #[test]
     fn test_repo_creation() {
-        let mut pool = Pool::default();
+        let pool = Pool::default();
         let mut _repo = pool.create_repo("conda-forge");
     }
 }

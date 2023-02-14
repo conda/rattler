@@ -49,8 +49,8 @@ mod test {
     #[test]
     fn test_conda_read_repodata() {
         let json_file = conda_json_path();
-        let mut pool = Pool::default();
-        let mut repo = pool.create_repo("conda-forge");
+        let pool = Pool::default();
+        let repo = pool.create_repo("conda-forge");
         repo.add_conda_json(json_file)
             .expect("could not add repodata to Repo");
     }
@@ -62,7 +62,7 @@ mod test {
         let mut pool = Pool::default();
         pool.set_debug_callback(|msg, _level| eprintln!("{}", msg.trim()));
         pool.set_debug_level(Verbosity::Low);
-        let mut repo = pool.create_repo("conda-forge");
+        let repo = pool.create_repo("conda-forge");
         repo.add_repodata(
             &serde_json::from_str(&std::fs::read_to_string(json_file).expect("couldnt read"))
                 .expect("couldnt parse"),
