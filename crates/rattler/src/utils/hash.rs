@@ -1,11 +1,13 @@
 use blake2::Blake2s256;
 use digest::{Digest, Output};
 use sha2::Sha256;
-use std::fs::File;
-use std::io::{Error, Write};
-use std::path::Path;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    fs::File,
+    io::{Error, Write},
+    path::Path,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tokio::io::AsyncWrite;
 
 /// Compute the SHA256 hash of the file at the specified location.

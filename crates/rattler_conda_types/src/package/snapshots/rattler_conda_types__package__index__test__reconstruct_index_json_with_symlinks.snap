@@ -1,0 +1,14 @@
+---
+source: crates/rattler_conda_types/src/package/index.rs
+expression: "Index::from_package_directory(&package_dir).unwrap()"
+---
+name: zlib
+version: 1.2.8
+build: "3"
+build_number: 3
+arch: x86_64
+platform: linux
+license: "zlib (http://zlib.net/zlib_license.html)"
+license_family: Other
+subdir: linux-64
+

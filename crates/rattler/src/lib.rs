@@ -9,14 +9,13 @@
 //! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefor a good
 //! candidate for a reimplementation.
 
-mod package_archive;
+pub mod install;
 pub mod package_cache;
 pub mod repo_data;
 pub mod solver;
-pub(crate) mod utils;
 pub mod validation;
 
-pub use package_archive::PackageArchiveFormat;
+pub(crate) mod utils;
 
 /// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
 /// that is bundled with this repository.

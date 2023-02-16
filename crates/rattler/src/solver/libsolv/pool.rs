@@ -97,7 +97,7 @@ impl PoolRef {
     }
 
     /// Add debug callback to the pool
-    pub fn set_debug_callback<F: FnMut(&str, i32) + 'static>(&mut self, callback: F) {
+    pub fn set_debug_callback<F: FnMut(&str, i32) + 'static>(&self, callback: F) {
         let box_callback: Box<BoxedLogCallback> = Box::new(Box::new(callback));
         unsafe {
             // Sets the debug callback into the pool
@@ -112,7 +112,7 @@ impl PoolRef {
     }
 
     /// Set debug level for libsolv
-    pub fn set_debug_level(&mut self, verbosity: Verbosity) {
+    pub fn set_debug_level(&self, verbosity: Verbosity) {
         let verbosity: libc::c_int = match verbosity {
             Verbosity::None => 0,
             Verbosity::Low => 1,
@@ -125,7 +125,7 @@ impl PoolRef {
     }
 
     /// Create repo from a pool
-    pub fn create_repo<S: AsRef<str>>(&mut self, url: S) -> Repo {
+    pub fn create_repo<S: AsRef<str>>(&self, url: S) -> Repo {
         unsafe {
             let c_url = c_string(url);
             Repo::new(
@@ -136,14 +136,14 @@ impl PoolRef {
     }
 
     /// Create the solver
-    pub fn create_solver(&mut self) -> Solver {
+    pub fn create_solver(&self) -> Solver {
         let solver = NonNull::new(unsafe { ffi::solver_create(self.as_ptr().as_mut()) })
             .expect("solver_create returned a nullptr");
         Solver::new(solver)
     }
 
     /// Create the whatprovides on the pool which is needed for solving
-    pub fn create_whatprovides(&mut self) {
+    pub fn create_whatprovides(&self) {
         // Safe because pointer must exist
         unsafe {
             ffi::pool_createwhatprovides(self.as_ptr().as_mut());
@@ -152,7 +152,7 @@ impl PoolRef {
 }
 
 /// Interns string like types into a `Pool` returning a `StringId`
-fn intern_str<T: AsRef<str>>(pool: &mut PoolRef, str: T) -> StringId {
+fn intern_str<T: AsRef<str>>(pool: &PoolRef, str: T) -> StringId {
     // Safe because conversion is valid
     let c_str = CString::new(str.as_ref()).expect("could never be null because of trait-bound");
     let length = c_str.as_bytes().len();
@@ -196,7 +196,7 @@ pub trait Intern {
     type Id;
 
     /// Interns the type in the [`Pool`]
-    fn intern(&self, pool: &mut PoolRef) -> Self::Id;
+    fn intern(&self, pool: &PoolRef) -> Self::Id;
 }
 
 /// Enables retrieving the `Id` of previously interned instances of `Self` through the `Intern`
@@ -235,7 +235,7 @@ impl StringId {
 impl<'s> Intern for &'s str {
     type Id = StringId;
 
-    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
+    fn intern(&self, pool: &PoolRef) -> Self::Id {
         intern_str(pool, self)
     }
 }
@@ -249,7 +249,7 @@ impl<'s> FindInterned for &'s str {
 impl Intern for String {
     type Id = StringId;
 
-    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
+    fn intern(&self, pool: &PoolRef) -> Self::Id {
         intern_str(pool, self)
     }
 }
@@ -257,7 +257,7 @@ impl Intern for String {
 impl Intern for StringId {
     type Id = Self;
 
-    fn intern(&self, _: &mut PoolRef) -> Self::Id {
+    fn intern(&self, _: &PoolRef) -> Self::Id {
         *self
     }
 }
@@ -265,7 +265,7 @@ impl Intern for StringId {
 impl<T: Intern> Intern for &T {
     type Id = T::Id;
 
-    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
+    fn intern(&self, pool: &PoolRef) -> Self::Id {
         (*self).intern(pool)
     }
 }
@@ -288,7 +288,7 @@ pub struct MatchSpecId(ffi::Id);
 impl Intern for MatchSpec {
     type Id = MatchSpecId;
 
-    fn intern(&self, pool: &mut PoolRef) -> Self::Id {
+    fn intern(&self, pool: &PoolRef) -> Self::Id {
         let name = self
             .name
             .as_ref()
@@ -340,7 +340,7 @@ mod test {
 
     #[test]
     fn test_pool_creation() {
-        let mut pool = Pool::default();
+        let pool = Pool::default();
         let repo = pool.create_repo("conda-forge");
         drop(repo);
         drop(pool);
@@ -388,14 +388,14 @@ mod test {
         let channel_config = ChannelConfig::default();
         let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
         // Intern it into the pool
-        let mut pool = Pool::default();
-        spec.intern(&mut pool);
+        let pool = Pool::default();
+        spec.intern(&pool);
         // Don't think libsolv has an API to get it back
     }
 
     #[test]
     fn test_pool_callback() {
-        let mut pool = Pool::default();
+        let pool = Pool::default();
         let (tx, rx) = std::sync::mpsc::sync_channel(10);
         // Set the debug level
         pool.set_debug_level(super::Verbosity::Extreme);

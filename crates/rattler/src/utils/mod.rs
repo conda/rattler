@@ -1,4 +1,4 @@
-pub(crate) use encoding::{AsyncEncoding, Encoding};
+pub use encoding::{AsyncEncoding, Encoding};
 pub use flock::LockedFile;
 pub(crate) use hash::{
     compute_file_blake2, compute_file_sha256, parse_sha256_from_hex, Blake2s256HashingWriter,
@@ -9,6 +9,7 @@ use url::Url;
 
 mod encoding;
 
+mod hash;
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
 
@@ -52,9 +53,8 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
 
 #[cfg(test)]
 mod test {
+    use super::url_to_cache_filename;
     use url::Url;
-
-    use crate::utils::url_to_cache_filename;
 
     #[test]
     fn test_url_to_cache_filename() {
