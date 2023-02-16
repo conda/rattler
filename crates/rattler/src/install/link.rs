@@ -84,24 +84,13 @@ pub fn link_file(
         let mut destination_writer = Sha256HashingWriter::new(destination);
 
         // Replace the prefix placeholder in the file with the new placeholder
-        match path_json_entry.file_mode {
-            FileMode::Text => {
-                copy_and_replace_textual_placeholder(
-                    source.as_ref(),
-                    &mut destination_writer,
-                    prefix_placeholder,
-                    target_prefix,
-                )?;
-            }
-            FileMode::Binary => {
-                copy_and_replace_cstring_placeholder(
-                    source.as_ref(),
-                    &mut destination_writer,
-                    prefix_placeholder,
-                    target_prefix,
-                )?;
-            }
-        }
+        copy_and_replace_placholders(
+            source.as_ref(),
+            &mut destination_writer,
+            prefix_placeholder,
+            target_prefix,
+            path_json_entry.file_mode,
+        )?;
 
         let (_, current_hash) = destination_writer.finalize();
 
@@ -149,6 +138,40 @@ pub fn link_file(
     };
 
     Ok(LinkedFile { clobbered, sha256 })
+}
+
+/// Given the contents of a file copy it to the `destination` and in the process replace the
+/// `prefix_placeholder` text with the `target_prefix` text.
+///
+/// This switches to more specialized functions that handle the replacement of either
+/// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
+/// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
+pub fn copy_and_replace_placholders(
+    source_bytes: &[u8],
+    destination: impl Write,
+    prefix_placeholder: &str,
+    target_prefix: &str,
+    file_mode: FileMode,
+) -> Result<(), std::io::Error> {
+    match file_mode {
+        FileMode::Text => {
+            copy_and_replace_textual_placeholder(
+                source_bytes,
+                destination,
+                prefix_placeholder,
+                target_prefix,
+            )?;
+        }
+        FileMode::Binary => {
+            copy_and_replace_cstring_placeholder(
+                source_bytes,
+                destination,
+                prefix_placeholder,
+                target_prefix,
+            )?;
+        }
+    }
+    Ok(())
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
