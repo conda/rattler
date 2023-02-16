@@ -158,7 +158,7 @@ pub fn link_file(
 /// files but will not work correctly for binary files where the length of the string is often
 /// important. See [`copy_and_replace_cstring_placeholder`] when you are dealing with binary
 /// content.
-fn copy_and_replace_textual_placeholder(
+pub fn copy_and_replace_textual_placeholder(
     mut source_bytes: &[u8],
     mut destination: impl Write,
     prefix_placeholder: &str,
@@ -194,7 +194,7 @@ fn copy_and_replace_textual_placeholder(
 ///
 /// This function replaces binary c-style strings. If you want to simply find-and-replace text in a
 /// file instead use the [`copy_and_replace_textual_placeholder`] function.
-fn copy_and_replace_cstring_placeholder(
+pub fn copy_and_replace_cstring_placeholder(
     mut source_bytes: &[u8],
     mut destination: impl Write,
     prefix_placeholder: &str,
