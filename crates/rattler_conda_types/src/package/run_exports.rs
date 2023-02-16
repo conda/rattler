@@ -54,12 +54,11 @@ impl FromStr for RunExports {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(unix, test))]
 mod test {
     use super::RunExports;
 
     #[test]
-    #[cfg(unix)]
     pub fn test_reconstruct_run_exports_json_with_symlinks() {
         let package_dir = tempfile::tempdir().unwrap();
         rattler_package_streaming::fs::extract(
