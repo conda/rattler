@@ -11,6 +11,7 @@ mod index;
 mod no_link;
 mod no_softlink;
 mod paths;
+mod run_exports;
 
 pub use {
     files::Files,
@@ -19,6 +20,7 @@ pub use {
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
+    run_exports::RunExports,
 };
 
 #[serde_as]

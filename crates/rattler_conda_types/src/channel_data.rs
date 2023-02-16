@@ -7,12 +7,14 @@
 
 use crate::{
     utils::serde::{LossyUrl, VecSkipNone},
-    RunExports, Version,
+    Version,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
 use std::collections::HashMap;
 use url::Url;
+
+use crate::package::RunExports;
 
 /// [`ChannelData`] is an index of subdirectories and packages stored within a Channel.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]

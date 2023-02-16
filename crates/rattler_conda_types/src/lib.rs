@@ -25,7 +25,7 @@ pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
 pub use repo_data::{PackageRecord, RepoData};
-pub use run_export::{RunExportKind, RunExports};
+pub use run_export::RunExportKind;
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
 
