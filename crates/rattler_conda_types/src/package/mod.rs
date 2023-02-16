@@ -1,16 +1,13 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
-use crate::{
-    utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
-    RunExports, Version,
-};
+use crate::utils::serde::{LossyUrl, MultiLineString, VecSkipNone};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Same};
-use std::collections::HashMap;
+use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
 use url::Url;
 
 mod files;
 mod has_prefix;
+mod index;
 mod no_link;
 mod no_softlink;
 mod paths;
@@ -18,59 +15,11 @@ mod paths;
 pub use {
     files::Files,
     has_prefix::HasPrefix,
+    index::Index,
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
 };
-
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct Index {
-    /// The lowercase name of the package
-    pub name: String,
-
-    /// The version of the package
-    #[serde_as(as = "DisplayFromStr")]
-    pub version: Version,
-
-    /// The build string of the package.
-    pub build: String,
-
-    /// The build number of the package. This is also included in the build string.
-    pub build_number: usize,
-
-    /// Optionally, the architecture the package is build for.
-    pub arch: Option<String>,
-
-    /// Optionally, the OS the package is build for.
-    pub platform: Option<String>,
-
-    /// Optionally, the license
-    pub license: Option<String>,
-
-    /// Optionally, the license family
-    pub license_family: Option<String>,
-
-    /// The dependencies of the package
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Vec<String>,
-
-    /// The package constraints of the package
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Vec<String>,
-
-    /// Any run_exports contained within the package.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    #[serde_as(as = "HashMap<DisplayFromStr, _>")]
-    pub run_exports: HashMap<Version, RunExports>,
-
-    /// The timestamp when this package was created
-    pub timestamp: Option<u64>,
-
-    /// The subdirectory that contains this package
-    pub subdir: Option<String>,
-}
 
 #[serde_as]
 #[skip_serializing_none]
