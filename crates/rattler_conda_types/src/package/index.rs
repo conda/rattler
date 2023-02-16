@@ -1,6 +1,8 @@
 use std::{collections::HashMap, fs::File, path::Path, str::FromStr};
 
-use crate::{RunExports, Version};
+use crate::package::RunExports;
+
+use crate::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 
