@@ -1,6 +1,4 @@
-use std::{collections::HashMap, fs::File, path::Path, str::FromStr};
-
-use crate::package::RunExports;
+use std::{fs::File, io::Read, path::Path, str::FromStr};
 
 use crate::Version;
 use serde::{Deserialize, Serialize};
@@ -47,11 +45,6 @@ pub struct Index {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
 
-    /// Any run_exports contained within the package.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    #[serde_as(as = "HashMap<DisplayFromStr, _>")]
-    pub run_exports: HashMap<Version, RunExports>,
-
     /// The timestamp when this package was created
     pub timestamp: Option<u64>,
 
@@ -61,8 +54,10 @@ pub struct Index {
 
 impl Index {
     /// Parses a `index.json` file from a reader.
-    pub fn from_reader(reader: impl std::io::Read) -> Result<Self, std::io::Error> {
-        serde_json::from_reader(reader).map_err(Into::into)
+    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
+        let mut str = String::new();
+        reader.read_to_string(&mut str)?;
+        Self::from_str(&str)
     }
 
     /// Parses a `index.json` file from a file.

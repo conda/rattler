@@ -40,6 +40,20 @@ impl PathsJson {
         Self::from_path(&path.join("info/paths.json"))
     }
 
+    /// Reads the file from a package archive directory. If the `paths.json` file could not be found
+    /// use the [`Self::from_deprecated_package_directory`] method as a fallback.
+    pub fn from_package_directory_with_deprecated_fallback(
+        path: &Path,
+    ) -> Result<Self, std::io::Error> {
+        match Self::from_package_directory(path) {
+            Ok(paths) => Ok(paths),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Self::from_deprecated_package_directory(path)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
     /// Constructs a new instance by looking at older (deprecated) files from a package directory.
     ///
     /// In older package archives the `paths.json` file does not exist. These packages contain the

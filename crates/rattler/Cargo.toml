@@ -12,8 +12,10 @@ rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
+apple-codesign = "0.22.0"
 async-compression = { version = "0.3.12", features = ["gzip", "futures-bufread", "tokio", "bzip2"] }
 bytes = "1.1.0"
+digest = "0.10.6"
 dirs = "4.0.0"
 extendhash = "1.0.9"
 futures = "0.3.17"
@@ -23,6 +25,8 @@ indicatif = { version = "0.17.1", features = ["improved_unicode"] }
 itertools = "0.10.3"
 libc = "0.2"
 libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
+memchr = "2.5.0"
+memmap2 = "0.5.8"
 nom = "7.1.0"
 once_cell = "1.8.0"
 pin-project-lite = "0.2.9"
@@ -38,9 +42,11 @@ smallvec = { version = "1.8.0", features = ["serde", "const_new", "const_generic
 tempfile = "3.3.0"
 thiserror = "1.0.30"
 tokio = { version = "1.12.0", features = ["rt", "io-util", "macros"] }
+tokio-stream = "0.1.11"
 tokio-util = { version = "0.7.3", features = ["codec", "io"] }
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
+uuid = { version = "1.3.0", features = ["v4", "fast-rng"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -51,11 +57,12 @@ rand = "0.8.4"
 rstest = "0.16.0"
 tokio-test = "0.4.2"
 tower-http = { version = "0.3.5", features = ["fs", "compression-gzip"] }
+tracing-test = "0.2.4"
 
 [build-dependencies]
 cc = "1"
 anyhow = "1"
-bindgen = "0.63"
+bindgen = "0.64"
 cmake = "0.1"
 
 [package.metadata.cargo-udeps.ignore]
