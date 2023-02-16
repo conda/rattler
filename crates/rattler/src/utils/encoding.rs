@@ -8,6 +8,8 @@ use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
 pub enum Encoding {
     Passthrough,
     GZip,
+    Bz2,
+    Zst,
 }
 
 impl<'a> From<&'a reqwest::Response> for Encoding {
@@ -25,6 +27,8 @@ pin_project! {
     pub enum Decoder<T: AsyncBufRead> {
         Passthrough { #[pin] inner: T },
         GZip { #[pin] inner: async_compression::tokio::bufread::GzipDecoder<T> },
+        Bz2 { #[pin] inner: async_compression::tokio::bufread::BzDecoder<T> },
+        Zst { #[pin] inner: async_compression::tokio::bufread::ZstdDecoder<T> },
     }
 }
 
@@ -37,6 +41,8 @@ impl<T: AsyncBufRead> AsyncRead for Decoder<T> {
         match self.project() {
             DecoderProj::Passthrough { inner } => inner.poll_read(cx, buf),
             DecoderProj::GZip { inner } => inner.poll_read(cx, buf),
+            DecoderProj::Bz2 { inner } => inner.poll_read(cx, buf),
+            DecoderProj::Zst { inner } => inner.poll_read(cx, buf),
         }
     }
 }
@@ -52,6 +58,12 @@ impl<T: AsyncBufRead> AsyncEncoding for T {
             Encoding::Passthrough => Decoder::Passthrough { inner: self },
             Encoding::GZip => Decoder::GZip {
                 inner: async_compression::tokio::bufread::GzipDecoder::new(self),
+            },
+            Encoding::Bz2 => Decoder::Bz2 {
+                inner: async_compression::tokio::bufread::BzDecoder::new(self),
+            },
+            Encoding::Zst => Decoder::Zst {
+                inner: async_compression::tokio::bufread::ZstdDecoder::new(self),
             },
         }
     }

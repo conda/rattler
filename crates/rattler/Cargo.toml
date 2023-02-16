@@ -12,8 +12,13 @@ rustls-tls = ['reqwest/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
-async-compression = { version = "0.3.12", features = ["gzip", "futures-bufread", "tokio", "bzip2"] }
+apple-codesign = "0.22.0"
+async-compression = { version = "0.3.12", features = ["gzip", "tokio", "bzip2", "zstd"] }
+blake2 = "0.10.6"
 bytes = "1.1.0"
+cache_control = "0.2.0"
+chrono = { version = "0.4.23", default-features = false, features = ["std", "serde", "alloc"] }
+digest = "0.10.6"
 dirs = "4.0.0"
 extendhash = "1.0.9"
 futures = "0.3.17"
@@ -42,9 +47,13 @@ tokio-util = { version = "0.7.3", features = ["codec", "io"] }
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.45.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
+
 [dev-dependencies]
 assert_matches = "1.5.0"
 axum = "0.6.2"
+hex-literal = "0.3.4"
 insta = { version = "1.16.0", features = ["yaml"] }
 proptest = "1.0.0"
 rand = "0.8.4"

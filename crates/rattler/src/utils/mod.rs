@@ -1,12 +1,18 @@
+pub(crate) use encoding::{AsyncEncoding, Encoding};
+pub use flock::LockedFile;
+pub(crate) use hash::{
+    compute_file_blake2, compute_file_sha256, parse_sha256_from_hex, Blake2s256HashingWriter,
+    Sha256HashingWriter,
+};
 use std::{fmt::Write, path::PathBuf};
 use url::Url;
-
-pub use encoding::{AsyncEncoding, Encoding};
 
 mod encoding;
 
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
+
+mod flock;
 
 /// Returns the default cache directory used by rattler.
 pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
@@ -16,7 +22,7 @@ pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
 }
 
 /// Convert a URL to a cache filename
-pub fn url_to_cache_filename(url: &Url) -> String {
+pub(crate) fn url_to_cache_filename(url: &Url) -> String {
     // Start Rant:
     // This function mimics behavior from Mamba which itself mimics this behavior from Conda.
     // However, I find this function absolutely ridiculous, it contains all sort of weird edge
