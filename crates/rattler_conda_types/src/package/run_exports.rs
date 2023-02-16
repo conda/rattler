@@ -1,4 +1,4 @@
-use std::{fs::File, path::Path, str::FromStr};
+use std::{fs::File, io::Read, path::Path, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
@@ -31,8 +31,10 @@ pub struct RunExports {
 
 impl RunExports {
     /// Parses a `run_exports.json` file from a reader.
-    pub fn from_reader(reader: impl std::io::Read) -> Result<Self, std::io::Error> {
-        serde_json::from_reader(reader).map_err(Into::into)
+    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
+        let mut str = String::new();
+        reader.read_to_string(&mut str)?;
+        Self::from_str(&str)
     }
 
     /// Parses a `run_exports.json` file from a file.
