@@ -1,5 +1,5 @@
 mod driver;
-pub(crate) mod link;
+pub mod link;
 
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
