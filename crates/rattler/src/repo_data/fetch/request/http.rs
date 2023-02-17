@@ -331,10 +331,10 @@ mod test {
     use url::Url;
 
     use super::{create_cache_file, fetch_repodata, read_cache_file, RepoDataMetadata};
+    use crate::get_test_data_dir;
     use crate::repo_data::fetch::request::REPODATA_CHANNEL_PATH;
     use crate::utils::simple_channel_server::SimpleChannelServer;
     use rattler_conda_types::{Channel, ChannelConfig, Platform};
-    use crate::get_test_data_dir;
 
     #[tokio::test]
     async fn test_fetch_http() {

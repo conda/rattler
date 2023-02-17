@@ -1,4 +1,8 @@
-use reqwest::{header, header::{HeaderMap, HeaderValue}, Response};
+use reqwest::{
+    header,
+    header::{HeaderMap, HeaderValue},
+    Response,
+};
 use serde::{Deserialize, Serialize};
 
 /// Extracted HTTP response headers that enable caching the repodata.json files.
