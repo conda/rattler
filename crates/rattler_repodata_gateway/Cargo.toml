@@ -30,6 +30,9 @@ pin-project-lite = "0.2.9"
 md-5 = "0.10.5"
 rattler_digest = { version = "0.1.0", path = "../rattler_digest", features = ["tokio"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.45.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
 
