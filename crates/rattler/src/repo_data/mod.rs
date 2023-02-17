@@ -5,8 +5,10 @@ use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
-use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Client, Response, StatusCode};
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client, Response, StatusCode,
+};
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -278,16 +280,12 @@ pub async fn fetch_repo_data(
         cache_headers.add_to_request(&mut headers)
     }
 
-    tracing::trace!("Send headers {:?}", &headers);
-
     // Send the request and wait for a reply
     let response = request_builder
         .headers(headers)
         .send()
         .await?
         .error_for_status()?;
-
-    tracing::trace!("{:?}", response.headers());
 
     // If the content didn't change, simply return whatever we have on disk.
     if response.status() == StatusCode::NOT_MODIFIED {
@@ -880,8 +878,9 @@ mod test {
         );
 
         // I know this is terrible but without the sleep rust is too blazingly fast and the server
-        // doesnt think the file was actually updated..
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // doesnt think the file was actually updated.. This is because the time send by the server
+        // has seconds precision.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
 
         // Update the original repodata.json file
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
