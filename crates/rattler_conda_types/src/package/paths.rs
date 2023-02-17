@@ -31,8 +31,8 @@ impl PathsJson {
     }
 
     /// Parses a `paths.json` file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        Self::from_reader(File::open(path.as_ref())?)
     }
 
     /// Reads the file from a package archive directory
