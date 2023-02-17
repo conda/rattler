@@ -1,11 +1,3 @@
-{
-  "info": {
-    "platform": null,
-    "default_python_version": "2.7",
-    "arch": null,
-    "subdir": "noarch",
-    "default_numpy_version": "1.7"
-  },
-  "packages.conda": {},
-  "packages": {}
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:6914ea088069b467fb0f1b70c41fbba31bdcdb442471d3d9f927bf90181ef653
+size 198
