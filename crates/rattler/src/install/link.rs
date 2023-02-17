@@ -1,7 +1,7 @@
-use crate::utils::{parse_sha256_from_hex, Sha256HashingWriter};
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
 use rattler_conda_types::Platform;
+use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use std::fs::Permissions;
 use std::io::Write;
 use std::path::Path;
@@ -81,7 +81,7 @@ pub fn link_file(
         // Open the destination file
         let destination = std::fs::File::create(&destination_path)
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
-        let mut destination_writer = Sha256HashingWriter::new(destination);
+        let mut destination_writer = HashingWriter::<_, sha2::Sha256>::new(destination);
 
         // Replace the prefix placeholder in the file with the new placeholder
         copy_and_replace_placholders(
@@ -111,7 +111,7 @@ pub fn link_file(
                 let original_hash = path_json_entry
                     .sha256
                     .as_deref()
-                    .and_then(parse_sha256_from_hex);
+                    .and_then(parse_digest_from_hex::<sha2::Sha256>);
                 let content_changed = original_hash != Some(current_hash);
 
                 // If the binary changed it requires resigning.

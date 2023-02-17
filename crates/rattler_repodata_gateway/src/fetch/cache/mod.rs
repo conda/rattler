@@ -125,11 +125,10 @@ where
 {
     use serde::de::Error;
     match Option::<&'de str>::deserialize(deserializer)? {
-        Some(str) => {
-            let mut hash = <blake2::digest::Output<blake2::Blake2s256>>::default();
-            hex::decode_to_slice(str, &mut hash).map_err(D::Error::custom)?;
-            Ok(Some(hash))
-        }
+        Some(str) => Ok(Some(
+            rattler_digest::parse_digest_from_hex::<blake2::Blake2s256>(str)
+                .ok_or_else(|| D::Error::custom("failed to parse blake2 hash"))?,
+        )),
         None => Ok(None),
     }
 }

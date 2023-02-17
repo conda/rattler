@@ -9,13 +9,12 @@
 //! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefor a good
 //! candidate for a reimplementation.
 
+use std::path::PathBuf;
+
 pub mod install;
 pub mod package_cache;
-pub mod repo_data;
 pub mod solver;
 pub mod validation;
-
-pub(crate) mod utils;
 
 /// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
 /// that is bundled with this repository.
@@ -31,9 +30,13 @@ pub fn empty_channel() -> rattler_conda_types::Channel {
 }
 
 #[cfg(test)]
-use std::path::{Path, PathBuf};
-
-#[cfg(test)]
 pub(crate) fn get_test_data_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+}
+
+/// Returns the default cache directory used by rattler.
+pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
+    Ok(dirs::cache_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
+        .join("rattler/cache"))
 }

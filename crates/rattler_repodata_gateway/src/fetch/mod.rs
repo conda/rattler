@@ -1,10 +1,11 @@
-use crate::utils::{
-    compute_file_blake2, AsyncEncoding, Blake2s256HashingWriter, Encoding, LockedFile,
-};
+//! This module provides functionality to download and cache `repodata.json` from a remote location.
+
+use crate::utils::{AsyncEncoding, Encoding, LockedFile};
 use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
+use rattler_digest::{compute_file_digest, HashingWriter};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -20,8 +21,8 @@ use tracing::instrument;
 use url::Url;
 
 mod cache;
-pub mod fetch;
 
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum FetchRepoDataError {
     #[error("failed to acquire a lock on the repodata cache")]
@@ -64,6 +65,7 @@ impl From<tokio::task::JoinError> for FetchRepoDataError {
     }
 }
 
+/// Defines how to use the repodata cache.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CacheAction {
     /// Use the cache if its up to date or fetch from the URL if there is no valid cached value.
@@ -85,6 +87,7 @@ impl Default for CacheAction {
     }
 }
 
+/// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 #[derive(Default)]
 pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
@@ -95,6 +98,7 @@ pub struct FetchRepoDataOptions {
     pub download_progress: Option<Box<dyn FnMut(DownloadProgress)>>,
 }
 
+/// A struct that provides information about download progress.
 #[derive(Debug, Clone)]
 pub struct DownloadProgress {
     /// The number of bytes already downloaded
@@ -105,6 +109,7 @@ pub struct DownloadProgress {
     pub total: Option<u64>,
 }
 
+/// The result of [`fetch_repo_data`].
 #[derive(Debug)]
 pub struct CachedRepoData {
     /// A lockfile that guards access to any of the repodata.json file or its cache.
@@ -123,16 +128,16 @@ pub struct CachedRepoData {
 /// Indicates whether or not the repodata.json cache was up-to-date or not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheResult {
-    // The cache was hit, the data on disk was already valid.
+    /// The cache was hit, the data on disk was already valid.
     CacheHit,
 
-    // The cache was hit, we did have to check with the server, but no data was downloaded.
+    /// The cache was hit, we did have to check with the server, but no data was downloaded.
     CacheHitAfterFetch,
 
-    // The cache was present but it was outdated.
+    /// The cache was present but it was outdated.
     CacheOutdated,
 
-    // There was no cache available
+    /// There was no cache available
     CacheNotPresent,
 }
 
@@ -432,7 +437,7 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
     let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
-    let mut hashing_file_writer = Blake2s256HashingWriter::new(file);
+    let mut hashing_file_writer = HashingWriter::<_, blake2::Blake2s256>::new(file);
 
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
@@ -649,7 +654,7 @@ fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheS
     //
     // Check the blake hash of the repodata.json file if we have a similar hash in the state.
     if let Some(cached_hash) = cache_state.blake2_hash.as_ref() {
-        match compute_file_blake2(&repo_data_json_path) {
+        match compute_file_digest::<blake2::Blake2s256>(&repo_data_json_path) {
             Err(e) => {
                 tracing::warn!(
                     "could not compute BLAKE2 hash of repodata.json file: {e}. Ignoring cached files..."
@@ -724,7 +729,7 @@ fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheS
 
 #[cfg(test)]
 mod test {
-    use crate::repo_data::{
+    use super::{
         fetch_repo_data, CacheResult, CachedRepoData, DownloadProgress, FetchRepoDataOptions,
     };
     use crate::utils::simple_channel_server::SimpleChannelServer;

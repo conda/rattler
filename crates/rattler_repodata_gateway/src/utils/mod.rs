@@ -1,26 +1,14 @@
 pub use encoding::{AsyncEncoding, Encoding};
 pub use flock::LockedFile;
-pub(crate) use hash::{
-    compute_file_blake2, compute_file_sha256, parse_sha256_from_hex, Blake2s256HashingWriter,
-    Sha256HashingWriter,
-};
-use std::{fmt::Write, path::PathBuf};
+use std::fmt::Write;
 use url::Url;
 
 mod encoding;
 
-mod hash;
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
 
 mod flock;
-
-/// Returns the default cache directory used by rattler.
-pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
-    Ok(dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/cache"))
-}
 
 /// Convert a URL to a cache filename
 pub(crate) fn url_to_cache_filename(url: &Url) -> String {
@@ -41,7 +29,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
     let url_str = url_str.strip_suffix("/repodata.json").unwrap_or(&url_str);
 
     // Compute the MD5 hash of the resulting URL string
-    let hash = extendhash::md5::compute_hash(url_str.as_bytes());
+    let hash = rattler_digest::compute_bytes_digest::<md5::Md5>(url_str);
 
     // Convert the hash to an MD5 hash.
     let mut result = String::with_capacity(8);
