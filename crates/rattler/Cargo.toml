@@ -24,6 +24,7 @@ extendhash = "1.0.9"
 futures = "0.3.17"
 fxhash = "0.2.1"
 hex = "0.4.3"
+humansize = "2.1.3"
 indicatif = { version = "0.17.1", features = ["improved_unicode"] }
 itertools = "0.10.3"
 libc = "0.2"
@@ -63,8 +64,8 @@ proptest = "1.0.0"
 rand = "0.8.4"
 rstest = "0.16.0"
 tokio-test = "0.4.2"
-tower-http = { version = "0.3.5", features = ["fs", "compression-gzip"] }
-tracing-test = "0.2.4"
+tower-http = { version = "0.3.5", features = ["fs", "compression-gzip", "trace"] }
+tracing-test = { version = "0.2.4" }
 
 [build-dependencies]
 cc = "1"

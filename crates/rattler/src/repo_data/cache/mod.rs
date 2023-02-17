@@ -1,4 +1,6 @@
-use super::cache_headers::CacheHeaders;
+mod cache_headers;
+
+pub use cache_headers::CacheHeaders;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
 use url::Url;

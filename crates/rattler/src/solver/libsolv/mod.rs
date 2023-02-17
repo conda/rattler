@@ -34,7 +34,7 @@ mod test {
         format!(
             "{}/{}",
             env!("CARGO_MANIFEST_DIR"),
-            "resources/channels/conda-forge/linux-64/repodata.json"
+            "../../test-data/channels/conda-forge/linux-64/repodata.json"
         )
     }
 
@@ -42,7 +42,7 @@ mod test {
         format!(
             "{}/{}",
             env!("CARGO_MANIFEST_DIR"),
-            "resources/channels/conda-forge/noarch/repodata.json"
+            "../../test-data/channels/conda-forge/noarch/repodata.json"
         )
     }
 

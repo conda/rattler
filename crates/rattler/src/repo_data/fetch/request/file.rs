@@ -44,12 +44,11 @@ pub async fn fetch_repodata(
 #[cfg(test)]
 mod test {
     use super::fetch_repodata;
-    use std::path::PathBuf;
+    use crate::get_test_data_dir;
 
     #[tokio::test]
     async fn test_fetch_file() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let subdir_path = manifest_dir.join("resources/channels/empty/noarch/repodata.json");
+        let subdir_path = get_test_data_dir().join("channels/empty/noarch/repodata.json");
         let _ = fetch_repodata(&subdir_path, &mut |_| {}).await.unwrap();
     }
 }

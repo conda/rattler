@@ -326,7 +326,6 @@ fn add_download_progress_listener<'s, E>(
 mod test {
     use std::fs::File;
     use std::io::BufReader;
-    use std::path::PathBuf;
     use std::str::FromStr;
     use tempfile::TempDir;
     use url::Url;
@@ -335,11 +334,11 @@ mod test {
     use crate::repo_data::fetch::request::REPODATA_CHANNEL_PATH;
     use crate::utils::simple_channel_server::SimpleChannelServer;
     use rattler_conda_types::{Channel, ChannelConfig, Platform};
+    use crate::get_test_data_dir;
 
     #[tokio::test]
     async fn test_fetch_http() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let channel_path = manifest_dir.join("resources/channels/empty");
+        let channel_path = get_test_data_dir().join("channels/empty");
 
         let server = SimpleChannelServer::new(channel_path);
         let url = server.url().to_string();
@@ -360,8 +359,7 @@ mod test {
 
     #[tokio::test]
     async fn test_http_fetch_cache() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let channel_path = manifest_dir.join("resources/channels/empty");
+        let channel_path = get_test_data_dir().join("channels/empty");
 
         let server = SimpleChannelServer::new(channel_path);
         let url = server.url().to_string();

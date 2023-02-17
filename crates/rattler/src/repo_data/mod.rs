@@ -1,11 +1,12 @@
-use crate::repo_data::cache_headers::CacheHeaders;
 use crate::utils::{
     compute_file_blake2, AsyncEncoding, Blake2s256HashingWriter, Encoding, LockedFile,
 };
+use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
+use humansize::{SizeFormatter, DECIMAL};
+use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Client, Response, StatusCode};
-use state::{Expiring, RepoDataState};
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -16,9 +17,8 @@ use tokio_util::io::StreamReader;
 use tracing::instrument;
 use url::Url;
 
-mod cache_headers;
+mod cache;
 pub mod fetch;
-mod state;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FetchRepoDataError {
@@ -88,6 +88,19 @@ pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
     /// server allows it).
     pub cache_action: CacheAction,
+
+    /// A function that is called during downloading of the repodata.json to report progress.
+    pub download_progress: Option<Box<dyn FnMut(DownloadProgress)>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DownloadProgress {
+    /// The number of bytes already downloaded
+    pub bytes: u64,
+
+    /// The total number of bytes to download. Or `None` if this is not known. This can happen
+    /// if the server does not supply a `Content-Length` header.
+    pub total: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -132,11 +145,11 @@ pub enum CacheResult {
 /// This method implements several different methods to download the repodata.json file from the
 /// remote:
 ///
-///     * If a `repodata.json.zst` file is available in the same directory that file is downloaded
-///       and decompressed.
-///     * If a `repodata.json.bz2` file is available in the same directory that file is downloaded
-///       and decompressed.
-///     * Otherwise the regular `repodata.json` file is downloaded.
+/// * If a `repodata.json.zst` file is available in the same directory that file is downloaded
+///   and decompressed.
+/// * If a `repodata.json.bz2` file is available in the same directory that file is downloaded
+///   and decompressed.
+/// * Otherwise the regular `repodata.json` file is downloaded.
 ///
 /// The checks to see if a `.zst` and/or `.bz2` file exist are performed by doing a HEAD request to
 /// the respective URLs. The result of these are cached.
@@ -245,16 +258,36 @@ pub async fn fetch_repo_data(
     tracing::debug!("fetching '{}'", &repo_data_url);
     let request_builder = client.get(repo_data_url.clone());
 
+    let mut headers = HeaderMap::default();
+
+    // We can handle g-zip encoding which is often used. We could also set this option on the
+    // client, but that will disable all download progress messages by `reqwest` because the
+    // gzipped data is decoded on the fly and the size of the decompressed body is unknown.
+    // However, we don't really care about the decompressed size but rather we'd like to know
+    // the number of raw bytes that are actually downloaded.
+    //
+    // To do this we manually set the request header to accept gzip encoding and we use the
+    // [`AsyncEncoding`] trait to perform the decoding on the fly.
+    headers.insert(
+        reqwest::header::ACCEPT_ENCODING,
+        HeaderValue::from_static("gzip"),
+    );
+
     // Add previous cache headers if we have them
-    let request_builder =
-        if let Some(headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
-            headers.add_to_request(request_builder)
-        } else {
-            request_builder
-        };
+    if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
+        cache_headers.add_to_request(&mut headers)
+    }
+
+    tracing::trace!("Send headers {:?}", &headers);
 
     // Send the request and wait for a reply
-    let response = request_builder.send().await?.error_for_status()?;
+    let response = request_builder
+        .headers(headers)
+        .send()
+        .await?
+        .error_for_status()?;
+
+    tracing::trace!("{:?}", response.headers());
 
     // If the content didn't change, simply return whatever we have on disk.
     if response.status() == StatusCode::NOT_MODIFIED {
@@ -293,6 +326,7 @@ pub async fn fetch_repo_data(
             Encoding::Passthrough
         },
         cache_path,
+        options.download_progress,
     )
     .await?;
 
@@ -336,26 +370,58 @@ pub async fn fetch_repo_data(
     })
 }
 
-/// Streams and decodes the response to a new temporary file in the given directory.
+/// Streams and decodes the response to a new temporary file in the given directory. While writing
+/// to disk it also computes the BLAKE2 hash of the file.
+#[instrument(skip_all)]
 async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
+    mut progress: Option<Box<dyn FnMut(DownloadProgress)>>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<blake2::Blake2s256>), FetchRepoDataError> {
+    // Determine the length of the response in bytes and notify the listener that a download is
+    // starting. The response may be compressed. Decompression happens below.
+    let content_size = response.content_length();
+    if let Some(progress) = progress.as_mut() {
+        progress(DownloadProgress {
+            bytes: 0,
+            total: content_size,
+        })
+    }
+
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
-    let decoded_byte_stream = StreamReader::new(
-        response
-            .bytes_stream()
-            .map_err(|e| std::io::Error::new(ErrorKind::Other, e)),
-    )
-    .decode(transfer_encoding);
 
-    // Decode based on content encoding
+    // Convert the response into a byte stream
+    let bytes_stream = response
+        .bytes_stream()
+        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
+
+    // Listen in on the bytes as they come from the response. Progress is tracked here instead of
+    // after decoding because that doesnt properly represent the number of bytes that are being
+    // transferred over the network.
+    let mut total_bytes = 0;
+    let total_bytes_mut = &mut total_bytes;
+    let bytes_stream = bytes_stream.inspect_ok(move |bytes| {
+        *total_bytes_mut += bytes.len() as u64;
+        if let Some(progress) = progress.as_mut() {
+            progress(DownloadProgress {
+                bytes: *total_bytes_mut,
+                total: content_size,
+            })
+        }
+    });
+
+    // Create a new stream from the byte stream that decodes the bytes using the transfer encoding
+    // on the fly.
+    let decoded_byte_stream = StreamReader::new(bytes_stream).decode(transfer_encoding);
+
+    // Create yet another stream that decodes the bytes yet again but this time using the content
+    // encoding.
     let mut decoded_repo_data_json_bytes =
         tokio::io::BufReader::new(decoded_byte_stream).decode(content_encoding);
 
-    tracing::debug!(
+    tracing::trace!(
         "decoding repodata (content: {:?}, transfer: {:?})",
         content_encoding,
         transfer_encoding
@@ -365,11 +431,12 @@ async fn stream_and_decode_to_file(
     let temp_file =
         NamedTempFile::new_in(temp_dir).map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
 
-    // Clone the file handle and create a hashing writer so we can compute a hash at the same time.
+    // Clone the file handle and create a hashing writer so we can compute a hash while the content
+    // is being written to disk.
     let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
     let mut hashing_file_writer = Blake2s256HashingWriter::new(file);
 
-    // Decode, hash and write the data to the file
+    // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
         .await
         .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
@@ -378,8 +445,9 @@ async fn stream_and_decode_to_file(
     let (_, hash) = hashing_file_writer.finalize();
 
     tracing::debug!(
-        "downloaded and decoded {} bytes, BLAKE2 hash: {:x}",
-        bytes,
+        "downloaded {}, decoded that into {}, BLAKE2 hash: {:x}",
+        SizeFormatter::new(total_bytes, DECIMAL),
+        SizeFormatter::new(bytes, DECIMAL),
         hash
     );
 
@@ -658,7 +726,9 @@ fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheS
 
 #[cfg(test)]
 mod test {
-    use crate::repo_data::{fetch_repo_data, CacheResult, CachedRepoData};
+    use crate::repo_data::{
+        fetch_repo_data, CacheResult, CachedRepoData, DownloadProgress, FetchRepoDataOptions,
+    };
     use crate::utils::simple_channel_server::SimpleChannelServer;
     use crate::utils::Encoding;
     use assert_matches::assert_matches;
@@ -958,5 +1028,75 @@ mod test {
                 value, ..
             }) if value
         );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_gzip_transfer_encoding() {
+        // Create a directory with some repodata.
+        let subdir_path = TempDir::new().unwrap();
+        write_encoded(
+            FAKE_REPO_DATA.as_ref(),
+            &subdir_path.path().join("repodata.json.gz"),
+            Encoding::GZip,
+        )
+        .await
+        .unwrap();
+
+        // The server is configured in such a way that if file `a` is requested but a file called
+        // `a.gz` is available it will stream the `a.gz` file and report that its a `gzip` encoded
+        // stream.
+        let server = SimpleChannelServer::new(subdir_path.path());
+
+        // Download the data from the channel
+        let cache_dir = TempDir::new().unwrap();
+        let result = fetch_repo_data(
+            server.url(),
+            Client::builder().no_gzip().build().unwrap(),
+            cache_dir.path(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(result.repo_data_json_path).unwrap(),
+            FAKE_REPO_DATA
+        );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_progress() {
+        use std::cell::Cell;
+        use std::sync::Arc;
+
+        // Create a directory with some repodata.
+        let subdir_path = TempDir::new().unwrap();
+        std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
+        let server = SimpleChannelServer::new(subdir_path.path());
+
+        let last_download_progress = Arc::new(Cell::new(0));
+        let last_download_progress_captured = last_download_progress.clone();
+        let download_progress = move |progress: DownloadProgress| {
+            last_download_progress_captured.set(progress.bytes);
+            assert_eq!(progress.total, Some(1110));
+        };
+
+        // Download the data from the channel with an empty cache.
+        let cache_dir = TempDir::new().unwrap();
+        let _result = fetch_repo_data(
+            server.url(),
+            Client::default(),
+            cache_dir.path(),
+            FetchRepoDataOptions {
+                download_progress: Some(Box::new(download_progress)),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(last_download_progress.get(), 1110);
     }
 }

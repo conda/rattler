@@ -1,4 +1,4 @@
-use reqwest::{header, RequestBuilder, Response};
+use reqwest::{header, header::{HeaderMap, HeaderValue}, Response};
 use serde::{Deserialize, Serialize};
 
 /// Extracted HTTP response headers that enable caching the repodata.json files.
@@ -53,18 +53,24 @@ impl From<&Response> for CacheHeaders {
 impl CacheHeaders {
     /// Adds the headers to the specified request to short-circuit if the content is still up to
     /// date.
-    pub fn add_to_request(&self, mut request_builder: RequestBuilder) -> RequestBuilder {
+    pub fn add_to_request(&self, headers: &mut HeaderMap) {
         // If previously there was an etag header, add the If-None-Match header so the server only sends
         // us new data if the etag is not longer valid.
-        if let Some(etag) = self.etag.as_ref() {
-            request_builder = request_builder.header(header::IF_NONE_MATCH, etag);
+        if let Some(etag) = self
+            .etag
+            .as_deref()
+            .and_then(|etag| HeaderValue::from_str(etag).ok())
+        {
+            headers.insert(header::IF_NONE_MATCH, etag);
         }
         // If a previous request contains a Last-Modified header, add the If-Modified-Since header to let
         // the server send us new data if the contents has been modified since that date.
-        if let Some(last_modified) = self.last_modified.as_ref() {
-            request_builder = request_builder.header(header::IF_MODIFIED_SINCE, last_modified);
+        if let Some(last_modified) = self
+            .last_modified
+            .as_deref()
+            .and_then(|last_modifed| HeaderValue::from_str(last_modifed).ok())
+        {
+            headers.insert(header::IF_MODIFIED_SINCE, last_modified);
         }
-
-        request_builder
     }
 }
