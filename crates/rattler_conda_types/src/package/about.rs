@@ -1,4 +1,4 @@
-use std::{path::Path, fs::File, io::Read, str::FromStr};
+use std::{fs::File, io::Read, path::Path, str::FromStr};
 
 use crate::utils::serde::{LossyUrl, MultiLineString, VecSkipNone};
 use serde::{Deserialize, Serialize};

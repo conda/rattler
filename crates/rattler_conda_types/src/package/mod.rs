@@ -10,10 +10,10 @@ mod paths;
 mod run_exports;
 
 pub use {
+    about::About,
     files::Files,
     has_prefix::HasPrefix,
     index::Index,
-    about::About,
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
