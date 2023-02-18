@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: tk
@@ -19,7 +20,7 @@ constrains: []
 license: TCL
 license_family: BSD
 timestamp: 1645033031535
-filename: tk-8.6.12-h8ffe710_0.tar.bz2
+fn: tk-8.6.12-h8ffe710_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/tk-8.6.12-h8ffe710_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0.tar.bz2"

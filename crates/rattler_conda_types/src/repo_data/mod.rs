@@ -10,7 +10,7 @@ use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
-use crate::{NoArchType, Version};
+use crate::{Channel, NoArchType, RepoDataRecord, Version};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 #[derive(Debug, Deserialize, Eq, PartialEq)]
@@ -19,6 +19,8 @@ pub struct RepoData {
     pub version: Option<usize>,
     pub info: Option<ChannelInfo>,
     pub packages: FxHashMap<String, PackageRecord>,
+    #[serde(rename = "packages.conda")]
+    pub conda_packages: FxHashMap<String, PackageRecord>,
     #[serde(default)]
     pub removed: FxHashSet<String>,
 }
@@ -56,7 +58,7 @@ pub struct PackageRecord {
     /// Optionally a MD5 hash of the package archive
     pub md5: Option<String>,
 
-    /// Optionally a MD5 hash of the package archive
+    /// Optionally a SHA256 hash of the package archive
     pub sha256: Option<String>,
 
     /// Optionally the size of the package archive in bytes
@@ -109,5 +111,26 @@ pub struct PackageRecord {
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}={}={}", self.name, self.version, self.build)
+    }
+}
+
+impl RepoData {
+    /// Builds a [`Vec<RepoDataRecord>`] from the packages in a [`RepoData`] given the source of the
+    /// data.
+    pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
+        let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
+        let channel_name = channel.canonical_name();
+        for (filename, package_record) in self.packages.into_iter().chain(self.conda_packages) {
+            records.push(RepoDataRecord {
+                url: channel
+                    .base_url()
+                    .join(&format!("{}/{}", &package_record.subdir, &filename))
+                    .expect("failed to build a url from channel and package record"),
+                channel: channel_name.clone(),
+                package_record,
+                filename,
+            })
+        }
+        records
     }
 }

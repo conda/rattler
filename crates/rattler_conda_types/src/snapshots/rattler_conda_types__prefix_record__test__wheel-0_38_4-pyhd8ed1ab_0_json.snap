@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: wheel
@@ -17,7 +18,7 @@ noarch: python
 license: MIT
 license_family: MIT
 timestamp: 1668051714265
-filename: wheel-0.38.4-pyhd8ed1ab_0.tar.bz2
+fn: wheel-0.38.4-pyhd8ed1ab_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"

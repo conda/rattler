@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: requests
@@ -22,7 +23,7 @@ track_features: ""
 noarch: python
 license: Apache-2.0
 timestamp: 1673863999077
-filename: requests-2.28.2-pyhd8ed1ab_0.conda
+fn: requests-2.28.2-pyhd8ed1ab_0.conda
 url: "https://conda.anaconda.org/conda-forge/noarch/requests-2.28.2-pyhd8ed1ab_0.conda"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2"

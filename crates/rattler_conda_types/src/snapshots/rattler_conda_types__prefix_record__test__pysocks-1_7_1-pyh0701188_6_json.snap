@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: pysocks
@@ -20,7 +21,7 @@ noarch: python
 license: BSD-3-Clause
 license_family: BSD
 timestamp: 1661605138291
-filename: pysocks-1.7.1-pyh0701188_6.tar.bz2
+fn: pysocks-1.7.1-pyh0701188_6.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyh0701188_6.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\pysocks-1.7.1-pyh0701188_6.tar.bz2"

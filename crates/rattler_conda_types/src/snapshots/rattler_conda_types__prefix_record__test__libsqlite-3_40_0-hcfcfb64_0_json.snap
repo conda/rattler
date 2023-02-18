@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: libsqlite
@@ -19,7 +20,7 @@ depends:
 constrains: []
 license: Unlicense
 timestamp: 1668697639781
-filename: libsqlite-3.40.0-hcfcfb64_0.tar.bz2
+fn: libsqlite-3.40.0-hcfcfb64_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.40.0-hcfcfb64_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\libsqlite-3.40.0-hcfcfb64_0.tar.bz2"

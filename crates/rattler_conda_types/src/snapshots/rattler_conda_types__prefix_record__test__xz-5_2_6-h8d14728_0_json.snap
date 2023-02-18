@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: xz
@@ -19,7 +20,7 @@ constrains: []
 track_features: ""
 license: LGPL-2.1 and GPL-2.0
 timestamp: 1660346976440
-filename: xz-5.2.6-h8d14728_0.tar.bz2
+fn: xz-5.2.6-h8d14728_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\pkgs\\xz-5.2.6-h8d14728_0.tar.bz2"

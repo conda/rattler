@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 196
 expression: prefix_record
 ---
 name: vc
@@ -19,7 +20,7 @@ track_features: vc14
 license: BSD-3-Clause
 license_family: BSD
 timestamp: 1673513671518
-filename: vc-14.3-hb6edc58_10.conda
+fn: vc-14.3-hb6edc58_10.conda
 url: "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-hb6edc58_10.conda"
 channel: "https://conda.anaconda.org/conda-forge/win-64"
 package_tarball_full_path: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\vc-14.3-hb6edc58_10.conda"
