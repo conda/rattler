@@ -1,5 +1,6 @@
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::path::Path;
 
+use super::PackageFile;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
@@ -9,7 +10,7 @@ use serde_with::{serde_as, skip_serializing_none};
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash)]
-pub struct RunExports {
+pub struct RunExportsJson {
     // weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub weak: Vec<String>,
@@ -29,36 +30,19 @@ pub struct RunExports {
     pub strong_constrains: Vec<String>,
 }
 
-impl RunExports {
-    /// Parses a `run_exports.json` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for RunExportsJson {
+    fn package_path() -> &'static Path {
+        Path::new("info/run_exports.json")
     }
 
-    /// Parses a `run_exports.json` file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/run_exports.json"))
-    }
-}
-
-impl FromStr for RunExports {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(Into::into)
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
+        serde_json::from_str(str).map_err(Into::into)
     }
 }
 
 #[cfg(all(unix, test))]
 mod test {
-    use super::RunExports;
+    use super::{PackageFile, RunExportsJson};
 
     #[test]
     pub fn test_reconstruct_run_exports_json_with_symlinks() {
@@ -72,6 +56,6 @@ mod test {
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());
 
-        insta::assert_yaml_snapshot!(RunExports::from_package_directory(&package_dir).unwrap());
+        insta::assert_yaml_snapshot!(RunExportsJson::from_package_directory(&package_dir).unwrap());
     }
 }
