@@ -10,6 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
   CARGO_TERM_COLOR: always
 
@@ -27,6 +29,19 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+
+  check-rustdoc-links:
+    name: Check intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+      - run: |
+          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
+            cargo rustdoc -p "$package" --all-features -- -D warnings
+          done
 
   test:
     name: Test Suite
