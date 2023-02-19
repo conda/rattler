@@ -269,7 +269,7 @@ where
 mod test {
     use super::{PackageCache, PackageInfo};
     use crate::{get_test_data_dir, validation::validate_package_directory};
-    use rattler_conda_types::package::PathsJson;
+    use rattler_conda_types::package::{PackageFile, PathsJson};
     use std::{fs::File, path::Path};
     use tempfile::tempdir;
 

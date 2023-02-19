@@ -1,6 +1,9 @@
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::{io::Error, path::Path};
 
-use crate::utils::serde::{LossyUrl, MultiLineString, VecSkipNone};
+use crate::{
+    package::PackageFile,
+    utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
+};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
 
@@ -9,7 +12,7 @@ use url::Url;
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct About {
+pub struct AboutJson {
     /// Description of the package
     #[serde_as(deserialize_as = "Option<MultiLineString>")]
     pub description: Option<String>,
@@ -58,36 +61,19 @@ pub struct About {
     pub channels: Vec<String>,
 }
 
-impl About {
-    /// Parses a `about.json` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for AboutJson {
+    fn package_path() -> &'static Path {
+        Path::new("info/about.json")
     }
 
-    /// Parses a `about.json` file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/about.json"))
-    }
-}
-
-impl FromStr for About {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(Into::into)
+    fn from_str(str: &str) -> Result<Self, Error> {
+        serde_json::from_str(str).map_err(Into::into)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::About;
+    use super::{AboutJson, PackageFile};
 
     #[test]
     pub fn test_reconstruct_about_json() {
@@ -98,7 +84,7 @@ mod test {
         )
         .unwrap();
 
-        insta::assert_yaml_snapshot!(About::from_package_directory(package_dir.path()).unwrap());
+        insta::assert_yaml_snapshot!(AboutJson::from_package_directory(package_dir.path()).unwrap());
     }
 
     #[test]
@@ -113,6 +99,6 @@ mod test {
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());
 
-        insta::assert_yaml_snapshot!(About::from_package_directory(&package_dir).unwrap());
+        insta::assert_yaml_snapshot!(AboutJson::from_package_directory(&package_dir).unwrap());
     }
 }

@@ -1,9 +1,5 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use crate::package::PackageFile;
+use std::path::{Path, PathBuf};
 
 /// Representation of the `info/no_softlink` file in older package archives. This file contains a list
 /// of all files that should not be "softlinked".
@@ -12,39 +8,22 @@ pub struct NoSoftlink {
     pub files: Vec<PathBuf>,
 }
 
-impl NoSoftlink {
-    /// Parses a `no_softlink` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for NoSoftlink {
+    fn package_path() -> &'static Path {
+        Path::new("info/no_softlink")
     }
 
-    /// Parses a `no_softlink` file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/no_softlink"))
-    }
-}
-
-impl FromStr for NoSoftlink {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
         Ok(Self {
-            files: s.lines().map(PathBuf::from).collect(),
+            files: str.lines().map(PathBuf::from).collect(),
         })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::NoSoftlink;
-    use std::{path::PathBuf, str::FromStr};
+    use super::{NoSoftlink, PackageFile};
+    use std::path::PathBuf;
 
     #[test]
     pub fn test_parse_no_link() {
