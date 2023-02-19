@@ -241,7 +241,7 @@ fn parse_platforms(
 
 /// Returns the default platforms. These are based on the platform this binary was build for as well
 /// as platform agnostic platforms.
-pub const fn default_platforms() -> &'static [Platform] {
+pub(crate) const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
     &CURRENT_PLATFORMS
 }
