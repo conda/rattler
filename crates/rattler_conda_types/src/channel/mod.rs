@@ -22,9 +22,9 @@ pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
     /// the `https://conda.anaconda.org` server but users are free to change this. This allows
     /// naming channels just by their name instead of their entire Url (e.g. "conda-forge" actually
-    /// refers to "https://conda.anaconda.org/conda-forge").
+    /// refers to `<https://conda.anaconda.org/conda-forge>`).
     ///
-    /// The default value is: https://conda.anaconda.org
+    /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
 }
 

@@ -1,8 +1,5 @@
 //! Defines [`RepoData`]. `RepoData` stores information of all packages present in a subdirectory
 //! of a channel. It provides indexing functionality.
-//!
-//! See the [`fetch`] module for functionality to download this information from a
-//! [`crate::Channel`].
 
 use std::fmt::{Display, Formatter};
 

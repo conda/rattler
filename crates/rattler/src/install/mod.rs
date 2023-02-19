@@ -42,7 +42,7 @@ impl From<JoinError> for InstallError {
     }
 }
 
-/// Additional options to pass to [`install_package`] to modify the installation process. Using
+/// Additional options to pass to [`link_package`] to modify the installation process. Using
 /// [`InstallOptions::default`] works in most cases unless you want specific control over the
 /// installation process.
 #[derive(Default)]
@@ -54,14 +54,14 @@ pub struct InstallOptions {
     /// However, in exceptional cases you might want to use a different prefix than the one that is
     /// being installed to. This field allows you to do that. When its set this is used instead of
     /// the target directory.
-    target_prefix: Option<PathBuf>,
+    pub target_prefix: Option<PathBuf>,
 
     /// Instead of reading the `paths.json` file from the package directory itself, use the data
     /// specified here.
     ///
     /// This is sometimes useful to avoid reading the file twice or when you want to modify
     /// installation process externally.
-    paths_json: Option<PathsJson>,
+    pub paths_json: Option<PathsJson>,
 
     /// Whether or not to use symbolic links where possible. If this is set to `Some(false)`
     /// symlinks are disabled, if set to `Some(true)` symbolic links are alwas used when specified
@@ -69,7 +69,7 @@ pub struct InstallOptions {
     /// symbolic links are only used if they are supported.
     ///
     /// Windows only supports symbolic links in specific cases.
-    allow_symbolic_links: Option<bool>,
+    pub allow_symbolic_links: Option<bool>,
 
     /// Whether or not to use hard links where possible. If this is set to `Some(false)` the use of
     /// hard links is disabled, if set to `Some(true)` hard links are always used when specified
@@ -79,12 +79,12 @@ pub struct InstallOptions {
     ///
     /// Hard links are supported by most OSes but often require that the hard link and its content
     /// are on the same filesystem.
-    allow_hard_links: Option<bool>,
+    pub allow_hard_links: Option<bool>,
 
     /// The platform for which the package is installed. Some operations like signing require
     /// different behavior depending on the platform. If the field is set to `None` the current
     /// platform is used.
-    platform: Option<Platform>,
+    pub platform: Option<Platform>,
 }
 
 /// Given an extracted package archive (`package_dir`), install its files to the `target_dir`.

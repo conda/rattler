@@ -56,10 +56,10 @@ pub enum NoArchKind {
     /// the compilation process through the python binary that is installed in the same environment.
     ///
     /// This introductory blog post highlights some of specific of noarch python packages:
-    /// https://www.anaconda.com/blog/condas-new-noarch-packages
+    /// <https://www.anaconda.com/blog/condas-new-noarch-packages>
     ///
     /// Or read the docs for more information:
-    /// https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/packages.html#noarch-python
+    /// <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/packages.html#noarch-python>
     Python,
 
     /// Noarch generic packages allow users to distribute docs, datasets, and source code in conda
