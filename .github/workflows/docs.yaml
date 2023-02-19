@@ -3,7 +3,7 @@ name: Deploy Docs
 on:
   push:
     branches:
-      - 'feat/rustdoc'
+      - $default-branch
 
 env:
   CARGO_TERM_COLOR: always
@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    if: github.repository == 'baszalmstra/rattler'
+    if: github.repository == 'mamba-org/rattler'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -47,7 +47,7 @@ jobs:
           echo "<meta name=\"robots\" content=\"noindex\">" > header.html
 
       - name: Build Documentation
-        run: cargo doc --all --no-deps --all-features
+        run: cargo doc --workspace --no-deps --all-features --lib
 
       #  This adds the following:
       #   - A top level redirect to the bevy crate documentation
