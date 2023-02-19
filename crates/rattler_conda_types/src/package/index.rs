@@ -1,5 +1,6 @@
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::path::Path;
 
+use super::PackageFile;
 use crate::Version;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
@@ -11,7 +12,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct Index {
+pub struct IndexJson {
     /// The lowercase name of the package
     pub name: String,
 
@@ -52,36 +53,19 @@ pub struct Index {
     pub subdir: Option<String>,
 }
 
-impl Index {
-    /// Parses a `index.json` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for IndexJson {
+    fn package_path() -> &'static Path {
+        Path::new("info/index.json")
     }
 
-    /// Parses a `index.json` file from a file.
-    pub fn from_path(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path)?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/index.json"))
-    }
-}
-
-impl FromStr for Index {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(Into::into)
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
+        serde_json::from_str(str).map_err(Into::into)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::Index;
+    use super::{IndexJson, PackageFile};
 
     #[test]
     pub fn test_reconstruct_index_json() {
@@ -92,7 +76,7 @@ mod test {
         )
         .unwrap();
 
-        insta::assert_yaml_snapshot!(Index::from_package_directory(package_dir.path()).unwrap());
+        insta::assert_yaml_snapshot!(IndexJson::from_package_directory(package_dir.path()).unwrap());
     }
 
     #[test]
@@ -108,6 +92,6 @@ mod test {
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());
 
-        insta::assert_yaml_snapshot!(Index::from_package_directory(&package_dir).unwrap());
+        insta::assert_yaml_snapshot!(IndexJson::from_package_directory(&package_dir).unwrap());
     }
 }

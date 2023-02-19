@@ -11,7 +11,7 @@
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
 use crate::{utils, utils::parse_sha256_from_hex};
-use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
+use rattler_conda_types::package::{PackageFile, PathType, PathsEntry, PathsJson};
 use std::{
     fs::Metadata,
     io::ErrorKind,
@@ -214,7 +214,7 @@ mod test {
         PackageEntryValidationError, PackageValidationError,
     };
     use assert_matches::assert_matches;
-    use rattler_conda_types::package::{PathType, PathsJson};
+    use rattler_conda_types::package::{PackageFile, PathType, PathsJson};
     use rstest::*;
     use std::{
         io::Write,
