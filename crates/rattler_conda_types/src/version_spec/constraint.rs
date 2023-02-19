@@ -6,7 +6,7 @@ use thiserror::Error;
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub enum Constraint {
+pub(crate) enum Constraint {
     /// Matches anything (`*`)
     Any,
 

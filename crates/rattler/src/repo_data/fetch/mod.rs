@@ -1,6 +1,6 @@
-//! The modules defines functionality to download channel [`crate::RepoData`] from several different
-//! type of sources, cache the results, do this for several sources in parallel, and provide
-//! adequate progress information to a user.
+//! The modules defines functionality to download channel [`rattler_conda_types::RepoData`] from
+//! several different type of sources, cache the results, do this for several sources in parallel,
+//! and provide adequate progress information to a user.
 
 mod multi_request;
 mod progress;

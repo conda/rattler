@@ -22,9 +22,9 @@ pub struct ChannelConfig {
     /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
     /// the `https://conda.anaconda.org` server but users are free to change this. This allows
     /// naming channels just by their name instead of their entire Url (e.g. "conda-forge" actually
-    /// refers to "https://conda.anaconda.org/conda-forge").
+    /// refers to `<https://conda.anaconda.org/conda-forge>`).
     ///
-    /// The default value is: https://conda.anaconda.org
+    /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
 }
 
@@ -241,7 +241,7 @@ fn parse_platforms(
 
 /// Returns the default platforms. These are based on the platform this binary was build for as well
 /// as platform agnostic platforms.
-pub const fn default_platforms() -> &'static [Platform] {
+pub(crate) const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
     &CURRENT_PLATFORMS
 }

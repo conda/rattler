@@ -139,7 +139,7 @@ struct VersionComponent {
 }
 
 impl VersionComponent {
-    pub fn starts_with(&self, other: &Self) -> bool {
+    pub(crate) fn starts_with(&self, other: &Self) -> bool {
         for ranges in self.ranges.iter().zip_longest(other.ranges.iter()) {
             let (left, right) = match ranges {
                 EitherOrBoth::Both(left, right) => (left, right),
