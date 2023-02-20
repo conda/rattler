@@ -92,7 +92,10 @@ pub struct InstallOptions {
     pub platform: Option<Platform>,
 }
 
-/// Given an extracted package archive (`package_dir`), install its files to the `target_dir`.
+/// Given an extracted package archive (`package_dir`), installs its files to the `target_dir`.
+///
+/// Returns a [`PathsEntry`] for every file that was linked into the target directory. The entries
+/// are ordered in the same order as they appear in the `paths.json` file of the package.
 #[instrument(skip_all, fields(package_dir = %package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
