@@ -1,3 +1,4 @@
+use crate::InstalledPackage;
 use rattler_conda_types::RepoData;
 use std::{
     cmp::Ordering,
@@ -11,58 +12,11 @@ use std::{
 
 use super::{
     c_string, ffi,
+    keys::*,
     pool::PoolRef,
     pool::{FindInterned, Intern},
     solvable::SolvableId,
 };
-
-// const SOLVABLE_SUMMARY: &str = "solvable:summary";
-// const SOLVABLE_DESCRIPTION: &str = "solvable:description";
-// const SOLVABLE_DISTRIBUTION: &str = "solvable:distribution";
-// const SOLVABLE_AUTHORS: &str = "solvable:authors";
-// const SOLVABLE_PACKAGER: &str = "solvable:packager";
-// const SOLVABLE_GROUP: &str = "solvable:group";
-// const SOLVABLE_URL: &str = "solvable:url";
-// const SOLVABLE_KEYWORDS: &str = "solvable:keywords";
-const SOLVABLE_LICENSE: &str = "solvable:license";
-const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
-// const SOLVABLE_BUILDHOST: &str = "solvable:buildhost";
-// const SOLVABLE_EULA: &str = "solvable:eula";
-// const SOLVABLE_CPEID: &str = "solvable:cpeid";
-// const SOLVABLE_MESSAGEINS: &str = "solvable:messageins";
-// const SOLVABLE_MESSAGEDEL: &str = "solvable:messagedel";
-// const SOLVABLE_INSTALLSIZE: &str = "solvable:installsize";
-// const SOLVABLE_DISKUSAGE: &str = "solvable:diskusage";
-// const SOLVABLE_FILELIST: &str = "solvable:filelist";
-// const SOLVABLE_INSTALLTIME: &str = "solvable:installtime";
-// const SOLVABLE_MEDIADIR: &str = "solvable:mediadir";
-// const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
-// const SOLVABLE_MEDIANR: &str = "solvable:medianr";
-// const SOLVABLE_MEDIABASE: &str = "solvable:mediabase"; /* <location xml:base=... > */
-const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
-// const SOLVABLE_SOURCEARCH: &str = "solvable:sourcearch";
-// const SOLVABLE_SOURCENAME: &str = "solvable:sourcename";
-// const SOLVABLE_SOURCEEVR: &str = "solvable:sourceevr";
-// const SOLVABLE_ISVISIBLE: &str = "solvable:isvisible";
-// const SOLVABLE_TRIGGERS: &str = "solvable:triggers";
-const SOLVABLE_CHECKSUM: &str = "solvable:checksum";
-const SOLVABLE_PKGID: &str = "solvable:pkgid"; /* pkgid: md5sum over header + payload */
-// const SOLVABLE_HDRID: &str = "solvable:hdrid"; /* hdrid: sha1sum over header only */
-// const SOLVABLE_LEADSIGID: &str = "solvable:leadsigid"; /* leadsigid: md5sum over lead + sigheader */
-const SOLVABLE_BUILDFLAVOR: &str = "solvable:buildflavor";
-const SOLVABLE_BUILDVERSION: &str = "solvable:buildversion";
-
-const REPOKEY_TYPE_MD5: &str = "repokey:type:md5";
-// const REPOKEY_TYPE_SHA1: &str = "repokey:type:sha1";
-// const REPOKEY_TYPE_SHA224: &str = "repokey:type:sha224";
-const REPOKEY_TYPE_SHA256: &str = "repokey:type:sha256";
-// const REPOKEY_TYPE_SHA384: &str = "repokey:type:sha384";
-// const REPOKEY_TYPE_SHA512: &str = "repokey:type:sha512";
-
-const SOLVABLE_CONSTRAINS: &str = "solvable:constrains"; /* conda */
-const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features"; /* conda */
-// const SOLVABLE_ISDEFAULT: &str = "solvable:isdefault";
-// const SOLVABLE_LANGONLY: &str = "solvable:langonly";
 
 /// Representation of a repo containing package data in libsolv. This corresponds to a repo_data
 /// json. Lifetime of this object is coupled to the Pool on creation
@@ -107,7 +61,7 @@ impl RepoRef {
     }
 
     /// Returns a pointer to the wrapped `ffi::Repo`
-    fn as_ptr(&self) -> NonNull<ffi::Repo> {
+    pub(super) fn as_ptr(&self) -> NonNull<ffi::Repo> {
         // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
         unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
     }
@@ -383,6 +337,76 @@ impl RepoRef {
             } else {
                 tracing::warn!("unknown package extension: {}", filename);
             }
+        }
+
+        // TODO: What does this do?
+        unsafe { ffi::repo_internalize(self.as_ptr().as_ptr()) };
+
+        Ok(())
+    }
+
+    pub fn add_installed(&self, packages: &[InstalledPackage]) -> anyhow::Result<()> {
+        let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
+
+        // Get relevant IDs
+        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
+        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
+
+        // Iterate over all packages
+        for package in packages {
+            // Create a solvable for the package.
+            let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
+            let solvable = solvable_id.resolve(self.pool());
+
+            let solvable = unsafe { solvable.as_ptr().as_mut() };
+
+            // Name and version
+            solvable.name = package.name.intern(self.pool()).into();
+            solvable.evr = package.version.intern(self.pool()).into();
+
+            // Build string
+            // TODO: is "0" a reasonable default? Can we somehow enforce the build string is always present?
+            let build_string = package
+                .build_string
+                .as_ref()
+                .cloned()
+                .unwrap_or_else(|| "0".to_string());
+            unsafe {
+                ffi::repodata_add_poolstr_array(
+                    data,
+                    solvable_id.into(),
+                    solvable_buildflavor_id.into(),
+                    CString::new(build_string.as_str())?.as_ptr(),
+                )
+            };
+
+            // Build number
+            // TODO: is this the right thing to do?
+            if let Some(build_number) = package.build_number {
+                unsafe {
+                    ffi::repodata_set_str(
+                        data,
+                        solvable_id.into(),
+                        solvable_buildversion_id.into(),
+                        CString::new(build_number.to_string())?.as_ptr(),
+                    )
+                }
+            }
+
+            solvable.provides = unsafe {
+                ffi::repo_addid_dep(
+                    self.as_ptr().as_ptr(),
+                    solvable.provides,
+                    ffi::pool_rel2id(
+                        self.pool().as_ptr().as_ptr(),
+                        solvable.name,
+                        solvable.evr,
+                        ffi::REL_EQ as i32,
+                        1,
+                    ),
+                    0,
+                )
+            };
         }
 
         // TODO: What does this do?

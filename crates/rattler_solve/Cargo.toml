@@ -1,0 +1,26 @@
+[package]
+name = "rattler_solve"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
+libc = "0.2"
+libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
+anyhow = "1.0.69"
+thiserror = "1.0.30"
+tracing = "0.1.29"
+serde = { version = "1.0.130", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0.68"
+
+[build-dependencies]
+anyhow = "1.0.69"
+bindgen = "0.64.0"
+cc = "1.0.79"
+cmake = "0.1.49"
+
+[package.metadata.cargo-udeps.ignore]
+# libz-sys is required to build libsolv properly
+normal = ["libz-sys"]

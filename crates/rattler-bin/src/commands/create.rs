@@ -1,4 +1,5 @@
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
+use rattler_solve::{RequestedAction, SolverProblem};
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -16,7 +17,9 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let _specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec, &channel_config))
+        .map(|spec| {
+            MatchSpec::from_str(spec, &channel_config).map(|s| (s, RequestedAction::Install))
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     // Get the cache directory

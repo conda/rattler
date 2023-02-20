@@ -1,4 +1,6 @@
+use crate::libsolv::keys::{REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDVERSION};
 use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 use super::ffi;
@@ -7,7 +9,7 @@ use super::repo::RepoRef;
 
 /// Solvable in libsolv
 #[repr(transparent)]
-pub struct Solvable(NonNull<ffi::Solvable>);
+pub struct Solvable<'repo>(NonNull<ffi::Solvable>, PhantomData<&'repo ffi::Repo>);
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
 #[derive(Copy, Clone)]
@@ -28,20 +30,15 @@ impl SolvableId {
             let solvables = pool.as_ref().solvables;
             // Apparently the solvable is offset by the id from the first solvable
             let solvable = solvables.offset(self.0 as isize);
-            Solvable(NonNull::new(solvable).expect("solvable cannot be null"))
+            Solvable(
+                NonNull::new(solvable).expect("solvable cannot be null"),
+                PhantomData::default(),
+            )
         }
     }
 }
 
-#[derive(Debug)]
-pub struct SolvableInfo {
-    pub name: String,
-    pub version: String,
-    pub build_string: Option<String>,
-    pub build_number: Option<usize>,
-}
-
-impl Solvable {
+impl<'repo> Solvable<'repo> {
     /// Returns a pointer to the wrapped `ffi::Pool`
     pub(super) fn as_ptr(&self) -> NonNull<ffi::Solvable> {
         self.0
@@ -75,51 +72,62 @@ impl Solvable {
     }
 
     /// Returns the location of the solvable which is defined by the subdirectory and the filename of the package.
-    pub fn location(&self) -> String {
+    pub fn location(&self) -> Option<String> {
         unsafe {
             let loc = ffi::solvable_get_location(self.as_ptr().as_ptr(), std::ptr::null_mut());
-            CStr::from_ptr(loc)
-                .to_str()
-                .expect("invalid utf8 in location")
-                .to_owned()
+            if loc.is_null() {
+                None
+            } else {
+                let str = CStr::from_ptr(loc)
+                    .to_str()
+                    .expect("invalid utf8 in location")
+                    .to_owned();
+
+                Some(str)
+            }
         }
     }
 
-    /// Returns a solvable info from a solvable
-    pub fn solvable_info(&self) -> SolvableInfo {
-        let pool = self.repo().pool();
-        let solvable = self.0.as_ptr();
+    pub fn name(&self) -> String {
+        self.resolve_by_id(|s| s.name)
+    }
 
-        let id = StringId(unsafe { (*solvable).name });
-        let version = StringId(unsafe { (*solvable).evr });
+    pub fn version(&self) -> String {
+        self.resolve_by_id(|s| s.evr)
+    }
 
-        let solvable_build_flavor = "solvable:buildflavor"
-            .find_interned_id(pool)
-            .expect("\"solvable:buildflavor\" was not found in the string pool");
-        let build_string = self
-            .lookup_str(solvable_build_flavor)
-            .map(ToOwned::to_owned);
+    pub fn build_string(&self) -> Option<String> {
+        self.resolve_by_key(SOLVABLE_BUILDFLAVOR)
+            .map(ToOwned::to_owned)
+    }
 
-        let solvable_build_version = "solvable:buildversion"
-            .find_interned_id(pool)
-            .expect("\"solvable:buildversion\" was not found in the string pool");
-        let build_number = self.lookup_str(solvable_build_version).map(|num_str| {
+    pub fn build_number(&self) -> Option<usize> {
+        self.resolve_by_key(SOLVABLE_BUILDVERSION).map(|num_str| {
             num_str.parse().unwrap_or_else(|e| {
                 panic!("could not convert build_number '{num_str}' to number: {e}")
             })
-        });
+        })
+    }
 
-        SolvableInfo {
-            name: id
-                .resolve(pool)
-                .expect("string not found in pool")
-                .to_string(),
-            version: version
-                .resolve(pool)
-                .expect("string not found in pool")
-                .to_string(),
-            build_string,
-            build_number,
+    pub fn sha256(&self) -> Option<String> {
+        self.resolve_by_key(REPOKEY_TYPE_SHA256)
+            .map(|s| s.to_owned())
+    }
+
+    fn resolve_by_key(&self, key: &str) -> Option<&str> {
+        let id = key.find_interned_id(self.pool());
+        match id {
+            None => panic!("key `{key}` was not found in the string pool"),
+            Some(id) => self.lookup_str(id),
         }
+    }
+
+    fn resolve_by_id(&self, get_id: impl Fn(ffi::Solvable) -> ffi::Id) -> String {
+        let id = (get_id)(unsafe { *self.0.as_ptr() });
+        let string_id = StringId(id);
+        string_id
+            .resolve(self.pool())
+            .expect("string not found in pool")
+            .to_string()
     }
 }

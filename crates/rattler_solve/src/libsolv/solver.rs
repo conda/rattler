@@ -84,6 +84,11 @@ impl SolverRef {
         output
     }
 
+    /// Sets a solver flag
+    pub fn set_flag(&self, flag: u32, value: bool) {
+        unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag as i32, i32::from(value)) };
+    }
+
     /// Solves all the problems in the `queue`, or returns an error if problems remain.
     pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<()> {
         let result = unsafe {

@@ -124,6 +124,10 @@ impl PoolRef {
         }
     }
 
+    pub fn set_installed(&self, repo: &Repo) {
+        unsafe { ffi::pool_set_installed(self.as_ptr().as_ptr(), repo.as_ptr().as_ptr()) }
+    }
+
     /// Create repo from a pool
     pub fn create_repo<S: AsRef<str>>(&self, url: S) -> Repo {
         unsafe {
