@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 
-//! `rattler_repodata_gateway` is a create that provides functionality to interact with Conda
+//! `rattler_repodata_gateway` is a crate that provides functionality to interact with Conda
 //! repodata. It currently provides functionality to download and cache `repodata.json` files
 //! through the [`fetch::fetch_repo_data`] function.
 //!
