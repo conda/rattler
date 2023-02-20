@@ -5,6 +5,7 @@ pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
 
 use futures::{stream, FutureExt, StreamExt, TryStreamExt};
+use rattler_conda_types::prefix_record::PathsEntry;
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::{
     future::ready,
@@ -94,7 +95,7 @@ pub async fn link_package(
     target_dir: &Path,
     driver: &InstallDriver,
     options: InstallOptions,
-) -> Result<(), InstallError> {
+) -> Result<Vec<PathsEntry>, InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -139,9 +140,9 @@ pub async fn link_package(
     let platform = options.platform.unwrap_or(Platform::current());
 
     // Link all package files in parallel
-    stream::iter(paths_json.paths)
-        .map(Ok)
-        .try_for_each_concurrent(None, |entry| {
+    let num_paths_entries = paths_json.paths.len();
+    let paths: Vec<_> = stream::iter(paths_json.paths)
+        .map(|entry| {
             let package_dir = package_dir.to_owned();
             let target_dir = target_dir.to_owned();
             let target_prefix = target_prefix.to_owned();
@@ -151,17 +152,26 @@ pub async fn link_package(
                     &package_dir,
                     &target_dir,
                     &target_prefix,
-                    allow_symbolic_links,
-                    allow_hard_links,
+                    allow_symbolic_links && !entry.no_link,
+                    allow_hard_links && !entry.no_link,
                     platform,
                 )
                 .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
-                .map(|_| ())
+                .map(|result| PathsEntry {
+                    relative_path: entry.relative_path,
+                    path_type: entry.path_type.into(),
+                    no_link: entry.no_link,
+                    sha256: entry.sha256,
+                    sha256_in_prefix: Some(format!("{:x}", result.sha256)),
+                    size_in_bytes: Some(result.file_size),
+                })
             })
         })
+        .buffered(num_paths_entries)
+        .try_collect()
         .await?;
 
-    Ok(())
+    Ok(paths)
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
@@ -306,5 +316,31 @@ mod test {
             String::from_utf8_lossy(&python_version.stdout).trim(),
             "Python 3.11.0"
         );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_prefix_paths() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let package_dir = tempfile::TempDir::new().unwrap();
+
+        // Create package cache
+        rattler_package_streaming::fs::extract(
+            &get_test_data_dir().join("ruff-0.0.171-py310h298983d_0.conda"),
+            package_dir.path(),
+        )
+        .unwrap();
+
+        // Link the package
+        let paths = link_package(
+            package_dir.path(),
+            environment_dir.path(),
+            &InstallDriver::default(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+
+        insta::assert_yaml_snapshot!(paths);
     }
 }

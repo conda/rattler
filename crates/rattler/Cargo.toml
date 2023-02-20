@@ -53,6 +53,7 @@ assert_matches = "1.5.0"
 rand = "0.8.4"
 rstest = "0.16.0"
 tracing-test = { version = "0.2.4" }
+insta = { version = "1.16.0", features = ["yaml"] }
 
 [build-dependencies]
 cc = "1"
