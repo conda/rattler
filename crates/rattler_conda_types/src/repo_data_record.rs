@@ -1,3 +1,5 @@
+//! Defines the `[RepoDataRecord]` struct.
+
 use crate::PackageRecord;
 use serde::{Deserialize, Serialize};
 use url::Url;

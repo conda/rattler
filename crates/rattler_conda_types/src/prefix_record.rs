@@ -1,3 +1,5 @@
+//! Defines the `[PrefixRecord]` struct.
+
 use crate::repo_data_record::RepoDataRecord;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
