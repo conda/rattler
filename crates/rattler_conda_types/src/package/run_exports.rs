@@ -48,7 +48,7 @@ mod test {
     pub fn test_reconstruct_run_exports_json_with_symlinks() {
         let package_dir = tempfile::tempdir().unwrap();
         rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("libzlib-1.2.13-hfd90126_4.tar.bz2"),
+            &crate::get_test_data_dir().join("with-symlinks/libzlib-1.2.13-hfd90126_4.tar.bz2"),
             package_dir.path(),
         )
         .unwrap();
