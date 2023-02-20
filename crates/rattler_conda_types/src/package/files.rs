@@ -1,9 +1,5 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use crate::package::PackageFile;
+use std::path::{Path, PathBuf};
 
 /// Representation of the `info/files` file in older package archives.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -11,39 +7,22 @@ pub struct Files {
     pub files: Vec<PathBuf>,
 }
 
-impl Files {
-    /// Parses a `files` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for Files {
+    fn package_path() -> &'static Path {
+        Path::new("info/files")
     }
 
-    /// Parses a `files` file from a file.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path.as_ref())?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/files"))
-    }
-}
-
-impl FromStr for Files {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
         Ok(Self {
-            files: s.lines().map(PathBuf::from).collect(),
+            files: str.lines().map(PathBuf::from).collect(),
         })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::Files;
-    use std::{path::PathBuf, str::FromStr};
+    use super::{Files, PackageFile};
+    use std::path::PathBuf;
 
     #[test]
     pub fn test_parse_files() {

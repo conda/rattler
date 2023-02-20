@@ -1,14 +1,10 @@
+use super::PackageFile;
 use crate::package::has_prefix::HasPrefixEntry;
 use crate::package::{Files, HasPrefix, NoLink, NoSoftlink};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
-use std::{
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::path::{Path, PathBuf};
 
 /// A representation of the `paths.json` file found in package archives.
 ///
@@ -22,24 +18,17 @@ pub struct PathsJson {
     pub paths: Vec<PathsEntry>,
 }
 
+impl PackageFile for PathsJson {
+    fn package_path() -> &'static Path {
+        Path::new("info/paths.json")
+    }
+
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
+        serde_json::from_str(str).map_err(Into::into)
+    }
+}
+
 impl PathsJson {
-    /// Parses a `paths.json` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
-    }
-
-    /// Parses a `paths.json` file from a file.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path.as_ref())?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/paths.json"))
-    }
-
     /// Reads the file from a package archive directory. If the `paths.json` file could not be found
     /// use the [`Self::from_deprecated_package_directory`] method as a fallback.
     pub fn from_package_directory_with_deprecated_fallback(
@@ -163,14 +152,6 @@ impl PathsJson {
                 }
             })
         })
-    }
-}
-
-impl FromStr for PathsJson {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(Into::into)
     }
 }
 

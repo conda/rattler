@@ -1,4 +1,5 @@
 use crate::package::paths::FileMode;
+use crate::package::PackageFile;
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_till1},
@@ -9,8 +10,6 @@ use nom::{
 };
 use std::{
     borrow::Cow,
-    fs::File,
-    io::Read,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -28,31 +27,14 @@ pub struct HasPrefix {
     pub files: Vec<HasPrefixEntry>,
 }
 
-impl HasPrefix {
-    /// Parses a `has_prefix` file from a reader.
-    pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
-        let mut str = String::new();
-        reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+impl PackageFile for HasPrefix {
+    fn package_path() -> &'static Path {
+        Path::new("info/has_prefix")
     }
 
-    /// Parses a `has_prefix` file from a file.
-    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_reader(File::open(path.as_ref())?)
-    }
-
-    /// Reads the file from a package archive directory
-    pub fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join("info/has_prefix"))
-    }
-}
-
-impl FromStr for HasPrefix {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(str: &str) -> Result<Self, std::io::Error> {
         Ok(Self {
-            files: s
+            files: str
                 .lines()
                 .map(HasPrefixEntry::from_str)
                 .collect::<Result<_, _>>()?,
@@ -139,7 +121,8 @@ impl FromStr for HasPrefixEntry {
 mod test {
     use super::HasPrefixEntry;
     use crate::package::FileMode;
-    use std::{borrow::Cow, path::PathBuf, str::FromStr};
+    use std::str::FromStr;
+    use std::{borrow::Cow, path::PathBuf};
 
     #[test]
     pub fn test_parse_has_prefix() {

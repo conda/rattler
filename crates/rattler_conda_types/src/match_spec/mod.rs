@@ -5,8 +5,8 @@ use std::fmt::{Debug, Display, Formatter};
 
 mod parse;
 
-/// A `MatchSpec` is, fundamentally, a query language for conda packages. Any of the fields that
-/// comprise a [`PackageRecord`] can be used to compose a `MatchSpec`.
+/// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
+/// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {

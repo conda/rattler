@@ -10,7 +10,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RUSTFLAGS: -Dwarnings
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
 
 jobs:
@@ -27,6 +29,21 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: check
+
+  check-rustdoc-links:
+    name: Check intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+      - run: |
+          for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
+            cargo rustdoc -p "$package" --all-features -- -D warnings -W unreachable-pub
+          done
 
   test:
     name: Test Suite

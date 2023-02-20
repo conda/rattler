@@ -1,10 +1,6 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
-use crate::utils::serde::{LossyUrl, MultiLineString, VecSkipNone};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
-use url::Url;
-
+mod about;
 mod files;
 mod has_prefix;
 mod index;
@@ -13,64 +9,67 @@ mod no_softlink;
 mod paths;
 mod run_exports;
 
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 pub use {
+    about::AboutJson,
     files::Files,
     has_prefix::HasPrefix,
-    index::Index,
+    index::IndexJson,
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
-    run_exports::RunExports,
+    run_exports::RunExportsJson,
 };
 
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
-pub struct About {
-    /// Description of the package
-    #[serde_as(deserialize_as = "Option<MultiLineString>")]
-    pub description: Option<String>,
+/// A trait implemented for structs that represent specific files in a Conda archive.
+///
+/// This trait provides a standardised interface for accessing the contents of known files in a
+/// Conda package, such as the `index.json` (see [`IndexJson`]) or `about.json` (see [`AboutJson`])
+/// files. Structs that represent these files should implement this trait in order to ensure that
+/// they can be easily accessed and manipulated by other code that expects a consistent interface.
+pub trait PackageFile: Sized {
+    /// Returns the path to the file within the Conda archive.
+    ///
+    /// The path is relative to the root of the archive and include any necessary directories.
+    fn package_path() -> &'static Path;
 
-    /// Short summary description
-    #[serde_as(deserialize_as = "Option<MultiLineString>")]
-    pub summary: Option<String>,
+    /// Parses the object from a string, using a format appropriate for the file type.
+    ///
+    /// For example, if the file is in JSON format, this function parses the JSON string and returns
+    /// the resulting object. If the file is not in a parsable format, this function returns an
+    /// error.
+    fn from_str(str: &str) -> Result<Self, std::io::Error>;
 
-    /// Optionally, the license
-    pub license: Option<String>,
+    /// Parses the object from a `Read` trait object, using a format appropriate for the file type.
+    ///
+    /// For example, if the file is in JSON format, this function reads the data from the `Read`
+    /// object, parse the JSON string and return the resulting object. If the file is not in a
+    /// parsable format, this function returns an error.
+    fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
+        let mut str = String::new();
+        reader.read_to_string(&mut str)?;
+        Self::from_str(&str)
+    }
 
-    /// Optionally, the license family
-    pub license_family: Option<String>,
+    /// Parses the object from a file specified by a `path`, using a format appropriate for the file
+    /// type.
+    ///
+    /// For example, if the file is in JSON format, this function reads the data from the file at
+    /// the specified path, parse the JSON string and return the resulting object. If the file is
+    /// not in a parsable format or if the file could not read, this function returns an error.
+    fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        Self::from_reader(File::open(path)?)
+    }
 
-    /// URL to the development page of the package
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    #[serde_as(
-        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
-        serialize_as = "OneOrMany<Same>"
-    )]
-    pub dev_url: Vec<Url>,
-
-    /// URL to the documentation of the package
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    #[serde_as(
-        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
-        serialize_as = "OneOrMany<Same>"
-    )]
-    pub doc_url: Vec<Url>,
-
-    /// URL to the homepage of the package
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    #[serde_as(
-        deserialize_as = "VecSkipNone<OneOrMany<LossyUrl>>",
-        serialize_as = "OneOrMany<Same>"
-    )]
-    pub home: Vec<Url>,
-
-    /// URL to the latest source code of the package
-    #[serde(default)]
-    #[serde_as(deserialize_as = "LossyUrl")]
-    pub source_url: Option<Url>,
-
-    /// A list of channels that where used during the build
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub channels: Vec<String>,
+    /// Parses the object by looking up the appropriate file from the root of the specified Conda
+    /// archive directory, using a format appropriate for the file type.
+    ///
+    /// For example, if the file is in JSON format, this function reads the appropriate file from
+    /// the archive, parse the JSON string and return the resulting object. If the file is not in a
+    /// parsable format or if the file could not be read, this function returns an error.
+    fn from_package_directory(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        Self::from_path(&path.as_ref().join(Self::package_path()))
+    }
 }
