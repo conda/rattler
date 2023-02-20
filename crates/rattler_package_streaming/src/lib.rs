@@ -1,4 +1,6 @@
-//! This crate provides the ability to extract a package archive or specific parts of it.
+#![deny(missing_docs)]
+
+//! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
 use std::path::Path;
 
@@ -14,6 +16,7 @@ pub mod tokio;
 
 /// An error that can occur when extracting a package archive.
 #[derive(thiserror::Error, Debug)]
+#[allow(missing_docs)]
 pub enum ExtractError {
     #[error("an io error occurred")]
     IoError(#[from] std::io::Error),

@@ -1,3 +1,6 @@
+//! Functions that enable extracting or streaming a Conda package for objects that implement the
+//! [`tokio::io::AsyncRead`] trait.
+
 use crate::ExtractError;
 use std::path::Path;
 use tokio::io::AsyncRead;

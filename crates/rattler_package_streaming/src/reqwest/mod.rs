@@ -1,3 +1,5 @@
+//! Functionality to stream and extract packages directly from a [`reqwest::Url`].
+
 #[cfg(feature = "tokio")]
 pub mod tokio;
 

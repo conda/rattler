@@ -1,3 +1,6 @@
+//! Functions that enable extracting or streaming a Conda package for objects that implement the
+//! [`std::io::Read`] trait.
+
 use super::ExtractError;
 use std::ffi::OsStr;
 use std::{io::Read, path::Path};

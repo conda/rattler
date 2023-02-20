@@ -1,3 +1,6 @@
+//! Functionality to stream and extract packages directly from a [`reqwest::Url`] within a [`tokio`]
+//! async context.
+
 use crate::{ArchiveType, ExtractError};
 use futures_util::stream::TryStreamExt;
 use reqwest::IntoUrl;
