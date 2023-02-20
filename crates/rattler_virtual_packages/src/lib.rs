@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! A library to detect Conda virtual packages present on a system.
 //!
 //! A virtual package represents a package that is injected into the solver to provide system
@@ -43,8 +45,13 @@ use linux::ParseLinuxVersionError;
 /// `version` and a `build_string`. See [`VirtualPackage`] for available virtual packages.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct GenericVirtualPackage {
+    /// The name of the package
     pub name: String,
+
+    /// The version of the package
     pub version: Version,
+
+    /// The build identifier of the package.
     pub build_string: String,
 }
 
@@ -96,6 +103,8 @@ impl From<VirtualPackage> for GenericVirtualPackage {
 }
 
 impl VirtualPackage {
+    /// Returns virtual packages detected for the current system or an error if the versions could
+    /// not be properly detected.
     pub fn current() -> Result<&'static [Self], DetectVirtualPackageError> {
         static DETECED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
         DETECED_VIRTUAL_PACKAGES
@@ -104,7 +113,9 @@ impl VirtualPackage {
     }
 }
 
+/// An error that might be returned by [`VirtualPackage::current`].
 #[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
 pub enum DetectVirtualPackageError {
     #[error(transparent)]
     ParseLinuxVersion(#[from] ParseLinuxVersionError),
@@ -158,6 +169,7 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
 /// Linux virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Linux {
+    /// The version of linux
     pub version: Version,
 }
 
@@ -190,7 +202,10 @@ impl From<Linux> for VirtualPackage {
 /// LibC virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct LibC {
+    /// The family of LibC. This could be glibc for instance.
     pub family: String,
+
+    /// The version of the libc distribution.
     pub version: Version,
 }
 
@@ -223,6 +238,7 @@ impl From<LibC> for VirtualPackage {
 /// Cuda virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Cuda {
+    /// The maximum supported Cuda version.
     pub version: Version,
 }
 
@@ -252,6 +268,8 @@ impl From<Cuda> for VirtualPackage {
 /// Archspec describes the CPU architecture
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Archspec {
+    /// A specification of the architecture family. This could be `x86_64` but it could also include
+    /// the full CPU family.
     pub spec: String,
 }
 
@@ -301,6 +319,7 @@ impl From<Archspec> for VirtualPackage {
 /// OSX virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct Osx {
+    /// The OSX version
     pub version: Version,
 }
 

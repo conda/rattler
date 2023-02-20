@@ -1,3 +1,5 @@
+//! Low-level functions to dect the linux version on the system. See [`linux_version`].
+
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
 use std::str::FromStr;
@@ -56,6 +58,7 @@ const fn try_detect_linux_version() -> Result<Option<Version>, ParseLinuxVersion
 }
 
 #[derive(Debug, Clone, thiserror::Error)]
+#[allow(missing_docs)]
 pub enum ParseLinuxVersionError {
     #[error("error parsing linux version")]
     ParseError,

@@ -1,3 +1,13 @@
+//! Provides functionality to detect the CUDA version present on the current system.
+//!
+//! Two methods are provided:
+//!
+//! * [`detect_cuda_version_via_nvml`]
+//! * [`detect_cuda_version_via_libcuda`]
+//!
+//! Both will detect the current supported CUDA version but the first method has less edge cases.
+//! See the function documentation for more information.
+
 use libloading::Symbol;
 use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
@@ -120,7 +130,6 @@ fn nvml_library_paths() -> &'static [&'static str] {
 ///
 /// Therefore you should use the function [`detect_cuda_version_via_nvml`] instead which does not
 /// have this limitation.
-#[allow(dead_code)]
 pub fn detect_cuda_version_via_libcuda() -> Option<Version> {
     // Try to open the library
     let cuda_library = cuda_library_paths()

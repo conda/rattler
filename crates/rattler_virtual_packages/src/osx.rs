@@ -1,3 +1,5 @@
+//! Low-level functions to detect the OSX version of the system. See [`osx_version`].
+
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
 
@@ -40,6 +42,7 @@ const fn try_detect_osx_version() -> Result<Option<Version>, ParseOsxVersionErro
 }
 
 #[derive(Debug, thiserror::Error)]
+#[allow(missing_docs)]
 pub enum ParseOsxVersionError {
     #[error("failed to read `/System/Library/CoreServices/SystemVersion.plist`")]
     FailedToReadSystemVersion(#[source] std::io::Error),
