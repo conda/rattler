@@ -173,21 +173,22 @@ impl RepoRef {
                 )
             };
 
-            // Location (filename (fn) and subdir)
-            let filename = record
-                .filename
-                .as_deref()
-                .unwrap_or_else(|| filename.as_ref());
-            let subdir = record.subdir.as_str();
-            unsafe {
-                ffi::repodata_set_location(
-                    data,
-                    solvable_id.into(),
-                    0,
-                    CString::new(subdir)?.as_ptr(),
-                    CString::new(filename)?.as_ptr(),
-                );
-            }
+            // TODO: The filename is not present in a PackageRecord
+            // // Location (filename (fn) and subdir)
+            // let filename = record
+            //     .filename
+            //     .as_deref()
+            //     .unwrap_or_else(|| filename.as_ref());
+            // let subdir = record.subdir.as_str();
+            // unsafe {
+            //     ffi::repodata_set_location(
+            //         data,
+            //         solvable_id.into(),
+            //         0,
+            //         CString::new(subdir)?.as_ptr(),
+            //         CString::new(filename)?.as_ptr(),
+            //     );
+            // }
 
             // Dependencies
             // TODO: Add requires
