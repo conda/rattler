@@ -1,5 +1,6 @@
-use crate::InstalledPackage;
-use rattler_conda_types::RepoData;
+use rattler_conda_types::{PrefixRecord, RepoDataRecord};
+use rattler_virtual_packages::GenericVirtualPackage;
+use std::ffi::NulError;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -78,8 +79,8 @@ impl RepoRef {
         unsafe { &*(self.as_ref().pool as *const PoolRef) }
     }
 
-    /// Adds [`RepoData`] to this instance
-    pub fn add_repodata(&self, repo_data: &RepoData) -> anyhow::Result<()> {
+    /// Adds [`RepoDataRecord`] to this instance
+    pub fn add_repodata_records(&self, repo_datas: &[RepoDataRecord]) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
         // Get all the IDs
@@ -102,7 +103,10 @@ impl RepoRef {
         let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
-        for (filename, record) in repo_data.packages.iter() {
+        for repo_data in repo_datas {
+            let filename = &repo_data.file_name;
+            let record = &repo_data.package_record;
+
             // Create a solvable for the package.
             let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
             let solvable = solvable_id.resolve(self.pool());
@@ -345,14 +349,11 @@ impl RepoRef {
         Ok(())
     }
 
-    pub fn add_installed(&self, packages: &[InstalledPackage]) -> anyhow::Result<()> {
+    pub fn add_virtual_packages(&self, packages: &[GenericVirtualPackage]) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
-        // Get relevant IDs
         let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
-        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
 
-        // Iterate over all packages
         for package in packages {
             // Create a solvable for the package.
             let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
@@ -362,35 +363,76 @@ impl RepoRef {
 
             // Name and version
             solvable.name = package.name.intern(self.pool()).into();
-            solvable.evr = package.version.intern(self.pool()).into();
+            solvable.evr = package.version.to_string().intern(self.pool()).into();
 
             // Build string
-            // TODO: is "0" a reasonable default? Can we somehow enforce the build string is always present?
-            let build_string = package
-                .build_string
-                .as_ref()
-                .cloned()
-                .unwrap_or_else(|| "0".to_string());
             unsafe {
                 ffi::repodata_add_poolstr_array(
                     data,
                     solvable_id.into(),
                     solvable_buildflavor_id.into(),
-                    CString::new(build_string.as_str())?.as_ptr(),
+                    CString::new(package.build_string.as_bytes())?.as_ptr(),
+                )
+            };
+
+            solvable.provides = unsafe {
+                ffi::repo_addid_dep(
+                    self.as_ptr().as_ptr(),
+                    solvable.provides,
+                    ffi::pool_rel2id(
+                        self.pool().as_ptr().as_ptr(),
+                        solvable.name,
+                        solvable.evr,
+                        ffi::REL_EQ as i32,
+                        1,
+                    ),
+                    0,
+                )
+            };
+        }
+
+        Ok(())
+    }
+
+    pub fn add_installed(&self, packages: &[PrefixRecord]) -> Result<(), NulError> {
+        let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
+
+        // Get relevant IDs
+        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
+        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
+
+        // Iterate over all packages
+        for record in packages {
+            let package = &record.repodata_record.package_record;
+
+            // Create a solvable for the package.
+            let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
+            let solvable = solvable_id.resolve(self.pool());
+
+            let solvable = unsafe { solvable.as_ptr().as_mut() };
+
+            // Name and version
+            solvable.name = package.name.intern(self.pool()).into();
+            solvable.evr = package.version.to_string().intern(self.pool()).into();
+
+            // Build string
+            unsafe {
+                ffi::repodata_add_poolstr_array(
+                    data,
+                    solvable_id.into(),
+                    solvable_buildflavor_id.into(),
+                    CString::new(package.build.as_bytes())?.as_ptr(),
                 )
             };
 
             // Build number
-            // TODO: is this the right thing to do?
-            if let Some(build_number) = package.build_number {
-                unsafe {
-                    ffi::repodata_set_str(
-                        data,
-                        solvable_id.into(),
-                        solvable_buildversion_id.into(),
-                        CString::new(build_number.to_string())?.as_ptr(),
-                    )
-                }
+            unsafe {
+                ffi::repodata_set_str(
+                    data,
+                    solvable_id.into(),
+                    solvable_buildversion_id.into(),
+                    CString::new(package.build_number.to_string())?.as_ptr(),
+                )
             }
 
             solvable.provides = unsafe {

@@ -1,5 +1,5 @@
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
-use rattler_solve::{RequestedAction, SolverProblem};
+use rattler_solve::RequestedAction;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {

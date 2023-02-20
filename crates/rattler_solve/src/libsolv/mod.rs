@@ -44,11 +44,16 @@ pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError
 
     // Create repos for all channels
     let mut channel_mapping = HashMap::new();
-    for (channel, repodata) in problem.channels.iter() {
-        let repo = pool.create_repo(channel);
-        repo.add_repodata(repodata)
+    for repodata_records in &problem.available_packages {
+        if repodata_records.is_empty() {
+            continue;
+        }
+
+        let channel_name = &repodata_records[0].channel;
+        let repo = pool.create_repo(channel_name);
+        repo.add_repodata_records(repodata_records)
             .map_err(SolveError::ErrorAddingRepodata)?;
-        channel_mapping.insert(repo.id(), channel.clone());
+        channel_mapping.insert(repo.id(), channel_name.clone());
 
         // We dont want to drop the Repo, its stored in the pool anyway, so just forget it.
         std::mem::forget(repo);
@@ -56,6 +61,8 @@ pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError
 
     let repo = pool.create_repo("installed");
     repo.add_installed(&problem.installed_packages)
+        .map_err(SolveError::ErrorAddingInstalledPackages)?;
+    repo.add_virtual_packages(&problem.virtual_packages)
         .map_err(SolveError::ErrorAddingInstalledPackages)?;
     pool.set_installed(&repo);
 
@@ -94,8 +101,12 @@ mod test {
     use super::pool::Pool;
     use crate::package_operation::PackageOperation;
     use crate::package_operation::PackageOperationKind;
-    use crate::{InstalledPackage, RequestedAction, SolveError, SolverProblem};
-    use rattler_conda_types::{ChannelConfig, MatchSpec, RepoData};
+    use crate::{RequestedAction, SolveError, SolverProblem};
+    use rattler_conda_types::prefix_record::PrefixPaths;
+    use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData, RepoDataRecord, Version};
+    use rattler_virtual_packages::GenericVirtualPackage;
+    use std::str::FromStr;
+    use url::Url;
 
     fn conda_json_path() -> String {
         format!(
@@ -121,8 +132,52 @@ mod test {
         )
     }
 
-    fn read_repodata(path: &str) -> RepoData {
-        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
+        let repo_data: RepoData = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        repo_data.into_repo_data_records(&Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap())
+    }
+
+    fn installed_package(
+        channel: &str,
+        subdir: &str,
+        name: &str,
+        version: &str,
+        build: &str,
+        build_number: usize,
+    ) -> PrefixRecord {
+        PrefixRecord {
+            package_tarball_full_path: None,
+            extracted_package_dir: None,
+            files: Vec::new(),
+            paths_data: PrefixPaths::default(),
+            link: None,
+            requested_spec: None,
+            repodata_record: RepoDataRecord {
+                url: Url::from_str("http://example.com").unwrap(),
+                channel: channel.to_string(),
+                file_name: "dummy-filename".to_string(),
+                package_record: PackageRecord {
+                    name: name.to_string(),
+                    version: Version::from_str(version).unwrap(),
+                    build: build.to_string(),
+                    build_number,
+                    subdir: subdir.to_string(),
+                    md5: None,
+                    sha256: None,
+                    size: None,
+                    arch: None,
+                    platform: None,
+                    depends: Vec::new(),
+                    constrains: Vec::new(),
+                    track_features: Vec::new(),
+                    features: None,
+                    noarch: NoArchType::default(),
+                    license: None,
+                    license_family: None,
+                    timestamp: None,
+                },
+            },
+        }
     }
 
     #[test]
@@ -139,14 +194,12 @@ mod test {
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
 
-        // TODO: it looks like `libsolv` supports adding the repo_data directly from its json file,
-        // maybe we should use that instead
         let repo_data = read_repodata(&json_file);
         let repo_data_noarch = read_repodata(&json_file_noarch);
 
-        let channels = vec![
-            ("conda-forge".to_string(), &repo_data),
-            ("conda-forge".to_string(), &repo_data_noarch),
+        let available_packages = vec![
+            repo_data,
+            repo_data_noarch,
         ];
 
         let specs = vec![(
@@ -155,9 +208,10 @@ mod test {
         )];
 
         let problem = SolverProblem {
-            channels,
+            available_packages,
             specs,
             installed_packages: Vec::new(),
+            virtual_packages: Vec::new(),
         };
         let operations = problem.solve().unwrap();
         for operation in operations.iter() {
@@ -172,63 +226,62 @@ mod test {
 
     #[test]
     fn test_solve_dummy_repo_install_non_existent() {
-        let repo_data = read_repodata(&dummy_channel_json_path());
-        let problem = SolverProblem {
-            channels: vec![("conda-forge".to_owned(), &repo_data)],
-            specs: vec![
-                (
-                    MatchSpec::from_str("asdfasdf", &ChannelConfig::default()).unwrap(),
-                    RequestedAction::Install,
-                ),
-                (
-                    MatchSpec::from_str("foo", &ChannelConfig::default()).unwrap(),
-                    RequestedAction::Install,
-                ),
-            ],
-            installed_packages: Vec::new(),
-        };
+        let result = solve_with_already_installed(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["asdfasdf", "foo<4"],
+            RequestedAction::Install,
+        );
 
-        let solved = problem.solve();
-        assert!(solved.is_err());
+        assert!(result.is_err());
 
-        let err = solved.err().unwrap();
+        let err = result.err().unwrap();
         assert!(matches!(err, SolveError::Unsolvable));
     }
 
     #[test]
-    fn test_solve_dummy_repo_install_noop() {
-        let already_installed = vec![InstalledPackage {
-            name: "foo".to_string(),
-            version: "3.0.2".to_string(),
-            build_string: Some("py36h1af98f8_1".to_string()),
-            build_number: Some(1),
-        }];
+    fn test_solve_dummy_repo_install_noop() -> anyhow::Result<()> {
+        let already_installed = vec![installed_package(
+            "conda-forge",
+            "linux-64",
+            "foo",
+            "3.0.2",
+            "py36h1af98f8_1",
+            1,
+        )];
 
         let operations = solve_with_already_installed(
             dummy_channel_json_path(),
             already_installed,
+            Vec::new(),
             &["foo<4"],
             RequestedAction::Install,
-        );
+        )?;
 
         assert_eq!(0, operations.len());
+
+        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_upgrade() {
-        let already_installed = vec![InstalledPackage {
-            name: "foo".to_string(),
-            version: "3.0.2".to_string(),
-            build_string: Some("py36h1af98f8_1".to_string()),
-            build_number: Some(1),
-        }];
+    fn test_solve_dummy_repo_upgrade() -> anyhow::Result<()> {
+        let already_installed = vec![installed_package(
+            "conda-forge",
+            "linux-64",
+            "foo",
+            "3.0.2",
+            "py36h1af98f8_1",
+            1,
+        )];
 
         let operations = solve_with_already_installed(
             dummy_channel_json_path(),
             already_installed,
+            Vec::new(),
             &["foo>=4"],
             RequestedAction::Update,
-        );
+        )?;
 
         assert_eq!(2, operations.len());
 
@@ -243,23 +296,28 @@ mod test {
         let info = &operations[1].package;
         assert_eq!("foo", &info.name);
         assert_eq!("4.0.2", &info.version);
+
+        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_downgrade() {
-        let already_installed = vec![InstalledPackage {
-            name: "foo".to_string(),
-            version: "4.0.2".to_string(),
-            build_string: Some("py36h1af98f8_1".to_string()),
-            build_number: Some(1),
-        }];
+    fn test_solve_dummy_repo_downgrade() -> anyhow::Result<()> {
+        let already_installed = vec![installed_package(
+            "conda-forge",
+            "linux-64",
+            "foo",
+            "4.0.2",
+            "py36h1af98f8_1",
+            1,
+        )];
 
         let operations = solve_with_already_installed(
             dummy_channel_json_path(),
             already_installed,
+            Vec::new(),
             &["foo<4"],
             RequestedAction::Update,
-        );
+        )?;
 
         assert_eq!(2, operations.len());
 
@@ -274,23 +332,28 @@ mod test {
         let info = &operations[1].package;
         assert_eq!("foo", &info.name);
         assert_eq!("3.0.2", &info.version);
+
+        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_remove() {
-        let already_installed = vec![InstalledPackage {
-            name: "foo".to_string(),
-            version: "3.0.2".to_string(),
-            build_string: Some("py36h1af98f8_1".to_string()),
-            build_number: Some(1),
-        }];
+    fn test_solve_dummy_repo_remove() -> anyhow::Result<()> {
+        let already_installed = vec![installed_package(
+            "conda-forge",
+            "linux-64",
+            "foo",
+            "3.0.2",
+            "py36h1af98f8_1",
+            1,
+        )];
 
         let operations = solve_with_already_installed(
             dummy_channel_json_path(),
             already_installed,
+            Vec::new(),
             &["foo"],
             RequestedAction::Remove,
-        );
+        )?;
 
         assert_eq!(1, operations.len());
 
@@ -299,18 +362,57 @@ mod test {
         let info = &operations[0].package;
         assert_eq!("foo", &info.name);
         assert_eq!("3.0.2", &info.version);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_solve_dummy_repo_with_virtual_package() -> anyhow::Result<()> {
+        let operations = solve_with_already_installed(
+            dummy_channel_json_path(),
+            Vec::new(),
+            vec![GenericVirtualPackage {
+                name: "__unix".to_string(),
+                version: Version::from_str("0").unwrap(),
+                build_string: "0".to_string(),
+            }],
+            &["bar"],
+            RequestedAction::Install,
+        )?;
+
+        assert_eq!(1, operations.len());
+        assert_eq!(PackageOperationKind::Install, operations[0].kind);
+        let info = &operations[0].package;
+        assert_eq!("bar", &info.name);
+        assert_eq!("1.2.3", &info.version);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_solve_dummy_repo_missing_virtual_package() {
+        let result = solve_with_already_installed(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["bar"],
+            RequestedAction::Install,
+        );
+
+        assert!(matches!(result.err(), Some(SolveError::Unsolvable)));
     }
 
     #[cfg(test)]
     fn solve_with_already_installed(
         repo_path: String,
-        installed_packages: Vec<InstalledPackage>,
+        installed_packages: Vec<PrefixRecord>,
+        virtual_packages: Vec<GenericVirtualPackage>,
         match_specs: &[&str],
         match_spec_action: RequestedAction,
-    ) -> Vec<PackageOperation> {
-        let repo_data =
-            serde_json::from_str::<RepoData>(&std::fs::read_to_string(repo_path).unwrap()).unwrap();
-        let channels = vec![("conda-forge".to_owned(), &repo_data)];
+    ) -> Result<Vec<PackageOperation>, SolveError> {
+
+        let repo_data = read_repodata(&repo_path);
+        let available_packages = vec![repo_data];
         let channel_config = ChannelConfig::default();
         let specs = match_specs
             .into_iter()
@@ -324,11 +426,12 @@ mod test {
 
         let problem = SolverProblem {
             installed_packages,
-            channels,
+            virtual_packages,
+            available_packages,
             specs,
         };
 
-        let solvable_operations = problem.solve().unwrap();
+        let solvable_operations = problem.solve()?;
 
         for operation in solvable_operations.iter() {
             println!("{:?} - {:?}", operation.kind, operation.package);
@@ -338,6 +441,6 @@ mod test {
             println!("No operations necessary!");
         }
 
-        solvable_operations
+        Ok(solvable_operations)
     }
 }
