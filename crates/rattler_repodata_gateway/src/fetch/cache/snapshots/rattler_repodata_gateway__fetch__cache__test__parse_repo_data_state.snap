@@ -1,0 +1,16 @@
+---
+source: crates/rattler_repodata_gateway/src/fetch/cache/mod.rs
+expression: "RepoDataState::from_str(r#\"{\n            \"cache_control\": \"public, max-age=1200\",\n            \"etag\": \"\\\"bec332621e00fc4ad87ba185171bcf46\\\"\",\n            \"has_zst\": {\n                \"last_checked\": \"2023-02-13T14:08:50Z\",\n                \"value\": true\n            },\n            \"mod\": \"Mon, 13 Feb 2023 13:49:56 GMT\",\n            \"mtime_ns\": 1676297333020928000,\n            \"size\": 156627374,\n            \"url\": \"https://conda.anaconda.org/conda-forge/win-64/repodata.json.zst\"\n        }\"#).unwrap()"
+---
+url: "https://conda.anaconda.org/conda-forge/win-64/repodata.json.zst"
+etag: "\"bec332621e00fc4ad87ba185171bcf46\""
+mod: "Mon, 13 Feb 2023 13:49:56 GMT"
+cache_control: "public, max-age=1200"
+mtime_ns: 1676297333020928000
+size: 156627374
+has_zst:
+  value: true
+  last_checked: "2023-02-13T14:08:50Z"
+has_bz2: ~
+has_jlap: ~
+

@@ -1,23 +1,17 @@
 pub use encoding::{AsyncEncoding, Encoding};
-pub use hash::{compute_file_sha256, parse_sha256_from_hex, HashingWriter, Sha256HashingWriter};
-use std::{fmt::Write, path::PathBuf};
+pub use flock::LockedFile;
+use std::fmt::Write;
 use url::Url;
 
 mod encoding;
 
-mod hash;
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
 
-/// Returns the default cache directory used by rattler.
-pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
-    Ok(dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/cache"))
-}
+mod flock;
 
 /// Convert a URL to a cache filename
-pub fn url_to_cache_filename(url: &Url) -> String {
+pub(crate) fn url_to_cache_filename(url: &Url) -> String {
     // Start Rant:
     // This function mimics behavior from Mamba which itself mimics this behavior from Conda.
     // However, I find this function absolutely ridiculous, it contains all sort of weird edge
@@ -35,7 +29,7 @@ pub fn url_to_cache_filename(url: &Url) -> String {
     let url_str = url_str.strip_suffix("/repodata.json").unwrap_or(&url_str);
 
     // Compute the MD5 hash of the resulting URL string
-    let hash = extendhash::md5::compute_hash(url_str.as_bytes());
+    let hash = rattler_digest::compute_bytes_digest::<md5::Md5>(url_str);
 
     // Convert the hash to an MD5 hash.
     let mut result = String::with_capacity(8);

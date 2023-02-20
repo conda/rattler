@@ -1,0 +1,24 @@
+[package]
+name = "rattler_digest"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "An simple crate used by rattler crates to compute different hashes from different sources"
+categories = ["conda"]
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
+license = "BSD-3-Clause"
+
+[dependencies]
+digest = "0.10.6"
+tokio = { version = "1.12.0", features = ["io-util"], optional = true }
+hex = "0.4.3"
+
+[features]
+tokio = ["dep:tokio"]
+
+[dev-dependencies]
+sha2 = "0.10.6"
+rstest = "0.16.0"
+tempfile = "3.3.0"
+md-5 = "0.10.5"

@@ -1,7 +1,3 @@
-use rattler::{
-    repo_data::fetch::{terminal_progress, MultiRequestRepoDataBuilder},
-    solver::SolverProblem,
-};
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 
 #[derive(Debug, clap::Parser)]
@@ -17,7 +13,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
     // Parse the match specs
-    let specs = opt
+    let _specs = opt
         .specs
         .iter()
         .map(|spec| MatchSpec::from_str(spec, &channel_config))
@@ -31,38 +27,38 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
 
     // Get the channels to download
-    let channels = opt
+    let _channels = opt
         .channels
         .unwrap_or_else(|| vec![String::from("conda-forge")])
         .into_iter()
         .map(|channel_str| Channel::from_str(&channel_str, &channel_config))
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Download all repo data from the channels and create an index
-    let repo_data_per_source = MultiRequestRepoDataBuilder::default()
-        .set_cache_dir(&cache_dir)
-        .set_listener(terminal_progress())
-        .set_fail_fast(false)
-        .add_channels(channels)
-        .request()
-        .await;
-
-    // Error out if fetching one of the sources resulted in an error.
-    let repo_data = repo_data_per_source
-        .into_iter()
-        .map(|(channel, _, result)| result.map(|data| (channel, data)))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    let solver_problem = SolverProblem {
-        channels: repo_data
-            .iter()
-            .map(|(channel, repodata)| (channel.base_url().to_string(), repodata))
-            .collect(),
-        specs,
-    };
-
-    let result = solver_problem.solve()?;
-    println!("{:#?}", result);
+    // // Download all repo data from the channels and create an index
+    // let repo_data_per_source = MultiRequestRepoDataBuilder::default()
+    //     .set_cache_dir(&cache_dir)
+    //     .set_listener(terminal_progress())
+    //     .set_fail_fast(false)
+    //     .add_channels(channels)
+    //     .request()
+    //     .await;
+    //
+    // // Error out if fetching one of the sources resulted in an error.
+    // let repo_data = repo_data_per_source
+    //     .into_iter()
+    //     .map(|(channel, _, result)| result.map(|data| (channel, data)))
+    //     .collect::<Result<Vec<_>, _>>()?;
+    //
+    // let solver_problem = SolverProblem {
+    //     channels: repo_data
+    //         .iter()
+    //         .map(|(channel, repodata)| (channel.base_url().to_string(), repodata))
+    //         .collect(),
+    //     specs,
+    // };
+    //
+    // let result = solver_problem.solve()?;
+    // println!("{:#?}", result);
 
     Ok(())
 }

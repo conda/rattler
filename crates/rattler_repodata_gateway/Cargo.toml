@@ -1,0 +1,46 @@
+[package]
+name = "rattler_repodata_gateway"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "A crate to interact with Conda repodata"
+categories = ["conda"]
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
+license = "BSD-3-Clause"
+
+[dependencies]
+async-compression = { version = "0.3.12", features = ["gzip", "tokio", "bzip2", "zstd"] }
+blake2 = "0.10.6"
+cache_control = "0.2.0"
+chrono = { version = "0.4.23", default-features = false, features = ["std", "serde", "alloc", "clock"] }
+humansize = "2.1.3"
+futures = "0.3.17"
+reqwest = { version = "0.11.6", default-features = false, features = ["stream"] }
+tokio-util = { version = "0.7.3", features = ["codec", "io"] }
+tempfile = "3.3.0"
+tracing = "0.1.29"
+thiserror = "1.0.30"
+url = { version = "2.2.2", features = ["serde"] }
+tokio = { version = "1.12.0", features = ["rt", "io-util"] }
+anyhow = "1.0.44"
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = { version = "1.0.68" }
+pin-project-lite = "0.2.9"
+md-5 = "0.10.5"
+rattler_digest = { version = "0.1.0", path = "../rattler_digest", features = ["tokio"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.45.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
+
+[dev-dependencies]
+hex-literal = "0.3.4"
+tower-http = { version = "0.3.5", features = ["fs", "compression-gzip", "trace"] }
+tracing-test = { version = "0.2.4" }
+insta = { version = "1.16.0", features = ["yaml"] }
+axum = "0.6.2"
+assert_matches = "1.5.0"
+tokio = { version = "1.12.0", features = ["macros"] }
