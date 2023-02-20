@@ -1,3 +1,6 @@
+//! Functionality to stream parts of a `.conda` archive for objects that implement both
+//! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor<T>`].
+
 use crate::read::stream_tar_zst;
 use crate::ExtractError;
 use std::io::{Read, Seek, SeekFrom};
@@ -23,7 +26,7 @@ fn stream_conda_zip_entry<'a>(
     let mut reader = archive.into_inner();
     reader.seek(SeekFrom::Start(offset))?;
 
-    // Open the info entry for reading
+    // Given the bytes in the zip archive of the file, decode it as a zst compressed tar file.
     stream_tar_zst(reader.take(size))
 }
 

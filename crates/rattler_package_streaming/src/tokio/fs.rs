@@ -1,3 +1,5 @@
+//! Functions to extracting or stream a Conda package from a file on disk.
+
 use crate::{ArchiveType, ExtractError};
 use std::path::Path;
 
