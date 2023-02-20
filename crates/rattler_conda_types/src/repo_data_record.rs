@@ -14,7 +14,7 @@ pub struct RepoDataRecord {
 
     /// The filename of the package
     #[serde(rename = "fn")]
-    pub filename: String,
+    pub file_name: String,
 
     /// The canonical URL from where to get this package.
     pub url: Url,
