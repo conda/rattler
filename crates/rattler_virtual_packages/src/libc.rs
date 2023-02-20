@@ -1,3 +1,5 @@
+//! Low-level functions to detect the LibC family and version. See [`libc_family_and_version`].
+
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
 use std::ffi::{FromVecWithNulError, IntoStringError};
@@ -28,6 +30,7 @@ mod ffi {
 
 /// An error that could occur when trying to detect to libc version
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum DetectLibCError {
     #[error("failed to parse libc version returned by the system")]
     ParseLibCVersion(#[from] ParseVersionError),
