@@ -59,7 +59,7 @@ pub trait PackageFile: Sized {
     /// For example, if the file is in JSON format, this function reads the data from the file at
     /// the specified path, parse the JSON string and return the resulting object. If the file is
     /// not in a parsable format or if the file could not read, this function returns an error.
-    fn from_path(path: &Path) -> Result<Self, std::io::Error> {
+    fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         Self::from_reader(File::open(path)?)
     }
 
@@ -69,7 +69,7 @@ pub trait PackageFile: Sized {
     /// For example, if the file is in JSON format, this function reads the appropriate file from
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
     /// parsable format or if the file could not be read, this function returns an error.
-    fn from_package_directory(path: &Path) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.join(Self::package_path()))
+    fn from_package_directory(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        Self::from_path(&path.as_ref().join(Self::package_path()))
     }
 }

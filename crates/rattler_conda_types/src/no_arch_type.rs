@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Noarch packages are packages that are not architecture specific and therefore only have to be
 /// built once. Noarch packages are either generic or Python.
@@ -41,6 +41,11 @@ impl NoArchType {
             }
             Some(RawNoArchType::Python) => Some(NoArchKind::Python),
         }
+    }
+
+    /// Returns true if this is not a noarch package
+    pub fn is_none(&self) -> bool {
+        self.0.is_none()
     }
 }
 
@@ -94,5 +99,19 @@ impl<'de> Deserialize<'de> for NoArchType {
             NoArchSerde::NewFormat(NoArchTypeSerde::Python) => Some(RawNoArchType::Python),
             NoArchSerde::NewFormat(NoArchTypeSerde::Generic) => Some(RawNoArchType::GenericV2),
         })))
+    }
+}
+
+impl Serialize for NoArchType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            None => false.serialize(serializer),
+            Some(RawNoArchType::GenericV1) => true.serialize(serializer),
+            Some(RawNoArchType::GenericV2) => "generic".serialize(serializer),
+            Some(RawNoArchType::Python) => "python".serialize(serializer),
+        }
     }
 }

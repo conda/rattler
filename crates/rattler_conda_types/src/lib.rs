@@ -8,12 +8,14 @@ mod match_spec;
 mod no_arch_type;
 mod platform;
 mod repo_data;
+mod repo_data_record;
 mod run_export;
 mod utils;
 mod version;
 mod version_spec;
 
 pub mod package;
+pub mod prefix_record;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
@@ -24,7 +26,9 @@ pub use explicit_environment_spec::{
 pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
+pub use prefix_record::PrefixRecord;
 pub use repo_data::{PackageRecord, RepoData};
+pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
 pub use version_spec::VersionSpec;
