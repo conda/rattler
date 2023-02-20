@@ -46,7 +46,7 @@ pub struct LinkedFile {
 /// `relative_path` is the path of the file in the `package_dir` (and the `target_dir`).
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
-/// [`super::InstallOptions::target_prefix`] for more information.
+/// [`crate::install::InstallOptions::target_prefix`] for more information.
 pub fn link_file(
     path_json_entry: &PathsEntry,
     package_dir: &Path,

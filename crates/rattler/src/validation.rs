@@ -10,7 +10,7 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
-use rattler_conda_types::package::{PathType, PathsEntry, PathsJson};
+use rattler_conda_types::package::{PackageFile, PathType, PathsEntry, PathsJson};
 use rattler_digest::{compute_file_digest, parse_digest_from_hex};
 use std::{
     fs::Metadata,
@@ -214,7 +214,7 @@ mod test {
         PackageEntryValidationError, PackageValidationError,
     };
     use assert_matches::assert_matches;
-    use rattler_conda_types::package::{PathType, PathsJson};
+    use rattler_conda_types::package::{PackageFile, PathType, PathsJson};
     use rstest::*;
     use std::{
         io::Write,

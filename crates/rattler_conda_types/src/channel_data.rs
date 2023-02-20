@@ -14,7 +14,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany, Sam
 use std::collections::HashMap;
 use url::Url;
 
-use crate::package::RunExports;
+use crate::package::RunExportsJson;
 
 /// [`ChannelData`] is an index of subdirectories and packages stored within a Channel.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -99,7 +99,7 @@ pub struct ChannelDataPackage {
     /// Any run_exports contained within the package.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     #[serde_as(as = "HashMap<DisplayFromStr, _>")]
-    pub run_exports: HashMap<Version, RunExports>,
+    pub run_exports: HashMap<Version, RunExportsJson>,
 
     /// Which architectures does the package support
     pub subdirs: Vec<String>,
