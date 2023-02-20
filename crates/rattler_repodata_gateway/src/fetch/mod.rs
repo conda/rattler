@@ -183,10 +183,13 @@ pub async fn fetch_repo_data(
 
     // Validate the current state of the cache
     let cache_state = if options.cache_action != CacheAction::NoCache {
-        match (
-            validate_cached_state(cache_path, &subdir_url),
-            options.cache_action,
-        ) {
+        let owned_subdir_url = subdir_url.clone();
+        let owned_cache_path = cache_path.to_owned();
+        let cache_state = tokio::task::spawn_blocking(move || {
+            validate_cached_state(&owned_cache_path, &owned_subdir_url)
+        })
+        .await?;
+        match (cache_state, options.cache_action) {
             (ValidatedCacheState::UpToDate(cache_state), _)
             | (ValidatedCacheState::OutOfDate(cache_state), CacheAction::ForceCacheOnly) => {
                 // Cache is up to date or we dont care about whether or not its up to date,
@@ -303,9 +306,14 @@ pub async fn fetch_repo_data(
             has_bz2: cached_bz2_available,
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
-        cache_state
-            .to_path(&cache_state_path)
-            .map_err(FetchRepoDataError::FailedToWriteCacheState)?;
+
+        let cache_state = tokio::task::spawn_blocking(move || {
+            cache_state
+                .to_path(&cache_state_path)
+                .map(|_| cache_state)
+                .map_err(FetchRepoDataError::FailedToWriteCacheState)
+        })
+        .await??;
 
         return Ok(CachedRepoData {
             lock_file,
@@ -334,13 +342,18 @@ pub async fn fetch_repo_data(
     .await?;
 
     // Persist the file to its final destination
-    let file = temp_file.persist(&repo_data_json_path)?;
+    let repo_data_destination_path = repo_data_json_path.clone();
+    let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
+        let file = temp_file
+            .persist(repo_data_destination_path)
+            .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
 
-    // Determine the last modified date and size of the repodata.json file. We store these values in
-    // the cache to link the cache to the corresponding repodata.json file.
-    let repo_data_json_metadata = file
-        .metadata()
-        .map_err(FetchRepoDataError::FailedToGetMetadata)?;
+        // Determine the last modified date and size of the repodata.json file. We store these values in
+        // the cache to link the cache to the corresponding repodata.json file.
+        file.metadata()
+            .map_err(FetchRepoDataError::FailedToGetMetadata)
+    })
+    .await??;
 
     // Update the cache on disk.
     let had_cache = cache_state.is_some();
@@ -357,9 +370,14 @@ pub async fn fetch_repo_data(
         // We dont do anything with JLAP so just copy over the value.
         has_jlap: cache_state.and_then(|state| state.has_jlap),
     };
-    new_cache_state
-        .to_path(&cache_state_path)
-        .map_err(FetchRepoDataError::FailedToWriteCacheState)?;
+
+    let new_cache_state = tokio::task::spawn_blocking(move || {
+        new_cache_state
+            .to_path(&cache_state_path)
+            .map(|_| new_cache_state)
+            .map_err(FetchRepoDataError::FailedToWriteCacheState)
+    })
+    .await??;
 
     Ok(CachedRepoData {
         lock_file,
