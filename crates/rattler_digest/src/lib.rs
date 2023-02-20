@@ -31,7 +31,7 @@
 //! - [`compute_file_digest`]: Computes the hash of a file on disk.
 //! - [`parse_digest_from_hex`]: Given a hex representation of a digest, parses it to bytes.
 //! - [`HashingWriter`]: An object that wraps a writable object and implements [`Write`] and
-//!   [`tokio::AsyncWrite`]. It forwards the data to the wrapped object but also computes the hash of the
+//!   [`tokio::io::AsyncWrite`]. It forwards the data to the wrapped object but also computes the hash of the
 //!   content on the fly.
 //!
 //! For more information on the hashing algorithms provided by the
@@ -80,8 +80,8 @@ pub fn parse_digest_from_hex<D: Digest>(str: &str) -> Option<Output<D>> {
 /// written to it. Call [`HashingWriter::finalize`] to retrieve both the original `impl Write`
 /// object as well as the hash.
 ///
-/// If the `tokio` feature is enabled this object also implements [`tokio::AsyncWrite`] which allows
-/// you to use it in an async context as well.
+/// If the `tokio` feature is enabled this object also implements [`tokio::io::AsyncWrite`] which
+/// allows you to use it in an async context as well.
 pub struct HashingWriter<W, D: Digest> {
     writer: W,
     hasher: D,
