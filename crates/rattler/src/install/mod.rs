@@ -325,9 +325,10 @@ mod test {
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallOptions},
-        package_cache::{PackageCache, PackageInfo},
+        package_cache::PackageCache,
     };
     use futures::{stream, StreamExt};
+    use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform};
     use reqwest::Client;
     use std::env::temp_dir;
@@ -364,7 +365,7 @@ mod test {
                 let install_driver = &install_driver;
                 async move {
                     // Populate the cache
-                    let package_info = PackageInfo::try_from_url(&package_url.url).unwrap();
+                    let package_info = ArchiveIdentifier::try_from_url(&package_url.url).unwrap();
                     let package_dir = package_cache
                         .get_or_fetch_from_url(package_info, package_url.url, client.clone())
                         .await

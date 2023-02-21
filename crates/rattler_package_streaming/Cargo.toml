@@ -19,10 +19,11 @@ reqwest = { version = "0.11.13", optional = true }
 tokio = { version = "1", optional = true }
 tokio-util = { version = "0.7", optional = true }
 futures-util = { version = "0.3.25", optional = true }
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
 
 [features]
 tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]
 reqwest = ["reqwest/blocking"]
 
 [dev-dependencies]
-tokio = { version = "1", features=["rt", "macros"]}
+tokio = { version = "1", features = ["rt", "macros"] }

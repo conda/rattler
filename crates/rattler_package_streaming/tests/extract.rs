@@ -1,7 +1,5 @@
-use rattler_package_streaming::{
-    read::{extract_conda, extract_tar_bz2},
-    ArchiveType,
-};
+use rattler_conda_types::package::ArchiveType;
+use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
