@@ -1,9 +1,12 @@
 # Rattler
 
 [![Build Status][build-badge]][build]
+[![Project Chat][chat-badge]][chat-url]
 
 [build-badge]: https://img.shields.io/github/actions/workflow/status/mamba-org/rattler/rust-compile.yml?style=flat-square&branch=main
 [build]: https://github.com/mamba-org/rattler/actions
+[chat-badge]: https://img.shields.io/badge/zulip-join_chat-brightgreen.svg?style=flat-square
+[chat-url]: https://prefix.zulipchat.com/
 
 Rattler is a library that provides common functionality used within the Conda ecosystem.
 The goal of the library is to enable programs and other libraries to easily interact with the Conda ecosystem without being dependent on Python.
@@ -70,9 +73,9 @@ RepoData is at the core of the Solver.
 - ✅ Download and cache RepoData from channels
 - ✅ Parse Repodata from channels
 - ✅ Terminal progress
-- 🚧 ZSTD support
-- 🚧 [RepoData State CEP](https://github.com/conda-incubator/ceps/pull/46)
-- 🚧 Improve API to provide better access to cache (libsolv has its own)
+- ✅ ZSTD support
+- ✅ [RepoData State CEP](https://github.com/conda-incubator/ceps/pull/46)
+- ✅ Improve API to provide better access to cache (libsolv has its own)
 - 🚧 Improve API to provide better streaming support of RepoData.
 
 ### Virtual packages
