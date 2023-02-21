@@ -1,7 +1,9 @@
 use super::ffi;
+use super::keys::*;
+use super::pool::FindInterned;
 use super::pool::PoolRef;
+use super::repo::RepoId;
 use super::solvable::{Solvable, SolvableId};
-use crate::libsolv::repo::RepoId;
 use crate::package_operation::{PackageOperation, PackageOperationKind};
 use rattler_conda_types::{NoArchType, PackageRecord, RepoDataRecord, Version};
 use std::collections::HashMap;
@@ -9,7 +11,6 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 use std::str::FromStr;
-use url::Url;
 
 /// Wraps a pointer to an `ffi::Transaction` which is freed when the instance is dropped.
 #[repr(transparent)]
@@ -157,24 +158,27 @@ fn repodata_record_from_solvable(
     solvable: Solvable,
     channel_mapping: &HashMap<RepoId, String>,
 ) -> RepoDataRecord {
+    // Keys
+    let solvable_mediadir = SOLVABLE_MEDIADIR.find_interned_id(solvable.pool()).unwrap();
+    let solvable_mediafile = SOLVABLE_MEDIAFILE
+        .find_interned_id(solvable.pool())
+        .unwrap();
+
     let channel = channel_mapping
         .get(&solvable.repo().id())
         .map(|c| c.to_owned())
         .unwrap_or_else(|| "unknown".to_owned());
 
     RepoDataRecord {
-        // TODO: if we want this we will probably need to add it separately to the solvable
-        file_name: "unknown".to_string(),
-        // TODO: if we want this we will probably need to add it separately to the solvable
-        url: Url::from_str("https://example.com").unwrap(),
+        file_name: solvable.lookup_str(solvable_mediafile).unwrap().to_string(),
+        url: solvable.url(),
         channel,
         package_record: PackageRecord {
             name: solvable.name(),
             version: Version::from_str(&solvable.version()).unwrap(),
             build_number: solvable.build_number().unwrap(),
             build: solvable.build_string().unwrap(),
-            // TODO: if we want this we will probably need to add it separately to the solvable
-            subdir: "unknown".to_string(),
+            subdir: solvable.lookup_str(solvable_mediadir).unwrap().to_string(),
             md5: solvable.md5(),
             sha256: solvable.sha256(),
             // We have the data (see [`Repo::add_repodata_records`]), but I'm not sure if it is necessary to retrieve it

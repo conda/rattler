@@ -2,6 +2,7 @@ use flags::{SolvableFlags, SolverFlag};
 use std::collections::HashMap;
 use std::ffi::CString;
 
+mod custom_keys;
 mod ffi;
 mod flags;
 mod keys;
@@ -259,10 +260,14 @@ mod test {
         assert!(matches!(operations[0].kind, PackageOperationKind::Install));
         let info = &operations[0].package;
 
-        // TODO: assert file name
-        // TODO: assert url
+        assert_eq!("foo-3.0.2.tar.bz2", info.file_name);
+        assert_eq!(
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2.tar.bz2",
+            info.url.to_string()
+        );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
         assert_eq!("foo", info.package_record.name);
+        assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
         assert_eq!("py36h1af98f8_1", info.package_record.build);
         assert_eq!(1, info.package_record.build_number);

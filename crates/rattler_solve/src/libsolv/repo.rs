@@ -12,7 +12,9 @@ use std::{
 };
 
 use super::{
-    c_string, ffi,
+    c_string,
+    custom_keys::SOLVABLE_REAL_URL,
+    ffi,
     keys::*,
     pool::PoolRef,
     pool::{FindInterned, Intern},
@@ -80,8 +82,14 @@ impl RepoRef {
     }
 
     /// Adds [`RepoDataRecord`] to this instance
-    pub fn add_repodata_records(&self, repo_datas: &[RepoDataRecord]) -> Result<(), NulError> {
+    pub fn add_repodata_records<'item>(
+        &self,
+        repo_datas: impl IntoIterator<Item = &'item RepoDataRecord>,
+    ) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
+
+        // Custom IDs
+        let solvable_url_id = SOLVABLE_REAL_URL.intern(self.pool());
 
         // Get all the IDs
         let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
@@ -129,6 +137,16 @@ impl RepoRef {
                     0,
                 )
             };
+
+            // Url
+            unsafe {
+                ffi::repodata_set_str(
+                    data,
+                    solvable_id.into(),
+                    solvable_url_id.into(),
+                    CString::new(repo_data.url.to_string())?.as_ptr(),
+                )
+            }
 
             // Location (filename (fn) and subdir)
             unsafe {
@@ -388,66 +406,7 @@ impl RepoRef {
     }
 
     pub fn add_installed(&self, packages: &[PrefixRecord]) -> Result<(), NulError> {
-        let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
-
-        // Get relevant IDs
-        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
-        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
-
-        // Iterate over all packages
-        for record in packages {
-            let package = &record.repodata_record.package_record;
-
-            // Create a solvable for the package.
-            let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
-            let solvable = solvable_id.resolve(self.pool());
-
-            let solvable = unsafe { solvable.as_ptr().as_mut() };
-
-            // Name and version
-            solvable.name = package.name.intern(self.pool()).into();
-            solvable.evr = package.version.to_string().intern(self.pool()).into();
-
-            // Build string
-            unsafe {
-                ffi::repodata_add_poolstr_array(
-                    data,
-                    solvable_id.into(),
-                    solvable_buildflavor_id.into(),
-                    CString::new(package.build.as_bytes())?.as_ptr(),
-                )
-            };
-
-            // Build number
-            unsafe {
-                ffi::repodata_set_str(
-                    data,
-                    solvable_id.into(),
-                    solvable_buildversion_id.into(),
-                    CString::new(package.build_number.to_string())?.as_ptr(),
-                )
-            }
-
-            solvable.provides = unsafe {
-                ffi::repo_addid_dep(
-                    self.as_ptr().as_ptr(),
-                    solvable.provides,
-                    ffi::pool_rel2id(
-                        self.pool().as_ptr().as_ptr(),
-                        solvable.name,
-                        solvable.evr,
-                        ffi::REL_EQ as i32,
-                        1,
-                    ),
-                    0,
-                )
-            };
-        }
-
-        // TODO: What does this do?
-        unsafe { ffi::repo_internalize(self.as_ptr().as_ptr()) };
-
-        Ok(())
+        self.add_repodata_records(packages.into_iter().map(|p| &p.repodata_record))
     }
 
     /// Reads the content of the file pointed to by `json_path` and adds it to the instance.

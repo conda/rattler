@@ -1,12 +1,11 @@
-use crate::libsolv::keys::{
-    REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDVERSION,
-    SOLVABLE_CHECKSUM, SOLVABLE_PKGID,
-};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
+use url::Url;
 
+use super::custom_keys::SOLVABLE_REAL_URL;
 use super::ffi;
+use super::keys::*;
 use super::pool::{FindInterned, PoolRef, StringId};
 use super::repo::RepoRef;
 
@@ -53,7 +52,7 @@ impl<'repo> Solvable<'repo> {
     }
 
     /// Looks up a string value associated with this instance with the given `key`.
-    fn lookup_str(&self, key: StringId) -> Option<&str> {
+    pub fn lookup_str(&self, key: StringId) -> Option<&str> {
         let str = unsafe { ffi::solvable_lookup_str(self.0.as_ptr(), key.into()) };
         if str.is_null() {
             None
@@ -72,6 +71,11 @@ impl<'repo> Solvable<'repo> {
     pub fn repo(&self) -> &RepoRef {
         // Safe because a `RepoRef` is a wrapper around `ffi::Repo`
         unsafe { &*(self.as_ptr().as_ref().repo as *const RepoRef) }
+    }
+
+    pub fn url(&self) -> Url {
+        let s = self.resolve_by_key(SOLVABLE_REAL_URL).unwrap().to_string();
+        Url::parse(&s).unwrap()
     }
 
     /// Returns the location of the solvable which is defined by the subdirectory and the filename of the package.

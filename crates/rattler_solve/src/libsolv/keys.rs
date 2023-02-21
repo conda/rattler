@@ -17,8 +17,8 @@ pub const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
 // pub const SOLVABLE_DISKUSAGE: &str = "solvable:diskusage";
 // pub const SOLVABLE_FILELIST: &str = "solvable:filelist";
 // pub const SOLVABLE_INSTALLTIME: &str = "solvable:installtime";
-// pub const SOLVABLE_MEDIADIR: &str = "solvable:mediadir";
-// pub const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
+pub const SOLVABLE_MEDIADIR: &str = "solvable:mediadir";
+pub const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
 // pub const SOLVABLE_MEDIANR: &str = "solvable:medianr";
 // pub const SOLVABLE_MEDIABASE: &str = "solvable:mediabase"; /* <location xml:base=... > */
 pub const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
