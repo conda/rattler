@@ -104,11 +104,11 @@ mod test {
     use crate::package_operation::PackageOperationKind;
     use crate::{RequestedAction, SolveError, SolverProblem};
     use rattler_conda_types::prefix_record::PrefixPaths;
+    use rattler_conda_types::virtual_package::GenericVirtualPackage;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData,
         RepoDataRecord, Version,
     };
-    use rattler_virtual_packages::GenericVirtualPackage;
     use std::str::FromStr;
     use url::Url;
 

@@ -40,22 +40,9 @@ use std::str::FromStr;
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
+use rattler_conda_types::virtual_package::GenericVirtualPackage;
 
-/// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
-/// `version` and a `build_string`. See [`VirtualPackage`] for available virtual packages.
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct GenericVirtualPackage {
-    /// The name of the package
-    pub name: String,
-
-    /// The version of the package
-    pub version: Version,
-
-    /// The build identifier of the package.
-    pub build_string: String,
-}
-
-/// An enum that represents all virtual package types provide by this library.
+/// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
     /// Available on windows

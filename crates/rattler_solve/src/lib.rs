@@ -9,8 +9,8 @@ mod package_operation;
 pub use package_operation::{PackageOperation, PackageOperationKind};
 use std::ffi::NulError;
 
+use rattler_conda_types::virtual_package::GenericVirtualPackage;
 use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};
-use rattler_virtual_packages::GenericVirtualPackage;
 
 /// Represents an error when solving the dependencies for a given environment
 #[derive(thiserror::Error, Debug)]

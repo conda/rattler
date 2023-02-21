@@ -16,6 +16,7 @@ mod version_spec;
 
 pub mod package;
 pub mod prefix_record;
+pub mod virtual_package;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};

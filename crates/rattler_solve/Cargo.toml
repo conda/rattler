@@ -5,8 +5,6 @@ edition = "2021"
 
 [dependencies]
 rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
-# TODO: should move GenericVirtualPackage to rattler_conda_types and get rid of this dependency
-rattler_virtual_packages = { version = "0.1.0", path = "../rattler_virtual_packages" }
 libc = "0.2"
 libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
 anyhow = "1.0.69"
