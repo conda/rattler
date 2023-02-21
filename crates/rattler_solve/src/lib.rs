@@ -6,8 +6,8 @@
 mod libsolv;
 mod package_operation;
 
-use std::ffi::NulError;
 pub use package_operation::{PackageIdentifier, PackageOperation, PackageOperationKind};
+use std::ffi::NulError;
 
 use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};
 use rattler_virtual_packages::GenericVirtualPackage;
@@ -27,9 +27,11 @@ pub enum SolveError {
     #[error("error adding installed packages: {0}")]
     ErrorAddingInstalledPackages(#[source] NulError),
 
-    /// The solver backend returned operations that have no known mapping to [`PackageOperationKind`]
+    /// The solver backend returned operations that have no known mapping to [`PackageOperationKind`].
+    /// Each string is a somewhat user-friendly representation of which operation was not recognized
+    /// and can be used for error reporting
     #[error("unsupported operations")]
-    UnsupportedOperations,
+    UnsupportedOperations(Vec<String>),
 }
 
 /// Represents the action that we want to perform on a given package, so the solver can take it into

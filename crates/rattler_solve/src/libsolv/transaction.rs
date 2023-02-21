@@ -69,7 +69,7 @@ impl TransactionRef {
     ///
     /// If the transaction contains libsolv operations that have no mapping to `PackageOperation`,
     /// an error is returned containing their ids
-    pub fn get_solvable_operations(
+    pub fn get_package_operations(
         &mut self,
         channel_mapping: &HashMap<RepoId, String>,
     ) -> Result<Vec<PackageOperation>, Vec<ffi::Id>> {

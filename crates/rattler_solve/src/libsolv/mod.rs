@@ -90,8 +90,15 @@ pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError
     // Construct a transaction from the solver
     let mut transaction = solver.create_transaction();
     let operations = transaction
-        .get_solvable_operations(&channel_mapping)
-        .map_err(|_unsupported_operation_ids| SolveError::UnsupportedOperations)?;
+        .get_package_operations(&channel_mapping)
+        .map_err(|unsupported_operation_ids| {
+            SolveError::UnsupportedOperations(
+                unsupported_operation_ids
+                    .into_iter()
+                    .map(|id| format!("libsolv operation {id}"))
+                    .collect(),
+            )
+        })?;
 
     Ok(operations)
 }
@@ -103,7 +110,10 @@ mod test {
     use crate::package_operation::PackageOperationKind;
     use crate::{RequestedAction, SolveError, SolverProblem};
     use rattler_conda_types::prefix_record::PrefixPaths;
-    use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData, RepoDataRecord, Version};
+    use rattler_conda_types::{
+        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData,
+        RepoDataRecord, Version,
+    };
     use rattler_virtual_packages::GenericVirtualPackage;
     use std::str::FromStr;
     use url::Url;
@@ -133,8 +143,11 @@ mod test {
     }
 
     fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
-        let repo_data: RepoData = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        repo_data.into_repo_data_records(&Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap())
+        let repo_data: RepoData =
+            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        repo_data.into_repo_data_records(
+            &Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+        )
     }
 
     fn installed_package(
@@ -197,10 +210,7 @@ mod test {
         let repo_data = read_repodata(&json_file);
         let repo_data_noarch = read_repodata(&json_file_noarch);
 
-        let available_packages = vec![
-            repo_data,
-            repo_data_noarch,
-        ];
+        let available_packages = vec![repo_data, repo_data_noarch];
 
         let specs = vec![(
             MatchSpec::from_str("python=3.9", &ChannelConfig::default()).unwrap(),
@@ -410,7 +420,6 @@ mod test {
         match_specs: &[&str],
         match_spec_action: RequestedAction,
     ) -> Result<Vec<PackageOperation>, SolveError> {
-
         let repo_data = read_repodata(&repo_path);
         let available_packages = vec![repo_data];
         let channel_config = ChannelConfig::default();
