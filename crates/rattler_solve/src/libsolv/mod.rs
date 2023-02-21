@@ -50,9 +50,15 @@ pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError
         std::mem::forget(repo);
     }
 
+    // Installed and virtual packages
     let repo = pool.create_repo("installed");
-    repo.add_installed(&problem.installed_packages)
-        .map_err(SolveError::ErrorAddingInstalledPackages)?;
+    repo.add_repodata_records(
+        problem
+            .installed_packages
+            .iter()
+            .map(|p| &p.repodata_record),
+    )
+    .map_err(SolveError::ErrorAddingInstalledPackages)?;
     repo.add_virtual_packages(&problem.virtual_packages)
         .map_err(SolveError::ErrorAddingInstalledPackages)?;
     pool.set_installed(&repo);

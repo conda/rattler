@@ -1,4 +1,4 @@
-use rattler_conda_types::{PrefixRecord, RepoDataRecord};
+use rattler_conda_types::RepoDataRecord;
 use rattler_virtual_packages::GenericVirtualPackage;
 use std::ffi::NulError;
 use std::{
@@ -360,6 +360,7 @@ impl RepoRef {
         Ok(())
     }
 
+    /// Adds virtual packages to this instance
     pub fn add_virtual_packages(&self, packages: &[GenericVirtualPackage]) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
@@ -403,10 +404,6 @@ impl RepoRef {
         }
 
         Ok(())
-    }
-
-    pub fn add_installed(&self, packages: &[PrefixRecord]) -> Result<(), NulError> {
-        self.add_repodata_records(packages.into_iter().map(|p| &p.repodata_record))
     }
 
     /// Reads the content of the file pointed to by `json_path` and adds it to the instance.
