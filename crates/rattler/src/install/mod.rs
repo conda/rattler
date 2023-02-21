@@ -4,8 +4,13 @@ pub mod link;
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
 
-use futures::{stream, FutureExt, StreamExt, TryStreamExt};
+use futures::stream::FuturesUnordered;
+use futures::{FutureExt, StreamExt};
+use rattler_conda_types::prefix_record::PathsEntry;
 use rattler_conda_types::{package::PathsJson, Platform};
+use std::cmp::Ordering;
+use std::collections::binary_heap::PeekMut;
+use std::collections::BinaryHeap;
 use std::{
     future::ready,
     path::{Path, PathBuf},
@@ -87,14 +92,17 @@ pub struct InstallOptions {
     pub platform: Option<Platform>,
 }
 
-/// Given an extracted package archive (`package_dir`), install its files to the `target_dir`.
+/// Given an extracted package archive (`package_dir`), installs its files to the `target_dir`.
+///
+/// Returns a [`PathsEntry`] for every file that was linked into the target directory. The entries
+/// are ordered in the same order as they appear in the `paths.json` file of the package.
 #[instrument(skip_all, fields(package_dir = %package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
     target_dir: &Path,
     driver: &InstallDriver,
     options: InstallOptions,
-) -> Result<(), InstallError> {
+) -> Result<Vec<PathsEntry>, InstallError> {
     // Determine the target prefix for linking
     let target_prefix = options
         .target_prefix
@@ -139,29 +147,114 @@ pub async fn link_package(
     let platform = options.platform.unwrap_or(Platform::current());
 
     // Link all package files in parallel
-    stream::iter(paths_json.paths)
-        .map(Ok)
-        .try_for_each_concurrent(None, |entry| {
-            let package_dir = package_dir.to_owned();
-            let target_dir = target_dir.to_owned();
-            let target_prefix = target_prefix.to_owned();
-            driver.spawn_throttled(move || {
-                link_file(
-                    &entry,
-                    &package_dir,
-                    &target_dir,
-                    &target_prefix,
-                    allow_symbolic_links,
-                    allow_hard_links,
-                    platform,
-                )
-                .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
-                .map(|_| ())
-            })
-        })
-        .await?;
+    let mut link_futures = FuturesUnordered::new();
+    for (idx, entry) in paths_json.paths.into_iter().enumerate() {
+        let package_dir = package_dir.to_owned();
+        let target_dir = target_dir.to_owned();
+        let target_prefix = target_prefix.to_owned();
 
-    Ok(())
+        // Spawn a task to link the specific file. Note that these tasks are throttled by the
+        // driver. So even though we might spawn thousands of tasks they might not all run
+        // parallel because the driver dictates that only N tasks can run in parallel at the same
+        // time.
+        let link_future = driver.spawn_throttled(move || {
+            link_file(
+                &entry,
+                &package_dir,
+                &target_dir,
+                &target_prefix,
+                allow_symbolic_links && !entry.no_link,
+                allow_hard_links && !entry.no_link,
+                platform,
+            )
+            .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
+            .map(|result| {
+                (
+                    idx,
+                    PathsEntry {
+                        relative_path: entry.relative_path,
+                        path_type: entry.path_type.into(),
+                        no_link: entry.no_link,
+                        sha256: entry.sha256,
+                        sha256_in_prefix: Some(format!("{:x}", result.sha256)),
+                        size_in_bytes: Some(result.file_size),
+                    },
+                )
+            })
+        });
+
+        // Push back the link future
+        link_futures.push(link_future);
+    }
+
+    // Await all futures and collect them. The futures are added in order to the `link_futures`
+    // set. However, they can complete in any order. This means we have to reorder them back into
+    // their original order. This is achieved by waiting to add finished results to the result Vec,
+    // if the result before it has not yet finished. To that end we use a `BinaryHeap` as a priority
+    // queue which will buffer up finished results that finished before their predecessor.
+    //
+    // What makes this loop special is that it also aborts if any of the returned futures indicate
+    // a failure.
+    let mut paths = Vec::with_capacity(link_futures.len());
+    let mut out_of_order_queue =
+        BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(link_futures.len());
+    while let Some(link_result) = link_futures.next().await {
+        let (index, data) = link_result?;
+
+        if index == paths.len() {
+            // If this is the next element expected in the sorted list, add it immediately. This
+            // basically means the future finished in order.
+            paths.push(data);
+
+            // By adding a finished future we have to check if there might also be another future
+            // that finished earlier and should also now be added to the result Vec.
+            while let Some(next_output) = out_of_order_queue.peek_mut() {
+                if next_output.index == paths.len() {
+                    paths.push(PeekMut::pop(next_output).data);
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // Otherwise add it to the out of order queue. This means that we still have to wait for
+            // an another element before we can add the result to the ordered list.
+            out_of_order_queue.push(OrderWrapper { index, data });
+        }
+    }
+    debug_assert_eq!(
+        paths.len(),
+        paths.capacity(),
+        "some futures where not added to the result"
+    );
+
+    Ok(paths)
+}
+
+/// A helper struct for a BinaryHeap to provides ordering to items that are otherwise unordered.
+struct OrderWrapper<T> {
+    index: usize,
+    data: T,
+}
+
+impl<T> PartialEq for OrderWrapper<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.index == other.index
+    }
+}
+
+impl<T> Eq for OrderWrapper<T> {}
+
+impl<T> PartialOrd for OrderWrapper<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<T> Ord for OrderWrapper<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // BinaryHeap is a max heap, so compare backwards here.
+        other.index.cmp(&self.index)
+    }
 }
 
 /// Returns true if it is possible to create symlinks in the target directory.
@@ -306,5 +399,31 @@ mod test {
             String::from_utf8_lossy(&python_version.stdout).trim(),
             "Python 3.11.0"
         );
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    async fn test_prefix_paths() {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+        let package_dir = tempfile::TempDir::new().unwrap();
+
+        // Create package cache
+        rattler_package_streaming::fs::extract(
+            &get_test_data_dir().join("ruff-0.0.171-py310h298983d_0.conda"),
+            package_dir.path(),
+        )
+        .unwrap();
+
+        // Link the package
+        let paths = link_package(
+            package_dir.path(),
+            environment_dir.path(),
+            &InstallDriver::default(),
+            Default::default(),
+        )
+        .await
+        .unwrap();
+
+        insta::assert_yaml_snapshot!(paths);
     }
 }

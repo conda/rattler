@@ -2,8 +2,9 @@ use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
 use rattler_conda_types::Platform;
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
+use sha2::Sha256;
 use std::fs::Permissions;
-use std::io::Write;
+use std::io::{Seek, Write};
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
@@ -35,9 +36,11 @@ pub struct LinkedFile {
     /// True if an existing file already existed and linking overwrote the original file.
     pub clobbered: bool,
 
-    /// If linking generated a different file from the file in the package directory (when a prefix,
-    /// is replaced for instance) this field contains the new Sha256 hash.
-    pub sha256: Option<sha2::digest::Output<sha2::Sha256>>,
+    /// The SHA256 hash of the resulting file.
+    pub sha256: sha2::digest::Output<sha2::Sha256>,
+
+    /// The size of the final file in bytes.
+    pub file_size: u64,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -69,7 +72,12 @@ pub fn link_file(
     // caller that this is the case but there is no special handling here.
     let clobbered = destination_path.is_file();
 
-    let sha256 = if let Some(prefix_placeholder) = path_json_entry.prefix_placeholder.as_deref() {
+    // Temporary variables to store intermediate computations in. If we already computed the file
+    // size or the sha hash we dont have to recompute them at the end of the function.
+    let mut sha256 = None;
+    let mut file_size = path_json_entry.size_in_bytes;
+
+    if let Some(prefix_placeholder) = path_json_entry.prefix_placeholder.as_deref() {
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = {
@@ -92,7 +100,15 @@ pub fn link_file(
             path_json_entry.file_mode,
         )?;
 
-        let (_, current_hash) = destination_writer.finalize();
+        let (mut file, current_hash) = destination_writer.finalize();
+
+        // We computed the hash of the file while writing and from the file we can also infer the
+        // size of it.
+        sha256 = Some(current_hash);
+        file_size = file.stream_position().ok();
+
+        // We no longer need the file.
+        drop(file);
 
         // In case of binary files we have to take care of reconstructing permissions and resigning
         // executables.
@@ -117,27 +133,56 @@ pub fn link_file(
                 // If the binary changed it requires resigning.
                 if content_changed {
                     let signer = UnifiedSigner::new(SigningSettings::default());
-                    signer.sign_path_in_place(destination_path)?
+                    signer.sign_path_in_place(&destination_path)?;
+
+                    // The file on disk changed from the original file so the hash and file size
+                    // also became invalid.
+                    sha256 = None;
+                    file_size = None;
                 }
             }
         }
-
-        Some(current_hash)
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         std::fs::hard_link(&source_path, &destination_path)?;
-        None
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
         let linked_path = source_path
             .read_link()
             .map_err(LinkFileError::FailedToOpenSourceFile)?;
         symlink(&linked_path, &destination_path)?;
-        None
     } else {
         std::fs::copy(&source_path, &destination_path)?;
-        None
     };
 
-    Ok(LinkedFile { clobbered, sha256 })
+    // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
+    let sha256 = if let Some(sha256) = sha256 {
+        sha256
+    } else if let Some(sha256) = path_json_entry
+        .sha256
+        .as_deref()
+        .and_then(rattler_digest::parse_digest_from_hex::<Sha256>)
+    {
+        sha256
+    } else {
+        rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+            .map_err(LinkFileError::FailedToOpenDestinationFile)?
+    };
+
+    // Compute the final file size if we didnt already.
+    let file_size = if let Some(file_size) = file_size {
+        file_size
+    } else if let Some(size_in_bytes) = path_json_entry.size_in_bytes {
+        size_in_bytes
+    } else {
+        let metadata = std::fs::symlink_metadata(&destination_path)
+            .map_err(LinkFileError::FailedToOpenDestinationFile)?;
+        metadata.len()
+    };
+
+    Ok(LinkedFile {
+        clobbered,
+        sha256,
+        file_size,
+    })
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
