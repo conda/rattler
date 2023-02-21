@@ -8,7 +8,6 @@ use anyhow::anyhow;
 
 use super::ffi;
 use super::flags::SolverFlag;
-use super::pool::PoolRef;
 use super::queue::Queue;
 use super::transaction::Transaction;
 
@@ -52,18 +51,6 @@ impl SolverRef {
     fn as_ptr(&self) -> NonNull<ffi::Solver> {
         // Safe because a `SolverRef` is a transparent wrapper around `ffi::Solver`
         unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
-    }
-
-    /// Returns a reference to the wrapped `ffi::Solver`.
-    fn as_ref(&self) -> &ffi::Solver {
-        // Safe because a `SolverRef` is a transparent wrapper around `ffi::Solver`
-        unsafe { std::mem::transmute(self) }
-    }
-
-    /// Returns the pool that created this instance
-    pub fn pool(&self) -> &PoolRef {
-        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
-        unsafe { &*(self.as_ref().pool as *const PoolRef) }
     }
 
     /// Creates a string of 'problems' that the solver still has which it encountered while solving

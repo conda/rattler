@@ -31,7 +31,7 @@ impl SolverBackend for LibsolvSolver {
 
             let channel_name = &repodata_records[0].channel;
             let repo = pool.create_repo(channel_name);
-            repo.add_repodata_records(repodata_records)
+            repo.add_repodata_records(&pool, repodata_records)
                 .map_err(SolveError::ErrorAddingRepodata)?;
 
             // Keep our own info about repodata_records
@@ -50,9 +50,9 @@ impl SolverBackend for LibsolvSolver {
             .into_iter()
             .map(|p| p.repodata_record)
             .collect();
-        repo.add_repodata_records(&installed_records)
+        repo.add_repodata_records(&pool, &installed_records)
             .map_err(SolveError::ErrorAddingInstalledPackages)?;
-        repo.add_virtual_packages(&problem.virtual_packages)
+        repo.add_virtual_packages(&pool, &problem.virtual_packages)
             .map_err(SolveError::ErrorAddingInstalledPackages)?;
         pool.set_installed(&repo);
 
@@ -81,7 +81,7 @@ impl SolverBackend for LibsolvSolver {
         // Construct a transaction from the solver
         let mut transaction = solver.create_transaction();
         let operations = transaction
-            .get_package_operations(&repo_mapping, &all_repodata_records)
+            .get_package_operations(&pool, &repo_mapping, &all_repodata_records)
             .map_err(|unsupported_operation_ids| {
                 SolveError::UnsupportedOperations(
                     unsupported_operation_ids

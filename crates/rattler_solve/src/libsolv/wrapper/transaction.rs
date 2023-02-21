@@ -1,6 +1,6 @@
 use super::ffi;
 use super::pool::FindInterned;
-use super::pool::PoolRef;
+use super::pool::Pool;
 use super::repo::RepoId;
 use super::solvable::SolvableId;
 use crate::package_operation::{PackageOperation, PackageOperationKind};
@@ -67,18 +67,13 @@ impl TransactionRef {
         unsafe { std::mem::transmute(self) }
     }
 
-    /// Returns the pool that owns this instance.
-    pub fn pool(&self) -> &PoolRef {
-        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
-        unsafe { &*(self.as_ref().pool as *const PoolRef) }
-    }
-
     /// Returns the package operations derived from the transaction
     ///
     /// If the transaction contains libsolv operations that have no mapping to `PackageOperation`,
     /// an error is returned containing their ids
     pub fn get_package_operations(
         &mut self,
+        pool: &Pool,
         repo_mapping: &HashMap<RepoId, usize>,
         repodata_records: &[&[RepoDataRecord]],
     ) -> Result<Vec<PackageOperation>, Vec<ffi::Id>> {
@@ -91,7 +86,7 @@ impl TransactionRef {
         let count = inner.steps.count as usize;
 
         let solvable_index_id = "solvable:repodata_record_index"
-            .find_interned_id(self.pool())
+            .find_interned_id(pool)
             .unwrap();
 
         // TODO: simplify unsafe usage and explain why it is all right
@@ -108,7 +103,7 @@ impl TransactionRef {
                     ffi::SOLVER_TRANSACTION_SHOW_ALL as std::os::raw::c_int,
                 );
 
-                let solvable = id.resolve(self.pool());
+                let solvable = id.resolve(pool);
                 let solvable_index = solvable.get_usize(solvable_index_id).unwrap();
                 let repo_index = repo_mapping[&solvable.repo().id()];
                 let repodata_record = &repodata_records[repo_index][solvable_index];
@@ -125,7 +120,7 @@ impl TransactionRef {
                         let solvable_offset =
                             ffi::transaction_obs_pkg(self.as_ptr().as_ptr(), raw_id);
                         let second_solvable = SolvableId(solvable_offset);
-                        let second_solvable = second_solvable.resolve(self.pool());
+                        let second_solvable = second_solvable.resolve(pool);
                         let second_solvable_index =
                             second_solvable.get_usize(solvable_index_id).unwrap();
                         let second_repo_index = repo_mapping[&second_solvable.repo().id()];
