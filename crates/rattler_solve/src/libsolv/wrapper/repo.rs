@@ -12,9 +12,7 @@ use std::{
 };
 
 use super::{
-    c_string,
-    custom_keys::SOLVABLE_REAL_URL,
-    ffi,
+    c_string, ffi,
     keys::*,
     pool::PoolRef,
     pool::{FindInterned, Intern},
@@ -82,14 +80,8 @@ impl RepoRef {
     }
 
     /// Adds [`RepoDataRecord`] to this instance
-    pub fn add_repodata_records<'item>(
-        &self,
-        repo_datas: impl IntoIterator<Item = &'item RepoDataRecord>,
-    ) -> Result<(), NulError> {
+    pub fn add_repodata_records(&self, repo_datas: &[RepoDataRecord]) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
-
-        // Custom IDs
-        let solvable_url_id = SOLVABLE_REAL_URL.intern(self.pool());
 
         // Get all the IDs
         let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
@@ -107,16 +99,20 @@ impl RepoRef {
         let repo_type_md5 = REPOKEY_TYPE_MD5.find_interned_id(self.pool()).unwrap();
         let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(self.pool()).unwrap();
 
+        // Custom id
+        let solvable_index_id = "solvable:repodata_record_index".intern(self.pool());
+
         // Keeps a mapping from packages added to the repo to the type and solvable
         let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
-        for repo_data in repo_datas {
+        for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
             let record = &repo_data.package_record;
 
             // Create a solvable for the package.
             let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
             let solvable = solvable_id.resolve(self.pool());
+            solvable.set_usize(solvable_index_id, repo_data_index);
 
             let solvable = unsafe { solvable.as_ptr().as_mut() };
 
@@ -137,16 +133,6 @@ impl RepoRef {
                     0,
                 )
             };
-
-            // Url
-            unsafe {
-                ffi::repodata_set_str(
-                    data,
-                    solvable_id.into(),
-                    solvable_url_id.into(),
-                    CString::new(repo_data.url.to_string())?.as_ptr(),
-                )
-            }
 
             // Location (filename (fn) and subdir)
             unsafe {

@@ -1,16 +1,14 @@
 use super::ffi;
-use super::keys::*;
 use super::pool::FindInterned;
 use super::pool::PoolRef;
 use super::repo::RepoId;
-use super::solvable::{Solvable, SolvableId};
+use super::solvable::SolvableId;
 use crate::package_operation::{PackageOperation, PackageOperationKind};
-use rattler_conda_types::{NoArchType, PackageRecord, RepoDataRecord, Version};
+use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
-use std::str::FromStr;
 
 /// Wraps a pointer to an `ffi::Transaction` which is freed when the instance is dropped.
 #[repr(transparent)]
@@ -26,6 +24,13 @@ impl Drop for TransactionOwnedPtr {
 /// This represents a transaction in libsolv which is a abstraction over changes that need to be
 /// done to satisfy the dependency constraint.
 pub struct Transaction<'solver>(TransactionOwnedPtr, PhantomData<&'solver ffi::Transaction>);
+
+impl Transaction<'_> {
+    /// Constructs a new instance
+    pub(super) fn new(ptr: NonNull<ffi::Transaction>) -> Self {
+        Transaction(TransactionOwnedPtr(ptr), PhantomData::default())
+    }
+}
 
 /// A `TransactionRef` is a wrapper around an `ffi::Transaction` that provides a safe abstraction
 /// over its functionality.
@@ -74,15 +79,20 @@ impl TransactionRef {
     /// an error is returned containing their ids
     pub fn get_package_operations(
         &mut self,
-        channel_mapping: &HashMap<RepoId, String>,
+        repo_mapping: &HashMap<RepoId, usize>,
+        repodata_records: &[&[RepoDataRecord]],
     ) -> Result<Vec<PackageOperation>, Vec<ffi::Id>> {
-        let mut solvable_operations = Vec::new();
+        let mut package_operations = Vec::new();
         let mut unsupported_operations = Vec::new();
 
         // Get inner transaction type
         let inner = self.as_ref();
         // Number of transaction details
         let count = inner.steps.count as usize;
+
+        let solvable_index_id = "solvable:repodata_record_index"
+            .find_interned_id(self.pool())
+            .unwrap();
 
         // TODO: simplify unsafe usage and explain why it is all right
         for index in 0..count {
@@ -99,42 +109,49 @@ impl TransactionRef {
                 );
 
                 let solvable = id.resolve(self.pool());
+                let solvable_index = solvable.get_usize(solvable_index_id).unwrap();
+                let repo_index = repo_mapping[&solvable.repo().id()];
+                let repodata_record = &repodata_records[repo_index][solvable_index];
+
                 match id_type as u32 {
                     ffi::SOLVER_TRANSACTION_DOWNGRADED
                     | ffi::SOLVER_TRANSACTION_UPGRADED
                     | ffi::SOLVER_TRANSACTION_CHANGED => {
-                        let solvable_offset =
-                            ffi::transaction_obs_pkg(self.as_ptr().as_ptr(), raw_id);
-                        let new_solvable = SolvableId(solvable_offset);
-
-                        solvable_operations.push(PackageOperation {
-                            package: repodata_record_from_solvable(solvable, channel_mapping),
+                        package_operations.push(PackageOperation {
+                            package: repodata_record.clone(),
                             kind: PackageOperationKind::Remove,
                         });
 
-                        solvable_operations.push(PackageOperation {
-                            package: repodata_record_from_solvable(
-                                new_solvable.resolve(self.pool()),
-                                channel_mapping,
-                            ),
+                        let solvable_offset =
+                            ffi::transaction_obs_pkg(self.as_ptr().as_ptr(), raw_id);
+                        let second_solvable = SolvableId(solvable_offset);
+                        let second_solvable = second_solvable.resolve(self.pool());
+                        let second_solvable_index =
+                            second_solvable.get_usize(solvable_index_id).unwrap();
+                        let second_repo_index = repo_mapping[&second_solvable.repo().id()];
+                        let second_repodata_record =
+                            &repodata_records[second_repo_index][second_solvable_index];
+
+                        package_operations.push(PackageOperation {
+                            package: second_repodata_record.clone(),
                             kind: PackageOperationKind::Install,
                         });
                     }
                     ffi::SOLVER_TRANSACTION_REINSTALLED => {
-                        solvable_operations.push(PackageOperation {
-                            package: repodata_record_from_solvable(solvable, channel_mapping),
+                        package_operations.push(PackageOperation {
+                            package: repodata_record.clone(),
                             kind: PackageOperationKind::Reinstall,
                         });
                     }
                     ffi::SOLVER_TRANSACTION_INSTALL => {
-                        solvable_operations.push(PackageOperation {
-                            package: repodata_record_from_solvable(solvable, channel_mapping),
+                        package_operations.push(PackageOperation {
+                            package: repodata_record.clone(),
                             kind: PackageOperationKind::Install,
                         });
                     }
                     ffi::SOLVER_TRANSACTION_ERASE => {
-                        solvable_operations.push(PackageOperation {
-                            package: repodata_record_from_solvable(solvable, channel_mapping),
+                        package_operations.push(PackageOperation {
+                            package: repodata_record.clone(),
                             kind: PackageOperationKind::Remove,
                         });
                     }
@@ -150,57 +167,6 @@ impl TransactionRef {
             return Err(unsupported_operations);
         }
 
-        Ok(solvable_operations)
-    }
-}
-
-fn repodata_record_from_solvable(
-    solvable: Solvable,
-    channel_mapping: &HashMap<RepoId, String>,
-) -> RepoDataRecord {
-    // Keys
-    let solvable_mediadir = SOLVABLE_MEDIADIR.find_interned_id(solvable.pool()).unwrap();
-    let solvable_mediafile = SOLVABLE_MEDIAFILE
-        .find_interned_id(solvable.pool())
-        .unwrap();
-
-    let channel = channel_mapping
-        .get(&solvable.repo().id())
-        .map(|c| c.to_owned())
-        .unwrap_or_else(|| "unknown".to_owned());
-
-    RepoDataRecord {
-        file_name: solvable.lookup_str(solvable_mediafile).unwrap().to_string(),
-        url: solvable.url(),
-        channel,
-        package_record: PackageRecord {
-            name: solvable.name(),
-            version: Version::from_str(&solvable.version()).unwrap(),
-            build_number: solvable.build_number().unwrap(),
-            build: solvable.build_string().unwrap(),
-            subdir: solvable.lookup_str(solvable_mediadir).unwrap().to_string(),
-            md5: solvable.md5(),
-            sha256: solvable.sha256(),
-            // We have the data (see [`Repo::add_repodata_records`]), but I'm not sure if it is necessary to retrieve it
-            depends: Vec::new(),
-            constrains: Vec::new(),
-            track_features: Vec::new(),
-            timestamp: None,
-            license: None,
-            size: None,
-            // Not sure where to get the following from (if it is even necessary), so using None for now
-            arch: None,
-            platform: None,
-            features: None,
-            noarch: NoArchType::default(),
-            license_family: None,
-        },
-    }
-}
-
-impl Transaction<'_> {
-    /// Constructs a new instance
-    pub(super) fn new(ptr: NonNull<ffi::Transaction>) -> Self {
-        Transaction(TransactionOwnedPtr(ptr), PhantomData::default())
+        Ok(package_operations)
     }
 }

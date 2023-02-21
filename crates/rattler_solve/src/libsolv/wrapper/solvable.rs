@@ -1,9 +1,7 @@
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
-use url::Url;
 
-use super::custom_keys::SOLVABLE_REAL_URL;
 use super::ffi;
 use super::keys::*;
 use super::pool::{FindInterned, PoolRef, StringId};
@@ -73,11 +71,6 @@ impl<'repo> Solvable<'repo> {
         unsafe { &*(self.as_ptr().as_ref().repo as *const RepoRef) }
     }
 
-    pub fn url(&self) -> Url {
-        let s = self.resolve_by_key(SOLVABLE_REAL_URL).unwrap().to_string();
-        Url::parse(&s).unwrap()
-    }
-
     /// Returns the location of the solvable which is defined by the subdirectory and the filename of the package.
     pub fn location(&self) -> Option<String> {
         unsafe {
@@ -101,6 +94,19 @@ impl<'repo> Solvable<'repo> {
 
     pub fn version(&self) -> String {
         self.resolve_by_id(|s| s.evr)
+    }
+
+    pub fn set_usize(&self, key: StringId, x: usize) {
+        unsafe { ffi::solvable_set_num(self.as_ptr().as_ptr(), key.0, x as u64) };
+    }
+
+    pub fn get_usize(&self, key: StringId) -> Option<usize> {
+        let value = unsafe { ffi::solvable_lookup_num(self.as_ptr().as_ptr(), key.0, u64::MAX) };
+        if value == u64::MAX {
+            None
+        } else {
+            Some(value as usize)
+        }
     }
 
     pub fn build_string(&self) -> Option<String> {
