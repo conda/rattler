@@ -1,47 +1,16 @@
-// pub const SOLVABLE_SUMMARY: &str = "solvable:summary";
-// pub const SOLVABLE_DESCRIPTION: &str = "solvable:description";
-// pub const SOLVABLE_DISTRIBUTION: &str = "solvable:distribution";
-// pub const SOLVABLE_AUTHORS: &str = "solvable:authors";
-// pub const SOLVABLE_PACKAGER: &str = "solvable:packager";
-// pub const SOLVABLE_GROUP: &str = "solvable:group";
-// pub const SOLVABLE_URL: &str = "solvable:url";
-// pub const SOLVABLE_KEYWORDS: &str = "solvable:keywords";
+//! The constants below are taken from
+//! https://github.com/openSUSE/libsolv/blob/67aaf74844c532129ec8d7c8a7be4209ee4ef78d/src/knownid.h
+//!
+//! We have only copied those that are interesting for rattler
+
 pub const SOLVABLE_LICENSE: &str = "solvable:license";
 pub const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
-// pub const SOLVABLE_BUILDHOST: &str = "solvable:buildhost";
-// pub const SOLVABLE_EULA: &str = "solvable:eula";
-// pub const SOLVABLE_CPEID: &str = "solvable:cpeid";
-// pub const SOLVABLE_MESSAGEINS: &str = "solvable:messageins";
-// pub const SOLVABLE_MESSAGEDEL: &str = "solvable:messagedel";
-// pub const SOLVABLE_INSTALLSIZE: &str = "solvable:installsize";
-// pub const SOLVABLE_DISKUSAGE: &str = "solvable:diskusage";
-// pub const SOLVABLE_FILELIST: &str = "solvable:filelist";
-// pub const SOLVABLE_INSTALLTIME: &str = "solvable:installtime";
-// pub const SOLVABLE_MEDIADIR: &str = "solvable:mediadir";
-// pub const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
-// pub const SOLVABLE_MEDIANR: &str = "solvable:medianr";
-// pub const SOLVABLE_MEDIABASE: &str = "solvable:mediabase"; /* <location xml:base=... > */
 pub const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
-// pub const SOLVABLE_SOURCEARCH: &str = "solvable:sourcearch";
-// pub const SOLVABLE_SOURCENAME: &str = "solvable:sourcename";
-// pub const SOLVABLE_SOURCEEVR: &str = "solvable:sourceevr";
-// pub const SOLVABLE_ISVISIBLE: &str = "solvable:isvisible";
-// pub const SOLVABLE_TRIGGERS: &str = "solvable:triggers";
 pub const SOLVABLE_CHECKSUM: &str = "solvable:checksum";
-pub const SOLVABLE_PKGID: &str = "solvable:pkgid"; /* pkgid: md5sum over header + payload */
-// pub const SOLVABLE_HDRID: &str = "solvable:hdrid"; /* hdrid: sha1sum over header only */
-// pub const SOLVABLE_LEADSIGID: &str = "solvable:leadsigid"; /* leadsigid: md5sum over lead + sigheader */
+pub const SOLVABLE_PKGID: &str = "solvable:pkgid";
 pub const SOLVABLE_BUILDFLAVOR: &str = "solvable:buildflavor";
 pub const SOLVABLE_BUILDVERSION: &str = "solvable:buildversion";
-
 pub const REPOKEY_TYPE_MD5: &str = "repokey:type:md5";
-// pub const REPOKEY_TYPE_SHA1: &str = "repokey:type:sha1";
-// pub const REPOKEY_TYPE_SHA224: &str = "repokey:type:sha224";
 pub const REPOKEY_TYPE_SHA256: &str = "repokey:type:sha256";
-// pub const REPOKEY_TYPE_SHA384: &str = "repokey:type:sha384";
-// pub const REPOKEY_TYPE_SHA512: &str = "repokey:type:sha512";
-
-pub const SOLVABLE_CONSTRAINS: &str = "solvable:constrains"; /* conda */
-pub const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features"; /* conda */
-// pub const SOLVABLE_ISDEFAULT: &str = "solvable:isdefault";
-// pub const SOLVABLE_LANGONLY: &str = "solvable:langonly";
+pub const SOLVABLE_CONSTRAINS: &str = "solvable:constrains";
+pub const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features";
