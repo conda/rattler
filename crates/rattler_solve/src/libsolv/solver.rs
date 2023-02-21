@@ -7,6 +7,7 @@ use std::ptr::NonNull;
 use anyhow::anyhow;
 
 use super::ffi;
+use super::flags::SolverFlag;
 use super::pool::PoolRef;
 use super::queue::Queue;
 use super::transaction::Transaction;
@@ -85,8 +86,8 @@ impl SolverRef {
     }
 
     /// Sets a solver flag
-    pub fn set_flag(&self, flag: u32, value: bool) {
-        unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag as i32, i32::from(value)) };
+    pub fn set_flag(&self, flag: SolverFlag, value: bool) {
+        unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag.inner(), i32::from(value)) };
     }
 
     /// Solves all the problems in the `queue`, or returns an error if problems remain.

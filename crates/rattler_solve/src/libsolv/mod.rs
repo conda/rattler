@@ -1,7 +1,9 @@
+use flags::{SolvableFlags, SolverFlag};
 use std::collections::HashMap;
 use std::ffi::CString;
 
 mod ffi;
+mod flags;
 mod keys;
 mod pool;
 mod queue;
@@ -13,23 +15,11 @@ mod transaction;
 use pool::{Intern, Pool, Verbosity};
 use queue::Queue;
 
-use crate::libsolv::ffi::{
-    SOLVER_ERASE, SOLVER_FLAG_ALLOW_DOWNGRADE, SOLVER_FLAG_ALLOW_UNINSTALL, SOLVER_INSTALL,
-    SOLVER_SOLVABLE_PROVIDES, SOLVER_UPDATE,
-};
-use crate::{PackageOperation, RequestedAction, SolveError, SolverProblem};
+use crate::{PackageOperation, SolveError, SolverProblem};
 
 /// Convenience method that converts a string reference to a CString
 fn c_string<T: AsRef<str>>(str: T) -> CString {
     CString::new(str.as_ref()).expect("should be convertable from string")
-}
-
-fn request_to_solvable_flags(action: RequestedAction) -> u32 {
-    match action {
-        RequestedAction::Install => SOLVER_INSTALL,
-        RequestedAction::Remove => SOLVER_ERASE,
-        RequestedAction::Update => SOLVER_UPDATE,
-    }
 }
 
 pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError> {
@@ -73,16 +63,13 @@ pub fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError
     let mut queue = Queue::default();
     for (spec, request) in problem.specs {
         let id = spec.intern(&pool);
-        queue.push_id_with_flags(
-            id,
-            (request_to_solvable_flags(request) | SOLVER_SOLVABLE_PROVIDES) as i32,
-        );
+        queue.push_id_with_flags(id, SolvableFlags::from(request));
     }
 
     // Construct a solver and solve the problems in the queue
     let mut solver = pool.create_solver();
-    solver.set_flag(SOLVER_FLAG_ALLOW_UNINSTALL, true);
-    solver.set_flag(SOLVER_FLAG_ALLOW_DOWNGRADE, true);
+    solver.set_flag(SolverFlag::allow_uninstall(), true);
+    solver.set_flag(SolverFlag::allow_downgrade(), true);
     if solver.solve(&mut queue).is_err() {
         return Err(SolveError::Unsolvable);
     }
