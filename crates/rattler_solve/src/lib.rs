@@ -6,7 +6,7 @@
 mod libsolv;
 mod package_operation;
 
-pub use package_operation::{PackageIdentifier, PackageOperation, PackageOperationKind};
+pub use package_operation::{PackageOperation, PackageOperationKind};
 use std::ffi::NulError;
 
 use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};

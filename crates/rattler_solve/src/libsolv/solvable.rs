@@ -1,4 +1,7 @@
-use crate::libsolv::keys::{REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDVERSION};
+use crate::libsolv::keys::{
+    REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDVERSION,
+    SOLVABLE_CHECKSUM, SOLVABLE_PKGID,
+};
 use std::ffi::CStr;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -109,9 +112,44 @@ impl<'repo> Solvable<'repo> {
         })
     }
 
+    pub fn md5(&self) -> Option<String> {
+        let checksum_id = SOLVABLE_PKGID.find_interned_id(self.pool()).unwrap();
+        let expected_checksum_type = REPOKEY_TYPE_MD5.find_interned_id(self.pool()).unwrap();
+        self.lookup_checksum(checksum_id, expected_checksum_type)
+    }
+
     pub fn sha256(&self) -> Option<String> {
-        self.resolve_by_key(REPOKEY_TYPE_SHA256)
-            .map(|s| s.to_owned())
+        let checksum_id = SOLVABLE_CHECKSUM.find_interned_id(self.pool()).unwrap();
+        let expected_checksum_type = REPOKEY_TYPE_SHA256.find_interned_id(self.pool()).unwrap();
+        self.lookup_checksum(checksum_id, expected_checksum_type)
+    }
+
+    fn lookup_checksum(
+        &self,
+        key_name: StringId,
+        expected_checksum_type: StringId,
+    ) -> Option<String> {
+        let mut checksum_type: ffi::Id = -1;
+
+        let checksum = unsafe {
+            ffi::solvable_lookup_checksum(self.as_ptr().as_ptr(), key_name.0, &mut checksum_type)
+        };
+
+        if checksum.is_null() {
+            None
+        } else {
+            if checksum_type != expected_checksum_type.0 {
+                panic!("libsolv returned the wrong checksum type! {checksum_type}");
+            }
+
+            // Safe to unwrap, because the checksum is valid UTF8
+            let checksum = unsafe { CStr::from_ptr(checksum) }
+                .to_str()
+                .unwrap()
+                .to_string();
+
+            Some(checksum)
+        }
     }
 
     fn resolve_by_key(&self, key: &str) -> Option<&str> {

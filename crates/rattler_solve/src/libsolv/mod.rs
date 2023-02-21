@@ -129,6 +129,14 @@ mod test {
         )
     }
 
+    fn dummy_md5_hash() -> &'static str {
+        "b3af409bb8423187c75e6c7f5b683908"
+    }
+
+    fn dummy_sha256_hash() -> &'static str {
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    }
+
     fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
         let repo_data: RepoData =
             serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
@@ -162,8 +170,8 @@ mod test {
                     build: build.to_string(),
                     build_number,
                     subdir: subdir.to_string(),
-                    md5: None,
-                    sha256: None,
+                    md5: Some(dummy_md5_hash().to_string()),
+                    sha256: Some(dummy_sha256_hash().to_string()),
                     size: None,
                     arch: None,
                     platform: None,
@@ -223,7 +231,7 @@ mod test {
 
     #[test]
     fn test_solve_dummy_repo_install_non_existent() {
-        let result = solve_with_already_installed(
+        let result = solve(
             dummy_channel_json_path(),
             Vec::new(),
             Vec::new(),
@@ -238,6 +246,39 @@ mod test {
     }
 
     #[test]
+    fn test_solve_dummy_repo_install_new() -> anyhow::Result<()> {
+        let operations = solve(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["foo<4"],
+            RequestedAction::Install,
+        )?;
+
+        assert_eq!(1, operations.len());
+        assert!(matches!(operations[0].kind, PackageOperationKind::Install));
+        let info = &operations[0].package;
+
+        // TODO: assert file name
+        // TODO: assert url
+        assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
+        assert_eq!("foo", info.package_record.name);
+        assert_eq!("3.0.2", info.package_record.version.to_string());
+        assert_eq!("py36h1af98f8_1", info.package_record.build);
+        assert_eq!(1, info.package_record.build_number);
+        assert_eq!(
+            "1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2",
+            info.package_record.sha256.as_ref().unwrap()
+        );
+        assert_eq!(
+            "d65ab674acf3b7294ebacaec05fc5b54",
+            info.package_record.md5.as_ref().unwrap()
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn test_solve_dummy_repo_install_noop() -> anyhow::Result<()> {
         let already_installed = vec![installed_package(
             "conda-forge",
@@ -248,7 +289,7 @@ mod test {
             1,
         )];
 
-        let operations = solve_with_already_installed(
+        let operations = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
@@ -272,7 +313,7 @@ mod test {
             1,
         )];
 
-        let operations = solve_with_already_installed(
+        let operations = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
@@ -285,14 +326,14 @@ mod test {
         // Uninstall
         assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
         let info = &operations[0].package;
-        assert_eq!("foo", &info.name);
-        assert_eq!("3.0.2", &info.version);
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("3.0.2", &info.package_record.version.to_string());
 
         // Install
         assert!(matches!(operations[1].kind, PackageOperationKind::Install));
         let info = &operations[1].package;
-        assert_eq!("foo", &info.name);
-        assert_eq!("4.0.2", &info.version);
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("4.0.2", &info.package_record.version.to_string());
 
         Ok(())
     }
@@ -308,7 +349,7 @@ mod test {
             1,
         )];
 
-        let operations = solve_with_already_installed(
+        let operations = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
@@ -321,14 +362,14 @@ mod test {
         // Uninstall
         assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
         let info = &operations[0].package;
-        assert_eq!("foo", &info.name);
-        assert_eq!("4.0.2", &info.version);
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("4.0.2", &info.package_record.version.to_string());
 
         // Install
         assert!(matches!(operations[1].kind, PackageOperationKind::Install));
         let info = &operations[1].package;
-        assert_eq!("foo", &info.name);
-        assert_eq!("3.0.2", &info.version);
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("3.0.2", &info.package_record.version.to_string());
 
         Ok(())
     }
@@ -344,7 +385,7 @@ mod test {
             1,
         )];
 
-        let operations = solve_with_already_installed(
+        let operations = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
@@ -357,15 +398,15 @@ mod test {
         // Uninstall
         assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
         let info = &operations[0].package;
-        assert_eq!("foo", &info.name);
-        assert_eq!("3.0.2", &info.version);
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("3.0.2", &info.package_record.version.to_string());
 
         Ok(())
     }
 
     #[test]
     fn test_solve_dummy_repo_with_virtual_package() -> anyhow::Result<()> {
-        let operations = solve_with_already_installed(
+        let operations = solve(
             dummy_channel_json_path(),
             Vec::new(),
             vec![GenericVirtualPackage {
@@ -380,15 +421,15 @@ mod test {
         assert_eq!(1, operations.len());
         assert_eq!(PackageOperationKind::Install, operations[0].kind);
         let info = &operations[0].package;
-        assert_eq!("bar", &info.name);
-        assert_eq!("1.2.3", &info.version);
+        assert_eq!("bar", &info.package_record.name);
+        assert_eq!("1.2.3", &info.package_record.version.to_string());
 
         Ok(())
     }
 
     #[test]
     fn test_solve_dummy_repo_missing_virtual_package() {
-        let result = solve_with_already_installed(
+        let result = solve(
             dummy_channel_json_path(),
             Vec::new(),
             Vec::new(),
@@ -400,7 +441,7 @@ mod test {
     }
 
     #[cfg(test)]
-    fn solve_with_already_installed(
+    fn solve(
         repo_path: String,
         installed_packages: Vec<PrefixRecord>,
         virtual_packages: Vec<GenericVirtualPackage>,

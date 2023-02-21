@@ -104,7 +104,6 @@ impl RepoRef {
 
         // Iterate over all packages
         for repo_data in repo_datas {
-            let filename = &repo_data.file_name;
             let record = &repo_data.package_record;
 
             // Create a solvable for the package.
@@ -131,25 +130,18 @@ impl RepoRef {
                 )
             };
 
-            // TODO: The filename is not present in a PackageRecord
-            // // Location (filename (fn) and subdir)
-            // let filename = record
-            //     .filename
-            //     .as_deref()
-            //     .unwrap_or_else(|| filename.as_ref());
-            // let subdir = record.subdir.as_str();
-            // unsafe {
-            //     ffi::repodata_set_location(
-            //         data,
-            //         solvable_id.into(),
-            //         0,
-            //         CString::new(subdir)?.as_ptr(),
-            //         CString::new(filename)?.as_ptr(),
-            //     );
-            // }
+            // Location (filename (fn) and subdir)
+            unsafe {
+                ffi::repodata_set_location(
+                    data,
+                    solvable_id.into(),
+                    0,
+                    CString::new(record.subdir.as_bytes())?.as_ptr(),
+                    CString::new(repo_data.file_name.as_bytes())?.as_ptr(),
+                );
+            }
 
             // Dependencies
-            // TODO: Add requires
             for match_spec in record.depends.iter() {
                 // Create a reldep id from a matchspec
                 let match_spec_id = unsafe {
@@ -166,7 +158,6 @@ impl RepoRef {
             }
 
             // Constraints
-            // TODO: Add requires
             for match_spec in record.constrains.iter() {
                 // Create a reldep id from a matchspec
                 let match_spec_id = unsafe {
@@ -291,7 +282,9 @@ impl RepoRef {
             }
 
             // Get the name of the package
-            if let Some((filename, package_type)) = extract_known_filename_extension(filename) {
+            if let Some((filename, package_type)) =
+                extract_known_filename_extension(&repo_data.file_name)
+            {
                 if let Some(&(other_package_type, other_solvable_id)) =
                     package_to_type.get(filename)
                 {
@@ -339,7 +332,7 @@ impl RepoRef {
                     package_to_type.insert(filename, (package_type, solvable_id));
                 };
             } else {
-                tracing::warn!("unknown package extension: {}", filename);
+                tracing::warn!("unknown package extension: {}", &repo_data.file_name);
             }
         }
 
