@@ -1,6 +1,7 @@
 //! Functions to extracting or stream a Conda package from a file on disk.
 
-use crate::{ArchiveType, ExtractError};
+use crate::ExtractError;
+use rattler_conda_types::package::ArchiveType;
 use std::fs::File;
 use std::path::Path;
 

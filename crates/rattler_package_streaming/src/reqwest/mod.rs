@@ -3,7 +3,8 @@
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-use crate::{ArchiveType, ExtractError};
+use crate::ExtractError;
+use rattler_conda_types::package::ArchiveType;
 use reqwest::blocking::{Client, Response};
 use reqwest::IntoUrl;
 use std::path::Path;

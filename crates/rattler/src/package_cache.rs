@@ -3,7 +3,7 @@
 use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use itertools::Itertools;
-use rattler_package_streaming::ArchiveType;
+use rattler_conda_types::package::ArchiveIdentifier;
 use reqwest::Client;
 use std::error::Error;
 use std::{
@@ -31,18 +31,18 @@ pub struct PackageCache {
 /// TODO: This could not be unique over multiple subdir. How to handle?
 /// TODO: Wouldn't it be better to cache based on hashes?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
-struct CacheKey {
+pub struct CacheKey {
     name: String,
     version: String,
     build_string: String,
 }
 
-impl From<&PackageInfo> for CacheKey {
-    fn from(pkg: &PackageInfo) -> Self {
+impl From<ArchiveIdentifier> for CacheKey {
+    fn from(pkg: ArchiveIdentifier) -> Self {
         CacheKey {
-            name: pkg.name.clone(),
-            version: pkg.version.clone(),
-            build_string: pkg.build_string.clone(),
+            name: pkg.name,
+            version: pkg.version,
+            build_string: pkg.build_string,
         }
     }
 }
@@ -63,49 +63,6 @@ struct PackageCacheInner {
 struct Package {
     path: Option<PathBuf>,
     inflight: Option<broadcast::Sender<Result<PathBuf, PackageCacheError>>>,
-}
-
-/// Required information about a package we want to retrieve or store in the cache.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct PackageInfo {
-    pub name: String,
-    pub version: String,
-    pub build_string: String,
-}
-
-impl Display for PackageInfo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
-    }
-}
-
-impl PackageInfo {
-    /// Try to convert the specified filename into a [`PackageInfo`].
-    pub fn try_from_filename(filename: &str) -> Option<PackageInfo> {
-        // Strip the suffix from the filename
-        let filename_without_ext = ArchiveType::split_str(filename)
-            .map(|(str, _)| str)
-            .unwrap_or(filename);
-
-        // Filename is in the form of: <name>-<version>-<build>
-        let (build_string, version, name) = filename_without_ext.rsplitn(3, '-').next_tuple()?;
-
-        Some(PackageInfo {
-            name: name.to_owned(),
-            version: version.to_owned(),
-            build_string: build_string.to_owned(),
-        })
-    }
-
-    /// Try to convert a [`Url`] into a [`PackageInfo`].
-    pub fn try_from_url(url: &Url) -> Option<PackageInfo> {
-        let filename = url
-            .path()
-            .rsplit_once(['/', '\\'])
-            .map(|(_, filename)| filename)
-            .unwrap_or_else(|| url.path());
-        Self::try_from_filename(filename)
-    }
 }
 
 /// An error that might be returned from one of the caching function of the [`PackageCache`].
@@ -137,7 +94,7 @@ impl PackageCache {
     /// duplicate fetch is performed.
     pub async fn get_or_fetch<F, Fut, E>(
         &self,
-        pkg: PackageInfo,
+        pkg: impl Into<CacheKey>,
         fetch: F,
     ) -> Result<PathBuf, PackageCacheError>
     where
@@ -145,7 +102,7 @@ impl PackageCache {
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
-        let cache_key = CacheKey::from(&pkg);
+        let cache_key = pkg.into();
 
         // Get the package entry
         let (package, pkg_cache_dir) = {
@@ -210,7 +167,7 @@ impl PackageCache {
     /// URL if the package could not be found in the cache.
     pub async fn get_or_fetch_from_url(
         &self,
-        pkg: PackageInfo,
+        pkg: impl Into<CacheKey>,
         url: Url,
         client: Client,
     ) -> Result<PathBuf, PackageCacheError> {
@@ -267,9 +224,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use super::{PackageCache, PackageInfo};
+    use super::PackageCache;
     use crate::{get_test_data_dir, validation::validate_package_directory};
-    use rattler_conda_types::package::{PackageFile, PathsJson};
+    use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use std::{fs::File, path::Path};
     use tempfile::tempdir;
 
@@ -296,11 +253,7 @@ mod test {
         // Get the package to the cache
         let package_dir = cache
             .get_or_fetch(
-                PackageInfo {
-                    name: "python".to_string(),
-                    version: "3.11.0".to_string(),
-                    build_string: "h9a09f29_0_cpython".to_string(),
-                },
+                ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| async move {
                     rattler_package_streaming::tokio::fs::extract(&tar_archive_path, &destination)
                         .await
@@ -315,28 +268,5 @@ mod test {
         // Make sure that the paths are the same as what we would expect from the original tar
         // archive.
         assert_eq!(current_paths, paths);
-    }
-
-    #[test]
-    pub fn test_package_info_from_filename() {
-        assert_eq!(
-            PackageInfo::try_from_filename(
-                "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2"
-            ),
-            Some(PackageInfo {
-                name: String::from("ros-noetic-rosbridge-suite"),
-                version: String::from("0.11.14"),
-                build_string: String::from("py39h6fdeb60_14")
-            })
-        );
-
-        assert_eq!(
-            PackageInfo::try_from_filename("clangdev-9.0.1-cling_v0.9_hd1e6b3a_3.tar.bz2"),
-            Some(PackageInfo {
-                name: String::from("clangdev"),
-                version: String::from("9.0.1"),
-                build_string: String::from("cling_v0.9_hd1e6b3a_3")
-            })
-        );
     }
 }

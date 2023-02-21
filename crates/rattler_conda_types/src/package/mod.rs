@@ -1,6 +1,8 @@
 //! Contains models of files that are found in the `info/` directory of a package.
 
 mod about;
+mod archive_identifier;
+mod archive_type;
 mod files;
 mod has_prefix;
 mod index;
@@ -14,6 +16,8 @@ use std::io::Read;
 use std::path::Path;
 pub use {
     about::AboutJson,
+    archive_identifier::ArchiveIdentifier,
+    archive_type::ArchiveType,
     files::Files,
     has_prefix::HasPrefix,
     index::IndexJson,

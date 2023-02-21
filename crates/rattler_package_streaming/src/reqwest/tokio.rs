@@ -1,10 +1,10 @@
 //! Functionality to stream and extract packages directly from a [`reqwest::Url`] within a [`tokio`]
 //! async context.
 
-use crate::{ArchiveType, ExtractError};
+use crate::ExtractError;
 use futures_util::stream::TryStreamExt;
-use reqwest::IntoUrl;
-use reqwest::{Client, Response};
+use rattler_conda_types::package::ArchiveType;
+use reqwest::{Client, IntoUrl, Response};
 use std::path::Path;
 use tokio_util::io::StreamReader;
 
