@@ -1,5 +1,4 @@
-use rattler_conda_types::virtual_package::GenericVirtualPackage;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::ffi::NulError;
 use std::{
     cmp::Ordering,

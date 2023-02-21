@@ -11,7 +11,7 @@ pub use package_operation::{PackageOperation, PackageOperationKind};
 pub use solver_backend::SolverBackend;
 use std::ffi::NulError;
 
-use rattler_conda_types::virtual_package::GenericVirtualPackage;
+use rattler_conda_types::GenericVirtualPackage;
 use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};
 
 /// Represents an error when solving the dependencies for a given environment
@@ -74,7 +74,7 @@ mod test_libsolv {
     use crate::package_operation::PackageOperationKind;
     use crate::{RequestedAction, SolveError, SolverBackend, SolverProblem};
     use rattler_conda_types::prefix_record::PrefixPaths;
-    use rattler_conda_types::virtual_package::GenericVirtualPackage;
+    use rattler_conda_types::GenericVirtualPackage;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData,
         RepoDataRecord, Version,

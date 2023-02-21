@@ -34,13 +34,12 @@ pub mod linux;
 pub mod osx;
 
 use once_cell::sync::OnceCell;
-use rattler_conda_types::{Platform, Version};
+use rattler_conda_types::{GenericVirtualPackage, Platform, Version};
 use std::str::FromStr;
 
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
-use rattler_conda_types::virtual_package::GenericVirtualPackage;
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
