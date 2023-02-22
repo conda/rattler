@@ -1,4 +1,4 @@
-use super::{c_string, ffi, repo::Repo, solver::Solver};
+use super::{c_string, ffi, repo::Repo, solvable::SolvableId, solver::Solver};
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
 use std::{
@@ -68,10 +68,25 @@ pub enum Verbosity {
 }
 
 impl Pool {
+    /// Returns a raw pointer to the wrapped `ffi::Pool`, to be used for calling ffi functions
+    /// that require access to the pool (and for nothing else)
+    pub(super) fn raw_ptr(&self) -> *mut ffi::Pool {
+        self.0.as_ptr()
+    }
+
     /// Returns a reference to the wrapped `ffi::Pool`.
     pub fn as_ref(&self) -> &ffi::Pool {
         // Safe because the pool is guaranteed to exist until it is dropped
         unsafe { self.0.as_ref() }
+    }
+
+    /// Swaps two solvables inside the libsolv pool
+    pub fn swap_solvables(&self, s1: SolvableId, s2: SolvableId) {
+        let pool = self.as_ref();
+        let solvables =
+            unsafe { std::slice::from_raw_parts_mut(pool.solvables, pool.nsolvables as _) };
+
+        solvables.swap(s1.0 as _, s2.0 as _);
     }
 
     /// Interns a REL_EQ relation between `id1` and `id2`
@@ -114,18 +129,7 @@ impl Pool {
 
     /// Set the provided repo to be considered as a source of installed packages
     pub fn set_installed(&self, repo: &Repo) {
-        unsafe { ffi::pool_set_installed(self.0.as_ptr(), repo.as_ptr().as_ptr()) }
-    }
-
-    /// Create repo from a pool
-    pub fn create_repo<S: AsRef<str>>(&self, url: S) -> Repo {
-        unsafe {
-            let c_url = c_string(url);
-            Repo::new(
-                NonNull::new(ffi::repo_create(self.0.as_ptr(), c_url.as_ptr()))
-                    .expect("libsolv repo_create returned nullptr"),
-            )
-        }
+        unsafe { ffi::pool_set_installed(self.0.as_ptr(), repo.raw_ptr()) }
     }
 
     /// Create the solver
@@ -322,14 +326,6 @@ mod test {
 
     use super::super::pool::{Intern, Pool};
     use rattler_conda_types::{ChannelConfig, MatchSpec};
-
-    #[test]
-    fn test_pool_creation() {
-        let pool = Pool::default();
-        let repo = pool.create_repo("conda-forge");
-        drop(repo);
-        drop(pool);
-    }
 
     #[test]
     fn test_pool_string_interning() {

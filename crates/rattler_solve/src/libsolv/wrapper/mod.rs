@@ -8,6 +8,7 @@ pub mod keys;
 pub mod pool;
 pub mod queue;
 pub mod repo;
+pub mod repodata;
 pub mod solvable;
 pub mod solver;
 pub mod transaction;

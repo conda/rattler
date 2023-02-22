@@ -1,8 +1,7 @@
 use super::ffi;
-use super::pool::FindInterned;
-use super::pool::Pool;
+use super::pool::{FindInterned, Pool, StringId};
 use super::repo::RepoId;
-use super::solvable::SolvableId;
+use super::solvable::{self, SolvableId};
 use crate::package_operation::{PackageOperation, PackageOperationKind};
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
@@ -103,9 +102,8 @@ impl TransactionRef {
                     ffi::SOLVER_TRANSACTION_SHOW_ALL as std::os::raw::c_int,
                 );
 
-                let solvable = id.resolve(pool);
-                let solvable_index = solvable.get_usize(solvable_index_id).unwrap();
-                let repo_index = repo_mapping[&solvable.repo_id()];
+                let (repo_index, solvable_index) =
+                    get_solvable_indexes(pool, repo_mapping, solvable_index_id, id);
                 let repodata_record = &repodata_records[repo_index][solvable_index];
 
                 match id_type as u32 {
@@ -119,11 +117,13 @@ impl TransactionRef {
 
                         let solvable_offset =
                             ffi::transaction_obs_pkg(self.as_ptr().as_ptr(), raw_id);
-                        let second_solvable = SolvableId(solvable_offset);
-                        let second_solvable = second_solvable.resolve(pool);
-                        let second_solvable_index =
-                            second_solvable.get_usize(solvable_index_id).unwrap();
-                        let second_repo_index = repo_mapping[&second_solvable.repo_id()];
+                        let second_solvable_id = SolvableId(solvable_offset);
+                        let (second_repo_index, second_solvable_index) = get_solvable_indexes(
+                            pool,
+                            repo_mapping,
+                            solvable_index_id,
+                            second_solvable_id,
+                        );
                         let second_repodata_record =
                             &repodata_records[second_repo_index][second_solvable_index];
 
@@ -164,4 +164,18 @@ impl TransactionRef {
 
         Ok(package_operations)
     }
+}
+
+fn get_solvable_indexes(
+    pool: &Pool,
+    repo_mapping: &HashMap<RepoId, usize>,
+    solvable_index_id: StringId,
+    id: SolvableId,
+) -> (usize, usize) {
+    let solvable = id.resolve(pool);
+    let solvable_index = solvable::lookup_num(solvable, solvable_index_id).unwrap() as usize;
+    let repo_id = RepoId::from_ffi_solvable(solvable);
+    let repo_index = repo_mapping[&repo_id];
+
+    (repo_index, solvable_index)
 }

@@ -227,16 +227,16 @@ mod test_libsolv {
         assert!(matches!(operations[0].kind, PackageOperationKind::Install));
         let info = &operations[0].package;
 
-        assert_eq!("foo-3.0.2.tar.bz2", info.file_name);
+        assert_eq!("foo-3.0.2.conda", info.file_name);
         assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2.tar.bz2",
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2.conda",
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
         assert_eq!("foo", info.package_record.name);
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_1", info.package_record.build);
+        assert_eq!("py36h1af98f8_conda", info.package_record.build);
         assert_eq!(1, info.package_record.build_number);
         assert_eq!(
             "1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2",
@@ -248,6 +248,19 @@ mod test_libsolv {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn test_solve_dummy_repo_tar_bz_pkg_not_present() {
+        let operations = solve(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["foo=3.0.2=py36h1af98f8_1"],
+            RequestedAction::Install,
+        );
+
+        assert!(matches!(operations, Err(SolveError::Unsolvable)))
     }
 
     #[test]
