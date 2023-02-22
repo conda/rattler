@@ -14,6 +14,7 @@ mod utils;
 mod version;
 mod version_spec;
 
+mod generic_virtual_package;
 pub mod package;
 pub mod prefix_record;
 
@@ -23,6 +24,7 @@ pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
+pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};

@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 use anyhow::anyhow;
 
 use super::ffi;
-use super::pool::PoolRef;
+use super::flags::SolverFlag;
 use super::queue::Queue;
 use super::transaction::Transaction;
 
@@ -53,18 +53,6 @@ impl SolverRef {
         unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
     }
 
-    /// Returns a reference to the wrapped `ffi::Solver`.
-    fn as_ref(&self) -> &ffi::Solver {
-        // Safe because a `SolverRef` is a transparent wrapper around `ffi::Solver`
-        unsafe { std::mem::transmute(self) }
-    }
-
-    /// Returns the pool that created this instance
-    pub fn pool(&self) -> &PoolRef {
-        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
-        unsafe { &*(self.as_ref().pool as *const PoolRef) }
-    }
-
     /// Creates a string of 'problems' that the solver still has which it encountered while solving
     /// the matchspecs. Use this function to print the existing problems to string.
     fn solver_problems(&self) -> String {
@@ -82,6 +70,11 @@ impl SolverRef {
             writeln!(&mut output, " - {}", problem).expect("could not write into string");
         }
         output
+    }
+
+    /// Sets a solver flag
+    pub fn set_flag(&self, flag: SolverFlag, value: bool) {
+        unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag.inner(), i32::from(value)) };
     }
 
     /// Solves all the problems in the `queue`, or returns an error if problems remain.
