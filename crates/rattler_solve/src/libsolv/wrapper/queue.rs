@@ -3,9 +3,11 @@ use super::flags::SolvableFlags;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
-/// Wrapper for libsolv queue type. This type is used by libsolv in the solver to solve for
-/// different conda matchspecs. This is a type-safe implementation that is coupled to a specific Id
-/// type
+/// Wrapper for queue, the queuing datastructure used by libsolv
+///
+/// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
+/// when the Queue is dropped. It also ensures that you always pass objects of the
+/// same Id type to the queue.
 pub struct Queue<T> {
     queue: ffi::Queue,
     // Makes this queue typesafe
@@ -14,29 +16,26 @@ pub struct Queue<T> {
 
 impl<T> Default for Queue<T> {
     fn default() -> Self {
-        // Safe because we know for a fact that the queue exists
-        unsafe {
-            // Create a queue pointer and initialize it
-            let mut queue = ffi::Queue {
-                elements: std::ptr::null_mut(),
-                count: 0,
-                alloc: std::ptr::null_mut(),
-                left: 0,
-            };
-            // This initializes some internal libsolv stuff
-            ffi::queue_init(&mut queue as *mut ffi::Queue);
-            Self {
-                queue,
-                _data: PhantomData,
-            }
+        let mut queue = ffi::Queue {
+            elements: std::ptr::null_mut(),
+            count: 0,
+            alloc: std::ptr::null_mut(),
+            left: 0,
+        };
+
+        // Create the queue
+        unsafe { ffi::queue_init(&mut queue as *mut ffi::Queue) };
+
+        Self {
+            queue,
+            _data: PhantomData,
         }
     }
 }
 
-/// This drop implementation drops the internal libsolv queue
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
-        // Safe because this pointer exists
+        // Safe because we know that the pool is never freed manually
         unsafe {
             ffi::queue_free(self.as_inner_mut());
         }
@@ -44,14 +43,9 @@ impl<T> Drop for Queue<T> {
 }
 
 impl<T> Queue<T> {
-    /// Returns the ffi::Queue as a mutable pointer
+    /// Returns the ffi::Queue as a mutable pointer, necessary when passing it to ffi functions
     pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
         &mut self.queue as *mut ffi::Queue
-    }
-
-    /// Returns the ffi::Queue as a const pointer
-    pub fn as_inner_ptr(&self) -> *const ffi::Queue {
-        &self.queue as *const ffi::Queue
     }
 }
 
@@ -63,7 +57,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
         }
     }
 
-    /// Push and id and flag into the queue
+    /// Push an id and flag into the queue
     pub fn push_id_with_flags(&mut self, id: T, flags: SolvableFlags) {
         unsafe {
             ffi::queue_insert2(
