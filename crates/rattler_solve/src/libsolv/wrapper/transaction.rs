@@ -157,9 +157,13 @@ fn get_solvable_indexes(
     solvable_index_id: StringId,
     id: SolvableId,
 ) -> (usize, usize) {
-    let solvable = id.resolve(pool);
-    let solvable_index = solvable::lookup_num(solvable, solvable_index_id).unwrap() as usize;
-    let repo_id = RepoId::from_ffi_solvable(solvable);
+    let solvable = id.resolve_raw(pool);
+    let solvable_index =
+        solvable::lookup_num(solvable.as_ptr(), solvable_index_id).unwrap() as usize;
+
+    // Safe because there are no active mutable borrows of any solvable at this stage
+    let repo_id = RepoId::from_ffi_solvable(unsafe { solvable.as_ref() });
+
     let repo_index = repo_mapping[&repo_id];
 
     (repo_index, solvable_index)

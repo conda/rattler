@@ -1,5 +1,6 @@
 use super::ffi;
 use super::pool::{Pool, StringId};
+use std::ptr::NonNull;
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
 #[derive(Copy, Clone)]
@@ -12,21 +13,23 @@ impl From<SolvableId> for ffi::Id {
 }
 
 impl SolvableId {
-    /// Resolves to the interned type returns a Solvable
-    ///
-    /// TODO: should be unsafe!
-    pub fn resolve(self, pool: &Pool) -> &mut ffi::Solvable {
-        // Note: this is a reimplementation of pool_id2solvable, which is not included in the bindings
-        // because it is static inline
-        let solvables = pool.as_ref().solvables;
+    /// Resolves the id to a pointer to the solvable
+    pub fn resolve_raw(self, pool: &Pool) -> NonNull<ffi::Solvable> {
+        let pool = pool.as_ref();
 
-        // Internally, the id is an offset to be applied on top of `pool.solvables`
-        unsafe { &mut *solvables.offset(self.0 as isize) }
+        // Internally, the id is just an offset to be applied on top of `pool.solvables`
+        if self.0 < pool.nsolvables {
+            // Safe because we just checked the offset is within bounds
+            let solvable_ptr = unsafe { pool.solvables.offset(self.0 as isize) };
+            NonNull::new(solvable_ptr).expect("solvable ptr was null")
+        } else {
+            panic!("invalid solvable id!")
+        }
     }
 }
 
 /// Gets a number associated to this solvable
-pub fn lookup_num(solvable: &mut ffi::Solvable, key: StringId) -> Option<u64> {
+pub fn lookup_num(solvable: *mut ffi::Solvable, key: StringId) -> Option<u64> {
     let value = unsafe { ffi::solvable_lookup_num(solvable as *mut _, key.0, u64::MAX) };
     if value == u64::MAX {
         None

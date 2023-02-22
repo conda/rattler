@@ -94,6 +94,6 @@ impl Solver<'_> {
             .expect("solver_create_transaction returned a nullptr");
 
         // Safe because we know the `transaction` ptr is valid
-        unsafe { Transaction::new(&self, transaction) }
+        unsafe { Transaction::new(self, transaction) }
     }
 }

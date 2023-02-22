@@ -141,7 +141,8 @@ pub fn add_repodata_records(
         // from the final transaction
         data.set_num(solvable_id, solvable_index_id, repo_data_index as u64);
 
-        let solvable = solvable_id.resolve(pool);
+        // Safe because there are no other active references to any solvable (so no aliasing)
+        let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
         let record = &repo_data.package_record;
 
         // Name and version
@@ -313,7 +314,9 @@ fn add_virtual_packages(
     for package in packages {
         // Create a solvable for the package
         let solvable_id = repo.add_solvable();
-        let solvable = solvable_id.resolve(pool);
+
+        // Safe because there are no other references to this solvable_id (we just created it)
+        let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
 
         // Name and version
         solvable.name = pool.intern_str(package.name.as_str()).into();
