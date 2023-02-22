@@ -11,7 +11,7 @@ use wrapper::queue::Queue;
 pub struct LibsolvSolver;
 
 impl SolverBackend for LibsolvSolver {
-    fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError> {
+    fn solve(&mut self, problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
 

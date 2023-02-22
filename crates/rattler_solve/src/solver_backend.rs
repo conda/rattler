@@ -4,5 +4,5 @@ use crate::{PackageOperation, SolveError, SolverProblem};
 pub trait SolverBackend {
     /// Resolve the dependencies and return the required [`PackageOperation`]s in the order in which
     /// they need to be applied
-    fn solve(problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError>;
+    fn solve(&mut self, problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError>;
 }

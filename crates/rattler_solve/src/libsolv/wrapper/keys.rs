@@ -1,7 +1,7 @@
-//! The constants below are taken from
-//! https://github.com/openSUSE/libsolv/blob/67aaf74844c532129ec8d7c8a7be4209ee4ef78d/src/knownid.h
-//!
-//! We have only copied those that are interesting for rattler
+// The constants below are taken from
+// https://github.com/openSUSE/libsolv/blob/67aaf74844c532129ec8d7c8a7be4209ee4ef78d/src/knownid.h
+//
+// We have only copied those that are interesting for rattler
 
 pub const SOLVABLE_LICENSE: &str = "solvable:license";
 pub const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
