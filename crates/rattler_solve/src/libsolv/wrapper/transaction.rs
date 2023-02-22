@@ -105,7 +105,7 @@ impl TransactionRef {
 
                 let solvable = id.resolve(pool);
                 let solvable_index = solvable.get_usize(solvable_index_id).unwrap();
-                let repo_index = repo_mapping[&solvable.repo().id()];
+                let repo_index = repo_mapping[&solvable.repo_id()];
                 let repodata_record = &repodata_records[repo_index][solvable_index];
 
                 match id_type as u32 {
@@ -123,7 +123,7 @@ impl TransactionRef {
                         let second_solvable = second_solvable.resolve(pool);
                         let second_solvable_index =
                             second_solvable.get_usize(solvable_index_id).unwrap();
-                        let second_repo_index = repo_mapping[&second_solvable.repo().id()];
+                        let second_repo_index = repo_mapping[&second_solvable.repo_id()];
                         let second_repodata_record =
                             &repodata_records[second_repo_index][second_solvable_index];
 

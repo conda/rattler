@@ -1,12 +1,7 @@
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::ffi::NulError;
 use std::{
-    cmp::Ordering,
-    collections::HashMap,
-    ffi::CString,
-    marker::PhantomData,
-    ops::{Deref, DerefMut},
-    os::raw::c_ulonglong,
+    cmp::Ordering, collections::HashMap, ffi::CString, marker::PhantomData, os::raw::c_ulonglong,
     ptr::NonNull,
 };
 
@@ -24,22 +19,11 @@ pub struct Repo<'pool>(NonNull<ffi::Repo>, PhantomData<&'pool ffi::Repo>);
 
 /// An Id to uniquely identify a Repo. This is not meant to be used a way to access a repo.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub struct RepoId(NonNull<ffi::Repo>);
+pub struct RepoId(*mut ffi::Repo);
 
-#[repr(transparent)]
-pub struct RepoRef(ffi::Repo);
-
-impl<'pool> Deref for Repo<'pool> {
-    type Target = RepoRef;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0.cast().as_ref() }
-    }
-}
-
-impl<'pool> DerefMut for Repo<'pool> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0.cast().as_mut() }
+impl RepoId {
+    pub fn from_solvable_struct(solvable: &ffi::Solvable) -> RepoId {
+        RepoId(solvable.repo)
     }
 }
 
@@ -50,10 +34,10 @@ impl<'pool> Drop for Repo<'pool> {
     }
 }
 
-impl RepoRef {
+impl<'pool> Repo<'pool> {
     /// Returns the id of the Repo
     pub fn id(&self) -> RepoId {
-        RepoId(self.as_ptr())
+        RepoId(self.0.as_ptr())
     }
 
     /// Returns a pointer to the wrapped `ffi::Repo`

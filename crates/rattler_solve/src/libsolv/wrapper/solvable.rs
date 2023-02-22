@@ -4,7 +4,7 @@ use std::ptr::NonNull;
 
 use super::ffi;
 use super::pool::{Pool, StringId};
-use super::repo::RepoRef;
+use super::repo::RepoId;
 
 /// Solvable in libsolv
 #[repr(transparent)]
@@ -60,9 +60,9 @@ impl<'repo> Solvable<'repo> {
     }
 
     /// Get the repo to which this solvable belongs.
-    pub fn repo(&self) -> &RepoRef {
-        // Safe because a `RepoRef` is a wrapper around `ffi::Repo`
-        unsafe { &*(self.as_ptr().as_ref().repo as *const RepoRef) }
+    pub fn repo_id(&self) -> RepoId {
+        let solvable = unsafe { self.as_ptr().as_ref() };
+        RepoId::from_solvable_struct(solvable)
     }
 
     pub fn set_usize(&self, key: StringId, x: usize) {
