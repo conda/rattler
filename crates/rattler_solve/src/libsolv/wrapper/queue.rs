@@ -35,7 +35,7 @@ impl<T> Default for Queue<T> {
 
 impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
-        // Safe because we know that the pool is never freed manually
+        // Safe because we know that the queue is never freed manually
         unsafe {
             ffi::queue_free(self.raw_ptr());
         }
@@ -68,6 +68,24 @@ impl<T: Into<ffi::Id>> Queue<T> {
                 id.into(),
             );
         }
+    }
+}
+
+/// A read-only reference to a libsolv queue
+pub struct QueueRef<'queue>(ffi::Queue, PhantomData<&'queue ffi::Queue>);
+
+impl QueueRef<'_> {
+    /// Construct a new `QueueRef` based on the provided `ffi::Queue`
+    ///
+    /// Safety: the queue must not have been freed
+    pub(super) unsafe fn from_ffi_queue<T>(_source: &T, queue: ffi::Queue) -> QueueRef {
+        QueueRef(queue, PhantomData::default())
+    }
+
+    /// Returns an iterator over the ids of the queue
+    pub fn iter(&self) -> impl Iterator<Item = ffi::Id> + '_ {
+        // Safe to dereference, because we are doing so within the bounds of count
+        (0..self.0.count as usize).map(|index| unsafe { *self.0.elements.add(index) })
     }
 }
 

@@ -23,9 +23,9 @@ impl<'pool> Drop for Solver<'pool> {
 }
 
 impl Solver<'_> {
-    /// Constructs a new Solver from the provided libsolv pointer. The function will ensure that
-    /// the pointer is non-null, but the caller must ensure the pointer is actually valid
-    pub(super) fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver {
+    /// Constructs a new Solver from the provided libsolv pointer. It is the responsibility of the
+    /// caller to ensure the pointer is actually valid.
+    pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver {
         Solver(ptr, PhantomData::default())
     }
 
@@ -89,9 +89,11 @@ impl Solver<'_> {
     }
 
     /// Creates a transaction from the solutions found by the solver.
-    pub fn create_transaction(&mut self) -> Transaction {
+    pub fn create_transaction(&self) -> Transaction {
         let transaction = NonNull::new(unsafe { ffi::solver_create_transaction(self.raw_ptr()) })
             .expect("solver_create_transaction returned a nullptr");
-        Transaction::new(transaction)
+
+        // Safe because we know the `transaction` ptr is valid
+        unsafe { Transaction::new(&self, transaction) }
     }
 }

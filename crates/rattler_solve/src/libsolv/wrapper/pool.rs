@@ -142,7 +142,9 @@ impl Pool {
     pub fn create_solver(&self) -> Solver {
         let solver = NonNull::new(unsafe { ffi::solver_create(self.raw_ptr()) })
             .expect("solver_create returned a nullptr");
-        Solver::new(self, solver)
+
+        // Safe because we know the solver ptr is valid
+        unsafe { Solver::new(self, solver) }
     }
 
     /// Create the whatprovides on the pool which is needed for solving
