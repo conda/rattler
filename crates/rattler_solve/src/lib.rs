@@ -69,7 +69,7 @@ pub struct SolverProblem {
 
 #[cfg(test)]
 mod test_libsolv {
-    use crate::libsolv::LibsolvSolver;
+    use crate::libsolv::LibsolvBackend;
     use crate::package_operation::PackageOperation;
     use crate::package_operation::PackageOperationKind;
     use crate::{RequestedAction, SolveError, SolverBackend, SolverProblem};
@@ -186,7 +186,7 @@ mod test_libsolv {
             installed_packages: Vec::new(),
             virtual_packages: Vec::new(),
         };
-        let operations = LibsolvSolver.solve(problem).unwrap();
+        let operations = LibsolvBackend.solve(problem).unwrap();
         for operation in operations.iter() {
             println!("{:?} - {:?}", operation.kind, operation.package);
         }
@@ -453,7 +453,7 @@ mod test_libsolv {
             specs,
         };
 
-        let solvable_operations = LibsolvSolver.solve(problem)?;
+        let solvable_operations = LibsolvBackend.solve(problem)?;
 
         for operation in solvable_operations.iter() {
             println!("{:?} - {:?}", operation.kind, operation.package);

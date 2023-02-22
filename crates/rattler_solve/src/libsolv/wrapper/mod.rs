@@ -6,7 +6,10 @@
 //!
 //! Some types, like [`queue::Queue`] can be modelled using ownership semantics, but we treat most
 //! other types as interiorly mutable, meaning that you can perform write operations through shared
-//! references (`&`).
+//! references (`&`). This works well as long as you mutate libsolv data through its FFI. If you
+//! need to mutate libsolv data from Rust, e.g. when setting up solvables, you will need to obtain
+//! a `&mut` references to the relevant data, taking special care to ensure there is no aliasing at
+//! hand.
 
 use std::ffi::CString;
 

@@ -2,7 +2,9 @@ use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::{CString, NulError};
+use util::PackageExtension;
 
+mod util;
 mod wrapper;
 
 use crate::libsolv::wrapper::keys::*;
@@ -15,9 +17,9 @@ use wrapper::pool::{Pool, Verbosity};
 use wrapper::queue::Queue;
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
-pub struct LibsolvSolver;
+pub struct LibsolvBackend;
 
-impl SolverBackend for LibsolvSolver {
+impl SolverBackend for LibsolvBackend {
     fn solve(&mut self, problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
@@ -264,7 +266,9 @@ fn add_or_reuse_solvable<'a>(
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
     // Sometimes we can reuse an existing solvable
-    if let Some((filename, package_type)) = extract_known_filename_extension(&repo_data.file_name) {
+    if let Some((filename, package_type)) =
+        util::extract_known_filename_extension(&repo_data.file_name)
+    {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
             match package_type.cmp(&other_package_type) {
                 Ordering::Less => {
@@ -342,22 +346,4 @@ fn reset_solvable(pool: &Pool, repo: &Repo, data: &Repodata, solvable_id: Solvab
     // It is safe to free the blank solvable, because there are no other references to it
     // than in this function
     unsafe { repo.free_solvable(blank_solvable) };
-}
-
-#[derive(Copy, Clone, Ord, PartialEq, PartialOrd, Eq)]
-enum PackageExtension {
-    TarBz2,
-    Conda,
-}
-
-/// Given a package filename, extracts the filename and the extension if the extension is a known
-/// package extension.
-fn extract_known_filename_extension(filename: &str) -> Option<(&str, PackageExtension)> {
-    if let Some(filename) = filename.strip_suffix(".conda") {
-        Some((filename, PackageExtension::Conda))
-    } else {
-        filename
-            .strip_suffix(".tar.bz2")
-            .map(|filename| (filename, PackageExtension::TarBz2))
-    }
 }
