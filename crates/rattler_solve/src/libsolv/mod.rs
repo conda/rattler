@@ -263,8 +263,6 @@ fn add_or_reuse_solvable<'a>(
     package_to_type: &mut HashMap<&'a str, (PackageExtension, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
-    // TODO: does it make sense that two packages have exactly the same file_name? No
-
     // Sometimes we can reuse an existing solvable
     if let Some((filename, package_type)) = extract_known_filename_extension(&repo_data.file_name) {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
@@ -286,8 +284,7 @@ fn add_or_reuse_solvable<'a>(
                     return Some(old_solvable_id);
                 }
                 Ordering::Equal => {
-                    // They both have the same extension? Keep them both I guess?
-                    unimplemented!("found a duplicate package")
+                    unreachable!("found a duplicate package")
                 }
             }
         } else {
