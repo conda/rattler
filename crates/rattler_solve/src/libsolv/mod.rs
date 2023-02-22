@@ -6,13 +6,12 @@ use std::ffi::{CString, NulError};
 mod wrapper;
 
 use crate::libsolv::wrapper::keys::*;
-use crate::libsolv::wrapper::pool::FindInterned;
 use crate::libsolv::wrapper::repo::Repo;
 use crate::libsolv::wrapper::repodata::Repodata;
 use crate::libsolv::wrapper::solvable::SolvableId;
 use crate::{PackageOperation, SolveError, SolverBackend, SolverProblem};
 use wrapper::flags::{SolvableFlags, SolverFlag};
-use wrapper::pool::{Intern, Pool, Verbosity};
+use wrapper::pool::{Pool, Verbosity};
 use wrapper::queue::Queue;
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
@@ -74,7 +73,7 @@ impl SolverBackend for LibsolvSolver {
         // Add matchspec to the queue
         let mut queue = Queue::default();
         for (spec, request) in problem.specs {
-            let id = spec.intern(&pool);
+            let id = pool.intern_matchspec(&spec);
             queue.push_id_with_flags(id, SolvableFlags::from(request));
         }
 
@@ -112,20 +111,20 @@ pub fn add_repodata_records(
     let data = repo.add_repodata();
 
     // Get all the IDs
-    let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(pool).unwrap();
-    let solvable_buildtime_id = SOLVABLE_BUILDTIME.find_interned_id(pool).unwrap();
-    let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(pool).unwrap();
-    let solvable_constraints = SOLVABLE_CONSTRAINS.find_interned_id(pool).unwrap();
-    let solvable_download_size_id = SOLVABLE_DOWNLOADSIZE.find_interned_id(pool).unwrap();
-    let solvable_license_id = SOLVABLE_LICENSE.find_interned_id(pool).unwrap();
-    let solvable_pkg_id = SOLVABLE_PKGID.find_interned_id(pool).unwrap();
-    let solvable_checksum = SOLVABLE_CHECKSUM.find_interned_id(pool).unwrap();
-    let solvable_track_features = SOLVABLE_TRACK_FEATURES.find_interned_id(pool).unwrap();
-    let repo_type_md5 = REPOKEY_TYPE_MD5.find_interned_id(pool).unwrap();
-    let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(pool).unwrap();
+    let solvable_buildflavor_id = pool.find_intern_str(SOLVABLE_BUILDFLAVOR).unwrap();
+    let solvable_buildtime_id = pool.find_intern_str(SOLVABLE_BUILDTIME).unwrap();
+    let solvable_buildversion_id = pool.find_intern_str(SOLVABLE_BUILDVERSION).unwrap();
+    let solvable_constraints = pool.find_intern_str(SOLVABLE_CONSTRAINS).unwrap();
+    let solvable_download_size_id = pool.find_intern_str(SOLVABLE_DOWNLOADSIZE).unwrap();
+    let solvable_license_id = pool.find_intern_str(SOLVABLE_LICENSE).unwrap();
+    let solvable_pkg_id = pool.find_intern_str(SOLVABLE_PKGID).unwrap();
+    let solvable_checksum = pool.find_intern_str(SOLVABLE_CHECKSUM).unwrap();
+    let solvable_track_features = pool.find_intern_str(SOLVABLE_TRACK_FEATURES).unwrap();
+    let repo_type_md5 = pool.find_intern_str(REPOKEY_TYPE_MD5).unwrap();
+    let repo_type_sha256 = pool.find_intern_str(REPOKEY_TYPE_SHA256).unwrap();
 
     // Custom id
-    let solvable_index_id = "solvable:repodata_record_index".intern(pool);
+    let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
 
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
@@ -146,8 +145,8 @@ pub fn add_repodata_records(
         let record = &repo_data.package_record;
 
         // Name and version
-        solvable.name = record.name.intern(pool).into();
-        solvable.evr = record.version.to_string().intern(pool).into();
+        solvable.name = pool.intern_str(record.name.as_str()).into();
+        solvable.evr = pool.intern_str(record.version.to_string()).into();
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);
 
@@ -183,7 +182,7 @@ pub fn add_repodata_records(
                 data.add_idarray(
                     solvable_id,
                     solvable_track_features,
-                    track_features.trim().intern(pool).into(),
+                    pool.intern_str(track_features.trim()).into(),
                 );
             }
         }
@@ -309,7 +308,7 @@ fn add_virtual_packages(
 ) -> Result<(), NulError> {
     let data = repo.add_repodata();
 
-    let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(pool).unwrap();
+    let solvable_buildflavor_id = pool.find_intern_str(SOLVABLE_BUILDFLAVOR).unwrap();
 
     for package in packages {
         // Create a solvable for the package
@@ -317,8 +316,8 @@ fn add_virtual_packages(
         let solvable = solvable_id.resolve(pool);
 
         // Name and version
-        solvable.name = package.name.intern(pool).into();
-        solvable.evr = package.version.to_string().intern(pool).into();
+        solvable.name = pool.intern_str(package.name.as_str()).into();
+        solvable.evr = pool.intern_str(package.version.to_string()).into();
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);
 

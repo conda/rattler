@@ -13,17 +13,15 @@ impl From<SolvableId> for ffi::Id {
 
 impl SolvableId {
     /// Resolves to the interned type returns a Solvable
-    // TODO: this is actually unsafe, because it allows creating multiple mutable references to the
-    // same solvable!
-    pub fn resolve<'id, 'pool>(&'id self, pool: &'pool Pool) -> &'pool mut ffi::Solvable {
-        // Safe because the new-type wraps the ffi::id and cant be created otherwise
-        unsafe {
-            // Re-implement pool_id2solvable, as it's a static inline function, we can't use it :(
-            let solvables = pool.as_ref().solvables;
-            // Apparently the solvable is offset by the id from the first solvable
-            let solvable = solvables.offset(self.0 as isize);
-            &mut *solvable
-        }
+    ///
+    /// TODO: should be unsafe!
+    pub fn resolve(self, pool: &Pool) -> &mut ffi::Solvable {
+        // Note: this is a reimplementation of pool_id2solvable, which is not included in the bindings
+        // because it is static inline
+        let solvables = pool.as_ref().solvables;
+
+        // Internally, the id is an offset to be applied on top of `pool.solvables`
+        unsafe { &mut *solvables.offset(self.0 as isize) }
     }
 }
 

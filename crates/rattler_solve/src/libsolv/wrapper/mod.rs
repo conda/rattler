@@ -1,4 +1,12 @@
-//! This module provides a safe wrapper around libsolv
+//! This module provides a mostly safe wrapper around libsolv
+//!
+//! The design of libsolv makes it difficult to provide a fully-safe wrapper. One of the reasons is
+//! that the library is full of doubly-linked data structures (e.g. Pool <-> Repo <-> Solvable),
+//! which are the bane of Rust's ownership system.
+//!
+//! Some types, like [`queue::Queue`] can be modelled using ownership semantics, but we treat most
+//! other types as interiorly mutable, meaning that you can perform write operations through shared
+//! references (`&`).
 
 use std::ffi::CString;
 

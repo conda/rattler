@@ -1,5 +1,5 @@
 use super::ffi;
-use super::pool::{FindInterned, Pool, StringId};
+use super::pool::{Pool, StringId};
 use super::repo::RepoId;
 use super::solvable::{self, SolvableId};
 use crate::package_operation::{PackageOperation, PackageOperationKind};
@@ -84,8 +84,8 @@ impl TransactionRef {
         // Number of transaction details
         let count = inner.steps.count as usize;
 
-        let solvable_index_id = "solvable:repodata_record_index"
-            .find_interned_id(pool)
+        let solvable_index_id = pool
+            .find_intern_str("solvable:repodata_record_index")
             .unwrap();
 
         // TODO: simplify unsafe usage and explain why it is all right

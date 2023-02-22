@@ -37,14 +37,15 @@ impl<T> Drop for Queue<T> {
     fn drop(&mut self) {
         // Safe because we know that the pool is never freed manually
         unsafe {
-            ffi::queue_free(self.as_inner_mut());
+            ffi::queue_free(self.raw_ptr());
         }
     }
 }
 
 impl<T> Queue<T> {
-    /// Returns the ffi::Queue as a mutable pointer, necessary when passing it to ffi functions
-    pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
+    /// Returns a raw pointer to the wrapped `ffi::Repo`, to be used for calling ffi functions
+    /// that require access to the repo (and for nothing else)
+    pub(super) fn raw_ptr(&mut self) -> *mut ffi::Queue {
         &mut self.queue as *mut ffi::Queue
     }
 }
@@ -53,7 +54,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
     /// Pushes a single id to the back of the queue
     pub fn push_id(&mut self, id: T) {
         unsafe {
-            ffi::queue_insert(self.as_inner_mut(), self.queue.count, id.into());
+            ffi::queue_insert(self.raw_ptr(), self.queue.count, id.into());
         }
     }
 
@@ -61,7 +62,7 @@ impl<T: Into<ffi::Id>> Queue<T> {
     pub fn push_id_with_flags(&mut self, id: T, flags: SolvableFlags) {
         unsafe {
             ffi::queue_insert2(
-                self.as_inner_mut(),
+                self.raw_ptr(),
                 self.queue.count,
                 flags.inner() as c_int,
                 id.into(),

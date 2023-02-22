@@ -81,7 +81,7 @@ impl SolverRef {
     pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<()> {
         let result = unsafe {
             // Run the solve method
-            ffi::solver_solve(self.as_ptr().as_mut(), queue.as_inner_mut());
+            ffi::solver_solve(self.as_ptr().as_mut(), queue.raw_ptr());
             // If there are no problems left then the solver is done
             ffi::solver_problem_count(self.as_ptr().as_mut()) == 0
         };
