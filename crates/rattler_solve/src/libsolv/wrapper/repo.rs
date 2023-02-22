@@ -20,7 +20,7 @@ use super::{
 
 /// Representation of a repo containing package data in libsolv. This corresponds to a repo_data
 /// json. Lifetime of this object is coupled to the Pool on creation
-pub struct Repo<'pool>(RepoOwnedPtr, PhantomData<&'pool ffi::Repo>);
+pub struct Repo<'pool>(NonNull<ffi::Repo>, PhantomData<&'pool ffi::Repo>);
 
 /// An Id to uniquely identify a Repo. This is not meant to be used a way to access a repo.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
@@ -33,21 +33,17 @@ impl<'pool> Deref for Repo<'pool> {
     type Target = RepoRef;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { self.0 .0.cast().as_ref() }
+        unsafe { self.0.cast().as_ref() }
     }
 }
 
 impl<'pool> DerefMut for Repo<'pool> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0 .0.cast().as_mut() }
+        unsafe { self.0.cast().as_mut() }
     }
 }
 
-/// Wrapper type so we do not use lifetime in the drop
-struct RepoOwnedPtr(NonNull<ffi::Repo>);
-
-/// Destroy c-side of things when repo is dropped
-impl Drop for RepoOwnedPtr {
+impl<'pool> Drop for Repo<'pool> {
     // Safe because we have coupled Repo lifetime to Pool lifetime
     fn drop(&mut self) {
         unsafe { ffi::repo_free(self.0.as_mut(), 1) }
@@ -388,7 +384,7 @@ impl RepoRef {
 impl Repo<'_> {
     /// Constructs a new instance
     pub(super) fn new(ptr: NonNull<ffi::Repo>) -> Self {
-        Repo(RepoOwnedPtr(ptr), PhantomData::default())
+        Repo(ptr, PhantomData::default())
     }
 }
 
