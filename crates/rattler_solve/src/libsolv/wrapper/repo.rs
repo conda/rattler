@@ -56,7 +56,7 @@ impl<'pool> Repo<'pool> {
     pub fn add_repodata(&self) -> Repodata {
         unsafe {
             let repodata_ptr = ffi::repo_add_repodata(self.raw_ptr(), 0);
-            Repodata::from_ptr(repodata_ptr)
+            Repodata::from_ptr(self, repodata_ptr)
         }
     }
 

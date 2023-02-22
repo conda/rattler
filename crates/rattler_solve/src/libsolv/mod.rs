@@ -111,17 +111,17 @@ pub fn add_repodata_records(
     let data = repo.add_repodata();
 
     // Get all the IDs
-    let solvable_buildflavor_id = pool.find_intern_str(SOLVABLE_BUILDFLAVOR).unwrap();
-    let solvable_buildtime_id = pool.find_intern_str(SOLVABLE_BUILDTIME).unwrap();
-    let solvable_buildversion_id = pool.find_intern_str(SOLVABLE_BUILDVERSION).unwrap();
-    let solvable_constraints = pool.find_intern_str(SOLVABLE_CONSTRAINS).unwrap();
-    let solvable_download_size_id = pool.find_intern_str(SOLVABLE_DOWNLOADSIZE).unwrap();
-    let solvable_license_id = pool.find_intern_str(SOLVABLE_LICENSE).unwrap();
-    let solvable_pkg_id = pool.find_intern_str(SOLVABLE_PKGID).unwrap();
-    let solvable_checksum = pool.find_intern_str(SOLVABLE_CHECKSUM).unwrap();
-    let solvable_track_features = pool.find_intern_str(SOLVABLE_TRACK_FEATURES).unwrap();
-    let repo_type_md5 = pool.find_intern_str(REPOKEY_TYPE_MD5).unwrap();
-    let repo_type_sha256 = pool.find_intern_str(REPOKEY_TYPE_SHA256).unwrap();
+    let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
+    let solvable_buildtime_id = pool.find_interned_str(SOLVABLE_BUILDTIME).unwrap();
+    let solvable_buildversion_id = pool.find_interned_str(SOLVABLE_BUILDVERSION).unwrap();
+    let solvable_constraints = pool.find_interned_str(SOLVABLE_CONSTRAINS).unwrap();
+    let solvable_download_size_id = pool.find_interned_str(SOLVABLE_DOWNLOADSIZE).unwrap();
+    let solvable_license_id = pool.find_interned_str(SOLVABLE_LICENSE).unwrap();
+    let solvable_pkg_id = pool.find_interned_str(SOLVABLE_PKGID).unwrap();
+    let solvable_checksum = pool.find_interned_str(SOLVABLE_CHECKSUM).unwrap();
+    let solvable_track_features = pool.find_interned_str(SOLVABLE_TRACK_FEATURES).unwrap();
+    let repo_type_md5 = pool.find_interned_str(REPOKEY_TYPE_MD5).unwrap();
+    let repo_type_sha256 = pool.find_interned_str(REPOKEY_TYPE_SHA256).unwrap();
 
     // Custom id
     let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
@@ -308,7 +308,7 @@ fn add_virtual_packages(
 ) -> Result<(), NulError> {
     let data = repo.add_repodata();
 
-    let solvable_buildflavor_id = pool.find_intern_str(SOLVABLE_BUILDFLAVOR).unwrap();
+    let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
 
     for package in packages {
         // Create a solvable for the package

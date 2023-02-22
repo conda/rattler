@@ -85,7 +85,7 @@ impl TransactionRef {
         let count = inner.steps.count as usize;
 
         let solvable_index_id = pool
-            .find_intern_str("solvable:repodata_record_index")
+            .find_interned_str("solvable:repodata_record_index")
             .unwrap();
 
         // TODO: simplify unsafe usage and explain why it is all right

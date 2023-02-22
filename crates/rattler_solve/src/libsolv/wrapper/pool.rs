@@ -12,6 +12,10 @@ use std::{
 ///
 /// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
 /// when the Pool is dropped
+///
+/// Additional note: interning reduces memory usage by only storing unique instances of the provided
+/// data, which then share the same `Id`. This `Pool` releases memory when explicitly asked and upon
+/// destruction
 #[repr(transparent)]
 pub struct Pool(NonNull<ffi::Pool>);
 
@@ -170,8 +174,8 @@ impl Pool {
         }
     }
 
-    /// Finds a previously interned string or returns `None` if it wasn't found.
-    pub fn find_intern_str<T: AsRef<str>>(&self, str: T) -> Option<StringId> {
+    /// Finds a previously interned string or returns `None` if it wasn't found
+    pub fn find_interned_str<T: AsRef<str>>(&self, str: T) -> Option<StringId> {
         let c_str = CString::new(str.as_ref()).expect("the provided string contained a NUL byte");
         let length = c_str.as_bytes().len();
         let c_str = c_str.as_c_str();
@@ -189,46 +193,26 @@ impl Pool {
     }
 }
 
-/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data.
-/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing
-/// the same `Id`. However, a `Pool` also only releases memory when explicitly asked to do so or on
-/// destruction.
-pub trait Intern {
-    type Id;
-
-    /// Interns the type in the [`Pool`]
-    fn intern(&self, pool: &Pool) -> Self::Id;
-}
-
-/// Enables retrieving the `Id` of previously interned instances of `Self` through the `Intern`
-/// trait.
-pub trait FindInterned: Intern {
-    /// Finds a previously interned instance in the specified [`Pool`]
-    fn find_interned_id(&self, pool: &Pool) -> Option<Self::Id>;
-}
-
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
 pub struct StringId(pub(super) Id);
 
 impl StringId {
-    /// Resolves to the interned type returns a string reference.
+    /// Resolves the id to the interned string, if present in the pool
     ///
-    /// # Safety
-    ///
-    /// This function does not result in undefined behavior if an Id is passsed that was not
-    /// interned by the passed `pool`. However, if the `pool` is different from the one that
-    /// returned the `StringId` while interning the result might be unexpected.
+    /// Note: string ids are basically indexes in an array, so using a [`StringId`] from one pool in
+    /// a different one will either return `None` (if the id can't be found) or it will return
+    /// whatever string is found at the index
     pub fn resolve<'a>(&self, pool: &'a Pool) -> Option<&'a str> {
-        if self.0 >= pool.as_ref().ss.nstrings {
-            None
-        } else {
-            // Safe because we check if the stringpool can actually contain the given id.
+        if self.0 < pool.as_ref().ss.nstrings {
+            // Safe because we know the string is in the pool
             let c_str = unsafe { ffi::pool_id2str(pool.0.as_ptr(), self.0) };
             let c_str = unsafe { CStr::from_ptr(c_str) }
                 .to_str()
                 .expect("utf-8 parse error");
             Some(c_str)
+        } else {
+            None
         }
     }
 }
@@ -242,6 +226,13 @@ impl From<StringId> for Id {
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
 pub struct MatchSpecId(Id);
+
+/// Conversion to [`Id`]
+impl From<MatchSpecId> for Id {
+    fn from(id: MatchSpecId) -> Self {
+        id.0
+    }
+}
 
 fn match_spec_to_c_string(match_spec: &MatchSpec) -> CString {
     let name = match_spec
@@ -270,13 +261,6 @@ fn match_spec_to_c_string(match_spec: &MatchSpec) -> CString {
     };
 
     c_string(conda_build_form)
-}
-
-/// Conversion to [`Id`]
-impl From<MatchSpecId> for Id {
-    fn from(id: MatchSpecId) -> Self {
-        id.0
-    }
 }
 
 #[cfg(test)]
