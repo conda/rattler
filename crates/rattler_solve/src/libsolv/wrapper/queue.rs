@@ -1,5 +1,6 @@
 use super::ffi;
 use super::flags::SolvableFlags;
+use super::solvable::SolvableId;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
@@ -83,9 +84,12 @@ impl QueueRef<'_> {
     }
 
     /// Returns an iterator over the ids of the queue
-    pub fn iter(&self) -> impl Iterator<Item = ffi::Id> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = SolvableId> + '_ {
         // Safe to dereference, because we are doing so within the bounds of count
-        (0..self.0.count as usize).map(|index| unsafe { *self.0.elements.add(index) })
+        (0..self.0.count as usize).map(|index| {
+            let id = unsafe { *self.0.elements.add(index) };
+            SolvableId(id)
+        })
     }
 }
 

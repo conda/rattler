@@ -13,7 +13,7 @@
 
 use std::ffi::CString;
 
-mod ffi;
+pub mod ffi;
 pub mod flags;
 pub mod keys;
 pub mod pool;
