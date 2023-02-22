@@ -94,7 +94,7 @@ impl RepoRef {
         let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
-        for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
+        for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
             let record = &repo_data.package_record;
 
             // Create a solvable for the package.
