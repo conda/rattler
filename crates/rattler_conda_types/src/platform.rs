@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serializer};
+use serde::{Deserializer, Serializer};
 use std::{fmt, fmt::Formatter, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
