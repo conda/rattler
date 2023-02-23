@@ -1,10 +1,11 @@
+use crate::install::python::PythonInfo;
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
-use rattler_conda_types::Platform;
+use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use sha2::Sha256;
 use std::fs::Permissions;
-use std::io::{Seek, Write};
+use std::io::{ErrorKind, Seek, Write};
 use std::path::Path;
 
 #[derive(Debug, thiserror::Error)]
@@ -29,6 +30,9 @@ pub enum LinkFileError {
 
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
+
+    #[error("cannot install noarch python files because there is no python version specified ")]
+    MissingPythonInfo,
 }
 
 /// The successful result of calling [`link_file`].
@@ -51,6 +55,7 @@ pub struct LinkedFile {
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
 pub fn link_file(
+    noarch_type: NoArchType,
     path_json_entry: &PathsEntry,
     package_dir: &Path,
     target_dir: &Path,
@@ -58,9 +63,22 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     target_platform: Platform,
+    target_python: Option<&PythonInfo>,
 ) -> Result<LinkedFile, LinkFileError> {
-    let destination_path = target_dir.join(&path_json_entry.relative_path);
     let source_path = package_dir.join(&path_json_entry.relative_path);
+
+    // Determine the destination path
+    let destination_relative_path = if noarch_type.is_python() {
+        match target_python {
+            Some(python_info) => {
+                python_info.get_python_noarch_target_path(&path_json_entry.relative_path)
+            }
+            None => return Err(LinkFileError::MissingPythonInfo),
+        }
+    } else {
+        path_json_entry.relative_path.as_path().into()
+    };
+    let destination_path = target_dir.join(destination_relative_path);
 
     // Ensure that all directories up to the path exist.
     if let Some(parent) = destination_path.parent() {
@@ -143,14 +161,39 @@ pub fn link_file(
             }
         }
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
-        std::fs::hard_link(&source_path, &destination_path)?;
+        loop {
+            match std::fs::hard_link(&source_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
         let linked_path = source_path
             .read_link()
             .map_err(LinkFileError::FailedToOpenSourceFile)?;
-        symlink(&linked_path, &destination_path)?;
+
+        loop {
+            match symlink(&linked_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     } else {
-        std::fs::copy(&source_path, &destination_path)?;
+        loop {
+            match std::fs::copy(&source_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     };
 
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.

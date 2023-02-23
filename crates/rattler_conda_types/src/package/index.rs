@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::PackageFile;
-use crate::Version;
+use crate::{NoArchType, Version};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 
@@ -11,7 +11,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 /// This data makes up the repodata.json file in the repository.
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct IndexJson {
     /// The lowercase name of the package
     pub name: String,
@@ -28,6 +28,11 @@ pub struct IndexJson {
 
     /// Optionally, the architecture the package is build for.
     pub arch: Option<String>,
+
+    /// If this package is independent of architecture this field specifies in what way. See
+    /// [`NoArchType`] for more information.
+    #[serde(skip_serializing_if = "NoArchType::is_none")]
+    pub noarch: NoArchType,
 
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,

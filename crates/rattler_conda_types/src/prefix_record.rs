@@ -1,10 +1,11 @@
 //! Defines the `[PrefixRecord]` struct.
 
 use crate::repo_data_record::RepoDataRecord;
+use crate::PackageRecord;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -28,6 +29,15 @@ impl Default for PrefixPaths {
         Self {
             paths_version: 1,
             paths: Default::default(),
+        }
+    }
+}
+
+impl From<Vec<PathsEntry>> for PrefixPaths {
+    fn from(paths: Vec<PathsEntry>) -> Self {
+        Self {
+            paths,
+            ..Default::default()
         }
     }
 }
@@ -113,7 +123,7 @@ pub struct PrefixRecord {
 
     /// A sorted list of all files included in this package
     #[serde(default)]
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
 
     /// Information about how files have been linked when installing the package.
     #[serde(default)]
@@ -138,6 +148,24 @@ impl PrefixRecord {
     /// Parses a `paths.json` file from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         Self::from_reader(File::open(path.as_ref())?)
+    }
+
+    /// Writes the contents of this instance to the file at the specified location.
+    pub fn write_to_path(self, path: impl AsRef<Path>, pretty: bool) -> Result<(), std::io::Error> {
+        self.write_to(File::create(path)?, pretty)
+    }
+
+    /// Writes the contents of this instance to the file at the specified location.
+    pub fn write_to(
+        &self,
+        writer: impl std::io::Write,
+        pretty: bool,
+    ) -> Result<(), std::io::Error> {
+        Ok(if pretty {
+            serde_json::to_writer_pretty(BufWriter::new(writer), self)?
+        } else {
+            serde_json::to_writer(BufWriter::new(writer), self)?
+        })
     }
 }
 
@@ -174,6 +202,18 @@ fn no_link_default() -> bool {
 /// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
+}
+
+impl AsRef<RepoDataRecord> for PrefixRecord {
+    fn as_ref(&self) -> &RepoDataRecord {
+        &self.repodata_record
+    }
+}
+
+impl AsRef<PackageRecord> for PrefixRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        &self.repodata_record.package_record
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,82 @@
+use rattler_conda_types::{Platform, Version};
+use std::borrow::Cow;
+use std::path::{Path, PathBuf};
+
+/// Information required for linking no-arch python packages. The struct contains information about
+/// a specific Python version that is installed in an environment.
+#[derive(Debug, Clone)]
+pub struct PythonInfo {
+    /// The major and minor version
+    pub short_version: (usize, usize),
+
+    /// The relative path to the python executable
+    pub path: PathBuf,
+
+    /// The relative path to where site-packages are stored
+    pub site_packages_path: PathBuf,
+
+    /// Path to the binary directory
+    pub bin_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum PythonInfoError {
+    #[error("invalid python version '{0}'")]
+    InvalidVersion(Version),
+}
+
+impl PythonInfo {
+    /// Build an instance based on the version of the python package and the platform it is
+    /// installed for.
+    pub fn from_version(version: &Version, platform: Platform) -> Result<Self, PythonInfoError> {
+        // Determine the major, and minor versions of the version
+        let (major, minor) = version
+            .as_major_minor()
+            .ok_or_else(|| PythonInfoError::InvalidVersion(version.clone()))?;
+
+        // Determine the expected relative path of the executable in a prefix
+        let path = if platform.is_windows() {
+            PathBuf::from("python.exe")
+        } else {
+            PathBuf::from(format!("bin/python{}.{}", major, minor))
+        };
+
+        // Find the location of the site packages
+        let site_packages_path = if platform.is_windows() {
+            PathBuf::from("Lib/site-packages")
+        } else {
+            PathBuf::from(format!("lib/python{}.{}/site-packages", major, minor))
+        };
+
+        // Binary directory
+        let bin_dir = if platform.is_windows() {
+            PathBuf::from("Scripts")
+        } else {
+            PathBuf::from("bin")
+        };
+
+        Ok(Self {
+            short_version: (major, minor),
+            path,
+            site_packages_path,
+            bin_dir,
+        })
+    }
+
+    /// Returns the path to the python executable
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the target location of a file in a noarch python package given its location in its
+    /// package archive.
+    pub fn get_python_noarch_target_path<'a>(&self, relative_path: &'a Path) -> Cow<'a, Path> {
+        if let Ok(rest) = relative_path.strip_prefix("site-packages/") {
+            self.site_packages_path.join(rest).into()
+        } else if let Ok(rest) = relative_path.strip_prefix("python-scripts/") {
+            self.bin_dir.join(rest).into()
+        } else {
+            relative_path.into()
+        }
+    }
+}
