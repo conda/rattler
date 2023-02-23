@@ -1,11 +1,13 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Deserializer, Serialize};
-use serde::de::Error;
-use url::Url;
-use crate::{Platform};
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
+use crate::Platform;
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::HashMap;
+use url::Url;
 
-const fn default_version() -> u32 { 1 }
+const fn default_version() -> u32 {
+    1
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct CondaLock {
@@ -16,7 +18,6 @@ pub struct CondaLock {
     #[serde(default = "default_version")]
     pub version: u32,
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct LockMeta {
@@ -49,7 +50,7 @@ pub struct TimeMeta {
 /// Stores information about the git repo the lockfile is being generated in (if applicable) and
 /// the git user generating the file.
 #[derive(Serialize, Deserialize)]
-pub struct GitMeta{
+pub struct GitMeta {
     /// Git user.name field of global config
     pub git_user_name: String,
     /// Git user.email field of global config
@@ -63,7 +64,7 @@ pub enum Manager {
     #[serde(rename = "conda")]
     Conda,
     #[serde(rename = "pip")]
-    Pip
+    Pip,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -79,14 +80,13 @@ pub enum PackageHashes {
     /// Contains as Sha256 Hash
     Sha256(String),
     /// Contains both hashes
-    Md5Sha256(String, String)
+    Md5Sha256(String, String),
 }
-
 
 impl<'de> Deserialize<'de> for PackageHashes {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
         struct Temp {
@@ -99,7 +99,7 @@ impl<'de> Deserialize<'de> for PackageHashes {
             (Some(md5), Some(sha)) => Md5Sha256(md5, sha),
             (Some(md5), None) => Md5(md5),
             (None, Some(sha)) => Sha256(sha),
-            _ => return Err(Error::custom("Expected `sha256` field `md5` field or both"))
+            _ => return Err(Error::custom("Expected `sha256` field `md5` field or both")),
         })
     }
 }
@@ -141,24 +141,22 @@ pub struct DependencySource {
     // https://github.com/conda/conda-lock/blob/854fca9923faae95dc2ddd1633d26fd6b8c2a82d/conda_lock/lockfile/models.py#L27
     // It also has a type field but this can only be url at the moment
     // so leaving it out for now!
-
     /// URL of the dependency
-    pub url: Url
+    pub url: Url,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Channel {
     /// Called `url` but can also be the name of the channel e.g. `conda-forge`
     pub url: String,
-    pub used_env_vars: Vec<String>
+    pub used_env_vars: Vec<String>,
 }
-
 
 #[cfg(test)]
 mod test {
     use super::PackageHashes;
-    use serde_yaml::from_str;
     use crate::conda_lock::CondaLock;
+    use serde_yaml::from_str;
 
     #[test]
     fn test_package_hashes() {
@@ -185,7 +183,6 @@ mod test {
         assert!(matches!(result, PackageHashes::Sha256(_)));
     }
 
-
     fn lock_file_path() -> String {
         format!(
             "{}/{}",
@@ -197,7 +194,8 @@ mod test {
     #[test]
     fn read_conda_lock() {
         /// Try to read conda_lock
-        let conda_lock: CondaLock = from_str(&std::fs::read_to_string(lock_file_path()).unwrap()).unwrap();
+        let conda_lock: CondaLock =
+            from_str(&std::fs::read_to_string(lock_file_path()).unwrap()).unwrap();
         assert!(!conda_lock.package.is_empty());
     }
 }

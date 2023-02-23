@@ -3,6 +3,7 @@
 
 mod channel;
 mod channel_data;
+mod conda_lock;
 mod explicit_environment_spec;
 mod match_spec;
 mod no_arch_type;
@@ -13,7 +14,6 @@ mod run_export;
 mod utils;
 mod version;
 mod version_spec;
-mod conda_lock;
 
 pub mod package;
 pub mod prefix_record;
