@@ -13,6 +13,7 @@ mod run_export;
 mod utils;
 mod version;
 mod version_spec;
+mod conda_lock;
 
 pub mod package;
 pub mod prefix_record;
