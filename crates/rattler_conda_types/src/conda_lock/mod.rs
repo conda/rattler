@@ -5,6 +5,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 use url::Url;
 
+//! This is the definitions for a conda-lock file format
+//! It is modeled on the definitions found at: [conda-lock models](https://github.com/conda/conda-lock/blob/main/conda_lock/lockfile/models.py)
+//! Most names were kept the same as in the models file. So you can refer to those exactly.
+//! However, some types were added to enforce a bit more type safety.
 
 /// Default version for the conda-lock file format
 const fn default_version() -> u32 {
