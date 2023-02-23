@@ -15,9 +15,25 @@ pub enum ShellType {
     CmdExe,
 }
 
+impl ShellType {
+    /// Returns the file extension for this shell type.
+    fn suffix(&self) -> &'static OsStr {
+        match self {
+            ShellType::Bash => OsStr::new("sh"),
+            ShellType::Zsh => OsStr::new("zsh"),
+            ShellType::Fish => OsStr::new("fish"),
+            ShellType::Powershell => OsStr::new("ps1"),
+            ShellType::CmdExe => OsStr::new("bat"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum OperatingSystem {
+    /// The Windows operating system
     Windows,
+
+    /// The UNIX family (Linux or macOS) operating systems
     Unix,
 }
 
@@ -30,7 +46,7 @@ pub struct Activator {
     /// The type of shell that is being activated
     pub shell_type: ShellType,
 
-    /// The new PATH variable after activation
+    /// Paths that need to be added to the PATH environment variable
     pub paths: Vec<PathBuf>,
 
     /// A list of scripts to run when activating the environment
@@ -43,19 +59,26 @@ pub struct Activator {
     pub env_vars: IndexMap<String, String>,
 }
 
-impl ShellType {
-    fn suffix(&self) -> &'static OsStr {
-        match self {
-            ShellType::Bash => OsStr::new("sh"),
-            ShellType::Zsh => OsStr::new("zsh"),
-            ShellType::Fish => OsStr::new("fish"),
-            ShellType::Powershell => OsStr::new("ps1"),
-            ShellType::CmdExe => OsStr::new("bat"),
-        }
-    }
-}
-
+/// Collect all script files that match a certain shell type from a given path.
+/// The files are sorted by their filename.
+/// If the path does not exist, an empty vector is returned.
+/// If the path is not a directory, an error is returned.
+///
+/// # Arguments
+///
+/// * `path` - The path to the directory that contains the scripts
+/// * `shell_type` - The type of shell that the scripts are for
+///
+/// # Returns
+///
+/// A vector of paths to the scripts
+///
+/// # Errors
+///
+/// If the path is not a directory, an error is returned.
 fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> anyhow::Result<Vec<PathBuf>> {
+    // Check if path exists
+
     if !path.exists() {
         return Ok(vec![]);
     }
@@ -74,22 +97,39 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> anyhow::Result<Vec
     Ok(scripts)
 }
 
+/// Collect all environment variables that are set in a conda environment.
+/// The environment variables are collected from the `state` file and the `env_vars.d` directory in the given prefix
+/// and are returned as a ordered map.
+///
+/// # Arguments
+///
+/// * `prefix` - The path to the root of the conda environment
+///
+/// # Returns
+///
+/// A map of environment variables
+///
+/// # Errors
+///
+/// If the `state` file or the `env_vars.d` directory cannot be read, an error is returned.
 fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
     let state_file = prefix.join("conda-meta/state");
     let pkg_env_var_dir = prefix.join("etc/conda/env_vars.d");
     let mut env_vars = IndexMap::new();
 
     if pkg_env_var_dir.exists() {
-        let env_var_files = pkg_env_var_dir.read_dir().unwrap();
+        let env_var_files = pkg_env_var_dir.read_dir()?;
         let mut env_var_files = env_var_files
             .into_iter()
             .filter(|r| r.is_ok())
+            // is safe because we filtered on `is_ok()`
             .map(|r| r.unwrap().path())
             .filter(|path| path.is_file())
             .collect::<Vec<_>>();
 
         env_var_files.sort();
 
+        // TODO figure out how to more safely `unwrap`?
         let env_var_json: Vec<serde_json::Value> = env_var_files
             .iter()
             .map(|path| fs::read_to_string(path).unwrap())
@@ -98,7 +138,6 @@ fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
 
         for env_var_json in env_var_json {
             for (key, value) in env_var_json.as_object().unwrap() {
-                println!("{}: {}", key, value.as_str().unwrap());
                 env_vars.insert(key.to_uppercase(), value.as_str().unwrap().to_string());
             }
         }
@@ -112,17 +151,24 @@ fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
         let state_env_vars = state_json["env_vars"].as_object().unwrap();
 
         for (key, value) in state_env_vars {
-            if env_vars.contains_key(key) {
-                println!("{}: {} (overwritten)", key, value.as_str().unwrap());
-            } else {
-                println!("{}: {}", key, value.as_str().unwrap());
-            }
+            // TODO log warning?
+            // println!("{}: {} (overwritten)", key, value.as_str().unwrap());
             env_vars.insert(key.to_uppercase(), value.as_str().unwrap().to_string());
         }
     }
     Ok(env_vars)
 }
 
+/// Return a vector of path entries that are prefixed with the given path.
+///
+/// # Arguments
+///
+/// * `prefix` - The path to prefix the path entries with
+/// * `operating_system` - The operating system that the path entries are for
+///
+/// # Returns
+///
+/// A vector of path entries
 fn prefix_path_entries(
     prefix: &Path,
     operating_system: &OperatingSystem,
@@ -146,6 +192,28 @@ fn prefix_path_entries(
 }
 
 impl Activator {
+    /// Create a new activator for the given conda environment.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to the root of the conda environment
+    /// * `shell_type` - The shell type that the activator is for
+    /// * `operating_system` - The operating system that the activator is for
+    ///
+    /// # Returns
+    ///
+    /// A new activator
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use rattler_shell_helpers::{Activator, OperatingSystem, ShellType};
+    /// use std::path::PathBuf;
+    ///
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), &ShellType::Bash, &OperatingSystem::Unix).unwrap();
+    /// assert_eq!(activator.paths.len(), 1);
+    /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
+    /// ```
     pub fn from_path(
         path: &Path,
         shell_type: &ShellType,
