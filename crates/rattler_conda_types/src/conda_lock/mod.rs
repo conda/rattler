@@ -2,15 +2,18 @@
 //! It is modeled on the definitions found at: [conda-lock models](https://github.com/conda/conda-lock/blob/main/conda_lock/lockfile/models.py)
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
-
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
-use crate::Platform;
+use crate::{ParsePlatformError, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::digest::Output;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+use std::str::FromStr;
 use url::Url;
 
 /// Default version for the conda-lock file format
@@ -29,6 +32,50 @@ pub struct CondaLock {
     pub package: Vec<LockedDependency>,
     #[serde(default = "default_version")]
     pub version: u32,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseCondaLockError {
+    #[error(transparent)]
+    InvalidPlatform(#[from] ParsePlatformError),
+
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+
+    #[error(transparent)]
+    ParseError(#[from] serde_yaml::Error),
+}
+
+impl FromStr for CondaLock {
+    type Err = ParseCondaLockError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)
+    }
+}
+
+impl CondaLock {
+    /// This returns the packages for the specific platform
+    /// Will return an empty iterator if no packages exist in
+    /// this lock file for this specific platform
+    pub fn packages_for_platform(
+        &self,
+        platform: Platform,
+    ) -> impl Iterator<Item = &LockedDependency> {
+        self.package.iter().filter(move |p| p.platform == platform)
+    }
+
+    /// Parses an conda-lock file from a reader.
+    pub fn from_reader(mut reader: impl Read) -> Result<Self, ParseCondaLockError> {
+        let mut str = String::new();
+        reader.read_to_string(&mut str)?;
+        Self::from_str(&str)
+    }
+
+    /// Parses an conda-lock file from a file.
+    pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
+        Self::from_reader(File::open(path)?)
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -90,7 +137,13 @@ impl Display for VersionConstraint {
     }
 }
 
-/// Contains an enumeration for the different types of hashes for a package
+// This implementation of the `Deserialize` trait for the `PackageHashes` struct
+//
+// It expects the input to have either a `md5` field, a `sha256` field, or both.
+// If both fields are present, it constructs a `Md5Sha256` instance with their values.
+// If only the `md5` field is present, it constructs a `Md5` instance with its value.
+// If only the `sha256` field is present, it constructs a `Sha256` instance with its value.
+// If neither field is present it returns an error
 pub enum PackageHashes {
     /// Contains an MD5 hash
     Md5(Output<md5::Md5>),
@@ -204,7 +257,9 @@ pub struct Channel {
 mod test {
     use super::PackageHashes;
     use crate::conda_lock::CondaLock;
+    use crate::Platform;
     use serde_yaml::from_str;
+    use std::path::Path;
 
     #[test]
     fn test_package_hashes() {
@@ -242,11 +297,39 @@ mod test {
     #[test]
     fn read_conda_lock() {
         // Try to read conda_lock
-        let conda_lock: CondaLock =
-            from_str(&std::fs::read_to_string(lock_file_path()).unwrap()).unwrap();
+        let conda_lock = CondaLock::from_path(Path::new(&lock_file_path())).unwrap();
         // Make sure that we have parsed some packages
         insta::with_settings!({sort_maps => true}, {
         insta::assert_yaml_snapshot!(conda_lock);
-        })
+        });
+    }
+
+    #[test]
+    fn packages_for_platform() {
+        // Try to read conda_lock
+        let conda_lock = CondaLock::from_path(Path::new(&lock_file_path())).unwrap();
+        // Make sure that we have parsed some packages
+        assert!(!conda_lock.package.is_empty());
+        assert_eq!(
+            conda_lock
+                .packages_for_platform(Platform::Linux64)
+                .collect::<Vec<_>>()
+                .len(),
+            254
+        );
+        assert_eq!(
+            conda_lock
+                .packages_for_platform(Platform::Osx64)
+                .collect::<Vec<_>>()
+                .len(),
+            180
+        );
+        assert_eq!(
+            conda_lock
+                .packages_for_platform(Platform::OsxArm64)
+                .collect::<Vec<_>>()
+                .len(),
+            183
+        );
     }
 }
