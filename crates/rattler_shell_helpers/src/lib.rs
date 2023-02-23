@@ -113,6 +113,23 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf
     Ok(scripts)
 }
 
+#[derive(thiserror::Error, Debug)]
+enum EnvironmentVariableFileError {
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
+
+    #[error("Invalid json for environment vars: {0} in file {1:?}")]
+    InvalidJson(serde_json::Error, PathBuf),
+
+    #[error("Invalid json: not a plain JSON object in file {file:?}")]
+    InvalidJsonNoObject { file: PathBuf },
+
+    #[error(
+        "Invalid json: file does not contain JSON object at key env_vars in file {file:?}"
+    )]
+    InvalidStateFile { file: PathBuf },
+}
+
 /// Collect all environment variables that are set in a conda environment.
 /// The environment variables are collected from the `state` file and the `env_vars.d` directory in the given prefix
 /// and are returned as a ordered map.
@@ -128,7 +145,9 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf
 /// # Errors
 ///
 /// If the `state` file or the `env_vars.d` directory cannot be read, an error is returned.
-fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, std::io::Error> {
+fn collect_env_vars(
+    prefix: &Path,
+) -> Result<IndexMap<String, String>, EnvironmentVariableFileError> {
     let state_file = prefix.join("conda-meta/state");
     let pkg_env_var_dir = prefix.join("etc/conda/env_vars.d");
     let mut env_vars = IndexMap::new();
@@ -143,46 +162,63 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, std::io::
             .filter(|path| path.is_file())
             .collect::<Vec<_>>();
 
+        // sort env var files to get a deterministic order
         env_var_files.sort();
-        let env_var_json: Vec<serde_json::Value> = env_var_files
+
+        let env_var_json_files = env_var_files
             .iter()
             .map(|path| {
-                fs::read_to_string(path)
-                    // Into::into to convert serde_json error to std::io::Error.
-                    .and_then(|text| serde_json::from_str(&text).map_err(Into::into))
+                fs::read_to_string(path)?
+                    .parse::<serde_json::Value>()
+                    .map_err(|e| EnvironmentVariableFileError::InvalidJson(e, path.to_path_buf()))
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<serde_json::Value>, EnvironmentVariableFileError>>()?;
 
-        for env_var_json in env_var_json {
-            for (key, value) in env_var_json.as_object().unwrap() {
-                let value = value.as_str().unwrap_or_else(|| {
-                    println!("WARNING: environment variable {} has no string value", key);
-                    "NOTASTRING"
-                });
-                env_vars.insert(key.to_uppercase(), value.to_string());
+        for (env_var_json, env_var_file) in env_var_json_files.iter().zip(env_var_files.iter()) {
+            let env_var_json = env_var_json.as_object().ok_or_else(|| {
+                EnvironmentVariableFileError::InvalidJsonNoObject {
+                    file: pkg_env_var_dir.to_path_buf(),
+                }
+            })?;
+
+            for (key, value) in env_var_json {
+                if let Some(value) = value.as_str() {
+                    env_vars.insert(key.to_string(), value.to_string());
+                } else {
+                    println!(
+                        "WARNING: environment variable {key} has no string value (path: {env_var_file:?})");
+                }
             }
         }
     }
 
     if state_file.exists() {
-        let state_json = fs::read_to_string(state_file)?;
+        let state_json = fs::read_to_string(&state_file)?;
 
         // load json but preserve the order of dicts - for this we use the serde preserve_order feature
         let state_json: serde_json::Value =
-            serde_json::from_str(&state_json).map_err(Into::<std::io::Error>::into)?;
-        let state_env_vars = state_json["env_vars"].as_object().unwrap();
+            serde_json::from_str(&state_json).map_err(|e| {
+                EnvironmentVariableFileError::InvalidJson(e, state_file.to_path_buf())
+            })?;
+
+        let state_env_vars = state_json["env_vars"].as_object().ok_or_else(|| {
+            EnvironmentVariableFileError::InvalidStateFile {
+                file: state_file.to_path_buf(),
+            }
+        })?;
 
         for (key, value) in state_env_vars {
-            // TODO log warning?
-            // println!("{}: {} (overwritten)", key, value.as_str().unwrap());
-            let value = value.as_str().unwrap_or_else(|| {
+            if state_env_vars.contains_key(key) {
                 println!(
-                    "WARNING: environment variable from state.json {} has no string value",
-                    key
-                );
-                "NOTASTRING"
-            });
-            env_vars.insert(key.to_uppercase(), value.to_string());
+                    "WARNING: environment variable {key} already defined in packages (path: {state_file:?})");
+            }
+
+            if let Some(value) = value.as_str() {
+                env_vars.insert(key.to_uppercase().to_string(), value.to_string());
+            } else {
+                println!(
+                    "WARNING: environment variable {key} has no string value (path: {state_file:?})");
+            }
         }
     }
     Ok(env_vars)
@@ -198,11 +234,8 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, std::io::
 /// # Returns
 ///
 /// A vector of path entries
-fn prefix_path_entries(
-    prefix: &Path,
-    operating_system: &OperatingSystem,
-) -> Result<Vec<PathBuf>, std::io::Error> {
-    let new_paths: Vec<PathBuf> = match operating_system {
+fn prefix_path_entries(prefix: &Path, operating_system: &OperatingSystem) -> Vec<PathBuf> {
+    match operating_system {
         OperatingSystem::Windows => {
             vec![
                 prefix.to_path_buf(),
@@ -216,8 +249,7 @@ fn prefix_path_entries(
         OperatingSystem::MacOS | OperatingSystem::Linux => {
             vec![prefix.join("bin")]
         }
-    };
-    Ok(new_paths)
+    }
 }
 
 impl Activator {
@@ -257,7 +289,7 @@ impl Activator {
         )?;
 
         let env_vars = collect_env_vars(path)?;
-        let paths = prefix_path_entries(path, operating_system)?;
+        let paths = prefix_path_entries(path, operating_system);
         Ok(Activator {
             target_prefix: path.to_path_buf(),
             shell_type: *shell_type,
@@ -377,6 +409,6 @@ mod tests {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
         let new_paths = prefix_path_entries(&prefix, &OperatingSystem::MacOS);
         println!("{:?}", new_paths);
-        assert_eq!(new_paths.unwrap().len(), 1);
+        assert_eq!(new_paths.len(), 1);
     }
 }
