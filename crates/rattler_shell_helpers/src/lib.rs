@@ -113,21 +113,30 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf
     Ok(scripts)
 }
 
+/// Error that can occur when activating a conda environment
 #[derive(thiserror::Error, Debug)]
-enum EnvironmentVariableFileError {
+pub enum ActivationError {
+    /// An error that can occur when reading or writing files
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
+    /// An error that can occur when parsing JSON
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
-    InvalidJson(serde_json::Error, PathBuf),
+    InvalidEnvVarFileJson(serde_json::Error, PathBuf),
 
-    #[error("Invalid json: not a plain JSON object in file {file:?}")]
-    InvalidJsonNoObject { file: PathBuf },
+    /// An error that can occur wiht malformed JSON when parsing files in the `env_vars.d` directory
+    #[error("Malformed JSON: not a plain JSON object in file {file:?}")]
+    InvalidEnvVarFileJsonNoObject {
+        /// The path to the file that contains the malformed JSON
+        file: PathBuf,
+    },
 
-    #[error(
-        "Invalid json: file does not contain JSON object at key env_vars in file {file:?}"
-    )]
-    InvalidStateFile { file: PathBuf },
+    /// An error that can occur when `state` file is malformed
+    #[error("Malformed JSON: file does not contain JSON object at key env_vars in file {file:?}")]
+    InvalidEnvVarFileStateFile {
+        /// The path to the file that contains the malformed JSON
+        file: PathBuf,
+    },
 }
 
 /// Collect all environment variables that are set in a conda environment.
@@ -145,9 +154,7 @@ enum EnvironmentVariableFileError {
 /// # Errors
 ///
 /// If the `state` file or the `env_vars.d` directory cannot be read, an error is returned.
-fn collect_env_vars(
-    prefix: &Path,
-) -> Result<IndexMap<String, String>, EnvironmentVariableFileError> {
+fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, ActivationError> {
     let state_file = prefix.join("conda-meta/state");
     let pkg_env_var_dir = prefix.join("etc/conda/env_vars.d");
     let mut env_vars = IndexMap::new();
@@ -170,13 +177,13 @@ fn collect_env_vars(
             .map(|path| {
                 fs::read_to_string(path)?
                     .parse::<serde_json::Value>()
-                    .map_err(|e| EnvironmentVariableFileError::InvalidJson(e, path.to_path_buf()))
+                    .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, path.to_path_buf()))
             })
-            .collect::<Result<Vec<serde_json::Value>, EnvironmentVariableFileError>>()?;
+            .collect::<Result<Vec<serde_json::Value>, ActivationError>>()?;
 
         for (env_var_json, env_var_file) in env_var_json_files.iter().zip(env_var_files.iter()) {
             let env_var_json = env_var_json.as_object().ok_or_else(|| {
-                EnvironmentVariableFileError::InvalidJsonNoObject {
+                ActivationError::InvalidEnvVarFileJsonNoObject {
                     file: pkg_env_var_dir.to_path_buf(),
                 }
             })?;
@@ -196,13 +203,11 @@ fn collect_env_vars(
         let state_json = fs::read_to_string(&state_file)?;
 
         // load json but preserve the order of dicts - for this we use the serde preserve_order feature
-        let state_json: serde_json::Value =
-            serde_json::from_str(&state_json).map_err(|e| {
-                EnvironmentVariableFileError::InvalidJson(e, state_file.to_path_buf())
-            })?;
+        let state_json: serde_json::Value = serde_json::from_str(&state_json)
+            .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, state_file.to_path_buf()))?;
 
         let state_env_vars = state_json["env_vars"].as_object().ok_or_else(|| {
-            EnvironmentVariableFileError::InvalidStateFile {
+            ActivationError::InvalidEnvVarFileStateFile {
                 file: state_file.to_path_buf(),
             }
         })?;
@@ -279,7 +284,7 @@ impl Activator {
         path: &Path,
         shell_type: &ShellType,
         operating_system: &OperatingSystem,
-    ) -> Result<Activator, std::io::Error> {
+    ) -> Result<Activator, ActivationError> {
         let activation_scripts =
             collect_scripts(&path.to_path_buf().join("etc/conda/activate.d"), shell_type)
                 .expect("Couldn't collect scripts");
