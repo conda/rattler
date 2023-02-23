@@ -2,15 +2,15 @@
 name = "rattler_shell_helpers"
 version = "0.1.0"
 edition = "2021"
-authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
-description = "A crate to interact with Conda repodata"
-categories = ["conda"]
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
+description = "A crate to help with activation and deactivation of a conda environment"
+categories = ["conda", "mamba", "package_management", "virtual_environment"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
 license = "BSD-3-Clause"
 
 [dependencies]
-anyhow = "1.0.69"
+thiserror = "1.0.30"
 indexmap = "1.9.2"
 serde_json = { version = "1.0.93", features = ["preserve_order"]}
 

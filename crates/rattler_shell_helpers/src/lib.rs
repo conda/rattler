@@ -1,3 +1,7 @@
+#![deny(missing_docs)]
+
+//! This crate provides helper functions to activate and deactivate virtual environments.
+
 use std::{
     ffi::OsStr,
     fs,
@@ -6,12 +10,20 @@ use std::{
 
 use indexmap::IndexMap;
 
+/// Enumeration of different shell types that are recognized by rattler
 #[derive(Copy, Clone, Debug)]
 pub enum ShellType {
+    /// The `bash` shell
     Bash,
+    /// The `zsh` shell
     Zsh,
+    /// The `fish` shell
     Fish,
+    /// The `xonsh` shell
+    Xonsh,
+    /// `powershell` or `pwsh`
     Powershell,
+    /// The Windows Command Prompt (cmd.exe)
     CmdExe,
 }
 
@@ -21,6 +33,7 @@ impl ShellType {
         match self {
             ShellType::Bash => OsStr::new("sh"),
             ShellType::Zsh => OsStr::new("zsh"),
+            ShellType::Xonsh => OsStr::new("xsh"),
             ShellType::Fish => OsStr::new("fish"),
             ShellType::Powershell => OsStr::new("ps1"),
             ShellType::CmdExe => OsStr::new("bat"),
@@ -28,13 +41,17 @@ impl ShellType {
     }
 }
 
+/// An enumeration of the different operating systems that are supported by rattler
 #[derive(Copy, Clone, Debug)]
 pub enum OperatingSystem {
     /// The Windows operating system
     Windows,
 
-    /// The UNIX family (Linux or macOS) operating systems
-    Unix,
+    /// The macOS operating systems
+    MacOS,
+
+    /// The Linux family operating systems
+    Linux,
 }
 
 /// A struct that holds values for the activation and deactivation
@@ -76,14 +93,13 @@ pub struct Activator {
 /// # Errors
 ///
 /// If the path is not a directory, an error is returned.
-fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> anyhow::Result<Vec<PathBuf>> {
+fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf>, std::io::Error> {
     // Check if path exists
-
-    if !path.exists() {
+    if !path.is_dir() {
         return Ok(vec![]);
     }
 
-    let paths = fs::read_dir(path).unwrap();
+    let paths = fs::read_dir(path)?;
 
     let mut scripts = paths
         .into_iter()
@@ -112,7 +128,7 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> anyhow::Result<Vec
 /// # Errors
 ///
 /// If the `state` file or the `env_vars.d` directory cannot be read, an error is returned.
-fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
+fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, std::io::Error> {
     let state_file = prefix.join("conda-meta/state");
     let pkg_env_var_dir = prefix.join("etc/conda/env_vars.d");
     let mut env_vars = IndexMap::new();
@@ -128,32 +144,45 @@ fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
             .collect::<Vec<_>>();
 
         env_var_files.sort();
-
-        // TODO figure out how to more safely `unwrap`?
         let env_var_json: Vec<serde_json::Value> = env_var_files
             .iter()
-            .map(|path| fs::read_to_string(path).unwrap())
-            .map(|json| serde_json::from_str(&json).unwrap())
-            .collect();
+            .map(|path| {
+                fs::read_to_string(path)
+                    // Into::into to convert serde_json error to std::io::Error.
+                    .and_then(|text| serde_json::from_str(&text).map_err(Into::into))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         for env_var_json in env_var_json {
             for (key, value) in env_var_json.as_object().unwrap() {
-                env_vars.insert(key.to_uppercase(), value.as_str().unwrap().to_string());
+                let value = value.as_str().unwrap_or_else(|| {
+                    println!("WARNING: environment variable {} has no string value", key);
+                    "NOTASTRING"
+                });
+                env_vars.insert(key.to_uppercase(), value.to_string());
             }
         }
     }
 
     if state_file.exists() {
-        let state_json = fs::read_to_string(state_file).unwrap();
+        let state_json = fs::read_to_string(state_file)?;
 
         // load json but preserve the order of dicts - for this we use the serde preserve_order feature
-        let state_json: serde_json::Value = serde_json::from_str(&state_json).unwrap();
+        let state_json: serde_json::Value =
+            serde_json::from_str(&state_json).map_err(Into::<std::io::Error>::into)?;
         let state_env_vars = state_json["env_vars"].as_object().unwrap();
 
         for (key, value) in state_env_vars {
             // TODO log warning?
             // println!("{}: {} (overwritten)", key, value.as_str().unwrap());
-            env_vars.insert(key.to_uppercase(), value.as_str().unwrap().to_string());
+            let value = value.as_str().unwrap_or_else(|| {
+                println!(
+                    "WARNING: environment variable from state.json {} has no string value",
+                    key
+                );
+                "NOTASTRING"
+            });
+            env_vars.insert(key.to_uppercase(), value.to_string());
         }
     }
     Ok(env_vars)
@@ -172,7 +201,7 @@ fn collect_env_vars(prefix: &Path) -> anyhow::Result<IndexMap<String, String>> {
 fn prefix_path_entries(
     prefix: &Path,
     operating_system: &OperatingSystem,
-) -> anyhow::Result<Vec<PathBuf>> {
+) -> Result<Vec<PathBuf>, std::io::Error> {
     let new_paths: Vec<PathBuf> = match operating_system {
         OperatingSystem::Windows => {
             vec![
@@ -184,7 +213,7 @@ fn prefix_path_entries(
                 prefix.join("bin"),
             ]
         }
-        OperatingSystem::Unix => {
+        OperatingSystem::MacOS | OperatingSystem::Linux => {
             vec![prefix.join("bin")]
         }
     };
@@ -210,7 +239,7 @@ impl Activator {
     /// use rattler_shell_helpers::{Activator, OperatingSystem, ShellType};
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), &ShellType::Bash, &OperatingSystem::Unix).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), &ShellType::Bash, &OperatingSystem::MacOS).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
@@ -218,18 +247,17 @@ impl Activator {
         path: &Path,
         shell_type: &ShellType,
         operating_system: &OperatingSystem,
-    ) -> Result<Activator, String> {
+    ) -> Result<Activator, std::io::Error> {
         let activation_scripts =
             collect_scripts(&path.to_path_buf().join("etc/conda/activate.d"), shell_type)
                 .expect("Couldn't collect scripts");
         let deactivation_scripts = collect_scripts(
             &path.to_path_buf().join("etc/conda/deactivate.d"),
             shell_type,
-        )
-        .expect("Couldn't collect scripts");
+        )?;
 
-        let env_vars = collect_env_vars(path).expect("Couldn't collect env vars");
-        let paths = prefix_path_entries(path, operating_system).expect("Couldn't add to path");
+        let env_vars = collect_env_vars(path)?;
+        let paths = prefix_path_entries(path, operating_system)?;
         Ok(Activator {
             target_prefix: path.to_path_buf(),
             shell_type: *shell_type,
@@ -274,7 +302,7 @@ mod tests {
         let activator = Activator::from_path(
             &tdir.path().to_path_buf(),
             &shell_type,
-            &OperatingSystem::Unix,
+            &OperatingSystem::MacOS,
         )
         .unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
@@ -347,7 +375,7 @@ mod tests {
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
-        let new_paths = prefix_path_entries(&prefix, &OperatingSystem::Unix);
+        let new_paths = prefix_path_entries(&prefix, &OperatingSystem::MacOS);
         println!("{:?}", new_paths);
         assert_eq!(new_paths.unwrap().len(), 1);
     }
