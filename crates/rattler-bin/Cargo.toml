@@ -17,9 +17,13 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.44"
-clap = { version="4.0.13", features=["derive"] }
+clap = { version = "4.0.13", features = ["derive"] }
 dirs = "4.0.0"
-rattler = { path="../rattler" }
-tokio = { version = "1.21.1", features=["rt-multi-thread", "macros"]}
+rattler = { path = "../rattler" }
+tokio = { version = "1.21.1", features = ["rt-multi-thread", "macros"] }
+futures = "0.3.17"
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
+rattler_repodata_gateway = { version = "0.1.0", path = "../rattler_repodata_gateway" }
+indicatif = "0.17.3"
+reqwest = "0.11.14"
