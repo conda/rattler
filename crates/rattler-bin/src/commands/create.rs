@@ -2,11 +2,10 @@ use futures::StreamExt;
 use indicatif::{MultiProgress, ProgressFinish, ProgressStyle};
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, Platform, RepoData, RepoDataRecord};
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
+use rattler_solve::{RequestedAction, SolverBackend, SolverProblem};
 use reqwest::Client;
-use std::io::Error;
 use std::path::Path;
 use std::time::Duration;
-use tokio::task::JoinHandle;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -20,21 +19,25 @@ pub struct Opt {
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
 
-    // Parse the match specs
-    let _specs = opt
+    // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
+    // with this because we need to parse the `channel_config` when parsing matchspecs.
+    let specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec, &channel_config))
+        .map(|spec| {
+            MatchSpec::from_str(spec, &channel_config).map(|s| (s, RequestedAction::Install))
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Get the cache directory
+    // Find the default cache directory. Create it if it doesnt exist yet.
     let cache_dir = dirs::cache_dir()
         .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
         .join("rattler/cache");
     std::fs::create_dir_all(&cache_dir)
         .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
 
-    // Get the channels to download
+    // Determine the channels to use from the command line or select the default. Like matchspecs
+    // this also requires the use of the `channel_config` so we have to do this manually.
     let channels = opt
         .channels
         .unwrap_or_else(|| vec![String::from("conda-forge")])
@@ -42,7 +45,9 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .map(|channel_str| Channel::from_str(&channel_str, &channel_config))
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Get the channels in combination with the platforms
+    // Each channel contains multiple subdirectories. Users can specify the subdirectories they want
+    // to use when specifying their channels. If the user didn't specify the default subdirectories
+    // we use defaults based on the current platform.
     let channel_urls = channels
         .iter()
         .flat_map(|channel| {
@@ -53,7 +58,9 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         })
         .collect::<Vec<_>>();
 
-    // Start downloading each repodata.json
+    // For each channel/subdirectory combination, download and cache the `repodata.json` that should
+    // be available from the corresponding Url. The code below also displays a nice CLI progress-bar
+    // to give users some more information about what is going on.
     let download_client = Client::builder()
         .no_gzip()
         .build()
@@ -84,31 +91,21 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
-    // // Download all repo data from the channels and create an index
-    // let repo_data_per_source = MultiRequestRepoDataBuilder::default()
-    //     .set_cache_dir(&cache_dir)
-    //     .set_listener(terminal_progress())
-    //     .set_fail_fast(false)
-    //     .add_channels(channels)
-    //     .request()
-    //     .await;
-    //
-    // // Error out if fetching one of the sources resulted in an error.
-    // let repo_data = repo_data_per_source
-    //     .into_iter()
-    //     .map(|(channel, _, result)| result.map(|data| (channel, data)))
-    //     .collect::<Result<Vec<_>, _>>()?;
-    //
-    // let solver_problem = SolverProblem {
-    //     channels: repo_data
-    //         .iter()
-    //         .map(|(channel, repodata)| (channel.base_url().to_string(), repodata))
-    //         .collect(),
-    //     specs,
-    // };
-    //
-    // let result = solver_problem.solve()?;
-    // println!("{:#?}", result);
+    // Now that we parsed and downloaded all information, construct the packaging problem that we
+    // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
+    // information required to be able to solve the problem.
+    let solver_problem = SolverProblem {
+        available_packages: repodatas,
+        installed_packages: vec![],
+        virtual_packages: vec![],
+        specs,
+    };
+
+    // Next, use a solver to solve this specific problem. This provides us with all the operations
+    // we need to apply to our environment to bring it up to date.
+    let result = rattler_solve::LibsolvSolver.solve(solver_problem)?;
+
+    
 
     Ok(())
 }

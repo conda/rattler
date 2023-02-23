@@ -1,4 +1,5 @@
-use rattler_conda_types::RepoData;
+use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
+use std::ffi::NulError;
 use std::{
     cmp::Ordering,
     collections::HashMap,
@@ -11,58 +12,11 @@ use std::{
 
 use super::{
     c_string, ffi,
-    pool::PoolRef,
+    keys::*,
+    pool::Pool,
     pool::{FindInterned, Intern},
     solvable::SolvableId,
 };
-
-// const SOLVABLE_SUMMARY: &str = "solvable:summary";
-// const SOLVABLE_DESCRIPTION: &str = "solvable:description";
-// const SOLVABLE_DISTRIBUTION: &str = "solvable:distribution";
-// const SOLVABLE_AUTHORS: &str = "solvable:authors";
-// const SOLVABLE_PACKAGER: &str = "solvable:packager";
-// const SOLVABLE_GROUP: &str = "solvable:group";
-// const SOLVABLE_URL: &str = "solvable:url";
-// const SOLVABLE_KEYWORDS: &str = "solvable:keywords";
-const SOLVABLE_LICENSE: &str = "solvable:license";
-const SOLVABLE_BUILDTIME: &str = "solvable:buildtime";
-// const SOLVABLE_BUILDHOST: &str = "solvable:buildhost";
-// const SOLVABLE_EULA: &str = "solvable:eula";
-// const SOLVABLE_CPEID: &str = "solvable:cpeid";
-// const SOLVABLE_MESSAGEINS: &str = "solvable:messageins";
-// const SOLVABLE_MESSAGEDEL: &str = "solvable:messagedel";
-// const SOLVABLE_INSTALLSIZE: &str = "solvable:installsize";
-// const SOLVABLE_DISKUSAGE: &str = "solvable:diskusage";
-// const SOLVABLE_FILELIST: &str = "solvable:filelist";
-// const SOLVABLE_INSTALLTIME: &str = "solvable:installtime";
-// const SOLVABLE_MEDIADIR: &str = "solvable:mediadir";
-// const SOLVABLE_MEDIAFILE: &str = "solvable:mediafile";
-// const SOLVABLE_MEDIANR: &str = "solvable:medianr";
-// const SOLVABLE_MEDIABASE: &str = "solvable:mediabase"; /* <location xml:base=... > */
-const SOLVABLE_DOWNLOADSIZE: &str = "solvable:downloadsize";
-// const SOLVABLE_SOURCEARCH: &str = "solvable:sourcearch";
-// const SOLVABLE_SOURCENAME: &str = "solvable:sourcename";
-// const SOLVABLE_SOURCEEVR: &str = "solvable:sourceevr";
-// const SOLVABLE_ISVISIBLE: &str = "solvable:isvisible";
-// const SOLVABLE_TRIGGERS: &str = "solvable:triggers";
-const SOLVABLE_CHECKSUM: &str = "solvable:checksum";
-const SOLVABLE_PKGID: &str = "solvable:pkgid"; /* pkgid: md5sum over header + payload */
-// const SOLVABLE_HDRID: &str = "solvable:hdrid"; /* hdrid: sha1sum over header only */
-// const SOLVABLE_LEADSIGID: &str = "solvable:leadsigid"; /* leadsigid: md5sum over lead + sigheader */
-const SOLVABLE_BUILDFLAVOR: &str = "solvable:buildflavor";
-const SOLVABLE_BUILDVERSION: &str = "solvable:buildversion";
-
-const REPOKEY_TYPE_MD5: &str = "repokey:type:md5";
-// const REPOKEY_TYPE_SHA1: &str = "repokey:type:sha1";
-// const REPOKEY_TYPE_SHA224: &str = "repokey:type:sha224";
-const REPOKEY_TYPE_SHA256: &str = "repokey:type:sha256";
-// const REPOKEY_TYPE_SHA384: &str = "repokey:type:sha384";
-// const REPOKEY_TYPE_SHA512: &str = "repokey:type:sha512";
-
-const SOLVABLE_CONSTRAINS: &str = "solvable:constrains"; /* conda */
-const SOLVABLE_TRACK_FEATURES: &str = "solvable:track_features"; /* conda */
-// const SOLVABLE_ISDEFAULT: &str = "solvable:isdefault";
-// const SOLVABLE_LANGONLY: &str = "solvable:langonly";
 
 /// Representation of a repo containing package data in libsolv. This corresponds to a repo_data
 /// json. Lifetime of this object is coupled to the Pool on creation
@@ -107,99 +61,72 @@ impl RepoRef {
     }
 
     /// Returns a pointer to the wrapped `ffi::Repo`
-    fn as_ptr(&self) -> NonNull<ffi::Repo> {
+    pub(super) fn as_ptr(&self) -> NonNull<ffi::Repo> {
         // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
         unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
     }
 
-    /// Returns a reference to the wrapped `ffi::Repo`.
-    fn as_ref(&self) -> &ffi::Repo {
-        // Safe because a `RepoRef` is a transparent wrapper around `ffi::Repo`
-        unsafe { std::mem::transmute(self) }
-    }
-
-    /// Returns the pool that created this instance
-    pub fn pool(&self) -> &PoolRef {
-        // Safe because a `PoolRef` is a wrapper around `ffi::Pool`
-        unsafe { &*(self.as_ref().pool as *const PoolRef) }
-    }
-
-    /// Adds [`RepoData`] to this instance
-    pub fn add_repodata(&self, repo_data: &RepoData) -> anyhow::Result<()> {
+    /// Adds [`RepoDataRecord`] to this instance
+    pub fn add_repodata_records(
+        &self,
+        pool: &Pool,
+        repo_datas: &[RepoDataRecord],
+    ) -> Result<(), NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
         // Get all the IDs
-        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(self.pool()).unwrap();
-        let solvable_buildtime_id = SOLVABLE_BUILDTIME.find_interned_id(self.pool()).unwrap();
-        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(self.pool()).unwrap();
-        let solvable_constraints = SOLVABLE_CONSTRAINS.find_interned_id(self.pool()).unwrap();
-        let solvable_download_size_id =
-            SOLVABLE_DOWNLOADSIZE.find_interned_id(self.pool()).unwrap();
-        let solvable_license_id = SOLVABLE_LICENSE.find_interned_id(self.pool()).unwrap();
-        let solvable_pkg_id = SOLVABLE_PKGID.find_interned_id(self.pool()).unwrap();
-        let solvable_checksum = SOLVABLE_CHECKSUM.find_interned_id(self.pool()).unwrap();
-        let solvable_track_features = SOLVABLE_TRACK_FEATURES
-            .find_interned_id(self.pool())
-            .unwrap();
-        let repo_type_md5 = REPOKEY_TYPE_MD5.find_interned_id(self.pool()).unwrap();
-        let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(self.pool()).unwrap();
+        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(pool).unwrap();
+        let solvable_buildtime_id = SOLVABLE_BUILDTIME.find_interned_id(pool).unwrap();
+        let solvable_buildversion_id = SOLVABLE_BUILDVERSION.find_interned_id(pool).unwrap();
+        let solvable_constraints = SOLVABLE_CONSTRAINS.find_interned_id(pool).unwrap();
+        let solvable_download_size_id = SOLVABLE_DOWNLOADSIZE.find_interned_id(pool).unwrap();
+        let solvable_license_id = SOLVABLE_LICENSE.find_interned_id(pool).unwrap();
+        let solvable_pkg_id = SOLVABLE_PKGID.find_interned_id(pool).unwrap();
+        let solvable_checksum = SOLVABLE_CHECKSUM.find_interned_id(pool).unwrap();
+        let solvable_track_features = SOLVABLE_TRACK_FEATURES.find_interned_id(pool).unwrap();
+        let repo_type_md5 = REPOKEY_TYPE_MD5.find_interned_id(pool).unwrap();
+        let repo_type_sha256 = REPOKEY_TYPE_SHA256.find_interned_id(pool).unwrap();
+
+        // Custom id
+        let solvable_index_id = "solvable:repodata_record_index".intern(pool);
 
         // Keeps a mapping from packages added to the repo to the type and solvable
         let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
-        for (filename, record) in repo_data.packages.iter() {
+        for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
+            let record = &repo_data.package_record;
+
             // Create a solvable for the package.
             let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
-            let solvable = solvable_id.resolve(self.pool());
+            let solvable = solvable_id.resolve(pool);
+            solvable.set_usize(solvable_index_id, repo_data_index);
 
             let solvable = unsafe { solvable.as_ptr().as_mut() };
 
             // Name and version
-            solvable.name = record.name.intern(self.pool()).into();
-            solvable.evr = record.version.to_string().intern(self.pool()).into();
+            solvable.name = record.name.intern(pool).into();
+            solvable.evr = record.version.to_string().intern(pool).into();
+            let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
             solvable.provides = unsafe {
-                ffi::repo_addid_dep(
-                    self.as_ptr().as_ptr(),
-                    solvable.provides,
-                    ffi::pool_rel2id(
-                        self.pool().as_ptr().as_ptr(),
-                        solvable.name,
-                        solvable.evr,
-                        ffi::REL_EQ as i32,
-                        1,
-                    ),
-                    0,
-                )
+                ffi::repo_addid_dep(self.as_ptr().as_ptr(), solvable.provides, rel_eq, 0)
             };
 
-            // TODO: The filename is not present in a PackageRecord
-            // // Location (filename (fn) and subdir)
-            // let filename = record
-            //     .filename
-            //     .as_deref()
-            //     .unwrap_or_else(|| filename.as_ref());
-            // let subdir = record.subdir.as_str();
-            // unsafe {
-            //     ffi::repodata_set_location(
-            //         data,
-            //         solvable_id.into(),
-            //         0,
-            //         CString::new(subdir)?.as_ptr(),
-            //         CString::new(filename)?.as_ptr(),
-            //     );
-            // }
+            // Location (filename (fn) and subdir)
+            unsafe {
+                ffi::repodata_set_location(
+                    data,
+                    solvable_id.into(),
+                    0,
+                    CString::new(record.subdir.as_bytes())?.as_ptr(),
+                    CString::new(repo_data.file_name.as_bytes())?.as_ptr(),
+                );
+            }
 
             // Dependencies
-            // TODO: Add requires
             for match_spec in record.depends.iter() {
                 // Create a reldep id from a matchspec
-                let match_spec_id = unsafe {
-                    ffi::pool_conda_matchspec(
-                        self.pool().as_ptr().as_ptr(),
-                        CString::new(match_spec.as_str())?.as_ptr(),
-                    )
-                };
+                let match_spec_id = pool.conda_matchspec(&CString::new(match_spec.as_str())?);
 
                 // Add it to the list of requirements of this solvable
                 solvable.requires = unsafe {
@@ -208,15 +135,9 @@ impl RepoRef {
             }
 
             // Constraints
-            // TODO: Add requires
             for match_spec in record.constrains.iter() {
                 // Create a reldep id from a matchspec
-                let match_spec_id = unsafe {
-                    ffi::pool_conda_matchspec(
-                        self.pool().as_ptr().as_ptr(),
-                        CString::new(match_spec.as_str())?.as_ptr(),
-                    )
-                };
+                let match_spec_id = pool.conda_matchspec(&CString::new(match_spec.as_str())?);
 
                 // Add it to the list of constraints of this solvable
                 unsafe {
@@ -238,7 +159,7 @@ impl RepoRef {
                             data,
                             solvable_id.into(),
                             solvable_track_features.into(),
-                            track_features.trim().intern(self.pool()).into(),
+                            track_features.trim().intern(pool).into(),
                         );
                     }
                 }
@@ -333,7 +254,9 @@ impl RepoRef {
             }
 
             // Get the name of the package
-            if let Some((filename, package_type)) = extract_known_filename_extension(filename) {
+            if let Some((filename, package_type)) =
+                extract_known_filename_extension(&repo_data.file_name)
+            {
                 if let Some(&(other_package_type, other_solvable_id)) =
                     package_to_type.get(filename)
                 {
@@ -352,8 +275,8 @@ impl RepoRef {
                         }
                         Ordering::Greater => {
                             // Swap the "old" and "new" solvables reusing the old solvable
+                            let pool = pool.as_ref();
                             unsafe {
-                                let pool: &mut ffi::Pool = &mut *(self.as_ref().pool);
                                 let solvables = std::slice::from_raw_parts_mut(
                                     pool.solvables,
                                     pool.nsolvables as _,
@@ -381,12 +304,52 @@ impl RepoRef {
                     package_to_type.insert(filename, (package_type, solvable_id));
                 };
             } else {
-                tracing::warn!("unknown package extension: {}", filename);
+                tracing::warn!("unknown package extension: {}", &repo_data.file_name);
             }
         }
 
         // TODO: What does this do?
         unsafe { ffi::repo_internalize(self.as_ptr().as_ptr()) };
+
+        Ok(())
+    }
+
+    /// Adds virtual packages to this instance
+    pub fn add_virtual_packages(
+        &self,
+        pool: &Pool,
+        packages: &[GenericVirtualPackage],
+    ) -> Result<(), NulError> {
+        let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
+
+        let solvable_buildflavor_id = SOLVABLE_BUILDFLAVOR.find_interned_id(pool).unwrap();
+
+        for package in packages {
+            // Create a solvable for the package.
+            let solvable_id = SolvableId(unsafe { ffi::repo_add_solvable(self.as_ptr().as_ptr()) });
+            let solvable = solvable_id.resolve(pool);
+
+            let solvable = unsafe { solvable.as_ptr().as_mut() };
+
+            // Name and version
+            solvable.name = package.name.intern(pool).into();
+            solvable.evr = package.version.to_string().intern(pool).into();
+
+            // Build string
+            unsafe {
+                ffi::repodata_add_poolstr_array(
+                    data,
+                    solvable_id.into(),
+                    solvable_buildflavor_id.into(),
+                    CString::new(package.build_string.as_bytes())?.as_ptr(),
+                )
+            };
+
+            let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
+            solvable.provides = unsafe {
+                ffi::repo_addid_dep(self.as_ptr().as_ptr(), solvable.provides, rel_eq, 0)
+            };
+        }
 
         Ok(())
     }

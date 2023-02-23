@@ -22,8 +22,6 @@ futures = "0.3.17"
 fxhash = "0.2.1"
 hex = "0.4.3"
 itertools = "0.10.3"
-libc = "0.2"
-libz-sys = { version = "1.1.0", default-features = false, features = ["static"] }
 memchr = "2.5.0"
 memmap2 = "0.5.8"
 nom = "7.1.0"
@@ -54,13 +52,3 @@ rand = "0.8.4"
 rstest = "0.16.0"
 tracing-test = { version = "0.2.4" }
 insta = { version = "1.16.0", features = ["yaml"] }
-
-[build-dependencies]
-cc = "1"
-anyhow = "1"
-bindgen = "0.64"
-cmake = "0.1"
-
-[package.metadata.cargo-udeps.ignore]
-# libz-sys is required to build libsolv properly
-normal = ["libz-sys"]

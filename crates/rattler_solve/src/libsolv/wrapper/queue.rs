@@ -1,4 +1,5 @@
 use super::ffi;
+use super::flags::SolvableFlags;
 use std::marker::PhantomData;
 use std::os::raw::c_int;
 
@@ -63,12 +64,12 @@ impl<T: Into<ffi::Id>> Queue<T> {
     }
 
     /// Push and id and flag into the queue
-    pub fn push_id_with_flags(&mut self, id: T, flags: i32) {
+    pub fn push_id_with_flags(&mut self, id: T, flags: SolvableFlags) {
         unsafe {
             ffi::queue_insert2(
                 self.as_inner_mut(),
                 self.queue.count,
-                flags as c_int,
+                flags.inner() as c_int,
                 id.into(),
             );
         }
