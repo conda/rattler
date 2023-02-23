@@ -93,7 +93,7 @@ pub struct Activator {
 /// # Errors
 ///
 /// If the path is not a directory, an error is returned.
-fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf>, std::io::Error> {
+fn collect_scripts(path: &Path, shell_type: ShellType) -> Result<Vec<PathBuf>, std::io::Error> {
     // Check if path exists
     if !path.is_dir() {
         return Ok(vec![]);
@@ -103,8 +103,8 @@ fn collect_scripts(path: &PathBuf, shell_type: &ShellType) -> Result<Vec<PathBuf
 
     let mut scripts = paths
         .into_iter()
-        .filter(|r| r.is_ok())
-        .map(|r| r.unwrap().path())
+        .filter_map(|r| r.ok())
+        .map(|r| r.path())
         .filter(|path| path.is_file() && path.extension() == Some(shell_type.suffix()))
         .collect::<Vec<_>>();
 
@@ -161,11 +161,11 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
     if pkg_env_var_dir.exists() {
         let env_var_files = pkg_env_var_dir.read_dir()?;
+
         let mut env_var_files = env_var_files
             .into_iter()
-            .filter(|r| r.is_ok())
-            // is safe because we filtered on `is_ok()`
-            .map(|r| r.unwrap().path())
+            .filter_map(|r| r.ok())
+            .map(|e| e.path())
             .filter(|path| path.is_file())
             .collect::<Vec<_>>();
 
@@ -239,7 +239,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 /// # Returns
 ///
 /// A vector of path entries
-fn prefix_path_entries(prefix: &Path, operating_system: &OperatingSystem) -> Vec<PathBuf> {
+fn prefix_path_entries(prefix: &Path, operating_system: OperatingSystem) -> Vec<PathBuf> {
     match operating_system {
         OperatingSystem::Windows => {
             vec![
@@ -276,28 +276,27 @@ impl Activator {
     /// use rattler_shell_helpers::{Activator, OperatingSystem, ShellType};
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), &ShellType::Bash, &OperatingSystem::MacOS).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), ShellType::Bash, OperatingSystem::MacOS).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
     pub fn from_path(
         path: &Path,
-        shell_type: &ShellType,
-        operating_system: &OperatingSystem,
+        shell_type: ShellType,
+        operating_system: OperatingSystem,
     ) -> Result<Activator, ActivationError> {
-        let activation_scripts =
-            collect_scripts(&path.to_path_buf().join("etc/conda/activate.d"), shell_type)
-                .expect("Couldn't collect scripts");
-        let deactivation_scripts = collect_scripts(
-            &path.to_path_buf().join("etc/conda/deactivate.d"),
-            shell_type,
-        )?;
+        let activation_scripts = collect_scripts(&path.join("etc/conda/activate.d"), shell_type)?;
+
+        let deactivation_scripts =
+            collect_scripts(&path.join("etc/conda/deactivate.d"), shell_type)?;
 
         let env_vars = collect_env_vars(path)?;
+
         let paths = prefix_path_entries(path, operating_system);
+
         Ok(Activator {
             target_prefix: path.to_path_buf(),
-            shell_type: *shell_type,
+            shell_type,
             paths,
             activation_scripts,
             deactivation_scripts,
@@ -330,7 +329,7 @@ mod tests {
 
         let shell_type = ShellType::Bash;
 
-        let scripts = collect_scripts(&path, &shell_type).unwrap();
+        let scripts = collect_scripts(&path, shell_type).unwrap();
         assert_eq!(scripts.len(), 3);
         assert_eq!(scripts[0], script2);
         assert_eq!(scripts[1], script1);
@@ -338,8 +337,8 @@ mod tests {
 
         let activator = Activator::from_path(
             &tdir.path().to_path_buf(),
-            &shell_type,
-            &OperatingSystem::MacOS,
+            shell_type,
+            OperatingSystem::MacOS,
         )
         .unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
@@ -412,7 +411,7 @@ mod tests {
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
-        let new_paths = prefix_path_entries(&prefix, &OperatingSystem::MacOS);
+        let new_paths = prefix_path_entries(&prefix, OperatingSystem::MacOS);
         println!("{:?}", new_paths);
         assert_eq!(new_paths.len(), 1);
     }
