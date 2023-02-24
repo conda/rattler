@@ -6,9 +6,11 @@
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::Platform;
 use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sha2::digest::Output;
 use std::collections::HashMap;
 use url::Url;
+use rattler_digest::serde::SerializableHash;
 
 /// Default version for the conda-lock file format
 const fn default_version() -> u32 {
@@ -69,12 +71,11 @@ pub struct GitMeta {
     pub git_sha: String,
 }
 
-#[derive(Serialize, Deserialize)]
 /// Represents whether this is a dependency managed by pip or conda
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Manager {
-    #[serde(rename = "conda")]
     Conda,
-    #[serde(rename = "pip")]
     Pip,
 }
 
@@ -84,15 +85,44 @@ pub struct PackageName(String);
 /// This is basically a MatchSpec but will never contain the package name
 pub struct VersionConstraint(String);
 
-#[derive(Serialize)]
 /// Contains an enumeration for the different types of hashes for a package
 pub enum PackageHashes {
     /// Contains an MD5 hash
-    Md5(String),
+    Md5(Output<md5::Md5>),
     /// Contains as Sha256 Hash
-    Sha256(String),
+    Sha256(Output<sha2::Sha256>),
     /// Contains both hashes
-    Md5Sha256(String, String),
+    Md5Sha256(Output<md5::Md5>, Output<sha2::Sha256>),
+}
+
+
+#[derive(Serialize, Deserialize)]
+struct RawPackageHashes {
+    md5: Option<SerializableHash<md5::Md5>>,
+    sha256: Option<SerializableHash<sha2::Sha256>>,
+}
+
+impl Serialize for PackageHashes {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let raw = match self {
+            Md5(hash) => RawPackageHashes {
+                md5: Some(SerializableHash::from(hash.clone())),
+                sha256: None,
+            },
+            Sha256(hash) => RawPackageHashes {
+                md5: None,
+                sha256: Some(SerializableHash::from(hash.clone())),
+            },
+            Md5Sha256(md5hash, sha) => RawPackageHashes {
+                md5: Some(SerializableHash::from(md5hash.clone())),
+                sha256: Some(SerializableHash::from(sha.clone())),
+            },
+        };
+        raw.serialize(serializer)
+    }
 }
 
 // This implementation of the `Deserialize` trait for the `PackageHashes` struct
@@ -107,17 +137,11 @@ impl<'de> Deserialize<'de> for PackageHashes {
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        struct Temp {
-            md5: Option<String>,
-            sha256: Option<String>,
-        }
-
-        let temp = Temp::deserialize(deserializer)?;
+        let temp = RawPackageHashes::deserialize(deserializer)?;
         Ok(match (temp.md5, temp.sha256) {
-            (Some(md5), Some(sha)) => Md5Sha256(md5, sha),
-            (Some(md5), None) => Md5(md5),
-            (None, Some(sha)) => Sha256(sha),
+            (Some(md5), Some(sha)) => Md5Sha256(md5.into(), sha.into()),
+            (Some(md5), None) => Md5(md5.into()),
+            (None, Some(sha)) => Sha256(sha.into()),
             _ => return Err(Error::custom("Expected `sha256` field `md5` field or both")),
         })
     }
