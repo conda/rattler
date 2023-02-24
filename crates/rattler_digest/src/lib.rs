@@ -41,6 +41,9 @@
 #[cfg(feature = "tokio")]
 mod tokio;
 
+#[cfg(feature = "serde")]
+pub mod serde;
+
 pub use digest;
 
 use digest::{Digest, Output};
