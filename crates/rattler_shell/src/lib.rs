@@ -214,14 +214,14 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
         for (key, value) in state_env_vars {
             if state_env_vars.contains_key(key) {
-                println!(
+                tracing::warn!(
                     "WARNING: environment variable {key} already defined in packages (path: {state_file:?})");
             }
 
             if let Some(value) = value.as_str() {
                 env_vars.insert(key.to_uppercase().to_string(), value.to_string());
             } else {
-                println!(
+                tracing::warn!(
                     "WARNING: environment variable {key} has no string value (path: {state_file:?})");
             }
         }
@@ -412,7 +412,6 @@ mod tests {
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
         let new_paths = prefix_path_entries(&prefix, OperatingSystem::MacOS);
-        println!("{:?}", new_paths);
         assert_eq!(new_paths.len(), 1);
     }
 }
