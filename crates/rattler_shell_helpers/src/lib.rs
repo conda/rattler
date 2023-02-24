@@ -95,7 +95,7 @@ pub struct Activator {
 /// If the path is not a directory, an error is returned.
 fn collect_scripts(path: &Path, shell_type: ShellType) -> Result<Vec<PathBuf>, std::io::Error> {
     // Check if path exists
-    if !path.is_dir() {
+    if !path.exists() {
         return Ok(vec![]);
     }
 
@@ -192,7 +192,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
                 if let Some(value) = value.as_str() {
                     env_vars.insert(key.to_string(), value.to_string());
                 } else {
-                    println!(
+                    tracing::warn!(
                         "WARNING: environment variable {key} has no string value (path: {env_var_file:?})");
                 }
             }
