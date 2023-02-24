@@ -212,28 +212,28 @@ fn default_category() -> String {
 #[derive(Serialize, Deserialize)]
 pub struct LockedDependency {
     /// Package name of dependency
-    name: String,
-    /// Locked version
-    version: String,
-    /// Pip or Conda managed
-    manager: Manager,
-    /// What platform is this package for
-    platform: Platform,
-    /// What are its own dependencies mapping name to version constraint
-    dependencies: HashMap<String, VersionConstraint>,
-    /// URL to find it at
-    url: Url,
-    /// Hashes of the package
-    hash: PackageHashes,
-    /// Is the dependency optional
-    optional: bool,
-    /// Used for pip packages
-    #[serde(default = "default_category")]
-    category: String,
-    /// ???
-    source: Option<Url>,
-    /// Build string
-    build: Option<String>,
+   pub  name: String,
+     /// Locked version
+   pub  version: String,
+     /// Pip or Conda managed
+   pub  manager: Manager,
+     /// What platform is this package for
+   pub  platform: Platform,
+     /// What are its own dependencies mapping name to version constraint
+   pub  dependencies: HashMap<String, VersionConstraint>,
+     /// URL to find it at
+   pub  url: Url,
+     /// Hashes of the package
+   pub  hash: PackageHashes,
+     /// Is the dependency optional
+   pub  optional: bool,
+     /// Used for pip packages
+   #[serde(default = "default_category")]
+     pub category: String,
+     /// ???
+   pub  source: Option<Url>,
+     /// Build string
+   pub  build: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -294,10 +294,28 @@ mod test {
         )
     }
 
+    fn lock_file_path_python() -> String {
+        format!(
+            "{}/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            "../../test-data/conda-lock/python-conda-lock.yml"
+        )
+    }
+
     #[test]
     fn read_conda_lock() {
         // Try to read conda_lock
         let conda_lock = CondaLock::from_path(Path::new(&lock_file_path())).unwrap();
+        // Make sure that we have parsed some packages
+        insta::with_settings!({sort_maps => true}, {
+        insta::assert_yaml_snapshot!(conda_lock);
+        });
+    }
+
+    #[test]
+    fn read_conda_lock_python() {
+        // Try to read conda_lock
+        let conda_lock = CondaLock::from_path(Path::new(&lock_file_path_python())).unwrap();
         // Make sure that we have parsed some packages
         insta::with_settings!({sort_maps => true}, {
         insta::assert_yaml_snapshot!(conda_lock);
