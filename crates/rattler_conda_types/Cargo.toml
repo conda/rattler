@@ -32,10 +32,9 @@ tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
 rattler_digest = {path ="../rattler_digest", features = ["serde"]}
 
-
 [dev-dependencies]
 rand = "0.8.4"
-insta = { version = "1.16.0", features = ["yaml"] }
+insta = { version = "1.16.0", features = ["yaml", "redactions"] }
 rattler_package_streaming = { path = "../rattler_package_streaming" }
 tempfile = "3.3.0"
 rstest = "0.16.0"

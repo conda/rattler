@@ -98,6 +98,6 @@ mod test {
             .unwrap(),
         );
         let str = serde_json::to_string(&hash).unwrap();
-        let hash: SerializableHash<sha2::Sha256> = serde_json::from_str(&str).unwrap();
+        let _hash: SerializableHash<sha2::Sha256> = serde_json::from_str(&str).unwrap();
     }
 }

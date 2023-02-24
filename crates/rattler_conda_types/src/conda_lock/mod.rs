@@ -245,6 +245,8 @@ mod test {
         let conda_lock: CondaLock =
             from_str(&std::fs::read_to_string(lock_file_path()).unwrap()).unwrap();
         // Make sure that we have parsed some packages
-        assert!(!conda_lock.package.is_empty());
+        insta::with_settings!({sort_maps => true}, {
+        insta::assert_yaml_snapshot!(conda_lock);
+        })
     }
 }
