@@ -113,16 +113,16 @@ impl Serialize for PackageHashes {
     {
         let raw = match self {
             Md5(hash) => RawPackageHashes {
-                md5: Some(SerializableHash::from(hash.clone())),
+                md5: Some(SerializableHash::from(*hash)),
                 sha256: None,
             },
             Sha256(hash) => RawPackageHashes {
                 md5: None,
-                sha256: Some(SerializableHash::from(hash.clone())),
+                sha256: Some(SerializableHash::from(*hash)),
             },
             Md5Sha256(md5hash, sha) => RawPackageHashes {
-                md5: Some(SerializableHash::from(md5hash.clone())),
-                sha256: Some(SerializableHash::from(sha.clone())),
+                md5: Some(SerializableHash::from(*md5hash)),
+                sha256: Some(SerializableHash::from(*sha)),
             },
         };
         raw.serialize(serializer)
