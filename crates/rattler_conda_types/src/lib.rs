@@ -3,6 +3,7 @@
 
 mod channel;
 mod channel_data;
+mod conda_lock;
 mod explicit_environment_spec;
 mod match_spec;
 mod no_arch_type;
