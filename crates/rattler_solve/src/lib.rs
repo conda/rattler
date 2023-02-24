@@ -71,11 +71,10 @@ pub struct SolverProblem {
 mod test_libsolv {
     use crate::libsolv::LibsolvSolver;
     use crate::{SolveError, SolverBackend, SolverProblem};
-    use rattler_conda_types::prefix_record::PrefixPaths;
     use rattler_conda_types::GenericVirtualPackage;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData,
-        RepoDataRecord, Version,
+        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, RepoData, RepoDataRecord,
+        Version,
     };
     use std::str::FromStr;
     use url::Url;

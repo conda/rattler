@@ -330,7 +330,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         assert_matches!(
             validate_package_directory(temp_dir.path()),
-            Err(PackageValidationError::MetadataMissing)
+            Err(PackageValidationError::InvalidIndexJson(_))
         );
     }
 }
