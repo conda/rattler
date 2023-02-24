@@ -5,12 +5,13 @@
 
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::Platform;
+use rattler_digest::serde::SerializableHash;
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::digest::Output;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use url::Url;
-use rattler_digest::serde::SerializableHash;
 
 /// Default version for the conda-lock file format
 const fn default_version() -> u32 {
@@ -83,6 +84,12 @@ pub enum Manager {
 /// This is basically a MatchSpec but will never contain the package name
 pub struct VersionConstraint(String);
 
+impl Display for VersionConstraint {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Contains an enumeration for the different types of hashes for a package
 pub enum PackageHashes {
     /// Contains an MD5 hash
@@ -92,7 +99,6 @@ pub enum PackageHashes {
     /// Contains both hashes
     Md5Sha256(Output<md5::Md5>, Output<sha2::Sha256>),
 }
-
 
 #[derive(Serialize, Deserialize)]
 struct RawPackageHashes {

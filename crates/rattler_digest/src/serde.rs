@@ -14,18 +14,16 @@
 //!
 //! ```
 //!
+use digest::{Digest, Output};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt::LowerHex;
 use std::ops::Deref;
-use digest::{Digest, Output};
-use serde::{Deserializer, Deserialize, Serializer, Serialize};
-use serde::de::Error;
 
 /// Deserialize into [`Output`] of a [`Digest`]
-pub fn deserialize<'de, D, Dig: Digest>(
-    deserializer: D,
-) -> Result<Output<Dig>, D::Error>
-    where
-        D: Deserializer<'de>,
+pub fn deserialize<'de, D, Dig: Digest>(deserializer: D) -> Result<Output<Dig>, D::Error>
+where
+    D: Deserializer<'de>,
 {
     let str = <&'de str>::deserialize(deserializer)?;
     super::parse_digest_from_hex::<Dig>(str).ok_or_else(|| Error::custom("failed to parse digest"))
@@ -35,23 +33,32 @@ pub fn deserialize<'de, D, Dig: Digest>(
 pub fn serialize<'a, S: Serializer, Dig: Digest>(
     digest: &'a Output<Dig>,
     s: S,
-) -> Result<S::Ok, S::Error> where &'a Output<Dig> : LowerHex {
+) -> Result<S::Ok, S::Error>
+where
+    &'a Output<Dig>: LowerHex,
+{
     format!("{digest:x}").serialize(s)
 }
 
 /// Wrapper type for easily serializing a Hash
 pub struct SerializableHash<T: Digest>(pub Output<T>);
 
-impl<T: Digest> Serialize for SerializableHash<T> where Output<T> : LowerHex {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer{
+impl<T: Digest> Serialize for SerializableHash<T>
+where
+    Output<T>: LowerHex,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
         serialize::<S, T>(&self.0, serializer)
     }
 }
 
 impl<'de, T: Digest + Default> Deserialize<'de> for SerializableHash<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let hash_output: Output<T> = deserialize::<D, T>(deserializer)?;
         Ok(SerializableHash(hash_output))
@@ -82,14 +89,15 @@ impl<T: Digest> Deref for SerializableHash<T> {
 mod test {
     use crate::serde::SerializableHash;
 
-
     #[test]
     pub fn test_serializable_hash() {
         let hash = SerializableHash::<sha2::Sha256>(
-            crate::parse_digest_from_hex::<sha2::Sha256>("fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726").unwrap(),
+            crate::parse_digest_from_hex::<sha2::Sha256>(
+                "fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726",
+            )
+            .unwrap(),
         );
         let str = serde_json::to_string(&hash).unwrap();
         let hash: SerializableHash<sha2::Sha256> = serde_json::from_str(&str).unwrap();
     }
 }
-
