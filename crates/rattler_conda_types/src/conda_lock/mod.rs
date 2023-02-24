@@ -80,8 +80,6 @@ pub enum Manager {
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
-pub struct PackageName(String);
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
 /// This is basically a MatchSpec but will never contain the package name
 pub struct VersionConstraint(String);
 
@@ -162,8 +160,8 @@ pub struct LockedDependency {
     manager: Manager,
     /// What platform is this package for
     platform: Platform,
-    /// What are its own dependencies
-    dependencies: HashMap<PackageName, VersionConstraint>,
+    /// What are its own dependencies mapping name to version constraint
+    dependencies: HashMap<String, VersionConstraint>,
     /// URL to find it at
     url: Url,
     /// Hashes of the package
