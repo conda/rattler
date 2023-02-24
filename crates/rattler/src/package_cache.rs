@@ -274,7 +274,7 @@ mod test {
             .unwrap();
 
         // Validate the contents of the package
-        let current_paths = validate_package_directory(&package_dir).unwrap();
+        let (_, current_paths) = validate_package_directory(&package_dir).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the original tar
         // archive.

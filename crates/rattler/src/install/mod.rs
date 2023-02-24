@@ -294,7 +294,7 @@ async fn read_index_json(
             driver
                 .spawn_throttled(move || {
                     IndexJson::from_package_directory(&package_dir)
-                        .map_err(InstallError::FailedToReadPathsJson)
+                        .map_err(InstallError::FailedToReadIndexJson)
                 })
                 .await
         }
@@ -392,7 +392,7 @@ async fn can_create_hardlinks(
 
 #[cfg(test)]
 mod test {
-    use crate::install::InstallDriver;
+    use crate::install::{InstallDriver, PythonInfo};
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallOptions},
@@ -400,10 +400,11 @@ mod test {
     };
     use futures::{stream, StreamExt};
     use rattler_conda_types::package::ArchiveIdentifier;
-    use rattler_conda_types::{ExplicitEnvironmentSpec, Platform};
+    use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
     use reqwest::Client;
     use std::env::temp_dir;
     use std::process::Command;
+    use std::str::FromStr;
     use tempfile::tempdir;
 
     #[tracing_test::traced_test]
@@ -425,6 +426,11 @@ mod test {
         // Create an HTTP client we can use to download packages
         let client = Client::new();
 
+        // Specify python version
+        let python_version =
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), current_platform)
+                .unwrap();
+
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
@@ -434,6 +440,7 @@ mod test {
                 let client = client.clone();
                 let package_cache = &package_cache;
                 let install_driver = &install_driver;
+                let python_version = &python_version;
                 async move {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(&package_url.url).unwrap();
@@ -447,7 +454,10 @@ mod test {
                         &package_dir,
                         prefix_path,
                         install_driver,
-                        InstallOptions::default(),
+                        InstallOptions {
+                            python_info: Some(python_version.clone()),
+                            ..Default::default()
+                        },
                     )
                     .await
                     .unwrap();
