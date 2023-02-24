@@ -1,9 +1,11 @@
 mod driver;
 pub mod link;
 mod python;
+mod transaction;
 
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
+pub use transaction::{Transaction, TransactionOperation};
 
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
@@ -199,7 +201,7 @@ pub async fn link_package(
                 (
                     idx,
                     PathsEntry {
-                        relative_path: entry.relative_path,
+                        relative_path: result.relative_path,
                         path_type: entry.path_type.into(),
                         no_link: entry.no_link,
                         sha256: entry.sha256,

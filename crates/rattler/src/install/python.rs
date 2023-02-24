@@ -22,7 +22,7 @@ pub struct PythonInfo {
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum PythonInfoError {
     #[error("invalid python version '{0}'")]
-    InvalidVersion(Version),
+    InvalidVersion(String),
 }
 
 impl PythonInfo {
@@ -32,7 +32,7 @@ impl PythonInfo {
         // Determine the major, and minor versions of the version
         let (major, minor) = version
             .as_major_minor()
-            .ok_or_else(|| PythonInfoError::InvalidVersion(version.clone()))?;
+            .ok_or_else(|| PythonInfoError::InvalidVersion(version.to_string()))?;
 
         // Determine the expected relative path of the executable in a prefix
         let path = if platform.is_windows() {
@@ -78,5 +78,12 @@ impl PythonInfo {
         } else {
             relative_path.into()
         }
+    }
+
+    /// Returns true if this version of python differs so much that a relink is required for all
+    /// noarch python packages.
+    pub fn is_relink_required(&self, previous: &PythonInfo) -> bool {
+        self.short_version.0 != previous.short_version.0
+            || self.short_version.1 != previous.short_version.1
     }
 }

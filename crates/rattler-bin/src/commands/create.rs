@@ -1,20 +1,26 @@
-use futures::{stream, StreamExt, TryStreamExt};
+use anyhow::Context;
+use futures::stream::FuturesUnordered;
+use futures::TryFutureExt;
+use futures::{stream, FutureExt, StreamExt, TryStreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
-use rattler::install::{link_package, InstallDriver, InstallOptions, PythonInfo};
+use rattler::install::{
+    link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation,
+};
 use rattler::package_cache::PackageCache;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord, RepoData,
     RepoDataRecord,
 };
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
-use rattler_solve::{
-    PackageOperation, PackageOperationKind, RequestedAction, SolverBackend, SolverProblem,
-};
+use rattler_solve::{SolverBackend, SolverProblem};
 use reqwest::Client;
 use std::borrow::Cow;
 use std::env;
+use std::future::ready;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use tokio::task::JoinHandle;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -29,14 +35,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
     let target_prefix = env::current_dir()?.join("conda-env");
 
+    // Determine the platform we're going to install for
+    let install_platform = Platform::current();
+
     // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
     // with this because we need to parse the `channel_config` when parsing matchspecs.
     let specs = opt
         .specs
         .iter()
-        .map(|spec| {
-            MatchSpec::from_str(spec, &channel_config).map(|s| (s, RequestedAction::Install))
-        })
+        .map(|spec| MatchSpec::from_str(spec, &channel_config))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Find the default cache directory. Create it if it doesnt exist yet.
@@ -63,10 +70,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .flat_map(|channel| {
             channel
                 .platforms_or_default()
-                .into_iter()
+                .iter()
                 .map(move |platform| (channel.clone(), *platform))
         })
         .collect::<Vec<_>>();
+
+    // Determine the packages that are currently installed in the environment.
+    let installed_packages = find_installed_packages(&target_prefix, 100)
+        .await
+        .context("failed to determine currently installed packages")?;
 
     // For each channel/subdirectory combination, download and cache the `repodata.json` that should
     // be available from the corresponding Url. The code below also displays a nice CLI progress-bar
@@ -75,9 +87,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .no_gzip()
         .build()
         .expect("failed to create client");
+    let multi_progress = indicatif::MultiProgress::new();
+
     let repodata_cache_path = cache_dir.join("repodata");
     let channel_and_platform_len = channel_urls.len();
-    let multi_progress = indicatif::MultiProgress::new();
     let repodata_download_client = download_client.clone();
     let repodatas = futures::stream::iter(channel_urls)
         .map(move |(channel, platform)| {
@@ -105,11 +118,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Determine virtual packages of the system. These packages define the capabilities of the
     // system. Some packages depend on these virtual packages to indiciate compability with the
     // hardware of the system.
-    // TODO: Progress indicator?
     let virtual_packages = wrap_in_progress("determining virtual packages", move || {
         rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
             vpkgs
-                .into_iter()
+                .iter()
                 .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
                 .collect::<Vec<_>>()
         })
@@ -120,69 +132,87 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // information required to be able to solve the problem.
     let solver_problem = SolverProblem {
         available_packages: repodatas,
-        installed_packages: vec![],
+        locked_packages: installed_packages
+            .iter()
+            .map(|record| record.repodata_record.clone())
+            .collect(),
         virtual_packages,
         specs,
+        ..Default::default()
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
-    let result = wrap_in_progress("solving", move || {
+    let required_packages = wrap_in_progress("solving", move || {
         rattler_solve::LibsolvSolver.solve(solver_problem)
     })?;
 
-    // Determine the platform we're going to install for
-    let install_platform = Platform::current();
+    // Construct a transaction to
+    let transaction = Transaction::from_current_and_desired(
+        installed_packages,
+        required_packages,
+        install_platform,
+    )?;
 
-    // Determine the python version from the packages to install or from the currently installed
-    // packages.
-    let python_info = result
-        .iter()
-        .find_map(|op| {
-            if matches!(
-                op.kind,
-                PackageOperationKind::Install | PackageOperationKind::Reinstall
-            ) && op.package.package_record.name == "python"
-            {
-                Some(PythonInfo::from_version(
-                    &op.package.package_record.version,
-                    install_platform,
-                ))
-            } else {
-                None
-            }
-        })
-        .map_or(Ok(None), |info| info.map(Some))?;
+    if !transaction.operations.is_empty() {
+        // Execute the operations that are returned by the solver.
+        execute_transaction(transaction, target_prefix, cache_dir, download_client).await?;
+        println!(
+            "{} Successfully updated the environment",
+            console::style(console::Emoji("✔", "")).green(),
+        );
+    } else {
+        println!(
+            "{} Already up to date",
+            console::style(console::Emoji("✔", "")).green(),
+        );
+    }
 
-    // Execute all operations in order.
+    Ok(())
+}
+
+/// Executes the transaction on the given environment.
+async fn execute_transaction(
+    transaction: Transaction<PrefixRecord, RepoDataRecord>,
+    target_prefix: PathBuf,
+    cache_dir: PathBuf,
+    download_client: Client,
+) -> anyhow::Result<()> {
+    // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
+
+    // Create an install driver which helps limit the number of concurrent fileystem operations
     let install_driver = InstallDriver::default();
+
+    // Define default installation options.
     let install_options = InstallOptions {
-        python_info,
-        platform: Some(install_platform),
+        python_info: transaction.python_info.clone(),
+        platform: Some(transaction.platform),
         ..Default::default()
     };
 
-    // Create a progress bars
+    // Create a progress bars for downloads.
     let multi_progress = indicatif::MultiProgress::new();
-    let total_packages_to_download = result
+    let total_packages_to_download = transaction
+        .operations
         .iter()
-        .filter(|op| {
-            matches!(
-                op.kind,
-                PackageOperationKind::Install | PackageOperationKind::Reinstall
-            )
-        })
+        .filter(|op| op.record_to_install().is_some())
         .count();
-    let download_pb = multi_progress.add(
-        indicatif::ProgressBar::new(total_packages_to_download as u64)
-            .with_style(default_progress_style())
-            .with_finish(indicatif::ProgressFinish::WithMessage("Done!".into()))
-            .with_prefix("downloading"),
-    );
-    download_pb.enable_steady_tick(Duration::from_millis(100));
+    let download_pb = if total_packages_to_download > 0 {
+        let pb = multi_progress.add(
+            indicatif::ProgressBar::new(total_packages_to_download as u64)
+                .with_style(default_progress_style())
+                .with_finish(indicatif::ProgressFinish::WithMessage("Done!".into()))
+                .with_prefix("downloading"),
+        );
+        pb.enable_steady_tick(Duration::from_millis(100));
+        Some(pb)
+    } else {
+        None
+    };
 
-    let total_operations = result.len();
+    // Create a progress bar to track all operations.
+    let total_operations = transaction.operations.len();
     let link_pb = multi_progress.add(
         indicatif::ProgressBar::new(total_operations as u64)
             .with_style(default_progress_style())
@@ -191,14 +221,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     );
     link_pb.enable_steady_tick(Duration::from_millis(100));
 
-    stream::iter(result)
+    // Perform all transactions operations in parallel.
+    stream::iter(transaction.operations)
         .map(Ok)
         .try_for_each_concurrent(50, |op| {
             let target_prefix = target_prefix.clone();
             let download_client = download_client.clone();
             let package_cache = &package_cache;
             let install_driver = &install_driver;
-            let download_pb = &download_pb;
+            let download_pb = download_pb.as_ref();
             let link_pb = &link_pb;
             let install_options = &install_options;
             async move {
@@ -220,72 +251,72 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Executes a single operation of a transaction on the environment.
+/// TODO: Move this into an object or something.
+#[allow(clippy::too_many_arguments)]
 async fn execute_operation(
-    target_prefix: &PathBuf,
+    target_prefix: &Path,
     download_client: Client,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
-    download_pb: &ProgressBar,
+    download_pb: Option<&ProgressBar>,
     link_pb: &ProgressBar,
-    op: PackageOperation,
+    op: TransactionOperation<PrefixRecord, RepoDataRecord>,
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
-    // Determine the type of operation to perform
-    match op.kind {
-        PackageOperationKind::Install => {
-            // Download or cache the package from the remote
-            let package_dir = package_cache
+    // Determine the package to install
+    let install_record = op.record_to_install();
+    let remove_record = op.record_to_remove();
+
+    // Create a future to remove the existing package
+    let remove_future = if let Some(remove_record) = remove_record {
+        remove_package_from_environment(target_prefix, remove_record).left_future()
+    } else {
+        ready(Ok(())).right_future()
+    };
+
+    // Create a future to download the package
+    let cached_package_dir_fut = if let Some(install_record) = install_record {
+        async {
+            // Make sure the package is available in the package cache.
+            let result = package_cache
                 .get_or_fetch_from_url(
-                    op.package.as_ref(),
-                    op.package.url.clone(),
+                    &install_record.package_record,
+                    install_record.url.clone(),
                     download_client.clone(),
                 )
-                .await?;
+                .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
+                .map_err(anyhow::Error::from)
+                .await;
 
-            // Increment the download progress bar
-            download_pb.inc(1);
-            if download_pb.length() == Some(download_pb.position()) {
-                download_pb.set_style(finished_progress_style());
+            // Increment the download progress bar.
+            if let Some(pb) = download_pb {
+                pb.inc(1);
+                if pb.length() == Some(pb.position()) {
+                    pb.set_style(finished_progress_style());
+                }
             }
 
-            install_package_to_environment(
-                &target_prefix,
-                package_dir,
-                op.package,
-                &install_driver,
-                install_options,
-            )
-            .await?;
+            result
         }
-        PackageOperationKind::Remove => {
-            remove_package_from_environment(&target_prefix, &op.package, &install_driver).await?;
-        }
-        PackageOperationKind::Reinstall => {
-            // Download or cache the package from the remote
-            let package_dir = package_cache
-                .get_or_fetch_from_url(
-                    op.package.as_ref(),
-                    op.package.url.clone(),
-                    download_client.clone(),
-                )
-                .await?;
+        .left_future()
+    } else {
+        ready(Ok(None)).right_future()
+    };
 
-            // Increment the download progress bar
-            download_pb.inc(1);
-            if download_pb.length() == Some(download_pb.position()) {
-                download_pb.set_style(finished_progress_style());
-            }
+    // Await removal and downloading concurrently
+    let (_, install_package) = tokio::try_join!(remove_future, cached_package_dir_fut)?;
 
-            remove_package_from_environment(&target_prefix, &op.package, &install_driver).await?;
-            install_package_to_environment(
-                &target_prefix,
-                package_dir,
-                op.package,
-                &install_driver,
-                install_options,
-            )
-            .await?;
-        }
+    // If there is a package to install, do that now.
+    if let Some((record, package_dir)) = install_package {
+        install_package_to_environment(
+            target_prefix,
+            package_dir,
+            record.clone(),
+            install_driver,
+            install_options,
+        )
+        .await?;
     }
 
     // Increment the link progress bar since we finished a step!
@@ -297,6 +328,8 @@ async fn execute_operation(
     Ok(())
 }
 
+/// Install a package into the environment and write a `conda-meta` file that contains information
+/// about how the file was linked.
 async fn install_package_to_environment(
     target_prefix: &Path,
     package_dir: PathBuf,
@@ -358,12 +391,37 @@ async fn install_package_to_environment(
     }
 }
 
+/// Completely remove the specified package from the environment.
 async fn remove_package_from_environment(
-    _target_prefix: &Path,
-    _package: &RepoDataRecord,
-    _install_driver: &InstallDriver,
+    target_prefix: &Path,
+    package: &PrefixRecord,
 ) -> anyhow::Result<()> {
-    // println!("removing {}", package.package_record.name);
+    // TODO: Take into account any clobbered files, they need to be restored.
+    // TODO: Can we also delete empty directories?
+
+    // Remove all entries
+    for paths in package.paths_data.paths.iter() {
+        match tokio::fs::remove_file(target_prefix.join(&paths.relative_path)).await {
+            Ok(_) => {}
+            Err(e) if e.kind() == ErrorKind::NotFound => {
+                // Simply ignore if the file is already gone.
+            }
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("failed to delete {}", paths.relative_path.display()))
+            }
+        }
+    }
+
+    // Remove the conda-meta file
+    let conda_meta_path = target_prefix.join("conda-meta").join(format!(
+        "{}-{}-{}.json",
+        package.repodata_record.package_record.name,
+        package.repodata_record.package_record.version,
+        package.repodata_record.package_record.build
+    ));
+    tokio::fs::remove_file(conda_meta_path).await?;
+
     Ok(())
 }
 
@@ -401,7 +459,7 @@ async fn fetch_repo_data_records_with_progress(
     let result = rattler_repodata_gateway::fetch::fetch_repo_data(
         channel.platform_url(platform),
         client,
-        &repodata_cache,
+        repodata_cache,
         FetchRepoDataOptions {
             download_progress: Some(Box::new(move |DownloadProgress { total, bytes }| {
                 download_progress_progress_bar.set_length(total.unwrap_or(bytes));
@@ -495,7 +553,10 @@ fn deserializing_progress_style() -> indicatif::ProgressStyle {
 /// Returns the style to use for a progressbar that is finished.
 fn finished_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
-        .template(&format!("{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}", console::style(console::Emoji("✔", "")).green()))
+        .template(&format!(
+            "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}",
+            console::style(console::Emoji("✔", "")).green()
+        ))
         .unwrap()
         .progress_chars("━━╾─")
 }
@@ -503,7 +564,10 @@ fn finished_progress_style() -> indicatif::ProgressStyle {
 /// Returns the style to use for a progressbar that is in error state.
 fn errored_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
-        .template(&format!("{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold.red}}", console::style(console::Emoji("❌", "")).red()))
+        .template(&format!(
+            "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold.red}}",
+            console::style(console::Emoji("❌", "")).red()
+        ))
         .unwrap()
         .progress_chars("━━╾─")
 }
@@ -511,4 +575,62 @@ fn errored_progress_style() -> indicatif::ProgressStyle {
 /// Returns the style to use for a progressbar that is indeterminate and simply shows a spinner.
 fn long_running_progress_style() -> indicatif::ProgressStyle {
     ProgressStyle::with_template("{spinner:.green} {msg}").unwrap()
+}
+
+/// Scans the conda-meta directory of an environment and returns all the [`PrefixRecord`]s found in
+/// there.
+async fn find_installed_packages(
+    target_prefix: &Path,
+    concurrency_limit: usize,
+) -> Result<Vec<PrefixRecord>, std::io::Error> {
+    let mut meta_futures =
+        FuturesUnordered::<JoinHandle<Result<PrefixRecord, std::io::Error>>>::new();
+    let mut result = Vec::new();
+    for entry in std::fs::read_dir(target_prefix.join("conda-meta"))
+        .into_iter()
+        .flatten()
+    {
+        let entry = entry?;
+        let path = entry.path();
+        if path.ends_with(".json") {
+            continue;
+        }
+
+        // If there are too many pending entries, wait for one to be finished
+        if meta_futures.len() >= concurrency_limit {
+            match meta_futures
+                .next()
+                .await
+                .expect("we know there are pending futures")
+            {
+                Ok(record) => result.push(record?),
+                Err(e) => {
+                    if let Ok(panic) = e.try_into_panic() {
+                        std::panic::resume_unwind(panic);
+                    }
+                    // The future was cancelled, we can simply return what we have.
+                    return Ok(result);
+                }
+            }
+        }
+
+        // Spawn loading on another thread
+        let future = tokio::task::spawn_blocking(move || PrefixRecord::from_path(path));
+        meta_futures.push(future);
+    }
+
+    while let Some(record) = meta_futures.next().await {
+        match record {
+            Ok(record) => result.push(record?),
+            Err(e) => {
+                if let Ok(panic) = e.try_into_panic() {
+                    std::panic::resume_unwind(panic);
+                }
+                // The future was cancelled, we can simply return what we have.
+                return Ok(result);
+            }
+        }
+    }
+
+    Ok(result)
 }

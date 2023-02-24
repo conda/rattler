@@ -4,16 +4,14 @@
 //! exposes the functionality through the [`SolverBackend::solve`] function.
 
 mod libsolv;
-mod package_operation;
 mod solver_backend;
 
 pub use libsolv::LibsolvSolver;
-pub use package_operation::{PackageOperation, PackageOperationKind};
 pub use solver_backend::SolverBackend;
 use std::ffi::NulError;
 
 use rattler_conda_types::GenericVirtualPackage;
-use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, RepoDataRecord};
 
 /// Represents an error when solving the dependencies for a given environment
 #[derive(thiserror::Error, Debug)]
@@ -37,35 +35,36 @@ pub enum SolveError {
     UnsupportedOperations(Vec<String>),
 }
 
-/// Represents the action that we want to perform on a given package, so the solver can take it into
-/// account (e.g. specifying [`RequestedAction::Install`] for a package that has already been
-/// installed will result in no operations, but specifying [`RequestedAction::Update`] will generate
-/// the necessary operations to update the package to a newer version if it exists and the update is
-/// compatible with the rest of the environment).
-#[derive(Debug, Copy, Clone)]
-pub enum RequestedAction {
-    /// The package is being installed
-    Install,
-    /// The package is being removed
-    Remove,
-    /// The package is being updated
-    Update,
-}
-
 /// Represents a dependency resolution problem, to be solved by one of the backends (currently only
 /// libsolv is supported)
+#[derive(Default)]
 pub struct SolverProblem {
-    /// All the available packages
+    /// All available packages
     pub available_packages: Vec<Vec<RepoDataRecord>>,
 
-    /// All the packages currently installed
-    pub installed_packages: Vec<PrefixRecord>,
+    /// Records of packages that are previously selected.
+    ///
+    /// If the solver encounters multiple variants of a single package (identified by its name), it
+    /// will sort the records ands select the best possible version. However, if there exists a
+    /// locked version it will prefer that variant instead. This is useful to reduce the number of
+    /// packages that are updated when installing new packages.
+    ///
+    /// Usually you add the currently installed packages or packages from a lock-file here.
+    pub locked_packages: Vec<RepoDataRecord>,
+
+    /// Records of packages that are previously selected and CANNOT be changed.
+    ///
+    /// If the solver encounters multiple variants of a single package (identified by its name), it
+    /// will sort the records ands select the best possible version. However, if there is a variant
+    /// available in the `pinned_packages` field it will always select that version no matter what
+    /// even if that means other packages have to be downgraded.
+    pub pinned_packages: Vec<RepoDataRecord>,
 
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
     /// The specs we want to solve
-    pub specs: Vec<(MatchSpec, RequestedAction)>,
+    pub specs: Vec<MatchSpec>,
 }
 
 #[cfg(test)]
@@ -184,8 +183,7 @@ mod test_libsolv {
         let problem = SolverProblem {
             available_packages,
             specs,
-            installed_packages: Vec::new(),
-            virtual_packages: Vec::new(),
+            ..Default::default()
         };
         let operations = LibsolvSolver.solve(problem).unwrap();
         for operation in operations.iter() {
@@ -435,7 +433,7 @@ mod test_libsolv {
             .collect();
 
         let problem = SolverProblem {
-            installed_packages,
+            locked_packages,
             virtual_packages,
             available_packages,
             specs,

@@ -3,7 +3,6 @@ use super::pool::FindInterned;
 use super::pool::Pool;
 use super::repo::RepoId;
 use super::solvable::SolvableId;
-use crate::package_operation::{PackageOperation, PackageOperationKind};
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -67,17 +66,17 @@ impl TransactionRef {
         unsafe { std::mem::transmute(self) }
     }
 
-    /// Returns the package operations derived from the transaction
+    /// Returns which packages should be installed in the environment
     ///
-    /// If the transaction contains libsolv operations that have no mapping to `PackageOperation`,
-    /// an error is returned containing their ids
-    pub fn get_package_operations(
+    /// If the transaction contains libsolv operations that are not "install" an error is returned
+    /// containing their ids
+    pub fn get_required_packages(
         &mut self,
         pool: &Pool,
         repo_mapping: &HashMap<RepoId, usize>,
         repodata_records: &[&[RepoDataRecord]],
-    ) -> Result<Vec<PackageOperation>, Vec<ffi::Id>> {
-        let mut package_operations = Vec::new();
+    ) -> Result<Vec<RepoDataRecord>, Vec<ffi::Id>> {
+        let mut required_packages = Vec::new();
         let mut unsupported_operations = Vec::new();
 
         // Get inner transaction type
@@ -109,46 +108,8 @@ impl TransactionRef {
                 let repodata_record = &repodata_records[repo_index][solvable_index];
 
                 match id_type as u32 {
-                    ffi::SOLVER_TRANSACTION_DOWNGRADED
-                    | ffi::SOLVER_TRANSACTION_UPGRADED
-                    | ffi::SOLVER_TRANSACTION_CHANGED => {
-                        package_operations.push(PackageOperation {
-                            package: repodata_record.clone(),
-                            kind: PackageOperationKind::Remove,
-                        });
-
-                        let solvable_offset =
-                            ffi::transaction_obs_pkg(self.as_ptr().as_ptr(), raw_id);
-                        let second_solvable = SolvableId(solvable_offset);
-                        let second_solvable = second_solvable.resolve(pool);
-                        let second_solvable_index =
-                            second_solvable.get_usize(solvable_index_id).unwrap();
-                        let second_repo_index = repo_mapping[&second_solvable.repo().id()];
-                        let second_repodata_record =
-                            &repodata_records[second_repo_index][second_solvable_index];
-
-                        package_operations.push(PackageOperation {
-                            package: second_repodata_record.clone(),
-                            kind: PackageOperationKind::Install,
-                        });
-                    }
-                    ffi::SOLVER_TRANSACTION_REINSTALLED => {
-                        package_operations.push(PackageOperation {
-                            package: repodata_record.clone(),
-                            kind: PackageOperationKind::Reinstall,
-                        });
-                    }
                     ffi::SOLVER_TRANSACTION_INSTALL => {
-                        package_operations.push(PackageOperation {
-                            package: repodata_record.clone(),
-                            kind: PackageOperationKind::Install,
-                        });
-                    }
-                    ffi::SOLVER_TRANSACTION_ERASE => {
-                        package_operations.push(PackageOperation {
-                            package: repodata_record.clone(),
-                            kind: PackageOperationKind::Remove,
-                        });
+                        required_packages.push(repodata_record.clone());
                     }
                     ffi::SOLVER_TRANSACTION_IGNORE => {}
                     _ => {
@@ -162,6 +123,6 @@ impl TransactionRef {
             return Err(unsupported_operations);
         }
 
-        Ok(package_operations)
+        Ok(required_packages)
     }
 }

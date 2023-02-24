@@ -161,11 +161,12 @@ impl PrefixRecord {
         writer: impl std::io::Write,
         pretty: bool,
     ) -> Result<(), std::io::Error> {
-        Ok(if pretty {
+        if pretty {
             serde_json::to_writer_pretty(BufWriter::new(writer), self)?
         } else {
             serde_json::to_writer(BufWriter::new(writer), self)?
-        })
+        }
+        Ok(())
     }
 }
 

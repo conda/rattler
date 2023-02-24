@@ -6,7 +6,7 @@ use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use sha2::Sha256;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
@@ -45,6 +45,10 @@ pub struct LinkedFile {
 
     /// The size of the final file in bytes.
     pub file_size: u64,
+
+    /// The relative path of the file in the destination directory. This might be different from the
+    /// relative path in the source directory for python noarch packages.
+    pub relative_path: PathBuf,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -54,6 +58,7 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
+#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
 pub fn link_file(
     noarch_type: NoArchType,
     path_json_entry: &PathsEntry,
@@ -78,7 +83,7 @@ pub fn link_file(
     } else {
         path_json_entry.relative_path.as_path().into()
     };
-    let destination_path = target_dir.join(destination_relative_path);
+    let destination_path = target_dir.join(&destination_relative_path);
 
     // Ensure that all directories up to the path exist.
     if let Some(parent) = destination_path.parent() {
@@ -225,6 +230,7 @@ pub fn link_file(
         clobbered,
         sha256,
         file_size,
+        relative_path: destination_relative_path.into_owned(),
     })
 }
 
