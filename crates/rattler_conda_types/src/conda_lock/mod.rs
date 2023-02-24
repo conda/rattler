@@ -258,6 +258,7 @@ mod test {
     use super::PackageHashes;
     use crate::conda_lock::CondaLock;
     use crate::Platform;
+    use insta::assert_yaml_snapshot;
     use serde_yaml::from_str;
     use std::path::Path;
 
@@ -328,26 +329,22 @@ mod test {
         let conda_lock = CondaLock::from_path(Path::new(&lock_file_path())).unwrap();
         // Make sure that we have parsed some packages
         assert!(!conda_lock.package.is_empty());
-        assert_eq!(
+        insta::with_settings!({sort_maps => true}, {
+        assert_yaml_snapshot!(
             conda_lock
                 .packages_for_platform(Platform::Linux64)
                 .collect::<Vec<_>>()
-                .len(),
-            254
         );
-        assert_eq!(
+        assert_yaml_snapshot!(
             conda_lock
                 .packages_for_platform(Platform::Osx64)
                 .collect::<Vec<_>>()
-                .len(),
-            180
         );
-        assert_eq!(
+        assert_yaml_snapshot!(
             conda_lock
                 .packages_for_platform(Platform::OsxArm64)
                 .collect::<Vec<_>>()
-                .len(),
-            183
         );
+            })
     }
 }
