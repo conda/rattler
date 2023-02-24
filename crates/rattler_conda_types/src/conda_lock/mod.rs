@@ -212,28 +212,28 @@ fn default_category() -> String {
 #[derive(Serialize, Deserialize)]
 pub struct LockedDependency {
     /// Package name of dependency
-   pub  name: String,
-     /// Locked version
-   pub  version: String,
-     /// Pip or Conda managed
-   pub  manager: Manager,
-     /// What platform is this package for
-   pub  platform: Platform,
-     /// What are its own dependencies mapping name to version constraint
-   pub  dependencies: HashMap<String, VersionConstraint>,
-     /// URL to find it at
-   pub  url: Url,
-     /// Hashes of the package
-   pub  hash: PackageHashes,
-     /// Is the dependency optional
-   pub  optional: bool,
-     /// Used for pip packages
-   #[serde(default = "default_category")]
-     pub category: String,
-     /// ???
-   pub  source: Option<Url>,
-     /// Build string
-   pub  build: Option<String>,
+    pub name: String,
+    /// Locked version
+    pub version: String,
+    /// Pip or Conda managed
+    pub manager: Manager,
+    /// What platform is this package for
+    pub platform: Platform,
+    /// What are its own dependencies mapping name to version constraint
+    pub dependencies: HashMap<String, VersionConstraint>,
+    /// URL to find it at
+    pub url: Url,
+    /// Hashes of the package
+    pub hash: PackageHashes,
+    /// Is the dependency optional
+    pub optional: bool,
+    /// Used for pip packages
+    #[serde(default = "default_category")]
+    pub category: String,
+    /// ???
+    pub source: Option<Url>,
+    /// Build string
+    pub build: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
