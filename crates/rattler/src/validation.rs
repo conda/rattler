@@ -34,8 +34,8 @@ pub enum PackageValidationError {
     #[error("the path '{0}' seems to be corrupted")]
     CorruptedEntry(PathBuf, #[source] PackageEntryValidationError),
 
-    #[error("failed to verify index.json")]
-    InvalidIndexJson(#[source] std::io::Error),
+    #[error("failed to read 'index.json'")]
+    ReadIndexJsonError(#[source] std::io::Error),
 }
 
 /// An error that indicates that a specific file in a package archive directory seems to be corrupted.
@@ -76,7 +76,7 @@ pub fn validate_package_directory(
 ) -> Result<(IndexJson, PathsJson), PackageValidationError> {
     // Validate that there is a valid IndexJson
     let index_json = IndexJson::from_package_directory(package_dir)
-        .map_err(PackageValidationError::InvalidIndexJson)?;
+        .map_err(PackageValidationError::ReadIndexJsonError)?;
 
     // Read the 'paths.json' file which describes all files that should be present. If the file
     // could not be found try reconstructing the paths information from deprecated files in the
@@ -330,7 +330,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         assert_matches!(
             validate_package_directory(temp_dir.path()),
-            Err(PackageValidationError::InvalidIndexJson(_))
+            Err(PackageValidationError::ReadIndexJsonError(_))
         );
     }
 }
