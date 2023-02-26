@@ -9,6 +9,7 @@ pub mod pool;
 pub mod queue;
 pub mod repo;
 pub mod solvable;
+pub mod solve_goal;
 pub mod solver;
 pub mod transaction;
 

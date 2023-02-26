@@ -1,9 +1,9 @@
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
-use std::ffi::NulError;
 use std::{
     cmp::Ordering,
     collections::HashMap,
     ffi::CString,
+    ffi::NulError,
     marker::PhantomData,
     ops::{Deref, DerefMut},
     os::raw::c_ulonglong,
@@ -71,7 +71,7 @@ impl RepoRef {
         &self,
         pool: &Pool,
         repo_datas: &[RepoDataRecord],
-    ) -> Result<(), NulError> {
+    ) -> Result<Vec<SolvableId>, NulError> {
         let data = unsafe { ffi::repo_add_repodata(self.as_ptr().as_ptr(), 0) };
 
         // Get all the IDs
@@ -94,6 +94,7 @@ impl RepoRef {
         let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
 
         // Iterate over all packages
+        let mut solvable_ids = Vec::new();
         for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
             let record = &repo_data.package_record;
 
@@ -306,12 +307,15 @@ impl RepoRef {
             } else {
                 tracing::warn!("unknown package extension: {}", &repo_data.file_name);
             }
+
+            // Store the solvable id
+            solvable_ids.push(solvable_id);
         }
 
         // TODO: What does this do?
         unsafe { ffi::repo_internalize(self.as_ptr().as_ptr()) };
 
-        Ok(())
+        Ok(solvable_ids)
     }
 
     /// Adds virtual packages to this instance

@@ -4,11 +4,12 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
+use crate::libsolv::wrapper::queue::Queue;
+use crate::libsolv::wrapper::solve_goal::SolveGoal;
 use anyhow::anyhow;
 
 use super::ffi;
 use super::flags::SolverFlag;
-use super::queue::Queue;
 use super::transaction::Transaction;
 
 /// Wraps a pointer to an `ffi::Solver` which is freed when the instance is dropped.
@@ -77,11 +78,11 @@ impl SolverRef {
         unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag.inner(), i32::from(value)) };
     }
 
-    /// Solves all the problems in the `queue`, or returns an error if problems remain.
-    pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<()> {
+    /// Solves all the problems in the `goal`, or returns an error if problems remain.
+    pub fn solve(&mut self, goal: &mut SolveGoal) -> anyhow::Result<()> {
         let result = unsafe {
             // Run the solve method
-            ffi::solver_solve(self.as_ptr().as_mut(), queue.as_inner_mut());
+            ffi::solver_solve(self.as_ptr().as_mut(), goal.as_inner_mut());
             // If there are no problems left then the solver is done
             ffi::solver_problem_count(self.as_ptr().as_mut()) == 0
         };

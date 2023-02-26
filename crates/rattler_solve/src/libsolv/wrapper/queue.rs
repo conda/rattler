@@ -1,11 +1,8 @@
 use super::ffi;
-use super::flags::SolvableFlags;
 use std::marker::PhantomData;
-use std::os::raw::c_int;
 
-/// Wrapper for libsolv queue type. This type is used by libsolv in the solver to solve for
-/// different conda matchspecs. This is a type-safe implementation that is coupled to a specific Id
-/// type
+/// Wrapper for libsolv queue type. This type is used by to gather items of a specific type. This
+/// is a type-safe implementation that is coupled to a specific Id type.
 pub struct Queue<T> {
     queue: ffi::Queue,
     // Makes this queue typesafe
@@ -48,11 +45,6 @@ impl<T> Queue<T> {
     pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
         &mut self.queue as *mut ffi::Queue
     }
-
-    /// Returns the ffi::Queue as a const pointer
-    pub fn as_inner_ptr(&self) -> *const ffi::Queue {
-        &self.queue as *const ffi::Queue
-    }
 }
 
 impl<T: Into<ffi::Id>> Queue<T> {
@@ -60,18 +52,6 @@ impl<T: Into<ffi::Id>> Queue<T> {
     pub fn push_id(&mut self, id: T) {
         unsafe {
             ffi::queue_insert(self.as_inner_mut(), self.queue.count, id.into());
-        }
-    }
-
-    /// Push and id and flag into the queue
-    pub fn push_id_with_flags(&mut self, id: T, flags: SolvableFlags) {
-        unsafe {
-            ffi::queue_insert2(
-                self.as_inner_mut(),
-                self.queue.count,
-                flags.inner() as c_int,
-                id.into(),
-            );
         }
     }
 }
