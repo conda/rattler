@@ -10,7 +10,7 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
-use rattler_conda_types::package::{PackageFile, PathType, PathsEntry, PathsJson};
+use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
 use rattler_digest::{compute_file_digest, parse_digest_from_hex};
 use std::{
     fs::Metadata,
@@ -33,6 +33,9 @@ pub enum PackageValidationError {
 
     #[error("the path '{0}' seems to be corrupted")]
     CorruptedEntry(PathBuf, #[source] PackageEntryValidationError),
+
+    #[error("failed to read 'index.json'")]
+    ReadIndexJsonError(#[source] std::io::Error),
 }
 
 /// An error that indicates that a specific file in a package archive directory seems to be corrupted.
@@ -68,7 +71,13 @@ pub enum PackageEntryValidationError {
 ///
 /// If validation succeeds the parsed [`PathsJson`] object is returned which contains information
 /// about the files in the archive.
-pub fn validate_package_directory(package_dir: &Path) -> Result<PathsJson, PackageValidationError> {
+pub fn validate_package_directory(
+    package_dir: &Path,
+) -> Result<(IndexJson, PathsJson), PackageValidationError> {
+    // Validate that there is a valid IndexJson
+    let index_json = IndexJson::from_package_directory(package_dir)
+        .map_err(PackageValidationError::ReadIndexJsonError)?;
+
     // Read the 'paths.json' file which describes all files that should be present. If the file
     // could not be found try reconstructing the paths information from deprecated files in the
     // package directory.
@@ -90,7 +99,7 @@ pub fn validate_package_directory(package_dir: &Path) -> Result<PathsJson, Packa
     validate_package_directory_from_paths(package_dir, &paths)
         .map_err(|(path, err)| PackageValidationError::CorruptedEntry(path, err))?;
 
-    Ok(paths)
+    Ok((index_json, paths))
 }
 
 /// Determine whether the files in the specified directory match wat is expected according to the
@@ -321,7 +330,7 @@ mod test {
         let temp_dir = tempfile::tempdir().unwrap();
         assert_matches!(
             validate_package_directory(temp_dir.path()),
-            Err(PackageValidationError::MetadataMissing)
+            Err(PackageValidationError::ReadIndexJsonError(_))
         );
     }
 }
