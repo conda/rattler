@@ -2,7 +2,7 @@ use anyhow::Context;
 use futures::stream::FuturesUnordered;
 use futures::TryFutureExt;
 use futures::{stream, FutureExt, StreamExt, TryStreamExt};
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{HumanBytes, ProgressBar, ProgressState, ProgressStyle};
 use rattler::install::{
     link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation,
 };
@@ -16,6 +16,7 @@ use rattler_solve::{SolverBackend, SolverProblem};
 use reqwest::Client;
 use std::borrow::Cow;
 use std::env;
+use std::fmt::Write;
 use std::future::ready;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -531,14 +532,23 @@ fn friendly_channel_name(channel: &Channel) -> String {
 /// Returns the style to use for a progressbar that is currently in progress.
 fn default_bytes_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
-        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{wide_bar:.bright.yellow/dim.white}] {bytes:>8} @ {bytes_per_sec:8}").unwrap()
+        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {bytes:>8} @ {smoothed_bytes_per_sec:8}").unwrap()
         .progress_chars("━━╾─")
+        .with_key(
+            "smoothed_bytes_per_sec",
+            |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
+                (pos, elapsed_ms) if elapsed_ms > 0 => {
+                    write!(w, "{:.2}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap()
+                }
+                _ => write!(w, "-").unwrap(),
+            },
+        )
 }
 
 /// Returns the style to use for a progressbar that is currently in progress.
 fn default_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
-        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{wide_bar:.bright.yellow/dim.white}] {pos:>7}/{len:7}").unwrap()
+        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {pos:>7}/{len:7}").unwrap()
         .progress_chars("━━╾─")
 }
 
@@ -555,7 +565,7 @@ fn finished_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
         .template(&format!(
             "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold}}",
-            console::style(console::Emoji("✔", "")).green()
+            console::style(console::Emoji("✔", " ")).green()
         ))
         .unwrap()
         .progress_chars("━━╾─")
@@ -566,7 +576,7 @@ fn errored_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
         .template(&format!(
             "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold.red}}",
-            console::style(console::Emoji("❌", "")).red()
+            console::style(console::Emoji("❌", " ")).red()
         ))
         .unwrap()
         .progress_chars("━━╾─")
