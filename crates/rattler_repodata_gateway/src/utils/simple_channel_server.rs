@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, routing::get_service};
+use axum::routing::get_service;
 use std::net::SocketAddr;
 use std::path::Path;
 use tokio::sync::oneshot;
@@ -23,14 +23,7 @@ impl SimpleChannelServer {
         // adds the behavior that a file gzip compressed file called `<path>.gz` is preferred over
         // the original file. This is very useful because we can store gzipped compressed files in
         // the repository instead of the full-blown jsons.
-        let service = get_service(ServeDir::new(path).precompressed_gzip()).handle_error(
-            |error: std::io::Error| async move {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Unhandled internal error: {}", error),
-                )
-            },
-        );
+        let service = get_service(ServeDir::new(path).precompressed_gzip());
 
         // Create a router that will serve the static files from the channel.
         let app = axum::Router::new().fallback_service(service);

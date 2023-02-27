@@ -1,14 +1,6 @@
-use std::ffi::CStr;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
-
 use super::ffi;
 use super::pool::{Pool, StringId};
-use super::repo::RepoRef;
-
-/// Solvable in libsolv
-#[repr(transparent)]
-pub struct Solvable<'repo>(NonNull<ffi::Solvable>, PhantomData<&'repo ffi::Repo>);
+use std::ptr::NonNull;
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
 #[derive(Copy, Clone)]
@@ -21,60 +13,29 @@ impl From<SolvableId> for ffi::Id {
 }
 
 impl SolvableId {
-    /// Resolves to the interned type returns a Solvable
-    pub fn resolve(&self, pool: &Pool) -> Solvable {
-        // Safe because the new-type wraps the ffi::id and cant be created otherwise
-        unsafe {
-            // Re-implement pool_id2solvable, as it's a static inline function, we can't use it :(
-            let solvables = pool.as_ref().solvables;
-            // Apparently the solvable is offset by the id from the first solvable
-            let solvable = solvables.offset(self.0 as isize);
-            Solvable(
-                NonNull::new(solvable).expect("solvable cannot be null"),
-                PhantomData::default(),
-            )
+    /// Resolves the id to a pointer to the solvable
+    ///
+    /// Panics if the solvable is not found in the pool
+    pub fn resolve_raw(self, pool: &Pool) -> NonNull<ffi::Solvable> {
+        let pool = pool.as_ref();
+
+        // Internally, the id is just an offset to be applied on top of `pool.solvables`
+        if self.0 < pool.nsolvables {
+            // Safe because we just checked the offset is within bounds
+            let solvable_ptr = unsafe { pool.solvables.offset(self.0 as isize) };
+            NonNull::new(solvable_ptr).expect("solvable ptr was null")
+        } else {
+            panic!("invalid solvable id!")
         }
     }
 }
 
-impl<'repo> Solvable<'repo> {
-    /// Returns a pointer to the wrapped `ffi::Solvable`
-    pub(super) fn as_ptr(&self) -> NonNull<ffi::Solvable> {
-        self.0
-    }
-
-    /// Looks up a string value associated with this instance with the given `key`.
-    pub fn lookup_str(&self, key: StringId) -> Option<&str> {
-        let str = unsafe { ffi::solvable_lookup_str(self.0.as_ptr(), key.into()) };
-        if str.is_null() {
-            None
-        } else {
-            unsafe {
-                Some(
-                    CStr::from_ptr(str)
-                        .to_str()
-                        .expect("could not decode string"),
-                )
-            }
-        }
-    }
-
-    /// Get the repo to which this solvable belongs.
-    pub fn repo(&self) -> &RepoRef {
-        // Safe because a `RepoRef` is a wrapper around `ffi::Repo`
-        unsafe { &*(self.as_ptr().as_ref().repo as *const RepoRef) }
-    }
-
-    pub fn set_usize(&self, key: StringId, x: usize) {
-        unsafe { ffi::solvable_set_num(self.as_ptr().as_ptr(), key.0, x as u64) };
-    }
-
-    pub fn get_usize(&self, key: StringId) -> Option<usize> {
-        let value = unsafe { ffi::solvable_lookup_num(self.as_ptr().as_ptr(), key.0, u64::MAX) };
-        if value == u64::MAX {
-            None
-        } else {
-            Some(value as usize)
-        }
+/// Gets a number associated to this solvable
+pub fn lookup_num(solvable: *mut ffi::Solvable, key: StringId) -> Option<u64> {
+    let value = unsafe { ffi::solvable_lookup_num(solvable as *mut _, key.0, u64::MAX) };
+    if value == u64::MAX {
+        None
+    } else {
+        Some(value)
     }
 }

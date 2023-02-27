@@ -34,22 +34,18 @@ impl Default for SolveGoal {
 /// This drop implementation drops the internal libsolv queue
 impl Drop for SolveGoal {
     fn drop(&mut self) {
-        // Safe because this pointer exists
+        // Safe because we know that the queue is never freed manually
         unsafe {
-            ffi::queue_free(self.as_inner_mut());
+            ffi::queue_free(self.raw_ptr());
         }
     }
 }
 
 impl SolveGoal {
-    /// Returns the ffi::Queue as a mutable pointer
-    pub fn as_inner_mut(&mut self) -> *mut ffi::Queue {
+    /// Returns a raw pointer to the wrapped `ffi::Repo`, to be used for calling ffi functions
+    /// that require access to the repo (and for nothing else)
+    pub(super) fn raw_ptr(&mut self) -> *mut ffi::Queue {
         &mut self.queue as *mut ffi::Queue
-    }
-
-    /// Returns the ffi::Queue as a const pointer
-    pub fn as_inner_ptr(&self) -> *const ffi::Queue {
-        &self.queue as *const ffi::Queue
     }
 }
 
@@ -95,12 +91,7 @@ impl SolveGoal {
     /// Push and id and flag into the queue
     fn push_id_with_flags(&mut self, id: impl Into<ffi::Id>, flags: u32) {
         unsafe {
-            ffi::queue_insert2(
-                self.as_inner_mut(),
-                self.queue.count,
-                flags as c_int,
-                id.into(),
-            );
+            ffi::queue_insert2(self.raw_ptr(), self.queue.count, flags as c_int, id.into());
         }
     }
 }

@@ -1,20 +1,23 @@
+use crate::libsolv::input::{add_repodata_records, add_virtual_packages};
+use crate::libsolv::output::get_required_packages;
+use crate::libsolv::wrapper::repo::Repo;
+use crate::{SolveError, SolverBackend, SolverProblem};
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
-
-mod wrapper;
-
-use crate::{SolveError, SolverBackend, SolverProblem};
 use wrapper::{
     flags::SolverFlag,
-    pool::Intern,
     pool::{Pool, Verbosity},
     solve_goal::SolveGoal,
 };
 
-/// A [`SolverBackend`] implemented using the `libsolv` library
-pub struct LibsolvSolver;
+mod input;
+mod output;
+mod wrapper;
 
-impl SolverBackend for LibsolvSolver {
+/// A [`SolverBackend`] implemented using the `libsolv` library
+pub struct LibsolvBackend;
+
+impl SolverBackend for LibsolvBackend {
     fn solve(&mut self, problem: SolverProblem) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
@@ -26,8 +29,8 @@ impl SolverBackend for LibsolvSolver {
         pool.set_debug_level(Verbosity::Low);
 
         // Add virtual packages
-        let repo = pool.create_repo("virtual_packages");
-        repo.add_virtual_packages(&pool, &problem.virtual_packages)
+        let repo = Repo::new(&pool, "virtual_packages");
+        add_virtual_packages(&pool, &repo, &problem.virtual_packages)
             .map_err(SolveError::ErrorAddingInstalledPackages)?;
 
         // Mark the virtual packages as installed.
@@ -42,8 +45,8 @@ impl SolverBackend for LibsolvSolver {
             }
 
             let channel_name = &repodata_records[0].channel;
-            let repo = pool.create_repo(channel_name);
-            repo.add_repodata_records(&pool, repodata_records)
+            let repo = Repo::new(&pool, channel_name);
+            add_repodata_records(&pool, &repo, repodata_records)
                 .map_err(SolveError::ErrorAddingRepodata)?;
 
             // Keep our own info about repodata_records
@@ -55,20 +58,18 @@ impl SolverBackend for LibsolvSolver {
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo = pool.create_repo("installed");
-        let installed_solvables = repo
-            .add_repodata_records(&pool, &problem.locked_packages)
-            .map_err(SolveError::ErrorAddingInstalledPackages)?;
+        let repo = Repo::new(&pool, "locked");
+        let installed_solvables = add_repodata_records(&pool, &repo, &problem.locked_packages)
+            .map_err(SolveError::ErrorAddingRepodata)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
         all_repodata_records.push(problem.locked_packages.as_slice());
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo = pool.create_repo("pinned");
-        let pinned_solvables = repo
-            .add_repodata_records(&pool, &problem.pinned_packages)
-            .map_err(SolveError::ErrorAddingInstalledPackages)?;
+        let repo = Repo::new(&pool, "pinned");
+        let pinned_solvables = add_repodata_records(&pool, &repo, &problem.pinned_packages)
+            .map_err(SolveError::ErrorAddingRepodata)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -92,7 +93,7 @@ impl SolverBackend for LibsolvSolver {
 
         // Specify the matchspec requests
         for spec in problem.specs {
-            let id = spec.intern(&pool);
+            let id = pool.intern_matchspec(&spec);
             goal.install(id, false)
         }
 
@@ -100,22 +101,21 @@ impl SolverBackend for LibsolvSolver {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
-        if solver.solve(&mut goal).is_err() {
-            return Err(SolveError::Unsolvable);
-        }
 
-        // Construct a transaction from the solver
-        let mut transaction = solver.create_transaction();
-        let required_records = transaction
-            .get_required_packages(&pool, &repo_mapping, &all_repodata_records)
-            .map_err(|unsupported_operation_ids| {
-                SolveError::UnsupportedOperations(
-                    unsupported_operation_ids
-                        .into_iter()
-                        .map(|id| format!("libsolv operation {id}"))
-                        .collect(),
-                )
-            })?;
+        let transaction = solver
+            .solve(&mut goal)
+            .map_err(|_| SolveError::Unsolvable)?;
+
+        let required_records =
+            get_required_packages(&pool, &repo_mapping, &transaction, &all_repodata_records)
+                .map_err(|unsupported_operation_ids| {
+                    SolveError::UnsupportedOperations(
+                        unsupported_operation_ids
+                            .into_iter()
+                            .map(|id| format!("libsolv operation {id}"))
+                            .collect(),
+                    )
+                })?;
 
         Ok(required_records)
     }

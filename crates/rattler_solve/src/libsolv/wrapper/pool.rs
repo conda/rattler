@@ -1,4 +1,4 @@
-use super::{c_string, ffi, repo::Repo, solver::Solver};
+use super::{c_string, ffi, repo::Repo, solvable::SolvableId, solver::Solver};
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
 use std::{
@@ -12,6 +12,10 @@ use std::{
 ///
 /// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
 /// when the Pool is dropped
+///
+/// Additional note: interning reduces memory usage by only storing unique instances of the provided
+/// data, which then share the same `Id`. This `Pool` releases memory when explicitly asked and upon
+/// destruction
 #[repr(transparent)]
 pub struct Pool(NonNull<ffi::Pool>);
 
@@ -27,8 +31,8 @@ impl Drop for Pool {
     fn drop(&mut self) {
         // Safe because we know that the pool is never freed manually
         unsafe {
-            // Free the registered Rust callback
-            let ptr = (*self.0.as_ptr()).debugcallbackdata;
+            // Free the registered Rust callback, if present
+            let ptr = (*self.raw_ptr()).debugcallbackdata;
             if !ptr.is_null() {
                 let _: Box<BoxedLogCallback> = Box::from_raw(ptr as *mut _);
             }
@@ -42,6 +46,7 @@ impl Drop for Pool {
 /// A boxed closure used for log callbacks
 type BoxedLogCallback = Box<dyn FnMut(&str, i32) + 'static>;
 
+/// The callback that is actually registered on the pool (it must be a function pointer)
 #[no_mangle]
 extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
@@ -50,11 +55,10 @@ extern "C" fn log_callback(
     str: *const i8,
 ) {
     unsafe {
-        // Get the box back
+        // We have previously stored a `BoxedLogCallback` in `user_data`, so now we can retrieve it
+        // and run it
         let closure: &mut BoxedLogCallback = &mut *(user_data as *mut BoxedLogCallback);
-        // Convert the string
         let str = CStr::from_ptr(str);
-        // Call the callback
         closure(str.to_str().expect("utf-8 error"), flags);
     }
 }
@@ -68,20 +72,37 @@ pub enum Verbosity {
 }
 
 impl Pool {
+    /// Returns a raw pointer to the wrapped `ffi::Pool`, to be used for calling ffi functions
+    /// that require access to the pool (and for nothing else)
+    pub(super) fn raw_ptr(&self) -> *mut ffi::Pool {
+        self.0.as_ptr()
+    }
+
     /// Returns a reference to the wrapped `ffi::Pool`.
     pub fn as_ref(&self) -> &ffi::Pool {
         // Safe because the pool is guaranteed to exist until it is dropped
         unsafe { self.0.as_ref() }
     }
 
+    /// Swaps two solvables inside the libsolv pool
+    pub fn swap_solvables(&self, s1: SolvableId, s2: SolvableId) {
+        let pool = self.as_ref();
+
+        // Safe because `pool.solvables` is the start of an array of length `pool.nsolvables`
+        let solvables =
+            unsafe { std::slice::from_raw_parts_mut(pool.solvables, pool.nsolvables as _) };
+
+        solvables.swap(s1.0 as _, s2.0 as _);
+    }
+
     /// Interns a REL_EQ relation between `id1` and `id2`
     pub fn rel_eq(&self, id1: Id, id2: Id) -> Id {
-        unsafe { ffi::pool_rel2id(self.0.as_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
+        unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
     }
 
     /// Interns the provided matchspec
     pub fn conda_matchspec(&self, matchspec: &CStr) -> Id {
-        unsafe { ffi::pool_conda_matchspec(self.0.as_ptr(), matchspec.as_ptr()) }
+        unsafe { ffi::pool_conda_matchspec(self.raw_ptr(), matchspec.as_ptr()) }
     }
 
     /// Add debug callback to the pool
@@ -92,7 +113,7 @@ impl Pool {
             // Double box because file because the Box<Fn> is a fat pointer and have a different
             // size compared to c_void
             ffi::pool_setdebugcallback(
-                self.0.as_ptr(),
+                self.raw_ptr(),
                 Some(log_callback),
                 Box::into_raw(box_callback) as *mut _,
             );
@@ -108,92 +129,73 @@ impl Pool {
             Verbosity::Extreme => 3,
         };
         unsafe {
-            ffi::pool_setdebuglevel(self.0.as_ptr(), verbosity);
+            ffi::pool_setdebuglevel(self.raw_ptr(), verbosity);
         }
     }
 
     /// Set the provided repo to be considered as a source of installed packages
+    ///
+    /// Panics if the repo does not belong to this pool
     pub fn set_installed(&self, repo: &Repo) {
-        unsafe { ffi::pool_set_installed(self.0.as_ptr(), repo.as_ptr().as_ptr()) }
-    }
-
-    /// Create repo from a pool
-    pub fn create_repo<S: AsRef<str>>(&self, url: S) -> Repo {
-        unsafe {
-            let c_url = c_string(url);
-            Repo::new(
-                NonNull::new(ffi::repo_create(self.0.as_ptr(), c_url.as_ptr()))
-                    .expect("libsolv repo_create returned nullptr"),
-            )
-        }
+        repo.ensure_belongs_to_pool(self);
+        unsafe { ffi::pool_set_installed(self.raw_ptr(), repo.raw_ptr()) }
     }
 
     /// Create the solver
     pub fn create_solver(&self) -> Solver {
-        let solver = NonNull::new(unsafe { ffi::solver_create(self.0.as_ptr()) })
+        let solver = NonNull::new(unsafe { ffi::solver_create(self.raw_ptr()) })
             .expect("solver_create returned a nullptr");
-        Solver::new(solver)
+
+        // Safe because we know the solver ptr is valid
+        unsafe { Solver::new(self, solver) }
     }
 
     /// Create the whatprovides on the pool which is needed for solving
     pub fn create_whatprovides(&self) {
         unsafe {
-            ffi::pool_createwhatprovides(self.0.as_ptr());
+            ffi::pool_createwhatprovides(self.raw_ptr());
         }
     }
-}
 
-/// Interns string like types into a `Pool` returning a `StringId`
-fn intern_str<T: AsRef<str>>(pool: &Pool, str: T) -> StringId {
-    let c_str = CString::new(str.as_ref()).expect("the provided string contained a NUL byte");
-    let length = c_str.as_bytes().len();
-    let c_str = c_str.as_c_str();
-
-    // Safe because the function accepts any string
-    unsafe {
-        StringId(ffi::pool_strn2id(
-            pool.0.as_ptr(),
-            c_str.as_ptr(),
-            length.try_into().expect("string too large"),
-            1,
-        ))
+    pub fn intern_matchspec(&self, match_spec: &MatchSpec) -> MatchSpecId {
+        let c_str = c_string(match_spec.to_string());
+        unsafe { MatchSpecId(ffi::pool_conda_matchspec(self.raw_ptr(), c_str.as_ptr())) }
     }
-}
 
-/// Finds a previously interned string or returns `None` if it wasn't found.
-fn find_intern_str<T: AsRef<str>>(pool: &Pool, str: T) -> Option<StringId> {
-    let c_str = CString::new(str.as_ref()).expect("the provided string contained a NUL byte");
-    let length = c_str.as_bytes().len();
-    let c_str = c_str.as_c_str();
+    /// Interns string like types into a `Pool` returning a `StringId`
+    pub fn intern_str<T: Into<Vec<u8>>>(&self, str: T) -> StringId {
+        let c_str = CString::new(str).expect("the provided string contained a NUL byte");
+        let length = c_str.as_bytes().len();
+        let c_str = c_str.as_c_str();
 
-    // Safe because the function accepts any string
-    unsafe {
-        let id = ffi::pool_strn2id(
-            pool.0.as_ptr(),
-            c_str.as_ptr(),
-            length.try_into().expect("string too large"),
-            0,
-        );
-        (id != 0).then_some(StringId(id))
+        // Safe because the function accepts any string
+        unsafe {
+            StringId(ffi::pool_strn2id(
+                self.raw_ptr(),
+                c_str.as_ptr(),
+                length.try_into().expect("string too large"),
+                1,
+            ))
+        }
     }
-}
 
-/// Interns an instance of `Self` into a [`Pool`] returning a handle (or `Id`) to the actual data.
-/// Interning reduces memory usage by pooling data together which is considered to be equal, sharing
-/// the same `Id`. However, a `Pool` also only releases memory when explicitly asked to do so or on
-/// destruction.
-pub trait Intern {
-    type Id;
+    /// Finds a previously interned string or returns `None` if it wasn't found
+    pub fn find_interned_str<T: AsRef<str>>(&self, str: T) -> Option<StringId> {
+        let c_str = CString::new(str.as_ref()).expect("the provided string contained a NUL byte");
+        let length = c_str.as_bytes().len();
+        let c_str = c_str.as_c_str();
 
-    /// Interns the type in the [`Pool`]
-    fn intern(&self, pool: &Pool) -> Self::Id;
-}
-
-/// Enables retrieving the `Id` of previously interned instances of `Self` through the `Intern`
-/// trait.
-pub trait FindInterned: Intern {
-    /// Finds a previously interned instance in the specified [`Pool`]
-    fn find_interned_id(&self, pool: &Pool) -> Option<Self::Id>;
+        // Safe because the function accepts any string
+        unsafe {
+            let id = ffi::pool_strn2id(
+                self.raw_ptr(),
+                c_str.as_ptr(),
+                length.try_into().expect("string too large"),
+                0,
+            );
+            (id != 0).then_some(StringId(id))
+        }
+    }
 }
 
 /// Wrapper for the StringId of libsolv
@@ -201,68 +203,22 @@ pub trait FindInterned: Intern {
 pub struct StringId(pub(super) Id);
 
 impl StringId {
-    /// Resolves to the interned type returns a string reference.
+    /// Resolves the id to the interned string, if present in the pool
     ///
-    /// # Safety
-    ///
-    /// This function does not result in undefined behavior if an Id is passsed that was not
-    /// interned by the passed `pool`. However, if the `pool` is different from the one that
-    /// returned the `StringId` while interning the result might be unexpected.
+    /// Note: string ids are basically indexes in an array, so using a [`StringId`] from one pool in
+    /// a different one will either return `None` (if the id can't be found) or it will return
+    /// whatever string is found at the index
     pub fn resolve<'a>(&self, pool: &'a Pool) -> Option<&'a str> {
-        if self.0 >= pool.as_ref().ss.nstrings {
-            None
-        } else {
-            // Safe because we check if the stringpool can actually contain the given id.
+        if self.0 < pool.as_ref().ss.nstrings {
+            // Safe because we know the string is in the pool
             let c_str = unsafe { ffi::pool_id2str(pool.0.as_ptr(), self.0) };
             let c_str = unsafe { CStr::from_ptr(c_str) }
                 .to_str()
                 .expect("utf-8 parse error");
             Some(c_str)
+        } else {
+            None
         }
-    }
-}
-
-impl<'s> Intern for &'s str {
-    type Id = StringId;
-
-    fn intern(&self, pool: &Pool) -> Self::Id {
-        intern_str(pool, self)
-    }
-}
-
-impl<'s> FindInterned for &'s str {
-    fn find_interned_id(&self, pool: &Pool) -> Option<Self::Id> {
-        find_intern_str(pool, self)
-    }
-}
-
-impl Intern for String {
-    type Id = StringId;
-
-    fn intern(&self, pool: &Pool) -> Self::Id {
-        intern_str(pool, self)
-    }
-}
-
-impl Intern for StringId {
-    type Id = Self;
-
-    fn intern(&self, _: &Pool) -> Self::Id {
-        *self
-    }
-}
-
-impl<T: Intern> Intern for &T {
-    type Id = T::Id;
-
-    fn intern(&self, pool: &Pool) -> Self::Id {
-        (*self).intern(pool)
-    }
-}
-
-impl FindInterned for String {
-    fn find_interned_id(&self, pool: &Pool) -> Option<Self::Id> {
-        find_intern_str(pool, self)
     }
 }
 
@@ -275,39 +231,6 @@ impl From<StringId> for Id {
 /// Wrapper for the StringId of libsolv
 #[derive(Copy, Clone)]
 pub struct MatchSpecId(Id);
-impl Intern for MatchSpec {
-    type Id = MatchSpecId;
-
-    fn intern(&self, pool: &Pool) -> Self::Id {
-        let name = self
-            .name
-            .as_ref()
-            .expect("matchspec should have a name")
-            .clone();
-
-        // Put the matchspec in conda build form
-        // This is also used by mamba to add matchspecs to libsolv
-        // See: https://github.dev/mamba-org/mamba/blob/master/libmamba/src/core/match_spec.cpp
-        let conda_build_form = if self.version.is_some() {
-            let version = self.version.as_ref().unwrap().clone();
-            if self.build.is_some() {
-                format!(
-                    "{} {} {}",
-                    name,
-                    version,
-                    self.build.as_ref().unwrap().clone()
-                )
-            } else {
-                format!("{} {}", name, version)
-            }
-        } else {
-            name
-        };
-
-        let c_str = c_string(conda_build_form);
-        unsafe { MatchSpecId(ffi::pool_conda_matchspec(pool.0.as_ptr(), c_str.as_ptr())) }
-    }
-}
 
 /// Conversion to [`Id`]
 impl From<MatchSpecId> for Id {
@@ -320,24 +243,16 @@ impl From<MatchSpecId> for Id {
 mod test {
     use std::ffi::CString;
 
-    use super::super::pool::{Intern, Pool};
+    use super::super::pool::Pool;
     use rattler_conda_types::{ChannelConfig, MatchSpec};
 
     #[test]
-    fn test_pool_creation() {
-        let pool = Pool::default();
-        let repo = pool.create_repo("conda-forge");
-        drop(repo);
-        drop(pool);
-    }
-
-    #[test]
     fn test_pool_string_interning() {
-        let mut pool = Pool::default();
+        let pool = Pool::default();
         let pool2 = Pool::default();
         let to_intern = "foobar";
         // Intern the string
-        let id = to_intern.intern(&mut pool);
+        let id = pool.intern_str(to_intern);
         // Get it back
         let outcome = id.resolve(&pool);
         assert_eq!(to_intern, outcome.unwrap());
@@ -359,9 +274,9 @@ mod test {
             "В чащах юга жил бы цитрус? Да, но фальшивый экземпляр!",
             "Съешь же ещё этих мягких французских булок да выпей чаю"];
 
-        let mut pool = Pool::default();
+        let pool = Pool::default();
         for in_s in strings {
-            let id = in_s.intern(&mut pool);
+            let id = pool.intern_str(in_s);
             let outcome = id.resolve(&pool);
             assert_eq!(in_s, outcome.unwrap());
         }
@@ -374,7 +289,7 @@ mod test {
         let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
         // Intern it into the pool
         let pool = Pool::default();
-        spec.intern(&pool);
+        pool.intern_matchspec(&spec);
         // Don't think libsolv has an API to get it back
     }
 
