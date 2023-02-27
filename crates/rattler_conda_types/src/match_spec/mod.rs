@@ -33,12 +33,12 @@ impl Display for MatchSpec {
 
         match &self.version {
             Some(version) => write!(f, " {version}")?,
-            None => ()
+            None => (),
         }
 
         match &self.build {
             Some(build) => write!(f, " {build}")?,
-            None => ()
+            None => (),
         }
 
         Ok(())
