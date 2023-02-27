@@ -1,9 +1,25 @@
+use crate::writer::IndicatifWriter;
 use clap::Parser;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
+use indicatif::{MultiProgress, ProgressDrawTarget};
+use once_cell::sync::Lazy;
+use tracing_subscriber::{filter::LevelFilter, util::SubscriberInitExt, EnvFilter};
 
 mod commands;
+mod writer;
+
+/// Returns a global instance of [`indicatif::MultiProgress`].
+///
+/// Although you can always create an instance yourself any logging will interrupt pending
+/// progressbars. To fix this issue, logging has been configured in such a way to it will not
+/// interfere if you use the [`indicatif::MultiProgress`] returning by this function.
+pub fn global_multi_progress() -> MultiProgress {
+    static GLOBAL_MP: Lazy<MultiProgress> = Lazy::new(|| {
+        let mp = MultiProgress::new();
+        mp.set_draw_target(ProgressDrawTarget::stderr_with_hz(20));
+        mp
+    });
+    GLOBAL_MP.clone()
+}
 
 /// Command line options available through the `rattler` cli.
 #[derive(Debug, Parser)]
@@ -44,6 +60,7 @@ async fn main() -> anyhow::Result<()> {
     // Setup the tracing subscriber
     tracing_subscriber::fmt()
         .with_env_filter(env_filter)
+        .with_writer(IndicatifWriter::new(global_multi_progress()))
         .without_time()
         .finish()
         .try_init()?;

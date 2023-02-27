@@ -1,11 +1,12 @@
+use crate::install::python::PythonInfo;
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
-use rattler_conda_types::Platform;
+use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use sha2::Sha256;
 use std::fs::Permissions;
-use std::io::{Seek, Write};
-use std::path::Path;
+use std::io::{ErrorKind, Seek, Write};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
@@ -29,6 +30,9 @@ pub enum LinkFileError {
 
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
+
+    #[error("cannot install noarch python files because there is no python version specified ")]
+    MissingPythonInfo,
 }
 
 /// The successful result of calling [`link_file`].
@@ -41,6 +45,10 @@ pub struct LinkedFile {
 
     /// The size of the final file in bytes.
     pub file_size: u64,
+
+    /// The relative path of the file in the destination directory. This might be different from the
+    /// relative path in the source directory for python noarch packages.
+    pub relative_path: PathBuf,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -50,7 +58,9 @@ pub struct LinkedFile {
 ///
 /// Note that usually the `target_prefix` is equal to `target_dir` but it might differ. See
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
+#[allow(clippy::too_many_arguments)] // TODO: Fix this properly
 pub fn link_file(
+    noarch_type: NoArchType,
     path_json_entry: &PathsEntry,
     package_dir: &Path,
     target_dir: &Path,
@@ -58,9 +68,22 @@ pub fn link_file(
     allow_symbolic_links: bool,
     allow_hard_links: bool,
     target_platform: Platform,
+    target_python: Option<&PythonInfo>,
 ) -> Result<LinkedFile, LinkFileError> {
-    let destination_path = target_dir.join(&path_json_entry.relative_path);
     let source_path = package_dir.join(&path_json_entry.relative_path);
+
+    // Determine the destination path
+    let destination_relative_path = if noarch_type.is_python() {
+        match target_python {
+            Some(python_info) => {
+                python_info.get_python_noarch_target_path(&path_json_entry.relative_path)
+            }
+            None => return Err(LinkFileError::MissingPythonInfo),
+        }
+    } else {
+        path_json_entry.relative_path.as_path().into()
+    };
+    let destination_path = target_dir.join(&destination_relative_path);
 
     // Ensure that all directories up to the path exist.
     if let Some(parent) = destination_path.parent() {
@@ -110,47 +133,70 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // In case of binary files we have to take care of reconstructing permissions and resigning
-        // executables.
-        if path_json_entry.file_mode == FileMode::Binary {
-            // Copy over filesystem permissions for binary files
-            let metadata = std::fs::symlink_metadata(&source_path)
-                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-            std::fs::set_permissions(&destination_path, metadata.permissions())
-                .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        // Copy over filesystem permissions. We do this to ensure that the destination file has the
+        // same permissions as the source file.
+        let metadata = std::fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+        std::fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
-            // (re)sign the binary if the file is executable
-            if has_executable_permissions(&metadata.permissions())
-                && target_platform == Platform::OsxArm64
-            {
-                // Did the binary actually change?
-                let original_hash = path_json_entry
-                    .sha256
-                    .as_deref()
-                    .and_then(parse_digest_from_hex::<sha2::Sha256>);
-                let content_changed = original_hash != Some(current_hash);
+        // (re)sign the binary if the file is executable
+        if has_executable_permissions(&metadata.permissions())
+            && target_platform == Platform::OsxArm64
+            && path_json_entry.file_mode == FileMode::Binary
+        {
+            // Did the binary actually change?
+            let original_hash = path_json_entry
+                .sha256
+                .as_deref()
+                .and_then(parse_digest_from_hex::<sha2::Sha256>);
+            let content_changed = original_hash != Some(current_hash);
 
-                // If the binary changed it requires resigning.
-                if content_changed {
-                    let signer = UnifiedSigner::new(SigningSettings::default());
-                    signer.sign_path_in_place(&destination_path)?;
+            // If the binary changed it requires resigning.
+            if content_changed {
+                let signer = UnifiedSigner::new(SigningSettings::default());
+                signer.sign_path_in_place(&destination_path)?;
 
-                    // The file on disk changed from the original file so the hash and file size
-                    // also became invalid.
-                    sha256 = None;
-                    file_size = None;
-                }
+                // The file on disk changed from the original file so the hash and file size
+                // also became invalid.
+                sha256 = None;
+                file_size = None;
             }
         }
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
-        std::fs::hard_link(&source_path, &destination_path)?;
+        loop {
+            match std::fs::hard_link(&source_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
         let linked_path = source_path
             .read_link()
             .map_err(LinkFileError::FailedToOpenSourceFile)?;
-        symlink(&linked_path, &destination_path)?;
+
+        loop {
+            match symlink(&linked_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     } else {
-        std::fs::copy(&source_path, &destination_path)?;
+        loop {
+            match std::fs::copy(&source_path, &destination_path) {
+                Ok(_) => break,
+                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                    std::fs::remove_file(&destination_path)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     };
 
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
@@ -182,6 +228,7 @@ pub fn link_file(
         clobbered,
         sha256,
         file_size,
+        relative_path: destination_relative_path.into_owned(),
     })
 }
 

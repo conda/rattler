@@ -2,6 +2,7 @@
 //! of a channel. It provides indexing functionality.
 
 use std::fmt::{Display, Formatter};
+use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
@@ -114,6 +115,12 @@ impl Display for PackageRecord {
 }
 
 impl RepoData {
+    /// Parses [`RepoData`] from a file.
+    pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
+        let contents = std::fs::read_to_string(path)?;
+        Ok(serde_json::from_str(&contents)?)
+    }
+
     /// Builds a [`Vec<RepoDataRecord>`] from the packages in a [`RepoData`] given the source of the
     /// data.
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {

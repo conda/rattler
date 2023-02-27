@@ -27,6 +27,12 @@ pub struct Version {
 }
 
 impl Version {
+    /// Tries to extract the major and minor versions from the version. Returns None if this instance
+    /// doesnt appear to contain a major and minor version.
+    pub fn as_major_minor(&self) -> Option<(usize, usize)> {
+        self.version.as_major_minor()
+    }
+
     /// Bumps this version to a version that is considered just higher than this version.
     pub fn bump(&self) -> Self {
         let mut result = self.clone();
@@ -84,6 +90,28 @@ enum NumeralOrOther {
     Infinity,
 }
 
+impl NumeralOrOther {
+    pub fn as_number(&self) -> Option<usize> {
+        match self {
+            NumeralOrOther::Numeral(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn as_string(&self) -> Option<&str> {
+        match self {
+            NumeralOrOther::Other(value) => Some(value.as_str()),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_infinity(&self) -> bool {
+        matches!(self, NumeralOrOther::Infinity)
+    }
+}
+
 impl From<usize> for NumeralOrOther {
     fn from(num: usize) -> Self {
         NumeralOrOther::Numeral(num)
@@ -139,6 +167,25 @@ struct VersionComponent {
 }
 
 impl VersionComponent {
+    /// Tries to extract the major and minor versions from the version. Returns None if this instance
+    /// doesnt appear to contain a major and minor version.
+    pub fn as_major_minor(&self) -> Option<(usize, usize)> {
+        match (self.range_as_number(1), self.range_as_number(2)) {
+            (Some(major), Some(minor)) => Some((major, minor)),
+            _ => None,
+        }
+    }
+
+    /// Tries to convert the specified range to a number. Returns the number if possible; None otherwise.
+    fn range_as_number(&self, range_idx: usize) -> Option<usize> {
+        let range = self.ranges.get(range_idx)?;
+        if range.end != range.start + 1 {
+            return None;
+        }
+        let component = self.components.get(range.start)?;
+        component.as_number()
+    }
+
     pub(crate) fn starts_with(&self, other: &Self) -> bool {
         for ranges in self.ranges.iter().zip_longest(other.ranges.iter()) {
             let (left, right) = match ranges {

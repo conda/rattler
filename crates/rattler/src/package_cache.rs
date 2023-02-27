@@ -4,6 +4,7 @@ use crate::validation::validate_package_directory;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use rattler_conda_types::package::ArchiveIdentifier;
+use rattler_conda_types::PackageRecord;
 use reqwest::Client;
 use std::error::Error;
 use std::{
@@ -43,6 +44,16 @@ impl From<ArchiveIdentifier> for CacheKey {
             name: pkg.name,
             version: pkg.version,
             build_string: pkg.build_string,
+        }
+    }
+}
+
+impl From<&PackageRecord> for CacheKey {
+    fn from(record: &PackageRecord) -> Self {
+        Self {
+            name: record.name.to_string(),
+            version: record.version.to_string(),
+            build_string: record.build.to_string(),
         }
     }
 }
@@ -172,7 +183,7 @@ impl PackageCache {
         client: Client,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
-            tracing::info!("downloading {} to {}", &url, destination.display());
+            tracing::debug!("downloading {} to {}", &url, destination.display());
             rattler_package_streaming::reqwest::tokio::extract(client, url, &destination).await
         })
         .await
