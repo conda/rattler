@@ -421,7 +421,12 @@ mod test {
 
         assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
-        test_install_python(env.packages.iter().map(|p| &p.url), "explicit").await;
+        test_install_python(
+            env.packages.iter().map(|p| &p.url),
+            "explicit",
+            current_platform,
+        )
+        .await;
     }
 
     #[tracing_test::traced_test]
@@ -437,11 +442,16 @@ mod test {
         test_install_python(
             lock.packages_for_platform(current_platform).map(|p| &p.url),
             "conda-lock",
+            current_platform,
         )
         .await;
     }
 
-    pub async fn test_install_python(urls: impl Iterator<Item = &Url>, cache_name: &str) {
+    pub async fn test_install_python(
+        urls: impl Iterator<Item = &Url>,
+        cache_name: &str,
+        platform: Platform,
+    ) {
         // Open a package cache in the systems temporary directory with a specific name. This allows
         // us to reuse a package cache across multiple invocations of this test. Useful if you're
         // debugging.
@@ -452,8 +462,7 @@ mod test {
 
         // Specify python version
         let python_version =
-            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), current_platform)
-                .unwrap();
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), platform).unwrap();
 
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
