@@ -22,6 +22,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::task::JoinHandle;
+use crate::global_multi_progress;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -88,7 +89,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .no_gzip()
         .build()
         .expect("failed to create client");
-    let multi_progress = indicatif::MultiProgress::new();
+    let multi_progress = global_multi_progress();
 
     let repodata_cache_path = cache_dir.join("repodata");
     let channel_and_platform_len = channel_urls.len();
@@ -193,7 +194,7 @@ async fn execute_transaction(
     };
 
     // Create a progress bars for downloads.
-    let multi_progress = indicatif::MultiProgress::new();
+    let multi_progress = global_multi_progress();
     let total_packages_to_download = transaction
         .operations
         .iter()
