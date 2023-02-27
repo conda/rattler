@@ -41,6 +41,16 @@ impl<'pool> Repo<'pool> {
         }
     }
 
+    /// Panics if this repo does not belong to the provided pool
+    pub fn ensure_belongs_to_pool(&self, pool: &Pool) {
+        let repo_pool_ptr = unsafe { self.0.as_ref().pool };
+        assert_eq!(
+            repo_pool_ptr,
+            pool.raw_ptr(),
+            "repo does not belong to the provided pool"
+        );
+    }
+
     /// Returns the id of the Repo
     pub fn id(&self) -> RepoId {
         RepoId(self.raw_ptr() as usize)
@@ -52,7 +62,8 @@ impl<'pool> Repo<'pool> {
         self.0.as_ptr()
     }
 
-    /// Adds a new repodata to this repo
+    /// Adds a new repodata to this repo (repodata is a libsolv datastructure, see [`Repodata`] for
+    /// details)
     pub fn add_repodata(&self) -> Repodata {
         unsafe {
             let repodata_ptr = ffi::repo_add_repodata(self.raw_ptr(), 0);

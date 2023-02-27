@@ -134,7 +134,10 @@ impl Pool {
     }
 
     /// Set the provided repo to be considered as a source of installed packages
+    ///
+    /// Panics if the repo does not belong to this pool
     pub fn set_installed(&self, repo: &Repo) {
+        repo.ensure_belongs_to_pool(self);
         unsafe { ffi::pool_set_installed(self.raw_ptr(), repo.raw_ptr()) }
     }
 

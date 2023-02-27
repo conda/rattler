@@ -13,12 +13,15 @@ use std::collections::HashMap;
 use std::ffi::{CString, NulError};
 
 /// Adds [`RepoDataRecord`] to `repo`
+///
+/// Panics if the repo does not belong to the pool
 pub fn add_repodata_records(
     pool: &Pool,
     repo: &Repo,
     repo_datas: &[RepoDataRecord],
 ) -> Result<(), NulError> {
-    let data = repo.add_repodata();
+    // Sanity check
+    repo.ensure_belongs_to_pool(pool);
 
     // Get all the IDs
     let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
@@ -38,6 +41,9 @@ pub fn add_repodata_records(
 
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
+
+    // Through `data` we can manipulate solvables (see the `Repodata` docs for details)
+    let data = repo.add_repodata();
 
     for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
         // Create a solvable for the package

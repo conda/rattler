@@ -14,6 +14,8 @@ impl From<SolvableId> for ffi::Id {
 
 impl SolvableId {
     /// Resolves the id to a pointer to the solvable
+    ///
+    /// Panics if the solvable is not found in the pool
     pub fn resolve_raw(self, pool: &Pool) -> NonNull<ffi::Solvable> {
         let pool = pool.as_ref();
 
