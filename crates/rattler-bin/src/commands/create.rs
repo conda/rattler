@@ -1,12 +1,11 @@
+use crate::global_multi_progress;
 use anyhow::Context;
-use futures::stream::FuturesUnordered;
-use futures::TryFutureExt;
-use futures::{stream, FutureExt, StreamExt, TryStreamExt};
+use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::{HumanBytes, ProgressBar, ProgressState, ProgressStyle};
-use rattler::install::{
-    link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation,
+use rattler::{
+    install::{link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation},
+    package_cache::PackageCache,
 };
-use rattler::package_cache::PackageCache;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord, RepoData,
     RepoDataRecord,
@@ -14,15 +13,16 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
 use rattler_solve::{SolverBackend, SolverProblem};
 use reqwest::Client;
-use std::borrow::Cow;
-use std::env;
-use std::fmt::Write;
-use std::future::ready;
-use std::io::ErrorKind;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::{
+    borrow::Cow,
+    env,
+    fmt::Write,
+    future::ready,
+    io::ErrorKind,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 use tokio::task::JoinHandle;
-use crate::global_multi_progress;
 
 #[derive(Debug, clap::Parser)]
 pub struct Opt {
@@ -146,7 +146,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
     let required_packages = wrap_in_progress("solving", move || {
-        rattler_solve::LibsolvSolver.solve(solver_problem)
+        rattler_solve::LibsolvBackend.solve(solver_problem)
     })?;
 
     // Construct a transaction to

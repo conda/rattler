@@ -6,7 +6,7 @@
 mod libsolv;
 mod solver_backend;
 
-pub use libsolv::LibsolvSolver;
+pub use libsolv::LibsolvBackend;
 pub use solver_backend::SolverBackend;
 use std::ffi::NulError;
 
@@ -45,7 +45,7 @@ pub struct SolverProblem {
     /// Records of packages that are previously selected.
     ///
     /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records ands select the best possible version. However, if there exists a
+    /// will sort the records and select the best possible version. However, if there exists a
     /// locked version it will prefer that variant instead. This is useful to reduce the number of
     /// packages that are updated when installing new packages.
     ///
@@ -55,7 +55,7 @@ pub struct SolverProblem {
     /// Records of packages that are previously selected and CANNOT be changed.
     ///
     /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records ands select the best possible version. However, if there is a variant
+    /// will sort the records and select the best possible version. However, if there is a variant
     /// available in the `pinned_packages` field it will always select that version no matter what
     /// even if that means other packages have to be downgraded.
     pub pinned_packages: Vec<RepoDataRecord>,
@@ -69,7 +69,7 @@ pub struct SolverProblem {
 
 #[cfg(test)]
 mod test_libsolv {
-    use crate::libsolv::LibsolvSolver;
+    use crate::libsolv::LibsolvBackend;
     use crate::{SolveError, SolverBackend, SolverProblem};
     use rattler_conda_types::GenericVirtualPackage;
     use rattler_conda_types::{
@@ -171,7 +171,8 @@ mod test_libsolv {
             specs,
             ..Default::default()
         };
-        let pkgs = LibsolvSolver
+
+        let pkgs = LibsolvBackend
             .solve(problem)
             .unwrap()
             .into_iter()
@@ -212,9 +213,9 @@ mod test_libsolv {
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
 
-        assert_eq!("foo-3.0.2.tar.bz2", info.file_name);
+        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
         assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2.tar.bz2",
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
@@ -224,13 +225,32 @@ mod test_libsolv {
         assert_eq!("py36h1af98f8_1", info.package_record.build);
         assert_eq!(1, info.package_record.build_number);
         assert_eq!(
-            "1154fceeb5c4ee9bb97d245713ac21eb1910237c724d2b7103747215663273c2",
+            "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
             info.package_record.sha256.as_ref().unwrap()
         );
         assert_eq!(
-            "d65ab674acf3b7294ebacaec05fc5b54",
+            "fb731d9290f0bcbf3a054665f33ec94f",
             info.package_record.md5.as_ref().unwrap()
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_solve_dummy_repo_prefers_conda_package() -> anyhow::Result<()> {
+        // There following package is provided as .tar.bz and as .conda in repodata.json
+        let match_spec = "foo=3.0.2=py36h1af98f8_1";
+
+        let operations = solve(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &[match_spec],
+        )?;
+
+        // The .conda entry is selected for installing
+        assert_eq!(operations.len(), 1);
+        assert_eq!(operations[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
 
         Ok(())
     }
@@ -393,7 +413,7 @@ mod test_libsolv {
             ..Default::default()
         };
 
-        let pkgs = LibsolvSolver.solve(problem)?;
+        let pkgs = LibsolvBackend.solve(problem)?;
 
         for pkg in pkgs.iter() {
             println!(

@@ -1,10 +1,8 @@
 use std::ffi::CStr;
-use std::fmt::Write;
 use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
 use std::ptr::NonNull;
 
-use crate::libsolv::wrapper::queue::Queue;
+use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::solve_goal::SolveGoal;
 use anyhow::anyhow;
 
@@ -12,102 +10,87 @@ use super::ffi;
 use super::flags::SolverFlag;
 use super::transaction::Transaction;
 
-/// Wraps a pointer to an `ffi::Solver` which is freed when the instance is dropped.
-struct SolverOwnedPtr(NonNull<ffi::Solver>);
+/// Wrapper for libsolv solver, which is used to drive dependency resolution
+///
+/// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
+/// when the Solver is dropped
+pub struct Solver<'pool>(NonNull<ffi::Solver>, PhantomData<&'pool Pool>);
 
-impl Drop for SolverOwnedPtr {
+impl<'pool> Drop for Solver<'pool> {
     fn drop(&mut self) {
         unsafe { ffi::solver_free(self.0.as_mut()) }
     }
 }
 
-/// Representation of a repo containing package data in libsolv. This corresponds to a repo_data
-/// json. Lifetime of this object is coupled to the Pool on creation
-pub struct Solver<'pool>(SolverOwnedPtr, PhantomData<&'pool ffi::Solver>);
-
-/// A `SolverRef` is a wrapper around an `ffi::Solver` that provides a safe abstraction
-/// over its functionality.
-///
-/// A `SolverRef` can not be constructed by itself but is instead returned by dereferencing a
-/// [`Solver`].
-#[repr(transparent)]
-pub struct SolverRef(ffi::Solver);
-
-impl Deref for Solver<'_> {
-    type Target = SolverRef;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.0 .0.cast().as_ref() }
+impl Solver<'_> {
+    /// Constructs a new Solver from the provided libsolv pointer. It is the responsibility of the
+    /// caller to ensure the pointer is actually valid.
+    pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver {
+        Solver(ptr, PhantomData::default())
     }
-}
 
-impl DerefMut for Solver<'_> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { self.0 .0.cast().as_mut() }
+    /// Returns a raw pointer to the wrapped `ffi::Solver`, to be used for calling ffi functions
+    /// that require access to the pool (and for nothing else)
+    fn raw_ptr(&self) -> *mut ffi::Solver {
+        self.0.as_ptr()
     }
-}
 
-impl SolverRef {
-    /// Returns a pointer to the wrapped `ffi::Solver`
-    fn as_ptr(&self) -> NonNull<ffi::Solver> {
-        // Safe because a `SolverRef` is a transparent wrapper around `ffi::Solver`
-        unsafe { NonNull::new_unchecked(self as *const Self as *mut Self).cast() }
+    /// Returns the amount of problems that are yet to be solved
+    fn problem_count(&self) -> u32 {
+        unsafe { ffi::solver_problem_count(self.raw_ptr()) }
+    }
+
+    /// Returns a user-friendly representation of a problem
+    ///
+    /// Safety: the caller must ensure the id is valid
+    unsafe fn problem2str(&self, id: ffi::Id) -> &CStr {
+        let problem = ffi::solver_problem2str(self.raw_ptr(), id);
+        CStr::from_ptr(problem)
     }
 
     /// Creates a string of 'problems' that the solver still has which it encountered while solving
     /// the matchspecs. Use this function to print the existing problems to string.
     fn solver_problems(&self) -> String {
-        let mut problem_queue = Queue::default();
-        let count = unsafe { ffi::solver_problem_count(self.as_ptr().as_ptr()) as u32 };
         let mut output = String::default();
+
+        let count = self.problem_count();
         for i in 1..=count {
-            problem_queue.push_id(i as ffi::Id);
-            let problem = unsafe {
-                let problem = ffi::solver_problem2str(self.as_ptr().as_ptr(), i as ffi::Id);
-                CStr::from_ptr(problem)
-                    .to_str()
-                    .expect("could not parse string")
-            };
-            writeln!(&mut output, " - {}", problem).expect("could not write into string");
+            // Safe because the id valid (between [1, count])
+            let problem = unsafe { self.problem2str(i as ffi::Id) };
+
+            output.push_str(" - ");
+            output.push_str(problem.to_str().expect("string is invalid UTF8"));
+            output.push('\n');
         }
         output
     }
 
     /// Sets a solver flag
     pub fn set_flag(&self, flag: SolverFlag, value: bool) {
-        unsafe { ffi::solver_set_flag(self.as_ptr().as_ptr(), flag.inner(), i32::from(value)) };
+        unsafe { ffi::solver_set_flag(self.raw_ptr(), flag.inner(), i32::from(value)) };
     }
 
-    /// Solves all the problems in the `queue`, or returns an error if problems remain.
-    pub fn solve(&mut self, queue: &mut SolveGoal) -> anyhow::Result<()> {
+    /// Solves all the problems in the `queue` and returns a transaction from the found solution.
+    /// Returns an error if problems remain unsolved.
+    pub fn solve(&mut self, queue: &mut SolveGoal) -> anyhow::Result<Transaction> {
         let result = unsafe {
             // Run the solve method
-            ffi::solver_solve(self.as_ptr().as_mut(), queue.as_inner_mut());
+            ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());
             // If there are no problems left then the solver is done
-            ffi::solver_problem_count(self.as_ptr().as_mut()) == 0
+            ffi::solver_problem_count(self.raw_ptr()) == 0
         };
         if result {
-            Ok(())
+            let transaction =
+                NonNull::new(unsafe { ffi::solver_create_transaction(self.raw_ptr()) })
+                    .expect("solver_create_transaction returned a nullptr");
+
+            // Safe because we know the `transaction` ptr is valid
+            Ok(unsafe { Transaction::new(self, transaction) })
         } else {
             Err(anyhow!(
                 "encountered problems while solving:\n {}",
                 self.solver_problems()
             ))
         }
-    }
-
-    /// Creates a transaction from the solutions found by the solver.
-    pub fn create_transaction(&mut self) -> Transaction {
-        let transaction =
-            NonNull::new(unsafe { ffi::solver_create_transaction(self.as_ptr().as_mut()) })
-                .expect("solver_create_transaction returned a nullptr");
-        Transaction::new(transaction)
-    }
-}
-
-impl Solver<'_> {
-    /// Constructs a new instance
-    pub(super) fn new(ptr: NonNull<ffi::Solver>) -> Self {
-        Solver(SolverOwnedPtr(ptr), PhantomData::default())
     }
 }

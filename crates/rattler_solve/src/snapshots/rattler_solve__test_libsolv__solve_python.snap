@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_solve/src/lib.rs
+assertion_line: 185
 expression: pkgs
 ---
 - python 3.9.13 h9a8a25e_0_cpython

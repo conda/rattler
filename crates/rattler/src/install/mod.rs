@@ -399,6 +399,8 @@ mod test {
         package_cache::PackageCache,
     };
     use futures::{stream, StreamExt};
+    use itertools::Itertools;
+    use rattler_conda_types::conda_lock::CondaLock;
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
     use reqwest::Client;
@@ -406,10 +408,11 @@ mod test {
     use std::process::Command;
     use std::str::FromStr;
     use tempfile::tempdir;
+    use url::Url;
 
     #[tracing_test::traced_test]
     #[tokio::test]
-    pub async fn test_install_python() {
+    pub async fn test_explicit_lock() {
         // Load a prepared explicit environment file for the current platform.
         let current_platform = Platform::current();
         let explicit_env_path =
@@ -418,10 +421,31 @@ mod test {
 
         assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
+        test_install_python(env.packages.iter().map(|p| &p.url), "explicit").await;
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_conda_lock() {
+        // Load a prepared explicit environment file for the current platform.
+        let lock_path = get_test_data_dir().join(format!("conda-lock/python-conda-lock.yml"));
+        let lock = CondaLock::from_path(&lock_path).unwrap();
+
+        let current_platform = Platform::current();
+        assert!(lock.metadata.platforms.iter().contains(&current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+
+        test_install_python(
+            lock.packages_for_platform(current_platform).map(|p| &p.url),
+            "conda-lock",
+        )
+        .await;
+    }
+
+    pub async fn test_install_python(urls: impl Iterator<Item = &Url>, cache_name: &str) {
         // Open a package cache in the systems temporary directory with a specific name. This allows
         // us to reuse a package cache across multiple invocations of this test. Useful if you're
         // debugging.
-        let package_cache = PackageCache::new(temp_dir().join("rattler/test_install_python_pkgs"));
+        let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
         let client = Client::new();
@@ -434,7 +458,7 @@ mod test {
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
         let target_dir = tempdir().unwrap();
-        stream::iter(env.packages)
+        stream::iter(urls)
             .for_each_concurrent(Some(50), |package_url| {
                 let prefix_path = target_dir.path();
                 let client = client.clone();
@@ -443,9 +467,9 @@ mod test {
                 let python_version = &python_version;
                 async move {
                     // Populate the cache
-                    let package_info = ArchiveIdentifier::try_from_url(&package_url.url).unwrap();
+                    let package_info = ArchiveIdentifier::try_from_url(package_url).unwrap();
                     let package_dir = package_cache
-                        .get_or_fetch_from_url(package_info, package_url.url, client.clone())
+                        .get_or_fetch_from_url(package_info, package_url.clone(), client.clone())
                         .await
                         .unwrap();
 
@@ -466,7 +490,7 @@ mod test {
             .await;
 
         // Run the python command and validate the version it outputs
-        let python_path = if current_platform.is_windows() {
+        let python_path = if Platform::current().is_windows() {
             "python.exe"
         } else {
             "bin/python"
