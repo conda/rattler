@@ -4,15 +4,14 @@
 //! exposes the functionality through the [`SolverBackend::solve`] function.
 
 mod libsolv;
-mod package_operation;
 mod solver_backend;
 
-pub use package_operation::{PackageOperation, PackageOperationKind};
+pub use libsolv::LibsolvBackend;
 pub use solver_backend::SolverBackend;
 use std::ffi::NulError;
 
 use rattler_conda_types::GenericVirtualPackage;
-use rattler_conda_types::{MatchSpec, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, RepoDataRecord};
 
 /// Represents an error when solving the dependencies for a given environment
 #[derive(thiserror::Error, Debug)]
@@ -29,55 +28,53 @@ pub enum SolveError {
     #[error("error adding installed packages: {0}")]
     ErrorAddingInstalledPackages(#[source] NulError),
 
-    /// The solver backend returned operations that have no known mapping to [`PackageOperationKind`].
+    /// The solver backend returned operations that we dont know how to install.
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
     /// and can be used for error reporting
     #[error("unsupported operations")]
     UnsupportedOperations(Vec<String>),
 }
 
-/// Represents the action that we want to perform on a given package, so the solver can take it into
-/// account (e.g. specifying [`RequestedAction::Install`] for a package that has already been
-/// installed will result in no operations, but specifying [`RequestedAction::Update`] will generate
-/// the necessary operations to update the package to a newer version if it exists and the update is
-/// compatible with the rest of the environment).
-#[derive(Debug, Copy, Clone)]
-pub enum RequestedAction {
-    /// The package is being installed
-    Install,
-    /// The package is being removed
-    Remove,
-    /// The package is being updated
-    Update,
-}
-
 /// Represents a dependency resolution problem, to be solved by one of the backends (currently only
 /// libsolv is supported)
+#[derive(Default)]
 pub struct SolverProblem {
-    /// All the available packages
+    /// All available packages
     pub available_packages: Vec<Vec<RepoDataRecord>>,
 
-    /// All the packages currently installed
-    pub installed_packages: Vec<PrefixRecord>,
+    /// Records of packages that are previously selected.
+    ///
+    /// If the solver encounters multiple variants of a single package (identified by its name), it
+    /// will sort the records and select the best possible version. However, if there exists a
+    /// locked version it will prefer that variant instead. This is useful to reduce the number of
+    /// packages that are updated when installing new packages.
+    ///
+    /// Usually you add the currently installed packages or packages from a lock-file here.
+    pub locked_packages: Vec<RepoDataRecord>,
+
+    /// Records of packages that are previously selected and CANNOT be changed.
+    ///
+    /// If the solver encounters multiple variants of a single package (identified by its name), it
+    /// will sort the records and select the best possible version. However, if there is a variant
+    /// available in the `pinned_packages` field it will always select that version no matter what
+    /// even if that means other packages have to be downgraded.
+    pub pinned_packages: Vec<RepoDataRecord>,
 
     /// Virtual packages considered active
     pub virtual_packages: Vec<GenericVirtualPackage>,
 
     /// The specs we want to solve
-    pub specs: Vec<(MatchSpec, RequestedAction)>,
+    pub specs: Vec<MatchSpec>,
 }
 
 #[cfg(test)]
 mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
-    use crate::package_operation::PackageOperation;
-    use crate::package_operation::PackageOperationKind;
-    use crate::{RequestedAction, SolveError, SolverBackend, SolverProblem};
-    use rattler_conda_types::prefix_record::PrefixPaths;
+    use crate::{SolveError, SolverBackend, SolverProblem};
     use rattler_conda_types::GenericVirtualPackage;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, PrefixRecord, RepoData,
-        RepoDataRecord, Version,
+        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, RepoData, RepoDataRecord,
+        Version,
     };
     use std::str::FromStr;
     use url::Url;
@@ -129,38 +126,30 @@ mod test_libsolv {
         version: &str,
         build: &str,
         build_number: usize,
-    ) -> PrefixRecord {
-        PrefixRecord {
-            package_tarball_full_path: None,
-            extracted_package_dir: None,
-            files: Vec::new(),
-            paths_data: PrefixPaths::default(),
-            link: None,
-            requested_spec: None,
-            repodata_record: RepoDataRecord {
-                url: Url::from_str("http://example.com").unwrap(),
-                channel: channel.to_string(),
-                file_name: "dummy-filename".to_string(),
-                package_record: PackageRecord {
-                    name: name.to_string(),
-                    version: Version::from_str(version).unwrap(),
-                    build: build.to_string(),
-                    build_number,
-                    subdir: subdir.to_string(),
-                    md5: Some(dummy_md5_hash().to_string()),
-                    sha256: Some(dummy_sha256_hash().to_string()),
-                    size: None,
-                    arch: None,
-                    platform: None,
-                    depends: Vec::new(),
-                    constrains: Vec::new(),
-                    track_features: Vec::new(),
-                    features: None,
-                    noarch: NoArchType::default(),
-                    license: None,
-                    license_family: None,
-                    timestamp: None,
-                },
+    ) -> RepoDataRecord {
+        RepoDataRecord {
+            url: Url::from_str("http://example.com").unwrap(),
+            channel: channel.to_string(),
+            file_name: "dummy-filename".to_string(),
+            package_record: PackageRecord {
+                name: name.to_string(),
+                version: Version::from_str(version).unwrap(),
+                build: build.to_string(),
+                build_number,
+                subdir: subdir.to_string(),
+                md5: Some(dummy_md5_hash().to_string()),
+                sha256: Some(dummy_sha256_hash().to_string()),
+                size: None,
+                arch: None,
+                platform: None,
+                depends: Vec::new(),
+                constrains: Vec::new(),
+                track_features: Vec::new(),
+                features: None,
+                noarch: NoArchType::default(),
+                license: None,
+                license_family: None,
+                timestamp: None,
             },
         }
     }
@@ -175,26 +164,26 @@ mod test_libsolv {
 
         let available_packages = vec![repo_data, repo_data_noarch];
 
-        let specs = vec![(
-            MatchSpec::from_str("python=3.9", &ChannelConfig::default()).unwrap(),
-            RequestedAction::Install,
-        )];
+        let specs = vec![MatchSpec::from_str("python=3.9", &ChannelConfig::default()).unwrap()];
 
         let problem = SolverProblem {
             available_packages,
             specs,
-            installed_packages: Vec::new(),
-            virtual_packages: Vec::new(),
+            ..Default::default()
         };
-        let operations = LibsolvBackend.solve(problem).unwrap();
-        for operation in operations.iter() {
-            println!("{:?} - {:?}", operation.kind, operation.package);
-        }
 
-        assert!(
-            operations.len() > 0,
-            "no operations resulted from installing python!"
-        );
+        let pkgs = LibsolvBackend
+            .solve(problem)
+            .unwrap()
+            .into_iter()
+            .map(|pkg| {
+                format!(
+                    "{} {} {}",
+                    pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
+                )
+            })
+            .collect::<Vec<_>>();
+        insta::assert_yaml_snapshot!(pkgs);
     }
 
     #[test]
@@ -204,7 +193,6 @@ mod test_libsolv {
             Vec::new(),
             Vec::new(),
             &["asdfasdf", "foo<4"],
-            RequestedAction::Install,
         );
 
         assert!(result.is_err());
@@ -215,17 +203,15 @@ mod test_libsolv {
 
     #[test]
     fn test_solve_dummy_repo_install_new() -> anyhow::Result<()> {
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             Vec::new(),
             Vec::new(),
             &["foo<4"],
-            RequestedAction::Install,
         )?;
 
-        assert_eq!(1, operations.len());
-        assert!(matches!(operations[0].kind, PackageOperationKind::Install));
-        let info = &operations[0].package;
+        assert_eq!(1, pkgs.len());
+        let info = &pkgs[0];
 
         assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
         assert_eq!(
@@ -260,15 +246,11 @@ mod test_libsolv {
             Vec::new(),
             Vec::new(),
             &[match_spec],
-            RequestedAction::Install,
         )?;
 
         // The .conda entry is selected for installing
         assert_eq!(operations.len(), 1);
-        assert_eq!(
-            operations[0].package.file_name,
-            "foo-3.0.2-py36h1af98f8_1.conda"
-        );
+        assert_eq!(operations[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
 
         Ok(())
     }
@@ -284,15 +266,19 @@ mod test_libsolv {
             1,
         )];
 
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
             &["foo<4"],
-            RequestedAction::Install,
         )?;
 
-        assert_eq!(0, operations.len());
+        assert_eq!(1, pkgs.len());
+
+        // Install
+        let info = &pkgs[0];
+        assert_eq!("foo", &info.package_record.name);
+        assert_eq!("3.0.2", &info.package_record.version.to_string());
 
         Ok(())
     }
@@ -308,25 +294,15 @@ mod test_libsolv {
             1,
         )];
 
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
             &["foo>=4"],
-            RequestedAction::Update,
         )?;
 
-        assert_eq!(2, operations.len());
-
-        // Uninstall
-        assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
-        let info = &operations[0].package;
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("3.0.2", &info.package_record.version.to_string());
-
         // Install
-        assert!(matches!(operations[1].kind, PackageOperationKind::Install));
-        let info = &operations[1].package;
+        let info = &pkgs[0];
         assert_eq!("foo", &info.package_record.name);
         assert_eq!("4.0.2", &info.package_record.version.to_string());
 
@@ -344,25 +320,17 @@ mod test_libsolv {
             1,
         )];
 
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
             &["foo<4"],
-            RequestedAction::Update,
         )?;
 
-        assert_eq!(2, operations.len());
+        assert_eq!(pkgs.len(), 1);
 
         // Uninstall
-        assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
-        let info = &operations[0].package;
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("4.0.2", &info.package_record.version.to_string());
-
-        // Install
-        assert!(matches!(operations[1].kind, PackageOperationKind::Install));
-        let info = &operations[1].package;
+        let info = &pkgs[0];
         assert_eq!("foo", &info.package_record.name);
         assert_eq!("3.0.2", &info.package_record.version.to_string());
 
@@ -380,28 +348,22 @@ mod test_libsolv {
             1,
         )];
 
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             already_installed,
             Vec::new(),
-            &["foo"],
-            RequestedAction::Remove,
+            &[],
         )?;
 
-        assert_eq!(1, operations.len());
-
-        // Uninstall
-        assert!(matches!(operations[0].kind, PackageOperationKind::Remove));
-        let info = &operations[0].package;
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("3.0.2", &info.package_record.version.to_string());
+        // Should be no packages!
+        assert_eq!(0, pkgs.len());
 
         Ok(())
     }
 
     #[test]
     fn test_solve_dummy_repo_with_virtual_package() -> anyhow::Result<()> {
-        let operations = solve(
+        let pkgs = solve(
             dummy_channel_json_path(),
             Vec::new(),
             vec![GenericVirtualPackage {
@@ -410,12 +372,11 @@ mod test_libsolv {
                 build_string: "0".to_string(),
             }],
             &["bar"],
-            RequestedAction::Install,
         )?;
 
-        assert_eq!(1, operations.len());
-        assert_eq!(PackageOperationKind::Install, operations[0].kind);
-        let info = &operations[0].package;
+        assert_eq!(pkgs.len(), 1);
+
+        let info = &pkgs[0];
         assert_eq!("bar", &info.package_record.name);
         assert_eq!("1.2.3", &info.package_record.version.to_string());
 
@@ -424,13 +385,7 @@ mod test_libsolv {
 
     #[test]
     fn test_solve_dummy_repo_missing_virtual_package() {
-        let result = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &["bar"],
-            RequestedAction::Install,
-        );
+        let result = solve(dummy_channel_json_path(), Vec::new(), Vec::new(), &["bar"]);
 
         assert!(matches!(result.err(), Some(SolveError::Unsolvable)));
     }
@@ -438,41 +393,39 @@ mod test_libsolv {
     #[cfg(test)]
     fn solve(
         repo_path: String,
-        installed_packages: Vec<PrefixRecord>,
+        installed_packages: Vec<RepoDataRecord>,
         virtual_packages: Vec<GenericVirtualPackage>,
         match_specs: &[&str],
-        match_spec_action: RequestedAction,
-    ) -> Result<Vec<PackageOperation>, SolveError> {
+    ) -> Result<Vec<RepoDataRecord>, SolveError> {
         let repo_data = read_repodata(&repo_path);
         let available_packages = vec![repo_data];
         let channel_config = ChannelConfig::default();
         let specs = match_specs
             .into_iter()
-            .map(|m| {
-                (
-                    MatchSpec::from_str(m, &channel_config).unwrap(),
-                    match_spec_action,
-                )
-            })
+            .map(|m| MatchSpec::from_str(m, &channel_config).unwrap())
             .collect();
 
         let problem = SolverProblem {
-            installed_packages,
+            locked_packages: installed_packages,
             virtual_packages,
             available_packages,
             specs,
+            ..Default::default()
         };
 
-        let solvable_operations = LibsolvBackend.solve(problem)?;
+        let pkgs = LibsolvBackend.solve(problem)?;
 
-        for operation in solvable_operations.iter() {
-            println!("{:?} - {:?}", operation.kind, operation.package);
+        for pkg in pkgs.iter() {
+            println!(
+                "{} {} {}",
+                pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
+            )
         }
 
-        if solvable_operations.len() == 0 {
-            println!("No operations necessary!");
+        if pkgs.len() == 0 {
+            println!("No packages in the environment!");
         }
 
-        Ok(solvable_operations)
+        Ok(pkgs)
     }
 }

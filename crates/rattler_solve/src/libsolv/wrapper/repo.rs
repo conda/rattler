@@ -1,5 +1,4 @@
 use super::repodata::Repodata;
-
 use std::{marker::PhantomData, ptr::NonNull};
 
 use super::{c_string, ffi, pool::Pool, solvable::SolvableId};

@@ -19,7 +19,7 @@ pub fn add_repodata_records(
     pool: &Pool,
     repo: &Repo,
     repo_datas: &[RepoDataRecord],
-) -> Result<(), NulError> {
+) -> Result<Vec<SolvableId>, NulError> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
 
@@ -46,6 +46,7 @@ pub fn add_repodata_records(
     // Through `data` we can manipulate solvables (see the `Repodata` docs for details)
     let data = repo.add_repodata();
 
+    let mut solvable_ids = Vec::new();
     for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
         // Create a solvable for the package
         let solvable_id =
@@ -163,11 +164,13 @@ pub fn add_repodata_records(
                 &CString::new(sha256.as_str())?,
             );
         }
+
+        solvable_ids.push(solvable_id)
     }
 
     repo.internalize();
 
-    Ok(())
+    Ok(solvable_ids)
 }
 
 /// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`

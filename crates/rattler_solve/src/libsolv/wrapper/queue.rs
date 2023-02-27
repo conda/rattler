@@ -1,14 +1,9 @@
 use super::ffi;
-use super::flags::SolvableFlags;
-use super::solvable::SolvableId;
+use crate::libsolv::wrapper::solvable::SolvableId;
 use std::marker::PhantomData;
-use std::os::raw::c_int;
 
-/// Wrapper for queue, the queuing datastructure used by libsolv
-///
-/// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
-/// when the Queue is dropped. It also ensures that you always pass objects of the
-/// same Id type to the queue.
+/// Wrapper for libsolv queue type. This type is used by to gather items of a specific type. This
+/// is a type-safe implementation that is coupled to a specific Id type.
 pub struct Queue<T> {
     queue: ffi::Queue,
     // Makes this queue typesafe
@@ -53,21 +48,10 @@ impl<T> Queue<T> {
 
 impl<T: Into<ffi::Id>> Queue<T> {
     /// Pushes a single id to the back of the queue
+    #[allow(dead_code)]
     pub fn push_id(&mut self, id: T) {
         unsafe {
             ffi::queue_insert(self.raw_ptr(), self.queue.count, id.into());
-        }
-    }
-
-    /// Push an id and flag into the queue
-    pub fn push_id_with_flags(&mut self, id: T, flags: SolvableFlags) {
-        unsafe {
-            ffi::queue_insert2(
-                self.raw_ptr(),
-                self.queue.count,
-                flags.inner() as c_int,
-                id.into(),
-            );
         }
     }
 }
