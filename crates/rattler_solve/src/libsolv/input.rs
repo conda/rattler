@@ -1,13 +1,12 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use crate::libsolv::util;
-use crate::libsolv::util::PackageExtension;
 use crate::libsolv::wrapper::keys::*;
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::repo::Repo;
 use crate::libsolv::wrapper::repodata::Repodata;
 use crate::libsolv::wrapper::solvable::SolvableId;
+use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -38,7 +37,7 @@ pub fn add_repodata_records(
     let solvable_index_id = pool.intern_str("solvable:repodata_record_index");
 
     // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&str, (PackageExtension, SolvableId)> = HashMap::new();
+    let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
 
     for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
         // Create a solvable for the package
@@ -171,15 +170,13 @@ fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo,
     data: &Repodata,
-    package_to_type: &mut HashMap<&'a str, (PackageExtension, SolvableId)>,
+    package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
     // Sometimes we can reuse an existing solvable
-    if let Some((filename, package_type)) =
-        util::extract_known_filename_extension(&repo_data.file_name)
-    {
+    if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
-            match package_type.cmp(&other_package_type) {
+            match archive_type.cmp(&other_package_type) {
                 Ordering::Less => {
                     // A previous package that we already stored is actually a package of a better
                     // "type" so we'll just use that instead (.conda > .tar.bz)
@@ -190,7 +187,7 @@ fn add_or_reuse_solvable<'a>(
                     // overwrite its attributes
 
                     // Update the package to the new type mapping
-                    package_to_type.insert(filename, (package_type, old_solvable_id));
+                    package_to_type.insert(filename, (archive_type, old_solvable_id));
 
                     // Reset and reuse the old solvable
                     reset_solvable(pool, repo, data, old_solvable_id);
@@ -202,7 +199,7 @@ fn add_or_reuse_solvable<'a>(
             }
         } else {
             let solvable_id = repo.add_solvable();
-            package_to_type.insert(filename, (package_type, solvable_id));
+            package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
         }
     } else {

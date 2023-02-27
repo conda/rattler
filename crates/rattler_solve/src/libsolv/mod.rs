@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 mod input;
 mod output;
-mod util;
 mod wrapper;
 
 use crate::{PackageOperation, SolveError, SolverBackend, SolverProblem};
