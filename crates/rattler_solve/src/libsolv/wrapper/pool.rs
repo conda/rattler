@@ -158,7 +158,7 @@ impl Pool {
     }
 
     pub fn intern_matchspec(&self, match_spec: &MatchSpec) -> MatchSpecId {
-        let c_str = match_spec_to_c_string(match_spec);
+        let c_str = c_string(match_spec.to_string());
         unsafe { MatchSpecId(ffi::pool_conda_matchspec(self.raw_ptr(), c_str.as_ptr())) }
     }
 
@@ -237,35 +237,6 @@ impl From<MatchSpecId> for Id {
     fn from(id: MatchSpecId) -> Self {
         id.0
     }
-}
-
-fn match_spec_to_c_string(match_spec: &MatchSpec) -> CString {
-    let name = match_spec
-        .name
-        .as_ref()
-        .expect("matchspec should have a name")
-        .clone();
-
-    // Put the matchspec in conda build form
-    // This is also used by mamba to add matchspecs to libsolv
-    // See: https://github.dev/mamba-org/mamba/blob/master/libmamba/src/core/match_spec.cpp
-    let conda_build_form = if match_spec.version.is_some() {
-        let version = match_spec.version.as_ref().unwrap().clone();
-        if match_spec.build.is_some() {
-            format!(
-                "{} {} {}",
-                name,
-                version,
-                match_spec.build.as_ref().unwrap().clone()
-            )
-        } else {
-            format!("{} {}", name, version)
-        }
-    } else {
-        name
-    };
-
-    c_string(conda_build_form)
 }
 
 #[cfg(test)]

@@ -27,8 +27,20 @@ impl Display for MatchSpec {
         }
 
         match &self.name {
-            Some(name) => write!(f, "{}", name),
-            None => write!(f, "*"),
+            Some(name) => write!(f, "{name}")?,
+            None => write!(f, "*")?,
         }
+
+        match &self.version {
+            Some(version) => write!(f, " {version}")?,
+            None => ()
+        }
+
+        match &self.build {
+            Some(build) => write!(f, " {build}")?,
+            None => ()
+        }
+
+        Ok(())
     }
 }
