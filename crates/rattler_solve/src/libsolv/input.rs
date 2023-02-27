@@ -12,7 +12,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::{CString, NulError};
 
-/// Adds [`RepoDataRecord`] to this instance
+/// Adds [`RepoDataRecord`] to `repo`
 pub fn add_repodata_records(
     pool: &Pool,
     repo: &Repo,
@@ -165,7 +165,9 @@ pub fn add_repodata_records(
 
 /// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`
 /// packages. For that reason, when adding a solvable we check first if a `.conda` version of the
-/// package has already been added, in which case
+/// package has already been added, in which case we forgo adding its `.tar.bz` version (and return
+/// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
+/// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo,
