@@ -133,36 +133,34 @@ pub fn link_file(
         // We no longer need the file.
         drop(file);
 
-        // In case of binary files we have to take care of reconstructing permissions and resigning
-        // executables.
-        if path_json_entry.file_mode == FileMode::Binary {
-            // Copy over filesystem permissions for binary files
-            let metadata = std::fs::symlink_metadata(&source_path)
-                .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
-            std::fs::set_permissions(&destination_path, metadata.permissions())
-                .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+        // Copy over filesystem permissions. We do this to ensure that the destination file has the
+        // same permissions as the source file.
+        let metadata = std::fs::symlink_metadata(&source_path)
+            .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+        std::fs::set_permissions(&destination_path, metadata.permissions())
+            .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
-            // (re)sign the binary if the file is executable
-            if has_executable_permissions(&metadata.permissions())
-                && target_platform == Platform::OsxArm64
-            {
-                // Did the binary actually change?
-                let original_hash = path_json_entry
-                    .sha256
-                    .as_deref()
-                    .and_then(parse_digest_from_hex::<sha2::Sha256>);
-                let content_changed = original_hash != Some(current_hash);
+        // (re)sign the binary if the file is executable
+        if has_executable_permissions(&metadata.permissions())
+            && target_platform == Platform::OsxArm64
+            && path_json_entry.file_mode == FileMode::Binary
+        {
+            // Did the binary actually change?
+            let original_hash = path_json_entry
+                .sha256
+                .as_deref()
+                .and_then(parse_digest_from_hex::<sha2::Sha256>);
+            let content_changed = original_hash != Some(current_hash);
 
-                // If the binary changed it requires resigning.
-                if content_changed {
-                    let signer = UnifiedSigner::new(SigningSettings::default());
-                    signer.sign_path_in_place(&destination_path)?;
+            // If the binary changed it requires resigning.
+            if content_changed {
+                let signer = UnifiedSigner::new(SigningSettings::default());
+                signer.sign_path_in_place(&destination_path)?;
 
-                    // The file on disk changed from the original file so the hash and file size
-                    // also became invalid.
-                    sha256 = None;
-                    file_size = None;
-                }
+                // The file on disk changed from the original file so the hash and file size
+                // also became invalid.
+                sha256 = None;
+                file_size = None;
             }
         }
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
