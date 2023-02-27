@@ -14,6 +14,7 @@ mod utils;
 mod version;
 mod version_spec;
 
+pub mod conda_lock;
 mod generic_virtual_package;
 pub mod package;
 pub mod prefix_record;

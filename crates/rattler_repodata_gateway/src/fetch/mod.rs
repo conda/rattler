@@ -628,7 +628,7 @@ fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheS
     let cache_state = match RepoDataState::from_path(&cache_state_path) {
         Err(e) if e.kind() == ErrorKind::NotFound => {
             // Ignore, the cache just doesnt exist
-            tracing::info!("repodata cache state is missing. Ignoring cached files...");
+            tracing::debug!("repodata cache state is missing. Ignoring cached files...");
             return ValidatedCacheState::InvalidOrMissing;
         }
         Err(e) => {
@@ -722,13 +722,17 @@ fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheS
                 max_age: Some(duration),
                 ..
             }) => {
-                if duration > cache_age {
-                    tracing::info!("Cache is out of date. Assuming out of date...");
+                if cache_age > duration {
+                    tracing::debug!(
+                        "Cache is {} old but can at most be {} old. Assuming out of date...",
+                        humantime::format_duration(cache_age),
+                        humantime::format_duration(duration),
+                    );
                     return ValidatedCacheState::OutOfDate(cache_state);
                 }
             }
             Some(_) => {
-                tracing::info!(
+                tracing::debug!(
                     "Unsupported cache-control value '{}'. Assuming out of date...",
                     cache_control
                 );

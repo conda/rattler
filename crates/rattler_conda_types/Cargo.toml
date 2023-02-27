@@ -21,6 +21,7 @@ nom = "7.1.0"
 regex = "1.7.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.91"
+serde_yaml = "0.9.17"
 serde_with = "2.0.0"
 serde_repr = "0.1"
 sha2 = "0.10.6"
@@ -29,11 +30,11 @@ strum = { version = "0.24.1", features = ["derive"] }
 thiserror = "1.0.37"
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
-
+rattler_digest = {path ="../rattler_digest", features = ["serde"]}
 
 [dev-dependencies]
 rand = "0.8.4"
-insta = { version = "1.16.0", features = ["yaml"] }
+insta = { version = "1.16.0", features = ["yaml", "redactions"] }
 rattler_package_streaming = { path = "../rattler_package_streaming" }
 tempfile = "3.3.0"
 rstest = "0.16.0"
