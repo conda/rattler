@@ -23,7 +23,8 @@ pub fn add_repodata_records(
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
 
-    // Get all the IDs
+    // Get all the IDs (these strings are internal to libsolv and always present, so we can
+    // unwrap them at will)
     let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
     let solvable_buildtime_id = pool.find_interned_str(SOLVABLE_BUILDTIME).unwrap();
     let solvable_buildversion_id = pool.find_interned_str(SOLVABLE_BUILDVERSION).unwrap();
