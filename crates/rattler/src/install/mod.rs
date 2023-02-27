@@ -349,7 +349,7 @@ mod test {
 
         assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
-        test_install_python(env.packages.iter().map(|p| &p.url)).await;
+        test_install_python(env.packages.iter().map(|p| &p.url), "explicit").await;
     }
 
     #[tracing_test::traced_test]
@@ -362,14 +362,18 @@ mod test {
         let current_platform = Platform::current();
         assert!(lock.metadata.platforms.iter().contains(&current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
-        test_install_python(lock.packages_for_platform(current_platform).map(|p| &p.url)).await;
+        test_install_python(
+            lock.packages_for_platform(current_platform).map(|p| &p.url),
+            "conda-lock",
+        )
+        .await;
     }
 
-    pub async fn test_install_python(urls: impl Iterator<Item = &Url>) {
+    pub async fn test_install_python(urls: impl Iterator<Item = &Url>, cache_name: &str) {
         // Open a package cache in the systems temporary directory with a specific name. This allows
         // us to reuse a package cache across multiple invocations of this test. Useful if you're
         // debugging.
-        let package_cache = PackageCache::new(temp_dir().join("rattler/test_install_python_pkgs"));
+        let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
         let client = Client::new();
