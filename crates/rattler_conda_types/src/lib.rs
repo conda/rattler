@@ -31,7 +31,7 @@ pub use match_spec::MatchSpec;
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
-pub use repo_data::{PackageRecord, RepoData};
+pub use repo_data::{ChannelInfo, PackageRecord, RepoData};
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};

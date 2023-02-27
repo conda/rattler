@@ -33,9 +33,10 @@ pub struct RepoData {
     pub removed: FxHashSet<String>,
 }
 
-/// Information about subdirectory of channel in the Conda [`Repodata`]
+/// Information about subdirectory of channel in the Conda [`RepoData`]
 #[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct ChannelInfo {
+    /// The channel's subdirectory
     pub subdir: String,
 }
 
