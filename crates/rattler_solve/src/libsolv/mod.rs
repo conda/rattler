@@ -23,7 +23,7 @@ impl SolverBackend for LibsolvSolver {
         pool.set_debug_callback(|msg, flags| {
             tracing::event!(tracing::Level::DEBUG, flags, "{}", msg);
         });
-        pool.set_debug_level(Verbosity::Extreme);
+        pool.set_debug_level(Verbosity::Low);
 
         // Add virtual packages
         let repo = pool.create_repo("virtual_packages");

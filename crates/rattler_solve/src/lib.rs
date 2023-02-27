@@ -45,7 +45,7 @@ pub struct SolverProblem {
     /// Records of packages that are previously selected.
     ///
     /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records ands select the best possible version. However, if there exists a
+    /// will sort the records and select the best possible version. However, if there exists a
     /// locked version it will prefer that variant instead. This is useful to reduce the number of
     /// packages that are updated when installing new packages.
     ///
@@ -55,7 +55,7 @@ pub struct SolverProblem {
     /// Records of packages that are previously selected and CANNOT be changed.
     ///
     /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records ands select the best possible version. However, if there is a variant
+    /// will sort the records and select the best possible version. However, if there is a variant
     /// available in the `pinned_packages` field it will always select that version no matter what
     /// even if that means other packages have to be downgraded.
     pub pinned_packages: Vec<RepoDataRecord>,
