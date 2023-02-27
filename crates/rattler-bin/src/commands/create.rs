@@ -34,7 +34,7 @@ pub struct Opt {
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
-    let target_prefix = env::current_dir()?.join("conda-env");
+    let target_prefix = env::current_dir()?.join(".prefix");
 
     // Determine the platform we're going to install for
     let install_platform = Platform::current();
@@ -367,7 +367,7 @@ async fn install_package_to_environment(
     // Create the conda-meta directory if it doesnt exist yet.
     let target_prefix = target_prefix.to_path_buf();
     match tokio::task::spawn_blocking(move || {
-        let conda_meta_path = target_prefix.join("conda-meta");
+        let conda_meta_path = target_prefix.join("prefix");
         std::fs::create_dir_all(&conda_meta_path)?;
 
         // Write the conda-meta information
@@ -538,7 +538,7 @@ fn default_bytes_style() -> indicatif::ProgressStyle {
             "smoothed_bytes_per_sec",
             |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
                 (pos, elapsed_ms) if elapsed_ms > 0 => {
-                    write!(w, "{:.2}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap()
+                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap()
                 }
                 _ => write!(w, "-").unwrap(),
             },
