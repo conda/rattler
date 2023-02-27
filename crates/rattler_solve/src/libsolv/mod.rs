@@ -1,16 +1,21 @@
 use std::collections::HashMap;
 
+mod input;
+mod output;
 mod wrapper;
 
 use crate::{PackageOperation, SolveError, SolverBackend, SolverProblem};
+use input::{add_repodata_records, add_virtual_packages};
+use output::get_package_operations;
 use wrapper::flags::{SolvableFlags, SolverFlag};
-use wrapper::pool::{Intern, Pool, Verbosity};
+use wrapper::pool::{Pool, Verbosity};
 use wrapper::queue::Queue;
+use wrapper::repo::Repo;
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
-pub struct LibsolvSolver;
+pub struct LibsolvBackend;
 
-impl SolverBackend for LibsolvSolver {
+impl SolverBackend for LibsolvBackend {
     fn solve(&mut self, problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
@@ -30,8 +35,8 @@ impl SolverBackend for LibsolvSolver {
             }
 
             let channel_name = &repodata_records[0].channel;
-            let repo = pool.create_repo(channel_name);
-            repo.add_repodata_records(&pool, repodata_records)
+            let repo = Repo::new(&pool, channel_name);
+            add_repodata_records(&pool, &repo, repodata_records)
                 .map_err(SolveError::ErrorAddingRepodata)?;
 
             // Keep our own info about repodata_records
@@ -44,15 +49,15 @@ impl SolverBackend for LibsolvSolver {
         }
 
         // Installed and virtual packages
-        let repo = pool.create_repo("installed");
+        let repo = Repo::new(&pool, "installed");
         let installed_records: Vec<_> = problem
             .installed_packages
             .into_iter()
             .map(|p| p.repodata_record)
             .collect();
-        repo.add_repodata_records(&pool, &installed_records)
+        add_repodata_records(&pool, &repo, &installed_records)
             .map_err(SolveError::ErrorAddingInstalledPackages)?;
-        repo.add_virtual_packages(&pool, &problem.virtual_packages)
+        add_virtual_packages(&pool, &repo, &problem.virtual_packages)
             .map_err(SolveError::ErrorAddingInstalledPackages)?;
         pool.set_installed(&repo);
 
@@ -66,7 +71,7 @@ impl SolverBackend for LibsolvSolver {
         // Add matchspec to the queue
         let mut queue = Queue::default();
         for (spec, request) in problem.specs {
-            let id = spec.intern(&pool);
+            let id = pool.intern_matchspec(&spec);
             queue.push_id_with_flags(id, SolvableFlags::from(request));
         }
 
@@ -74,22 +79,20 @@ impl SolverBackend for LibsolvSolver {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
-        if solver.solve(&mut queue).is_err() {
-            return Err(SolveError::Unsolvable);
-        }
+        let transaction = solver
+            .solve(&mut queue)
+            .map_err(|_| SolveError::Unsolvable)?;
 
-        // Construct a transaction from the solver
-        let mut transaction = solver.create_transaction();
-        let operations = transaction
-            .get_package_operations(&pool, &repo_mapping, &all_repodata_records)
-            .map_err(|unsupported_operation_ids| {
-                SolveError::UnsupportedOperations(
-                    unsupported_operation_ids
-                        .into_iter()
-                        .map(|id| format!("libsolv operation {id}"))
-                        .collect(),
-                )
-            })?;
+        let operations =
+            get_package_operations(&pool, &repo_mapping, &transaction, &all_repodata_records)
+                .map_err(|unsupported_operation_ids| {
+                    SolveError::UnsupportedOperations(
+                        unsupported_operation_ids
+                            .into_iter()
+                            .map(|id| format!("libsolv operation {id}"))
+                            .collect(),
+                    )
+                })?;
 
         Ok(operations)
     }
