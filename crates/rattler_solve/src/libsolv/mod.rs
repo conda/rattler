@@ -79,12 +79,10 @@ impl SolverBackend for LibsolvBackend {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
-        if solver.solve(&mut queue).is_err() {
-            return Err(SolveError::Unsolvable);
-        }
+        let transaction = solver
+            .solve(&mut queue)
+            .map_err(|_| SolveError::Unsolvable)?;
 
-        // Construct a transaction from the solver
-        let transaction = solver.create_transaction();
         let operations =
             get_package_operations(&pool, &repo_mapping, &transaction, &all_repodata_records)
                 .map_err(|unsupported_operation_ids| {

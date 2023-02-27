@@ -70,8 +70,9 @@ impl Solver<'_> {
         unsafe { ffi::solver_set_flag(self.raw_ptr(), flag.inner(), i32::from(value)) };
     }
 
-    /// Solves all the problems in the `queue`, or returns an error if problems remain.
-    pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<()> {
+    /// Solves all the problems in the `queue` and returns a transaction from the found solution.
+    /// Returns an error if problems remain unsolved.
+    pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<Transaction> {
         let result = unsafe {
             // Run the solve method
             ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());
@@ -79,21 +80,17 @@ impl Solver<'_> {
             ffi::solver_problem_count(self.raw_ptr()) == 0
         };
         if result {
-            Ok(())
+            let transaction =
+                NonNull::new(unsafe { ffi::solver_create_transaction(self.raw_ptr()) })
+                    .expect("solver_create_transaction returned a nullptr");
+
+            // Safe because we know the `transaction` ptr is valid
+            Ok(unsafe { Transaction::new(self, transaction) })
         } else {
             Err(anyhow!(
                 "encountered problems while solving:\n {}",
                 self.solver_problems()
             ))
         }
-    }
-
-    /// Creates a transaction from the solutions found by the solver.
-    pub fn create_transaction(&self) -> Transaction {
-        let transaction = NonNull::new(unsafe { ffi::solver_create_transaction(self.raw_ptr()) })
-            .expect("solver_create_transaction returned a nullptr");
-
-        // Safe because we know the `transaction` ptr is valid
-        unsafe { Transaction::new(self, transaction) }
     }
 }
