@@ -11,7 +11,7 @@ use rattler_conda_types::{
     RepoDataRecord,
 };
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
-use rattler_solve::{SolverBackend, SolverProblem};
+use rattler_solve::{LibsolvRepoData, SolverBackend, SolverProblem};
 use reqwest::Client;
 use std::{
     borrow::Cow,
@@ -113,7 +113,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .buffer_unordered(channel_and_platform_len)
         .collect::<Vec<_>>()
         .await
-        // Collect into another iterator where we extract the first errornous result
+        // Collect into another iterator where we extract the first erroneous result
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -133,14 +133,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
     // information required to be able to solve the problem.
     let solver_problem = SolverProblem {
-        available_packages: repodatas,
+        available_packages: repodatas
+            .iter()
+            .map(|records| LibsolvRepoData::from_records(records)),
         locked_packages: installed_packages
             .iter()
             .map(|record| record.repodata_record.clone())
             .collect(),
         virtual_packages,
         specs,
-        ..Default::default()
+        pinned_packages: Vec::new(),
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations

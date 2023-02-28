@@ -70,6 +70,14 @@ impl<'pool> Repo<'pool> {
         }
     }
 
+    /// Adds a `.solv` file to the repo
+    pub fn add_solv(&self, pool: &Pool, file: *mut libc::FILE) {
+        let result = unsafe { ffi::repo_add_solv(self.raw_ptr(), file as *mut ffi::FILE, 0) };
+        if result != 0 {
+            panic!("add_solv failed: {}", pool.last_error());
+        }
+    }
+
     /// Adds a new solvable to this repo
     pub fn add_solvable(&self) -> SolvableId {
         SolvableId(unsafe { ffi::repo_add_solvable(self.raw_ptr()) })
@@ -85,6 +93,17 @@ impl<'pool> Repo<'pool> {
     pub fn add_provides(&self, solvable: &mut ffi::Solvable, rel_id: ffi::Id) {
         solvable.provides =
             unsafe { ffi::repo_addid_dep(self.raw_ptr(), solvable.provides, rel_id, 0) };
+    }
+
+    /// Serializes the current repo as a `.solv` file
+    ///
+    /// The provided file should have been opened with write access. Closing the file is the
+    /// responsibility of the caller.
+    pub fn write(&self, pool: &Pool, file: *mut libc::FILE) {
+        let result = unsafe { ffi::repo_write(self.raw_ptr(), file as *mut ffi::FILE) };
+        if result != 0 {
+            panic!("repo_write failed: {}", pool.last_error());
+        }
     }
 
     /// Wrapper around `repo_internalize`
@@ -104,10 +123,57 @@ impl<'pool> Repo<'pool> {
 mod tests {
     use super::super::pool::Pool;
     use super::Repo;
+    use crate::libsolv::wrapper::c_string;
+    use crate::libsolv::wrapper::pool::StringId;
 
     #[test]
     fn test_repo_creation() {
         let pool = Pool::default();
         let mut _repo = Repo::new(&pool, "conda-forge");
+    }
+
+    #[test]
+    fn test_repo_solv_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let solv_path = dir.path().join("repo.solv").to_string_lossy().into_owned();
+        let solv_path = c_string(solv_path);
+
+        {
+            // Create a pool and a repo
+            let pool = Pool::default();
+            let repo = Repo::new(&pool, "conda-forge");
+
+            // Add a solvable with a particular name
+            let solvable_id = repo.add_solvable();
+            let solvable = unsafe { solvable_id.resolve_raw(&pool).as_mut() };
+            solvable.name = pool.intern_str("dummy-solvable").into();
+
+            // Open and write the .solv file
+            let mode = c_string("wb");
+            let file = unsafe { libc::fopen(solv_path.as_ptr(), mode.as_ptr()) };
+            repo.write(&pool, file);
+            unsafe { libc::fclose(file) };
+        }
+
+        // Create a clean pool and repo
+        let pool = Pool::default();
+        let repo = Repo::new(&pool, "conda-forge");
+
+        // Open and read the .solv file
+        let mode = c_string("rb");
+        let file = unsafe { libc::fopen(solv_path.as_ptr(), mode.as_ptr()) };
+        repo.add_solv(&pool, file);
+        unsafe { libc::fclose(file) };
+
+        // Check that everything was properly loaded
+        let repo = unsafe { repo.0.as_ref() };
+        assert_eq!(repo.nsolvables, 1);
+
+        let ffi_pool = pool.as_ref();
+
+        // Somehow there are already 2 solvables in the pool, so we check at the third position
+        let solvable = unsafe { *ffi_pool.solvables.offset(2) };
+        let name = StringId(solvable.name).resolve(&pool).unwrap();
+        assert_eq!(name, "dummy-solvable");
     }
 }

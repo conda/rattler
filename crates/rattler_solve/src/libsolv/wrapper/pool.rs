@@ -196,6 +196,15 @@ impl Pool {
             (id != 0).then_some(StringId(id))
         }
     }
+
+    /// Returns a string describing the last error associated to this pool, or "no error" if there
+    /// were no errors
+    pub fn last_error(&self) -> String {
+        // Safe, because `pool_errstr` is guaranteed to return a valid string even in the absence
+        // of errors
+        let err = unsafe { CStr::from_ptr(ffi::pool_errstr(self.raw_ptr())) };
+        err.to_string_lossy().into_owned()
+    }
 }
 
 /// Wrapper for the StringId of libsolv
