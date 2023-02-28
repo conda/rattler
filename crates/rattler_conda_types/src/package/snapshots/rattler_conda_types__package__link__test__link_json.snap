@@ -1,0 +1,13 @@
+---
+source: crates/rattler_conda_types/src/package/link.rs
+expression: link_json
+---
+noarch:
+  type: python
+  entry_points:
+    - "jlpm = jupyterlab.jlpmapp:main"
+    - "jupyter-lab = jupyterlab.labapp:main"
+    - "jupyter-labextension = jupyterlab.labextensions:main"
+    - "jupyter-labhub = jupyterlab.labhubapp:main"
+package_metadata_version: 1
+
