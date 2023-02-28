@@ -95,7 +95,7 @@ pub struct FetchRepoDataOptions {
     pub cache_action: CacheAction,
 
     /// A function that is called during downloading of the repodata.json to report progress.
-    pub download_progress: Option<Box<dyn FnMut(DownloadProgress)>>,
+    pub download_progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
 }
 
 /// A struct that provides information about download progress.
@@ -398,7 +398,7 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    mut progress: Option<Box<dyn FnMut(DownloadProgress)>>,
+    mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<blake2::Blake2s256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
@@ -760,6 +760,8 @@ mod test {
     use hex_literal::hex;
     use reqwest::Client;
     use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::io::AsyncWriteExt;
     use url::Url;
@@ -1094,18 +1096,15 @@ mod test {
     #[tracing_test::traced_test]
     #[tokio::test]
     pub async fn test_progress() {
-        use std::cell::Cell;
-        use std::sync::Arc;
-
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
         let server = SimpleChannelServer::new(subdir_path.path());
 
-        let last_download_progress = Arc::new(Cell::new(0));
+        let last_download_progress = Arc::new(AtomicU64::new(0));
         let last_download_progress_captured = last_download_progress.clone();
         let download_progress = move |progress: DownloadProgress| {
-            last_download_progress_captured.set(progress.bytes);
+            last_download_progress_captured.store(progress.bytes, Ordering::SeqCst);
             assert_eq!(progress.total, Some(1110));
         };
 
@@ -1123,6 +1122,6 @@ mod test {
         .await
         .unwrap();
 
-        assert_eq!(last_download_progress.get(), 1110);
+        assert_eq!(last_download_progress.load(Ordering::SeqCst), 1110);
     }
 }
