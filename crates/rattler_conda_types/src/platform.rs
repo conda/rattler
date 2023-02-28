@@ -17,6 +17,8 @@ pub enum Platform {
     LinuxPpc64le,
     LinuxPpc64,
     LinuxS390X,
+    LinuxRiscv32,
+    LinuxRiscv64,
 
     Osx64,
     OsxArm64,
@@ -38,7 +40,18 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Linux64;
 
-            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+            #[cfg(target_arch = "riscv32")]
+            return Platform::LinuxRiscv32;
+
+            #[cfg(target_arch = "riscv64")]
+            return Platform::LinuxRiscv64;
+
+            #[cfg(not(any(
+                target_arch = "x86_64",
+                target_arch = "x86",
+                target_arch = "riscv32",
+                target_arch = "riscv64"
+            )))]
             compile_error!("unsupported linux architecture");
         }
         #[cfg(windows)]
@@ -96,6 +109,8 @@ impl Platform {
                 | Platform::LinuxPpc64le
                 | Platform::LinuxPpc64
                 | Platform::LinuxS390X
+                | Platform::LinuxRiscv32
+                | Platform::LinuxRiscv64
         )
     }
 
@@ -127,6 +142,8 @@ impl FromStr for Platform {
             "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
             "linux-s390x" => Platform::LinuxS390X,
+            "linux-riscv32" => Platform::LinuxRiscv32,
+            "linux-riscv64" => Platform::LinuxRiscv64,
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
             "win-32" => Platform::Win32,
@@ -153,6 +170,8 @@ impl From<Platform> for &'static str {
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
             Platform::LinuxS390X => "linux-s390x",
+            Platform::LinuxRiscv32 => "linux-riscv32",
+            Platform::LinuxRiscv64 => "linux-riscv64",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
