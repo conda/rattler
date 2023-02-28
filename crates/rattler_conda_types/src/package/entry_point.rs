@@ -41,9 +41,9 @@ impl FromStr for EntryPoint {
             .ok_or("missing module and function separator")?;
 
         Ok(EntryPoint {
-            command: command.to_string(),
-            module: module.to_string(),
-            function: function.to_string(),
+            command: command.trim().to_string(),
+            module: module.trim().to_string(),
+            function: function.trim().to_string(),
         })
     }
 }
