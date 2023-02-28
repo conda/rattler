@@ -101,7 +101,7 @@ pub enum PathType {
     /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
     /// Entry points are created in the `bin/...` directory when installing Python noarch packages
     UnixPythonEntryPoint,
-    /// Not used
+    /// NOT USED - path to the package's .json file in conda-meta
     LinkedPackageRecord,
 }
 
