@@ -3,9 +3,11 @@
 mod about;
 mod archive_identifier;
 mod archive_type;
+mod entry_point;
 mod files;
 mod has_prefix;
 mod index;
+mod link;
 mod no_link;
 mod no_softlink;
 mod paths;
@@ -18,9 +20,11 @@ pub use {
     about::AboutJson,
     archive_identifier::ArchiveIdentifier,
     archive_type::ArchiveType,
+    entry_point::EntryPoint,
     files::Files,
     has_prefix::HasPrefix,
     index::IndexJson,
+    link::LinkJson,
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},

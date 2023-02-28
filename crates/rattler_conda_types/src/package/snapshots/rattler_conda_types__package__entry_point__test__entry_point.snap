@@ -1,0 +1,6 @@
+---
+source: crates/rattler_conda_types/src/package/entry_point.rs
+expression: entry_point
+---
+"jupyter = jupyterlab.jupyterapp:main"
+
