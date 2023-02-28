@@ -335,12 +335,8 @@ mod tests {
         assert_eq!(scripts[1], script1);
         assert_eq!(scripts[2], script3);
 
-        let activator = Activator::from_path(
-            &tdir.path().to_path_buf(),
-            shell_type,
-            OperatingSystem::MacOS,
-        )
-        .unwrap();
+        let activator =
+            Activator::from_path(tdir.path(), shell_type, OperatingSystem::MacOS).unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
         assert_eq!(activator.activation_scripts[0], script2);
         assert_eq!(activator.activation_scripts[1], script1);
@@ -356,7 +352,7 @@ mod tests {
         let quotes = r#"{"env_vars": {"Hallo": "myval", "TEST": "itsatest", "AAA": "abcdef"}}"#;
         fs::write(&path, quotes).unwrap();
 
-        let env_vars = collect_env_vars(&tdir.path().to_path_buf()).unwrap();
+        let env_vars = collect_env_vars(tdir.path()).unwrap();
         assert_eq!(env_vars.len(), 3);
 
         assert_eq!(env_vars["HALLO"], "myval");
@@ -385,8 +381,7 @@ mod tests {
         let quotes = r#"{"env_vars": {"Hallo": "myval", "TEST": "itsatest", "AAA": "abcdef"}}"#;
         fs::write(&state_path, quotes).unwrap();
 
-        let env_vars =
-            collect_env_vars(&tdir.path().to_path_buf()).expect("Could not load env vars");
+        let env_vars = collect_env_vars(tdir.path()).expect("Could not load env vars");
         assert_eq!(env_vars.len(), 6);
 
         assert_eq!(env_vars["VAR1"], "overwrite1");

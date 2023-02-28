@@ -192,7 +192,7 @@ mod test_libsolv {
         }
 
         assert!(
-            operations.len() > 0,
+            !operations.is_empty(),
             "no operations resulted from installing python!"
         );
     }
@@ -447,7 +447,7 @@ mod test_libsolv {
         let available_packages = vec![repo_data];
         let channel_config = ChannelConfig::default();
         let specs = match_specs
-            .into_iter()
+            .iter()
             .map(|m| {
                 (
                     MatchSpec::from_str(m, &channel_config).unwrap(),
@@ -469,7 +469,7 @@ mod test_libsolv {
             println!("{:?} - {:?}", operation.kind, operation.package);
         }
 
-        if solvable_operations.len() == 0 {
+        if solvable_operations.is_empty() {
             println!("No operations necessary!");
         }
 

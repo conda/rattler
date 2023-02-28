@@ -1,0 +1,1 @@
+{"channels": [{"url": "conda-forge", "used_env_vars": []}], "specs": [{"build": null, "category": "main", "conda_channel": null, "extras": [], "manager": "conda", "name": "python", "optional": false, "selectors": {"platform": null}, "version": "3.11.0.*"}]}
