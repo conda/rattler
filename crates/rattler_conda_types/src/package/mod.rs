@@ -24,7 +24,7 @@ pub use {
     files::Files,
     has_prefix::HasPrefix,
     index::IndexJson,
-    link::LinkJson,
+    link::{LinkJson, NoArchLinks, PythonEntryPoints},
     no_link::NoLink,
     no_softlink::NoSoftlink,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
