@@ -141,7 +141,7 @@ fn python_entry_point_template(
         from {module} import {import_name}\n\n\
         if __name__ == '__main__':\n\
         \tsys.argv[0] = re.sub(r'(-script\\.pyw?|\\.exe)?$', '', sys.argv[0])\n\
-        \tsys.exit({func})\n\
+        \tsys.exit({func}())\n\
         "
     )
 }
