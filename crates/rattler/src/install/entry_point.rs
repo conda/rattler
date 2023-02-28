@@ -103,7 +103,7 @@ pub fn create_unix_python_entry_point(
     std::fs::set_permissions(
         script_path,
         std::os::unix::fs::PermissionsExt::from_mode(0o775),
-    );
+    )?;
 
     Ok(PathsEntry {
         relative_path,
