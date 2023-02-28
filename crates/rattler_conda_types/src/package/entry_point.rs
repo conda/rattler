@@ -34,13 +34,11 @@ impl FromStr for EntryPoint {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut parts = s.splitn(2, "=");
-        let command = parts.next().ok_or("missing command")?.trim();
-        let module_and_function = parts.next().ok_or("missing module")?;
-
-        let mut parts = module_and_function.splitn(2, ":");
-        let module = parts.next().ok_or("missing module")?.trim();
-        let function = parts.next().ok_or("missing function")?.trim();
+        let (command, module_and_function) =
+            s.split_once('=').ok_or("missing entry point separator")?;
+        let (module, function) = module_and_function
+            .split_once(':')
+            .ok_or("missing module and function separator")?;
 
         Ok(EntryPoint {
             command: command.to_string(),
