@@ -7,28 +7,28 @@ mod parse;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
-/// 
+///
 /// [`MatchSpec`] can be composed with keyword arguments, where keys are any of the
 /// attributes of [`PackageRecord`]. Values for keyword arguments are the exact values the
 /// attribute should match against. Many fields can also be matched against non-exact values--by
 /// including wildcard `*` and `>`/`<` ranges--where supported. Any non-specified field is
 /// the equivalent of a full wildcard match.
-/// 
+///
 /// MatchSpecs can also be composed using a single positional argument, with optional
 /// keyword arguments. Keyword arguments also override any conflicting information provided in
 /// the positional argument. Conda has historically had several string representations for equivalent
 /// MatchSpecs.
-/// 
+///
 /// A series of rules are now followed for creating the canonical string representation of a
 /// MatchSpec instance. The canonical string representation can generically be
 /// represented by
-/// 
+///
 /// (channel(/subdir):(namespace):)name(version(build))[key1=value1,key2=value2]
-/// 
-/// where `()` indicate optional fields. 
-/// 
+///
+/// where `()` indicate optional fields.
+///
 /// The rules for constructing a canonical string representation are:
-/// 
+///
 /// 1. `name` (i.e. "package name") is required, but its value can be '*'. Its position is always
 ///    outside the key-value brackets.
 /// 2. If `version` is an exact version, it goes outside the key-value brackets and is prepended
@@ -49,26 +49,26 @@ mod parse;
 ///    space, or equal sign.  The canonical format uses comma delimiters and single quotes.
 /// 8. When constructing a `MatchSpec` instance from a string, any key-value pair given
 ///    inside the key-value brackets overrides any matching parameter given outside the brackets.
-/// 
+///
 /// When `MatchSpec` attribute values are simple strings, the are interpreted using the
 /// following conventions:
 ///   - If the string begins with `^` and ends with `$`, it is converted to a regex.
 ///   - If the string contains an asterisk (`*`), it is transformed from a glob to a regex.
 ///   - Otherwise, an exact match to the string is sought.
-/// 
+///
 /// # Examples:
-/// 
+///
 /// ```rust
 /// use rattler_conda_types::{MatchSpec, VersionSpec, ChannelConfig};
 /// use std::str::FromStr;
-/// 
+///
 /// let channel_config = ChannelConfig::default();
-/// 
+///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0", &channel_config).unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
 /// assert_eq!(spec.build, Some("py27_0".to_string()));
-/// 
+///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
@@ -78,33 +78,33 @@ mod parse;
 /// //assert_eq!(spec.name, Some("foo".to_string()));
 /// //assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
 /// // assert_eq!(spec.channel, Some("conda-forge".to_string()));
-/// 
+///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0", &channel_config).unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// //assert_eq!(spec.channel.unwrap().name, "conda-forge"));
 /// //assert_eq!(spec.subdir, Some("linux-64".to_string()));
-/// 
+///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0", &channel_config).unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// // assert_eq!(spec.subdir, Some("linux-64".to_string()));
-/// 
+///
 /// //let spec = MatchSpec::from_str("foo[build=py2*]", &channel_config).unwrap();
 /// //assert_eq!(spec.name, Some("foo".to_string()));
 /// //assert_eq!(spec.build, Some("py2*".to_string()));
 /// ```
-/// 
+///
 /// To fully-specify a package with a full, exact spec, the following fields must be given as exact values:
-/// 
+///
 ///   - channel
 ///   - subdir
 ///   - name
 ///   - version
 ///   - build
-/// 
+///
 /// In the future, the namespace field might be added to this list.
-/// 
+///
 /// Alternatively, an exact spec is given by '*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]'.
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
