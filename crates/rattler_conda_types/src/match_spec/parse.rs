@@ -47,6 +47,7 @@ pub enum ParseMatchSpecError {
 }
 
 impl MatchSpec {
+    /// Parses a matchspec from a string.
     pub fn from_str(
         input: &str,
         channel_config: &ChannelConfig,

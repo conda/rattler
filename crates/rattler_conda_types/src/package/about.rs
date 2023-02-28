@@ -9,6 +9,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
 
 use url::Url;
 
+/// The `about.json` file contains metadata about the package
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 /// Representation of the `info/files` file in older package archives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Files {
+    /// A list of files in the package.
     pub files: Vec<PathBuf>,
 }
 

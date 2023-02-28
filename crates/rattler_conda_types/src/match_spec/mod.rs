@@ -10,12 +10,19 @@ mod parse;
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
+    /// The name of the package
     pub name: Option<String>,
+    /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
+    /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
     pub build: Option<String>,
+    /// The build number of the package
     pub build_number: Option<usize>,
+    /// Match the specific filename of the package
     pub filename: Option<String>,
+    /// The channel of the package
     pub channel: Option<Channel>,
+    /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
 }
 

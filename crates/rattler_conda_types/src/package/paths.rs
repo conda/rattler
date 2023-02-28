@@ -155,6 +155,7 @@ impl PathsJson {
     }
 }
 
+/// A single entry in the `paths.json` file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct PathsEntry {
     /// The relative path from the root of the package
@@ -191,18 +192,25 @@ pub struct PathsEntry {
     pub size_in_bytes: Option<u64>,
 }
 
+/// The file mode of the entry
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum FileMode {
+    /// The file is a binary file (needs binary prefix replacement)
     Binary,
+    /// The file is a text file (needs text prefix replacement)
     Text,
 }
 
+/// The path type of the path entry
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum PathType {
+    /// The path should be hard linked (the default)
     HardLink,
+    /// The path should be soft linked
     SoftLink,
+    /// This should explicitly create an empty directory
     Directory,
 }
 

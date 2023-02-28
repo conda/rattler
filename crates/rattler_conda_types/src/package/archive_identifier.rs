@@ -9,9 +9,13 @@ use url::Url;
 /// the [`ArchiveIdentifier::try_from_filename`] and [`ArchiveIdentifier::try_from_url`] functions.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ArchiveIdentifier {
+    /// The name of the package.
     pub name: String,
+    /// The version of the package.
     pub version: String,
+    /// The build string of the package.
     pub build_string: String,
+    /// The archive type of the package (tar.bz2 or conda)
     pub archive_type: ArchiveType,
 }
 
