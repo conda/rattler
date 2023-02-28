@@ -477,6 +477,7 @@ mod tests {
         assert_eq!(new_paths.len(), 1);
     }
 
+    #[cfg(unix)]
     fn create_temp_dir() -> TempDir {
         let tempdir = TempDir::new("test").unwrap();
         let path = tempdir.path().join("etc/conda/activate.d/");
@@ -489,6 +490,7 @@ mod tests {
         tempdir
     }
 
+    #[cfg(unix)]
     fn get_script<T: Shell>(shell_type: T) -> String
     where
         T: Clone,
