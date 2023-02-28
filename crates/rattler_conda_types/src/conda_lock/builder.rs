@@ -1,3 +1,4 @@
+use crate::conda_lock::content_hash::CalculateContentHashError;
 use crate::conda_lock::{
     content_hash, Channel, CondaLock, GitMeta, LockMeta, LockedDependency, Manager, PackageHashes,
     TimeMeta, VersionConstraint,
@@ -40,9 +41,7 @@ impl LockFileBuilder {
                 .into_iter()
                 .map(|into_channel| into_channel.into())
                 .collect(),
-            platforms: platforms
-                .into_iter()
-                .collect(),
+            platforms: platforms.into_iter().collect(),
             input_specs: input_spec.into_iter().collect(),
             ..Default::default()
         }
@@ -56,23 +55,21 @@ impl LockFileBuilder {
     }
 
     /// Build a conda_lock file
-    pub fn build(self) -> CondaLock {
-        CondaLock {
+    pub fn build(self) -> Result<CondaLock, CalculateContentHashError> {
+        let content_hash = self
+            .platforms
+            .iter()
+            .map(|plat| {
+                Ok((
+                    *plat,
+                    content_hash::calculate_content_hash(plat, &self.input_specs, &self.channels)?,
+                ))
+            })
+            .collect::<Result<HashMap<_, _>, CalculateContentHashError>>()?;
+
+        let lock = CondaLock {
             metadata: LockMeta {
-                content_hash: self
-                    .platforms
-                    .iter()
-                    .map(|plat| {
-                        (
-                            *plat,
-                            content_hash::calculate_content_hash(
-                                plat,
-                                &self.input_specs,
-                                &self.channels,
-                            ),
-                        )
-                    })
-                    .collect(),
+                content_hash,
                 channels: self.channels,
                 platforms: self.platforms.iter().cloned().collect(),
                 sources: self.sources.unwrap_or_default(),
@@ -87,7 +84,8 @@ impl LockFileBuilder {
                 .flat_map(|package| package.build())
                 .collect(),
             version: super::default_version(),
-        }
+        };
+        Ok(lock)
     }
 }
 
@@ -199,12 +197,11 @@ mod tests {
                     dependency_list: Default::default(),
                     optional: None,
                 }))
-            .build();
+            .build().unwrap();
 
         let s = serde_yaml::to_string(&lock).unwrap();
         let serialize: CondaLock = serde_yaml::from_str(&s).unwrap();
     }
-
 
     //
     // md5: c6f4b87020c72e2700e3e94c1fc93b70

@@ -3,6 +3,14 @@ use crate::{MatchSpec, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
 
+#[derive(Debug, thiserror::Error)]
+pub enum CalculateContentHashError {
+    #[error("the data for key `{0}` is required but missing")]
+    RequiredAttributeMissing(String),
+    #[error(transparent)]
+    JsonDecodeError(#[from] serde_json::Error),
+}
+
 /// This function tries to replicate the creation of the content-hashes
 /// like conda-lock does https://github.com/conda/conda-lock/blob/83117cb8da89d011a25f643f953822d5c098b246/conda_lock/models/lock_spec.py#L60
 /// so we need to recreate some python data-structures and serialize these to json
@@ -10,7 +18,7 @@ pub fn calculate_content_data(
     _platform: &Platform,
     input_specs: &[MatchSpec],
     channels: &[Channel],
-) -> String {
+) -> Result<String, CalculateContentHashError> {
     /// Selector taken from the conda-lock python source code
     /// which we will just keep empty for now
     #[derive(Serialize, Default, Debug)]
@@ -45,18 +53,24 @@ pub fn calculate_content_data(
     // Map our stuff to conda-lock types
     let specs = input_specs
         .iter()
-        .map(|spec| CondaLockVersionedDependency {
-            name: spec.name.clone().unwrap(),
-            manager: "conda".to_string(),
-            optional: false,
-            category: "main".to_string(),
-            extras: Default::default(),
-            selectors: Default::default(),
-            version: spec.version.as_ref().map(|v| v.to_string()).unwrap(),
-            build: spec.build.clone(),
-            conda_channel: None,
+        .map(|spec| {
+            Ok(CondaLockVersionedDependency {
+                name: spec.name.clone().ok_or(
+                    CalculateContentHashError::RequiredAttributeMissing("name".to_string()),
+                )?,
+                manager: "conda".to_string(),
+                optional: false,
+                category: "main".to_string(),
+                extras: Default::default(),
+                selectors: Default::default(),
+                version: spec.version.as_ref().map(|v| v.to_string()).ok_or(
+                    CalculateContentHashError::RequiredAttributeMissing("version".to_string()),
+                )?,
+                build: spec.build.clone(),
+                conda_channel: None,
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>, CalculateContentHashError>>()?;
 
     // In the python code they are also adding a virtual package hash
     // For virtual packages overwritten by the user, we are skipping
@@ -70,11 +84,11 @@ pub fn calculate_content_data(
     };
 
     // Create the json
-    serde_json::to_string(&content_hash_data)
-        .unwrap()
+    Ok(serde_json::to_string(&content_hash_data)?
         // Replace these because python encodes with spaces
+        // and serde does not
         .replace(":", ": ")
-        .replace(",", ", ")
+        .replace(",", ", "))
 }
 
 /// Calculate the content hash for a platform and set of matchspecs
@@ -82,15 +96,12 @@ pub fn calculate_content_hash(
     _platform: &Platform,
     input_specs: &[MatchSpec],
     channels: &[Channel],
-) -> String {
-    serde_json::to_string(&SerializableHash::<sha2::Sha256>(
-        rattler_digest::compute_bytes_digest::<sha2::Sha256>(calculate_content_data(
-            _platform,
-            input_specs,
-            channels,
-        )),
-    ))
-    .unwrap()
+) -> Result<String, CalculateContentHashError> {
+    let content_data = calculate_content_data(_platform, input_specs, channels)?;
+    let json_str = serde_json::to_string(&SerializableHash::<sha2::Sha256>(
+        rattler_digest::compute_bytes_digest::<sha2::Sha256>(&content_data),
+    ))?;
+    Ok(json_str)
 }
 
 #[cfg(test)]
