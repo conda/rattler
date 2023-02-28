@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 /// of all files that should not be "softlinked".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoSoftlink {
+    /// A list of files in the package that should not be "softlinked".
     pub files: Vec<PathBuf>,
 }
 

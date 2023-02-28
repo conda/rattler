@@ -4,6 +4,7 @@ use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
 
 /// A platform supported by Conda.
+#[allow(missing_docs)]
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
@@ -108,6 +109,7 @@ impl Platform {
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 #[error("'{string}' is not a known platform")]
 pub struct ParsePlatformError {
+    /// The platform string that could not be parsed.
     pub string: String,
 }
 

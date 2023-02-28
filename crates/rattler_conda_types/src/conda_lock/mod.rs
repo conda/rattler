@@ -28,14 +28,19 @@ const fn default_version() -> u32 {
 pub struct CondaLock {
     /// Metadata for the lock file
     pub metadata: LockMeta,
+
     /// Locked packages
     pub package: Vec<LockedDependency>,
+
+    /// Version of the conda-lock file format
     #[serde(default = "default_version")]
     pub version: u32,
 }
 
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum ParseCondaLockError {
+    /// The platform could not be parsed
     #[error(transparent)]
     InvalidPlatform(#[from] ParsePlatformError),
 
@@ -123,7 +128,9 @@ pub struct GitMeta {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Manager {
+    /// The "conda" manager
     Conda,
+    /// The pip manager
     Pip,
 }
 
@@ -137,13 +144,13 @@ impl Display for VersionConstraint {
     }
 }
 
-// This implementation of the `Deserialize` trait for the `PackageHashes` struct
-//
-// It expects the input to have either a `md5` field, a `sha256` field, or both.
-// If both fields are present, it constructs a `Md5Sha256` instance with their values.
-// If only the `md5` field is present, it constructs a `Md5` instance with its value.
-// If only the `sha256` field is present, it constructs a `Sha256` instance with its value.
-// If neither field is present it returns an error
+/// This implementation of the `Deserialize` trait for the `PackageHashes` struct
+///
+/// It expects the input to have either a `md5` field, a `sha256` field, or both.
+/// If both fields are present, it constructs a `Md5Sha256` instance with their values.
+/// If only the `md5` field is present, it constructs a `Md5` instance with its value.
+/// If only the `sha256` field is present, it constructs a `Sha256` instance with its value.
+/// If neither field is present it returns an error
 pub enum PackageHashes {
     /// Contains an MD5 hash
     Md5(Output<md5::Md5>),
@@ -209,6 +216,7 @@ fn default_category() -> String {
     "main".to_string()
 }
 
+/// A locked single dependency / package
 #[derive(Serialize, Deserialize)]
 pub struct LockedDependency {
     /// Package name of dependency
@@ -236,6 +244,7 @@ pub struct LockedDependency {
     pub build: Option<String>,
 }
 
+/// The URL for the dependency (currently only used for pip packages)
 #[derive(Serialize, Deserialize)]
 pub struct DependencySource {
     // According to:
@@ -246,10 +255,12 @@ pub struct DependencySource {
     pub url: Url,
 }
 
+/// The conda channel that was used for the dependency
 #[derive(Serialize, Deserialize)]
 pub struct Channel {
     /// Called `url` but can also be the name of the channel e.g. `conda-forge`
     pub url: String,
+    /// Used env vars for the channel (e.g. hints for passwords or other secrets)
     pub used_env_vars: Vec<String>,
 }
 

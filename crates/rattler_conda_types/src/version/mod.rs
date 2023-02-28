@@ -19,10 +19,17 @@ mod parse;
 /// optional epoch number - an integer followed by '!' - can precede the actual version string (this
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
 /// case-insensitive.
+/// A local version is an optional string that can be used to indicate a local version of a package.
+/// A local version is indicated by a '+' followed by the local version string.
 #[derive(Clone, Debug)]
 pub struct Version {
+    /// The epoch of this version. This is an optional number that can be used to indicate a change
+    /// in the versioning scheme.
     norm: String,
+    /// The version of this version. This is the actual version string.
     version: VersionComponent,
+    /// The local version of this version (everything following a `+`).
+    /// This is an optional string that can be used to indicate a local version of a package.
     local: VersionComponent,
 }
 
@@ -62,6 +69,7 @@ impl Version {
         })
     }
 
+    /// Check if this version version and local strings start with the same as other.
     pub fn starts_with(&self, other: &Self) -> bool {
         self.version.starts_with(&other.version) && self.local.starts_with(&other.local)
     }

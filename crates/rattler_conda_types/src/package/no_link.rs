@@ -2,9 +2,10 @@ use super::PackageFile;
 use std::path::{Path, PathBuf};
 
 /// Representation of the `info/no_link` file in older package archives. This file contains a list
-/// of all files that should not be "linked".
+/// of all files that should not be "linked" (i.e. hard linked) but copied.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoLink {
+    /// A list of files in the package that should not be "linked" (i.e. hard linked) but copied.
     pub files: Vec<PathBuf>,
 }
 

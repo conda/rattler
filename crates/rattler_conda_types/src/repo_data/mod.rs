@@ -13,12 +13,22 @@ use crate::{Channel, NoArchType, RepoDataRecord, Version};
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 #[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct RepoData {
+    /// The version of the repodata format
     #[serde(rename = "repodata_version")]
     pub version: Option<usize>,
+
+    /// The channel information contained in the repodata.json file
     pub info: Option<ChannelInfo>,
+
+    /// The tar.bz2 packages contained in the repodata.json file
     pub packages: FxHashMap<String, PackageRecord>,
+
+    /// The conda packages contained in the repodata.json file (under a different key for
+    /// backwards compatibility with previous conda versions)
     #[serde(rename = "packages.conda")]
     pub conda_packages: FxHashMap<String, PackageRecord>,
+
+    /// removed packages (files are still accessible, but they are not installable like regular packages)
     #[serde(default)]
     pub removed: FxHashSet<String>,
 }
@@ -79,10 +89,16 @@ pub struct PackageRecord {
     #[serde(default)]
     pub constrains: Vec<String>,
 
+    /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
+    /// that effect, the number of track features is counted (number of commas) and the package is downweighted
+    /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "OneOrMany<_>")]
     pub track_features: Vec<String>,
 
+    /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
+    /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
+    /// mutually exclusive features.
     pub features: Option<String>,
 
     /// If this package is independent of architecture this field specifies in what way. See
