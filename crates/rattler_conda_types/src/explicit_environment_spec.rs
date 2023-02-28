@@ -45,15 +45,20 @@ pub struct ExplicitEnvironmentEntry {
 /// package archive. See [`ExplicitEnvironmentEntry::package_archive_hash`].
 #[derive(Debug, Clone)]
 pub enum PackageArchiveHash {
+    /// An MD5 hash for a given package
     Md5(md5::digest::Output<md5::Md5>),
+    /// A SHA256 hash for a given package
     Sha256(sha2::digest::Output<sha2::Sha256>),
 }
 
+/// An error that can occur when parsing a [`PackageArchiveHash`] from a string
 #[derive(Debug, thiserror::Error)]
 pub enum ParsePackageArchiveHashError {
+    /// The hash is not a valid SHA256 hex string
     #[error("invalid sha256 hash")]
     InvalidSha256Hash(#[source] hex::FromHexError),
 
+    /// The hash is not a valid MD5 hex string
     #[error("invalid md5 hash")]
     InvalidMd5Hash(#[source] hex::FromHexError),
 }
@@ -113,17 +118,22 @@ impl From<ExplicitEnvironmentEntry> for Url {
     }
 }
 
+/// An error that can occur when parsing an [`ExplicitEnvironmentSpec`] from a string
 #[derive(Debug, thiserror::Error)]
 pub enum ParseExplicitEnvironmentSpecError {
+    /// The @EXPLICIT tag is missing
     #[error("the @EXPLICIT tag is missing")]
     MissingExplicitTag,
 
+    /// A invalid URL was present in the text file and could not be parsed
     #[error("failed to parse url '{0}'")]
     InvalidUrl(String, #[source] url::ParseError),
 
+    /// The platform string could not be parsed
     #[error(transparent)]
     InvalidPlatform(#[from] ParsePlatformError),
 
+    /// An IO error occurred
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 }

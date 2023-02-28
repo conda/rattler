@@ -83,15 +83,25 @@ pub struct PathsEntry {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum PathType {
+    /// The file was installed as a hard link (i.e. a file that points to another file in the package cache)
     #[serde(rename = "hardlink")]
     HardLink,
     #[serde(rename = "softlink")]
+    /// The file was installed as a soft link (i.e. a soft link to a file in the package cache)
     SoftLink,
+    /// An empty directory was created at installation time here
     Directory,
+    /// This is a file that was automatically "compiled" from Python source code when a `noarch` package
+    /// was installed
     PycFile,
+    /// This file is a Python entry point script for Windows (a `<entrypoint>-script.py` Python script file)
     WindowsPythonEntryPointScript,
+    /// This file is a Python entry point executable for Windows (a `<entrypoint>.exe` file)
     WindowsPythonEntryPointExe,
+    /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
+    /// Entry points are created in the `bin/...` directory when installing Python noarch packages
     UnixPythonEntryPoint,
+    /// Not used
     LinkedPackageRecord,
 }
 
@@ -178,20 +188,29 @@ impl FromStr for PrefixRecord {
     }
 }
 
+/// A record of a single file that was installed into the prefix
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct Link {
+    /// The path to the file source that was installed
     pub source: String,
+
+    /// The link type that was used to install the file
     #[serde(rename = "type")]
     pub link_type: Option<LinkType>,
 }
 
+/// The different link types that are used
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr, Hash)]
 #[serde(rename_all = "lowercase")]
 #[repr(u8)]
 pub enum LinkType {
+    /// Hard link refers to the same inode as the source file
     HardLink = 1,
+    /// Soft link is a soft link to the source file
     SoftLink = 2,
+    /// Copy is a proper copy of the source file (duplicated data on hard disk)
     Copy = 3,
+    /// Directory is a (empty) directory
     Directory = 4,
 }
 
