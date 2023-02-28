@@ -1,5 +1,5 @@
 [package]
-name = "rattler_shell_helpers"
+name = "rattler_shell"
 version = "0.1.0"
 edition = "2021"
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
@@ -17,3 +17,4 @@ tracing = "0.1.29"
 
 [dev-dependencies]
 tempdir = "0.3.7"
+insta = "1.28.0"
