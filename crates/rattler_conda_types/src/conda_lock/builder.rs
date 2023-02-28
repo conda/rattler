@@ -177,7 +177,7 @@ impl LockedPackage {
 #[cfg(test)]
 mod tests {
     use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
-    use crate::conda_lock::{Channel, PackageHashes};
+    use crate::conda_lock::{Channel, CondaLock, PackageHashes};
     use crate::{ChannelConfig, MatchSpec, Platform};
 
     #[test]
@@ -200,7 +200,11 @@ mod tests {
                     optional: None,
                 }))
             .build();
+
+        let s = serde_yaml::to_string(&lock).unwrap();
+        let serialize: CondaLock = serde_yaml::from_str(&s).unwrap();
     }
+
 
     //
     // md5: c6f4b87020c72e2700e3e94c1fc93b70
