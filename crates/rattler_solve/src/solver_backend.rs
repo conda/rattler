@@ -1,8 +1,9 @@
-use crate::{PackageOperation, SolveError, SolverProblem};
+use crate::{SolveError, SolverProblem};
+use rattler_conda_types::RepoDataRecord;
 
 /// Represents a solver backend, capable of solving [`SolverProblem`]s
 pub trait SolverBackend {
-    /// Resolve the dependencies and return the required [`PackageOperation`]s in the order in which
-    /// they need to be applied
-    fn solve(&mut self, problem: SolverProblem) -> Result<Vec<PackageOperation>, SolveError>;
+    /// Resolve the dependencies and return the [`RepoDataRecord`]s that should be present in the
+    /// environment.
+    fn solve(&mut self, problem: SolverProblem) -> Result<Vec<RepoDataRecord>, SolveError>;
 }

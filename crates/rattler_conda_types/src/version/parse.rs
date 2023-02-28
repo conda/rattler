@@ -44,6 +44,7 @@ impl Display for ParseVersionError {
 impl Error for ParseVersionError {}
 
 impl ParseVersionError {
+    /// Create a new parse error
     pub fn new(text: impl Into<String>, kind: ParseVersionErrorKind) -> Self {
         Self {
             version: text.into(),
@@ -52,14 +53,22 @@ impl ParseVersionError {
     }
 }
 
+/// The type of parse error that occurred when parsing a version string.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ParseVersionErrorKind {
+    /// The string was empty
     Empty,
+    /// The string contained invalid characters
     InvalidCharacters,
+    /// The epoch was not an integer value
     EpochMustBeInteger(ParseIntError),
+    /// The string contained an invalid numeral
     InvalidNumeral(ParseIntError),
+    /// The string contained multiple epoch separators
     DuplicateEpochSeparator,
+    /// The string contained multiple local version separators
     DuplicateLocalVersionSeparator,
+    /// The string contained an empty version component
     EmptyVersionComponent,
 }
 

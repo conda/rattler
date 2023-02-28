@@ -47,6 +47,11 @@ impl NoArchType {
     pub fn is_none(&self) -> bool {
         self.0.is_none()
     }
+
+    /// Returns true if this instance is a Python noarch type
+    pub fn is_python(&self) -> bool {
+        self.kind() == Some(NoArchKind::Python)
+    }
 }
 
 /// Defines the type of noarch that a package could be.

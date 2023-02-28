@@ -24,6 +24,7 @@ pub struct HasPrefixEntry {
 /// Representation of the `info/has_prefix` file in older package archives.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HasPrefix {
+    /// A list of files in the package that contain the `prefix` (and need prefix replacement).
     pub files: Vec<HasPrefixEntry>,
 }
 

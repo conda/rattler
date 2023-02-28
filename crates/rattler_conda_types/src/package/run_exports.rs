@@ -11,21 +11,21 @@ use serde_with::{serde_as, skip_serializing_none};
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash)]
 pub struct RunExportsJson {
-    // weak run exports apply a dependency from host to run
+    /// weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub weak: Vec<String>,
-    // strong run exports apply a dependency from build to host and run
+    /// strong run exports apply a dependency from build to host and run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong: Vec<String>,
-    // noarch run exports apply a run export only to noarch packages (other run exports are ignored)
-    // for example, python uses this to apply a dependency on python to all noarch packages, but not to
-    // the python_abi package
+    /// noarch run exports apply a run export only to noarch packages (other run exports are ignored)
+    /// for example, python uses this to apply a dependency on python to all noarch packages, but not to
+    /// the python_abi package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub noarch: Vec<String>,
-    // weak constrains apply a constrain dependency from host to build, or run to host
+    /// weak constrains apply a constrain dependency from host to build, or run to host
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub weak_constrains: Vec<String>,
-    // strong constrains apply a constrain dependency from build to host and run
+    /// strong constrains apply a constrain dependency from build to host and run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong_constrains: Vec<String>,
 }

@@ -3,11 +3,11 @@ use std::marker::PhantomData;
 use std::ptr::NonNull;
 
 use crate::libsolv::wrapper::pool::Pool;
+use crate::libsolv::wrapper::solve_goal::SolveGoal;
 use anyhow::anyhow;
 
 use super::ffi;
 use super::flags::SolverFlag;
-use super::queue::Queue;
 use super::transaction::Transaction;
 
 /// Wrapper for libsolv solver, which is used to drive dependency resolution
@@ -72,7 +72,7 @@ impl Solver<'_> {
 
     /// Solves all the problems in the `queue` and returns a transaction from the found solution.
     /// Returns an error if problems remain unsolved.
-    pub fn solve<T>(&mut self, queue: &mut Queue<T>) -> anyhow::Result<Transaction> {
+    pub fn solve(&mut self, queue: &mut SolveGoal) -> anyhow::Result<Transaction> {
         let result = unsafe {
             // Run the solve method
             ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());

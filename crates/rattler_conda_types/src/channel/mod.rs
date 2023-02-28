@@ -190,13 +190,17 @@ impl Channel {
 }
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
+/// Error that can occur when parsing a channel.
 pub enum ParseChannelError {
+    /// Error when the platform could not be parsed.
     #[error("could not parse the platforms")]
     ParsePlatformError(#[source] ParsePlatformError),
 
+    /// Error when the url could not be parsed.
     #[error("could not parse url")]
     ParseUrlError(#[source] url::ParseError),
 
+    /// Error when the path is invalid.
     #[error("invalid path '{0}")]
     InvalidPath(PathBuf),
 }

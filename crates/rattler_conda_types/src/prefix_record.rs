@@ -1,10 +1,11 @@
 //! Defines the `[PrefixRecord]` struct.
 
 use crate::repo_data_record::RepoDataRecord;
+use crate::PackageRecord;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
@@ -28,6 +29,15 @@ impl Default for PrefixPaths {
         Self {
             paths_version: 1,
             paths: Default::default(),
+        }
+    }
+}
+
+impl From<Vec<PathsEntry>> for PrefixPaths {
+    fn from(paths: Vec<PathsEntry>) -> Self {
+        Self {
+            paths,
+            ..Default::default()
         }
     }
 }
@@ -73,15 +83,25 @@ pub struct PathsEntry {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum PathType {
+    /// The file was installed as a hard link (i.e. a file that points to another file in the package cache)
     #[serde(rename = "hardlink")]
     HardLink,
     #[serde(rename = "softlink")]
+    /// The file was installed as a soft link (i.e. a soft link to a file in the package cache)
     SoftLink,
+    /// An empty directory was created at installation time here
     Directory,
+    /// This is a file that was automatically "compiled" from Python source code when a `noarch` package
+    /// was installed
     PycFile,
+    /// This file is a Python entry point script for Windows (a `<entrypoint>-script.py` Python script file)
     WindowsPythonEntryPointScript,
+    /// This file is a Python entry point executable for Windows (a `<entrypoint>.exe` file)
     WindowsPythonEntryPointExe,
+    /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
+    /// Entry points are created in the `bin/...` directory when installing Python noarch packages
     UnixPythonEntryPoint,
+    /// NOT USED - path to the package's .json file in conda-meta
     LinkedPackageRecord,
 }
 
@@ -113,7 +133,7 @@ pub struct PrefixRecord {
 
     /// A sorted list of all files included in this package
     #[serde(default)]
-    pub files: Vec<String>,
+    pub files: Vec<PathBuf>,
 
     /// Information about how files have been linked when installing the package.
     #[serde(default)]
@@ -139,6 +159,25 @@ impl PrefixRecord {
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         Self::from_reader(File::open(path.as_ref())?)
     }
+
+    /// Writes the contents of this instance to the file at the specified location.
+    pub fn write_to_path(self, path: impl AsRef<Path>, pretty: bool) -> Result<(), std::io::Error> {
+        self.write_to(File::create(path)?, pretty)
+    }
+
+    /// Writes the contents of this instance to the file at the specified location.
+    pub fn write_to(
+        &self,
+        writer: impl std::io::Write,
+        pretty: bool,
+    ) -> Result<(), std::io::Error> {
+        if pretty {
+            serde_json::to_writer_pretty(BufWriter::new(writer), self)?
+        } else {
+            serde_json::to_writer(BufWriter::new(writer), self)?
+        }
+        Ok(())
+    }
 }
 
 impl FromStr for PrefixRecord {
@@ -149,20 +188,29 @@ impl FromStr for PrefixRecord {
     }
 }
 
+/// A record of a single file that was installed into the prefix
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct Link {
+    /// The path to the file source that was installed
     pub source: String,
+
+    /// The link type that was used to install the file
     #[serde(rename = "type")]
     pub link_type: Option<LinkType>,
 }
 
+/// The different link types that are used
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize_repr, Deserialize_repr, Hash)]
 #[serde(rename_all = "lowercase")]
 #[repr(u8)]
 pub enum LinkType {
+    /// Hard link refers to the same inode as the source file
     HardLink = 1,
+    /// Soft link is a soft link to the source file
     SoftLink = 2,
+    /// Copy is a proper copy of the source file (duplicated data on hard disk)
     Copy = 3,
+    /// Directory is a (empty) directory
     Directory = 4,
 }
 
@@ -174,6 +222,18 @@ fn no_link_default() -> bool {
 /// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
+}
+
+impl AsRef<RepoDataRecord> for PrefixRecord {
+    fn as_ref(&self) -> &RepoDataRecord {
+        &self.repodata_record
+    }
+}
+
+impl AsRef<PackageRecord> for PrefixRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        &self.repodata_record.package_record
+    }
 }
 
 #[cfg(test)]

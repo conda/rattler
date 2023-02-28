@@ -1,3 +1,4 @@
+#![deny(missing_docs)]
 //! `rattler-conda-types` contains data models for types commonly found within the Conda ecosystem.
 //! The library itself doesnt provide any functionality besides parsing the data types.
 

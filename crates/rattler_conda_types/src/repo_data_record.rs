@@ -24,3 +24,9 @@ pub struct RepoDataRecord {
     /// explicit about where the package came from.
     pub channel: String,
 }
+
+impl AsRef<PackageRecord> for RepoDataRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        &self.package_record
+    }
+}

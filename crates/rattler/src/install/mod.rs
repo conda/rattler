@@ -1,11 +1,16 @@
 mod driver;
 pub mod link;
+mod python;
+mod transaction;
 
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
+pub use transaction::{Transaction, TransactionOperation};
 
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
+pub use python::PythonInfo;
+use rattler_conda_types::package::{IndexJson, PackageFile};
 use rattler_conda_types::prefix_record::PathsEntry;
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
@@ -27,6 +32,9 @@ pub enum InstallError {
     #[error("failed to read 'paths.json'")]
     FailedToReadPathsJson(#[source] std::io::Error),
 
+    #[error("failed to read 'index.json'")]
+    FailedToReadIndexJson(#[source] std::io::Error),
+
     #[error("failed to link '{0}'")]
     FailedToLink(PathBuf, #[source] LinkFileError),
 
@@ -35,6 +43,9 @@ pub enum InstallError {
 
     #[error("failed to create target directory")]
     FailedToCreateTargetDirectory(#[source] std::io::Error),
+
+    #[error("cannot install noarch python package because there is no python version specified")]
+    MissingPythonInfo,
 }
 
 impl From<JoinError> for InstallError {
@@ -50,7 +61,7 @@ impl From<JoinError> for InstallError {
 /// Additional options to pass to [`link_package`] to modify the installation process. Using
 /// [`InstallOptions::default`] works in most cases unless you want specific control over the
 /// installation process.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct InstallOptions {
     /// When files are copied/linked to the target directory hardcoded paths in these files are
     /// "patched". The hardcoded paths are replaced with the full path of the target directory, also
@@ -67,6 +78,13 @@ pub struct InstallOptions {
     /// This is sometimes useful to avoid reading the file twice or when you want to modify
     /// installation process externally.
     pub paths_json: Option<PathsJson>,
+
+    /// Instead of reading the `index.json` file from the package directory itself, use the data
+    /// specified here.
+    ///
+    /// This is sometimes useful to avoid reading the file twice or when you want to modify
+    /// installation process externally.
+    pub index_json: Option<IndexJson>,
 
     /// Whether or not to use symbolic links where possible. If this is set to `Some(false)`
     /// symlinks are disabled, if set to `Some(true)` symbolic links are alwas used when specified
@@ -90,6 +108,16 @@ pub struct InstallOptions {
     /// different behavior depending on the platform. If the field is set to `None` the current
     /// platform is used.
     pub platform: Option<Platform>,
+
+    /// Python version information of the python distribution installed within the environment. This
+    /// is only used when installing noarch Python packages. Noarch python packages are python
+    /// packages that contain python source code that has to be installed in the correct
+    /// site-packages directory based on the version of python. This site-packages directory depends
+    /// on the version of python, therefor it must be provided when linking.
+    ///
+    /// If you're installing a noarch python package and do not provide this field, the
+    /// [`link_package`] function will return [`InstallError::MissingPythonInfo`].
+    pub python_info: Option<PythonInfo>,
 }
 
 /// Given an extracted package archive (`package_dir`), installs its files to the `target_dir`.
@@ -117,20 +145,17 @@ pub async fn link_package(
         .await
         .map_err(InstallError::FailedToCreateTargetDirectory)?;
 
-    // Reuse or read the `paths.json` file from the package directory
-    let paths_json = match options.paths_json {
-        Some(paths) => paths,
-        None => {
-            let package_dir = package_dir.to_owned();
-            driver
-                .spawn_throttled(move || {
-                    PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
-                        .map_err(InstallError::FailedToReadPathsJson)
-                })
-                .await?
-        }
-    };
+    // Reuse or read the `paths.json` and `index.json` files from the package directory
+    let paths_json = read_paths_json(package_dir, driver, options.paths_json);
+    let index_json = read_index_json(package_dir, driver, options.index_json);
+    let (paths_json, index_json) = tokio::try_join!(paths_json, index_json)?;
 
+    // Error out if this is a noarch python package but the python information is missing.
+    if index_json.noarch.is_python() && options.python_info.is_none() {
+        return Err(InstallError::MissingPythonInfo);
+    }
+
+    // Determine whether or not we can use symbolic links
     let (allow_symbolic_links, allow_hard_links) = tokio::join!(
         // Determine if we can use symlinks
         match options.allow_symbolic_links {
@@ -144,6 +169,7 @@ pub async fn link_package(
         }
     );
 
+    // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
 
     // Link all package files in parallel
@@ -152,6 +178,7 @@ pub async fn link_package(
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
         let target_prefix = target_prefix.to_owned();
+        let python_info = options.python_info.clone();
 
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
         // driver. So even though we might spawn thousands of tasks they might not all run
@@ -159,6 +186,7 @@ pub async fn link_package(
         // time.
         let link_future = driver.spawn_throttled(move || {
             link_file(
+                index_json.noarch,
                 &entry,
                 &package_dir,
                 &target_dir,
@@ -166,13 +194,14 @@ pub async fn link_package(
                 allow_symbolic_links && !entry.no_link,
                 allow_hard_links && !entry.no_link,
                 platform,
+                python_info.as_ref(),
             )
             .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
             .map(|result| {
                 (
                     idx,
                     PathsEntry {
-                        relative_path: entry.relative_path,
+                        relative_path: result.relative_path,
                         path_type: entry.path_type.into(),
                         no_link: entry.no_link,
                         sha256: entry.sha256,
@@ -228,6 +257,48 @@ pub async fn link_package(
     );
 
     Ok(paths)
+}
+
+/// A helper function that reads the `paths.json` file from a package unless it has already been
+/// provided, in which case it is returned immediately.
+async fn read_paths_json(
+    package_dir: &Path,
+    driver: &InstallDriver,
+    paths_json: Option<PathsJson>,
+) -> Result<PathsJson, InstallError> {
+    match paths_json {
+        Some(paths) => Ok(paths),
+        None => {
+            let package_dir = package_dir.to_owned();
+            driver
+                .spawn_throttled(move || {
+                    PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
+                        .map_err(InstallError::FailedToReadPathsJson)
+                })
+                .await
+        }
+    }
+}
+
+/// A helper function that reads the `index.json` file from a package unless it has already been
+/// provided, in which case it is returned immediately.
+async fn read_index_json(
+    package_dir: &Path,
+    driver: &InstallDriver,
+    index_json: Option<IndexJson>,
+) -> Result<IndexJson, InstallError> {
+    match index_json {
+        Some(index) => Ok(index),
+        None => {
+            let package_dir = package_dir.to_owned();
+            driver
+                .spawn_throttled(move || {
+                    IndexJson::from_package_directory(&package_dir)
+                        .map_err(InstallError::FailedToReadIndexJson)
+                })
+                .await
+        }
+    }
 }
 
 /// A helper struct for a BinaryHeap to provides ordering to items that are otherwise unordered.
@@ -321,7 +392,7 @@ async fn can_create_hardlinks(
 
 #[cfg(test)]
 mod test {
-    use crate::install::InstallDriver;
+    use crate::install::{InstallDriver, PythonInfo};
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallOptions},
@@ -331,10 +402,11 @@ mod test {
     use itertools::Itertools;
     use rattler_conda_types::conda_lock::CondaLock;
     use rattler_conda_types::package::ArchiveIdentifier;
-    use rattler_conda_types::{ExplicitEnvironmentSpec, Platform};
+    use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
     use reqwest::Client;
     use std::env::temp_dir;
     use std::process::Command;
+    use std::str::FromStr;
     use tempfile::tempdir;
     use url::Url;
 
@@ -349,7 +421,12 @@ mod test {
 
         assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
-        test_install_python(env.packages.iter().map(|p| &p.url), "explicit").await;
+        test_install_python(
+            env.packages.iter().map(|p| &p.url),
+            "explicit",
+            current_platform,
+        )
+        .await;
     }
 
     #[tracing_test::traced_test]
@@ -365,11 +442,16 @@ mod test {
         test_install_python(
             lock.packages_for_platform(current_platform).map(|p| &p.url),
             "conda-lock",
+            current_platform,
         )
         .await;
     }
 
-    pub async fn test_install_python(urls: impl Iterator<Item = &Url>, cache_name: &str) {
+    pub async fn test_install_python(
+        urls: impl Iterator<Item = &Url>,
+        cache_name: &str,
+        platform: Platform,
+    ) {
         // Open a package cache in the systems temporary directory with a specific name. This allows
         // us to reuse a package cache across multiple invocations of this test. Useful if you're
         // debugging.
@@ -377,6 +459,10 @@ mod test {
 
         // Create an HTTP client we can use to download packages
         let client = Client::new();
+
+        // Specify python version
+        let python_version =
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), platform).unwrap();
 
         // Download and install each layer into an environment.
         let install_driver = InstallDriver::default();
@@ -387,6 +473,7 @@ mod test {
                 let client = client.clone();
                 let package_cache = &package_cache;
                 let install_driver = &install_driver;
+                let python_version = &python_version;
                 async move {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(package_url).unwrap();
@@ -400,7 +487,10 @@ mod test {
                         &package_dir,
                         prefix_path,
                         install_driver,
-                        InstallOptions::default(),
+                        InstallOptions {
+                            python_info: Some(python_version.clone()),
+                            ..Default::default()
+                        },
                     )
                     .await
                     .unwrap();

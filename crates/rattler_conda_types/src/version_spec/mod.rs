@@ -59,12 +59,17 @@ impl LogicalOperator {
     }
 }
 
+/// A version specification.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum VersionSpec {
+    /// No version specified
     None,
+    /// Any version
     Any,
+    /// A specific version
     Operator(VersionOperator, Version),
+    /// A group of version specifications
     Group(LogicalOperator, Vec<VersionSpec>),
 }
 

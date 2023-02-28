@@ -6,21 +6,20 @@ use crate::libsolv::wrapper::repo::RepoId;
 use crate::libsolv::wrapper::solvable::SolvableId;
 use crate::libsolv::wrapper::transaction::Transaction;
 use crate::libsolv::wrapper::{ffi, solvable};
-use crate::{PackageOperation, PackageOperationKind};
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 
-/// Returns the package operations derived from the transaction
+/// Returns which packages should be installed in the environment
 ///
-/// If the transaction contains libsolv operations that have no mapping to `PackageOperation`,
-/// an error is returned containing their ids
-pub fn get_package_operations(
+/// If the transaction contains libsolv operations that are not "install" an error is returned
+/// containing their ids.
+pub fn get_required_packages(
     pool: &Pool,
     repo_mapping: &HashMap<RepoId, usize>,
     transaction: &Transaction,
     repodata_records: &[&[RepoDataRecord]],
-) -> Result<Vec<PackageOperation>, Vec<ffi::Id>> {
-    let mut package_operations = Vec::new();
+) -> Result<Vec<RepoDataRecord>, Vec<ffi::Id>> {
+    let mut required_packages = Vec::new();
     let mut unsupported_operations = Vec::new();
 
     let solvable_index_id = pool
@@ -39,46 +38,9 @@ pub fn get_package_operations(
         let repodata_record = &repodata_records[repo_index][solvable_index];
 
         match transaction_type as u32 {
-            ffi::SOLVER_TRANSACTION_DOWNGRADED
-            | ffi::SOLVER_TRANSACTION_UPGRADED
-            | ffi::SOLVER_TRANSACTION_CHANGED => {
-                package_operations.push(PackageOperation {
-                    package: repodata_record.clone(),
-                    kind: PackageOperationKind::Remove,
-                });
-
-                // Safe because the provided id is valid and the transaction type has a second
-                // associated solvable
-                let second_solvable_id = unsafe { transaction.obs_pkg(id) };
-                let (second_repo_index, second_solvable_index) =
-                    get_solvable_indexes(pool, repo_mapping, solvable_index_id, second_solvable_id);
-                let second_repodata_record =
-                    &repodata_records[second_repo_index][second_solvable_index];
-
-                package_operations.push(PackageOperation {
-                    package: second_repodata_record.clone(),
-                    kind: PackageOperationKind::Install,
-                });
-            }
-            ffi::SOLVER_TRANSACTION_REINSTALLED => {
-                package_operations.push(PackageOperation {
-                    package: repodata_record.clone(),
-                    kind: PackageOperationKind::Reinstall,
-                });
-            }
             ffi::SOLVER_TRANSACTION_INSTALL => {
-                package_operations.push(PackageOperation {
-                    package: repodata_record.clone(),
-                    kind: PackageOperationKind::Install,
-                });
+                required_packages.push(repodata_record.clone());
             }
-            ffi::SOLVER_TRANSACTION_ERASE => {
-                package_operations.push(PackageOperation {
-                    package: repodata_record.clone(),
-                    kind: PackageOperationKind::Remove,
-                });
-            }
-            ffi::SOLVER_TRANSACTION_IGNORE => {}
             _ => {
                 unsupported_operations.push(transaction_type);
             }
@@ -89,7 +51,7 @@ pub fn get_package_operations(
         return Err(unsupported_operations);
     }
 
-    Ok(package_operations)
+    Ok(required_packages)
 }
 
 fn get_solvable_indexes(
