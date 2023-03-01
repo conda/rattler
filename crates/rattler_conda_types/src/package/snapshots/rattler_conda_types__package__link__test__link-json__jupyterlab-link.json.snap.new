@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/package/link.rs
+assertion_line: 57
 expression: link_json
 ---
 noarch:

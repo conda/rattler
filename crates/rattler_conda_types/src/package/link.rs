@@ -54,6 +54,6 @@ mod test {
         let test_file = &crate::get_test_data_dir().join(path);
         let link_json: LinkJson =
             serde_json::from_reader(std::fs::File::open(test_file).unwrap()).unwrap();
-        insta::assert_yaml_snapshot!(link_json);
+        insta::assert_yaml_snapshot!(path, link_json);
     }
 }
