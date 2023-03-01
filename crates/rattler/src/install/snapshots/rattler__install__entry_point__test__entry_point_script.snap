@@ -2,7 +2,7 @@
 source: crates/rattler/src/install/entry_point.rs
 expression: script
 ---
-#!/prefix\bin/python3.11
+#!/prefix/bin/python3.11
 # -*- coding: utf-8 -*-
 import re
 import sys
