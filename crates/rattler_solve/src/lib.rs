@@ -73,10 +73,9 @@ mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
     use crate::{LibsolvRepoData, SolveError, SolverBackend, SolverProblem};
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, RepoData, RepoDataRecord,
-        Version,
+        Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+        RepoData, RepoDataRecord, Version,
     };
-    use rattler_conda_types::{GenericVirtualPackage, Platform};
     use std::str::FromStr;
     use url::Url;
 
@@ -213,7 +212,7 @@ mod test_libsolv {
     }
 
     #[test]
-    #[cfg(not(target_os = "nto"))]
+    #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() -> anyhow::Result<()> {
         let pkgs = solve(
             dummy_channel_json_path(),
@@ -459,21 +458,22 @@ mod test_libsolv {
         match_specs: &[&str],
         with_solv_file: bool,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
-        let channel = Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap();
-
         let repo_data = read_repodata(&repo_path);
 
-        #[cfg(not(target_os = "nto"))]
+        #[cfg(target_family = "unix")]
         let cached_repo_data = super::cache_libsolv_repodata(
-            channel.platform_url(Platform::Linux64).to_string(),
+            Channel::from_str("conda-forge", &ChannelConfig::default())
+                .unwrap()
+                .platform_url(rattler_conda_types::Platform::Linux64)
+                .to_string(),
             &repo_data,
         );
 
         let libsolv_repodata = if with_solv_file {
-            #[cfg(target_os = "nto")]
+            #[cfg(not(target_family = "unix"))]
             panic!("solv files are unsupported for this platform");
 
-            #[cfg(not(target_os = "nto"))]
+            #[cfg(target_family = "unix")]
             LibsolvRepoData {
                 records: repo_data.as_slice(),
                 solv_file: Some(&cached_repo_data),

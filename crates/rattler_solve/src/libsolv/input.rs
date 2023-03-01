@@ -13,18 +13,26 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ffi::{CString, NulError};
 
-pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
-    #[cfg(not(target_family = "unix"))]
-    unreachable!("this platform does not support in-memory .solv files");
+#[cfg(not(target_family = "unix"))]
+/// Adds solvables to a repo from an in-memory .solv file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+pub fn add_solv_file(_pool: &Pool, _repo: &Repo, _solv_bytes: &LibcByteSlice) {
+    unimplemented!("this platform does not support in-memory .solv files");
+}
 
-    #[cfg(target_family = "unix")]
-    {
-        // Add solv file from memory if available
-        let mode = CString::new("r").unwrap();
-        let file = unsafe { libc::fmemopen(solv_bytes.as_ptr(), solv_bytes.len(), mode.as_ptr()) };
-        repo.add_solv(pool, file);
-        unsafe { libc::fclose(file) };
-    }
+#[cfg(target_family = "unix")]
+/// Adds solvables to a repo from an in-memory .solv file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
+    // Add solv file from memory if available
+    let mode = CString::new("r").unwrap();
+    let file = unsafe { libc::fmemopen(solv_bytes.as_ptr(), solv_bytes.len(), mode.as_ptr()) };
+    repo.add_solv(pool, file);
+    unsafe { libc::fclose(file) };
 }
 
 /// Adds [`RepoDataRecord`] to `repo`
@@ -286,7 +294,7 @@ fn reset_solvable(pool: &Pool, repo: &Repo, data: &Repodata, solvable_id: Solvab
 /// Note: this function relies on primitives that are only available on unix-like operating systems,
 /// and will panic if called from another platform (e.g. Windows)
 #[cfg(not(target_family = "unix"))]
-pub fn cache_repodata(url: String, data: &[RepoDataRecord]) -> LibcByteSlice {
+pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
     unimplemented!("this function is only available on unix-like operating systems")
 }
 

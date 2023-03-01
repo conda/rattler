@@ -1,3 +1,5 @@
+#![cfg_attr(not(target_family = "unix"), allow(dead_code))]
+
 use std::ptr::NonNull;
 
 /// Represents an owned byte slice that was allocated using [`libc::malloc`] and is deallocated upon
