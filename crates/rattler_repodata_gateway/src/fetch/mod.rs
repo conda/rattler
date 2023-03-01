@@ -239,21 +239,13 @@ pub async fn fetch_repo_data(
     };
 
     // Determine the availability of variants based on the cache or by querying the remote.
-    let VariantAvailability {
-        has_zst: cached_zst_available,
-        has_bz2: cached_bz2_available,
-    } = check_variant_availability(&client, &subdir_url, cache_state.as_ref()).await;
+    let variant_availability =
+        check_variant_availability(&client, &subdir_url, cache_state.as_ref()).await;
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
     // variants. We dont check the expiration here since we just refreshed it.
-    let has_zst = cached_zst_available
-        .as_ref()
-        .map(|state| state.value)
-        .unwrap_or(false);
-    let has_bz2 = cached_bz2_available
-        .as_ref()
-        .map(|state| state.value)
-        .unwrap_or(false);
+    let has_zst = variant_availability.has_zst();
+    let has_bz2 = variant_availability.has_bz2();
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -302,8 +294,8 @@ pub async fn fetch_repo_data(
         // Update the cache on disk with any new findings.
         let cache_state = RepoDataState {
             url: repo_data_url,
-            has_zst: cached_zst_available,
-            has_bz2: cached_bz2_available,
+            has_zst: variant_availability.has_zst,
+            has_bz2: variant_availability.has_bz2,
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
@@ -365,8 +357,8 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        has_zst: cached_zst_available,
-        has_bz2: cached_bz2_available,
+        has_zst: variant_availability.has_zst,
+        has_bz2: variant_availability.has_bz2,
         // We dont do anything with JLAP so just copy over the value.
         has_jlap: cache_state.and_then(|state| state.has_jlap),
     };
@@ -477,14 +469,32 @@ async fn stream_and_decode_to_file(
 
 /// Describes the availability of certain `repodata.json`.
 #[derive(Debug)]
-struct VariantAvailability {
+pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
     has_bz2: Option<Expiring<bool>>,
 }
 
+impl VariantAvailability {
+    /// Returns true if there is a Zst variant available, regardless of when it was checked
+    pub fn has_zst(&self) -> bool {
+        self.has_zst
+            .as_ref()
+            .map(|state| state.value)
+            .unwrap_or(false)
+    }
+
+    /// Returns true if there is a Bz2 variant available, regardless of when it was checked
+    pub fn has_bz2(&self) -> bool {
+        self.has_bz2
+            .as_ref()
+            .map(|state| state.value)
+            .unwrap_or(false)
+    }
+}
+
 /// Determine the availability of `repodata.json` variants (like a `.zst` or `.bz2`) by checking
 /// a cache or the internet.
-async fn check_variant_availability(
+pub async fn check_variant_availability(
     client: &Client,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
