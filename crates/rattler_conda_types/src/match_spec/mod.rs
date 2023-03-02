@@ -59,7 +59,7 @@ mod parse;
 /// # Examples:
 ///
 /// ```rust
-/// use crate::{MatchSpec, VersionSpec};
+/// use rattler_conda_types::{MatchSpec, VersionSpec};
 /// use std::str::FromStr;
 /// 
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
