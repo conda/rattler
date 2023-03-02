@@ -1,6 +1,6 @@
 use super::MatchSpec;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{Channel, ChannelConfig, ParseChannelError, VersionSpec};
+use crate::{ParseChannelError, VersionSpec};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
@@ -164,12 +164,12 @@ fn parse_bracket_vec_into_components(
     bracket: BracketVec,
     match_spec: MatchSpec,
 ) -> Result<MatchSpec, ParseMatchSpecError> {
-    let mut match_spec = match_spec.clone();
+    let mut match_spec = match_spec;
 
     for elem in bracket {
         let (key, value) = elem;
         match key {
-            "version" => match_spec.version = Some(VersionSpec::from_str(&value)?),
+            "version" => match_spec.version = Some(VersionSpec::from_str(value)?),
             "build" => match_spec.build = Some(value.to_string()),
             "build_number" => match_spec.build_number = Some(value.parse()?),
             "fn" => match_spec.file_name = Some(value.to_string()),
@@ -299,7 +299,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     match_spec.namespace = namespace.map(ToOwned::to_owned).or(match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
-        if let Some((channel, subdir)) = channel_str.rsplit_once("/") {
+        if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
             match_spec.channel = Some(channel.to_string());
             match_spec.subdir = Some(subdir.to_string());
         } else {
@@ -347,7 +347,7 @@ mod tests {
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::{channel, Channel, ChannelConfig, VersionSpec};
+    use crate::{VersionSpec};
     use smallvec::smallvec;
 
     #[test]

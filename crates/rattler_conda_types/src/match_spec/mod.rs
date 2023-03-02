@@ -1,4 +1,4 @@
-use crate::{Channel, VersionSpec};
+use crate::{VersionSpec};
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};

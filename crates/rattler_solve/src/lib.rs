@@ -400,7 +400,7 @@ mod test_libsolv {
         let repo_data = read_repodata(&repo_path);
         let available_packages = vec![repo_data];
         let specs = match_specs
-            .into_iter()
+            .iter()
             .map(|m| MatchSpec::from_str(m).unwrap())
             .collect();
 
@@ -421,7 +421,7 @@ mod test_libsolv {
             )
         }
 
-        if pkgs.len() == 0 {
+        if pkgs.is_empty() {
             println!("No packages in the environment!");
         }
 
