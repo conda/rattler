@@ -52,11 +52,8 @@ pub enum ParseMatchSpecError {
 
 impl MatchSpec {
     /// Parses a matchspec from a string.
-    pub fn from_str(
-        input: &str,
-        channel_config: &ChannelConfig,
-    ) -> Result<MatchSpec, ParseMatchSpecError> {
-        parse(input, channel_config)
+    pub fn from_str(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
+        parse(input)
     }
 }
 
@@ -176,7 +173,7 @@ fn parse_bracket_vec_into_components(
             "build" => match_spec.build = Some(value.to_string()),
             "build_number" => match_spec.build_number = Some(value.parse()?),
             "fn" => match_spec.file_name = Some(value.to_string()),
-            _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?
+            _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
     Ok(match_spec)
@@ -254,7 +251,7 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
 
 /// Parses a conda match spec.
 /// This is based on: https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569
-fn parse(input: &str, channel_config: &ChannelConfig) -> Result<MatchSpec, ParseMatchSpecError> {
+fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
@@ -300,11 +297,14 @@ fn parse(input: &str, channel_config: &ChannelConfig) -> Result<MatchSpec, Parse
     };
 
     match_spec.namespace = namespace.map(ToOwned::to_owned).or(match_spec.namespace);
+
     if let Some(channel_str) = channel_str {
-        match_spec.channel = Some(
-            Channel::from_str(channel_str, channel_config)
-                .map_err(ParseMatchSpecError::ParseChannelError)?,
-        )
+        if let Some((channel, subdir)) = channel_str.rsplit_once("/") {
+            match_spec.channel = Some(channel.to_string());
+            match_spec.subdir = Some(subdir.to_string());
+        } else {
+            match_spec.channel = Some(channel_str.to_string());
+        }
     }
 
     // Step 6. Strip off the package name from the input
@@ -347,7 +347,7 @@ mod tests {
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::{ChannelConfig, VersionSpec, Channel, channel};
+    use crate::{channel, Channel, ChannelConfig, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
@@ -416,11 +416,10 @@ mod tests {
 
     #[test]
     fn test_match_spec() {
-        let channel_config = ChannelConfig::default();
         insta::assert_yaml_snapshot!([
-            MatchSpec::from_str("python 3.8.* *_cpython", &channel_config).unwrap(),
-            MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap(),
-            MatchSpec::from_str("foo==1.0=py27_0", &channel_config).unwrap(),
+            MatchSpec::from_str("python 3.8.* *_cpython").unwrap(),
+            MatchSpec::from_str("foo=1.0=py27_0").unwrap(),
+            MatchSpec::from_str("foo==1.0=py27_0").unwrap(),
         ],
         @r###"
         ---
@@ -438,10 +437,9 @@ mod tests {
 
     #[test]
     fn test_match_spec_more() {
-        let channel_config = ChannelConfig::default();
-        let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]", &channel_config).unwrap();
+        let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
         assert_eq!(spec.name, Some("foo".to_string()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-        assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).unwrap()));
+        assert_eq!(spec.channel, Some("conda-forge".to_string()));
     }
 }

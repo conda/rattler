@@ -9,10 +9,10 @@ mod parse;
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
 ///
 /// [`MatchSpec`] can be composed with keyword arguments, where keys are any of the
-/// attributes of [`PackageRecord`]. Values for keyword arguments are the exact values the
-/// attribute should match against. Many fields can also be matched against non-exact values--by
-/// including wildcard `*` and `>`/`<` ranges--where supported. Any non-specified field is
-/// the equivalent of a full wildcard match.
+/// attributes of [`crate::PackageRecord`]. Values for keyword arguments are the exact
+/// values the attribute should match against. Many fields can also be matched against non-exact
+/// values -- by including wildcard `*` and `>`/`<` ranges--where supported. Any non-specified field
+/// is the equivalent of a full wildcard match.
 ///
 /// MatchSpecs can also be composed using a single positional argument, with optional
 /// keyword arguments. Keyword arguments also override any conflicting information provided in
@@ -59,40 +59,39 @@ mod parse;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, ChannelConfig};
+/// use crate::{MatchSpec, VersionSpec};
 /// use std::str::FromStr;
-///
-/// let channel_config = ChannelConfig::default();
-///
-/// let spec = MatchSpec::from_str("foo 1.0 py27_0", &channel_config).unwrap();
+/// 
+/// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
 /// assert_eq!(spec.build, Some("py27_0".to_string()));
 ///
-/// let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
+/// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
 /// assert_eq!(spec.build, Some("py27_0".to_string()));
 ///
-/// //let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]", &channel_config).unwrap();
-/// //assert_eq!(spec.name, Some("foo".to_string()));
-/// //assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// // assert_eq!(spec.channel, Some("conda-forge".to_string()));
+/// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
+/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+/// assert_eq!(spec.channel, Some("conda-forge".to_string()));
 ///
-/// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0", &channel_config).unwrap();
+/// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// //assert_eq!(spec.channel.unwrap().name, "conda-forge"));
-/// //assert_eq!(spec.subdir, Some("linux-64".to_string()));
+/// assert_eq!(spec.channel, Some("conda-forge".to_string()));
+/// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0", &channel_config).unwrap();
+/// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// // assert_eq!(spec.subdir, Some("linux-64".to_string()));
+/// assert_eq!(spec.channel, Some("*".to_string()));
+/// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// //let spec = MatchSpec::from_str("foo[build=py2*]", &channel_config).unwrap();
-/// //assert_eq!(spec.name, Some("foo".to_string()));
-/// //assert_eq!(spec.build, Some("py2*".to_string()));
+/// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
+/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.build, Some("py2*".to_string()));
 /// ```
 ///
 /// To fully-specify a package with a full, exact spec, the following fields must be given as exact values:
@@ -105,7 +104,7 @@ mod parse;
 ///
 /// In the future, the namespace field might be added to this list.
 ///
-/// Alternatively, an exact spec is given by '*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]'.
+/// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
@@ -120,7 +119,9 @@ pub struct MatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    pub channel: Option<Channel>,
+    pub channel: Option<String>,
+    /// The subdir of the channel
+    pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
 }
@@ -129,7 +130,17 @@ impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
             // TODO: namespace
-            write!(f, "{}::", channel.canonical_name())?;
+            write!(f, "{}", channel)?;
+        }
+
+        if let Some(subdir) = &self.subdir {
+            write!(f, "/{}", subdir)?;
+        }
+
+        if let Some(namespace) = &self.namespace {
+            write!(f, ":{}:", namespace)?;
+        } else if self.channel.is_some() || self.subdir.is_some() {
+            write!(f, "::")?;
         }
 
         match &self.name {

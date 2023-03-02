@@ -57,8 +57,8 @@ mod parse;
 ///
 /// # Examples:
 ///
-/// 1.2g.beta15.rc  =>  [[0], [1], [2, 'g'], [0, 'beta', 15], [0, 'rc']]
-/// 1!2.15.1_ALPHA  =>  [[1], [2], [15], [1, '_alpha']]
+/// `1.2g.beta15.rc`  =>  `[[0], [1], [2, 'g'], [0, 'beta', 15], [0, 'rc']]`
+/// `1!2.15.1_ALPHA`  =>  `[[1], [2], [15], [1, '_alpha']]`
 ///
 /// The resulting lists are compared lexicographically, where the following
 /// rules are applied to each pair of corresponding subcomponents:

@@ -285,8 +285,7 @@ mod test {
     #[test]
     fn test_matchspec_interning() {
         // Create a matchspec
-        let channel_config = ChannelConfig::default();
-        let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
+        let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
         // Intern it into the pool
         let pool = Pool::default();
         pool.intern_matchspec(&spec);
