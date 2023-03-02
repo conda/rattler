@@ -50,10 +50,11 @@ pub enum ParseMatchSpecError {
     InvalidBuildNumber(#[from] ParseIntError),
 }
 
-impl MatchSpec {
-    /// Parses a matchspec from a string.
-    pub fn from_str(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
-        parse(input)
+impl FromStr for MatchSpec {
+    type Err = ParseMatchSpecError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse(s)
     }
 }
 
