@@ -118,7 +118,7 @@ pub struct MatchSpec {
     /// The build number of the package
     pub build_number: Option<usize>,
     /// Match the specific filename of the package
-    pub filename: Option<String>,
+    pub file_name: Option<String>,
     /// The channel of the package
     pub channel: Option<Channel>,
     /// The namespace of the package (currently not used)

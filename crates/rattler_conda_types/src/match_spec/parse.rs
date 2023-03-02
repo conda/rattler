@@ -11,6 +11,7 @@ use nom::sequence::{delimited, pair, separated_pair, terminated};
 use nom::{Finish, IResult};
 use smallvec::SmallVec;
 use std::borrow::Cow;
+use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
@@ -44,6 +45,9 @@ pub enum ParseMatchSpecError {
 
     #[error("invalid version spec: {0}")]
     InvalidVersionSpec(#[from] ParseVersionSpecError),
+
+    #[error("invalid build number: {0}")]
+    InvalidBuildNumber(#[from] ParseIntError),
 }
 
 impl MatchSpec {
@@ -163,9 +167,17 @@ fn parse_bracket_vec_into_components(
     bracket: BracketVec,
     match_spec: MatchSpec,
 ) -> Result<MatchSpec, ParseMatchSpecError> {
-    if let Some(&(key, _)) = bracket.first() {
-        // TODO: not supported yet
-        return Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()));
+    let mut match_spec = match_spec.clone();
+
+    for elem in bracket {
+        let (key, value) = elem;
+        match key {
+            "version" => match_spec.version = Some(VersionSpec::from_str(&value)?),
+            "build" => match_spec.build = Some(value.to_string()),
+            "build_number" => match_spec.build_number = Some(value.parse()?),
+            "fn" => match_spec.file_name = Some(value.to_string()),
+            _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?
+        }
     }
     Ok(match_spec)
 }
@@ -330,10 +342,12 @@ fn parse(input: &str, channel_config: &ChannelConfig) -> Result<MatchSpec, Parse
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::ChannelConfig;
+    use crate::{ChannelConfig, VersionSpec, Channel, channel};
     use smallvec::smallvec;
 
     #[test]
@@ -350,6 +364,11 @@ mod tests {
 
         let result = strip_brackets(r#"bla [version=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
+        let expected: BracketVec = smallvec![("version", "1")];
+        assert_eq!(result.1, expected);
+
+        let result = strip_brackets(r#"conda-forge::bla[version=1]"#).unwrap();
+        assert_eq!(result.0, "conda-forge::bla");
         let expected: BracketVec = smallvec![("version", "1")];
         assert_eq!(result.1, expected);
 
@@ -415,5 +434,14 @@ mod tests {
           version: "==1.0"
           build: py27_0
         "###);
+    }
+
+    #[test]
+    fn test_match_spec_more() {
+        let channel_config = ChannelConfig::default();
+        let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]", &channel_config).unwrap();
+        assert_eq!(spec.name, Some("foo".to_string()));
+        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).unwrap()));
     }
 }
