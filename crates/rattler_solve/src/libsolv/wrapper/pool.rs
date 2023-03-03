@@ -244,7 +244,7 @@ mod test {
     use std::ffi::CString;
 
     use super::super::pool::Pool;
-    use rattler_conda_types::{MatchSpec};
+    use rattler_conda_types::MatchSpec;
 
     #[test]
     fn test_pool_string_interning() {

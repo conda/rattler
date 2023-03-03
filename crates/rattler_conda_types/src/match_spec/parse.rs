@@ -348,7 +348,7 @@ mod tests {
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
-    use crate::{VersionSpec};
+    use crate::VersionSpec;
     use smallvec::smallvec;
 
     #[test]

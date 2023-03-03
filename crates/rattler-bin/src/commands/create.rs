@@ -20,7 +20,8 @@ use std::{
     future::ready,
     io::ErrorKind,
     path::{Path, PathBuf},
-    time::Duration, str::FromStr,
+    str::FromStr,
+    time::Duration,
 };
 use tokio::task::JoinHandle;
 

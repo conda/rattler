@@ -1,4 +1,4 @@
-use crate::{VersionSpec};
+use crate::VersionSpec;
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
@@ -61,7 +61,7 @@ mod parse;
 /// ```rust
 /// use rattler_conda_types::{MatchSpec, VersionSpec};
 /// use std::str::FromStr;
-/// 
+///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
