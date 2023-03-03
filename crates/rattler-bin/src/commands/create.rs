@@ -7,10 +7,11 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord, RepoData,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
     RepoDataRecord,
 };
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
+use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverBackend, SolverProblem};
 use reqwest::Client;
 use std::{
@@ -95,7 +96,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let repodata_cache_path = cache_dir.join("repodata");
     let channel_and_platform_len = channel_urls.len();
     let repodata_download_client = download_client.clone();
-    let repodatas = futures::stream::iter(channel_urls)
+    let sparse_repo_datas = futures::stream::iter(channel_urls)
         .map(move |(channel, platform)| {
             let repodata_cache = repodata_cache_path.clone();
             let download_client = repodata_download_client.clone();
@@ -117,6 +118,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         // Collect into another iterator where we extract the first errornous result
         .into_iter()
         .collect::<Result<Vec<_>, _>>()?;
+
+    // Get the package names from the matchspecs so we can only load the package records that we need.
+    let package_names = specs.iter().filter_map(|spec| spec.name.as_ref());
+    let repodatas = wrap_in_progress("parsing repodata", move || {
+        SparseRepoData::load_records(&sparse_repo_datas, package_names)
+    })?;
 
     // Determine virtual packages of the system. These packages define the capabilities of the
     // system. Some packages depend on these virtual packages to indiciate compability with the
@@ -447,7 +454,7 @@ async fn fetch_repo_data_records_with_progress(
     repodata_cache: &Path,
     client: Client,
     multi_progress: indicatif::MultiProgress,
-) -> Result<Vec<RepoDataRecord>, anyhow::Error> {
+) -> Result<SparseRepoData, anyhow::Error> {
     // Create a progress bar
     let progress_bar = multi_progress.add(
         indicatif::ProgressBar::new(1)
@@ -490,11 +497,8 @@ async fn fetch_repo_data_records_with_progress(
     // Deserialize the data. This is a hefty blocking operation so we spawn it as a tokio blocking
     // task.
     let repo_data_json_path = result.repo_data_json_path.clone();
-    match tokio::task::spawn_blocking(move || {
-        RepoData::from_path(repo_data_json_path)
-            .map(move |repodata| repodata.into_repo_data_records(&channel))
-    })
-    .await
+    match tokio::task::spawn_blocking(move || SparseRepoData::new(channel, repo_data_json_path))
+        .await
     {
         Ok(Ok(repodata)) => {
             progress_bar.set_style(finished_progress_style());
@@ -510,15 +514,17 @@ async fn fetch_repo_data_records_with_progress(
             progress_bar.finish_with_message("Error");
             Err(err.into())
         }
-        Err(err) => {
-            if let Ok(panic) = err.try_into_panic() {
+        Err(err) => match err.try_into_panic() {
+            Ok(panic) => {
                 std::panic::resume_unwind(panic);
             }
-            progress_bar.set_style(errored_progress_style());
-            progress_bar.finish_with_message("Cancelled..");
-            // Since the task was cancelled most likely the whole async stack is being cancelled.
-            Ok(Vec::new())
-        }
+            Err(_) => {
+                progress_bar.set_style(errored_progress_style());
+                progress_bar.finish_with_message("Cancelled..");
+                // Since the task was cancelled most likely the whole async stack is being cancelled.
+                Err(anyhow::anyhow!("cancelled"))
+            }
+        },
     }
 }
 
