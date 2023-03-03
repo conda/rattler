@@ -55,10 +55,9 @@ async fn main() -> anyhow::Result<()> {
     };
     let env_filter = EnvFilter::builder()
         .with_default_directive(default_filter.into())
-        .from_env()?;
-
-    // filter logs from apple codesign because they are very noisy
-    let env_filter = env_filter.add_directive("apple_codesign=off".parse()?);
+        .from_env()?
+        // filter logs from apple codesign because they are very noisy
+        .add_directive("apple_codesign=off".parse()?);
 
     // Setup the tracing subscriber
     tracing_subscriber::fmt()
