@@ -4,15 +4,20 @@ use serde::{Deserialize, Serialize};
 
 use super::{EntryPoint, PackageFile};
 
+/// Describes python noarch specific entry points
 #[derive(Serialize, Clone, Debug, Deserialize)]
-struct NoarchPython {
-    entry_points: Vec<EntryPoint>,
+pub struct PythonEntryPoints {
+    /// A list of commands that should execute certain python commands.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entry_points: Vec<EntryPoint>,
 }
 
+/// Links for specific types of noarch packages.
 #[derive(Serialize, Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
-enum Noarch {
-    Python(NoarchPython),
+pub enum NoArchLinks {
+    /// Python noarch specific entry points.
+    Python(PythonEntryPoints),
 }
 
 /// A representation of the `link.json` file found in noarch package archives.
@@ -20,7 +25,8 @@ enum Noarch {
 /// The `link.json` file contains information about entrypoints that need to be installed for the package.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LinkJson {
-    noarch: Noarch,
+    /// Links for specific noarch packages
+    pub noarch: NoArchLinks,
 
     /// The version of the package metadata file
     pub package_metadata_version: usize,
@@ -39,12 +45,15 @@ impl PackageFile for LinkJson {
 #[cfg(test)]
 mod test {
     use super::LinkJson;
+    use rstest::rstest;
 
-    #[test]
-    fn test_link_json() {
-        let test_file = &crate::get_test_data_dir().join("link-json/jupyterlab-link.json");
+    #[rstest]
+    #[case::jupyterlab("link-json/jupyterlab-link.json")]
+    #[case::setuptools("link-json/setuptools-link.json")]
+    fn test_link_json(#[case] path: &str) {
+        let test_file = &crate::get_test_data_dir().join(path);
         let link_json: LinkJson =
             serde_json::from_reader(std::fs::File::open(test_file).unwrap()).unwrap();
-        insta::assert_yaml_snapshot!(link_json);
+        insta::assert_yaml_snapshot!(path, link_json);
     }
 }
