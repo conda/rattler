@@ -96,7 +96,7 @@ impl SparseRepoData {
                 for record in records.iter() {
                     for dependency in &record.package_record.depends {
                         let dependency_name =
-                            dependency.split_once(' ').unwrap_or((&dependency, "")).0;
+                            dependency.split_once(' ').unwrap_or((dependency, "")).0;
                         if !seen.contains(dependency_name) {
                             pending.push_back(dependency_name.to_string());
                             seen.insert(dependency_name.to_string());
@@ -171,11 +171,8 @@ pub async fn load_repo_data_sparse(
         .buffered(50)
         .try_collect::<Vec<_>>()
         .await?;
-    
-    Ok(SparseRepoData::load_records(
-        &lazy_repo_data,
-        package_names,
-    )?)
+
+    SparseRepoData::load_records(&lazy_repo_data, package_names)
 }
 
 fn deserialize_tuple_map<'d, D: Deserializer<'d>, K: Deserialize<'d>, V: Deserialize<'d>>(
@@ -183,7 +180,7 @@ fn deserialize_tuple_map<'d, D: Deserializer<'d>, K: Deserialize<'d>, V: Deseria
 ) -> Result<Vec<(K, V)>, D::Error> {
     return deserializer.deserialize_map(MapVisitor(PhantomData));
 
-    #[cfg_attr(feature = "cargo-clippy", allow(type_complexity))]
+    #[allow(clippy::type_complexity)]
     struct MapVisitor<I, K, V>(PhantomData<fn() -> (I, K, V)>);
 
     impl<'de, I, K, V> Visitor<'de> for MapVisitor<I, K, V>
