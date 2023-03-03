@@ -241,7 +241,7 @@ impl From<MatchSpecId> for Id {
 
 #[cfg(test)]
 mod test {
-    use std::ffi::CString;
+    use std::{ffi::CString, str::FromStr};
 
     use super::super::pool::Pool;
     use rattler_conda_types::MatchSpec;
