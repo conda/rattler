@@ -20,6 +20,7 @@ use std::{
     future::ready,
     io::ErrorKind,
     path::{Path, PathBuf},
+    str::FromStr,
     time::Duration,
 };
 use tokio::task::JoinHandle;
@@ -45,7 +46,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec, &channel_config))
+        .map(|spec| MatchSpec::from_str(spec))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Find the default cache directory. Create it if it doesnt exist yet.
