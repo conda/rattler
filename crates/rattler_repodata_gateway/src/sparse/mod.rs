@@ -28,7 +28,7 @@ pub struct SparseRepoData {
 }
 
 /// A struct that holds a memory map of a `repodata.json` file and also a self-referential field which
-/// indexes the data in the memory map with a sparsely parsed json struct. (See: [`LazyRepoData`].
+/// indexes the data in the memory map with a sparsely parsed json struct. See [`LazyRepoData`].
 #[ouroboros::self_referencing]
 struct SparseRepoDataInner {
     /// Memory map of the `repodata.json` file
@@ -224,6 +224,7 @@ fn deserialize_tuple_map<'d, D: Deserializer<'d>, K: Deserialize<'d>, V: Deseria
     }
 }
 
+/// A struct that holds both a filename and the part of the filename thats just the package name.
 struct PackageFilename<'i> {
     package: &'i str,
     filename: &'i str,
