@@ -1,0 +1,7 @@
+---
+source: crates/rattler_conda_types/src/package/run_exports.rs
+expression: "RunExportsJson::from_package_directory(&package_dir).unwrap()"
+---
+weak:
+  - "libzlib >=1.2.13,<1.3.0a0"
+
