@@ -26,7 +26,7 @@ itertools = "0.10.3"
 once_cell = "1.17.1"
 rattler = { path = "../rattler" }
 rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
-rattler_repodata_gateway = { version = "0.1.0", path = "../rattler_repodata_gateway" }
+rattler_repodata_gateway = { version = "0.1.0", path = "../rattler_repodata_gateway", features = ["sparse"] }
 rattler_solve = { version = "0.1.0", path = "../rattler_solve" }
 rattler_virtual_packages = { version = "0.1.0", path = "../rattler_virtual_packages" }
 reqwest = "0.11.14"

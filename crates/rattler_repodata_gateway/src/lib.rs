@@ -8,4 +8,7 @@
 //! about specific packages from different sources.
 
 pub mod fetch;
+#[cfg(feature = "sparse")]
+pub mod sparse;
+
 mod utils;
