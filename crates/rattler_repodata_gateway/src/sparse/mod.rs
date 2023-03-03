@@ -171,14 +171,7 @@ pub async fn load_repo_data_sparse(
         .buffered(50)
         .try_collect::<Vec<_>>()
         .await?;
-
-    // Print total number of records
-    dbg!(lazy_repo_data
-        .iter()
-        .map(|data| data.inner.borrow_repo_data().packages.len()
-            + data.inner.borrow_repo_data().conda_packages.len())
-        .sum::<usize>());
-
+    
     Ok(SparseRepoData::load_records(
         &lazy_repo_data,
         package_names,
