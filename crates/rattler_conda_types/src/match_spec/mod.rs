@@ -1,9 +1,12 @@
-use crate::VersionSpec;
+use crate::{PackageRecord, VersionSpec};
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
 
+pub mod matcher;
 mod parse;
+
+use matcher::StringMatcher;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -59,18 +62,18 @@ mod parse;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher};
 /// use std::str::FromStr;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
-/// assert_eq!(spec.build, Some("py27_0".to_string()));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// assert_eq!(spec.build, Some("py27_0".to_string()));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
@@ -91,7 +94,7 @@ mod parse;
 ///
 /// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
-/// assert_eq!(spec.build, Some("py2*".to_string()));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
 /// To fully-specify a package with a full, exact spec, the following fields must be given as exact values:
@@ -113,7 +116,7 @@ pub struct MatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    pub build: Option<String>,
+    pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<usize>,
     /// Match the specific filename of the package
@@ -159,5 +162,30 @@ impl Display for MatchSpec {
         }
 
         Ok(())
+    }
+}
+
+impl MatchSpec {
+    /// Match a MatchSpec against a PackageRecord
+    pub fn matches(&self, record: &PackageRecord) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &record.name {
+                return false;
+            }
+        }
+
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&record.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&record.build) {
+                return false;
+            }
+        }
+
+        true
     }
 }
