@@ -1,12 +1,21 @@
+use serde::{Serialize, Serializer};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
 
+/// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
 pub enum StringMatcher {
+    /// Match the string exactly
     Exact(String),
+    /// Match the string by glob. A glob uses a * to match any characters.
+    /// For example, `*` matches any string, `py*` matches any string starting with `py`,
+    /// `*37` matches any string ending with `37` and `py*37` matches any string starting with `py` and ending with `37`.
     Glob(glob::Pattern),
+    /// Match the string by regex. A regex starts with a `^`, ends with a `$` and uses the regex syntax.
+    /// For example, `^py.*37$` matches any string starting with `py` and ending with `37`.
+    /// Note that the regex is anchored, so it must match the entire string.
     Regex(regex::Regex),
 }
 
@@ -22,11 +31,12 @@ impl PartialEq for StringMatcher {
 }
 
 impl StringMatcher {
-    pub(crate) fn matches(&self, other: &str) -> bool {
+    /// Match string against [`StringMatcher`].
+    pub fn matches(&self, other: &str) -> bool {
         match self {
             StringMatcher::Exact(s) => s == other,
-            StringMatcher::Glob(s) => s.matches(other),
-            StringMatcher::Regex(s) => s.is_match(other),
+            StringMatcher::Glob(glob) => glob.matches(other),
+            StringMatcher::Regex(regex) => regex.is_match(other),
         }
     }
 }
@@ -44,7 +54,7 @@ impl FromStr for StringMatcher {
     type Err = StringMatcherParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.starts_with('^') {
+        if s.starts_with('^') && s.ends_with('$') {
             Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(
                 |_| StringMatcherParseError::InvalidRegex {
                     regex: s.to_string(),
@@ -74,9 +84,6 @@ impl Display for StringMatcher {
 
 impl Eq for StringMatcher {}
 
-/// implement serde serialization
-use serde::{Serialize, Serializer};
-
 impl Serialize for StringMatcher {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -101,8 +108,27 @@ mod tests {
             "foo*".parse().unwrap()
         );
         assert_eq!(
-            StringMatcher::Regex(regex::Regex::new("^foo.*").unwrap()),
-            "^foo.*".parse().unwrap()
+            StringMatcher::Regex(regex::Regex::new("^foo.*$").unwrap()),
+            "^foo.*$".parse().unwrap()
         );
+    }
+
+    #[test]
+    fn test_string_matcher_matches() {
+        assert!(StringMatcher::from_str("foo").unwrap().matches("foo"));
+        assert!(!StringMatcher::from_str("foo").unwrap().matches("bar"));
+        assert!(StringMatcher::from_str("foo*").unwrap().matches("foobar"));
+        assert!(StringMatcher::from_str("*oo").unwrap().matches("foo"));
+        assert!(!StringMatcher::from_str("*oo").unwrap().matches("foobar"));
+        assert!(StringMatcher::from_str("*oo*").unwrap().matches("foobar"));
+        assert!(StringMatcher::from_str("^foo.*$")
+            .unwrap()
+            .matches("foobar"));
+        assert!(StringMatcher::from_str("^.*[oo|bar].*$")
+            .unwrap()
+            .matches("foobar"));
+        assert!(!StringMatcher::from_str("^[not].*$")
+            .unwrap()
+            .matches("foobar"));
     }
 }

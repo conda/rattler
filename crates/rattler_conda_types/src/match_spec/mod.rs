@@ -3,7 +3,7 @@ use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
 
-mod matcher;
+pub mod matcher;
 mod parse;
 
 use matcher::StringMatcher;
@@ -62,19 +62,18 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec};
-/// // use rattler_conda_types::matcher::StringMatcher;
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher};
 /// use std::str::FromStr;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
-/// // assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0")));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// // assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0")));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
@@ -95,7 +94,7 @@ use matcher::StringMatcher;
 ///
 /// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
-/// // assert_eq!(spec.build, Some(StringMatcher::from_str("py2*")));
+/// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
 /// To fully-specify a package with a full, exact spec, the following fields must be given as exact values:
