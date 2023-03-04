@@ -50,8 +50,7 @@ impl FromStr for StringMatcher {
                     regex: s.to_string(),
                 },
             )?))
-        }
-        else if s.contains('*') {
+        } else if s.contains('*') {
             Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(
                 |_| StringMatcherParseError::InvalidGlob {
                     glob: s.to_string(),
