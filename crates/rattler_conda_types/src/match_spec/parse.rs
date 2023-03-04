@@ -1,5 +1,5 @@
-use super::MatchSpec;
 use super::matcher::{StringMatcher, StringMatcherParseError};
+use super::MatchSpec;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{ParseChannelError, VersionSpec};
 use nom::branch::alt;

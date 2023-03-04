@@ -1,4 +1,7 @@
-use std::{str::FromStr, fmt::{Formatter, Display}};
+use std::{
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 #[derive(Debug, Clone)]
 pub enum StringMatcher {
@@ -31,10 +34,10 @@ impl StringMatcher {
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum StringMatcherParseError {
     #[error("invalid glob: {glob}")]
-    InvalidGlob {glob: String},
+    InvalidGlob { glob: String },
 
     #[error("invalid regex: {regex}")]
-    InvalidRegex {regex: String},
+    InvalidRegex { regex: String },
 }
 
 impl FromStr for StringMatcher {
@@ -42,9 +45,17 @@ impl FromStr for StringMatcher {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.contains('*') {
-            Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(|_| StringMatcherParseError::InvalidGlob {glob: s.to_string()})?))
+            Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(
+                |_| StringMatcherParseError::InvalidGlob {
+                    glob: s.to_string(),
+                },
+            )?))
         } else if s.starts_with('^') {
-            Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(|_| StringMatcherParseError::InvalidRegex {regex: s.to_string()})?))
+            Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(
+                |_| StringMatcherParseError::InvalidRegex {
+                    regex: s.to_string(),
+                },
+            )?))
         } else {
             Ok(StringMatcher::Exact(s.to_string()))
         }
@@ -64,13 +75,12 @@ impl Display for StringMatcher {
 impl Eq for StringMatcher {}
 
 /// implement serde serialization
-
 use serde::{Serialize, Serializer};
 
 impl Serialize for StringMatcher {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         serializer.serialize_str(&self.to_string())
     }
@@ -82,8 +92,17 @@ mod tests {
 
     #[test]
     fn test_string_matcher() {
-        assert_eq!(StringMatcher::Exact("foo".to_string()), "foo".parse().unwrap());
-        assert_eq!(StringMatcher::Glob(glob::Pattern::new("foo*").unwrap()), "foo*".parse().unwrap());
-        assert_eq!(StringMatcher::Regex(regex::Regex::new("^foo.*").unwrap()), "^foo.*".parse().unwrap());
+        assert_eq!(
+            StringMatcher::Exact("foo".to_string()),
+            "foo".parse().unwrap()
+        );
+        assert_eq!(
+            StringMatcher::Glob(glob::Pattern::new("foo*").unwrap()),
+            "foo*".parse().unwrap()
+        );
+        assert_eq!(
+            StringMatcher::Regex(regex::Regex::new("^foo.*").unwrap()),
+            "^foo.*".parse().unwrap()
+        );
     }
 }

@@ -1,10 +1,10 @@
-use crate::{VersionSpec, PackageRecord};
+use crate::{PackageRecord, VersionSpec};
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
 
-mod parse;
 mod matcher;
+mod parse;
 
 use matcher::StringMatcher;
 
