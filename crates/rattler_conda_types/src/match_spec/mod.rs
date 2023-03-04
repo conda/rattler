@@ -1,9 +1,12 @@
-use crate::VersionSpec;
+use crate::{VersionSpec, PackageRecord};
 use serde::Serialize;
 use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
 
 mod parse;
+mod matcher;
+
+use matcher::StringMatcher;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -113,7 +116,7 @@ pub struct MatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
-    pub build: Option<String>,
+    pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<usize>,
     /// Match the specific filename of the package
@@ -159,5 +162,30 @@ impl Display for MatchSpec {
         }
 
         Ok(())
+    }
+}
+
+impl MatchSpec {
+    /// Match a MatchSpec against a PackageRecord
+    pub fn matches(&self, record: &PackageRecord) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &record.name {
+                return false;
+            }
+        }
+
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&record.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&record.build) {
+                return false;
+            }
+        }
+
+        true
     }
 }

@@ -1,4 +1,5 @@
 use super::MatchSpec;
+use super::matcher::{StringMatcher, StringMatcherParseError};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{ParseChannelError, VersionSpec};
 use nom::branch::alt;
@@ -45,6 +46,9 @@ pub enum ParseMatchSpecError {
 
     #[error("invalid version spec: {0}")]
     InvalidVersionSpec(#[from] ParseVersionSpecError),
+
+    #[error("invalid string matcher: {0}")]
+    InvalidStringMatcher(#[from] StringMatcherParseError),
 
     #[error("invalid build number: {0}")]
     InvalidBuildNumber(#[from] ParseIntError),
@@ -171,7 +175,7 @@ fn parse_bracket_vec_into_components(
         let (key, value) = elem;
         match key {
             "version" => match_spec.version = Some(VersionSpec::from_str(value)?),
-            "build" => match_spec.build = Some(value.to_string()),
+            "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(value.parse()?),
             "fn" => match_spec.file_name = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -334,7 +338,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         );
 
         if let Some(build) = build_str {
-            match_spec.build = Some(build.to_owned());
+            match_spec.build = Some(StringMatcher::from_str(build)?);
         }
     }
 
