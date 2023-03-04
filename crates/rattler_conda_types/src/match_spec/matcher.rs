@@ -44,16 +44,17 @@ impl FromStr for StringMatcher {
     type Err = StringMatcherParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.contains('*') {
-            Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(
-                |_| StringMatcherParseError::InvalidGlob {
-                    glob: s.to_string(),
-                },
-            )?))
-        } else if s.starts_with('^') {
+        if s.starts_with('^') {
             Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(
                 |_| StringMatcherParseError::InvalidRegex {
                     regex: s.to_string(),
+                },
+            )?))
+        }
+        else if s.contains('*') {
+            Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(
+                |_| StringMatcherParseError::InvalidGlob {
+                    glob: s.to_string(),
                 },
             )?))
         } else {
