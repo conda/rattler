@@ -25,6 +25,7 @@ pub enum Platform {
 
     Win32,
     Win64,
+    WinArm64,
 
     Emscripten32,
 }
@@ -62,7 +63,10 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Win64;
 
-            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+            #[cfg(target_arch = "aarch64")]
+            return Platform::WinArm64;
+
+            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
             compile_error!("unsupported windows architecture");
         }
         #[cfg(target_os = "macos")]
@@ -89,7 +93,7 @@ impl Platform {
 
     /// Returns true if the platform is a windows based platform.
     pub const fn is_windows(self) -> bool {
-        matches!(self, Platform::Win32 | Platform::Win64)
+        matches!(self, Platform::Win32 | Platform::Win64 | Platform::WinArm64)
     }
 
     /// Returns true if the platform is a unix based platform.
@@ -148,6 +152,7 @@ impl FromStr for Platform {
             "osx-arm64" => Platform::OsxArm64,
             "win-32" => Platform::Win32,
             "win-64" => Platform::Win64,
+            "win-arm64" => Platform::WinArm64,
             "emscripten-32" => Platform::Emscripten32,
             string => {
                 return Err(ParsePlatformError {
@@ -176,6 +181,7 @@ impl From<Platform> for &'static str {
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
+            Platform::WinArm64 => "win-arm64",
             Platform::Emscripten32 => "emscripten-32",
         }
     }
