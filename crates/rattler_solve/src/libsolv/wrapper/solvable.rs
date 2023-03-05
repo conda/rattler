@@ -3,7 +3,7 @@ use super::pool::{Pool, StringId};
 use std::ptr::NonNull;
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SolvableId(pub(super) ffi::Id);
 
 impl From<SolvableId> for ffi::Id {

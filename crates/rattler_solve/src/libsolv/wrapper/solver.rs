@@ -4,9 +4,12 @@ use std::ptr::NonNull;
 
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::solve_goal::SolveGoal;
+use crate::libsolv::wrapper::solve_problem::SolveProblem;
 
 use super::ffi;
 use super::flags::SolverFlag;
+use super::queue::Queue;
+use super::solvable::SolvableId;
 use super::transaction::Transaction;
 
 /// Wrapper for libsolv solver, which is used to drive dependency resolution
@@ -65,6 +68,67 @@ impl Solver<'_> {
             );
         }
         output
+    }
+
+    pub fn all_solver_problems(&self) -> Vec<SolveProblem> {
+        let mut problems = Vec::new();
+        let mut problem_rules = Queue::<ffi::Id>::default();
+
+        let count = self.problem_count();
+        for i in 1..=count {
+            unsafe {
+                ffi::solver_findallproblemrules(
+                    self.raw_ptr(),
+                    i.try_into().unwrap(),
+                    problem_rules.raw_ptr(),
+                )
+            };
+            for r in problem_rules.id_iter() {
+                if r != 0 {
+                    let mut source_id = 0;
+                    let mut target_id = 0;
+                    let mut dep_id = 0;
+
+                    let problem_type = unsafe {
+                        ffi::solver_ruleinfo(
+                            self.raw_ptr(),
+                            r,
+                            &mut source_id,
+                            &mut target_id,
+                            &mut dep_id,
+                        )
+                    };
+
+                    let pool = unsafe { (*self.0.as_ptr()).pool as *mut ffi::Pool };
+
+                    let nsolvables = unsafe { (*pool).nsolvables };
+
+                    let target = if target_id < 0 || target_id >= nsolvables as i32 {
+                        None
+                    } else {
+                        Some(SolvableId(target_id))
+                    };
+
+                    let source = if source_id < 0 || source_id >= nsolvables as i32 {
+                        None
+                    } else {
+                        Some(SolvableId(target_id))
+                    };
+
+                    let dep = if dep_id == 0 {
+                        None
+                    } else {
+                        let dep = unsafe { ffi::pool_dep2str(pool, dep_id) };
+                        let dep = unsafe { CStr::from_ptr(dep) };
+                        let dep = dep.to_str().expect("Invalid UTF8 value").to_string();
+                        Some(dep)
+                    };
+
+                    problems.push(SolveProblem::from_raw(problem_type, dep, source, target));
+                }
+            }
+        }
+        problems
     }
 
     /// Sets a solver flag
