@@ -68,11 +68,12 @@ impl SparseRepoData {
         // Construct the result map
         let mut result = Vec::from_iter((0..repo_data.len()).map(|_| Vec::new()));
 
-        // Construct a queue to store packages in that still need to be processed
-        let mut pending = VecDeque::from_iter(package_names.into_iter().map(Into::into));
-
         // Construct a set of packages that we have seen and have been added to the pending list.
-        let mut seen: HashSet<String> = HashSet::from_iter(pending.iter().cloned());
+        let mut seen: HashSet<String> =
+            HashSet::from_iter(package_names.into_iter().map(Into::into));
+
+        // Construct a queue to store packages in that still need to be processed
+        let mut pending = VecDeque::from_iter(seen.iter().cloned());
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
@@ -288,6 +289,18 @@ mod test {
             .map(|repo| repo.len())
             .sum::<usize>();
 
+        assert_eq!(total_records, 3);
+    }
+
+    #[tokio::test]
+    async fn test_parse_duplicate() {
+        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
+        let total_records = sparse_empty_data
+            .iter()
+            .map(|repo| repo.len())
+            .sum::<usize>();
+
+        // Number of records should still be 3. The duplicate package name should be ignored.
         assert_eq!(total_records, 3);
     }
 
