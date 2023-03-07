@@ -8,7 +8,6 @@ mod solver_backend;
 
 pub use libsolv::LibsolvBackend;
 pub use solver_backend::SolverBackend;
-use std::ffi::NulError;
 
 use rattler_conda_types::GenericVirtualPackage;
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
@@ -19,14 +18,6 @@ pub enum SolveError {
     /// There is no set of dependencies that satisfies the requirements
     #[error("unsolvable")]
     Unsolvable,
-
-    /// An error occurred when trying to load the channel and platform's `repodata.json`
-    #[error("error adding repodata: {0}")]
-    ErrorAddingRepodata(#[source] NulError),
-
-    /// An error occurred when trying to load information about installed packages to the solver
-    #[error("error adding installed packages: {0}")]
-    ErrorAddingInstalledPackages(#[source] NulError),
 
     /// The solver backend returned operations that we dont know how to install.
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
