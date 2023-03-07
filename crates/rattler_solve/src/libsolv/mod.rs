@@ -154,9 +154,7 @@ impl SolverBackend for LibsolvBackend {
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
 
-        let transaction = solver
-            .solve(&mut goal)
-            .map_err(|_| SolveError::Unsolvable)?;
+        let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
         let required_records = get_required_packages(
             &pool,

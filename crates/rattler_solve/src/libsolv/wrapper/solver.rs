@@ -4,7 +4,6 @@ use std::ptr::NonNull;
 
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::solve_goal::SolveGoal;
-use anyhow::anyhow;
 
 use super::ffi;
 use super::flags::SolverFlag;
@@ -48,19 +47,22 @@ impl Solver<'_> {
         CStr::from_ptr(problem)
     }
 
-    /// Creates a string of 'problems' that the solver still has which it encountered while solving
-    /// the matchspecs. Use this function to print the existing problems to string.
-    fn solver_problems(&self) -> String {
-        let mut output = String::default();
+    /// Creates a string for each 'problem' that the solver still has which it encountered while
+    /// solving the matchspecs. Use this function to print the existing problems to string.
+    fn solver_problems(&self) -> Vec<String> {
+        let mut output = Vec::new();
 
         let count = self.problem_count();
         for i in 1..=count {
             // Safe because the id valid (between [1, count])
             let problem = unsafe { self.problem2str(i as ffi::Id) };
 
-            output.push_str(" - ");
-            output.push_str(problem.to_str().expect("string is invalid UTF8"));
-            output.push('\n');
+            output.push(
+                problem
+                    .to_str()
+                    .expect("string is invalid UTF8")
+                    .to_string(),
+            );
         }
         output
     }
@@ -72,7 +74,7 @@ impl Solver<'_> {
 
     /// Solves all the problems in the `queue` and returns a transaction from the found solution.
     /// Returns an error if problems remain unsolved.
-    pub fn solve(&mut self, queue: &mut SolveGoal) -> anyhow::Result<Transaction> {
+    pub fn solve(&mut self, queue: &mut SolveGoal) -> Result<Transaction, Vec<String>> {
         let result = unsafe {
             // Run the solve method
             ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());
@@ -87,10 +89,7 @@ impl Solver<'_> {
             // Safe because we know the `transaction` ptr is valid
             Ok(unsafe { Transaction::new(self, transaction) })
         } else {
-            Err(anyhow!(
-                "encountered problems while solving:\n {}",
-                self.solver_problems()
-            ))
+            Err(self.solver_problems())
         }
     }
 }
