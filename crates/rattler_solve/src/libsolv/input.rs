@@ -2,6 +2,7 @@
 //! environment
 
 use crate::libsolv::c_string;
+use crate::libsolv::libc_byte_slice::LibcByteSlice;
 use crate::libsolv::wrapper::keys::*;
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::repo::Repo;
@@ -11,6 +12,28 @@ use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+
+#[cfg(not(target_family = "unix"))]
+/// Adds solvables to a repo from an in-memory .solv file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+pub fn add_solv_file(_pool: &Pool, _repo: &Repo, _solv_bytes: &LibcByteSlice) {
+    unimplemented!("this platform does not support in-memory .solv files");
+}
+
+#[cfg(target_family = "unix")]
+/// Adds solvables to a repo from an in-memory .solv file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
+    // Add solv file from memory if available
+    let mode = c_string("r");
+    let file = unsafe { libc::fmemopen(solv_bytes.as_ptr(), solv_bytes.len(), mode.as_ptr()) };
+    repo.add_solv(pool, file);
+    unsafe { libc::fclose(file) };
+}
 
 /// Adds [`RepoDataRecord`] to `repo`
 ///
@@ -249,4 +272,41 @@ fn reset_solvable(pool: &Pool, repo: &Repo, data: &Repodata, solvable_id: Solvab
     // It is safe to free the blank solvable, because there are no other references to it
     // than in this function
     unsafe { repo.free_solvable(blank_solvable) };
+}
+
+/// Caches the repodata as an in-memory `.solv` file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+#[cfg(not(target_family = "unix"))]
+pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
+    unimplemented!("this function is only available on unix-like operating systems")
+}
+
+/// Caches the repodata as an in-memory `.solv` file
+///
+/// Note: this function relies on primitives that are only available on unix-like operating systems,
+/// and will panic if called from another platform (e.g. Windows)
+#[cfg(target_family = "unix")]
+pub fn cache_repodata(url: String, data: &[RepoDataRecord]) -> LibcByteSlice {
+    // Add repodata to a new pool + repo
+    let pool = Pool::default();
+    let repo = Repo::new(&pool, url);
+    add_repodata_records(&pool, &repo, data);
+
+    // Export repo to .solv in memory
+    let mut stream_ptr = std::ptr::null_mut();
+    let mut stream_size = 0;
+    let file = unsafe { libc::open_memstream(&mut stream_ptr, &mut stream_size) };
+    if file.is_null() {
+        panic!("unable to open memstream");
+    }
+
+    repo.write(&pool, file);
+    unsafe { libc::fclose(file) };
+
+    let stream_ptr = std::ptr::NonNull::new(stream_ptr).expect("stream_ptr was null");
+
+    // Safe because we know `stream_ptr` points to an array of bytes of length `stream_size`
+    unsafe { LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) }
 }

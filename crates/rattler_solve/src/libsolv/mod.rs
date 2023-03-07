@@ -1,19 +1,43 @@
-use crate::libsolv::input::{add_repodata_records, add_virtual_packages};
-use crate::libsolv::output::get_required_packages;
-use crate::libsolv::wrapper::repo::Repo;
 use crate::{SolveError, SolverBackend, SolverProblem};
+pub use input::cache_repodata;
+use input::{add_repodata_records, add_solv_file, add_virtual_packages};
+pub use libc_byte_slice::LibcByteSlice;
+use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 use std::ffi::CString;
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
+    repo::Repo,
     solve_goal::SolveGoal,
 };
 
 mod input;
+mod libc_byte_slice;
 mod output;
 mod wrapper;
+
+/// Represents the information required to load available packages into libsolv for a single channel
+/// and platform combination
+#[derive(Clone)]
+pub struct LibsolvRepoData<'a> {
+    /// The actual records after parsing `repodata.json`
+    pub records: &'a [RepoDataRecord],
+
+    /// The in-memory .solv file built from the records (if available)
+    pub solv_file: Option<&'a LibcByteSlice>,
+}
+
+impl LibsolvRepoData<'_> {
+    /// Constructs a new `LibsolvRepoData` without a corresponding .solv file
+    pub fn from_records(records: &[RepoDataRecord]) -> LibsolvRepoData {
+        LibsolvRepoData {
+            records,
+            solv_file: None,
+        }
+    }
+}
 
 /// Convenience method that converts a string reference to a CString, replacing NUL characters with
 /// whitespace (` `)
@@ -40,7 +64,12 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
 pub struct LibsolvBackend;
 
 impl SolverBackend for LibsolvBackend {
-    fn solve(&mut self, problem: SolverProblem) -> Result<Vec<RepoDataRecord>, SolveError> {
+    type RepoData<'a> = LibsolvRepoData<'a>;
+
+    fn solve<'a, TAvailablePackagesIterator: Iterator<Item = Self::RepoData<'a>>>(
+        &mut self,
+        problem: SolverProblem<TAvailablePackagesIterator>,
+    ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
 
@@ -57,21 +86,26 @@ impl SolverBackend for LibsolvBackend {
         // Mark the virtual packages as installed.
         pool.set_installed(&repo);
 
-        // Create repos for all channels
-        let mut repo_mapping = HashMap::with_capacity(problem.available_packages.len() + 1);
-        let mut all_repodata_records = Vec::with_capacity(repo_mapping.len());
-        for repodata_records in &problem.available_packages {
-            if repodata_records.is_empty() {
+        // Create repos for all channel + platform combinations
+        let mut repo_mapping = HashMap::new();
+        let mut all_repodata_records = Vec::new();
+        for repodata in problem.available_packages {
+            if repodata.records.is_empty() {
                 continue;
             }
 
-            let channel_name = &repodata_records[0].channel;
+            let channel_name = &repodata.records[0].channel;
             let repo = Repo::new(&pool, channel_name);
-            add_repodata_records(&pool, &repo, repodata_records);
+
+            if let Some(solv_file) = repodata.solv_file {
+                add_solv_file(&pool, &repo, solv_file);
+            } else {
+                add_repodata_records(&pool, &repo, repodata.records);
+            }
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo.id(), repo_mapping.len());
-            all_repodata_records.push(repodata_records.as_slice());
+            all_repodata_records.push(repodata.records);
 
             // We dont want to drop the Repo, its stored in the pool anyway, so just forget it.
             std::mem::forget(repo);
@@ -83,7 +117,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(problem.locked_packages.as_slice());
+        all_repodata_records.push(&problem.locked_packages);
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned");
@@ -91,7 +125,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(problem.pinned_packages.as_slice());
+        all_repodata_records.push(&problem.pinned_packages);
 
         // Create datastructures for solving
         pool.create_whatprovides();
@@ -124,16 +158,20 @@ impl SolverBackend for LibsolvBackend {
             .solve(&mut goal)
             .map_err(|_| SolveError::Unsolvable)?;
 
-        let required_records =
-            get_required_packages(&pool, &repo_mapping, &transaction, &all_repodata_records)
-                .map_err(|unsupported_operation_ids| {
-                    SolveError::UnsupportedOperations(
-                        unsupported_operation_ids
-                            .into_iter()
-                            .map(|id| format!("libsolv operation {id}"))
-                            .collect(),
-                    )
-                })?;
+        let required_records = get_required_packages(
+            &pool,
+            &repo_mapping,
+            &transaction,
+            all_repodata_records.as_slice(),
+        )
+        .map_err(|unsupported_operation_ids| {
+            SolveError::UnsupportedOperations(
+                unsupported_operation_ids
+                    .into_iter()
+                    .map(|id| format!("libsolv operation {id}"))
+                    .collect(),
+            )
+        })?;
 
         Ok(required_records)
     }
