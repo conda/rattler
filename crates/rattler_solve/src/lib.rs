@@ -164,7 +164,7 @@ mod test_libsolv {
 
         let available_packages = vec![repo_data, repo_data_noarch];
 
-        let specs = vec![MatchSpec::from_str("python=3.9", &ChannelConfig::default()).unwrap()];
+        let specs = vec![MatchSpec::from_str("python=3.9").unwrap()];
 
         let problem = SolverProblem {
             available_packages: available_packages
@@ -482,10 +482,9 @@ mod test_libsolv {
             LibsolvRepoData::from_records(&repo_data)
         };
 
-        let channel_config = ChannelConfig::default();
         let specs = match_specs
-            .into_iter()
-            .map(|m| MatchSpec::from_str(m, &channel_config).unwrap())
+            .iter()
+            .map(|m| MatchSpec::from_str(m).unwrap())
             .collect();
 
         let problem = SolverProblem {
@@ -505,7 +504,7 @@ mod test_libsolv {
             )
         }
 
-        if pkgs.len() == 0 {
+        if pkgs.is_empty() {
             println!("No packages in the environment!");
         }
 

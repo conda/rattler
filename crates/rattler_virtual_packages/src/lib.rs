@@ -280,6 +280,7 @@ impl Archspec {
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",
             Platform::OsxArm64 => "arm64",
+            Platform::WinArm64 => "arm64",
         };
 
         Some(Self {

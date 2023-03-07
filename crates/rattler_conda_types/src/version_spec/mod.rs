@@ -186,6 +186,34 @@ impl Serialize for VersionSpec {
     }
 }
 
+impl VersionSpec {
+    /// Returns whether the version matches the specification.
+    pub fn matches(&self, version: &Version) -> bool {
+        match self {
+            VersionSpec::None => false,
+            VersionSpec::Any => true,
+            VersionSpec::Operator(VersionOperator::Equals, limit) => limit == version,
+            VersionSpec::Operator(VersionOperator::NotEquals, limit) => limit != version,
+            VersionSpec::Operator(VersionOperator::Greater, limit) => version > limit,
+            VersionSpec::Operator(VersionOperator::GreaterEquals, limit) => version >= limit,
+            VersionSpec::Operator(VersionOperator::Less, limit) => version < limit,
+            VersionSpec::Operator(VersionOperator::LessEquals, limit) => version <= limit,
+            VersionSpec::Operator(VersionOperator::StartsWith, limit) => version.starts_with(limit),
+            VersionSpec::Operator(VersionOperator::NotStartsWith, limit) => {
+                !version.starts_with(limit)
+            }
+            VersionSpec::Operator(VersionOperator::Compatible, limit) => version >= limit,
+            VersionSpec::Operator(VersionOperator::NotCompatible, limit) => version < limit,
+            VersionSpec::Group(LogicalOperator::And, group) => {
+                group.iter().all(|spec| spec.matches(version))
+            }
+            VersionSpec::Group(LogicalOperator::Or, group) => {
+                group.iter().any(|spec| spec.matches(version))
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::version_spec::{LogicalOperator, VersionOperator};

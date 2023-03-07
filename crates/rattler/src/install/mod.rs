@@ -1,4 +1,5 @@
 mod driver;
+mod entry_point;
 pub mod link;
 mod python;
 mod transaction;
@@ -7,15 +8,19 @@ pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
 pub use transaction::{Transaction, TransactionOperation};
 
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
+use crate::install::entry_point::{
+    create_unix_python_entry_point, create_windows_python_entry_point,
+};
+use futures::FutureExt;
 pub use python::PythonInfo;
-use rattler_conda_types::package::{IndexJson, PackageFile};
+use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
 use rattler_conda_types::prefix_record::PathsEntry;
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
 use std::collections::BinaryHeap;
+use std::io::ErrorKind;
+use std::sync::Arc;
 use std::{
     future::ready,
     path::{Path, PathBuf},
@@ -35,6 +40,9 @@ pub enum InstallError {
     #[error("failed to read 'index.json'")]
     FailedToReadIndexJson(#[source] std::io::Error),
 
+    #[error("failed to read 'link.json'")]
+    FailedToReadLinkJson(#[source] std::io::Error),
+
     #[error("failed to link '{0}'")]
     FailedToLink(PathBuf, #[source] LinkFileError),
 
@@ -46,6 +54,9 @@ pub enum InstallError {
 
     #[error("cannot install noarch python package because there is no python version specified")]
     MissingPythonInfo,
+
+    #[error("failed to create Python entry point")]
+    FailedToCreatePythonEntryPoint(#[source] std::io::Error),
 }
 
 impl From<JoinError> for InstallError {
@@ -85,6 +96,19 @@ pub struct InstallOptions {
     /// This is sometimes useful to avoid reading the file twice or when you want to modify
     /// installation process externally.
     pub index_json: Option<IndexJson>,
+
+    /// Instead of reading the `link.json` file from the package directory itself, use the data
+    /// specified here.
+    ///
+    /// This is sometimes useful to avoid reading the file twice or when you want to modify
+    /// installation process externally.
+    ///
+    /// Because the the `link.json` file is optional this fields is using a doubly wrapped Option.
+    /// The first `Option` is to indicate whether or not this value is set. The second Option is the
+    /// [`LinkJson`] to use or `None` if you want to force that there is no [`LinkJson`].
+    ///
+    /// This struct is only used if the package to be linked is a noarch Python package.
+    pub link_json: Option<Option<LinkJson>>,
 
     /// Whether or not to use symbolic links where possible. If this is set to `Some(false)`
     /// symlinks are disabled, if set to `Some(true)` symbolic links are alwas used when specified
@@ -155,6 +179,13 @@ pub async fn link_package(
         return Err(InstallError::MissingPythonInfo);
     }
 
+    // Parse the `link.json` file and extract entry points from it.
+    let link_json = if index_json.noarch.is_python() {
+        read_link_json(package_dir, driver, options.link_json).await?
+    } else {
+        None
+    };
+
     // Determine whether or not we can use symbolic links
     let (allow_symbolic_links, allow_hard_links) = tokio::join!(
         // Determine if we can use symlinks
@@ -172,20 +203,33 @@ pub async fn link_package(
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
 
-    // Link all package files in parallel
-    let mut link_futures = FuturesUnordered::new();
-    for (idx, entry) in paths_json.paths.into_iter().enumerate() {
+    // Construct a channel to will hold the results of the different linking stages
+    let (tx, mut rx) = tokio::sync::mpsc::channel(driver.concurrency_limit());
+
+    // Wrap the python info in an `Arc` so we can more easily share it with async tasks.
+    let python_info = options.python_info.map(Arc::new);
+
+    // Start linking all package files in parallel
+    let mut number_of_paths_entries = 0;
+    for entry in paths_json.paths.into_iter() {
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
         let target_prefix = target_prefix.to_owned();
-        let python_info = options.python_info.clone();
+        let python_info = python_info.clone();
 
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
         // driver. So even though we might spawn thousands of tasks they might not all run
         // parallel because the driver dictates that only N tasks can run in parallel at the same
         // time.
-        let link_future = driver.spawn_throttled(move || {
-            link_file(
+        let tx = tx.clone();
+        driver.spawn_throttled_and_forget(move || {
+            // Return immediately if the receiver was closed. This can happen if a previous step
+            // failed. In that case we do not want to continue the installation.
+            if tx.is_closed() {
+                return;
+            }
+
+            let linked_file_result = match link_file(
                 index_json.noarch,
                 &entry,
                 &package_dir,
@@ -194,12 +238,10 @@ pub async fn link_package(
                 allow_symbolic_links && !entry.no_link,
                 allow_hard_links && !entry.no_link,
                 platform,
-                python_info.as_ref(),
-            )
-            .map_err(|e| InstallError::FailedToLink(entry.relative_path.clone(), e))
-            .map(|result| {
-                (
-                    idx,
+                python_info.as_deref(),
+            ) {
+                Ok(result) => Ok((
+                    number_of_paths_entries,
                     PathsEntry {
                         relative_path: result.relative_path,
                         path_type: entry.path_type.into(),
@@ -208,26 +250,108 @@ pub async fn link_package(
                         sha256_in_prefix: Some(format!("{:x}", result.sha256)),
                         size_in_bytes: Some(result.file_size),
                     },
-                )
-            })
+                )),
+                Err(e) => Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
+            };
+
+            // Send the result to the main task for further processing.
+            let _ = tx.blocking_send(linked_file_result);
         });
 
-        // Push back the link future
-        link_futures.push(link_future);
+        number_of_paths_entries += 1;
     }
 
-    // Await all futures and collect them. The futures are added in order to the `link_futures`
-    // set. However, they can complete in any order. This means we have to reorder them back into
+    // If this package is a noarch python package we also have to create entry points.
+    //
+    // Be careful with the fact that this code is currently running in parallel with the linking of
+    // individual files.
+    if let Some(link_json) = link_json {
+        // Parse the `link.json` file and extract entry points from it.
+        let entry_points = match link_json.noarch {
+            NoArchLinks::Python(entry_points) => entry_points.entry_points,
+        };
+
+        // Get python info
+        let python_info = python_info
+            .clone()
+            .expect("should be safe because its checked above that this contains a value");
+
+        // Create entry points for each listed item. This is different between Windows and unix
+        // because on Windows, two PathEntry's are created whereas on Linux only one is created.
+        for entry_point in entry_points {
+            let tx = tx.clone();
+            let python_info = python_info.clone();
+            let target_dir = target_dir.to_owned();
+            let target_prefix = target_prefix.to_owned();
+
+            if platform.is_windows() {
+                driver.spawn_throttled_and_forget(move || {
+                    // Return immediately if the receiver was closed. This can happen if a previous step
+                    // failed. In that case we do not want to continue the installation.
+                    if tx.is_closed() {
+                        return;
+                    }
+
+                    match create_windows_python_entry_point(
+                        &target_dir,
+                        &target_prefix,
+                        &entry_point,
+                        &python_info,
+                    ) {
+                        Ok([a, b]) => {
+                            let _ = tx.blocking_send(Ok((number_of_paths_entries, a)));
+                            let _ = tx.blocking_send(Ok((number_of_paths_entries + 1, b)));
+                        }
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(
+                                InstallError::FailedToCreatePythonEntryPoint(e),
+                            ));
+                        }
+                    }
+                });
+                number_of_paths_entries += 2
+            } else {
+                driver.spawn_throttled_and_forget(move || {
+                    // Return immediately if the receiver was closed. This can happen if a previous step
+                    // failed. In that case we do not want to continue the installation.
+                    if tx.is_closed() {
+                        return;
+                    }
+
+                    let result = match create_unix_python_entry_point(
+                        &target_dir,
+                        &target_prefix,
+                        &entry_point,
+                        &python_info,
+                    ) {
+                        Ok(a) => Ok((number_of_paths_entries, a)),
+                        Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
+                    };
+
+                    let _ = tx.blocking_send(result);
+                });
+                number_of_paths_entries += 1;
+            }
+        }
+    }
+
+    // Drop the transmitter on the current task. This ensures that the only alive transmitters are
+    // owned by tasks that are running in the background. When we try to receive stuff over the
+    // channel we can then know that all tasks are done if all senders are dropped.
+    drop(tx);
+
+    // Await the result of all the background tasks. The background tasks are scheduled in order,
+    // however, they can complete in any order. This means we have to reorder them back into
     // their original order. This is achieved by waiting to add finished results to the result Vec,
     // if the result before it has not yet finished. To that end we use a `BinaryHeap` as a priority
     // queue which will buffer up finished results that finished before their predecessor.
     //
-    // What makes this loop special is that it also aborts if any of the returned futures indicate
+    // What makes this loop special is that it also aborts if any of the returned results indicate
     // a failure.
-    let mut paths = Vec::with_capacity(link_futures.len());
+    let mut paths = Vec::with_capacity(number_of_paths_entries);
     let mut out_of_order_queue =
-        BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(link_futures.len());
-    while let Some(link_result) = link_futures.next().await {
+        BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(driver.concurrency_limit());
+    while let Some(link_result) = rx.recv().await {
         let (index, data) = link_result?;
 
         if index == paths.len() {
@@ -295,6 +419,38 @@ async fn read_index_json(
                 .spawn_throttled(move || {
                     IndexJson::from_package_directory(&package_dir)
                         .map_err(InstallError::FailedToReadIndexJson)
+                })
+                .await
+        }
+    }
+}
+
+/// A helper function that reads the `link.json` file from a package unless it has already been
+/// provided, in which case it is returned immediately.
+async fn read_link_json(
+    package_dir: &Path,
+    driver: &InstallDriver,
+    index_json: Option<Option<LinkJson>>,
+) -> Result<Option<LinkJson>, InstallError> {
+    match index_json {
+        Some(index) => Ok(index),
+        None => {
+            let package_dir = package_dir.to_owned();
+            driver
+                .spawn_throttled(move || {
+                    LinkJson::from_package_directory(&package_dir)
+                        .map_or_else(
+                            |e| {
+                                // Its ok if the file is not present.
+                                if e.kind() == ErrorKind::NotFound {
+                                    Ok(None)
+                                } else {
+                                    Err(e)
+                                }
+                            },
+                            |link_json| Ok(Some(link_json)),
+                        )
+                        .map_err(InstallError::FailedToReadLinkJson)
                 })
                 .await
         }
@@ -433,7 +589,7 @@ mod test {
     #[tokio::test]
     pub async fn test_conda_lock() {
         // Load a prepared explicit environment file for the current platform.
-        let lock_path = get_test_data_dir().join(format!("conda-lock/python-conda-lock.yml"));
+        let lock_path = get_test_data_dir().join("conda-lock/python-conda-lock.yml".to_string());
         let lock = CondaLock::from_path(&lock_path).unwrap();
 
         let current_platform = Platform::current();
