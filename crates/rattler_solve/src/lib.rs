@@ -19,7 +19,7 @@ use rattler_conda_types::{MatchSpec, RepoDataRecord};
 pub enum SolveError {
     /// There is no set of dependencies that satisfies the requirements
     #[error("unsolvable")]
-    Unsolvable,
+    Unsolvable(Vec<String>),
 
     /// The solver backend returned operations that we dont know how to install.
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
@@ -199,7 +199,12 @@ mod test_libsolv {
         assert!(result.is_err());
 
         let err = result.err().unwrap();
-        assert!(matches!(err, SolveError::Unsolvable));
+        match err {
+            SolveError::Unsolvable(errors) => {
+                assert_eq!(errors, vec!["nothing provides requested asdfasdf"])
+            }
+            _ => panic!("Unexpected error: {err:?}"),
+        }
     }
 
     #[test]
@@ -438,7 +443,7 @@ mod test_libsolv {
             false,
         );
 
-        assert!(matches!(result.err(), Some(SolveError::Unsolvable)));
+        assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
     }
 
     #[cfg(test)]
