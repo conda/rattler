@@ -1,4 +1,5 @@
-use super::{c_string, ffi, repo::Repo, solvable::SolvableId, solver::Solver};
+use super::{ffi, repo::Repo, solvable::SolvableId, solver::Solver};
+use crate::libsolv::c_string;
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
 use std::{

@@ -5,6 +5,7 @@ pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
+use std::ffi::CString;
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -38,6 +39,27 @@ impl LibsolvRepoData<'_> {
     }
 }
 
+/// Convenience method that converts a string reference to a CString, replacing NUL characters with
+/// whitespace (` `)
+fn c_string<T: AsRef<str>>(str: T) -> CString {
+    let bytes = str.as_ref().as_bytes();
+
+    let mut vec = Vec::with_capacity(bytes.len() + 1);
+    vec.extend_from_slice(bytes);
+
+    for byte in &mut vec {
+        if *byte == 0 {
+            *byte = b' ';
+        }
+    }
+
+    // Trailing 0
+    vec.push(0);
+
+    // Safe because the string does is guaranteed to have no NUL bytes other than the trailing one
+    unsafe { CString::from_vec_with_nul_unchecked(vec) }
+}
+
 /// A [`SolverBackend`] implemented using the `libsolv` library
 pub struct LibsolvBackend;
 
@@ -59,8 +81,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Add virtual packages
         let repo = Repo::new(&pool, "virtual_packages");
-        add_virtual_packages(&pool, &repo, &problem.virtual_packages)
-            .map_err(SolveError::ErrorAddingInstalledPackages)?;
+        add_virtual_packages(&pool, &repo, &problem.virtual_packages);
 
         // Mark the virtual packages as installed.
         pool.set_installed(&repo);
@@ -79,8 +100,7 @@ impl SolverBackend for LibsolvBackend {
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
             } else {
-                add_repodata_records(&pool, &repo, repodata.records)
-                    .map_err(SolveError::ErrorAddingRepodata)?;
+                add_repodata_records(&pool, &repo, repodata.records);
             }
 
             // Keep our own info about repodata_records
@@ -93,8 +113,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked");
-        let installed_solvables = add_repodata_records(&pool, &repo, &problem.locked_packages)
-            .map_err(SolveError::ErrorAddingRepodata)?;
+        let installed_solvables = add_repodata_records(&pool, &repo, &problem.locked_packages);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -102,8 +121,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned");
-        let pinned_solvables = add_repodata_records(&pool, &repo, &problem.pinned_packages)
-            .map_err(SolveError::ErrorAddingRepodata)?;
+        let pinned_solvables = add_repodata_records(&pool, &repo, &problem.pinned_packages);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -156,5 +174,21 @@ impl SolverBackend for LibsolvBackend {
         })?;
 
         Ok(required_records)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::libsolv::c_string;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("", "")]
+    #[case("a\0b\0c\0d\0", "a b c d ")]
+    #[case("a b c d", "a b c d")]
+    #[case("😒", "😒")]
+    fn test_c_string(#[case] input: &str, #[case] expected_output: &str) {
+        let output = c_string(input);
+        assert_eq!(output.as_bytes(), expected_output.as_bytes());
     }
 }
