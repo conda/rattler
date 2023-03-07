@@ -1,6 +1,7 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
+use crate::libsolv::c_string;
 use crate::libsolv::wrapper::keys::*;
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::repo::Repo;
@@ -10,7 +11,6 @@ use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::ffi::{CString, NulError};
 
 /// Adds [`RepoDataRecord`] to `repo`
 ///
@@ -19,7 +19,7 @@ pub fn add_repodata_records(
     pool: &Pool,
     repo: &Repo,
     repo_datas: &[RepoDataRecord],
-) -> Result<Vec<SolvableId>, NulError> {
+) -> Vec<SolvableId> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
 
@@ -72,14 +72,14 @@ pub fn add_repodata_records(
         // Location (filename (fn) and subdir)
         data.set_location(
             solvable_id,
-            &CString::new(record.subdir.as_bytes())?,
-            &CString::new(repo_data.file_name.as_bytes())?,
+            &c_string(&record.subdir),
+            &c_string(&repo_data.file_name),
         );
 
         // Dependencies
         for match_spec in record.depends.iter() {
             // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&CString::new(match_spec.as_str())?);
+            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
 
             // Add it to the list of requirements of this solvable
             repo.add_requires(solvable, match_spec_id);
@@ -88,7 +88,7 @@ pub fn add_repodata_records(
         // Constraints
         for match_spec in record.constrains.iter() {
             // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&CString::new(match_spec.as_str())?);
+            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
 
             // Add it to the list of constraints of this solvable
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);
@@ -126,33 +126,24 @@ pub fn add_repodata_records(
         data.add_poolstr_array(
             solvable_id,
             solvable_buildflavor_id,
-            &CString::new(record.build.as_str())?,
+            &c_string(&record.build),
         );
 
         // Build number
         data.set_str(
             solvable_id,
             solvable_buildversion_id,
-            &CString::new(record.build_number.to_string())?,
+            &c_string(record.build_number.to_string()),
         );
 
         // License
         if let Some(license) = record.license.as_ref() {
-            data.add_poolstr_array(
-                solvable_id,
-                solvable_license_id,
-                &CString::new(license.as_str())?,
-            );
+            data.add_poolstr_array(solvable_id, solvable_license_id, &c_string(license));
         }
 
         // MD5 hash
         if let Some(md5) = record.md5.as_ref() {
-            data.set_checksum(
-                solvable_id,
-                solvable_pkg_id,
-                repo_type_md5,
-                &CString::new(md5.as_str())?,
-            );
+            data.set_checksum(solvable_id, solvable_pkg_id, repo_type_md5, &c_string(md5));
         }
 
         // Sha256 hash
@@ -161,7 +152,7 @@ pub fn add_repodata_records(
                 solvable_id,
                 solvable_checksum,
                 repo_type_sha256,
-                &CString::new(sha256.as_str())?,
+                &c_string(sha256),
             );
         }
 
@@ -170,7 +161,7 @@ pub fn add_repodata_records(
 
     repo.internalize();
 
-    Ok(solvable_ids)
+    solvable_ids
 }
 
 /// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`
@@ -221,11 +212,7 @@ fn add_or_reuse_solvable<'a>(
     Some(repo.add_solvable())
 }
 
-pub fn add_virtual_packages(
-    pool: &Pool,
-    repo: &Repo,
-    packages: &[GenericVirtualPackage],
-) -> Result<(), NulError> {
+pub fn add_virtual_packages(pool: &Pool, repo: &Repo, packages: &[GenericVirtualPackage]) {
     let data = repo.add_repodata();
 
     let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
@@ -247,11 +234,9 @@ pub fn add_virtual_packages(
         data.add_poolstr_array(
             solvable_id,
             solvable_buildflavor_id,
-            &CString::new(package.build_string.as_bytes())?,
+            &c_string(&package.build_string),
         );
     }
-
-    Ok(())
 }
 
 fn reset_solvable(pool: &Pool, repo: &Repo, data: &Repodata, solvable_id: SolvableId) {

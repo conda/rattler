@@ -11,8 +11,6 @@
 //! a `&mut` references to the relevant data, taking special care to ensure there is no aliasing at
 //! hand.
 
-use std::ffi::CString;
-
 pub mod ffi;
 pub mod flags;
 pub mod keys;
@@ -24,8 +22,3 @@ pub mod solvable;
 pub mod solve_goal;
 pub mod solver;
 pub mod transaction;
-
-/// Convenience method that converts a string reference to a CString
-fn c_string<T: AsRef<str>>(str: T) -> CString {
-    CString::new(str.as_ref()).expect("should be convertable from string")
-}

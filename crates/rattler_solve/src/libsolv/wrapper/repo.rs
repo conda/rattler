@@ -1,7 +1,7 @@
 use super::repodata::Repodata;
+use super::{ffi, pool::Pool, solvable::SolvableId};
+use crate::libsolv::c_string;
 use std::{marker::PhantomData, ptr::NonNull};
-
-use super::{c_string, ffi, pool::Pool, solvable::SolvableId};
 
 /// Wrapper for libsolv repo, which contains package information (in our case, we are creating repos
 /// from `repodata.json`, installed package metadata and virtual packages)
