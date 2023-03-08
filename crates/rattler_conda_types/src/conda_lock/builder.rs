@@ -31,8 +31,10 @@ struct LockFileBuilder {
 }
 
 impl LockFileBuilder {
+    /// Generate a new lock file using the builder pattern
+    /// channels, platforms and input_specs need to be provided
     pub fn new(
-        channels: impl IntoIterator<Item = Channel>,
+        channels: impl IntoIterator<Item = impl Into<Channel>>,
         platforms: impl IntoIterator<Item = Platform>,
         input_spec: impl IntoIterator<Item = MatchSpec>,
     ) -> Self {
@@ -49,6 +51,11 @@ impl LockFileBuilder {
 
     /// Add locked packages per platform
     pub fn add_locked_packages(mut self, locked_packages: LockedPackages) -> Self {
+        let platform = &locked_packages.platform;
+        if self.locked_packages.contains_key(platform) {
+            panic!("Tried to insert packages for {platform} twice")
+        }
+
         self.locked_packages
             .insert(locked_packages.platform, locked_packages);
         self
@@ -175,14 +182,15 @@ impl LockedPackage {
 #[cfg(test)]
 mod tests {
     use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
-    use crate::conda_lock::{Channel, CondaLock, PackageHashes};
+    use crate::conda_lock::{CondaLock, PackageHashes};
     use crate::{ChannelConfig, MatchSpec, Platform};
+    use rattler_digest::parse_digest_from_hex;
 
     #[test]
     fn create_lock_file() {
         let channel_config = ChannelConfig::default();
         let lock = LockFileBuilder::new(
-            ["conda_forge".into()],
+            ["conda_forge"],
             [Platform::Osx64],
             [MatchSpec::from_str("python =3.11.0", &channel_config).unwrap()]
         )
@@ -192,18 +200,15 @@ mod tests {
                     version: "3.11.0".to_string(),
                     build_string: "h4150a38_1_cpython".to_string(),
                     url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda".parse().unwrap(),
-                    package_hashes:  PackageHashes::Md5Sha256(rattler_digest::parse_digest_from_hex::<md5::Md5>("c6f4b87020c72e2700e3e94c1fc93b70").unwrap(),
-                                                               rattler_digest::parse_digest_from_hex::<sha2::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
+                    package_hashes:  PackageHashes::Md5Sha256(parse_digest_from_hex::<md5::Md5>("c6f4b87020c72e2700e3e94c1fc93b70").unwrap(),
+                                                               parse_digest_from_hex::<sha2::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
                     dependency_list: Default::default(),
                     optional: None,
                 }))
             .build().unwrap();
 
+        // See if we can serialize/deserialize it
         let s = serde_yaml::to_string(&lock).unwrap();
-        let serialize: CondaLock = serde_yaml::from_str(&s).unwrap();
+        serde_yaml::from_str::<CondaLock>(&s).unwrap();
     }
-
-    //
-    // md5: c6f4b87020c72e2700e3e94c1fc93b70
-    // sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
 }

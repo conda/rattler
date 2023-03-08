@@ -124,7 +124,7 @@ mod tests {
             env!("CARGO_MANIFEST_DIR"),
             "/../../test-data/conda-lock/content_hash/python.txt"
         ));
-        assert_eq!(str, output);
+        assert_eq!(str, output.unwrap());
 
         // TODO: add actual hash output checking when we have a default virtual package list
         //assert_eq!()
