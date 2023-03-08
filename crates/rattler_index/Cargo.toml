@@ -1,0 +1,21 @@
+[package]
+name = "rattler_index"
+version = "0.1.0"
+edition = "2021"
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
+description = "Create repodata index files"
+categories = ["conda"]
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
+license = "BSD-3-Clause"
+
+[dependencies]
+fxhash = "0.2.1"
+glob = "0.3.1"
+hex = "0.4.3"
+md-5 = "0.10.5"
+rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
+rattler_digest = { version = "0.1.0", path = "../rattler_digest" }
+rattler_package_streaming = { version = "0.1.0", path = "../rattler_package_streaming" }
+serde_json = "1.0.94"
+sha2 = "0.10.6"

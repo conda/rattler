@@ -10,8 +10,13 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
 
+fn sort_alphabetically<T: Serialize, S: serde::Serializer>(value: &T, serializer: S) -> Result<S::Ok, S::Error> {
+    let value = serde_json::to_value(value).map_err(serde::ser::Error::custom)?;
+    value.serialize(serializer)
+}
+
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct RepoData {
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -21,20 +26,21 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
+    #[serde(serialize_with= "sort_alphabetically")]
     pub packages: FxHashMap<String, PackageRecord>,
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(rename = "packages.conda")]
+    #[serde(rename = "packages.conda", serialize_with= "sort_alphabetically")]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not installable like regular packages)
-    #[serde(default)]
+    #[serde(default, serialize_with= "sort_alphabetically")]
     pub removed: FxHashSet<String>,
 }
 
 /// Information about subdirectory of channel in the Conda [`RepoData`]
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
     pub subdir: String,
@@ -71,7 +77,7 @@ pub struct PackageRecord {
     pub sha256: Option<String>,
 
     /// Optionally the size of the package archive in bytes
-    pub size: Option<usize>,
+    pub size: Option<u64>,
 
     /// Optionally the architecture the package supports
     pub arch: Option<String>,
@@ -115,7 +121,7 @@ pub struct PackageRecord {
 
     /// The UNIX Epoch timestamp when this package was created. Note that sometimes this is specified in
     /// seconds and sometimes in milliseconds.
-    pub timestamp: Option<usize>,
+    pub timestamp: Option<u64>,
     // Looking at the `PackageRecord` class in the Conda source code a record can also include all
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,
