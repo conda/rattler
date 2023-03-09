@@ -116,7 +116,7 @@ mod test_libsolv {
         name: &str,
         version: &str,
         build: &str,
-        build_number: usize,
+        build_number: u64,
     ) -> RepoDataRecord {
         RepoDataRecord {
             url: Url::from_str("http://example.com").unwrap(),
