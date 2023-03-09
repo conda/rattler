@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
@@ -54,11 +55,10 @@ pub struct PackageRecord {
     pub version: Version,
 
     /// The build string of the package
-    #[serde(alias = "build_string")]
     pub build: String,
 
     /// The build number of the package
-    pub build_number: usize,
+    pub build_number: u64,
 
     /// The subdirectory where the package can be found
     #[serde(default)]

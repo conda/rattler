@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/package/index.rs
-expression: "Index::from_package_directory(package_dir.path()).unwrap()"
+expression: "IndexJson::from_package_directory(package_dir.path()).unwrap()"
 ---
 name: zlib
 version: 1.2.8
@@ -10,5 +10,6 @@ arch: x86_64
 platform: win
 license: "zlib (http://zlib.net/zlib_license.html)"
 license_family: Other
+features: vc10
 subdir: win-64
 

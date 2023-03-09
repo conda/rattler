@@ -3,7 +3,7 @@ use std::path::Path;
 use super::PackageFile;
 use crate::{NoArchType, Version};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 /// A representation of the `index.json` file found in package archives.
 ///
@@ -24,7 +24,7 @@ pub struct IndexJson {
     pub build: String,
 
     /// The build number of the package. This is also included in the build string.
-    pub build_number: usize,
+    pub build_number: u64,
 
     /// Optionally, the architecture the package is build for.
     pub arch: Option<String>,
@@ -50,6 +50,18 @@ pub struct IndexJson {
     /// The package constraints of the package
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
+
+    /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
+    /// that effect, the number of track features is counted (number of commas) and the package is downweighted
+    /// by the number of track_features.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde_as(as = "OneOrMany<_>")]
+    pub track_features: Vec<String>,
+
+    /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
+    /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
+    /// mutually exclusive features.
+    pub features: Option<String>,
 
     /// The timestamp when this package was created
     pub timestamp: Option<u64>,
