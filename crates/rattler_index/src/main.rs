@@ -86,17 +86,12 @@ fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Erro
 }
 
 fn main() {
-    println!("Hello, world!");
-
+    let base_path = PathBuf::from("./testpkgs");
     // find all tar.bz2 files in the current directory
     // for each file, create a PackageRecord
     // create a RepoData with the PackageRecords
     // print the RepoData as JSON
-    let tar_bz2_glob = PathBuf::from("/Users/wolfv/micromamba/pkgs")
-        .join("*.tar.bz2")
-        .to_str()
-        .unwrap()
-        .to_string();
+    let tar_bz2_glob = base_path.join("*.tar.bz2").to_str().unwrap().to_string();
 
     let mut packages_subdir = HashMap::<String, FxHashMap<String, PackageRecord>>::default();
 
@@ -121,11 +116,7 @@ fn main() {
         }
     }
 
-    let conda_glob = PathBuf::from("/Users/wolfv/micromamba/pkgs")
-        .join("*.conda")
-        .to_str()
-        .unwrap()
-        .to_string();
+    let conda_glob = base_path.join("*.conda").to_str().unwrap().to_string();
 
     let mut conda_packages_subdir = HashMap::<String, FxHashMap<String, PackageRecord>>::default();
 
