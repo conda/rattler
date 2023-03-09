@@ -10,8 +10,14 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
 
-fn sort_alphabetically<T: Serialize, S: serde::Serializer>(value: &T, serializer: S) -> Result<S::Ok, S::Error> {
+fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(value: &T, serializer: S) -> Result<S::Ok, S::Error> {
     let value = serde_json::to_value(value).map_err(serde::ser::Error::custom)?;
+    value.serialize(serializer)
+}
+
+fn sort_set_alphabetically<S: serde::Serializer>(value: &FxHashSet<String>, serializer: S) -> Result<S::Ok, S::Error> {
+    let mut value = Vec::from_iter(value.iter().cloned());
+    value.sort();
     value.serialize(serializer)
 }
 
@@ -26,16 +32,16 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(serialize_with= "sort_alphabetically")]
+    #[serde(serialize_with= "sort_map_alphabetically")]
     pub packages: FxHashMap<String, PackageRecord>,
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(rename = "packages.conda", serialize_with= "sort_alphabetically")]
+    #[serde(rename = "packages.conda", serialize_with= "sort_map_alphabetically")]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not installable like regular packages)
-    #[serde(default, serialize_with= "sort_alphabetically")]
+    #[serde(default, serialize_with= "sort_set_alphabetically")]
     pub removed: FxHashSet<String>,
 }
 
