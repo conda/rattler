@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs,
     io::Read,
     path::{Path, PathBuf},
 };
@@ -14,6 +15,7 @@ use rattler_conda_types::{
 use rattler_digest::compute_file_digest;
 use rattler_package_streaming::{read, seek};
 
+use serde_json::json;
 use sha2::Sha256;
 
 fn package_record_from_index_json<T: Read>(
@@ -161,6 +163,33 @@ fn main() {
             conda_packages: conda_packages_subdir.remove(&subdir).unwrap_or_default(),
             removed,
         };
+
+        if fs::metadata("./testpkgs/patch_instructions.json").is_ok() {
+            let patch_instructions =
+                fs::read_to_string("./testpkgs/patch_instructions.json").unwrap();
+            let patch_instructions: serde_json::Value =
+                serde_json::from_str(&patch_instructions).unwrap();
+
+            let mut j: serde_json::Value = json!(repodata);
+
+            // find packages key in patch instructions and for each dictionary, update the values
+            // in the repodata
+            let packages_patches = patch_instructions["packages"].as_object().unwrap();
+            for (patchkey, patchvalue) in packages_patches {
+                let package = j["packages"]
+                    .as_object_mut()
+                    .unwrap()
+                    .get_mut(patchkey)
+                    .unwrap()
+                    .as_object_mut()
+                    .unwrap();
+                for (k, v) in patchvalue.as_object().unwrap() {
+                    package.insert(k.to_string(), v.clone());
+                }
+            }
+
+            print!("{}", serde_json::to_string_pretty(&j).unwrap());
+        }
 
         print!("{}", serde_json::to_string_pretty(&repodata).unwrap());
     }
