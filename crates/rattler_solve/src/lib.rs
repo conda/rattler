@@ -160,7 +160,7 @@ mod test_libsolv {
         let problem = SolverProblem {
             available_packages: available_packages
                 .iter()
-                .map(|records| LibsolvRepoData::from_records(&records)),
+                .map(|records| LibsolvRepoData::from_records(records)),
             specs,
             locked_packages: Default::default(),
             pinned_packages: Default::default(),

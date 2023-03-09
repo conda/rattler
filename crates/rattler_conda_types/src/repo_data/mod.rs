@@ -5,8 +5,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize};
+
+use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
