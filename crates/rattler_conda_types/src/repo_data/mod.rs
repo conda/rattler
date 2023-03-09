@@ -70,7 +70,7 @@ pub struct PackageRecord {
     pub build: String,
 
     /// The build number of the package
-    pub build_number: usize,
+    pub build_number: u64,
 
     /// The subdirectory where the package can be found
     #[serde(default)]

@@ -20,7 +20,7 @@ mod generic_virtual_package;
 pub mod package;
 pub mod prefix_record;
 
-pub use channel::{Channel, ParseChannelError};
+pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
