@@ -5,7 +5,8 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
-use serde::{Deserialize, Serialize};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
@@ -54,7 +55,6 @@ pub struct PackageRecord {
     pub version: Version,
 
     /// The build string of the package
-    #[serde(alias = "build_string")]
     pub build: String,
 
     /// The build number of the package
