@@ -93,11 +93,11 @@ pub fn calculate_content_data(
 
 /// Calculate the content hash for a platform and set of matchspecs
 pub fn calculate_content_hash(
-    _platform: &Platform,
+    platform: &Platform,
     input_specs: &[MatchSpec],
     channels: &[Channel],
 ) -> Result<String, CalculateContentHashError> {
-    let content_data = calculate_content_data(_platform, input_specs, channels)?;
+    let content_data = calculate_content_data(platform, input_specs, channels)?;
     let json_str = serde_json::to_string(&SerializableHash::<sha2::Sha256>(
         rattler_digest::compute_bytes_digest::<sha2::Sha256>(&content_data),
     ))?;
