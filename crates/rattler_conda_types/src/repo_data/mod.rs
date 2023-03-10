@@ -70,6 +70,12 @@ pub struct PackageRecord {
     /// Optionally a SHA256 hash of the package archive
     pub sha256: Option<String>,
 
+    /// A deprecated md5 hash
+    pub legacy_bz2_md5: Option<String>,
+
+    /// A deprecated package archive size.
+    pub legacy_bz2_size: Option<usize>,
+
     /// Optionally the size of the package archive in bytes
     pub size: Option<usize>,
 
@@ -116,12 +122,11 @@ pub struct PackageRecord {
     /// The UNIX Epoch timestamp when this package was created. Note that sometimes this is specified in
     /// seconds and sometimes in milliseconds.
     pub timestamp: Option<usize>,
+
     // Looking at the `PackageRecord` class in the Conda source code a record can also include all
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,
     //pub date: Option<String>,
-    //pub legacy_bz2_md5: Option<String>,
-    //pub legacy_bz2_size: Option<usize>,
     //pub package_type: ?
 }
 
