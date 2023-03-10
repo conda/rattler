@@ -70,6 +70,12 @@ pub struct PackageRecord {
     /// Optionally a SHA256 hash of the package archive
     pub sha256: Option<String>,
 
+    /// A deprecated md5 hash
+    pub legacy_bz2_md5: Option<String>,
+
+    /// A deprecated package archive size.
+    pub legacy_bz2_size: Option<u64>,
+
     /// Optionally the size of the package archive in bytes
     pub size: Option<u64>,
 
@@ -120,8 +126,6 @@ pub struct PackageRecord {
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,
     //pub date: Option<String>,
-    //pub legacy_bz2_md5: Option<String>,
-    //pub legacy_bz2_size: Option<u64>,
     //pub package_type: ?
 }
 
