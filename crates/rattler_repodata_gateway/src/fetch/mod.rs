@@ -100,8 +100,15 @@ pub enum Variant {
     /// packages ever uploaded.
     ///
     /// Note that this file is not available for all channels. This only seems to be available for
-    /// the conda-forge and bioconda channels.
+    /// the conda-forge and bioconda channels on anaconda.org.
     FromPackages,
+
+    /// Fetch `current_repodata.json` file. This file contains only the latest version of each
+    /// package.
+    ///
+    /// Note that this file is not available for all channels. This only seems to be available for
+    /// the conda-forge and bioconda channels on anaconda.org.
+    Current,
 }
 
 impl Default for Variant {
@@ -116,6 +123,7 @@ impl Variant {
         match self {
             Variant::AfterPatches => "repodata.json",
             Variant::FromPackages => "repodata_from_packages.json",
+            Variant::Current => "current_repodata.json",
         }
     }
 }
