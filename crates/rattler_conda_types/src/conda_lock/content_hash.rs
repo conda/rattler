@@ -2,6 +2,8 @@ use crate::conda_lock::Channel;
 use crate::{MatchSpec, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
+use serde_json::ser::{Formatter, PrettyFormatter};
+use std::string::FromUtf8Error;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CalculateContentHashError {
@@ -9,6 +11,8 @@ pub enum CalculateContentHashError {
     RequiredAttributeMissing(String),
     #[error(transparent)]
     JsonDecodeError(#[from] serde_json::Error),
+    #[error(transparent)]
+    Utf8Error(#[from] FromUtf8Error),
 }
 
 /// This function tries to replicate the creation of the content-hashes
@@ -83,15 +87,59 @@ pub fn calculate_content_data(
         specs,
     };
 
+    let mut buf = Vec::new();
+    let mut ser = serde_json::Serializer::with_formatter(&mut buf, PythonFormatter {});
+    content_hash_data.serialize(&mut ser)?;
+    Ok(String::from_utf8(buf)?)
+
     // Create the json
-    Ok(serde_json::to_string(&content_hash_data)?
-        // Replace these because python encodes with spaces
-        // and serde does not
-        .replace(":", ": ")
-        .replace(",", ", "))
+    // Ok(serde_json::to_string(&content_hash_data)?
+    //     // Replace these because python encodes with spaces
+    //     // and serde does not
+    //     .replace(":", ": ")
+    //     .replace(",", ", "))
 }
 
-/// Calculate the content hash for a platform and set of matchspecs
+/// This implements a formatter that uses the same formatting as
+/// as the standard lib python `json.dumps()`
+#[derive(Clone, Debug)]
+struct PythonFormatter {}
+
+impl Formatter for PythonFormatter {
+    #[inline]
+    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> std::io::Result<()>
+    where
+        W: ?Sized + std::io::Write,
+    {
+        if first {
+            Ok(())
+        } else {
+            writer.write_all(b", ")
+        }
+    }
+
+    #[inline]
+    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> std::io::Result<()>
+    where
+        W: ?Sized + std::io::Write,
+    {
+        if first {
+            Ok(())
+        } else {
+            writer.write_all(b", ")
+        }
+    }
+
+    #[inline]
+    fn begin_object_value<W>(&mut self, writer: &mut W) -> std::io::Result<()>
+    where
+        W: ?Sized + std::io::Write,
+    {
+        writer.write_all(b": ")
+    }
+}
+
+/// Calculate the content hash for a platform and set of match-specs
 pub fn calculate_content_hash(
     platform: &Platform,
     input_specs: &[MatchSpec],
