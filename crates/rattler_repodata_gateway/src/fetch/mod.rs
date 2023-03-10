@@ -87,6 +87,39 @@ impl Default for CacheAction {
     }
 }
 
+/// Defines which type of repodata.json file to download. Usually you want to use the
+/// [`Variant::AfterPatches`] variant because that reflects the repodata with any patches applied.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Variant {
+    /// Fetch the `repodata.json` file. This `repodata.json` has repodata patches applied. Packages
+    /// may have also been removed from this file (yanked).
+    AfterPatches,
+
+    /// Fetch the `repodata_from_packages.json` file. This file contains all packages with the
+    /// information extracted from their index.json file. This file is not patched and contains all
+    /// packages ever uploaded.
+    ///
+    /// Note that this file is not available for all channels. This only seems to be available for
+    /// the conda-forge and bioconda channels.
+    FromPackages,
+}
+
+impl Default for Variant {
+    fn default() -> Self {
+        Variant::AfterPatches
+    }
+}
+
+impl Variant {
+    /// Returns the file name of the repodata file to download.
+    pub fn file_name(&self) -> &'static str {
+        match self {
+            Variant::AfterPatches => "repodata.json",
+            Variant::FromPackages => "repodata_from_packages.json",
+        }
+    }
+}
+
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 #[derive(Default)]
 pub struct FetchRepoDataOptions {
@@ -96,6 +129,9 @@ pub struct FetchRepoDataOptions {
 
     /// A function that is called during downloading of the repodata.json to report progress.
     pub download_progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
+
+    /// Determines which variant to download. See [`Variant`] for more information.
+    pub variant: Variant,
 }
 
 /// A struct that provides information about download progress.
@@ -170,7 +206,11 @@ pub async fn fetch_repo_data(
     let subdir_url = normalize_subdir_url(subdir_url);
 
     // Compute the cache key from the url
-    let cache_key = crate::utils::url_to_cache_filename(&subdir_url);
+    let cache_key = crate::utils::url_to_cache_filename(
+        &subdir_url
+            .join(options.variant.file_name())
+            .expect("file name is valid"),
+    );
     let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
     let cache_state_path = cache_path.join(format!("{}.state.json", cache_key));
 
@@ -185,8 +225,9 @@ pub async fn fetch_repo_data(
     let cache_state = if options.cache_action != CacheAction::NoCache {
         let owned_subdir_url = subdir_url.clone();
         let owned_cache_path = cache_path.to_owned();
+        let owned_cache_key = cache_key.clone();
         let cache_state = tokio::task::spawn_blocking(move || {
-            validate_cached_state(&owned_cache_path, &owned_subdir_url)
+            validate_cached_state(&owned_cache_path, &owned_subdir_url, &owned_cache_key)
         })
         .await?;
         match (cache_state, options.cache_action) {
@@ -239,8 +280,13 @@ pub async fn fetch_repo_data(
     };
 
     // Determine the availability of variants based on the cache or by querying the remote.
-    let variant_availability =
-        check_variant_availability(&client, &subdir_url, cache_state.as_ref()).await;
+    let variant_availability = check_variant_availability(
+        &client,
+        &subdir_url,
+        cache_state.as_ref(),
+        options.variant.file_name(),
+    )
+    .await;
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
     // variants. We dont check the expiration here since we just refreshed it.
@@ -249,11 +295,15 @@ pub async fn fetch_repo_data(
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
-        subdir_url.join("repodata.json.zst").unwrap()
+        subdir_url
+            .join(&format!("{}.zst", options.variant.file_name()))
+            .unwrap()
     } else if has_bz2 {
-        subdir_url.join("repodata.json.bz2").unwrap()
+        subdir_url
+            .join(&format!("{}.bz2", options.variant.file_name()))
+            .unwrap()
     } else {
-        subdir_url.join("repodata.json").unwrap()
+        subdir_url.join(options.variant.file_name()).unwrap()
     };
 
     // Construct the HTTP request
@@ -498,6 +548,7 @@ pub async fn check_variant_availability(
     client: &Client,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
+    filename: &str,
 ) -> VariantAvailability {
     // Determine from the cache which variant are available. This is currently cached for a maximum
     // of 14 days.
@@ -512,8 +563,8 @@ pub async fn check_variant_availability(
         .copied();
 
     // Create a future to possibly refresh the zst state.
-    let zst_repodata_url = subdir_url.join("repodata.json.zst").unwrap();
-    let bz2_repodata_url = subdir_url.join("repodata.json.bz2").unwrap();
+    let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
+    let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
     let zst_future = match has_zst {
         Some(_) => {
             // The last cached value was value so we simply copy that
@@ -616,8 +667,11 @@ enum ValidatedCacheState {
 ///
 /// This functions reads multiple files from the `cache_path`, it is left up to the user to ensure
 /// that these files stay synchronized during the execution of this function.
-fn validate_cached_state(cache_path: &Path, subdir_url: &Url) -> ValidatedCacheState {
-    let cache_key = crate::utils::url_to_cache_filename(subdir_url);
+fn validate_cached_state(
+    cache_path: &Path,
+    subdir_url: &Url,
+    cache_key: &str,
+) -> ValidatedCacheState {
     let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
     let cache_state_path = cache_path.join(format!("{}.state.json", cache_key));
 
