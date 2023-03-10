@@ -432,13 +432,13 @@ mod test {
 
     #[rstest]
     #[case(
-        b"12345Hello, fabulous world!\06789",
+        b"12345Hello, fabulous world!\x006789",
         "fabulous",
         "cruel",
-        b"12345Hello, cruel world!\0\0\0\06789"
+        b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
-    #[case(b"short\0", "short", "verylong", b"veryl\0")]
-    #[case(b"short1234\0", "short", "verylong", b"verylong1\0")]
+    #[case(b"short\x00", "short", "verylong", b"veryl\x00")]
+    #[case(b"short1234\x00", "short", "verylong", b"verylong1\x00")]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,

@@ -1,7 +1,7 @@
-use crate::{SolveError, SolverProblem};
+use crate::{SolveError, SolverTask};
 use rattler_conda_types::RepoDataRecord;
 
-/// Represents a solver backend, capable of solving [`SolverProblem`]s
+/// Represents a solver backend, capable of solving [`SolverTask`]s
 pub trait SolverBackend {
     /// The repo data associated to a channel and platform combination
     type RepoData<'a>;
@@ -10,6 +10,6 @@ pub trait SolverBackend {
     /// environment.
     fn solve<'a, TAvailablePackagesIterator: Iterator<Item = Self::RepoData<'a>>>(
         &mut self,
-        problem: SolverProblem<TAvailablePackagesIterator>,
+        task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError>;
 }

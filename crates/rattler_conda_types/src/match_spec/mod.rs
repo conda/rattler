@@ -118,7 +118,7 @@ pub struct MatchSpec {
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
     pub build: Option<StringMatcher>,
     /// The build number of the package
-    pub build_number: Option<usize>,
+    pub build_number: Option<u64>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
