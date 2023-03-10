@@ -122,7 +122,6 @@ pub struct PackageRecord {
     /// The UNIX Epoch timestamp when this package was created. Note that sometimes this is specified in
     /// seconds and sometimes in milliseconds.
     pub timestamp: Option<u64>,
-    
     // Looking at the `PackageRecord` class in the Conda source code a record can also include all
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,

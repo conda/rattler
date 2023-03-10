@@ -141,6 +141,8 @@ mod test_libsolv {
                 license: None,
                 license_family: None,
                 timestamp: None,
+                legacy_bz2_size: None,
+                legacy_bz2_md5: None,
             },
         }
     }
