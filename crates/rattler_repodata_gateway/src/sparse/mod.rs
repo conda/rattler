@@ -2,6 +2,7 @@
 //! from a `repodata.json` file.
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
+use itertools::Itertools;
 use rattler_conda_types::{Channel, PackageRecord, RepoDataRecord};
 use serde::{
     de::{Error, MapAccess, Visitor},
@@ -25,6 +26,9 @@ pub struct SparseRepoData {
 
     /// The channel from which this data was downloaded.
     channel: Channel,
+
+    /// The subdirectory from where the repodata is downloaded
+    subdir: String,
 }
 
 /// A struct that holds a memory map of a `repodata.json` file and also a self-referential field which
@@ -43,25 +47,63 @@ struct SparseRepoDataInner {
 
 impl SparseRepoData {
     /// Construct an instance of self from a file on disk and a [`Channel`].
-    pub fn new(channel: Channel, path: impl AsRef<Path>) -> Result<Self, io::Error> {
+    pub fn new(
+        channel: Channel,
+        subdir: impl Into<String>,
+        path: impl AsRef<Path>,
+    ) -> Result<Self, io::Error> {
         let file = std::fs::File::open(path)?;
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInnerTryBuilder {
                 memory_map,
-
                 repo_data_builder: |memory_map| serde_json::from_slice(memory_map.as_ref()),
             }
             .try_build()?,
+            subdir: subdir.into(),
             channel,
         })
     }
 
-    /// Given a set of [`SparseRepoData`]s load all the records for the packages with the specified names.
+    /// Returns an iterator over all package names in this repodata file.
+    ///
+    /// This works by iterating over all elements in the `packages` and `conda_packages` fields of
+    /// the repodata and returning the unique package names.
+    pub fn package_names(&self) -> impl Iterator<Item = &'_ str> + '_ {
+        let repo_data = self.inner.borrow_repo_data();
+        repo_data
+            .packages
+            .iter()
+            .chain(repo_data.conda_packages.iter())
+            .map(|(name, _)| name.package)
+            .dedup()
+    }
+
+    /// Returns all the records for the specified package name.
+    pub fn load_records(&self, package_name: &str) -> io::Result<Vec<RepoDataRecord>> {
+        let repo_data = self.inner.borrow_repo_data();
+        let mut records = parse_records(
+            package_name,
+            &repo_data.packages,
+            &self.channel,
+            &self.subdir,
+        )?;
+        let mut conda_records = parse_records(
+            package_name,
+            &repo_data.conda_packages,
+            &self.channel,
+            &self.subdir,
+        )?;
+        records.append(&mut conda_records);
+        Ok(records)
+    }
+
+    /// Given a set of [`SparseRepoData`]s load all the records for the packages with the specified
+    /// names and all the packages these records depend on.
     ///
     /// This will parse the records for the specified packages as well as all the packages these records
     /// depend on.
-    pub fn load_records(
+    pub fn load_records_recursive(
         repo_data: &[SparseRepoData],
         package_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
@@ -85,11 +127,13 @@ impl SparseRepoData {
                     &next_package,
                     &repo_data_packages.packages,
                     &repo_data.channel,
+                    &repo_data.subdir,
                 )?;
                 let mut conda_records = parse_records(
                     &next_package,
                     &repo_data_packages.conda_packages,
                     &repo_data.channel,
+                    &repo_data.subdir,
                 )?;
                 records.append(&mut conda_records);
 
@@ -133,13 +177,18 @@ fn parse_records<'i>(
     package_name: &str,
     packages: &[(PackageFilename<'i>, &'i RawValue)],
     channel: &Channel,
+    subdir: &str,
 ) -> io::Result<Vec<RepoDataRecord>> {
     let channel_name = channel.canonical_name();
 
     let package_indices = packages.equal_range_by(|(package, _)| package.package.cmp(package_name));
     let mut result = Vec::with_capacity(package_indices.len());
     for (key, raw_json) in &packages[package_indices] {
-        let package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
+        let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
+        // Overwrite subdir if its empty
+        if package_record.subdir.is_empty() {
+            package_record.subdir = subdir.to_owned();
+        }
         result.push(RepoDataRecord {
             url: channel
                 .base_url()
@@ -154,26 +203,26 @@ fn parse_records<'i>(
 }
 
 /// A helper function that immediately loads the records for the given packages (and their dependencies).
-pub async fn load_repo_data_sparse(
-    repo_data_paths: impl IntoIterator<Item = (Channel, impl AsRef<Path>)>,
+pub async fn load_repo_data_recursively(
+    repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = impl Into<String>>,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
     let lazy_repo_data = stream::iter(repo_data_paths)
-        .map(|(channel, path)| {
+        .map(|(channel, subdir, path)| {
             let path = path.as_ref().to_path_buf();
-            tokio::task::spawn_blocking(move || SparseRepoData::new(channel, path)).unwrap_or_else(
-                |r| match r.try_into_panic() {
+            let subdir = subdir.into();
+            tokio::task::spawn_blocking(move || SparseRepoData::new(channel, subdir, path))
+                .unwrap_or_else(|r| match r.try_into_panic() {
                     Ok(panic) => std::panic::resume_unwind(panic),
                     Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
-                },
-            )
+                })
         })
         .buffered(50)
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records(&lazy_repo_data, package_names)
+    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names)
 }
 
 fn deserialize_tuple_map<'d, D: Deserializer<'d>, K: Deserialize<'d>, V: Deserialize<'d>>(
@@ -247,7 +296,7 @@ impl<'de> Deserialize<'de> for PackageFilename<'de> {
 
 #[cfg(test)]
 mod test {
-    use crate::sparse::load_repo_data_sparse;
+    use super::load_repo_data_recursively;
     use rattler_conda_types::{Channel, ChannelConfig, RepoData, RepoDataRecord};
     use std::path::{Path, PathBuf};
 
@@ -258,14 +307,16 @@ mod test {
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> Vec<Vec<RepoDataRecord>> {
-        load_repo_data_sparse(
+        load_repo_data_recursively(
             [
                 (
-                    Channel::from_str("conda-forge[linux-64]", &ChannelConfig::default()).unwrap(),
+                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    "noarch",
                     test_dir().join("channels/conda-forge/noarch/repodata.json"),
                 ),
                 (
-                    Channel::from_str("conda-forge[linux-64]", &ChannelConfig::default()).unwrap(),
+                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    "linux-64",
                     test_dir().join("channels/conda-forge/linux-64/repodata.json"),
                 ),
             ],
