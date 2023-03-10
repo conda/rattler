@@ -1,4 +1,4 @@
-use crate::{SolveError, SolverBackend, SolverProblem};
+use crate::{SolveError, SolverBackend, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
@@ -68,7 +68,7 @@ impl SolverBackend for LibsolvBackend {
 
     fn solve<'a, TAvailablePackagesIterator: Iterator<Item = Self::RepoData<'a>>>(
         &mut self,
-        problem: SolverProblem<TAvailablePackagesIterator>,
+        task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
         let pool = Pool::default();
@@ -81,7 +81,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Add virtual packages
         let repo = Repo::new(&pool, "virtual_packages");
-        add_virtual_packages(&pool, &repo, &problem.virtual_packages);
+        add_virtual_packages(&pool, &repo, &task.virtual_packages);
 
         // Mark the virtual packages as installed.
         pool.set_installed(&repo);
@@ -89,7 +89,7 @@ impl SolverBackend for LibsolvBackend {
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
-        for repodata in problem.available_packages {
+        for repodata in task.available_packages {
             if repodata.records.is_empty() {
                 continue;
             }
@@ -113,19 +113,19 @@ impl SolverBackend for LibsolvBackend {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked");
-        let installed_solvables = add_repodata_records(&pool, &repo, &problem.locked_packages);
+        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(&problem.locked_packages);
+        all_repodata_records.push(&task.locked_packages);
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned");
-        let pinned_solvables = add_repodata_records(&pool, &repo, &problem.pinned_packages);
+        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(&problem.pinned_packages);
+        all_repodata_records.push(&task.pinned_packages);
 
         // Create datastructures for solving
         pool.create_whatprovides();
@@ -144,7 +144,7 @@ impl SolverBackend for LibsolvBackend {
         }
 
         // Specify the matchspec requests
-        for spec in problem.specs {
+        for spec in task.specs {
             let id = pool.intern_matchspec(&spec);
             goal.install(id, false)
         }
