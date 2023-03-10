@@ -20,5 +20,6 @@ pub mod repo;
 pub mod repodata;
 pub mod solvable;
 pub mod solve_goal;
+pub mod solve_problem;
 pub mod solver;
 pub mod transaction;
