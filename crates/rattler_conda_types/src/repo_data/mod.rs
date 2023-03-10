@@ -5,6 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
+
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
@@ -15,7 +16,7 @@ use crate::{Channel, NoArchType, RepoDataRecord, Version};
 pub struct RepoData {
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
-    pub version: Option<usize>,
+    pub version: Option<u64>,
 
     /// The channel information contained in the repodata.json file
     pub info: Option<ChannelInfo>,
@@ -54,11 +55,10 @@ pub struct PackageRecord {
     pub version: Version,
 
     /// The build string of the package
-    #[serde(alias = "build_string")]
     pub build: String,
 
     /// The build number of the package
-    pub build_number: usize,
+    pub build_number: u64,
 
     /// The subdirectory where the package can be found
     #[serde(default)]
@@ -71,7 +71,7 @@ pub struct PackageRecord {
     pub sha256: Option<String>,
 
     /// Optionally the size of the package archive in bytes
-    pub size: Option<usize>,
+    pub size: Option<u64>,
 
     /// Optionally the architecture the package supports
     pub arch: Option<String>,
@@ -115,13 +115,13 @@ pub struct PackageRecord {
 
     /// The UNIX Epoch timestamp when this package was created. Note that sometimes this is specified in
     /// seconds and sometimes in milliseconds.
-    pub timestamp: Option<usize>,
+    pub timestamp: Option<u64>,
     // Looking at the `PackageRecord` class in the Conda source code a record can also include all
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,
     //pub date: Option<String>,
     //pub legacy_bz2_md5: Option<String>,
-    //pub legacy_bz2_size: Option<usize>,
+    //pub legacy_bz2_size: Option<u64>,
     //pub package_type: ?
 }
 

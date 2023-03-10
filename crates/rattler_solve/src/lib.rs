@@ -28,9 +28,9 @@ pub enum SolveError {
     UnsupportedOperations(Vec<String>),
 }
 
-/// Represents a dependency resolution problem, to be solved by one of the backends (currently only
+/// Represents a dependency resolution task, to be solved by one of the backends (currently only
 /// libsolv is supported)
-pub struct SolverProblem<TAvailablePackagesIterator> {
+pub struct SolverTask<TAvailablePackagesIterator> {
     /// An iterator over all available packages
     pub available_packages: TAvailablePackagesIterator,
 
@@ -62,7 +62,7 @@ pub struct SolverProblem<TAvailablePackagesIterator> {
 #[cfg(test)]
 mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
-    use crate::{LibsolvRepoData, SolveError, SolverBackend, SolverProblem};
+    use crate::{LibsolvRepoData, SolveError, SolverBackend, SolverTask};
     use rattler_conda_types::{
         Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
         RepoData, RepoDataRecord, Version,
@@ -116,7 +116,7 @@ mod test_libsolv {
         name: &str,
         version: &str,
         build: &str,
-        build_number: usize,
+        build_number: u64,
     ) -> RepoDataRecord {
         RepoDataRecord {
             url: Url::from_str("http://example.com").unwrap(),
@@ -157,10 +157,10 @@ mod test_libsolv {
 
         let specs = vec![MatchSpec::from_str("python=3.9").unwrap()];
 
-        let problem = SolverProblem {
+        let solver_task = SolverTask {
             available_packages: available_packages
                 .iter()
-                .map(|records| LibsolvRepoData::from_records(&records)),
+                .map(|records| LibsolvRepoData::from_records(records)),
             specs,
             locked_packages: Default::default(),
             pinned_packages: Default::default(),
@@ -168,7 +168,7 @@ mod test_libsolv {
         };
 
         let mut pkgs = LibsolvBackend
-            .solve(problem)
+            .solve(solver_task)
             .unwrap()
             .into_iter()
             .map(|pkg| {
@@ -483,7 +483,7 @@ mod test_libsolv {
             .map(|m| MatchSpec::from_str(m).unwrap())
             .collect();
 
-        let problem = SolverProblem {
+        let task = SolverTask {
             locked_packages: installed_packages,
             virtual_packages,
             available_packages: vec![libsolv_repodata].into_iter(),
@@ -491,7 +491,7 @@ mod test_libsolv {
             pinned_packages: Vec::new(),
         };
 
-        let pkgs = LibsolvBackend.solve(problem)?;
+        let pkgs = LibsolvBackend.solve(task)?;
 
         for pkg in pkgs.iter() {
             println!(

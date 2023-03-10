@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
     /// The version of the file
-    pub paths_version: usize,
+    pub paths_version: u64,
 
     /// All entries included in the package.
     pub paths: Vec<PathsEntry>,

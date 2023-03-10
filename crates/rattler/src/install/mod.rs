@@ -589,7 +589,7 @@ mod test {
     #[tokio::test]
     pub async fn test_conda_lock() {
         // Load a prepared explicit environment file for the current platform.
-        let lock_path = get_test_data_dir().join("conda-lock/python-conda-lock.yml".to_string());
+        let lock_path = get_test_data_dir().join("conda-lock/python-conda-lock.yml");
         let lock = CondaLock::from_path(&lock_path).unwrap();
 
         let current_platform = Platform::current();

@@ -29,7 +29,7 @@ pub struct LinkJson {
     pub noarch: NoArchLinks,
 
     /// The version of the package metadata file
-    pub package_metadata_version: usize,
+    pub package_metadata_version: u64,
 }
 
 impl PackageFile for LinkJson {

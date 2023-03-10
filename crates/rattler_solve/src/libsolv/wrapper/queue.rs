@@ -54,6 +54,13 @@ impl<T: Into<ffi::Id>> Queue<T> {
             ffi::queue_insert(self.raw_ptr(), self.queue.count, id.into());
         }
     }
+
+    /// Returns an iterator over the ids of the queue
+    pub fn id_iter(&self) -> impl Iterator<Item = ffi::Id> + '_ {
+        unsafe { std::slice::from_raw_parts(self.queue.elements as _, self.queue.count as usize) }
+            .iter()
+            .copied()
+    }
 }
 
 /// A read-only reference to a libsolv queue

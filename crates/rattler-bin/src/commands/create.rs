@@ -12,7 +12,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{LibsolvRepoData, SolverBackend, SolverProblem};
+use rattler_solve::{LibsolvRepoData, SolverBackend, SolverTask};
 use reqwest::Client;
 use std::{
     borrow::Cow,
@@ -140,7 +140,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
     // information required to be able to solve the problem.
-    let solver_problem = SolverProblem {
+    let solver_task = SolverTask {
         available_packages: repodatas
             .iter()
             .map(|records| LibsolvRepoData::from_records(records)),
@@ -156,7 +156,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
     let required_packages = wrap_in_progress("solving", move || {
-        rattler_solve::LibsolvBackend.solve(solver_problem)
+        rattler_solve::LibsolvBackend.solve(solver_task)
     })?;
 
     // Construct a transaction to
