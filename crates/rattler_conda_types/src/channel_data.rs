@@ -115,7 +115,7 @@ pub struct ChannelDataPackage {
     pub text_prefix: bool,
 
     /// Last update time
-    pub timestamp: usize,
+    pub timestamp: u64,
 
     /// Latest version
     #[serde_as(as = "DisplayFromStr")]

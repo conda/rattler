@@ -17,7 +17,7 @@ use std::str::FromStr;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefixPaths {
     /// The version of the file
-    pub paths_version: usize,
+    pub paths_version: u64,
 
     /// All entries included in the package.
     #[serde(default)]
