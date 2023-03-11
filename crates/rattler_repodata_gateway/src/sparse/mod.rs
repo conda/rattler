@@ -162,13 +162,13 @@ impl SparseRepoData {
 struct LazyRepoData<'i> {
     /// The tar.bz2 packages contained in the repodata.json file
     #[serde(borrow)]
-    #[serde(deserialize_with = "deserialize_tuple_map")]
+    #[serde(deserialize_with = "deserialize_filename_and_raw_record")]
     packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
     #[serde(borrow, rename = "packages.conda")]
-    #[serde(deserialize_with = "deserialize_tuple_map")]
+    #[serde(deserialize_with = "deserialize_filename_and_raw_record")]
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 }
 
@@ -225,10 +225,29 @@ pub async fn load_repo_data_recursively(
     SparseRepoData::load_records_recursive(&lazy_repo_data, package_names)
 }
 
-fn deserialize_tuple_map<'d, D: Deserializer<'d>, K: Deserialize<'d>, V: Deserialize<'d>>(
+fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     deserializer: D,
-) -> Result<Vec<(K, V)>, D::Error> {
-    return deserializer.deserialize_map(MapVisitor(PhantomData));
+) -> Result<Vec<(PackageFilename<'d>, &'d RawValue)>, D::Error> {
+    let mut entries: Vec<(PackageFilename<'d>, &'d RawValue)> =
+        deserializer.deserialize_map(MapVisitor(PhantomData))?;
+
+    // Although in general the filenames are sorted in repodata.json this doesnt necessarily mean
+    // that the records are also sorted by package name.
+    //
+    // To illustrate, the following filenames are properly sorted by filename but they are NOT
+    // properly sorted by package name.
+    // - clang-format-12.0.1-default_he082bbe_4.tar.bz2 (package name: clang-format)
+    // - clang-format-13-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format-13)
+    // - clang-format-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format)
+    //
+    // Because most use-cases involve finding filenames by package name we reorder the entries here
+    // by package name. This enables use the binary search for the packages we need.
+    //
+    // Since (in most cases) the repodata is already ordered by filename which does closely resemble
+    // ordering by package name this sort operation will most likely be very fast.
+    entries.sort_by(|(a, _), (b, _)| a.package.cmp(b.package));
+
+    return Ok(entries);
 
     #[allow(clippy::type_complexity)]
     struct MapVisitor<I, K, V>(PhantomData<fn() -> (I, K, V)>);
@@ -285,19 +304,29 @@ impl<'de> Deserialize<'de> for PackageFilename<'de> {
     where
         D: Deserializer<'de>,
     {
-        let filename = <&str>::deserialize(deserializer)?;
-        let package = filename
-            .rsplitn(3, '-')
-            .nth(2)
-            .ok_or_else(|| D::Error::custom("invalid filename"))?;
-        Ok(Self { package, filename })
+        <&str>::deserialize(deserializer)?
+            .try_into()
+            .map_err(D::Error::custom)
+    }
+}
+
+impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
+    type Error = &'static str;
+
+    fn try_from(s: &'de str) -> Result<Self, Self::Error> {
+        let package = s.rsplitn(3, '-').nth(2).ok_or("invalid filename")?;
+        Ok(PackageFilename {
+            package,
+            filename: s,
+        })
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::load_repo_data_recursively;
+    use super::{load_repo_data_recursively, PackageFilename};
     use rattler_conda_types::{Channel, ChannelConfig, RepoData, RepoDataRecord};
+    use rstest::rstest;
     use std::path::{Path, PathBuf};
 
     fn test_dir() -> PathBuf {
@@ -421,5 +450,12 @@ mod test {
             .sum::<usize>();
 
         assert_eq!(total_records, 367595);
+    }
+
+    #[rstest]
+    #[case("clang-format-13.0.1-root_62800_h69bbbaa_1.conda", "clang-format")]
+    #[case("clang-format-13-13.0.1-default_he082bbe_0.tar.bz2", "clang-format-13")]
+    fn test_deserialize_package_name(#[case] filename: &str, #[case] result: &str) {
+        assert_eq!(PackageFilename::try_from(filename).unwrap().package, result);
     }
 }
