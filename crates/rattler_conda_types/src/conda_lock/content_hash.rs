@@ -3,6 +3,7 @@ use crate::{MatchSpec, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
 use serde_json::ser::{Formatter, PrettyFormatter};
+use std::fmt::format;
 use std::string::FromUtf8Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -70,7 +71,11 @@ pub fn calculate_content_data(
                 version: spec.version.as_ref().map(|v| v.to_string()).ok_or(
                     CalculateContentHashError::RequiredAttributeMissing("version".to_string()),
                 )?,
-                build: spec.build.clone(),
+                build: spec.build.clone().map(|b| match b {
+                    crate::StringMatcher::Exact(s) => s,
+                    crate::StringMatcher::Glob(g) => format!("{}", g),
+                    crate::StringMatcher::Regex(r) => format!("{}", r),
+                }),
                 conda_channel: None,
             })
         })
@@ -154,15 +159,16 @@ pub fn calculate_content_hash(
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::conda_lock::content_hash;
-    use crate::{ChannelConfig, MatchSpec, Platform};
+    use crate::{MatchSpec, Platform};
 
     #[test]
     fn test_content_hash() {
-        let channel_config = ChannelConfig::default();
         let output = content_hash::calculate_content_data(
             &Platform::Osx64,
-            &[MatchSpec::from_str("python =3.11.0", &channel_config).unwrap()],
+            &[MatchSpec::from_str("python =3.11.0").unwrap()],
             &["conda-forge".into()],
         );
 

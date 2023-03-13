@@ -17,12 +17,15 @@ pub enum Platform {
     LinuxPpc64le,
     LinuxPpc64,
     LinuxS390X,
+    LinuxRiscv32,
+    LinuxRiscv64,
 
     Osx64,
     OsxArm64,
 
     Win32,
     Win64,
+    WinArm64,
 
     Emscripten32,
 }
@@ -38,7 +41,18 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Linux64;
 
-            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+            #[cfg(target_arch = "riscv32")]
+            return Platform::LinuxRiscv32;
+
+            #[cfg(target_arch = "riscv64")]
+            return Platform::LinuxRiscv64;
+
+            #[cfg(not(any(
+                target_arch = "x86_64",
+                target_arch = "x86",
+                target_arch = "riscv32",
+                target_arch = "riscv64"
+            )))]
             compile_error!("unsupported linux architecture");
         }
         #[cfg(windows)]
@@ -49,7 +63,10 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Win64;
 
-            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86")))]
+            #[cfg(target_arch = "aarch64")]
+            return Platform::WinArm64;
+
+            #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
             compile_error!("unsupported windows architecture");
         }
         #[cfg(target_os = "macos")]
@@ -76,7 +93,7 @@ impl Platform {
 
     /// Returns true if the platform is a windows based platform.
     pub const fn is_windows(self) -> bool {
-        matches!(self, Platform::Win32 | Platform::Win64)
+        matches!(self, Platform::Win32 | Platform::Win64 | Platform::WinArm64)
     }
 
     /// Returns true if the platform is a unix based platform.
@@ -96,6 +113,8 @@ impl Platform {
                 | Platform::LinuxPpc64le
                 | Platform::LinuxPpc64
                 | Platform::LinuxS390X
+                | Platform::LinuxRiscv32
+                | Platform::LinuxRiscv64
         )
     }
 
@@ -127,10 +146,13 @@ impl FromStr for Platform {
             "linux-ppc64le" => Platform::LinuxPpc64le,
             "linux-ppc64" => Platform::LinuxPpc64,
             "linux-s390x" => Platform::LinuxS390X,
+            "linux-riscv32" => Platform::LinuxRiscv32,
+            "linux-riscv64" => Platform::LinuxRiscv64,
             "osx-64" => Platform::Osx64,
             "osx-arm64" => Platform::OsxArm64,
             "win-32" => Platform::Win32,
             "win-64" => Platform::Win64,
+            "win-arm64" => Platform::WinArm64,
             "emscripten-32" => Platform::Emscripten32,
             string => {
                 return Err(ParsePlatformError {
@@ -153,10 +175,13 @@ impl From<Platform> for &'static str {
             Platform::LinuxPpc64le => "linux-ppc64le",
             Platform::LinuxPpc64 => "linux-ppc64",
             Platform::LinuxS390X => "linux-s390x",
+            Platform::LinuxRiscv32 => "linux-riscv32",
+            Platform::LinuxRiscv64 => "linux-riscv64",
             Platform::Osx64 => "osx-64",
             Platform::OsxArm64 => "osx-arm64",
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
+            Platform::WinArm64 => "win-arm64",
             Platform::Emscripten32 => "emscripten-32",
         }
     }

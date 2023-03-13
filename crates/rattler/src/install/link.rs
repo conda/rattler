@@ -4,6 +4,7 @@ use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use sha2::Sha256;
+use std::borrow::Cow;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -114,12 +115,33 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
         let mut destination_writer = HashingWriter::<_, sha2::Sha256>::new(destination);
 
+        // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
+        // string escaping. For instance if we replace the prefix in the following text
+        //
+        // ```text
+        // string = "c:\\old_prefix"
+        // ```
+        //
+        // with the path `c:\new_prefix` the text will become:
+        //
+        // ```text
+        // string = "c:\new_prefix"
+        // ```
+        //
+        // In this case the literal string is not properly escape. This is fixed by using
+        // forward-slashes on windows instead.
+        let target_prefix = if target_platform.is_windows() {
+            Cow::Owned(target_prefix.replace('\\', "/"))
+        } else {
+            Cow::Borrowed(target_prefix)
+        };
+
         // Replace the prefix placeholder in the file with the new placeholder
         copy_and_replace_placholders(
             source.as_ref(),
             &mut destination_writer,
             prefix_placeholder,
-            target_prefix,
+            &target_prefix,
             path_json_entry.file_mode,
         )?;
 
@@ -410,13 +432,13 @@ mod test {
 
     #[rstest]
     #[case(
-        b"12345Hello, fabulous world!\06789",
+        b"12345Hello, fabulous world!\x006789",
         "fabulous",
         "cruel",
-        b"12345Hello, cruel world!\0\0\0\06789"
+        b"12345Hello, cruel world!\x00\x00\x00\x006789"
     )]
-    #[case(b"short\0", "short", "verylong", b"veryl\0")]
-    #[case(b"short1234\0", "short", "verylong", b"verylong1\0")]
+    #[case(b"short\x00", "short", "verylong", b"veryl\x00")]
+    #[case(b"short1234\x00", "short", "verylong", b"verylong1\x00")]
     pub fn test_copy_and_replace_binary_placeholder(
         #[case] input: &[u8],
         #[case] prefix_placeholder: &str,

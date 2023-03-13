@@ -68,6 +68,23 @@ impl PythonInfo {
         &self.path
     }
 
+    /// Constructs a shebang that will run the rest of the script as Python.
+    pub fn shebang(&self, target_prefix: &str) -> String {
+        let target_path = Path::new(target_prefix).join(self.path());
+        let target_path = target_path.as_os_str().to_string_lossy().replace('\\', "/");
+
+        // Shebangs cannot be larger than 127 characters and executables with spaces are
+        // problematic.
+        if target_path.len() > 127 - 2 || target_path.contains(' ') {
+            format!(
+                "#!/bin/sh\n'''exec' \"{}\" \"$0\" \"$@\" #'''",
+                &target_path
+            )
+        } else {
+            format!("#!{}", &target_path)
+        }
+    }
+
     /// Returns the target location of a file in a noarch python package given its location in its
     /// package archive.
     pub fn get_python_noarch_target_path<'a>(&self, relative_path: &'a Path) -> Cow<'a, Path> {

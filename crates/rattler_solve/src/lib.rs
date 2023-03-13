@@ -6,9 +6,10 @@
 mod libsolv;
 mod solver_backend;
 
-pub use libsolv::LibsolvBackend;
+pub use libsolv::{
+    cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
+};
 pub use solver_backend::SolverBackend;
-use std::ffi::NulError;
 
 use rattler_conda_types::GenericVirtualPackage;
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
@@ -18,15 +19,7 @@ use rattler_conda_types::{MatchSpec, RepoDataRecord};
 pub enum SolveError {
     /// There is no set of dependencies that satisfies the requirements
     #[error("unsolvable")]
-    Unsolvable,
-
-    /// An error occurred when trying to load the channel and platform's `repodata.json`
-    #[error("error adding repodata: {0}")]
-    ErrorAddingRepodata(#[source] NulError),
-
-    /// An error occurred when trying to load information about installed packages to the solver
-    #[error("error adding installed packages: {0}")]
-    ErrorAddingInstalledPackages(#[source] NulError),
+    Unsolvable(Vec<String>),
 
     /// The solver backend returned operations that we dont know how to install.
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
@@ -35,12 +28,11 @@ pub enum SolveError {
     UnsupportedOperations(Vec<String>),
 }
 
-/// Represents a dependency resolution problem, to be solved by one of the backends (currently only
+/// Represents a dependency resolution task, to be solved by one of the backends (currently only
 /// libsolv is supported)
-#[derive(Default)]
-pub struct SolverProblem {
-    /// All available packages
-    pub available_packages: Vec<Vec<RepoDataRecord>>,
+pub struct SolverTask<TAvailablePackagesIterator> {
+    /// An iterator over all available packages
+    pub available_packages: TAvailablePackagesIterator,
 
     /// Records of packages that are previously selected.
     ///
@@ -70,11 +62,10 @@ pub struct SolverProblem {
 #[cfg(test)]
 mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
-    use crate::{SolveError, SolverBackend, SolverProblem};
-    use rattler_conda_types::GenericVirtualPackage;
+    use crate::{LibsolvRepoData, SolveError, SolverBackend, SolverTask};
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, NoArchType, PackageRecord, RepoData, RepoDataRecord,
-        Version,
+        Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+        RepoData, RepoDataRecord, Version,
     };
     use std::str::FromStr;
     use url::Url;
@@ -125,7 +116,7 @@ mod test_libsolv {
         name: &str,
         version: &str,
         build: &str,
-        build_number: usize,
+        build_number: u64,
     ) -> RepoDataRecord {
         RepoDataRecord {
             url: Url::from_str("http://example.com").unwrap(),
@@ -150,6 +141,8 @@ mod test_libsolv {
                 license: None,
                 license_family: None,
                 timestamp: None,
+                legacy_bz2_size: None,
+                legacy_bz2_md5: None,
             },
         }
     }
@@ -164,16 +157,20 @@ mod test_libsolv {
 
         let available_packages = vec![repo_data, repo_data_noarch];
 
-        let specs = vec![MatchSpec::from_str("python=3.9", &ChannelConfig::default()).unwrap()];
+        let specs = vec![MatchSpec::from_str("python=3.9").unwrap()];
 
-        let problem = SolverProblem {
-            available_packages,
+        let solver_task = SolverTask {
+            available_packages: available_packages
+                .iter()
+                .map(|records| LibsolvRepoData::from_records(records)),
             specs,
-            ..Default::default()
+            locked_packages: Default::default(),
+            pinned_packages: Default::default(),
+            virtual_packages: Default::default(),
         };
 
-        let pkgs = LibsolvBackend
-            .solve(problem)
+        let mut pkgs = LibsolvBackend
+            .solve(solver_task)
             .unwrap()
             .into_iter()
             .map(|pkg| {
@@ -183,6 +180,11 @@ mod test_libsolv {
                 )
             })
             .collect::<Vec<_>>();
+
+        // The order of packages is nondeterministic, so we sort them to ensure we can compare them
+        // to a previous run
+        pkgs.sort();
+
         insta::assert_yaml_snapshot!(pkgs);
     }
 
@@ -193,12 +195,55 @@ mod test_libsolv {
             Vec::new(),
             Vec::new(),
             &["asdfasdf", "foo<4"],
+            false,
         );
 
         assert!(result.is_err());
 
         let err = result.err().unwrap();
-        assert!(matches!(err, SolveError::Unsolvable));
+        match err {
+            SolveError::Unsolvable(errors) => {
+                assert_eq!(errors, vec!["nothing provides requested asdfasdf"])
+            }
+            _ => panic!("Unexpected error: {err:?}"),
+        }
+    }
+
+    #[test]
+    #[cfg(target_family = "unix")]
+    fn test_solve_with_cached_solv_file_install_new() -> anyhow::Result<()> {
+        let pkgs = solve(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["foo<4"],
+            true,
+        )?;
+
+        assert_eq!(1, pkgs.len());
+        let info = &pkgs[0];
+
+        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
+        assert_eq!(
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
+            info.url.to_string()
+        );
+        assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
+        assert_eq!("foo", info.package_record.name);
+        assert_eq!("linux-64", info.package_record.subdir);
+        assert_eq!("3.0.2", info.package_record.version.to_string());
+        assert_eq!("py36h1af98f8_1", info.package_record.build);
+        assert_eq!(1, info.package_record.build_number);
+        assert_eq!(
+            "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
+            info.package_record.sha256.as_ref().unwrap()
+        );
+        assert_eq!(
+            "fb731d9290f0bcbf3a054665f33ec94f",
+            info.package_record.md5.as_ref().unwrap()
+        );
+
+        Ok(())
     }
 
     #[test]
@@ -208,6 +253,7 @@ mod test_libsolv {
             Vec::new(),
             Vec::new(),
             &["foo<4"],
+            false,
         )?;
 
         assert_eq!(1, pkgs.len());
@@ -246,6 +292,7 @@ mod test_libsolv {
             Vec::new(),
             Vec::new(),
             &[match_spec],
+            false,
         )?;
 
         // The .conda entry is selected for installing
@@ -271,6 +318,7 @@ mod test_libsolv {
             already_installed,
             Vec::new(),
             &["foo<4"],
+            false,
         )?;
 
         assert_eq!(1, pkgs.len());
@@ -299,6 +347,7 @@ mod test_libsolv {
             already_installed,
             Vec::new(),
             &["foo>=4"],
+            false,
         )?;
 
         // Install
@@ -325,6 +374,7 @@ mod test_libsolv {
             already_installed,
             Vec::new(),
             &["foo<4"],
+            false,
         )?;
 
         assert_eq!(pkgs.len(), 1);
@@ -353,6 +403,7 @@ mod test_libsolv {
             already_installed,
             Vec::new(),
             &[],
+            false,
         )?;
 
         // Should be no packages!
@@ -372,6 +423,7 @@ mod test_libsolv {
                 build_string: "0".to_string(),
             }],
             &["bar"],
+            false,
         )?;
 
         assert_eq!(pkgs.len(), 1);
@@ -385,9 +437,15 @@ mod test_libsolv {
 
     #[test]
     fn test_solve_dummy_repo_missing_virtual_package() {
-        let result = solve(dummy_channel_json_path(), Vec::new(), Vec::new(), &["bar"]);
+        let result = solve(
+            dummy_channel_json_path(),
+            Vec::new(),
+            Vec::new(),
+            &["bar"],
+            false,
+        );
 
-        assert!(matches!(result.err(), Some(SolveError::Unsolvable)));
+        assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
     }
 
     #[cfg(test)]
@@ -396,24 +454,46 @@ mod test_libsolv {
         installed_packages: Vec<RepoDataRecord>,
         virtual_packages: Vec<GenericVirtualPackage>,
         match_specs: &[&str],
+        with_solv_file: bool,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         let repo_data = read_repodata(&repo_path);
-        let available_packages = vec![repo_data];
-        let channel_config = ChannelConfig::default();
-        let specs = match_specs
-            .into_iter()
-            .map(|m| MatchSpec::from_str(m, &channel_config).unwrap())
-            .collect();
 
-        let problem = SolverProblem {
-            locked_packages: installed_packages,
-            virtual_packages,
-            available_packages,
-            specs,
-            ..Default::default()
+        #[cfg(target_family = "unix")]
+        let cached_repo_data = super::cache_libsolv_repodata(
+            Channel::from_str("conda-forge", &ChannelConfig::default())
+                .unwrap()
+                .platform_url(rattler_conda_types::Platform::Linux64)
+                .to_string(),
+            &repo_data,
+        );
+
+        let libsolv_repodata = if with_solv_file {
+            #[cfg(not(target_family = "unix"))]
+            panic!("solv files are unsupported for this platform");
+
+            #[cfg(target_family = "unix")]
+            LibsolvRepoData {
+                records: repo_data.as_slice(),
+                solv_file: Some(&cached_repo_data),
+            }
+        } else {
+            LibsolvRepoData::from_records(&repo_data)
         };
 
-        let pkgs = LibsolvBackend.solve(problem)?;
+        let specs = match_specs
+            .iter()
+            .map(|m| MatchSpec::from_str(m).unwrap())
+            .collect();
+
+        let task = SolverTask {
+            locked_packages: installed_packages,
+            virtual_packages,
+            available_packages: vec![libsolv_repodata].into_iter(),
+            specs,
+            pinned_packages: Vec::new(),
+        };
+
+        let pkgs = LibsolvBackend.solve(task)?;
 
         for pkg in pkgs.iter() {
             println!(
@@ -422,7 +502,7 @@ mod test_libsolv {
             )
         }
 
-        if pkgs.len() == 0 {
+        if pkgs.is_empty() {
             println!("No packages in the environment!");
         }
 

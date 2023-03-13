@@ -277,7 +277,10 @@ impl Archspec {
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
             Platform::LinuxS390X => "s390x",
+            Platform::LinuxRiscv32 => "riscv32",
+            Platform::LinuxRiscv64 => "riscv64",
             Platform::OsxArm64 => "arm64",
+            Platform::WinArm64 => "arm64",
         };
 
         Some(Self {

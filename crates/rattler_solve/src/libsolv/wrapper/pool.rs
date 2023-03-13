@@ -1,4 +1,5 @@
-use super::{c_string, ffi, repo::Repo, solvable::SolvableId, solver::Solver};
+use super::{ffi, repo::Repo, solvable::SolvableId, solver::Solver};
+use crate::libsolv::c_string;
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
 use std::{
@@ -196,6 +197,15 @@ impl Pool {
             (id != 0).then_some(StringId(id))
         }
     }
+
+    /// Returns a string describing the last error associated to this pool, or "no error" if there
+    /// were no errors
+    pub fn last_error(&self) -> String {
+        // Safe, because `pool_errstr` is guaranteed to return a valid string even in the absence
+        // of errors
+        let err = unsafe { CStr::from_ptr(ffi::pool_errstr(self.raw_ptr())) };
+        err.to_string_lossy().into_owned()
+    }
 }
 
 /// Wrapper for the StringId of libsolv
@@ -241,10 +251,10 @@ impl From<MatchSpecId> for Id {
 
 #[cfg(test)]
 mod test {
-    use std::ffi::CString;
+    use std::{ffi::CString, str::FromStr};
 
     use super::super::pool::Pool;
-    use rattler_conda_types::{ChannelConfig, MatchSpec};
+    use rattler_conda_types::MatchSpec;
 
     #[test]
     fn test_pool_string_interning() {
@@ -285,8 +295,7 @@ mod test {
     #[test]
     fn test_matchspec_interning() {
         // Create a matchspec
-        let channel_config = ChannelConfig::default();
-        let spec = MatchSpec::from_str("foo=1.0=py27_0", &channel_config).unwrap();
+        let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
         // Intern it into the pool
         let pool = Pool::default();
         pool.intern_matchspec(&spec);

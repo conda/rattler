@@ -1,0 +1,7 @@
+---
+source: crates/rattler_shell/src/shell/mod.rs
+expression: script.to_string()
+---
+export FOO="bar"
+unset FOO
+. "foo.sh"

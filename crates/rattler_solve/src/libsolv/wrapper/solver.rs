@@ -4,10 +4,12 @@ use std::ptr::NonNull;
 
 use crate::libsolv::wrapper::pool::Pool;
 use crate::libsolv::wrapper::solve_goal::SolveGoal;
-use anyhow::anyhow;
+use crate::libsolv::wrapper::solve_problem::SolveProblem;
 
 use super::ffi;
 use super::flags::SolverFlag;
+use super::queue::Queue;
+use super::solvable::SolvableId;
 use super::transaction::Transaction;
 
 /// Wrapper for libsolv solver, which is used to drive dependency resolution
@@ -48,21 +50,85 @@ impl Solver<'_> {
         CStr::from_ptr(problem)
     }
 
-    /// Creates a string of 'problems' that the solver still has which it encountered while solving
-    /// the matchspecs. Use this function to print the existing problems to string.
-    fn solver_problems(&self) -> String {
-        let mut output = String::default();
+    /// Creates a string for each 'problem' that the solver still has which it encountered while
+    /// solving the matchspecs. Use this function to print the existing problems to string.
+    fn solver_problems(&self) -> Vec<String> {
+        let mut output = Vec::new();
 
         let count = self.problem_count();
         for i in 1..=count {
             // Safe because the id valid (between [1, count])
             let problem = unsafe { self.problem2str(i as ffi::Id) };
 
-            output.push_str(" - ");
-            output.push_str(problem.to_str().expect("string is invalid UTF8"));
-            output.push('\n');
+            output.push(
+                problem
+                    .to_str()
+                    .expect("string is invalid UTF8")
+                    .to_string(),
+            );
         }
         output
+    }
+
+    pub fn all_solver_problems(&self) -> Vec<SolveProblem> {
+        let mut problems = Vec::new();
+        let mut problem_rules = Queue::<ffi::Id>::default();
+
+        let count = self.problem_count();
+        for i in 1..=count {
+            unsafe {
+                ffi::solver_findallproblemrules(
+                    self.raw_ptr(),
+                    i.try_into().unwrap(),
+                    problem_rules.raw_ptr(),
+                )
+            };
+            for r in problem_rules.id_iter() {
+                if r != 0 {
+                    let mut source_id = 0;
+                    let mut target_id = 0;
+                    let mut dep_id = 0;
+
+                    let problem_type = unsafe {
+                        ffi::solver_ruleinfo(
+                            self.raw_ptr(),
+                            r,
+                            &mut source_id,
+                            &mut target_id,
+                            &mut dep_id,
+                        )
+                    };
+
+                    let pool = unsafe { (*self.0.as_ptr()).pool as *mut ffi::Pool };
+
+                    let nsolvables = unsafe { (*pool).nsolvables };
+
+                    let target = if target_id < 0 || target_id >= nsolvables as i32 {
+                        None
+                    } else {
+                        Some(SolvableId(target_id))
+                    };
+
+                    let source = if source_id < 0 || source_id >= nsolvables as i32 {
+                        None
+                    } else {
+                        Some(SolvableId(target_id))
+                    };
+
+                    let dep = if dep_id == 0 {
+                        None
+                    } else {
+                        let dep = unsafe { ffi::pool_dep2str(pool, dep_id) };
+                        let dep = unsafe { CStr::from_ptr(dep) };
+                        let dep = dep.to_str().expect("Invalid UTF8 value").to_string();
+                        Some(dep)
+                    };
+
+                    problems.push(SolveProblem::from_raw(problem_type, dep, source, target));
+                }
+            }
+        }
+        problems
     }
 
     /// Sets a solver flag
@@ -72,7 +138,7 @@ impl Solver<'_> {
 
     /// Solves all the problems in the `queue` and returns a transaction from the found solution.
     /// Returns an error if problems remain unsolved.
-    pub fn solve(&mut self, queue: &mut SolveGoal) -> anyhow::Result<Transaction> {
+    pub fn solve(&mut self, queue: &mut SolveGoal) -> Result<Transaction, Vec<String>> {
         let result = unsafe {
             // Run the solve method
             ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());
@@ -87,10 +153,7 @@ impl Solver<'_> {
             // Safe because we know the `transaction` ptr is valid
             Ok(unsafe { Transaction::new(self, transaction) })
         } else {
-            Err(anyhow!(
-                "encountered problems while solving:\n {}",
-                self.solver_problems()
-            ))
+            Err(self.solver_problems())
         }
     }
 }
