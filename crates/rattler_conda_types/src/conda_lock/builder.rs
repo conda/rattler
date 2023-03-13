@@ -181,6 +181,8 @@ impl LockedPackage {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
     use crate::conda_lock::{CondaLock, PackageHashes};
     use crate::{ChannelConfig, MatchSpec, Platform};
@@ -192,7 +194,7 @@ mod tests {
         let lock = LockFileBuilder::new(
             ["conda_forge"],
             [Platform::Osx64],
-            [MatchSpec::from_str("python =3.11.0", &channel_config).unwrap()]
+            [MatchSpec::from_str("python =3.11.0").unwrap()]
         )
             .add_locked_packages(LockedPackages::new(Platform::Osx64)
                 .add_locked_package(LockedPackage {
