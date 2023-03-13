@@ -9,6 +9,17 @@ use std::{
     ptr::NonNull,
 };
 
+/// The type of distribution that the pool is being used for
+/// Note: rattler only supports conda
+#[repr(u32)]
+pub enum DistType {
+    Rpm = ffi::DISTTYPE_RPM,
+    Debian = ffi::DISTTYPE_DEB,
+    Arch = ffi::DISTTYPE_ARCH,
+    Haiku = ffi::DISTTYPE_HAIKU,
+    Conda = ffi::DISTTYPE_CONDA,
+}
+
 /// Wrapper for libsolv Pool, the interning datastructure used by libsolv
 ///
 /// The wrapper functions as an owned pointer, guaranteed to be non-null and freed
@@ -23,7 +34,9 @@ pub struct Pool(NonNull<ffi::Pool>);
 impl Default for Pool {
     fn default() -> Self {
         let pool_ptr = unsafe { ffi::pool_create() };
-        Self(NonNull::new(pool_ptr).expect("pool_create returned a null pointer"))
+        let self_obj = Self(NonNull::new(pool_ptr).expect("pool_create returned null"));
+        self_obj.set_disttype(DistType::Conda);
+        self_obj
     }
 }
 
@@ -140,6 +153,12 @@ impl Pool {
     pub fn set_installed(&self, repo: &Repo) {
         repo.ensure_belongs_to_pool(self);
         unsafe { ffi::pool_set_installed(self.raw_ptr(), repo.raw_ptr()) }
+    }
+
+    /// Set the disttype for this pool. This is used to determine how to interpret the
+    /// fields of a solvable. Note that rattler currently only supports the conda disttype.
+    pub fn set_disttype(&self, disttype: DistType) {
+        unsafe { ffi::pool_setdisttype(self.raw_ptr(), disttype as i32) };
     }
 
     /// Create the solver
