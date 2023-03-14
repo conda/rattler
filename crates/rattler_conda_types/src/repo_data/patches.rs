@@ -68,13 +68,28 @@ pub struct PackageRecordPatch {
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
-    pub features: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "::serde_with::rust::double_option"
+    )]
+    pub features: Option<Option<String>>,
 
     /// The specific license of the package
-    pub license: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "::serde_with::rust::double_option"
+    )]
+    pub license: Option<Option<String>>,
 
     /// The license family
-    pub license_family: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "::serde_with::rust::double_option"
+    )]
+    pub license_family: Option<Option<String>>,
 }
 
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
@@ -96,4 +111,14 @@ pub struct PatchInstructions {
         skip_serializing_if = "FxHashMap::is_empty"
     )]
     pub conda_packages: FxHashMap<String, PackageRecordPatch>,
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn test_null_values() {
+        let record_patch: super::PackageRecordPatch =
+            serde_json::from_str(r#"{"features": null, "license": null, "license_family": null, "depends": [], "constrains": [], "track_features": []}"#).unwrap();
+        insta::assert_yaml_snapshot!(record_patch);
+    }
 }

@@ -1,0 +1,11 @@
+---
+source: crates/rattler_conda_types/src/repo_data/patches.rs
+expression: record_patch
+---
+depends: []
+constrains: []
+track_features: []
+features: ~
+license: ~
+license_family: ~
+
