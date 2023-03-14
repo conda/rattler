@@ -1,6 +1,8 @@
 //! Defines [`RepoData`]. `RepoData` stores information of all packages present in a subdirectory
 //! of a channel. It provides indexing functionality.
 
+pub mod patches;
+
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
