@@ -51,6 +51,9 @@ enum FilterFiles {
     NoLicense,
 }
 
+/// Compare two tar archives by comparing the files, the file sizes and the file metadata (uid, gid, mode, mtime)
+/// However, currently we skip some checks as we are not yet properly setting some of the values
+/// Also note that there are some conda packagaging weirdnesses going on (like the info/licenses/... files in the pkg archive)
 fn compare_two_tar_archives<T: Read>(
     f1: &mut T,
     f2: &mut T,

@@ -50,6 +50,12 @@ pub enum CompressionLevel {
     Numeric(u32),
 }
 
+impl Default for CompressionLevel {
+    fn default() -> Self {
+        CompressionLevel::Default
+    }
+}
+
 impl CompressionLevel {
     fn to_zstd_level(self) -> Result<i32, std::io::Error> {
         match self {
@@ -194,9 +200,7 @@ pub fn write_conda_package<W: Write + Seek>(
         zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
     // write the metadata as first file in the zip archive
-    let package_metadata = PackageMetadata {
-        conda_pkg_format_version: 2,
-    };
+    let package_metadata = PackageMetadata::default();
     let package_metadata = serde_json::to_string(&package_metadata).unwrap();
     outer_archive.start_file("metadata.json", options)?;
     outer_archive.write_all(package_metadata.as_bytes())?;
@@ -223,59 +227,4 @@ pub fn write_conda_package<W: Write + Seek>(
     outer_archive.finish()?;
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{fs::File, path::PathBuf};
-
-    use walkdir::WalkDir;
-
-    #[test]
-    fn test_write_tar_bz2() {
-        // repackage a package found at `path` and compare the contents of the tar.bz2
-        // with the contents of the original package
-        // `path` should be a path to a directory containing a `info/` directory
-        let path = PathBuf::from("/Users/wolfv/micromamba/pkgs/zstandard-0.19.0-py311hdcbfb07_1");
-
-        // recursively find all files under the path directory
-        let files = WalkDir::new(&path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .map(|e| e.into_path())
-            .filter(|p| p.is_file())
-            .collect::<Vec<_>>();
-
-        let outfile = File::create("test.tar.bz2").unwrap();
-        write_tar_bz2_package(outfile, &path, &files, CompressionLevel::Default).unwrap();
-    }
-
-    #[test]
-    fn test_write_conda() {
-        // repackage a package found at `path` and compare the contents of the tar.bz2
-        // with the contents of the original package
-        // `path` should be a path to a directory containing a `info/` directory
-
-        let path = PathBuf::from("/Users/wolfv/micromamba/pkgs/zstandard-0.19.0-py311hdcbfb07_1");
-        println!("Making new conda package! {:?}", path);
-
-        // recursively find all files under the path directory
-        let files = WalkDir::new(&path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .map(|e| e.into_path())
-            .filter(|p| p.is_file())
-            .collect::<Vec<_>>();
-
-        let outfile = File::create("zstandard-0.19.0-py311hdcbfb07_1.conda").unwrap();
-        write_conda_package(
-            outfile,
-            &path,
-            &files,
-            CompressionLevel::Numeric(15),
-            "zstandard-0.19.0-py311hdcbfb07_1",
-        )
-        .unwrap();
-    }
 }
