@@ -134,6 +134,7 @@ pub fn write_tar_bz2_package<W: Write>(
         writer,
         compression_level.to_bzip2_level()?,
     ));
+    archive.follow_symlinks(false);
 
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
@@ -158,6 +159,7 @@ fn write_zst_archive<W: Write>(
     // TODO figure out multi-threading for zstd
     let compression_level = compression_level.to_zstd_level()?;
     let mut archive = tar::Builder::new(zstd::Encoder::new(writer, compression_level)?);
+    archive.follow_symlinks(false);
 
     for path in paths {
         // TODO we need more control over the archive headers here to
