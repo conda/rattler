@@ -37,6 +37,57 @@ fn sort_paths(paths: &[PathBuf], base_path: &Path) -> (Vec<PathBuf>, Vec<PathBuf
     (info_paths, other_paths)
 }
 
+/// Select the compression level to use for the package
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompressionLevel {
+    /// Use the lowest compression level (zstd: 1, bzip2: 1)
+    Lowest,
+    /// Use the highest compression level (zstd: 22, bzip2: 9)
+    Highest,
+    /// Use the default compression level (zstd: 15, bzip2: 9)
+    Default,
+    /// Use a numeric compression level (zstd: 1-22, bzip2: 1-9)
+    Numeric(u32),
+}
+
+impl CompressionLevel {
+    fn to_zstd_level(self) -> Result<i32, std::io::Error> {
+        match self {
+            CompressionLevel::Lowest => Ok(1),
+            CompressionLevel::Highest => Ok(22),
+            CompressionLevel::Default => Ok(15),
+            CompressionLevel::Numeric(n) => {
+                if !(1..=22).contains(&n) {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "zstd compression level must be between 1 and 22",
+                    ))
+                } else {
+                    Ok(n as i32)
+                }
+            }
+        }
+    }
+
+    fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
+        match self {
+            CompressionLevel::Lowest => Ok(bzip2::Compression::new(1)),
+            CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
+            CompressionLevel::Default => Ok(bzip2::Compression::new(9)),
+            CompressionLevel::Numeric(n) => {
+                if !(1..=9).contains(&n) {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "bzip2 compression level must be between 1 and 9",
+                    ))
+                } else {
+                    Ok(bzip2::Compression::new(n))
+                }
+            }
+        }
+    }
+}
+
 /// Write the contents of a list of paths to a tar.bz2 package
 /// The paths are sorted alphabetically, and paths beginning with `info/` come first.
 ///
@@ -57,11 +108,11 @@ fn sort_paths(paths: &[PathBuf], base_path: &Path) -> (Vec<PathBuf>, Vec<PathBuf
 /// ```no_run
 /// use std::path::PathBuf;
 /// use std::fs::File;
-/// use rattler_package_streaming::write::write_tar_bz2_package;
+/// use rattler_package_streaming::write::{write_tar_bz2_package, CompressionLevel};
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
-/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, 9).unwrap();
+/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, CompressionLevel::Default).unwrap();
 /// ```
 ///
 /// # See also
@@ -71,21 +122,18 @@ pub fn write_tar_bz2_package<W: Write>(
     writer: W,
     base_path: &Path,
     paths: &[PathBuf],
-    compression_level: i32,
+    compression_level: CompressionLevel,
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
-        bzip2::Compression::new(compression_level.try_into().map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("invalid compression level: {}", e),
-            )
-        })?),
+        compression_level.to_bzip2_level()?,
     ));
 
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
     for path in info_paths.iter().chain(other_paths.iter()) {
+        // TODO we need more control over the archive headers here to
+        // set uid, gid to 0.
         archive.append_path_with_name(base_path.join(path), path)?;
     }
 
@@ -99,12 +147,15 @@ fn write_zst_archive<W: Write>(
     writer: W,
     base_path: &Path,
     paths: &[PathBuf],
-    compression_level: i32,
+    compression_level: CompressionLevel,
 ) -> Result<(), std::io::Error> {
     // TODO figure out multi-threading for zstd
+    let compression_level = compression_level.to_zstd_level()?;
     let mut archive = tar::Builder::new(zstd::Encoder::new(writer, compression_level)?);
 
     for path in paths {
+        // TODO we need more control over the archive headers here to
+        // set uid, gid to 0.
         archive.append_path_with_name(base_path.join(path), path)?;
     }
 
@@ -134,7 +185,8 @@ pub fn write_conda_package<W: Write + Seek>(
     writer: W,
     base_path: &Path,
     paths: &[PathBuf],
-    compression_level: i32,
+    compression_level: CompressionLevel,
+    out_name: &str,
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
@@ -151,7 +203,7 @@ pub fn write_conda_package<W: Write + Seek>(
 
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
-    outer_archive.start_file("pkg-archive.tar.zst", options)?;
+    outer_archive.start_file(format!("pkg-{out_name}.tar.zst"), options)?;
     write_zst_archive(
         &mut outer_archive,
         base_path,
@@ -160,7 +212,7 @@ pub fn write_conda_package<W: Write + Seek>(
     )?;
 
     // info paths come last
-    outer_archive.start_file("info-archive.tar.zst", options)?;
+    outer_archive.start_file(format!("info-{out_name}.tar.zst"), options)?;
     write_zst_archive(
         &mut outer_archive,
         base_path,
@@ -196,7 +248,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         let outfile = File::create("test.tar.bz2").unwrap();
-        write_tar_bz2_package(outfile, &path, &files, 9).unwrap();
+        write_tar_bz2_package(outfile, &path, &files, CompressionLevel::Default).unwrap();
     }
 
     #[test]
@@ -216,7 +268,14 @@ mod tests {
             .filter(|p| p.is_file())
             .collect::<Vec<_>>();
 
-        let outfile = File::create("test.conda").unwrap();
-        write_conda_package(outfile, &path, &files, 15).unwrap();
+        let outfile = File::create("zstandard-0.19.0-py311hdcbfb07_1.conda").unwrap();
+        write_conda_package(
+            outfile,
+            &path,
+            &files,
+            CompressionLevel::Numeric(15),
+            "zstandard-0.19.0-py311hdcbfb07_1",
+        )
+        .unwrap();
     }
 }
