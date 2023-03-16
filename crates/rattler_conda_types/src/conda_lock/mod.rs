@@ -16,7 +16,7 @@ use std::path::Path;
 use std::str::FromStr;
 use url::Url;
 
-mod builder;
+pub mod builder;
 mod content_hash;
 
 /// Default version for the conda-lock file format

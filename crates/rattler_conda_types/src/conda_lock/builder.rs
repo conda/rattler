@@ -1,3 +1,5 @@
+//! Builder for the creation of lock files. Currently,
+//!
 use crate::conda_lock::content_hash::CalculateContentHashError;
 use crate::conda_lock::{
     content_hash, Channel, CondaLock, GitMeta, LockMeta, LockedDependency, Manager, PackageHashes,
@@ -9,7 +11,7 @@ use url::Url;
 
 /// Struct used to build a conda-lock file
 #[derive(Default)]
-struct LockFileBuilder {
+pub struct LockFileBuilder {
     /// Channels used to resolve dependencies
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
@@ -97,12 +99,15 @@ impl LockFileBuilder {
 }
 
 /// Shorthand for creating packages per platform
-struct LockedPackages {
+pub struct LockedPackages {
+    /// The number of locked packages
     pub locked_packages: Vec<LockedPackage>,
+    /// The to lock the packages to
     pub platform: Platform,
 }
 
 impl LockedPackages {
+    /// Create a list of locked packages per platform
     pub fn new(platform: Platform) -> Self {
         Self {
             locked_packages: Vec::new(),
@@ -141,13 +146,20 @@ impl LockedPackages {
 }
 
 /// Short-hand for creating a LockedPackage that transforms into a [`LockedDependency`]
-struct LockedPackage {
+pub struct LockedPackage {
+    /// Name of the locked package
     pub name: String,
+    /// Package version
     pub version: String,
+    /// Package build string
     pub build_string: String,
+    /// Url where the package is hosted
     pub url: Url,
+    /// Collection of package hash fields
     pub package_hashes: PackageHashes,
+    /// List of dependencies for this package
     pub dependency_list: HashMap<String, VersionConstraint>,
+    /// Check if package is optional
     pub optional: Option<bool>,
 }
 
@@ -190,7 +202,7 @@ mod tests {
 
     #[test]
     fn create_lock_file() {
-        let channel_config = ChannelConfig::default();
+        let _channel_config = ChannelConfig::default();
         let lock = LockFileBuilder::new(
             ["conda_forge"],
             [Platform::Osx64],

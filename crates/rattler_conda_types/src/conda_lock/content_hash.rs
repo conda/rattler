@@ -2,8 +2,7 @@ use crate::conda_lock::Channel;
 use crate::{MatchSpec, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
-use serde_json::ser::{Formatter, PrettyFormatter};
-use std::fmt::format;
+use serde_json::ser::Formatter;
 use std::string::FromUtf8Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -60,17 +59,21 @@ pub fn calculate_content_data(
         .iter()
         .map(|spec| {
             Ok(CondaLockVersionedDependency {
-                name: spec.name.clone().ok_or(
-                    CalculateContentHashError::RequiredAttributeMissing("name".to_string()),
-                )?,
+                name: spec.name.clone().ok_or_else(|| {
+                    CalculateContentHashError::RequiredAttributeMissing("name".to_string())
+                })?,
                 manager: "conda".to_string(),
                 optional: false,
                 category: "main".to_string(),
                 extras: Default::default(),
                 selectors: Default::default(),
-                version: spec.version.as_ref().map(|v| v.to_string()).ok_or(
-                    CalculateContentHashError::RequiredAttributeMissing("version".to_string()),
-                )?,
+                version: spec
+                    .version
+                    .as_ref()
+                    .map(|v| v.to_string())
+                    .ok_or_else(|| {
+                        CalculateContentHashError::RequiredAttributeMissing("version".to_string())
+                    })?,
                 build: spec.build.clone().map(|b| match b {
                     crate::StringMatcher::Exact(s) => s,
                     crate::StringMatcher::Glob(g) => format!("{}", g),
@@ -96,13 +99,6 @@ pub fn calculate_content_data(
     let mut ser = serde_json::Serializer::with_formatter(&mut buf, PythonFormatter {});
     content_hash_data.serialize(&mut ser)?;
     Ok(String::from_utf8(buf)?)
-
-    // Create the json
-    // Ok(serde_json::to_string(&content_hash_data)?
-    //     // Replace these because python encodes with spaces
-    //     // and serde does not
-    //     .replace(":", ": ")
-    //     .replace(",", ", "))
 }
 
 /// This implements a formatter that uses the same formatting as
