@@ -31,7 +31,12 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 ## Try it yourself!
 
-To get started with the code, make sure you downloaded the repository (including submodules) and have a working Rust installation on your system.
+To get started with the code:
+
+* make sure you downloaded the repository (including submodules),
+* have a working Rust installation on your system,
+* have a `c` compiler and `cmake` installed (needed for libsolv).
+
 Then run:
 
 ```shell
