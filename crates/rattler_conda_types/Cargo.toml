@@ -30,7 +30,7 @@ strum = { version = "0.24.1", features = ["derive"] }
 thiserror = "1.0.37"
 tracing = "0.1.29"
 url = { version = "2.2.2", features = ["serde"] }
-rattler_digest = {path ="../rattler_digest", features = ["serde"]}
+rattler_digest = { version = "0.1.0", path = "../rattler_digest", features = ["serde"] }
 glob = "0.3.1"
 
 [dev-dependencies]

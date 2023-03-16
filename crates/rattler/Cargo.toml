@@ -3,8 +3,12 @@ name = "rattler"
 version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Rust library to install conda environments"
+categories = ["conda"]
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ['native-tls']
 native-tls = ['reqwest/native-tls']
