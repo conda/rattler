@@ -13,101 +13,84 @@
 [docs-main-badge]: https://img.shields.io/badge/docs-main-yellow.svg?style=flat-square
 [docs-main]: https://mamba-org.github.io/rattler
 
+Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda--conda-forge)).
+The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
+Its primary use case is as a library that you can use to provide conda related workflows in your own tools.
 
-Rattler is a library that provides common functionality used within the Conda ecosystem.
-The goal of the library is to enable programs and other libraries to easily interact with the Conda ecosystem without being dependent on Python.
-Its primary use case is as a library that you can use to provide Conda related workflows in your own tools.
-
-Rattler is written in Rust and tries to provide a clean API to its functionalities. 
+Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)). 
 With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects.
 
-Why Rust?
+Rattler is actively used within the https://prefix.dev backend.
 
-* Out-of-the-box cross-platform support. (including WASM! 🙀)
-* Easy to use and widely available existing crates to do heavy lifting.
-* Support for async operations and easy to use multi-threading. 
-* Strong memory- & thread safety guarantees.
-* Very easy to generate statically linked binaries.
-* Strongly typed. This ensures commonly used data formats have a formal specification.
-* Support for binding to [Python](https://github.com/PyO3/pyo3), [C](https://github.com/eqrion/cbindgen), [C++](https://github.com/dtolnay/cxx), [Javascript](https://napi.rs/) and other languages.
+## Showcase
 
-## Features and plans
+This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
+This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
-### Compatibility
+![Installing an environment](/assets/showcase_create.gif)
 
-Rattler strives to be compatible with the current ecosystem.
+## Try it yourself!
 
-### Common datatypes
+To get started with the code, make sure you downloaded the repository (including submodules) and have a working Rust installation on your system.
+Then run:
 
-Rattler provides types for `Version`, `Channel`, `MatchSpec`, `VersionSpec` and many more commonly used types. 
+```shell
+cargo run --release create jupyterlab
+```
 
-It also provides data types and parsing of `index.json`, `repodata.json`, `channeldata.json`, and a few other files commonly found in Conda archives.
+The above command will execute the `rattler-bin` executable in release mode.
+It will download and install an environment into the `.prefix` folder that contains [`jupyterlab`](https://jupyterlab.readthedocs.io/en/stable/getting_started/overview.html) and all the dependencies required to run it (like `python`)
 
-Parsing from string is also implemented for these types. 
-Over the years a lot of complexity crept into these formats which makes this very non-trivial. 
-Rattler is able to parse the most commonly used variants.
+Run the following command to start jupyterlab:
 
-`Version` ordering is also implemented according to the Conda implementation. 
-Common operations on `Version`, `VersionSpec` and `MatchSpec` are also implemented.
+```shell
+# on windows
+.\.prefix\Scripts\jupyter-lab.exe
 
-🚧 Rattler is able to provide the most common functionalities, but it has not been optimized for speed or size yet. 
-A lot of functionality is also still missing. 
+# on linux or macOS
+ ./.prefix/bin/jupyter-lab
+```
 
-PR's are very welcome! 👋
+Voila! 
+You have a working installation of jupyterlab installed on your system! 
+You can of course install any package you want this way. 
+Try it!
 
-### Solver
+## Contributing 😍
 
-The plan is to provide a uniform API to solve an environment that also provides a user configurable way to provide caching for different components.
+We would love to have you contribute! 
+For a good list of things you could help us with, take a look at our [*good first issues*](https://github.com/mamba-org/rattler/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22). 
+If you want to go deeper though, any [open issue](https://github.com/mamba-org/rattler/issues) is up for grabs. 
+Just let us know what you start on something.
 
-The API should hide the solver implementation. 
-Initially this will use `libsolv` but in the future we could look more into [pubgrub](https://github.com/pubgrub-rs/pubgrub).
+For questions, requests or a casual chat, we are very active on our discord server. You can [join our discord server via this link][chat-url].
 
-#### Challenges:
+## Components
 
-* Downloading and caching the repodata since different implementations might generate different caches or read from the repodata differently.
-* Providing reasonable error messages. [pubgrub](https://github.com/pubgrub-rs/pubgrub) could really help here.
+Rattler consists of several crates that provide different functionalities. 
 
-#### Use cases:
+* **rattler_conda_types**: foundational types for all datastructures used withing the conda eco-system.
+* **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.  
+* **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
+* **rattler_shell**: code to activate an existing environment and run programs in it.
+* **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
+* **rattler_virtual_packages**: a crate to detect system capabilities.
+* **rattler**: functionality to create complete environments from scratch using the crates above.
+* **rattler-bin**: an example of a package manager using all the crates above (see: [showcase](#showcase))
 
-- Solve an environment
-- Generate lock files
+You can find these crates in the `crates` folder.
 
-### Efficient repodata fetching 
+## What is conda & conda-forge?
 
-RepoData is at the core of the Solver. 
+The conda ecosystem provides **cross-platform**, **binary** packages that you can use with **any programming language**.
+`conda` is an open-source package management system and environment management system that can install and manage multiple versions of software packages and their dependencies.
+`conda` is written in Python.
+The aim of Rattler is to provide all functionality required to work with the conda ecosystem from Rust.
+Rattler is not a reimplementation of `conda`.
+`conda` is a package management tool.
+Rattler is a _library_ to work with the conda ecosystem from different languages and applications.
+For example, it powers the backend of https://prefix.dev.
 
-- ✅ Download and cache RepoData from channels
-- ✅ Parse Repodata from channels
-- ✅ Terminal progress
-- ✅ ZSTD support
-- ✅ [RepoData State CEP](https://github.com/conda-incubator/ceps/pull/46)
-- ✅ Improve API to provide better access to cache (libsolv has its own)
-- 🚧 Improve API to provide better streaming support of RepoData.
-
-### Virtual packages
-
-Provide a simple API to work with supported virtual packages and natively detect which are present on the system.
-
-Existing virtual packages are correctly discovered but could be extended by integrating `archspec` support.
-
-- ✅ Datatypes for all currently existing virtual packages
-- ✅ Detection of virtual packages for the current system
-- 🚧 Support override detection with environment variables
-
-### Installation of an environment
-
-Given a set of explicit packages quickly construct or update an environment.
-
-We can leverage some concurrency here to download, extract and install packages at the same time. 
-Initial (hacky-dont-take-my-word-for-it) tests already showed a 20% performance improvement over micromamba.
-
-### "Package streaming"
-
-Anything that has to do with Conda package "archives".
-
-- ✅ Provide an API to make it easy to download and extract a Conda package regardless of format.
-- 🚧 Provide an API to *create* Conda packages from a directory.
-- ✅ Extract only the `info` section of Conda packages without reading the entire file.
-- 🚧 Stream only the `info` section of Conda packages from a URL.
-- 🚧 Support downloading packages from other Source like S3 and OCI registries
-- 🚧 Support authentication methods
+`conda-forge` is a community-driven effort to bring new and existing software into the conda ecosystem.
+It provides _tens-of-thousands of up-to-date_ packages that are maintained by a community of contributors.
+For an overview of available packages see https://prefix.dev.
