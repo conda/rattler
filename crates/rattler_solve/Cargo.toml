@@ -2,6 +2,12 @@
 name = "rattler_solve"
 version = "0.1.0"
 edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "A crate to solve conda environments"
+categories = ["conda"]
+homepage = "https://github.com/mamba-org/rattler"
+repository = "https://github.com/mamba-org/rattler"
+license = "BSD-3-Clause"
 
 [dependencies]
 rattler_conda_types = { version = "0.1.0", path = "../rattler_conda_types" }
