@@ -64,9 +64,9 @@ pub fn compute_file_digest<D: Digest + Default + Write>(
 }
 
 /// Compute a hash of the specified bytes.
-pub fn compute_bytes_digest<D: Digest + Default + Write>(path: impl AsRef<[u8]>) -> Output<D> {
+pub fn compute_bytes_digest<D: Digest + Default + Write>(bytes: impl AsRef<[u8]>) -> Output<D> {
     let mut hasher = D::default();
-    hasher.update(path);
+    hasher.update(bytes);
     hasher.finalize()
 }
 

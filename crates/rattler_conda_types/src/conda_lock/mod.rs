@@ -16,6 +16,9 @@ use std::path::Path;
 use std::str::FromStr;
 use url::Url;
 
+pub mod builder;
+mod content_hash;
+
 /// Default version for the conda-lock file format
 const fn default_version() -> u32 {
     1
@@ -256,12 +259,30 @@ pub struct DependencySource {
 }
 
 /// The conda channel that was used for the dependency
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Channel {
     /// Called `url` but can also be the name of the channel e.g. `conda-forge`
     pub url: String,
     /// Used env vars for the channel (e.g. hints for passwords or other secrets)
     pub used_env_vars: Vec<String>,
+}
+
+impl From<String> for Channel {
+    fn from(url: String) -> Self {
+        Self {
+            url,
+            used_env_vars: Default::default(),
+        }
+    }
+}
+
+impl From<&str> for Channel {
+    fn from(url: &str) -> Self {
+        Self {
+            url: url.to_string(),
+            used_env_vars: Default::default(),
+        }
+    }
 }
 
 #[cfg(test)]
