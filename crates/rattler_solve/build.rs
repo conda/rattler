@@ -26,7 +26,7 @@ fn build_libsolv() -> Result<PathBuf> {
     let target = std::env::var("TARGET").unwrap();
     let is_windows = target.contains("windows");
 
-    let p = path::PathBuf::from("./../../libsolv/CMakeLists.txt");
+    let p = path::PathBuf::from("./libsolv/CMakeLists.txt");
     if !p.is_file() {
         return Err(anyhow!(
             "Bundled libsolv not found, please do `git submodule update --init`."
