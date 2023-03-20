@@ -21,7 +21,7 @@ serde = ["dep:serde"]
 
 [dev-dependencies]
 sha2 = "0.10.6"
-rstest = "0.16.0"
+rstest = "0.17.0"
 tempfile = "3.3.0"
 md-5 = "0.10.5"
 serde_json = "1.0.93"
