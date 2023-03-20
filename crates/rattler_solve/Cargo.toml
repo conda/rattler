@@ -23,7 +23,7 @@ tempfile = "3.4.0"
 
 [dev-dependencies]
 insta = { version = "1.16.0", features = ["yaml"] }
-rstest = "0.16.0"
+rstest = "0.17.0"
 serde_json = "1.0.68"
 url = "2.2.2"
 
