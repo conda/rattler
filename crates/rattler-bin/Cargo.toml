@@ -17,7 +17,7 @@ path = "src/main.rs"
 anyhow = "1.0.44"
 clap = { version = "4.0.13", features = ["derive"] }
 console = { version = "0.15.5", features = ["windows-console-colors"] }
-dirs = "4.0.0"
+dirs = "5.0.0"
 futures = "0.3.17"
 indicatif = "0.17.3"
 itertools = "0.10.3"
