@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: tk
@@ -16,7 +15,6 @@ platform: win32
 depends:
   - "vc >=14.1,<15"
   - vs2015_runtime >=14.16.27033
-constrains: []
 license: TCL
 license_family: BSD
 timestamp: 1645033031535

@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: vc
@@ -15,7 +14,6 @@ arch: x86_64
 platform: win32
 depends:
   - vs2015_runtime >=14.34.31931
-constrains: []
 track_features: vc14
 license: BSD-3-Clause
 license_family: BSD

@@ -1,0 +1,17 @@
+---
+source: crates/rattler_conda_types/src/repo_data/mod.rs
+expression: repodata
+---
+repodata_version: 1
+info: ~
+packages: {}
+packages.conda: {}
+removed:
+  - aux
+  - bar
+  - baz
+  - foo
+  - quux
+  - qux
+  - xyz
+

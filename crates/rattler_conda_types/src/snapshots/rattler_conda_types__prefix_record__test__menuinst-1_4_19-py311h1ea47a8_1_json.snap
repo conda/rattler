@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: menuinst
@@ -16,7 +15,6 @@ platform: win
 depends:
   - "python >=3.11,<3.12.0a0"
   - python_abi 3.11.* *_cp311
-constrains: []
 track_features: ""
 license: BSD-3-Clause
 timestamp: 1666840887861

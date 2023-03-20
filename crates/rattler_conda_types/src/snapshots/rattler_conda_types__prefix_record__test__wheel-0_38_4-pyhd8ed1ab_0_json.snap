@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: wheel
@@ -13,7 +12,6 @@ sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
 size: 32521
 depends:
   - python >=3.7
-constrains: []
 noarch: python
 license: MIT
 license_family: MIT

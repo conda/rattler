@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: pip
@@ -15,7 +14,6 @@ depends:
   - python >=3.7
   - setuptools
   - wheel
-constrains: []
 noarch: python
 license: MIT
 license_family: MIT

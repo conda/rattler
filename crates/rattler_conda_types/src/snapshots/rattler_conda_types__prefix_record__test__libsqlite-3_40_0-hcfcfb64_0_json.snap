@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: libsqlite
@@ -17,7 +16,6 @@ depends:
   - ucrt >=10.0.20348.0
   - "vc >=14.2,<15"
   - vs2015_runtime >=14.29.30139
-constrains: []
 license: Unlicense
 timestamp: 1668697639781
 fn: libsqlite-3.40.0-hcfcfb64_0.tar.bz2

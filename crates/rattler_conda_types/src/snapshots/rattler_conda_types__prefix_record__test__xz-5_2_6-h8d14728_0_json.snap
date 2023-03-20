@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
 name: xz
@@ -16,7 +15,6 @@ platform: win
 depends:
   - "vc >=14.1,<15"
   - vs2015_runtime >=14.16.27033
-constrains: []
 track_features: ""
 license: LGPL-2.1 and GPL-2.0
 timestamp: 1660346976440

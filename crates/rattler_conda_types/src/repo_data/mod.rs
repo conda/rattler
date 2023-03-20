@@ -3,6 +3,7 @@
 
 pub mod patches;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
@@ -14,7 +15,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct RepoData {
     /// The version of the repodata format
     #[serde(rename = "repodata_version")]
@@ -24,20 +25,25 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
+    #[serde(serialize_with = "sort_map_alphabetically")]
     pub packages: FxHashMap<String, PackageRecord>,
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(rename = "packages.conda")]
+    #[serde(rename = "packages.conda", serialize_with = "sort_map_alphabetically")]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not installable like regular packages)
-    #[serde(default)]
+    #[serde(
+        default,
+        serialize_with = "sort_set_alphabetically",
+        skip_serializing_if = "FxHashSet::is_empty"
+    )]
     pub removed: FxHashSet<String>,
 }
 
 /// Information about subdirectory of channel in the Conda [`RepoData`]
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
     pub subdir: String,
@@ -95,7 +101,7 @@ pub struct PackageRecord {
     /// specified in `depends` must be installed next to this package, whereas packages specified in
     /// `constrains` are not required to be installed, but if they are installed they must follow these
     /// constraints.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
 
     /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
@@ -161,5 +167,56 @@ impl RepoData {
             })
         }
         records
+    }
+}
+
+fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
+    value: &FxHashMap<String, T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    return BTreeMap::from_iter(value.iter()).serialize(serializer);
+}
+
+fn sort_set_alphabetically<S: serde::Serializer>(
+    value: &FxHashSet<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    return BTreeSet::from_iter(value.iter()).serialize(serializer);
+}
+
+#[cfg(test)]
+mod test {
+    use fxhash::FxHashSet;
+
+    use crate::RepoData;
+
+    #[test]
+    fn test_serialize() {
+        let repodata = RepoData {
+            version: Some(1),
+            info: Default::default(),
+            packages: Default::default(),
+            conda_packages: Default::default(),
+            removed: FxHashSet::from_iter(
+                ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
+                    .iter()
+                    .map(|s| s.to_string()),
+            ),
+        };
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_serialize_packages() {
+        // load test data
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+        insta::assert_yaml_snapshot!(repodata);
+
+        // serialize to json
+        let json = serde_json::to_string_pretty(&repodata).unwrap();
+        insta::assert_snapshot!(json);
     }
 }
