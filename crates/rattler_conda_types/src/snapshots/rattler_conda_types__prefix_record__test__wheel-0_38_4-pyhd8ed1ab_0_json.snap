@@ -2,20 +2,20 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: wheel
-version: 0.38.4
 build: pyhd8ed1ab_0
 build_number: 0
-subdir: noarch
-md5: c829cfb8cb826acb9de0ac1a2df0a940
-sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
-size: 32521
 depends:
   - python >=3.7
-noarch: python
 license: MIT
 license_family: MIT
+md5: c829cfb8cb826acb9de0ac1a2df0a940
+name: wheel
+noarch: python
+sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
+size: 32521
+subdir: noarch
 timestamp: 1668051714265
+version: 0.38.4
 fn: wheel-0.38.4-pyhd8ed1ab_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/wheel-0.38.4-pyhd8ed1ab_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"

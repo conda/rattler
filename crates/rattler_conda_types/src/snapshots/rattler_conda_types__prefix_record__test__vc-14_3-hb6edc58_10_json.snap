@@ -2,22 +2,22 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: vc
-version: "14.3"
+arch: x86_64
 build: hb6edc58_10
 build_number: 10
-subdir: win-64
-md5: 52d246d8d14b83c516229be5bb03a163
-sha256: 05d5ae5859e8d097559f5445ffbaeac638c9875e4d2a0c5fd8c4bb1c010d35c1
-size: 15650
-arch: x86_64
-platform: win32
 depends:
   - vs2015_runtime >=14.34.31931
-track_features: vc14
 license: BSD-3-Clause
 license_family: BSD
+md5: 52d246d8d14b83c516229be5bb03a163
+name: vc
+platform: win32
+sha256: 05d5ae5859e8d097559f5445ffbaeac638c9875e4d2a0c5fd8c4bb1c010d35c1
+size: 15650
+subdir: win-64
 timestamp: 1673513671518
+track_features: vc14
+version: "14.3"
 fn: vc-14.3-hb6edc58_10.conda
 url: "https://conda.anaconda.org/conda-forge/win-64/vc-14.3-hb6edc58_10.conda"
 channel: "https://conda.anaconda.org/conda-forge/win-64"

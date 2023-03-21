@@ -2,23 +2,23 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: pysocks
-version: 1.7.1
 build: pyh0701188_6
 build_number: 6
-subdir: noarch
-md5: 56cd9fe388baac0e90c7149cfac95b60
-sha256: b3a612bc887f3dd0fb7c4199ad8e342bd148cf69a9b74fd9468a18cf2bef07b7
-size: 19348
 depends:
   - __win
   - python >=3.8
   - win_inet_pton
-track_features: ""
-noarch: python
 license: BSD-3-Clause
 license_family: BSD
+md5: 56cd9fe388baac0e90c7149cfac95b60
+name: pysocks
+noarch: python
+sha256: b3a612bc887f3dd0fb7c4199ad8e342bd148cf69a9b74fd9468a18cf2bef07b7
+size: 19348
+subdir: noarch
 timestamp: 1661605138291
+track_features: ""
+version: 1.7.1
 fn: pysocks-1.7.1-pyh0701188_6.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyh0701188_6.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/noarch"

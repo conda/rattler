@@ -2,22 +2,22 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: tk
-version: 8.6.12
+arch: x86_64
 build: h8ffe710_0
 build_number: 0
-subdir: win-64
-md5: c69a5047cc9291ae40afd4a1ad6f0c0f
-sha256: 087795090a99a1d397ef1ed80b4a01fabfb0122efb141562c168e3c0a76edba6
-size: 3681762
-arch: x86_64
-platform: win32
 depends:
   - "vc >=14.1,<15"
   - vs2015_runtime >=14.16.27033
 license: TCL
 license_family: BSD
+md5: c69a5047cc9291ae40afd4a1ad6f0c0f
+name: tk
+platform: win32
+sha256: 087795090a99a1d397ef1ed80b4a01fabfb0122efb141562c168e3c0a76edba6
+size: 3681762
+subdir: win-64
 timestamp: 1645033031535
+version: 8.6.12
 fn: tk-8.6.12-h8ffe710_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/tk-8.6.12-h8ffe710_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"

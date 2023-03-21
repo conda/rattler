@@ -2,22 +2,22 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: xz
-version: 5.2.6
+arch: x86_64
 build: h8d14728_0
 build_number: 0
-subdir: win-64
-md5: 515d77642eaa3639413c6b1bc3f94219
-sha256: 54d9778f75a02723784dc63aff4126ff6e6749ba21d11a6d03c1f4775f269fe0
-size: 217804
-arch: x86_64
-platform: win
 depends:
   - "vc >=14.1,<15"
   - vs2015_runtime >=14.16.27033
-track_features: ""
 license: LGPL-2.1 and GPL-2.0
+md5: 515d77642eaa3639413c6b1bc3f94219
+name: xz
+platform: win
+sha256: 54d9778f75a02723784dc63aff4126ff6e6749ba21d11a6d03c1f4775f269fe0
+size: 217804
+subdir: win-64
 timestamp: 1660346976440
+track_features: ""
+version: 5.2.6
 fn: xz-5.2.6-h8d14728_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"

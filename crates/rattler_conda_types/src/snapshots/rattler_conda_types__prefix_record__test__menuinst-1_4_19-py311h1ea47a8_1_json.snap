@@ -2,22 +2,22 @@
 source: crates/rattler_conda_types/src/prefix_record.rs
 expression: prefix_record
 ---
-name: menuinst
-version: 1.4.19
+arch: x86_64
 build: py311h1ea47a8_1
 build_number: 1
-subdir: win-64
-md5: 8eb00075c8acb7dd264c4a8537b89549
-sha256: f23b6f89654c21ff994991a2c0e018311e2a9288a68796d1612d4fb953b75be2
-size: 110326
-arch: x86_64
-platform: win
 depends:
   - "python >=3.11,<3.12.0a0"
   - python_abi 3.11.* *_cp311
-track_features: ""
 license: BSD-3-Clause
+md5: 8eb00075c8acb7dd264c4a8537b89549
+name: menuinst
+platform: win
+sha256: f23b6f89654c21ff994991a2c0e018311e2a9288a68796d1612d4fb953b75be2
+size: 110326
+subdir: win-64
 timestamp: 1666840887861
+track_features: ""
+version: 1.4.19
 fn: menuinst-1.4.19-py311h1ea47a8_1.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/menuinst-1.4.19-py311h1ea47a8_1.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"

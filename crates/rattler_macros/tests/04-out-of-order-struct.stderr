@@ -1,0 +1,5 @@
+error: The field a must be sorted before b in struct Alphabet.
+ --> tests/04-out-of-order-struct.rs:6:5
+  |
+6 |     a: String,
+  |     ^
