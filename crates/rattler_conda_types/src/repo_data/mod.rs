@@ -14,6 +14,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 
 use rattler_macros::sorted;
 
+use crate::package::IndexJson;
 use crate::{Channel, NoArchType, RepoDataRecord, Version};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
@@ -172,6 +173,39 @@ impl RepoData {
             })
         }
         records
+    }
+}
+
+impl PackageRecord {
+    /// Builds a [`PackageRecord`] from a [`IndexJson`] and optionally a size, sha256 and md5 hash.
+    pub fn from_index_json(
+        index: IndexJson,
+        size: Option<u64>,
+        sha256: Option<String>,
+        md5: Option<String>,
+    ) -> Self {
+        PackageRecord {
+            arch: index.arch,
+            build: index.build,
+            build_number: index.build_number,
+            constrains: index.constrains,
+            depends: index.depends,
+            features: index.features,
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: index.license,
+            license_family: index.license_family,
+            md5,
+            name: index.name,
+            noarch: index.noarch,
+            platform: index.platform,
+            sha256,
+            size,
+            subdir: index.subdir.unwrap(),
+            timestamp: index.timestamp,
+            track_features: index.track_features,
+            version: index.version,
+        }
     }
 }
 
