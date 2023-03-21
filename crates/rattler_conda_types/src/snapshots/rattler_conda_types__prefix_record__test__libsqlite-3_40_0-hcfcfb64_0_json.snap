@@ -1,25 +1,23 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
-name: libsqlite
-version: 3.40.0
+arch: x86_64
 build: hcfcfb64_0
 build_number: 0
-subdir: win-64
-md5: 5e5a97795de72f8cc3baf3d9ea6327a2
-sha256: 4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9
-size: 669941
-arch: x86_64
-platform: win32
 depends:
   - ucrt >=10.0.20348.0
   - "vc >=14.2,<15"
   - vs2015_runtime >=14.29.30139
-constrains: []
 license: Unlicense
+md5: 5e5a97795de72f8cc3baf3d9ea6327a2
+name: libsqlite
+platform: win32
+sha256: 4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9
+size: 669941
+subdir: win-64
 timestamp: 1668697639781
+version: 3.40.0
 fn: libsqlite-3.40.0-hcfcfb64_0.tar.bz2
 url: "https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.40.0-hcfcfb64_0.tar.bz2"
 channel: "https://conda.anaconda.org/conda-forge/win-64"

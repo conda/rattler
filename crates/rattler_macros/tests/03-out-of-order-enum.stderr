@@ -1,0 +1,5 @@
+error: The field A must be sorted before BBB in enum Alphabet.
+ --> tests/03-out-of-order-enum.rs:6:5
+  |
+6 |     A,
+  |     ^

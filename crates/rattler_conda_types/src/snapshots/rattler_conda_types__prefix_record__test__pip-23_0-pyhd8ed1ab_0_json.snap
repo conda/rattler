@@ -1,25 +1,23 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
-name: pip
-version: "23.0"
 build: pyhd8ed1ab_0
 build_number: 0
-subdir: noarch
-md5: 85b35999162ec95f9f999bac15279c02
-sha256: bbffec284bd0e154363e845121f43007e7e64c80412ff13be21909be907b697d
-size: 1364220
 depends:
   - python >=3.7
   - setuptools
   - wheel
-constrains: []
-noarch: python
 license: MIT
 license_family: MIT
+md5: 85b35999162ec95f9f999bac15279c02
+name: pip
+noarch: python
+sha256: bbffec284bd0e154363e845121f43007e7e64c80412ff13be21909be907b697d
+size: 1364220
+subdir: noarch
 timestamp: 1675141351173
+version: "23.0"
 fn: pip-23.0-pyhd8ed1ab_0.conda
 url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0-pyhd8ed1ab_0.conda"
 channel: "https://conda.anaconda.org/conda-forge/noarch"

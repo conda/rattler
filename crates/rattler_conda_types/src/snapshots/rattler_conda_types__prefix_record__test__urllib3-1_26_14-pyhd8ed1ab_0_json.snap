@@ -1,16 +1,9 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
-name: urllib3
-version: 1.26.14
 build: pyhd8ed1ab_0
 build_number: 0
-subdir: noarch
-md5: 01f33ad2e0aaf6b5ba4add50dad5ad29
-sha256: f2f09c44e47946ce631dbc9a8a79bb463ac0f4122aaafdbcc51f200a1e420ca6
-size: 112541
 depends:
   - brotlipy >=0.6.0
   - certifi
@@ -19,12 +12,17 @@ depends:
   - pyopenssl >=0.14
   - "pysocks >=1.5.6,<2.0,!=1.5.7"
   - python <4.0
-constrains: []
-track_features: ""
-noarch: python
 license: MIT
 license_family: MIT
+md5: 01f33ad2e0aaf6b5ba4add50dad5ad29
+name: urllib3
+noarch: python
+sha256: f2f09c44e47946ce631dbc9a8a79bb463ac0f4122aaafdbcc51f200a1e420ca6
+size: 112541
+subdir: noarch
 timestamp: 1673452288650
+track_features: ""
+version: 1.26.14
 fn: urllib3-1.26.14-pyhd8ed1ab_0.conda
 url: "https://conda.anaconda.org/conda-forge/noarch/urllib3-1.26.14-pyhd8ed1ab_0.conda"
 channel: conda-forge

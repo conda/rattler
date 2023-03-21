@@ -1,28 +1,27 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 196
 expression: prefix_record
 ---
-name: requests
-version: 2.28.2
 build: pyhd8ed1ab_0
 build_number: 0
-subdir: noarch
-md5: 11d178fc55199482ee48d6812ea83983
-sha256: 22c081b4cdd023a514400413f50efdf2c378f56f2a5ea9d65666aacf4696490a
-size: 56747
+constrains:
+  - "chardet >=3.0.2,<6"
 depends:
   - certifi >=2017.4.17
   - "charset-normalizer >=2,<3"
   - "idna >=2.5,<4"
   - "python >=3.7,<4.0"
   - "urllib3 >=1.21.1,<1.27"
-constrains:
-  - "chardet >=3.0.2,<6"
-track_features: ""
-noarch: python
 license: Apache-2.0
+md5: 11d178fc55199482ee48d6812ea83983
+name: requests
+noarch: python
+sha256: 22c081b4cdd023a514400413f50efdf2c378f56f2a5ea9d65666aacf4696490a
+size: 56747
+subdir: noarch
 timestamp: 1673863999077
+track_features: ""
+version: 2.28.2
 fn: requests-2.28.2-pyhd8ed1ab_0.conda
 url: "https://conda.anaconda.org/conda-forge/noarch/requests-2.28.2-pyhd8ed1ab_0.conda"
 channel: "https://conda.anaconda.org/conda-forge/noarch"
