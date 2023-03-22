@@ -4,7 +4,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use std::io;
 use std::path::Path;
 
-use crate::{PackageRecord, RepoData, package::ArchiveType};
+use crate::{package::ArchiveType, PackageRecord, RepoData};
 
 /// Represents a Conda repodata patch.
 ///
@@ -169,18 +169,18 @@ impl RepoData {
             if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
                 match archive_type {
                     ArchiveType::TarBz2 => {
-                        if let Some(_) = self.packages.remove_entry(pkg) {
+                        if self.packages.remove_entry(pkg).is_some() {
                             removed.insert(pkg.clone());
                         }
 
                         // also remove equivalent .conda package if it exists
                         let conda_pkg_name = format!("{}.conda", pkg_name);
-                        if let Some(_) = self.conda_packages.remove_entry(&conda_pkg_name) {
+                        if self.conda_packages.remove_entry(&conda_pkg_name).is_some() {
                             removed.insert(conda_pkg_name);
                         }
                     }
                     ArchiveType::Conda => {
-                        if let Some(_) = self.conda_packages.remove_entry(pkg) {
+                        if self.conda_packages.remove_entry(pkg).is_some() {
                             removed.insert(pkg.clone());
                         }
                     }
