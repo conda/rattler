@@ -1,38 +1,29 @@
 //! Functionality for writing conda packages
+use std::fs;
+use std::io::{Seek, Write};
+use std::path::{Path, PathBuf};
 
-use itertools::Itertools;
+use itertools::sorted;
 
-use std::io::Seek;
-use std::io::Write;
-
-use std::path::Path;
-use std::path::PathBuf;
-
-use bzip2;
 use rattler_conda_types::package::PackageMetadata;
-use tar;
-use zip;
 
-/// a function that sorts paths into two vectors, one that starts with `info/` and one that does not
-/// both vectors are sorted alphabetically for reproducibility
-fn sort_paths(paths: &[PathBuf], base_path: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+/// a function that sorts paths into two iterators, one that starts with `info/` and one that does not
+/// both iterators are sorted alphabetically for reproducibility
+fn sort_paths<'a>(
+    paths: &'a [PathBuf],
+    base_path: &'a Path,
+) -> (
+    impl Iterator<Item = PathBuf> + 'a,
+    impl Iterator<Item = PathBuf> + 'a,
+) {
     let info = Path::new("info/");
     let (info_paths, other_paths): (Vec<_>, Vec<_>) = paths
         .iter()
         .map(|p| p.strip_prefix(base_path).unwrap())
-        .partition(|path| path.starts_with(info));
+        .partition(|&path| path.starts_with(info));
 
-    let info_paths = info_paths.into_iter();
-    let other_paths = other_paths.into_iter();
-
-    let info_paths = info_paths
-        .sorted_by(|a, b| a.cmp(b))
-        .map(|p| p.to_path_buf())
-        .collect::<Vec<PathBuf>>();
-    let other_paths = other_paths
-        .sorted_by(|a, b| a.cmp(b))
-        .map(|p| p.to_path_buf())
-        .collect::<Vec<PathBuf>>();
+    let info_paths = sorted(info_paths.into_iter().map(|p| p.to_path_buf()));
+    let other_paths = sorted(other_paths.into_iter().map(|p| p.to_path_buf()));
 
     (info_paths, other_paths)
 }
@@ -138,10 +129,8 @@ pub fn write_tar_bz2_package<W: Write>(
 
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
-    for path in info_paths.iter().chain(other_paths.iter()) {
-        // TODO we need more control over the archive headers here to
-        // set uid, gid to 0.
-        archive.append_path_with_name(base_path.join(path), path)?;
+    for path in info_paths.chain(other_paths) {
+        append_path_to_archive(&mut archive, base_path, &path)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -153,7 +142,7 @@ pub fn write_tar_bz2_package<W: Write>(
 fn write_zst_archive<W: Write>(
     writer: W,
     base_path: &Path,
-    paths: &[PathBuf],
+    paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
 ) -> Result<(), std::io::Error> {
     // TODO figure out multi-threading for zstd
@@ -162,9 +151,7 @@ fn write_zst_archive<W: Write>(
     archive.follow_symlinks(false);
 
     for path in paths {
-        // TODO we need more control over the archive headers here to
-        // set uid, gid to 0.
-        archive.append_path_with_name(base_path.join(path), path)?;
+        append_path_to_archive(&mut archive, base_path, &path)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -213,20 +200,72 @@ pub fn write_conda_package<W: Write + Seek>(
     write_zst_archive(
         &mut outer_archive,
         base_path,
-        &other_paths,
+        other_paths,
         compression_level,
     )?;
 
     // info paths come last
     outer_archive.start_file(format!("info-{out_name}.tar.zst"), options)?;
-    write_zst_archive(
-        &mut outer_archive,
-        base_path,
-        &info_paths,
-        compression_level,
-    )?;
+    write_zst_archive(&mut outer_archive, base_path, info_paths, compression_level)?;
 
     outer_archive.finish()?;
+
+    Ok(())
+}
+
+fn prepare_header(path: &Path) -> Result<tar::Header, std::io::Error> {
+    let mut header = tar::Header::new_gnu();
+    let name = b"././@LongLink";
+    header.as_gnu_mut().unwrap().name[..name.len()].clone_from_slice(&name[..]);
+
+    let stat = fs::symlink_metadata(path)?;
+    header.set_metadata(&stat);
+
+    // erase some fields
+    header.set_uid(0);
+    header.set_gid(0);
+    header.set_device_minor(0)?;
+    header.set_device_major(0)?;
+
+    // let file_size = stat.len();
+    // TODO do we need this
+    //  + 1 to be compliant with GNU tar
+    // header.set_size(file_size + 1);
+    Ok(header)
+}
+
+fn trace_file_error(path: &Path, err: std::io::Error) -> std::io::Error {
+    println!("{}: {}", path.display(), err);
+    std::io::Error::new(err.kind(), format!("{}: {}", path.display(), err))
+}
+
+fn append_path_to_archive(
+    archive: &mut tar::Builder<impl Write>,
+    base_path: &Path,
+    path: &Path,
+) -> Result<(), std::io::Error> {
+    // create a tar header
+    let mut header = prepare_header(&base_path.join(path))
+        .map_err(|err| trace_file_error(&base_path.join(path), err))?;
+
+    if header.entry_type().is_file() {
+        let file = fs::File::open(base_path.join(path))
+            .map_err(|err| trace_file_error(&base_path.join(path), err))?;
+
+        archive.append_data(&mut header, path, file)?;
+    } else if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
+        let target = fs::read_link(&base_path.join(path))
+            .map_err(|err| trace_file_error(&base_path.join(path), err))?;
+
+        archive.append_link(&mut header, path, target)?;
+    } else if header.entry_type().is_dir() {
+        archive.append_data(&mut header, path, std::io::empty())?;
+    } else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "unsupported file type",
+        ));
+    }
 
     Ok(())
 }
