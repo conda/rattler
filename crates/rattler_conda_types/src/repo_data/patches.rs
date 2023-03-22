@@ -4,6 +4,8 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use std::io;
 use std::path::Path;
 
+use crate::{PackageRecord, RepoData};
+
 /// Represents a Conda repodata patch.
 ///
 /// This struct contains information about a patch to a Conda repodata file,
@@ -113,12 +115,75 @@ pub struct PatchInstructions {
     pub conda_packages: FxHashMap<String, PackageRecordPatch>,
 }
 
+impl PackageRecord {
+    /// Apply a patch to a single package record
+    pub fn apply_patch(&mut self, patch: &PackageRecordPatch) {
+        if let Some(depends) = &patch.depends {
+            self.depends = depends.clone();
+        }
+        if let Some(constrains) = &patch.constrains {
+            self.constrains = constrains.clone();
+        }
+        if let Some(track_features) = &patch.track_features {
+            self.track_features = track_features.clone();
+        }
+        if let Some(features) = &patch.features {
+            self.features = features.clone();
+        }
+        if let Some(license) = &patch.license {
+            self.license = license.clone();
+        }
+        if let Some(license_family) = &patch.license_family {
+            self.license_family = license_family.clone();
+        }
+    }
+}
+
+impl RepoData {
+    /// Apply a patch to a repodata file
+    pub fn apply_patches(&mut self, instructions: &PatchInstructions) {
+        for (pkg, patch) in instructions.packages.iter() {
+            if let Some(record) = self.packages.get_mut(pkg) {
+                record.apply_patch(patch);
+            }
+        }
+        for (pkg, patch) in instructions.conda_packages.iter() {
+            if let Some(record) = self.conda_packages.get_mut(pkg) {
+                record.apply_patch(patch);
+            }
+        }
+        self.removed = self.removed.union(&instructions.remove).cloned().collect();
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use crate::{PatchInstructions, RepoData};
+
     #[test]
     fn test_null_values() {
         let record_patch: super::PackageRecordPatch =
             serde_json::from_str(r#"{"features": null, "license": null, "license_family": null, "depends": [], "constrains": [], "track_features": []}"#).unwrap();
         insta::assert_yaml_snapshot!(record_patch);
+    }
+
+    #[test]
+    fn test_patching() {
+        // test data
+        let test_data_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/channels/patch/linux-64");
+        let repodata_path = test_data_path.join("repodata_from_packages.json");
+        let mut repodata: RepoData =
+            serde_json::from_str(&std::fs::read_to_string(&repodata_path).unwrap()).unwrap();
+        let patch_instructions_path = test_data_path.join("patch_instructions.json");
+        let patch_instructions = std::fs::read_to_string(&patch_instructions_path).unwrap();
+        let patch_instructions: PatchInstructions =
+            serde_json::from_str(&patch_instructions).unwrap();
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
     }
 }
