@@ -13,5 +13,10 @@
                 "curl >5.0"
             ]
         }
+    },
+    "packages.conda": {
+        "cross-python_emscripten-32-3.12.1-h60d57d3_8.conda": {
+            "license": "WOLF LICENSE II"
+        }
     }
 }

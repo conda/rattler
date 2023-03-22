@@ -4,7 +4,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use std::io;
 use std::path::Path;
 
-use crate::{PackageRecord, RepoData};
+use crate::{PackageRecord, RepoData, package::ArchiveType};
 
 /// Represents a Conda repodata patch.
 ///
@@ -141,18 +141,54 @@ impl PackageRecord {
 
 impl RepoData {
     /// Apply a patch to a repodata file
+    /// Note that we currently do not handle `revoked` instructions
     pub fn apply_patches(&mut self, instructions: &PatchInstructions) {
         for (pkg, patch) in instructions.packages.iter() {
             if let Some(record) = self.packages.get_mut(pkg) {
                 record.apply_patch(patch);
             }
+
+            // also apply the patch to the conda packages
+            if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
+                assert!(archive_type == ArchiveType::TarBz2);
+                if let Some(record) = self.conda_packages.get_mut(&format!("{}.conda", pkg_name)) {
+                    record.apply_patch(patch);
+                }
+            }
         }
+
         for (pkg, patch) in instructions.conda_packages.iter() {
             if let Some(record) = self.conda_packages.get_mut(pkg) {
                 record.apply_patch(patch);
             }
         }
-        self.removed = self.removed.union(&instructions.remove).cloned().collect();
+
+        let mut removed = FxHashSet::<String>::default();
+        // remove packages that have been removed
+        for pkg in instructions.remove.iter() {
+            if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
+                match archive_type {
+                    ArchiveType::TarBz2 => {
+                        if let Some(_) = self.packages.remove_entry(pkg) {
+                            removed.insert(pkg.clone());
+                        }
+
+                        // also remove equivalent .conda package if it exists
+                        let conda_pkg_name = format!("{}.conda", pkg_name);
+                        if let Some(_) = self.conda_packages.remove_entry(&conda_pkg_name) {
+                            removed.insert(conda_pkg_name);
+                        }
+                    }
+                    ArchiveType::Conda => {
+                        if let Some(_) = self.conda_packages.remove_entry(pkg) {
+                            removed.insert(pkg.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        self.removed.extend(removed.into_iter());
     }
 }
 
@@ -167,18 +203,56 @@ mod test {
         insta::assert_yaml_snapshot!(record_patch);
     }
 
-    #[test]
-    fn test_patching() {
-        // test data
-        let test_data_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/channels/patch/linux-64");
-        let repodata_path = test_data_path.join("repodata_from_packages.json");
-        let mut repodata: RepoData =
+    fn test_data_path() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/patch")
+    }
+
+    fn load_test_repodata() -> RepoData {
+        let repodata_path = test_data_path().join("linux-64/repodata_from_packages.json");
+        let repodata: RepoData =
             serde_json::from_str(&std::fs::read_to_string(&repodata_path).unwrap()).unwrap();
-        let patch_instructions_path = test_data_path.join("patch_instructions.json");
+        repodata
+    }
+
+    fn load_patch_instructions(name: &str) -> PatchInstructions {
+        let patch_instructions_path = test_data_path().join("linux-64").join(name);
         let patch_instructions = std::fs::read_to_string(&patch_instructions_path).unwrap();
         let patch_instructions: PatchInstructions =
             serde_json::from_str(&patch_instructions).unwrap();
+        patch_instructions
+    }
+
+    #[test]
+    fn test_patching() {
+        // test data
+        let mut repodata = load_test_repodata();
+        let patch_instructions = load_patch_instructions("patch_instructions.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_removing_1() {
+        // test data
+        let mut repodata = load_test_repodata();
+        let patch_instructions = load_patch_instructions("patch_instructions_2.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_removing_2() {
+        // test data
+        let mut repodata = load_test_repodata();
+        let patch_instructions = load_patch_instructions("patch_instructions_3.json");
 
         // apply patch
         repodata.apply_patches(&patch_instructions);
