@@ -23,7 +23,7 @@ pub enum RawNoArchType {
 /// built once. A `NoArchType` is either specific to an architecture or not. See [`NoArchKind`] for
 /// more information on the different types of `noarch`.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Default)]
-pub struct NoArchType(Option<RawNoArchType>);
+pub struct NoArchType(pub Option<RawNoArchType>);
 
 impl From<NoArchType> for Option<RawNoArchType> {
     fn from(value: NoArchType) -> Self {
@@ -51,6 +51,31 @@ impl NoArchType {
     /// Returns true if this instance is a Python noarch type
     pub fn is_python(&self) -> bool {
         self.kind() == Some(NoArchKind::Python)
+    }
+
+    /// Constructs a Python noarch instance.
+    pub fn python() -> Self {
+        Self(Some(RawNoArchType::Python))
+    }
+
+    /// Constructs a Generic noarch instance.
+    pub fn generic() -> Self {
+        Self(Some(RawNoArchType::GenericV2))
+    }
+}
+
+impl From<Option<NoArchKind>> for NoArchType {
+    fn from(noarch: Option<NoArchKind>) -> Self {
+        NoArchType(noarch.map(|noarch| match noarch {
+            NoArchKind::Python => RawNoArchType::Python,
+            NoArchKind::Generic => RawNoArchType::GenericV2,
+        }))
+    }
+}
+
+impl From<Option<RawNoArchType>> for NoArchType {
+    fn from(noarch: Option<RawNoArchType>) -> Self {
+        NoArchType(noarch)
     }
 }
 
