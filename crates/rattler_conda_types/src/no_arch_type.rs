@@ -62,6 +62,12 @@ impl NoArchType {
     pub fn generic() -> Self {
         Self(Some(RawNoArchType::GenericV2))
     }
+
+    /// Constructs a `None` noarch type, this basically indicates that the package is specific to
+    /// an architecture.
+    pub fn none() -> Self {
+        Self(None)
+    }
 }
 
 impl From<Option<NoArchKind>> for NoArchType {
