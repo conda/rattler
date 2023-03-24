@@ -29,7 +29,6 @@ url = "2.2.2"
 
 [build-dependencies]
 anyhow = "1.0.69"
-bindgen = "0.64.0"
 cc = "1.0.79"
 cmake = "0.1.49"
 

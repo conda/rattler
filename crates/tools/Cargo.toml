@@ -1,0 +1,15 @@
+[package]
+name = "tools"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.1.13", features = ["derive"] }
+bindgen = "0.64.0"
+anyhow = "1.0.70"
+difference = "2.0.0"
+tempdir = "0.3.7"
+
+[package.metadata.release]
+# Dont publish the binary
+release = false
