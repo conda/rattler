@@ -20,6 +20,7 @@ serde = { version = "1.0.130", features = ["derive"] }
 url = "2.2.2"
 hex = "0.4.3"
 tempfile = "3.4.0"
+cfg-if = "1.0.0"
 
 [dev-dependencies]
 insta = { version = "1.16.0", features = ["yaml"] }
@@ -29,7 +30,6 @@ url = "2.2.2"
 
 [build-dependencies]
 anyhow = "1.0.69"
-bindgen = "0.64.0"
 cc = "1.0.79"
 cmake = "0.1.49"
 
