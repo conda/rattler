@@ -19,9 +19,30 @@ const ALLOWED_FUNC_PREFIX: &[&str] = &[
     "stringpool",
 ];
 
+const ALLOWED_VAR_PREFIX: &[&str] = &[
+    "SOLVER_",
+    "DISTTYPE_",
+    "REL_",
+    "CONDA_",
+    "SELECTION_",
+    "SEARCH_",
+    "POOL_",
+    "SOLV_",
+];
+
 /// Generate or verify the libsolv bindings.
 pub fn generate(mode: Mode) -> anyhow::Result<()> {
     let libsolv_path = project_root().join("crates/rattler_solve/libsolv");
+
+    // The bindings for libsolv are different for Unix and Windows because of the use of lib types.
+    // To work around that issue we generate bindings for the two different platforms seperately.
+    let suffix = if cfg!(windows) {
+        "windows"
+    } else if cfg!(unix) {
+        "unix"
+    } else {
+        anyhow::bail!("only unix and windows are supported platforms for libsolv bindings");
+    };
 
     // Normally the `solvversion.h` is generated from the `solverversion.h.in` by CMake when
     // building libsolv. However, for the bindings we don't need that much information from that
@@ -61,7 +82,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .header(libsolv_path.join("src/repo_write.h").to_str().unwrap())
         .header(libsolv_path.join("ext/repo_conda.h").to_str().unwrap())
         .allowlist_type("(Id|solv_knownid)")
-        .allowlist_var(".*")
+        .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
         .generate()?;
 
@@ -74,7 +95,9 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
 
     // Write (or check) the bindings
     update(
-        &project_root().join("crates/rattler_solve/src/libsolv/wrapper/ffi.rs"),
+        &project_root().join(format!(
+            "crates/rattler_solve/src/libsolv/wrapper/ffi/{suffix}.rs"
+        )),
         &libsolv_bindings,
         mode,
     )
