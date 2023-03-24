@@ -1,4 +1,5 @@
 use crate::{project_root, reformat, update, Mode};
+use std::borrow::Cow;
 use tempdir::TempDir;
 
 const ALLOWED_FUNC_PREFIX: &[&str] = &[
@@ -30,19 +31,44 @@ const ALLOWED_VAR_PREFIX: &[&str] = &[
     "SOLV_",
 ];
 
+/// Different platforms generate different bindings for enum representations. To not have to
+/// generate completely different files based on the platform we patch these enum representations
+/// inline.
+fn patch_enum_representation<'a>(input: &'a str, enum_name: &str) -> Cow<'a, str> {
+    let replacement = format!(
+        concat!(
+            "\ncfg_if::cfg_if! {{\n",
+            "    if #[cfg(windows)] {{\n",
+            "        pub type {} = libc::c_int;\n",
+            "    }} else {{\n",
+            "        pub type {} = libc::c_uint;\n",
+            "    }}\n",
+            "}}"
+        ),
+        enum_name, enum_name
+    );
+
+    let c_int_repr = format!("\npub type {enum_name} = libc::c_int;");
+    let c_uint_repr = format!("\npub type {enum_name} = libc::c_uint;");
+
+    if let Some((start, str)) = input
+        .match_indices(&c_int_repr)
+        .next()
+        .or_else(|| input.match_indices(&c_uint_repr).next())
+    {
+        Cow::Owned(format!(
+            "{}{replacement}{}",
+            &input[..start],
+            &input[start + str.len()..]
+        ))
+    } else {
+        Cow::Borrowed(input)
+    }
+}
+
 /// Generate or verify the libsolv bindings.
 pub fn generate(mode: Mode) -> anyhow::Result<()> {
     let libsolv_path = project_root().join("crates/rattler_solve/libsolv");
-
-    // Different platforms unfortunately generate different bindings. To that end we also generate
-    // multiple bindings.
-    let target = if cfg!(windows) {
-        "windows"
-    } else if cfg!(unix) {
-        "unix"
-    } else {
-        anyhow::bail!("unsupported platform");
-    };
 
     // Normally the `solvversion.h` is generated from the `solverversion.h.in` by CMake when
     // building libsolv. However, for the bindings we don't need that much information from that
@@ -82,7 +108,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .header(libsolv_path.join("src/repo_solv.h").to_str().unwrap())
         .header(libsolv_path.join("src/repo_write.h").to_str().unwrap())
         .header(libsolv_path.join("ext/repo_conda.h").to_str().unwrap())
-        .allowlist_type("(Id|solv_knownid)")
+        .allowlist_type("Id")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
         .blocklist_type("(FILE|_iobuf|_IO_FILE)")
@@ -97,11 +123,12 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     // Add a preemble to the bindings to ensure clippy also passes.
     let libsolv_bindings = reformat(format!("#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}", String::from_utf8(libsolv_bindings).unwrap()))?;
 
+    // Patch out some platform weirdness
+    let libsolv_bindings = patch_enum_representation(&libsolv_bindings, "SolverRuleinfo");
+
     // Write (or check) the bindings
     update(
-        &project_root().join(format!(
-            "crates/rattler_solve/src/libsolv/wrapper/ffi/{target}.rs"
-        )),
+        &project_root().join("crates/rattler_solve/src/libsolv/wrapper/ffi.rs"),
         &libsolv_bindings,
         mode,
     )
