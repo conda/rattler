@@ -31,6 +31,15 @@ const ALLOWED_VAR_PREFIX: &[&str] = &[
     "SOLV_",
 ];
 
+const DISALLOWED_TYPES: &[&str] = &[
+    // Dont generate code for libc FILE io related types. We add the binding to libc::FILE manually.
+    // All the other types here are generated recursively through `FILE` for different platforms. We
+    // also get rid of those because they are never used.
+    "FILE", "_iobuf", "fpos_t", "_IO_.*",
+    // Types starting with `__` are usually part of libc. We dont want them.
+    "__.*",
+];
+
 /// Different platforms generate different bindings for enum representations. To not have to
 /// generate completely different files based on the platform we patch these enum representations
 /// inline.
@@ -38,7 +47,7 @@ fn patch_enum_representation<'a>(input: &'a str, enum_name: &str) -> Cow<'a, str
     let replacement = format!(
         concat!(
             "\ncfg_if::cfg_if! {{\n",
-            "    if #[cfg(windows)] {{\n",
+            "    if #[cfg(all(target_os = \"windows\", target_env = \"msvc\"))] {{\n",
             "        pub type {} = libc::c_int;\n",
             "    }} else {{\n",
             "        pub type {} = libc::c_uint;\n",
@@ -111,7 +120,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("Id")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
-        .blocklist_type("(FILE|_iobuf|_IO_.*|__.*)")
+        .blocklist_type(format!("{}", DISALLOWED_TYPES.join("|")))
         .disable_header_comment()
         .layout_tests(false)
         .generate()?;

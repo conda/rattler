@@ -2146,7 +2146,7 @@ pub const SolverRuleinfo_SOLVER_RULE_RECOMMENDS: SolverRuleinfo = 2816;
 pub const SolverRuleinfo_SOLVER_RULE_BLACK: SolverRuleinfo = 3072;
 pub const SolverRuleinfo_SOLVER_RULE_STRICT_REPO_PRIORITY: SolverRuleinfo = 3328;
 cfg_if::cfg_if! {
-    if #[cfg(windows)] {
+    if #[cfg(all(target_os = "windows", target_env = "msvc"))] {
         pub type SolverRuleinfo = libc::c_int;
     } else {
         pub type SolverRuleinfo = libc::c_uint;
