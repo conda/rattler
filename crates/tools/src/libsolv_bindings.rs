@@ -71,6 +71,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     // Define the contents of the bindings and how they are generated
     let bindings = bindgen::Builder::default()
         .clang_arg(format!("-I{}", temp_include_dir.path().display()))
+        .ctypes_prefix("libc")
         .header(libsolv_path.join("src/solver.h").to_str().unwrap())
         .header(libsolv_path.join("src/solverdebug.h").to_str().unwrap())
         .header(libsolv_path.join("src/queue.h").to_str().unwrap())
@@ -84,6 +85,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
+        .blocklist_type("FILE")
         .disable_header_comment()
         .generate()?;
 
@@ -92,12 +94,12 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     bindings.write(Box::new(&mut libsolv_bindings))?;
 
     // Add a preemble to the bindings to ensure clippy also passes.
-    let libsolv_bindings = reformat(format!("#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\n{}", String::from_utf8(libsolv_bindings).unwrap()))?;
+    let libsolv_bindings = reformat(format!("#![allow(non_upper_case_globals, non_camel_case_types, non_snake_case, dead_code, clippy::upper_case_acronyms)]\n\npub use libc::FILE;\n\n{}", String::from_utf8(libsolv_bindings).unwrap()))?;
 
     // Write (or check) the bindings
     update(
         &project_root().join(format!(
-            "crates/rattler_solve/src/libsolv/wrapper/ffi/{suffix}.rs"
+            "crates/rattler_solve/src/libsolv/wrapper/ffi.rs"
         )),
         &libsolv_bindings,
         mode,

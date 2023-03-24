@@ -8,6 +8,8 @@
     clippy::upper_case_acronyms
 )]
 
+pub use libc::FILE;
+
 pub const SOLV_VERSION_0: u32 = 0;
 pub const SOLV_VERSION_1: u32 = 1;
 pub const SOLV_VERSION_2: u32 = 2;
@@ -250,373 +252,46 @@ pub const CONDA_ADD_USE_ONLY_TAR_BZ2: u32 = 256;
 pub const CONDA_ADD_WITH_SIGNATUREDATA: u32 = 512;
 pub type Stringpool = s_Stringpool;
 pub type Pool = s_Pool;
-pub type Id = ::std::os::raw::c_int;
-pub type Offset = ::std::os::raw::c_uint;
-pub type __off_t = ::std::os::raw::c_long;
-pub type __off64_t = ::std::os::raw::c_long;
-pub type FILE = _IO_FILE;
+pub type Id = libc::c_int;
+pub type Offset = libc::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct _IO_marker {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _IO_codecvt {
-    _unused: [u8; 0],
-}
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _IO_wide_data {
-    _unused: [u8; 0],
-}
-pub type _IO_lock_t = ::std::os::raw::c_void;
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct _IO_FILE {
-    pub _flags: ::std::os::raw::c_int,
-    pub _IO_read_ptr: *mut ::std::os::raw::c_char,
-    pub _IO_read_end: *mut ::std::os::raw::c_char,
-    pub _IO_read_base: *mut ::std::os::raw::c_char,
-    pub _IO_write_base: *mut ::std::os::raw::c_char,
-    pub _IO_write_ptr: *mut ::std::os::raw::c_char,
-    pub _IO_write_end: *mut ::std::os::raw::c_char,
-    pub _IO_buf_base: *mut ::std::os::raw::c_char,
-    pub _IO_buf_end: *mut ::std::os::raw::c_char,
-    pub _IO_save_base: *mut ::std::os::raw::c_char,
-    pub _IO_backup_base: *mut ::std::os::raw::c_char,
-    pub _IO_save_end: *mut ::std::os::raw::c_char,
-    pub _markers: *mut _IO_marker,
-    pub _chain: *mut _IO_FILE,
-    pub _fileno: ::std::os::raw::c_int,
-    pub _flags2: ::std::os::raw::c_int,
-    pub _old_offset: __off_t,
-    pub _cur_column: ::std::os::raw::c_ushort,
-    pub _vtable_offset: ::std::os::raw::c_schar,
-    pub _shortbuf: [::std::os::raw::c_char; 1usize],
-    pub _lock: *mut _IO_lock_t,
-    pub _offset: __off64_t,
-    pub _codecvt: *mut _IO_codecvt,
-    pub _wide_data: *mut _IO_wide_data,
-    pub _freeres_list: *mut _IO_FILE,
-    pub _freeres_buf: *mut ::std::os::raw::c_void,
-    pub __pad5: usize,
-    pub _mode: ::std::os::raw::c_int,
-    pub _unused2: [::std::os::raw::c_char; 20usize],
+pub struct _iobuf {
+    pub _Placeholder: *mut libc::c_void,
 }
 #[test]
-fn bindgen_test_layout__IO_FILE() {
-    const UNINIT: ::std::mem::MaybeUninit<_IO_FILE> = ::std::mem::MaybeUninit::uninit();
+fn bindgen_test_layout__iobuf() {
+    const UNINIT: ::std::mem::MaybeUninit<_iobuf> = ::std::mem::MaybeUninit::uninit();
     let ptr = UNINIT.as_ptr();
     assert_eq!(
-        ::std::mem::size_of::<_IO_FILE>(),
-        216usize,
-        concat!("Size of: ", stringify!(_IO_FILE))
-    );
-    assert_eq!(
-        ::std::mem::align_of::<_IO_FILE>(),
+        ::std::mem::size_of::<_iobuf>(),
         8usize,
-        concat!("Alignment of ", stringify!(_IO_FILE))
+        concat!("Size of: ", stringify!(_iobuf))
     );
     assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._flags) as usize - ptr as usize },
+        ::std::mem::align_of::<_iobuf>(),
+        8usize,
+        concat!("Alignment of ", stringify!(_iobuf))
+    );
+    assert_eq!(
+        unsafe { ::std::ptr::addr_of!((*ptr)._Placeholder) as usize - ptr as usize },
         0usize,
         concat!(
             "Offset of field: ",
-            stringify!(_IO_FILE),
+            stringify!(_iobuf),
             "::",
-            stringify!(_flags)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_read_ptr) as usize - ptr as usize },
-        8usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_read_ptr)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_read_end) as usize - ptr as usize },
-        16usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_read_end)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_read_base) as usize - ptr as usize },
-        24usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_read_base)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_write_base) as usize - ptr as usize },
-        32usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_write_base)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_write_ptr) as usize - ptr as usize },
-        40usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_write_ptr)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_write_end) as usize - ptr as usize },
-        48usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_write_end)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_buf_base) as usize - ptr as usize },
-        56usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_buf_base)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_buf_end) as usize - ptr as usize },
-        64usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_buf_end)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_save_base) as usize - ptr as usize },
-        72usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_save_base)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_backup_base) as usize - ptr as usize },
-        80usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_backup_base)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._IO_save_end) as usize - ptr as usize },
-        88usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_IO_save_end)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._markers) as usize - ptr as usize },
-        96usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_markers)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._chain) as usize - ptr as usize },
-        104usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_chain)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._fileno) as usize - ptr as usize },
-        112usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_fileno)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._flags2) as usize - ptr as usize },
-        116usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_flags2)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._old_offset) as usize - ptr as usize },
-        120usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_old_offset)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._cur_column) as usize - ptr as usize },
-        128usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_cur_column)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._vtable_offset) as usize - ptr as usize },
-        130usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_vtable_offset)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._shortbuf) as usize - ptr as usize },
-        131usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_shortbuf)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._lock) as usize - ptr as usize },
-        136usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_lock)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._offset) as usize - ptr as usize },
-        144usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_offset)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._codecvt) as usize - ptr as usize },
-        152usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_codecvt)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._wide_data) as usize - ptr as usize },
-        160usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_wide_data)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._freeres_list) as usize - ptr as usize },
-        168usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_freeres_list)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._freeres_buf) as usize - ptr as usize },
-        176usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_freeres_buf)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr).__pad5) as usize - ptr as usize },
-        184usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(__pad5)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._mode) as usize - ptr as usize },
-        192usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_mode)
-        )
-    );
-    assert_eq!(
-        unsafe { ::std::ptr::addr_of!((*ptr)._unused2) as usize - ptr as usize },
-        196usize,
-        concat!(
-            "Offset of field: ",
-            stringify!(_IO_FILE),
-            "::",
-            stringify!(_unused2)
+            stringify!(_Placeholder)
         )
     );
 }
-pub type Hashval = ::std::os::raw::c_uint;
+pub type Hashval = libc::c_uint;
 pub type Hashtable = *mut Id;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Reldep {
     pub name: Id,
     pub evr: Id,
-    pub flags: ::std::os::raw::c_int,
+    pub flags: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Reldep() {
@@ -665,18 +340,14 @@ fn bindgen_test_layout_s_Reldep() {
 }
 pub type Reldep = s_Reldep;
 extern "C" {
-    pub fn pool_str2id(
-        pool: *mut Pool,
-        arg1: *const ::std::os::raw::c_char,
-        arg2: ::std::os::raw::c_int,
-    ) -> Id;
+    pub fn pool_str2id(pool: *mut Pool, arg1: *const libc::c_char, arg2: libc::c_int) -> Id;
 }
 extern "C" {
     pub fn pool_strn2id(
         pool: *mut Pool,
-        arg1: *const ::std::os::raw::c_char,
-        arg2: ::std::os::raw::c_uint,
-        arg3: ::std::os::raw::c_int,
+        arg1: *const libc::c_char,
+        arg2: libc::c_uint,
+        arg3: libc::c_int,
     ) -> Id;
 }
 extern "C" {
@@ -684,21 +355,21 @@ extern "C" {
         pool: *mut Pool,
         arg1: Id,
         arg2: Id,
-        arg3: ::std::os::raw::c_int,
-        arg4: ::std::os::raw::c_int,
+        arg3: libc::c_int,
+        arg4: libc::c_int,
     ) -> Id;
 }
 extern "C" {
-    pub fn pool_id2str(pool: *const Pool, arg1: Id) -> *const ::std::os::raw::c_char;
+    pub fn pool_id2str(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn pool_id2rel(pool: *const Pool, arg1: Id) -> *const ::std::os::raw::c_char;
+    pub fn pool_id2rel(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn pool_id2evr(pool: *const Pool, arg1: Id) -> *const ::std::os::raw::c_char;
+    pub fn pool_id2evr(pool: *const Pool, arg1: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn pool_dep2str(pool: *mut Pool, arg1: Id) -> *const ::std::os::raw::c_char;
+    pub fn pool_dep2str(pool: *mut Pool, arg1: Id) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_shrink_strings(pool: *mut Pool);
@@ -710,15 +381,15 @@ extern "C" {
     pub fn pool_freeidhashes(pool: *mut Pool);
 }
 extern "C" {
-    pub fn pool_resize_rels_hash(pool: *mut Pool, numnew: ::std::os::raw::c_int);
+    pub fn pool_resize_rels_hash(pool: *mut Pool, numnew: libc::c_int);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Queue {
     pub elements: *mut Id,
-    pub count: ::std::os::raw::c_int,
+    pub count: libc::c_int,
     pub alloc: *mut Id,
-    pub left: ::std::os::raw::c_int,
+    pub left: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Queue() {
@@ -786,7 +457,7 @@ extern "C" {
     pub fn queue_init(q: *mut Queue);
 }
 extern "C" {
-    pub fn queue_init_buffer(q: *mut Queue, buf: *mut Id, size: ::std::os::raw::c_int);
+    pub fn queue_init_buffer(q: *mut Queue, buf: *mut Id, size: libc::c_int);
 }
 extern "C" {
     pub fn queue_init_clone(target: *mut Queue, source: *const Queue);
@@ -795,36 +466,31 @@ extern "C" {
     pub fn queue_free(q: *mut Queue);
 }
 extern "C" {
-    pub fn queue_insert(q: *mut Queue, pos: ::std::os::raw::c_int, id: Id);
+    pub fn queue_insert(q: *mut Queue, pos: libc::c_int, id: Id);
 }
 extern "C" {
-    pub fn queue_insert2(q: *mut Queue, pos: ::std::os::raw::c_int, id1: Id, id2: Id);
+    pub fn queue_insert2(q: *mut Queue, pos: libc::c_int, id1: Id, id2: Id);
 }
 extern "C" {
-    pub fn queue_insertn(
-        q: *mut Queue,
-        pos: ::std::os::raw::c_int,
-        n: ::std::os::raw::c_int,
-        elements: *const Id,
-    );
+    pub fn queue_insertn(q: *mut Queue, pos: libc::c_int, n: libc::c_int, elements: *const Id);
 }
 extern "C" {
-    pub fn queue_delete(q: *mut Queue, pos: ::std::os::raw::c_int);
+    pub fn queue_delete(q: *mut Queue, pos: libc::c_int);
 }
 extern "C" {
-    pub fn queue_delete2(q: *mut Queue, pos: ::std::os::raw::c_int);
+    pub fn queue_delete2(q: *mut Queue, pos: libc::c_int);
 }
 extern "C" {
-    pub fn queue_deleten(q: *mut Queue, pos: ::std::os::raw::c_int, n: ::std::os::raw::c_int);
+    pub fn queue_deleten(q: *mut Queue, pos: libc::c_int, n: libc::c_int);
 }
 extern "C" {
-    pub fn queue_prealloc(q: *mut Queue, n: ::std::os::raw::c_int);
+    pub fn queue_prealloc(q: *mut Queue, n: libc::c_int);
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Map {
-    pub map: *mut ::std::os::raw::c_uchar,
-    pub size: ::std::os::raw::c_int,
+    pub map: *mut libc::c_uchar,
+    pub size: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Map() {
@@ -863,13 +529,13 @@ fn bindgen_test_layout_s_Map() {
 }
 pub type Map = s_Map;
 extern "C" {
-    pub fn map_init(m: *mut Map, n: ::std::os::raw::c_int);
+    pub fn map_init(m: *mut Map, n: libc::c_int);
 }
 extern "C" {
     pub fn map_init_clone(target: *mut Map, source: *const Map);
 }
 extern "C" {
-    pub fn map_grow(m: *mut Map, n: ::std::os::raw::c_int);
+    pub fn map_grow(m: *mut Map, n: libc::c_int);
 }
 extern "C" {
     pub fn map_free(m: *mut Map);
@@ -1059,74 +725,67 @@ extern "C" {
     pub fn solvable_lookup_num(
         s: *mut Solvable,
         keyname: Id,
-        notfound: ::std::os::raw::c_ulonglong,
-    ) -> ::std::os::raw::c_ulonglong;
+        notfound: libc::c_ulonglong,
+    ) -> libc::c_ulonglong;
 }
 extern "C" {
     pub fn solvable_lookup_sizek(
         s: *mut Solvable,
         keyname: Id,
-        notfound: ::std::os::raw::c_ulonglong,
-    ) -> ::std::os::raw::c_ulonglong;
+        notfound: libc::c_ulonglong,
+    ) -> libc::c_ulonglong;
 }
 extern "C" {
-    pub fn solvable_lookup_str(s: *mut Solvable, keyname: Id) -> *const ::std::os::raw::c_char;
+    pub fn solvable_lookup_str(s: *mut Solvable, keyname: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solvable_lookup_str_poollang(
-        s: *mut Solvable,
-        keyname: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn solvable_lookup_str_poollang(s: *mut Solvable, keyname: Id) -> *const libc::c_char;
 }
 extern "C" {
     pub fn solvable_lookup_str_lang(
         s: *mut Solvable,
         keyname: Id,
-        lang: *const ::std::os::raw::c_char,
-        usebase: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
+        lang: *const libc::c_char,
+        usebase: libc::c_int,
+    ) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solvable_lookup_bool(s: *mut Solvable, keyname: Id) -> ::std::os::raw::c_int;
+    pub fn solvable_lookup_bool(s: *mut Solvable, keyname: Id) -> libc::c_int;
 }
 extern "C" {
-    pub fn solvable_lookup_void(s: *mut Solvable, keyname: Id) -> ::std::os::raw::c_int;
+    pub fn solvable_lookup_void(s: *mut Solvable, keyname: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_get_location(
         s: *mut Solvable,
-        medianrp: *mut ::std::os::raw::c_uint,
-    ) -> *const ::std::os::raw::c_char;
+        medianrp: *mut libc::c_uint,
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn solvable_lookup_location(
         s: *mut Solvable,
-        medianrp: *mut ::std::os::raw::c_uint,
-    ) -> *const ::std::os::raw::c_char;
+        medianrp: *mut libc::c_uint,
+    ) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solvable_lookup_sourcepkg(s: *mut Solvable) -> *const ::std::os::raw::c_char;
+    pub fn solvable_lookup_sourcepkg(s: *mut Solvable) -> *const libc::c_char;
 }
 extern "C" {
     pub fn solvable_lookup_bin_checksum(
         s: *mut Solvable,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_uchar;
+    ) -> *const libc::c_uchar;
 }
 extern "C" {
     pub fn solvable_lookup_checksum(
         s: *mut Solvable,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solvable_lookup_idarray(
-        s: *mut Solvable,
-        keyname: Id,
-        q: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    pub fn solvable_lookup_idarray(s: *mut Solvable, keyname: Id, q: *mut Queue) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_lookup_deparray(
@@ -1134,29 +793,25 @@ extern "C" {
         keyname: Id,
         q: *mut Queue,
         marker: Id,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn solvable_lookup_count(s: *mut Solvable, keyname: Id) -> ::std::os::raw::c_uint;
+    pub fn solvable_lookup_count(s: *mut Solvable, keyname: Id) -> libc::c_uint;
 }
 extern "C" {
     pub fn solvable_set_id(s: *mut Solvable, keyname: Id, id: Id);
 }
 extern "C" {
-    pub fn solvable_set_num(s: *mut Solvable, keyname: Id, num: ::std::os::raw::c_ulonglong);
+    pub fn solvable_set_num(s: *mut Solvable, keyname: Id, num: libc::c_ulonglong);
 }
 extern "C" {
-    pub fn solvable_set_str(s: *mut Solvable, keyname: Id, str_: *const ::std::os::raw::c_char);
+    pub fn solvable_set_str(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
-    pub fn solvable_set_poolstr(s: *mut Solvable, keyname: Id, str_: *const ::std::os::raw::c_char);
+    pub fn solvable_set_poolstr(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
-    pub fn solvable_add_poolstr_array(
-        s: *mut Solvable,
-        keyname: Id,
-        str_: *const ::std::os::raw::c_char,
-    );
+    pub fn solvable_add_poolstr_array(s: *mut Solvable, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
     pub fn solvable_add_idarray(s: *mut Solvable, keyname: Id, id: Id);
@@ -1174,7 +829,7 @@ extern "C" {
     pub fn solvable_unset(s: *mut Solvable, keyname: Id);
 }
 extern "C" {
-    pub fn solvable_identical(s1: *mut Solvable, s2: *mut Solvable) -> ::std::os::raw::c_int;
+    pub fn solvable_identical(s1: *mut Solvable, s2: *mut Solvable) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_selfprovidedep(s: *mut Solvable) -> Id;
@@ -1184,8 +839,8 @@ extern "C" {
         s: *mut Solvable,
         keyname: Id,
         dep: Id,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_matchessolvable(
@@ -1193,27 +848,24 @@ extern "C" {
         keyname: Id,
         solvid: Id,
         depq: *mut Queue,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_matchessolvable_int(
         s: *mut Solvable,
         keyname: Id,
-        marker: ::std::os::raw::c_int,
+        marker: libc::c_int,
         solvid: Id,
         solvidmap: *mut Map,
         depq: *mut Queue,
         missc: *mut Map,
-        reloff: ::std::os::raw::c_int,
+        reloff: libc::c_int,
         outdepq: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn solvable_is_irrelevant_patch(
-        s: *mut Solvable,
-        installedmap: *mut Map,
-    ) -> ::std::os::raw::c_int;
+    pub fn solvable_is_irrelevant_patch(s: *mut Solvable, installedmap: *mut Map) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_trivial_installable_map(
@@ -1221,28 +873,28 @@ extern "C" {
         installedmap: *mut Map,
         conflictsmap: *mut Map,
         multiversionmap: *mut Map,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_trivial_installable_queue(
         s: *mut Solvable,
         installed: *mut Queue,
         multiversionmap: *mut Map,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_trivial_installable_repo(
         s: *mut Solvable,
         installed: *mut s_Repo,
         multiversionmap: *mut Map,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Stringpool {
     pub strings: *mut Offset,
-    pub nstrings: ::std::os::raw::c_int,
-    pub stringspace: *mut ::std::os::raw::c_char,
+    pub nstrings: libc::c_int,
+    pub stringspace: *mut libc::c_char,
     pub sstrings: Offset,
     pub stringhashtbl: Hashtable,
     pub stringhashmask: Hashval,
@@ -1323,7 +975,7 @@ fn bindgen_test_layout_s_Stringpool() {
     );
 }
 extern "C" {
-    pub fn stringpool_init(ss: *mut Stringpool, strs: *mut *const ::std::os::raw::c_char);
+    pub fn stringpool_init(ss: *mut Stringpool, strs: *mut *const libc::c_char);
 }
 extern "C" {
     pub fn stringpool_init_empty(ss: *mut Stringpool);
@@ -1338,21 +990,21 @@ extern "C" {
     pub fn stringpool_freehash(ss: *mut Stringpool);
 }
 extern "C" {
-    pub fn stringpool_resize_hash(ss: *mut Stringpool, numnew: ::std::os::raw::c_int);
+    pub fn stringpool_resize_hash(ss: *mut Stringpool, numnew: libc::c_int);
 }
 extern "C" {
     pub fn stringpool_str2id(
         ss: *mut Stringpool,
-        str_: *const ::std::os::raw::c_char,
-        create: ::std::os::raw::c_int,
+        str_: *const libc::c_char,
+        create: libc::c_int,
     ) -> Id;
 }
 extern "C" {
     pub fn stringpool_strn2id(
         ss: *mut Stringpool,
-        str_: *const ::std::os::raw::c_char,
-        len: ::std::os::raw::c_uint,
-        create: ::std::os::raw::c_int,
+        str_: *const libc::c_char,
+        len: libc::c_uint,
+        create: libc::c_int,
     ) -> Id;
 }
 extern "C" {
@@ -1563,7 +1215,7 @@ pub const solv_knownid_UPDATE_COLLECTIONLIST: solv_knownid = 201;
 pub const solv_knownid_SOLVABLE_MULTIARCH: solv_knownid = 202;
 pub const solv_knownid_SOLVABLE_SIGNATUREDATA: solv_knownid = 203;
 pub const solv_knownid_ID_NUM_INTERNAL: solv_knownid = 204;
-pub type solv_knownid = ::std::os::raw::c_uint;
+pub type solv_knownid = libc::c_int;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Datapos {
@@ -1642,57 +1294,52 @@ pub type Datapos = s_Datapos;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Pool {
-    pub appdata: *mut ::std::os::raw::c_void,
+    pub appdata: *mut libc::c_void,
     pub ss: s_Stringpool,
     pub rels: *mut Reldep,
-    pub nrels: ::std::os::raw::c_int,
+    pub nrels: libc::c_int,
     pub repos: *mut *mut s_Repo,
-    pub nrepos: ::std::os::raw::c_int,
-    pub urepos: ::std::os::raw::c_int,
+    pub nrepos: libc::c_int,
+    pub urepos: libc::c_int,
     pub installed: *mut s_Repo,
     pub solvables: *mut Solvable,
-    pub nsolvables: ::std::os::raw::c_int,
-    pub languages: *mut *const ::std::os::raw::c_char,
-    pub nlanguages: ::std::os::raw::c_int,
-    pub disttype: ::std::os::raw::c_int,
+    pub nsolvables: libc::c_int,
+    pub languages: *mut *const libc::c_char,
+    pub nlanguages: libc::c_int,
+    pub disttype: libc::c_int,
     pub id2arch: *mut Id,
-    pub id2color: *mut ::std::os::raw::c_uchar,
+    pub id2color: *mut libc::c_uchar,
     pub lastarch: Id,
     pub vendormap: Queue,
-    pub vendorclasses: *mut *const ::std::os::raw::c_char,
+    pub vendorclasses: *mut *const libc::c_char,
     pub whatprovides: *mut Offset,
     pub whatprovides_rel: *mut Offset,
     pub whatprovidesdata: *mut Id,
     pub whatprovidesdataoff: Offset,
-    pub whatprovidesdataleft: ::std::os::raw::c_int,
+    pub whatprovidesdataleft: libc::c_int,
     pub considered: *mut Map,
     pub nscallback: ::std::option::Option<
-        unsafe extern "C" fn(
-            arg1: *mut s_Pool,
-            data: *mut ::std::os::raw::c_void,
-            name: Id,
-            evr: Id,
-        ) -> Id,
+        unsafe extern "C" fn(arg1: *mut s_Pool, data: *mut libc::c_void, name: Id, evr: Id) -> Id,
     >,
-    pub nscallbackdata: *mut ::std::os::raw::c_void,
-    pub debugmask: ::std::os::raw::c_int,
+    pub nscallbackdata: *mut libc::c_void,
+    pub debugmask: libc::c_int,
     pub debugcallback: ::std::option::Option<
         unsafe extern "C" fn(
             arg1: *mut s_Pool,
-            data: *mut ::std::os::raw::c_void,
-            type_: ::std::os::raw::c_int,
-            str_: *const ::std::os::raw::c_char,
+            data: *mut libc::c_void,
+            type_: libc::c_int,
+            str_: *const libc::c_char,
         ),
     >,
-    pub debugcallbackdata: *mut ::std::os::raw::c_void,
+    pub debugcallbackdata: *mut libc::c_void,
     pub loadcallback: ::std::option::Option<
         unsafe extern "C" fn(
             arg1: *mut s_Pool,
             arg2: *mut s_Repodata,
-            arg3: *mut ::std::os::raw::c_void,
-        ) -> ::std::os::raw::c_int,
+            arg3: *mut libc::c_void,
+        ) -> libc::c_int,
     >,
-    pub loadcallbackdata: *mut ::std::os::raw::c_void,
+    pub loadcallbackdata: *mut libc::c_void,
     pub pos: Datapos,
     pub pooljobs: Queue,
 }
@@ -2048,34 +1695,22 @@ extern "C" {
     pub fn pool_free(pool: *mut Pool);
 }
 extern "C" {
-    pub fn pool_freeallrepos(pool: *mut Pool, reuseids: ::std::os::raw::c_int);
+    pub fn pool_freeallrepos(pool: *mut Pool, reuseids: libc::c_int);
 }
 extern "C" {
-    pub fn pool_setdebuglevel(pool: *mut Pool, level: ::std::os::raw::c_int);
+    pub fn pool_setdebuglevel(pool: *mut Pool, level: libc::c_int);
 }
 extern "C" {
-    pub fn pool_setdisttype(
-        pool: *mut Pool,
-        disttype: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn pool_setdisttype(pool: *mut Pool, disttype: libc::c_int) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_set_flag(
-        pool: *mut Pool,
-        flag: ::std::os::raw::c_int,
-        value: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn pool_set_flag(pool: *mut Pool, flag: libc::c_int, value: libc::c_int) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_get_flag(pool: *mut Pool, flag: ::std::os::raw::c_int) -> ::std::os::raw::c_int;
+    pub fn pool_get_flag(pool: *mut Pool, flag: libc::c_int) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_debug(
-        pool: *mut Pool,
-        type_: ::std::os::raw::c_int,
-        format: *const ::std::os::raw::c_char,
-        ...
-    );
+    pub fn pool_debug(pool: *mut Pool, type_: libc::c_int, format: *const libc::c_char, ...);
 }
 extern "C" {
     pub fn pool_setdebugcallback(
@@ -2083,16 +1718,16 @@ extern "C" {
         debugcallback: ::std::option::Option<
             unsafe extern "C" fn(
                 arg1: *mut s_Pool,
-                data: *mut ::std::os::raw::c_void,
-                type_: ::std::os::raw::c_int,
-                str_: *const ::std::os::raw::c_char,
+                data: *mut libc::c_void,
+                type_: libc::c_int,
+                str_: *const libc::c_char,
             ),
         >,
-        debugcallbackdata: *mut ::std::os::raw::c_void,
+        debugcallbackdata: *mut libc::c_void,
     );
 }
 extern "C" {
-    pub fn pool_setdebugmask(pool: *mut Pool, mask: ::std::os::raw::c_int);
+    pub fn pool_setdebugmask(pool: *mut Pool, mask: libc::c_int);
 }
 extern "C" {
     pub fn pool_setloadcallback(
@@ -2101,10 +1736,10 @@ extern "C" {
             unsafe extern "C" fn(
                 arg1: *mut s_Pool,
                 arg2: *mut s_Repodata,
-                arg3: *mut ::std::os::raw::c_void,
-            ) -> ::std::os::raw::c_int,
+                arg3: *mut libc::c_void,
+            ) -> libc::c_int,
         >,
-        loadcbdata: *mut ::std::os::raw::c_void,
+        loadcbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -2113,12 +1748,12 @@ extern "C" {
         cb: ::std::option::Option<
             unsafe extern "C" fn(
                 arg1: *mut s_Pool,
-                arg2: *mut ::std::os::raw::c_void,
+                arg2: *mut libc::c_void,
                 arg3: Id,
                 arg4: Id,
             ) -> Id,
         >,
-        nscbdata: *mut ::std::os::raw::c_void,
+        nscbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -2132,7 +1767,7 @@ extern "C" {
                 arg1: *mut s_Pool,
                 arg2: *mut Solvable,
                 arg3: *mut Solvable,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
     );
 }
@@ -2144,40 +1779,37 @@ extern "C" {
             pool: *mut s_Pool,
             arg1: *mut Solvable,
             arg2: *mut Solvable,
-        ) -> ::std::os::raw::c_int,
+        ) -> libc::c_int,
     >;
 }
 extern "C" {
-    pub fn pool_alloctmpspace(
-        pool: *mut Pool,
-        len: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
+    pub fn pool_alloctmpspace(pool: *mut Pool, len: libc::c_int) -> *mut libc::c_char;
 }
 extern "C" {
-    pub fn pool_freetmpspace(pool: *mut Pool, space: *const ::std::os::raw::c_char);
+    pub fn pool_freetmpspace(pool: *mut Pool, space: *const libc::c_char);
 }
 extern "C" {
     pub fn pool_tmpjoin(
         pool: *mut Pool,
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        str3: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+        str1: *const libc::c_char,
+        str2: *const libc::c_char,
+        str3: *const libc::c_char,
+    ) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn pool_tmpappend(
         pool: *mut Pool,
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        str3: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+        str1: *const libc::c_char,
+        str2: *const libc::c_char,
+        str3: *const libc::c_char,
+    ) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn pool_bin2hex(
         pool: *mut Pool,
-        buf: *const ::std::os::raw::c_uchar,
-        len: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
+        buf: *const libc::c_uchar,
+        len: libc::c_int,
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_set_installed(pool: *mut Pool, repo: *mut s_Repo);
@@ -2185,79 +1817,76 @@ extern "C" {
 extern "C" {
     pub fn pool_error(
         pool: *mut Pool,
-        ret: ::std::os::raw::c_int,
-        format: *const ::std::os::raw::c_char,
+        ret: libc::c_int,
+        format: *const libc::c_char,
         ...
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_errstr(pool: *mut Pool) -> *mut ::std::os::raw::c_char;
+    pub fn pool_errstr(pool: *mut Pool) -> *mut libc::c_char;
 }
 extern "C" {
-    pub fn pool_set_rootdir(pool: *mut Pool, rootdir: *const ::std::os::raw::c_char);
+    pub fn pool_set_rootdir(pool: *mut Pool, rootdir: *const libc::c_char);
 }
 extern "C" {
-    pub fn pool_get_rootdir(pool: *mut Pool) -> *const ::std::os::raw::c_char;
+    pub fn pool_get_rootdir(pool: *mut Pool) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn pool_prepend_rootdir(
-        pool: *mut Pool,
-        dir: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+    pub fn pool_prepend_rootdir(pool: *mut Pool, dir: *const libc::c_char) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn pool_prepend_rootdir_tmp(
         pool: *mut Pool,
-        dir: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
+        dir: *const libc::c_char,
+    ) -> *const libc::c_char;
 }
 extern "C" {
     #[doc = " Solvable management"]
     pub fn pool_add_solvable(pool: *mut Pool) -> Id;
 }
 extern "C" {
-    pub fn pool_add_solvable_block(pool: *mut Pool, count: ::std::os::raw::c_int) -> Id;
+    pub fn pool_add_solvable_block(pool: *mut Pool, count: libc::c_int) -> Id;
 }
 extern "C" {
     pub fn pool_free_solvable_block(
         pool: *mut Pool,
         start: Id,
-        count: ::std::os::raw::c_int,
-        reuseids: ::std::os::raw::c_int,
+        count: libc::c_int,
+        reuseids: libc::c_int,
     );
 }
 extern "C" {
-    pub fn pool_solvable2str(pool: *mut Pool, s: *mut Solvable) -> *const ::std::os::raw::c_char;
+    pub fn pool_solvable2str(pool: *mut Pool, s: *mut Solvable) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_set_languages(
         pool: *mut Pool,
-        languages: *mut *const ::std::os::raw::c_char,
-        nlanguages: ::std::os::raw::c_int,
+        languages: *mut *const libc::c_char,
+        nlanguages: libc::c_int,
     );
 }
 extern "C" {
     pub fn pool_id2langid(
         pool: *mut Pool,
         id: Id,
-        lang: *const ::std::os::raw::c_char,
-        create: ::std::os::raw::c_int,
+        lang: *const libc::c_char,
+        create: libc::c_int,
     ) -> Id;
 }
 extern "C" {
     pub fn pool_intersect_evrs(
         pool: *mut Pool,
-        pflags: ::std::os::raw::c_int,
+        pflags: libc::c_int,
         pevr: Id,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
         evr: Id,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_match_dep(pool: *mut Pool, d1: Id, d2: Id) -> ::std::os::raw::c_int;
+    pub fn pool_match_dep(pool: *mut Pool, d1: Id, d2: Id) -> libc::c_int;
 }
 extern "C" {
-    pub fn pool_match_nevr_rel(pool: *mut Pool, s: *mut Solvable, d: Id) -> ::std::os::raw::c_int;
+    pub fn pool_match_nevr_rel(pool: *mut Pool, s: *mut Solvable, d: Id) -> libc::c_int;
 }
 extern "C" {
     #[doc = " Prepares a pool for solving"]
@@ -2276,8 +1905,7 @@ extern "C" {
     pub fn pool_queuetowhatprovides(pool: *mut Pool, q: *mut Queue) -> Id;
 }
 extern "C" {
-    pub fn pool_ids2whatprovides(pool: *mut Pool, ids: *mut Id, count: ::std::os::raw::c_int)
-        -> Id;
+    pub fn pool_ids2whatprovides(pool: *mut Pool, ids: *mut Id, count: libc::c_int) -> Id;
 }
 extern "C" {
     pub fn pool_searchlazywhatprovidesq(pool: *mut Pool, d: Id) -> Id;
@@ -2291,7 +1919,7 @@ extern "C" {
         keyname: Id,
         dep: Id,
         q: *mut Queue,
-        marker: ::std::os::raw::c_int,
+        marker: libc::c_int,
     );
 }
 extern "C" {
@@ -2300,7 +1928,7 @@ extern "C" {
         keyname: Id,
         dep: Id,
         q: *mut Queue,
-        marker: ::std::os::raw::c_int,
+        marker: libc::c_int,
     );
 }
 extern "C" {
@@ -2309,7 +1937,7 @@ extern "C" {
         keyname: Id,
         solvid: Id,
         q: *mut Queue,
-        marker: ::std::os::raw::c_int,
+        marker: libc::c_int,
     );
 }
 extern "C" {
@@ -2320,29 +1948,25 @@ extern "C" {
         pool: *mut Pool,
         p: Id,
         key: Id,
-        match_: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
+        match_: *const libc::c_char,
+        flags: libc::c_int,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut s_Repodata,
                 key: *mut s_Repokey,
                 kv: *mut s_KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
     pub fn pool_clear_pos(pool: *mut Pool);
 }
 extern "C" {
-    pub fn pool_lookup_str(
-        pool: *mut Pool,
-        entry: Id,
-        keyname: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn pool_lookup_str(pool: *mut Pool, entry: Id, keyname: Id) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_lookup_id(pool: *mut Pool, entry: Id, keyname: Id) -> Id;
@@ -2352,11 +1976,11 @@ extern "C" {
         pool: *mut Pool,
         entry: Id,
         keyname: Id,
-        notfound: ::std::os::raw::c_ulonglong,
-    ) -> ::std::os::raw::c_ulonglong;
+        notfound: libc::c_ulonglong,
+    ) -> libc::c_ulonglong;
 }
 extern "C" {
-    pub fn pool_lookup_void(pool: *mut Pool, entry: Id, keyname: Id) -> ::std::os::raw::c_int;
+    pub fn pool_lookup_void(pool: *mut Pool, entry: Id, keyname: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn pool_lookup_bin_checksum(
@@ -2364,7 +1988,7 @@ extern "C" {
         entry: Id,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_uchar;
+    ) -> *const libc::c_uchar;
 }
 extern "C" {
     pub fn pool_lookup_idarray(
@@ -2372,7 +1996,7 @@ extern "C" {
         entry: Id,
         keyname: Id,
         q: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn pool_lookup_checksum(
@@ -2380,22 +2004,22 @@ extern "C" {
         entry: Id,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_lookup_deltalocation(
         pool: *mut Pool,
         entry: Id,
-        medianrp: *mut ::std::os::raw::c_uint,
-    ) -> *const ::std::os::raw::c_char;
+        medianrp: *mut libc::c_uint,
+    ) -> *const libc::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_DUChanges {
-    pub path: *const ::std::os::raw::c_char,
-    pub kbytes: ::std::os::raw::c_longlong,
-    pub files: ::std::os::raw::c_longlong,
-    pub flags: ::std::os::raw::c_int,
+    pub path: *const libc::c_char,
+    pub kbytes: libc::c_longlong,
+    pub files: libc::c_longlong,
+    pub flags: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_DUChanges() {
@@ -2466,14 +2090,12 @@ extern "C" {
         pool: *mut Pool,
         installedmap: *mut Map,
         mps: *mut DUChanges,
-        nmps: ::std::os::raw::c_int,
+        nmps: libc::c_int,
     );
 }
 extern "C" {
-    pub fn pool_calc_installsizechange(
-        pool: *mut Pool,
-        installedmap: *mut Map,
-    ) -> ::std::os::raw::c_longlong;
+    pub fn pool_calc_installsizechange(pool: *mut Pool, installedmap: *mut Map)
+        -> libc::c_longlong;
 }
 extern "C" {
     pub fn pool_add_fileconflicts_deps(pool: *mut Pool, conflicts: *mut Queue);
@@ -2496,123 +2118,113 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn pool_setarch(arg1: *mut Pool, arg2: *const ::std::os::raw::c_char);
+    pub fn pool_setarch(arg1: *mut Pool, arg2: *const libc::c_char);
 }
 extern "C" {
-    pub fn pool_setarchpolicy(arg1: *mut Pool, arg2: *const ::std::os::raw::c_char);
+    pub fn pool_setarchpolicy(arg1: *mut Pool, arg2: *const libc::c_char);
 }
 extern "C" {
-    pub fn pool_arch2color_slow(pool: *mut Pool, arch: Id) -> ::std::os::raw::c_uchar;
+    pub fn pool_arch2color_slow(pool: *mut Pool, arch: Id) -> libc::c_uchar;
 }
 extern "C" {
     #[doc = " malloc\n exits with error message on error"]
-    pub fn solv_malloc(arg1: usize) -> *mut ::std::os::raw::c_void;
+    pub fn solv_malloc(arg1: usize) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_malloc2(arg1: usize, arg2: usize) -> *mut ::std::os::raw::c_void;
+    pub fn solv_malloc2(arg1: usize, arg2: usize) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_calloc(arg1: usize, arg2: usize) -> *mut ::std::os::raw::c_void;
+    pub fn solv_calloc(arg1: usize, arg2: usize) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_realloc(
-        arg1: *mut ::std::os::raw::c_void,
-        arg2: usize,
-    ) -> *mut ::std::os::raw::c_void;
+    pub fn solv_realloc(arg1: *mut libc::c_void, arg2: usize) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_realloc2(
-        arg1: *mut ::std::os::raw::c_void,
-        arg2: usize,
-        arg3: usize,
-    ) -> *mut ::std::os::raw::c_void;
+    pub fn solv_realloc2(arg1: *mut libc::c_void, arg2: usize, arg3: usize) -> *mut libc::c_void;
 }
 extern "C" {
     pub fn solv_extend_realloc(
-        arg1: *mut ::std::os::raw::c_void,
+        arg1: *mut libc::c_void,
         arg2: usize,
         arg3: usize,
         arg4: usize,
-    ) -> *mut ::std::os::raw::c_void;
+    ) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_free(arg1: *mut ::std::os::raw::c_void) -> *mut ::std::os::raw::c_void;
+    pub fn solv_free(arg1: *mut libc::c_void) -> *mut libc::c_void;
 }
 extern "C" {
-    pub fn solv_strdup(arg1: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
+    pub fn solv_strdup(arg1: *const libc::c_char) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn solv_oom(arg1: usize, arg2: usize);
 }
 extern "C" {
-    pub fn solv_timems(subtract: ::std::os::raw::c_uint) -> ::std::os::raw::c_uint;
+    pub fn solv_timems(subtract: libc::c_uint) -> libc::c_uint;
 }
 extern "C" {
-    pub fn solv_setcloexec(
-        fd: ::std::os::raw::c_int,
-        state: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn solv_setcloexec(fd: libc::c_int, state: libc::c_int) -> libc::c_int;
 }
 extern "C" {
     pub fn solv_sort(
-        base: *mut ::std::os::raw::c_void,
+        base: *mut libc::c_void,
         nmemb: usize,
         size: usize,
         compar: ::std::option::Option<
             unsafe extern "C" fn(
-                arg1: *const ::std::os::raw::c_void,
-                arg2: *const ::std::os::raw::c_void,
-                arg3: *mut ::std::os::raw::c_void,
-            ) -> ::std::os::raw::c_int,
+                arg1: *const libc::c_void,
+                arg2: *const libc::c_void,
+                arg3: *mut libc::c_void,
+            ) -> libc::c_int,
         >,
-        compard: *mut ::std::os::raw::c_void,
+        compard: *mut libc::c_void,
     );
 }
 extern "C" {
     pub fn solv_dupjoin(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        str3: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+        str1: *const libc::c_char,
+        str2: *const libc::c_char,
+        str3: *const libc::c_char,
+    ) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn solv_dupappend(
-        str1: *const ::std::os::raw::c_char,
-        str2: *const ::std::os::raw::c_char,
-        str3: *const ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+        str1: *const libc::c_char,
+        str2: *const libc::c_char,
+        str3: *const libc::c_char,
+    ) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn solv_hex2bin(
-        strp: *mut *const ::std::os::raw::c_char,
-        buf: *mut ::std::os::raw::c_uchar,
-        bufl: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        strp: *mut *const libc::c_char,
+        buf: *mut libc::c_uchar,
+        bufl: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solv_bin2hex(
-        buf: *const ::std::os::raw::c_uchar,
-        l: ::std::os::raw::c_int,
-        str_: *mut ::std::os::raw::c_char,
-    ) -> *mut ::std::os::raw::c_char;
+        buf: *const libc::c_uchar,
+        l: libc::c_int,
+        str_: *mut libc::c_char,
+    ) -> *mut libc::c_char;
 }
 extern "C" {
-    pub fn solv_validutf8(buf: *const ::std::os::raw::c_char) -> usize;
+    pub fn solv_validutf8(buf: *const libc::c_char) -> usize;
 }
 extern "C" {
-    pub fn solv_latin1toutf8(buf: *const ::std::os::raw::c_char) -> *mut ::std::os::raw::c_char;
+    pub fn solv_latin1toutf8(buf: *const libc::c_char) -> *mut libc::c_char;
 }
 extern "C" {
     pub fn solv_replacebadutf8(
-        buf: *const ::std::os::raw::c_char,
-        replchar: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_char;
+        buf: *const libc::c_char,
+        replchar: libc::c_int,
+    ) -> *mut libc::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Dirpool {
     pub dirs: *mut Id,
-    pub ndirs: ::std::os::raw::c_int,
+    pub ndirs: libc::c_int,
     pub dirtraverse: *mut Id,
 }
 #[test]
@@ -2666,8 +2278,8 @@ pub type Dirpool = s_Dirpool;
 pub struct s_Repokey {
     pub name: Id,
     pub type_: Id,
-    pub size: ::std::os::raw::c_uint,
-    pub storage: ::std::os::raw::c_uint,
+    pub size: libc::c_uint,
+    pub storage: libc::c_uint,
 }
 #[test]
 fn bindgen_test_layout_s_Repokey() {
@@ -2730,18 +2342,18 @@ pub type Repokey = s_Repokey;
 pub struct s_Repodata {
     pub repodataid: Id,
     pub repo: *mut s_Repo,
-    pub state: ::std::os::raw::c_int,
+    pub state: libc::c_int,
     pub loadcallback: ::std::option::Option<unsafe extern "C" fn(arg1: *mut s_Repodata)>,
-    pub start: ::std::os::raw::c_int,
-    pub end: ::std::os::raw::c_int,
+    pub start: libc::c_int,
+    pub end: libc::c_int,
     pub keys: *mut Repokey,
-    pub nkeys: ::std::os::raw::c_int,
-    pub keybits: [::std::os::raw::c_uchar; 32usize],
+    pub nkeys: libc::c_int,
+    pub keybits: [libc::c_uchar; 32usize],
     pub schemata: *mut Id,
-    pub nschemata: ::std::os::raw::c_int,
+    pub nschemata: libc::c_int,
     pub schemadata: *mut Id,
     pub spool: Stringpool,
-    pub localpool: ::std::os::raw::c_int,
+    pub localpool: libc::c_int,
     pub dirpool: Dirpool,
 }
 #[test]
@@ -2911,11 +2523,7 @@ fn bindgen_test_layout_s_Repodata() {
 }
 pub type Repodata = s_Repodata;
 extern "C" {
-    pub fn repodata_initdata(
-        data: *mut Repodata,
-        repo: *mut s_Repo,
-        localpool: ::std::os::raw::c_int,
-    );
+    pub fn repodata_initdata(data: *mut Repodata, repo: *mut s_Repo, localpool: libc::c_int);
 }
 extern "C" {
     pub fn repodata_freedata(data: *mut Repodata);
@@ -2924,24 +2532,16 @@ extern "C" {
     pub fn repodata_free(data: *mut Repodata);
 }
 extern "C" {
-    pub fn repodata_empty(data: *mut Repodata, localpool: ::std::os::raw::c_int);
+    pub fn repodata_empty(data: *mut Repodata, localpool: libc::c_int);
 }
 extern "C" {
     pub fn repodata_load(data: *mut Repodata);
 }
 extern "C" {
-    pub fn repodata_key2id(
-        data: *mut Repodata,
-        key: *mut Repokey,
-        create: ::std::os::raw::c_int,
-    ) -> Id;
+    pub fn repodata_key2id(data: *mut Repodata, key: *mut Repokey, create: libc::c_int) -> Id;
 }
 extern "C" {
-    pub fn repodata_schema2id(
-        data: *mut Repodata,
-        schema: *mut Id,
-        create: ::std::os::raw::c_int,
-    ) -> Id;
+    pub fn repodata_schema2id(data: *mut Repodata, schema: *mut Id, create: libc::c_int) -> Id;
 }
 extern "C" {
     pub fn repodata_free_schemahash(data: *mut Repodata);
@@ -2951,17 +2551,17 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut Repodata,
                 key: *mut Repokey,
                 kv: *mut s_KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -2969,18 +2569,18 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
         keyskip: *mut Id,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut Repodata,
                 key: *mut Repokey,
                 kv: *mut s_KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -2988,18 +2588,18 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
         kv: *mut s_KeyValue,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut Repodata,
                 key: *mut Repokey,
                 kv: *mut s_KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -3008,17 +2608,17 @@ extern "C" {
         data: *mut Repodata,
         key: *mut Repokey,
         kv: *mut s_KeyValue,
-        flags: ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_char;
+        flags: libc::c_int,
+    ) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn repodata_set_filelisttype(data: *mut Repodata, filelisttype: ::std::os::raw::c_int);
+    pub fn repodata_set_filelisttype(data: *mut Repodata, filelisttype: libc::c_int);
 }
 extern "C" {
     pub fn repodata_filelistfilter_matches(
         data: *mut Repodata,
-        str_: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
+        str_: *const libc::c_char,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn repodata_free_filelistfilter(data: *mut Repodata);
@@ -3030,26 +2630,19 @@ extern "C" {
     pub fn repodata_lookup_id(data: *mut Repodata, solvid: Id, keyname: Id) -> Id;
 }
 extern "C" {
-    pub fn repodata_lookup_str(
-        data: *mut Repodata,
-        solvid: Id,
-        keyname: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn repodata_lookup_str(data: *mut Repodata, solvid: Id, keyname: Id)
+        -> *const libc::c_char;
 }
 extern "C" {
     pub fn repodata_lookup_num(
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        notfound: ::std::os::raw::c_ulonglong,
-    ) -> ::std::os::raw::c_ulonglong;
+        notfound: libc::c_ulonglong,
+    ) -> libc::c_ulonglong;
 }
 extern "C" {
-    pub fn repodata_lookup_void(
-        data: *mut Repodata,
-        solvid: Id,
-        keyname: Id,
-    ) -> ::std::os::raw::c_int;
+    pub fn repodata_lookup_void(data: *mut Repodata, solvid: Id, keyname: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn repodata_lookup_bin_checksum(
@@ -3057,7 +2650,7 @@ extern "C" {
         solvid: Id,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_uchar;
+    ) -> *const libc::c_uchar;
 }
 extern "C" {
     pub fn repodata_lookup_idarray(
@@ -3065,29 +2658,25 @@ extern "C" {
         solvid: Id,
         keyname: Id,
         q: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn repodata_lookup_binary(
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        lenp: *mut ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_void;
+        lenp: *mut libc::c_int,
+    ) -> *const libc::c_void;
 }
 extern "C" {
-    pub fn repodata_lookup_count(
-        data: *mut Repodata,
-        solvid: Id,
-        keyname: Id,
-    ) -> ::std::os::raw::c_uint;
+    pub fn repodata_lookup_count(data: *mut Repodata, solvid: Id, keyname: Id) -> libc::c_uint;
 }
 extern "C" {
     pub fn repodata_lookup_packed_dirstrarray(
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-    ) -> *const ::std::os::raw::c_uchar;
+    ) -> *const libc::c_uchar;
 }
 extern "C" {
     pub fn repodata_fill_keyskip(data: *mut Repodata, solvid: Id, keyskip: *mut Id) -> *mut Id;
@@ -3096,10 +2685,10 @@ extern "C" {
     pub fn repodata_extend(data: *mut Repodata, p: Id);
 }
 extern "C" {
-    pub fn repodata_extend_block(data: *mut Repodata, p: Id, num: ::std::os::raw::c_int);
+    pub fn repodata_extend_block(data: *mut Repodata, p: Id, num: libc::c_int);
 }
 extern "C" {
-    pub fn repodata_shrink(data: *mut Repodata, end: ::std::os::raw::c_int);
+    pub fn repodata_shrink(data: *mut Repodata, end: libc::c_int);
 }
 extern "C" {
     pub fn repodata_internalize(data: *mut Repodata);
@@ -3111,12 +2700,7 @@ extern "C" {
     pub fn repodata_set_void(data: *mut Repodata, solvid: Id, keyname: Id);
 }
 extern "C" {
-    pub fn repodata_set_num(
-        data: *mut Repodata,
-        solvid: Id,
-        keyname: Id,
-        num: ::std::os::raw::c_ulonglong,
-    );
+    pub fn repodata_set_num(data: *mut Repodata, solvid: Id, keyname: Id, num: libc::c_ulonglong);
 }
 extern "C" {
     pub fn repodata_set_id(data: *mut Repodata, solvid: Id, keyname: Id, id: Id);
@@ -3126,7 +2710,7 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        str_: *const ::std::os::raw::c_char,
+        str_: *const libc::c_char,
     );
 }
 extern "C" {
@@ -3134,8 +2718,8 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        buf: *mut ::std::os::raw::c_void,
-        len: ::std::os::raw::c_int,
+        buf: *mut libc::c_void,
+        len: libc::c_int,
     );
 }
 extern "C" {
@@ -3143,7 +2727,7 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        str_: *const ::std::os::raw::c_char,
+        str_: *const libc::c_char,
     );
 }
 extern "C" {
@@ -3151,7 +2735,7 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        constant: ::std::os::raw::c_uint,
+        constant: libc::c_uint,
     );
 }
 extern "C" {
@@ -3163,7 +2747,7 @@ extern "C" {
         solvid: Id,
         keyname: Id,
         type_: Id,
-        buf: *const ::std::os::raw::c_uchar,
+        buf: *const libc::c_uchar,
     );
 }
 extern "C" {
@@ -3172,7 +2756,7 @@ extern "C" {
         solvid: Id,
         keyname: Id,
         type_: Id,
-        str_: *const ::std::os::raw::c_char,
+        str_: *const libc::c_char,
     );
 }
 extern "C" {
@@ -3194,7 +2778,7 @@ extern "C" {
         solvid: Id,
         keyname: Id,
         dir: Id,
-        str_: *const ::std::os::raw::c_char,
+        str_: *const libc::c_char,
     );
 }
 extern "C" {
@@ -3208,7 +2792,7 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        str_: *const ::std::os::raw::c_char,
+        str_: *const libc::c_char,
     );
 }
 extern "C" {
@@ -3241,7 +2825,7 @@ extern "C" {
         dest: Id,
         src: Id,
         keyidmap: *mut Map,
-        overwrite: ::std::os::raw::c_int,
+        overwrite: libc::c_int,
     );
 }
 extern "C" {
@@ -3254,17 +2838,17 @@ extern "C" {
     pub fn repodata_disable_paging(data: *mut Repodata);
 }
 extern "C" {
-    pub fn repodata_globalize_id(data: *mut Repodata, id: Id, create: ::std::os::raw::c_int) -> Id;
+    pub fn repodata_globalize_id(data: *mut Repodata, id: Id, create: libc::c_int) -> Id;
 }
 extern "C" {
-    pub fn repodata_localize_id(data: *mut Repodata, id: Id, create: ::std::os::raw::c_int) -> Id;
+    pub fn repodata_localize_id(data: *mut Repodata, id: Id, create: libc::c_int) -> Id;
 }
 extern "C" {
     pub fn repodata_translate_id(
         data: *mut Repodata,
         fromdata: *mut Repodata,
         id: Id,
-        create: ::std::os::raw::c_int,
+        create: libc::c_int,
     ) -> Id;
 }
 extern "C" {
@@ -3272,55 +2856,51 @@ extern "C" {
         data: *mut Repodata,
         fromdata: *mut Repodata,
         dir: Id,
-        create: ::std::os::raw::c_int,
+        create: libc::c_int,
         cache: *mut Id,
     ) -> Id;
 }
 extern "C" {
     pub fn repodata_str2dir(
         data: *mut Repodata,
-        dir: *const ::std::os::raw::c_char,
-        create: ::std::os::raw::c_int,
+        dir: *const libc::c_char,
+        create: libc::c_int,
     ) -> Id;
 }
 extern "C" {
     pub fn repodata_dir2str(
         data: *mut Repodata,
         did: Id,
-        suf: *const ::std::os::raw::c_char,
-    ) -> *const ::std::os::raw::c_char;
+        suf: *const libc::c_char,
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn repodata_chk2str(
         data: *mut Repodata,
         type_: Id,
-        buf: *const ::std::os::raw::c_uchar,
-    ) -> *const ::std::os::raw::c_char;
+        buf: *const libc::c_uchar,
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn repodata_set_location(
         data: *mut Repodata,
         solvid: Id,
-        medianr: ::std::os::raw::c_int,
-        dir: *const ::std::os::raw::c_char,
-        file: *const ::std::os::raw::c_char,
+        medianr: libc::c_int,
+        dir: *const libc::c_char,
+        file: *const libc::c_char,
     );
 }
 extern "C" {
     pub fn repodata_set_deltalocation(
         data: *mut Repodata,
         handle: Id,
-        medianr: ::std::os::raw::c_int,
-        dir: *const ::std::os::raw::c_char,
-        file: *const ::std::os::raw::c_char,
+        medianr: libc::c_int,
+        dir: *const libc::c_char,
+        file: *const libc::c_char,
     );
 }
 extern "C" {
-    pub fn repodata_set_sourcepkg(
-        data: *mut Repodata,
-        solvid: Id,
-        sourcepkg: *const ::std::os::raw::c_char,
-    );
+    pub fn repodata_set_sourcepkg(data: *mut Repodata, solvid: Id, sourcepkg: *const libc::c_char);
 }
 extern "C" {
     pub fn repodata_lookup_kv_uninternalized(
@@ -3335,31 +2915,31 @@ extern "C" {
         data: *mut Repodata,
         solvid: Id,
         keyname: Id,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut Repodata,
                 key: *mut Repokey,
                 kv: *mut s_KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
-    pub fn repodata_memused(data: *mut Repodata) -> ::std::os::raw::c_uint;
+    pub fn repodata_memused(data: *mut Repodata) -> libc::c_uint;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_KeyValue {
     pub id: Id,
-    pub str_: *const ::std::os::raw::c_char,
-    pub num: ::std::os::raw::c_uint,
-    pub num2: ::std::os::raw::c_uint,
-    pub entry: ::std::os::raw::c_int,
-    pub eof: ::std::os::raw::c_int,
+    pub str_: *const libc::c_char,
+    pub num: libc::c_uint,
+    pub num2: libc::c_uint,
+    pub entry: libc::c_int,
+    pub eof: libc::c_int,
     pub parent: *mut s_KeyValue,
 }
 #[test]
@@ -3451,10 +3031,10 @@ pub type KeyValue = s_KeyValue;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Datamatcher {
-    pub flags: ::std::os::raw::c_int,
-    pub match_: *const ::std::os::raw::c_char,
-    pub matchdata: *mut ::std::os::raw::c_void,
-    pub error: ::std::os::raw::c_int,
+    pub flags: libc::c_int,
+    pub match_: *const libc::c_char,
+    pub matchdata: *mut libc::c_void,
+    pub error: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Datamatcher() {
@@ -3515,35 +3095,32 @@ pub type Datamatcher = s_Datamatcher;
 extern "C" {
     pub fn datamatcher_init(
         ma: *mut Datamatcher,
-        match_: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        match_: *const libc::c_char,
+        flags: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn datamatcher_free(ma: *mut Datamatcher);
 }
 extern "C" {
-    pub fn datamatcher_match(
-        ma: *mut Datamatcher,
-        str_: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
+    pub fn datamatcher_match(ma: *mut Datamatcher, str_: *const libc::c_char) -> libc::c_int;
 }
 extern "C" {
     pub fn datamatcher_checkbasename(
         ma: *mut Datamatcher,
-        str_: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
+        str_: *const libc::c_char,
+    ) -> libc::c_int;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Dataiterator {
-    pub state: ::std::os::raw::c_int,
-    pub flags: ::std::os::raw::c_int,
+    pub state: libc::c_int,
+    pub flags: libc::c_int,
     pub pool: *mut Pool,
     pub repo: *mut s_Repo,
     pub data: *mut s_Repodata,
-    pub dp: *mut ::std::os::raw::c_uchar,
-    pub ddp: *mut ::std::os::raw::c_uchar,
+    pub dp: *mut libc::c_uchar,
+    pub ddp: *mut libc::c_uchar,
     pub idp: *mut Id,
     pub keyp: *mut Id,
     pub key: *mut s_Repokey,
@@ -3554,16 +3131,16 @@ pub struct s_Dataiterator {
     pub solvid: Id,
     pub repoid: Id,
     pub keynames: [Id; 4usize],
-    pub nkeynames: ::std::os::raw::c_int,
-    pub rootlevel: ::std::os::raw::c_int,
+    pub nkeynames: libc::c_int,
+    pub rootlevel: libc::c_int,
     pub parents: [s_Dataiterator_di_parent; 3usize],
-    pub nparents: ::std::os::raw::c_int,
-    pub vert_ddp: *mut ::std::os::raw::c_uchar,
+    pub nparents: libc::c_int,
+    pub vert_ddp: *mut libc::c_uchar,
     pub vert_off: Id,
     pub vert_len: Id,
     pub vert_storestate: Id,
-    pub dupstr: *mut ::std::os::raw::c_char,
-    pub dupstrn: ::std::os::raw::c_int,
+    pub dupstr: *mut libc::c_char,
+    pub dupstrn: libc::c_int,
     pub keyskip: *mut Id,
     pub oldkeyskip: *mut Id,
 }
@@ -3571,7 +3148,7 @@ pub struct s_Dataiterator {
 #[derive(Debug, Copy, Clone)]
 pub struct s_Dataiterator_di_parent {
     pub kv: KeyValue,
-    pub dp: *mut ::std::os::raw::c_uchar,
+    pub dp: *mut libc::c_uchar,
     pub keyp: *mut Id,
 }
 #[test]
@@ -3933,9 +3510,9 @@ extern "C" {
         repo: *mut s_Repo,
         p: Id,
         keyname: Id,
-        match_: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        match_: *const libc::c_char,
+        flags: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn dataiterator_init_clone(di: *mut Dataiterator, from: *mut Dataiterator);
@@ -3949,9 +3526,9 @@ extern "C" {
 extern "C" {
     pub fn dataiterator_set_match(
         di: *mut Dataiterator,
-        match_: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        match_: *const libc::c_char,
+        flags: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn dataiterator_prepend_keyname(di: *mut Dataiterator, keyname: Id);
@@ -3960,7 +3537,7 @@ extern "C" {
     pub fn dataiterator_free(di: *mut Dataiterator);
 }
 extern "C" {
-    pub fn dataiterator_step(di: *mut Dataiterator) -> ::std::os::raw::c_int;
+    pub fn dataiterator_step(di: *mut Dataiterator) -> libc::c_int;
 }
 extern "C" {
     pub fn dataiterator_setpos(di: *mut Dataiterator);
@@ -3969,8 +3546,7 @@ extern "C" {
     pub fn dataiterator_setpos_parent(di: *mut Dataiterator);
 }
 extern "C" {
-    pub fn dataiterator_match(di: *mut Dataiterator, ma: *mut Datamatcher)
-        -> ::std::os::raw::c_int;
+    pub fn dataiterator_match(di: *mut Dataiterator, ma: *mut Datamatcher) -> libc::c_int;
 }
 extern "C" {
     pub fn dataiterator_skip_attribute(di: *mut Dataiterator);
@@ -3994,7 +3570,7 @@ extern "C" {
     pub fn dataiterator_clonepos(di: *mut Dataiterator, from: *mut Dataiterator);
 }
 extern "C" {
-    pub fn dataiterator_seek(di: *mut Dataiterator, whence: ::std::os::raw::c_int);
+    pub fn dataiterator_seek(di: *mut Dataiterator, whence: libc::c_int);
 }
 extern "C" {
     pub fn dataiterator_strdup(di: *mut Dataiterator);
@@ -4002,19 +3578,19 @@ extern "C" {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Repo {
-    pub name: *const ::std::os::raw::c_char,
+    pub name: *const libc::c_char,
     pub repoid: Id,
-    pub appdata: *mut ::std::os::raw::c_void,
+    pub appdata: *mut libc::c_void,
     pub pool: *mut Pool,
-    pub start: ::std::os::raw::c_int,
-    pub end: ::std::os::raw::c_int,
-    pub nsolvables: ::std::os::raw::c_int,
-    pub disabled: ::std::os::raw::c_int,
-    pub priority: ::std::os::raw::c_int,
-    pub subpriority: ::std::os::raw::c_int,
+    pub start: libc::c_int,
+    pub end: libc::c_int,
+    pub nsolvables: libc::c_int,
+    pub disabled: libc::c_int,
+    pub priority: libc::c_int,
+    pub subpriority: libc::c_int,
     pub idarraydata: *mut Id,
-    pub idarraysize: ::std::os::raw::c_int,
-    pub nrepodata: ::std::os::raw::c_int,
+    pub idarraysize: libc::c_int,
+    pub nrepodata: libc::c_int,
     pub rpmdbid: *mut Id,
 }
 #[test]
@@ -4174,13 +3750,13 @@ fn bindgen_test_layout_s_Repo() {
 }
 pub type Repo = s_Repo;
 extern "C" {
-    pub fn repo_create(pool: *mut Pool, name: *const ::std::os::raw::c_char) -> *mut Repo;
+    pub fn repo_create(pool: *mut Pool, name: *const libc::c_char) -> *mut Repo;
 }
 extern "C" {
-    pub fn repo_free(repo: *mut Repo, reuseids: ::std::os::raw::c_int);
+    pub fn repo_free(repo: *mut Repo, reuseids: libc::c_int);
 }
 extern "C" {
-    pub fn repo_empty(repo: *mut Repo, reuseids: ::std::os::raw::c_int);
+    pub fn repo_empty(repo: *mut Repo, reuseids: libc::c_int);
 }
 extern "C" {
     pub fn repo_freedata(repo: *mut Repo);
@@ -4189,35 +3765,35 @@ extern "C" {
     pub fn repo_add_solvable(repo: *mut Repo) -> Id;
 }
 extern "C" {
-    pub fn repo_add_solvable_block(repo: *mut Repo, count: ::std::os::raw::c_int) -> Id;
+    pub fn repo_add_solvable_block(repo: *mut Repo, count: libc::c_int) -> Id;
 }
 extern "C" {
-    pub fn repo_free_solvable(repo: *mut Repo, p: Id, reuseids: ::std::os::raw::c_int);
+    pub fn repo_free_solvable(repo: *mut Repo, p: Id, reuseids: libc::c_int);
 }
 extern "C" {
     pub fn repo_free_solvable_block(
         repo: *mut Repo,
         start: Id,
-        count: ::std::os::raw::c_int,
-        reuseids: ::std::os::raw::c_int,
+        count: libc::c_int,
+        reuseids: libc::c_int,
     );
 }
 extern "C" {
-    pub fn repo_sidedata_create(repo: *mut Repo, size: usize) -> *mut ::std::os::raw::c_void;
+    pub fn repo_sidedata_create(repo: *mut Repo, size: usize) -> *mut libc::c_void;
 }
 extern "C" {
     pub fn repo_sidedata_extend(
         repo: *mut Repo,
-        b: *mut ::std::os::raw::c_void,
+        b: *mut libc::c_void,
         size: usize,
         p: Id,
-        count: ::std::os::raw::c_int,
-    ) -> *mut ::std::os::raw::c_void;
+        count: libc::c_int,
+    ) -> *mut libc::c_void;
 }
 extern "C" {
     pub fn repo_add_solvable_block_before(
         repo: *mut Repo,
-        count: ::std::os::raw::c_int,
+        count: libc::c_int,
         beforerepo: *mut Repo,
     ) -> Id;
 }
@@ -4228,11 +3804,10 @@ extern "C" {
     pub fn repo_addid_dep(repo: *mut Repo, olddeps: Offset, id: Id, marker: Id) -> Offset;
 }
 extern "C" {
-    pub fn repo_reserve_ids(repo: *mut Repo, olddeps: Offset, num: ::std::os::raw::c_int)
-        -> Offset;
+    pub fn repo_reserve_ids(repo: *mut Repo, olddeps: Offset, num: libc::c_int) -> Offset;
 }
 extern "C" {
-    pub fn repo_add_repodata(repo: *mut Repo, flags: ::std::os::raw::c_int) -> *mut Repodata;
+    pub fn repo_add_repodata(repo: *mut Repo, flags: libc::c_int) -> *mut Repodata;
 }
 extern "C" {
     pub fn repo_id2repodata(repo: *mut Repo, id: Id) -> *mut Repodata;
@@ -4245,18 +3820,18 @@ extern "C" {
         repo: *mut Repo,
         p: Id,
         key: Id,
-        match_: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
+        match_: *const libc::c_char,
+        flags: libc::c_int,
         callback: ::std::option::Option<
             unsafe extern "C" fn(
-                cbdata: *mut ::std::os::raw::c_void,
+                cbdata: *mut libc::c_void,
                 s: *mut Solvable,
                 data: *mut Repodata,
                 key: *mut Repokey,
                 kv: *mut KeyValue,
-            ) -> ::std::os::raw::c_int,
+            ) -> libc::c_int,
         >,
-        cbdata: *mut ::std::os::raw::c_void,
+        cbdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -4276,19 +3851,15 @@ extern "C" {
     pub fn repo_lookup_type(repo: *mut Repo, entry: Id, keyname: Id) -> Id;
 }
 extern "C" {
-    pub fn repo_lookup_str(
-        repo: *mut Repo,
-        entry: Id,
-        keyname: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn repo_lookup_str(repo: *mut Repo, entry: Id, keyname: Id) -> *const libc::c_char;
 }
 extern "C" {
     pub fn repo_lookup_num(
         repo: *mut Repo,
         entry: Id,
         keyname: Id,
-        notfound: ::std::os::raw::c_ulonglong,
-    ) -> ::std::os::raw::c_ulonglong;
+        notfound: libc::c_ulonglong,
+    ) -> libc::c_ulonglong;
 }
 extern "C" {
     pub fn repo_lookup_id(repo: *mut Repo, entry: Id, keyname: Id) -> Id;
@@ -4299,7 +3870,7 @@ extern "C" {
         entry: Id,
         keyname: Id,
         q: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn repo_lookup_deparray(
@@ -4308,10 +3879,10 @@ extern "C" {
         keyname: Id,
         q: *mut Queue,
         marker: Id,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn repo_lookup_void(repo: *mut Repo, entry: Id, keyname: Id) -> ::std::os::raw::c_int;
+    pub fn repo_lookup_void(repo: *mut Repo, entry: Id, keyname: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn repo_lookup_checksum(
@@ -4319,7 +3890,7 @@ extern "C" {
         entry: Id,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn repo_lookup_bin_checksum(
@@ -4327,18 +3898,18 @@ extern "C" {
         entry: Id,
         keyname: Id,
         typep: *mut Id,
-    ) -> *const ::std::os::raw::c_uchar;
+    ) -> *const libc::c_uchar;
 }
 extern "C" {
     pub fn repo_lookup_binary(
         repo: *mut Repo,
         entry: Id,
         keyname: Id,
-        lenp: *mut ::std::os::raw::c_int,
-    ) -> *const ::std::os::raw::c_void;
+        lenp: *mut libc::c_int,
+    ) -> *const libc::c_void;
 }
 extern "C" {
-    pub fn repo_lookup_count(repo: *mut Repo, entry: Id, keyname: Id) -> ::std::os::raw::c_uint;
+    pub fn repo_lookup_count(repo: *mut Repo, entry: Id, keyname: Id) -> libc::c_uint;
 }
 extern "C" {
     pub fn solv_depmarker(keyname: Id, marker: Id) -> Id;
@@ -4347,26 +3918,16 @@ extern "C" {
     pub fn repo_set_id(repo: *mut Repo, p: Id, keyname: Id, id: Id);
 }
 extern "C" {
-    pub fn repo_set_num(repo: *mut Repo, p: Id, keyname: Id, num: ::std::os::raw::c_ulonglong);
+    pub fn repo_set_num(repo: *mut Repo, p: Id, keyname: Id, num: libc::c_ulonglong);
 }
 extern "C" {
-    pub fn repo_set_str(repo: *mut Repo, p: Id, keyname: Id, str_: *const ::std::os::raw::c_char);
+    pub fn repo_set_str(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
-    pub fn repo_set_poolstr(
-        repo: *mut Repo,
-        p: Id,
-        keyname: Id,
-        str_: *const ::std::os::raw::c_char,
-    );
+    pub fn repo_set_poolstr(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
-    pub fn repo_add_poolstr_array(
-        repo: *mut Repo,
-        p: Id,
-        keyname: Id,
-        str_: *const ::std::os::raw::c_char,
-    );
+    pub fn repo_add_poolstr_array(repo: *mut Repo, p: Id, keyname: Id, str_: *const libc::c_char);
 }
 extern "C" {
     pub fn repo_add_idarray(repo: *mut Repo, p: Id, keyname: Id, id: Id);
@@ -4471,19 +4032,15 @@ extern "C" {
     pub fn transaction_all_obs_pkgs(trans: *mut Transaction, p: Id, pkgs: *mut Queue);
 }
 extern "C" {
-    pub fn transaction_type(trans: *mut Transaction, p: Id, mode: ::std::os::raw::c_int) -> Id;
+    pub fn transaction_type(trans: *mut Transaction, p: Id, mode: libc::c_int) -> Id;
 }
 extern "C" {
-    pub fn transaction_classify(
-        trans: *mut Transaction,
-        mode: ::std::os::raw::c_int,
-        classes: *mut Queue,
-    );
+    pub fn transaction_classify(trans: *mut Transaction, mode: libc::c_int, classes: *mut Queue);
 }
 extern "C" {
     pub fn transaction_classify_pkgs(
         trans: *mut Transaction,
-        mode: ::std::os::raw::c_int,
+        mode: libc::c_int,
         type_: Id,
         from: Id,
         to: Id,
@@ -4494,29 +4051,27 @@ extern "C" {
     pub fn transaction_installedresult(
         trans: *mut Transaction,
         installedq: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn transaction_calc_installsizechange(
-        trans: *mut Transaction,
-    ) -> ::std::os::raw::c_longlong;
+    pub fn transaction_calc_installsizechange(trans: *mut Transaction) -> libc::c_longlong;
 }
 extern "C" {
     pub fn transaction_calc_duchanges(
         trans: *mut Transaction,
         mps: *mut s_DUChanges,
-        nmps: ::std::os::raw::c_int,
+        nmps: libc::c_int,
     );
 }
 extern "C" {
-    pub fn transaction_order(trans: *mut Transaction, flags: ::std::os::raw::c_int);
+    pub fn transaction_order(trans: *mut Transaction, flags: libc::c_int);
 }
 extern "C" {
     pub fn transaction_order_add_choices(
         trans: *mut Transaction,
         chosen: Id,
         choices: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn transaction_add_obsoleted(trans: *mut Transaction);
@@ -4528,7 +4083,7 @@ extern "C" {
     pub fn transaction_order_get_cycleids(
         trans: *mut Transaction,
         q: *mut Queue,
-        minseverity: ::std::os::raw::c_int,
+        minseverity: libc::c_int,
     );
 }
 extern "C" {
@@ -4536,14 +4091,14 @@ extern "C" {
         trans: *mut Transaction,
         cid: Id,
         q: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn transaction_order_get_edges(
         trans: *mut Transaction,
         p: Id,
         q: *mut Queue,
-        unbroken: ::std::os::raw::c_int,
+        unbroken: libc::c_int,
     );
 }
 extern "C" {
@@ -4657,7 +4212,7 @@ pub const SolverRuleinfo_SOLVER_RULE_YUMOBS: SolverRuleinfo = 2560;
 pub const SolverRuleinfo_SOLVER_RULE_RECOMMENDS: SolverRuleinfo = 2816;
 pub const SolverRuleinfo_SOLVER_RULE_BLACK: SolverRuleinfo = 3072;
 pub const SolverRuleinfo_SOLVER_RULE_STRICT_REPO_PRIORITY: SolverRuleinfo = 3328;
-pub type SolverRuleinfo = ::std::os::raw::c_uint;
+pub type SolverRuleinfo = libc::c_int;
 extern "C" {
     pub fn solver_addrule(solv: *mut s_Solver, p: Id, p2: Id, d: Id) -> *mut Rule;
 }
@@ -4665,14 +4220,10 @@ extern "C" {
     pub fn solver_unifyrules(solv: *mut s_Solver);
 }
 extern "C" {
-    pub fn solver_rulecmp(
-        solv: *mut s_Solver,
-        r1: *mut Rule,
-        r2: *mut Rule,
-    ) -> ::std::os::raw::c_int;
+    pub fn solver_rulecmp(solv: *mut s_Solver, r1: *mut Rule, r2: *mut Rule) -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_shrinkrules(solv: *mut s_Solver, nrules: ::std::os::raw::c_int);
+    pub fn solver_shrinkrules(solv: *mut s_Solver, nrules: libc::c_int);
 }
 extern "C" {
     pub fn solver_addpkgrulesforsolvable(solv: *mut s_Solver, s: *mut Solvable, m: *mut Map);
@@ -4688,7 +4239,7 @@ extern "C" {
         solv: *mut s_Solver,
         s: *mut Solvable,
         m: *mut Map,
-        allow_all: ::std::os::raw::c_int,
+        allow_all: libc::c_int,
     );
 }
 extern "C" {
@@ -4718,8 +4269,8 @@ extern "C" {
 extern "C" {
     pub fn solver_addbestrules(
         solv: *mut s_Solver,
-        havebestinstalljobs: ::std::os::raw::c_int,
-        haslockjob: ::std::os::raw::c_int,
+        havebestinstalljobs: libc::c_int,
+        haslockjob: libc::c_int,
     );
 }
 extern "C" {
@@ -4738,17 +4289,13 @@ extern "C" {
     pub fn solver_disablepolicyrules(solv: *mut s_Solver);
 }
 extern "C" {
-    pub fn solver_reenablepolicyrules(solv: *mut s_Solver, jobidx: ::std::os::raw::c_int);
+    pub fn solver_reenablepolicyrules(solv: *mut s_Solver, jobidx: libc::c_int);
 }
 extern "C" {
     pub fn solver_reenablepolicyrules_cleandeps(solv: *mut s_Solver, pkg: Id);
 }
 extern "C" {
-    pub fn solver_allruleinfos(
-        solv: *mut s_Solver,
-        rid: Id,
-        rq: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    pub fn solver_allruleinfos(solv: *mut s_Solver, rid: Id, rq: *mut Queue) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_ruleinfo(
@@ -4766,7 +4313,7 @@ extern "C" {
     pub fn solver_ruleliterals(solv: *mut s_Solver, rid: Id, q: *mut Queue);
 }
 extern "C" {
-    pub fn solver_rule2jobidx(solv: *mut s_Solver, rid: Id) -> ::std::os::raw::c_int;
+    pub fn solver_rule2jobidx(solv: *mut s_Solver, rid: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_rule2job(solv: *mut s_Solver, rid: Id, whatp: *mut Id) -> Id;
@@ -4775,12 +4322,7 @@ extern "C" {
     pub fn solver_rule2solvable(solv: *mut s_Solver, rid: Id) -> Id;
 }
 extern "C" {
-    pub fn solver_rule2rules(
-        solv: *mut s_Solver,
-        rid: Id,
-        q: *mut Queue,
-        recursive: ::std::os::raw::c_int,
-    );
+    pub fn solver_rule2rules(solv: *mut s_Solver, rid: Id, q: *mut Queue, recursive: libc::c_int);
 }
 extern "C" {
     pub fn solver_rule2pkgrule(solv: *mut s_Solver, rid: Id) -> Id;
@@ -4798,22 +4340,22 @@ extern "C" {
     pub fn solver_fixproblem(solv: *mut s_Solver, rid: Id);
 }
 extern "C" {
-    pub fn solver_autouninstall(solv: *mut s_Solver, start: ::std::os::raw::c_int) -> Id;
+    pub fn solver_autouninstall(solv: *mut s_Solver, start: libc::c_int) -> Id;
 }
 extern "C" {
-    pub fn solver_disableproblemset(solv: *mut s_Solver, start: ::std::os::raw::c_int);
+    pub fn solver_disableproblemset(solv: *mut s_Solver, start: libc::c_int);
 }
 extern "C" {
-    pub fn solver_prepare_solutions(solv: *mut s_Solver) -> ::std::os::raw::c_int;
+    pub fn solver_prepare_solutions(solv: *mut s_Solver) -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_problem_count(solv: *mut s_Solver) -> ::std::os::raw::c_uint;
+    pub fn solver_problem_count(solv: *mut s_Solver) -> libc::c_uint;
 }
 extern "C" {
     pub fn solver_next_problem(solv: *mut s_Solver, problem: Id) -> Id;
 }
 extern "C" {
-    pub fn solver_solution_count(solv: *mut s_Solver, problem: Id) -> ::std::os::raw::c_uint;
+    pub fn solver_solution_count(solv: *mut s_Solver, problem: Id) -> libc::c_uint;
 }
 extern "C" {
     pub fn solver_next_solution(solv: *mut s_Solver, problem: Id, solution: Id) -> Id;
@@ -4823,7 +4365,7 @@ extern "C" {
         solv: *mut s_Solver,
         problem: Id,
         solution: Id,
-    ) -> ::std::os::raw::c_uint;
+    ) -> libc::c_uint;
 }
 extern "C" {
     pub fn solver_solutionelement_internalid(solv: *mut s_Solver, problem: Id, solution: Id) -> Id;
@@ -4870,17 +4412,13 @@ extern "C" {
         source: Id,
         target: Id,
         dep: Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solver_problem2str(solv: *mut s_Solver, problem: Id) -> *const ::std::os::raw::c_char;
+    pub fn solver_problem2str(solv: *mut s_Solver, problem: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn solver_solutionelement2str(
-        solv: *mut s_Solver,
-        p: Id,
-        rp: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn solver_solutionelement2str(solv: *mut s_Solver, p: Id, rp: Id) -> *const libc::c_char;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -4888,13 +4426,10 @@ pub struct s_Solver {
     pub pool: *mut Pool,
     pub job: Queue,
     pub solution_callback: ::std::option::Option<
-        unsafe extern "C" fn(
-            solv: *mut s_Solver,
-            data: *mut ::std::os::raw::c_void,
-        ) -> ::std::os::raw::c_int,
+        unsafe extern "C" fn(solv: *mut s_Solver, data: *mut libc::c_void) -> libc::c_int,
     >,
-    pub solution_callback_data: *mut ::std::os::raw::c_void,
-    pub pooljobcnt: ::std::os::raw::c_int,
+    pub solution_callback_data: *mut libc::c_void,
+    pub pooljobcnt: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Solver() {
@@ -4969,37 +4504,29 @@ extern "C" {
     pub fn solver_free(solv: *mut Solver);
 }
 extern "C" {
-    pub fn solver_solve(solv: *mut Solver, job: *mut Queue) -> ::std::os::raw::c_int;
+    pub fn solver_solve(solv: *mut Solver, job: *mut Queue) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_create_transaction(solv: *mut Solver) -> *mut Transaction;
 }
 extern "C" {
-    pub fn solver_set_flag(
-        solv: *mut Solver,
-        flag: ::std::os::raw::c_int,
-        value: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn solver_set_flag(solv: *mut Solver, flag: libc::c_int, value: libc::c_int)
+        -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_get_flag(solv: *mut Solver, flag: ::std::os::raw::c_int)
-        -> ::std::os::raw::c_int;
+    pub fn solver_get_flag(solv: *mut Solver, flag: libc::c_int) -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_get_decisionlevel(solv: *mut Solver, p: Id) -> ::std::os::raw::c_int;
+    pub fn solver_get_decisionlevel(solv: *mut Solver, p: Id) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_get_decisionqueue(solv: *mut Solver, decisionq: *mut Queue);
 }
 extern "C" {
-    pub fn solver_get_lastdecisionblocklevel(solv: *mut Solver) -> ::std::os::raw::c_int;
+    pub fn solver_get_lastdecisionblocklevel(solv: *mut Solver) -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_get_decisionblock(
-        solv: *mut Solver,
-        level: ::std::os::raw::c_int,
-        decisionq: *mut Queue,
-    );
+    pub fn solver_get_decisionblock(solv: *mut Solver, level: libc::c_int, decisionq: *mut Queue);
 }
 extern "C" {
     pub fn solver_get_orphaned(solv: *mut Solver, orphanedq: *mut Queue);
@@ -5009,42 +4536,34 @@ extern "C" {
         solv: *mut Solver,
         recommendationsq: *mut Queue,
         suggestionsq: *mut Queue,
-        noselected: ::std::os::raw::c_int,
+        noselected: libc::c_int,
     );
 }
 extern "C" {
-    pub fn solver_get_unneeded(
-        solv: *mut Solver,
-        unneededq: *mut Queue,
-        filtered: ::std::os::raw::c_int,
-    );
+    pub fn solver_get_unneeded(solv: *mut Solver, unneededq: *mut Queue, filtered: libc::c_int);
 }
 extern "C" {
-    pub fn solver_get_userinstalled(solv: *mut Solver, q: *mut Queue, flags: ::std::os::raw::c_int);
+    pub fn solver_get_userinstalled(solv: *mut Solver, q: *mut Queue, flags: libc::c_int);
 }
 extern "C" {
     pub fn pool_add_userinstalled_jobs(
         pool: *mut Pool,
         q: *mut Queue,
         job: *mut Queue,
-        flags: ::std::os::raw::c_int,
+        flags: libc::c_int,
     );
 }
 extern "C" {
     pub fn solver_get_cleandeps(solv: *mut Solver, cleandepsq: *mut Queue);
 }
 extern "C" {
-    pub fn solver_describe_decision(
-        solv: *mut Solver,
-        p: Id,
-        infop: *mut Id,
-    ) -> ::std::os::raw::c_int;
+    pub fn solver_describe_decision(solv: *mut Solver, p: Id, infop: *mut Id) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_describe_weakdep_decision(solv: *mut Solver, p: Id, whyq: *mut Queue);
 }
 extern "C" {
-    pub fn solver_alternatives_count(solv: *mut Solver) -> ::std::os::raw::c_int;
+    pub fn solver_alternatives_count(solv: *mut Solver) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_get_alternative(
@@ -5054,8 +4573,8 @@ extern "C" {
         fromp: *mut Id,
         chosenp: *mut Id,
         choices: *mut Queue,
-        levelp: *mut ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        levelp: *mut libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solver_calculate_multiversionmap(
@@ -5075,69 +4594,51 @@ extern "C" {
     );
 }
 extern "C" {
-    pub fn solver_calc_duchanges(
-        solv: *mut Solver,
-        mps: *mut DUChanges,
-        nmps: ::std::os::raw::c_int,
-    );
+    pub fn solver_calc_duchanges(solv: *mut Solver, mps: *mut DUChanges, nmps: libc::c_int);
 }
 extern "C" {
-    pub fn solver_calc_installsizechange(solv: *mut Solver) -> ::std::os::raw::c_int;
+    pub fn solver_calc_installsizechange(solv: *mut Solver) -> libc::c_int;
 }
 extern "C" {
     pub fn pool_job2solvables(pool: *mut Pool, pkgs: *mut Queue, how: Id, what: Id);
 }
 extern "C" {
-    pub fn pool_isemptyupdatejob(pool: *mut Pool, how: Id, what: Id) -> ::std::os::raw::c_int;
+    pub fn pool_isemptyupdatejob(pool: *mut Pool, how: Id, what: Id) -> libc::c_int;
 }
 extern "C" {
-    pub fn solver_select2str(
-        pool: *mut Pool,
-        select: Id,
-        what: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn solver_select2str(pool: *mut Pool, select: Id, what: Id) -> *const libc::c_char;
 }
 extern "C" {
-    pub fn pool_job2str(
-        pool: *mut Pool,
-        how: Id,
-        what: Id,
-        flagmask: Id,
-    ) -> *const ::std::os::raw::c_char;
+    pub fn pool_job2str(pool: *mut Pool, how: Id, what: Id, flagmask: Id) -> *const libc::c_char;
 }
 extern "C" {
     pub fn solver_alternative2str(
         solv: *mut Solver,
-        type_: ::std::os::raw::c_int,
+        type_: libc::c_int,
         id: Id,
         from: Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn solver_trivial_installable(solv: *mut Solver, pkgs: *mut Queue, res: *mut Queue);
 }
 extern "C" {
-    pub fn solver_printruleelement(
-        solv: *mut Solver,
-        type_: ::std::os::raw::c_int,
-        r: *mut Rule,
-        v: Id,
-    );
+    pub fn solver_printruleelement(solv: *mut Solver, type_: libc::c_int, r: *mut Rule, v: Id);
 }
 extern "C" {
-    pub fn solver_printrule(solv: *mut Solver, type_: ::std::os::raw::c_int, r: *mut Rule);
+    pub fn solver_printrule(solv: *mut Solver, type_: libc::c_int, r: *mut Rule);
 }
 extern "C" {
-    pub fn solver_printruleclass(solv: *mut Solver, type_: ::std::os::raw::c_int, r: *mut Rule);
+    pub fn solver_printruleclass(solv: *mut Solver, type_: libc::c_int, r: *mut Rule);
 }
 extern "C" {
     pub fn solver_printproblem(solv: *mut Solver, v: Id);
 }
 extern "C" {
-    pub fn solver_printwatches(solv: *mut Solver, type_: ::std::os::raw::c_int);
+    pub fn solver_printwatches(solv: *mut Solver, type_: libc::c_int);
 }
 extern "C" {
-    pub fn solver_printdecisionq(solv: *mut Solver, type_: ::std::os::raw::c_int);
+    pub fn solver_printdecisionq(solv: *mut Solver, type_: libc::c_int);
 }
 extern "C" {
     pub fn solver_printdecisions(solv: *mut Solver);
@@ -5167,49 +4668,49 @@ extern "C" {
     pub fn selection_make(
         pool: *mut Pool,
         selection: *mut Queue,
-        name: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        name: *const libc::c_char,
+        flags: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn selection_make_matchdeps(
         pool: *mut Pool,
         selection: *mut Queue,
-        name: *const ::std::os::raw::c_char,
-        flags: ::std::os::raw::c_int,
-        keyname: ::std::os::raw::c_int,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        name: *const libc::c_char,
+        flags: libc::c_int,
+        keyname: libc::c_int,
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn selection_make_matchdepid(
         pool: *mut Pool,
         selection: *mut Queue,
         dep: Id,
-        flags: ::std::os::raw::c_int,
-        keyname: ::std::os::raw::c_int,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        flags: libc::c_int,
+        keyname: libc::c_int,
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn selection_make_matchsolvable(
         pool: *mut Pool,
         selection: *mut Queue,
         solvid: Id,
-        flags: ::std::os::raw::c_int,
-        keyname: ::std::os::raw::c_int,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        flags: libc::c_int,
+        keyname: libc::c_int,
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn selection_make_matchsolvablelist(
         pool: *mut Pool,
         selection: *mut Queue,
         solvidq: *mut Queue,
-        flags: ::std::os::raw::c_int,
-        keyname: ::std::os::raw::c_int,
-        marker: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        flags: libc::c_int,
+        keyname: libc::c_int,
+        marker: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn selection_filter(pool: *mut Pool, sel1: *mut Queue, sel2: *mut Queue);
@@ -5228,62 +4729,58 @@ extern "C" {
         pool: *mut Pool,
         selection: *mut Queue,
         flagmask: Id,
-    ) -> *const ::std::os::raw::c_char;
+    ) -> *const libc::c_char;
 }
 extern "C" {
     pub fn pool_evrcmp_conda(
         pool: *const Pool,
-        evr1: *const ::std::os::raw::c_char,
-        evr2: *const ::std::os::raw::c_char,
-        mode: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        evr1: *const libc::c_char,
+        evr2: *const libc::c_char,
+        mode: libc::c_int,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn solvable_conda_matchversion(
         s: *mut Solvable,
-        version: *const ::std::os::raw::c_char,
-    ) -> ::std::os::raw::c_int;
+        version: *const libc::c_char,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn pool_addrelproviders_conda(pool: *mut Pool, name: Id, evr: Id, plist: *mut Queue) -> Id;
 }
 extern "C" {
-    pub fn pool_conda_matchspec(pool: *mut Pool, name: *const ::std::os::raw::c_char) -> Id;
+    pub fn pool_conda_matchspec(pool: *mut Pool, name: *const libc::c_char) -> Id;
 }
 extern "C" {
-    pub fn repo_add_solv(
-        repo: *mut Repo,
-        fp: *mut FILE,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn repo_add_solv(repo: *mut Repo, fp: *mut FILE, flags: libc::c_int) -> libc::c_int;
 }
 extern "C" {
     pub fn solv_read_userdata(
         fp: *mut FILE,
-        datap: *mut *mut ::std::os::raw::c_uchar,
-        lenp: *mut ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+        datap: *mut *mut libc::c_uchar,
+        lenp: *mut libc::c_int,
+    ) -> libc::c_int;
 }
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct s_Repowriter {
     pub repo: *mut Repo,
-    pub flags: ::std::os::raw::c_int,
-    pub repodatastart: ::std::os::raw::c_int,
-    pub repodataend: ::std::os::raw::c_int,
-    pub solvablestart: ::std::os::raw::c_int,
-    pub solvableend: ::std::os::raw::c_int,
+    pub flags: libc::c_int,
+    pub repodatastart: libc::c_int,
+    pub repodataend: libc::c_int,
+    pub solvablestart: libc::c_int,
+    pub solvableend: libc::c_int,
     pub keyfilter: ::std::option::Option<
         unsafe extern "C" fn(
             repo: *mut Repo,
             key: *mut Repokey,
-            kfdata: *mut ::std::os::raw::c_void,
-        ) -> ::std::os::raw::c_int,
+            kfdata: *mut libc::c_void,
+        ) -> libc::c_int,
     >,
-    pub kfdata: *mut ::std::os::raw::c_void,
+    pub kfdata: *mut libc::c_void,
     pub keyq: *mut Queue,
-    pub userdata: *mut ::std::os::raw::c_void,
-    pub userdatalen: ::std::os::raw::c_int,
+    pub userdata: *mut libc::c_void,
+    pub userdatalen: libc::c_int,
 }
 #[test]
 fn bindgen_test_layout_s_Repowriter() {
@@ -5418,7 +4915,7 @@ extern "C" {
     pub fn repowriter_free(writer: *mut Repowriter) -> *mut Repowriter;
 }
 extern "C" {
-    pub fn repowriter_set_flags(writer: *mut Repowriter, flags: ::std::os::raw::c_int);
+    pub fn repowriter_set_flags(writer: *mut Repowriter, flags: libc::c_int);
 }
 extern "C" {
     pub fn repowriter_set_keyfilter(
@@ -5427,10 +4924,10 @@ extern "C" {
             unsafe extern "C" fn(
                 repo: *mut Repo,
                 key: *mut Repokey,
-                kfdata: *mut ::std::os::raw::c_void,
-            ) -> ::std::os::raw::c_int,
+                kfdata: *mut libc::c_void,
+            ) -> libc::c_int,
         >,
-        kfdata: *mut ::std::os::raw::c_void,
+        kfdata: *mut libc::c_void,
     );
 }
 extern "C" {
@@ -5439,39 +4936,39 @@ extern "C" {
 extern "C" {
     pub fn repowriter_set_repodatarange(
         writer: *mut Repowriter,
-        repodatastart: ::std::os::raw::c_int,
-        repodataend: ::std::os::raw::c_int,
+        repodatastart: libc::c_int,
+        repodataend: libc::c_int,
     );
 }
 extern "C" {
     pub fn repowriter_set_solvablerange(
         writer: *mut Repowriter,
-        solvablestart: ::std::os::raw::c_int,
-        solvableend: ::std::os::raw::c_int,
+        solvablestart: libc::c_int,
+        solvableend: libc::c_int,
     );
 }
 extern "C" {
     pub fn repowriter_set_userdata(
         writer: *mut Repowriter,
-        data: *const ::std::os::raw::c_void,
-        len: ::std::os::raw::c_int,
+        data: *const libc::c_void,
+        len: libc::c_int,
     );
 }
 extern "C" {
-    pub fn repowriter_write(writer: *mut Repowriter, fp: *mut FILE) -> ::std::os::raw::c_int;
+    pub fn repowriter_write(writer: *mut Repowriter, fp: *mut FILE) -> libc::c_int;
 }
 extern "C" {
-    pub fn repo_write(repo: *mut Repo, fp: *mut FILE) -> ::std::os::raw::c_int;
+    pub fn repo_write(repo: *mut Repo, fp: *mut FILE) -> libc::c_int;
 }
 extern "C" {
-    pub fn repodata_write(data: *mut Repodata, fp: *mut FILE) -> ::std::os::raw::c_int;
+    pub fn repodata_write(data: *mut Repodata, fp: *mut FILE) -> libc::c_int;
 }
 extern "C" {
     pub fn repo_write_stdkeyfilter(
         repo: *mut Repo,
         key: *mut Repokey,
-        kfdata: *mut ::std::os::raw::c_void,
-    ) -> ::std::os::raw::c_int;
+        kfdata: *mut libc::c_void,
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn repo_write_filtered(
@@ -5481,12 +4978,12 @@ extern "C" {
             unsafe extern "C" fn(
                 repo: *mut Repo,
                 key: *mut Repokey,
-                kfdata: *mut ::std::os::raw::c_void,
-            ) -> ::std::os::raw::c_int,
+                kfdata: *mut libc::c_void,
+            ) -> libc::c_int,
         >,
-        kfdata: *mut ::std::os::raw::c_void,
+        kfdata: *mut libc::c_void,
         keyq: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
     pub fn repodata_write_filtered(
@@ -5496,17 +4993,13 @@ extern "C" {
             unsafe extern "C" fn(
                 repo: *mut Repo,
                 key: *mut Repokey,
-                kfdata: *mut ::std::os::raw::c_void,
-            ) -> ::std::os::raw::c_int,
+                kfdata: *mut libc::c_void,
+            ) -> libc::c_int,
         >,
-        kfdata: *mut ::std::os::raw::c_void,
+        kfdata: *mut libc::c_void,
         keyq: *mut Queue,
-    ) -> ::std::os::raw::c_int;
+    ) -> libc::c_int;
 }
 extern "C" {
-    pub fn repo_add_conda(
-        repo: *mut Repo,
-        fp: *mut FILE,
-        flags: ::std::os::raw::c_int,
-    ) -> ::std::os::raw::c_int;
+    pub fn repo_add_conda(repo: *mut Repo, fp: *mut FILE, flags: libc::c_int) -> libc::c_int;
 }
