@@ -34,6 +34,16 @@ const ALLOWED_VAR_PREFIX: &[&str] = &[
 pub fn generate(mode: Mode) -> anyhow::Result<()> {
     let libsolv_path = project_root().join("crates/rattler_solve/libsolv");
 
+    // Different platforms unfortunately generate different bindings. To that end we also generate
+    // multiple bindings.
+    let target = if cfg!(windows) {
+        "windows"
+    } else if cfg!(unix) {
+        "unix"
+    } else {
+        anyhow::bail!("unsupported platform");
+    };
+
     // Normally the `solvversion.h` is generated from the `solverversion.h.in` by CMake when
     // building libsolv. However, for the bindings we don't need that much information from that
     // file. So to be able to generate proper bindings we use a drop-in-replacement for this file
@@ -75,7 +85,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
-        .blocklist_type("(FILE|_iobuf| _IO_FILE)")
+        .blocklist_type("(FILE|_iobuf|_IO_FILE)")
         .disable_header_comment()
         .layout_tests(false)
         .generate()?;
@@ -90,7 +100,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
     // Write (or check) the bindings
     update(
         &project_root().join(format!(
-            "crates/rattler_solve/src/libsolv/wrapper/ffi.rs"
+            "crates/rattler_solve/src/libsolv/wrapper/ffi/{target}.rs"
         )),
         &libsolv_bindings,
         mode,
