@@ -1,13 +1,14 @@
 [package]
 name = "rattler_shell"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "A crate to help with activation and deactivation of a conda environment"
 categories = ["conda", "mamba", "package_management", "virtual_environment"]
-homepage = "https://github.com/mamba-org/rattler"
-repository = "https://github.com/mamba-org/rattler"
-license = "BSD-3-Clause"
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
 
 [dependencies]
 thiserror = "1.0.30"
