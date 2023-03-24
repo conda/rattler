@@ -68,7 +68,7 @@ mod test {
     #[test]
     fn libsolv_bindings_up_to_date() {
         if let Err(error) = super::libsolv_bindings::generate(Mode::Verify) {
-            panic!("{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\n");
+            panic!("{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\nMake sure you run that command both on Windows and on a unix machine!\n");
         }
     }
 }
