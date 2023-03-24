@@ -111,7 +111,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("Id")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
-        .blocklist_type("(FILE|_iobuf|_IO_.*)")
+        .blocklist_type("(FILE|_iobuf|_IO_.*|__.*)")
         .disable_header_comment()
         .layout_tests(false)
         .generate()?;
