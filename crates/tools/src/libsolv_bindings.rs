@@ -84,6 +84,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
+        .disable_header_comment()
         .generate()?;
 
     // Generate the actual bindings and format them
