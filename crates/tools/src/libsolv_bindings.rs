@@ -34,16 +34,6 @@ const ALLOWED_VAR_PREFIX: &[&str] = &[
 pub fn generate(mode: Mode) -> anyhow::Result<()> {
     let libsolv_path = project_root().join("crates/rattler_solve/libsolv");
 
-    // The bindings for libsolv are different for Unix and Windows because of the use of lib types.
-    // To work around that issue we generate bindings for the two different platforms seperately.
-    let suffix = if cfg!(windows) {
-        "windows"
-    } else if cfg!(unix) {
-        "unix"
-    } else {
-        anyhow::bail!("only unix and windows are supported platforms for libsolv bindings");
-    };
-
     // Normally the `solvversion.h` is generated from the `solverversion.h.in` by CMake when
     // building libsolv. However, for the bindings we don't need that much information from that
     // file. So to be able to generate proper bindings we use a drop-in-replacement for this file
@@ -85,8 +75,9 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
         .allowlist_type("(Id|solv_knownid)")
         .allowlist_var(format!("({}).*", ALLOWED_VAR_PREFIX.join("|")))
         .allowlist_function(format!("({}).*", ALLOWED_FUNC_PREFIX.join("|")))
-        .blocklist_type("FILE")
+        .blocklist_type("(FILE|_iobuf| _IO_FILE)")
         .disable_header_comment()
+        .layout_tests(false)
         .generate()?;
 
     // Generate the actual bindings and format them
