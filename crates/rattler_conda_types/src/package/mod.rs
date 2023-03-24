@@ -10,6 +10,7 @@ mod index;
 mod link;
 mod no_link;
 mod no_softlink;
+mod package_metadata;
 mod paths;
 mod run_exports;
 
@@ -27,6 +28,7 @@ pub use {
     link::{LinkJson, NoArchLinks, PythonEntryPoints},
     no_link::NoLink,
     no_softlink::NoSoftlink,
+    package_metadata::PackageMetadata,
     paths::{FileMode, PathType, PathsEntry, PathsJson},
     run_exports::RunExportsJson,
 };

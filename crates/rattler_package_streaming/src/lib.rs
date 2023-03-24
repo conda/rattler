@@ -11,6 +11,7 @@ pub mod reqwest;
 pub mod fs;
 #[cfg(feature = "tokio")]
 pub mod tokio;
+pub mod write;
 
 /// An error that can occur when extracting a package archive.
 #[derive(thiserror::Error, Debug)]
