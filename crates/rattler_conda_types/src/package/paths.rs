@@ -166,7 +166,7 @@ pub struct PathsEntry {
     pub path_type: PathType,
 
     /// The type of the file, either binary or text.
-    // #[serde(default, skip_serializing_if = "FileMode::is_binary")]
+    #[serde(default)]
     pub file_mode: FileMode,
 
     /// Optionally the placeholder prefix used in the file. If this value is `None` the prefix is not
