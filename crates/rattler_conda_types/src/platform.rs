@@ -72,7 +72,12 @@ impl Platform {
                 target_arch = "x86_64",
                 target_arch = "x86",
                 target_arch = "riscv32",
-                target_arch = "riscv64"
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "arm",
+                target_arch = "powerpc64le",
+                target_arch = "powerpc64",
+                target_arch = "s390x"
             )))]
             compile_error!("unsupported linux architecture");
         }
@@ -105,7 +110,12 @@ impl Platform {
             return Platform::Emscripten32;
         }
 
-        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "emscripten",
+            windows
+        )))]
         compile_error!("unsupported target os");
     }
 
