@@ -41,6 +41,27 @@ impl Platform {
             #[cfg(target_arch = "x86_64")]
             return Platform::Linux64;
 
+            #[cfg(target_arch = "aarch64")]
+            return Platform::LinuxAarch64;
+
+            #[cfg(target_arch = "arm")]
+            {
+                #[cfg(target_feature = "v7")]
+                return Platform::LinuxArmV7l;
+
+                #[cfg(not(target_feature = "v7"))]
+                return Platform::LinuxArmV6l;
+            }
+
+            #[cfg(target_arch = "powerpc64le")]
+            return Platform::LinuxPpc64le;
+
+            #[cfg(target_arch = "powerpc64")]
+            return Platform::LinuxPpc64;
+
+            #[cfg(target_arch = "s390x")]
+            return Platform::LinuxS390X;
+
             #[cfg(target_arch = "riscv32")]
             return Platform::LinuxRiscv32;
 
@@ -51,7 +72,12 @@ impl Platform {
                 target_arch = "x86_64",
                 target_arch = "x86",
                 target_arch = "riscv32",
-                target_arch = "riscv64"
+                target_arch = "riscv64",
+                target_arch = "aarch64",
+                target_arch = "arm",
+                target_arch = "powerpc64le",
+                target_arch = "powerpc64",
+                target_arch = "s390x"
             )))]
             compile_error!("unsupported linux architecture");
         }
@@ -77,7 +103,19 @@ impl Platform {
             #[cfg(target_arch = "aarch64")]
             return Platform::OsxArm64;
         }
-        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
+
+        #[cfg(target_os = "emscripten")]
+        {
+            #[cfg(target_arch = "wasm32")]
+            return Platform::Emscripten32;
+        }
+
+        #[cfg(not(any(
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "emscripten",
+            windows
+        )))]
         compile_error!("unsupported target os");
     }
 
