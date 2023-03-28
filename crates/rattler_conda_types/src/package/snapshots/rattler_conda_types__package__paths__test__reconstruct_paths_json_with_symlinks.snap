@@ -6,22 +6,16 @@ paths_version: 1
 paths:
   - _path: include/zconf.h
     path_type: hardlink
-    file_mode: text
   - _path: include/zlib.h
     path_type: hardlink
-    file_mode: text
   - _path: lib/libz.a
     path_type: hardlink
-    file_mode: text
   - _path: lib/libz.so
     path_type: softlink
-    file_mode: text
   - _path: lib/libz.so.1
     path_type: softlink
-    file_mode: text
   - _path: lib/libz.so.1.2.8
     path_type: hardlink
-    file_mode: text
   - _path: lib/pkgconfig/zlib.pc
     path_type: hardlink
     file_mode: text
