@@ -1,6 +1,6 @@
 use crate::install::python::PythonInfo;
 use apple_codesign::{SigningSettings, UnifiedSigner};
-use rattler_conda_types::package::{FileMode, PathType, PathsEntry};
+use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use sha2::Sha256;
@@ -101,7 +101,11 @@ pub fn link_file(
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
-    if let Some(prefix_placeholder) = path_json_entry.prefix_placeholder.as_deref() {
+    if let Some(PrefixPlaceholder {
+        file_mode,
+        placeholder,
+    }) = path_json_entry.prefix_placeholder.as_ref()
+    {
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
         let source = {
@@ -140,9 +144,9 @@ pub fn link_file(
         copy_and_replace_placholders(
             source.as_ref(),
             &mut destination_writer,
-            prefix_placeholder,
+            placeholder,
             &target_prefix,
-            path_json_entry.file_mode,
+            *file_mode,
         )?;
 
         let (mut file, current_hash) = destination_writer.finalize();
@@ -165,7 +169,7 @@ pub fn link_file(
         // (re)sign the binary if the file is executable
         if has_executable_permissions(&metadata.permissions())
             && target_platform == Platform::OsxArm64
-            && path_json_entry.file_mode == FileMode::Binary
+            && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
             let original_hash = path_json_entry

@@ -29,7 +29,7 @@ pub use {
     no_link::NoLink,
     no_softlink::NoSoftlink,
     package_metadata::PackageMetadata,
-    paths::{FileMode, PathType, PathsEntry, PathsJson},
+    paths::{FileMode, PathType, PathsEntry, PathsJson, PrefixPlaceholder},
     run_exports::RunExportsJson,
 };
 

@@ -97,11 +97,10 @@ impl PathsJson {
                     match path_type {
                         Ok(path_type) => Ok(PathsEntry {
                             path_type,
-                            file_mode: prefix
-                                .map(|entry| entry.file_mode)
-                                .unwrap_or(FileMode::Text),
-                            prefix_placeholder: prefix
-                                .map(|entry| entry.prefix.as_ref().to_owned()),
+                            prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
+                                file_mode: entry.file_mode,
+                                placeholder: entry.prefix.as_ref().to_owned(),
+                            }),
                             no_link: no_link.contains(&path),
                             sha256: None,
                             size_in_bytes: None,
@@ -155,6 +154,20 @@ impl PathsJson {
     }
 }
 
+/// Description off a placeholder text found in a file that must be replaced when installing the
+/// file into the prefix.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+pub struct PrefixPlaceholder {
+    /// The type of the file, either binary or text. Depending on the type of file either text
+    /// replacement is performed or CString replacement.
+    pub file_mode: FileMode,
+
+    /// The placeholder prefix used in the file. This is the path of the prefix when the package
+    /// was build.
+    #[serde(rename = "prefix_placeholder")]
+    pub placeholder: String,
+}
+
 /// A single entry in the `paths.json` file.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct PathsEntry {
@@ -165,14 +178,10 @@ pub struct PathsEntry {
     /// Determines how to include the file when installing the package
     pub path_type: PathType,
 
-    /// The type of the file, either binary or text.
-    #[serde(default, skip_serializing_if = "FileMode::is_binary")]
-    pub file_mode: FileMode,
-
     /// Optionally the placeholder prefix used in the file. If this value is `None` the prefix is not
     /// present in the file.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prefix_placeholder: Option<String>,
+    #[serde(default, flatten, skip_serializing_if = "Option::is_none")]
+    pub prefix_placeholder: Option<PrefixPlaceholder>,
 
     /// Whether or not this file should be linked or not when installing the package.
     #[serde(
@@ -212,19 +221,6 @@ pub enum PathType {
     SoftLink,
     /// This should explicitly create an empty directory
     Directory,
-}
-
-impl Default for FileMode {
-    fn default() -> Self {
-        FileMode::Binary
-    }
-}
-
-impl FileMode {
-    /// Returns `true` if the file type is a binary file.
-    pub fn is_binary(&self) -> bool {
-        matches!(self, FileMode::Binary)
-    }
 }
 
 /// Returns the default value for the "no_link" value of a [`PathsEntry`]
