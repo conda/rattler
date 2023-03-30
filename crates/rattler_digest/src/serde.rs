@@ -18,7 +18,7 @@ use digest::{Digest, Output};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
-use std::fmt::{Display, LowerHex};
+use std::fmt::LowerHex;
 use std::ops::Deref;
 
 /// Deserialize into [`Output`] of a [`Digest`]
@@ -42,31 +42,7 @@ where
 }
 
 /// Wrapper type for easily serializing a Hash
-#[derive(Debug, Clone)]
 pub struct SerializableHash<T: Digest>(pub Output<T>);
-
-impl<T: Digest> PartialEq for SerializableHash<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.eq(&other.0)
-    }
-}
-
-impl<T: Digest> Eq for SerializableHash<T> {}
-
-impl<T: Digest> std::hash::Hash for SerializableHash<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state)
-    }
-}
-
-impl<T: Digest> Display for SerializableHash<T>
-where
-    Output<T>: LowerHex,
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{digest:x}", digest = self.0)
-    }
-}
 
 impl<T: Digest> Serialize for SerializableHash<T>
 where
