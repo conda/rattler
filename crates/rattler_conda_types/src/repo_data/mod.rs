@@ -20,7 +20,7 @@ use crate::{Channel, NoArchType, RepoDataRecord, Version};
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
 // serialized in a special way. Therefore we do it manually.
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct RepoData {
     /// The channel information contained in the repodata.json file
     pub info: Option<ChannelInfo>,
@@ -48,7 +48,7 @@ pub struct RepoData {
 }
 
 /// Information about subdirectory of channel in the Conda [`RepoData`]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct ChannelInfo {
     /// The channel's subdirectory
     pub subdir: String,
