@@ -1,7 +1,9 @@
 use super::PackageFile;
 use crate::package::has_prefix::HasPrefixEntry;
 use crate::package::{Files, HasPrefix, NoLink, NoSoftlink};
+use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -169,7 +171,8 @@ pub struct PrefixPlaceholder {
 }
 
 /// A single entry in the `paths.json` file.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[serde_as]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PathsEntry {
     /// The relative path from the root of the package
     #[serde(rename = "_path")]
@@ -192,8 +195,9 @@ pub struct PathsEntry {
 
     /// A hex representation of the SHA256 hash of the contents of the file.
     /// This entry is only present in version 1 of the paths.json file.
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<String>,
+    pub sha256: Option<rattler_digest::Sha256Hash>,
 
     /// The size of the file in bytes
     /// This entry is only present in version 1 of the paths.json file.

@@ -52,12 +52,17 @@ pub fn create_windows_python_entry_point(
     let launcher_bytes = include_bytes!("../../resources/launcher.exe");
     std::fs::write(target_dir.join(&relative_path_script_exe), launcher_bytes)?;
 
+    let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+        "28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a",
+    )
+    .unwrap();
+
     Ok([
         PathsEntry {
             relative_path: relative_path_script_py,
             path_type: PathType::WindowsPythonEntryPointScript,
             no_link: false,
-            sha256: Some(format!("{:x}", hash)),
+            sha256: Some(hash),
             sha256_in_prefix: None,
             size_in_bytes: Some(size as _),
         },
@@ -65,7 +70,7 @@ pub fn create_windows_python_entry_point(
             relative_path: relative_path_script_exe,
             path_type: PathType::WindowsPythonEntryPointExe,
             no_link: false,
-            sha256: Some("28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a".into()),
+            sha256: Some(fixed_launcher_digest),
             sha256_in_prefix: None,
             size_in_bytes: Some(launcher_bytes.len() as u64),
         },
@@ -109,7 +114,7 @@ pub fn create_unix_python_entry_point(
         relative_path,
         path_type: PathType::UnixPythonEntryPoint,
         no_link: false,
-        sha256: Some(format!("{:x}", hash)),
+        sha256: Some(hash),
         sha256_in_prefix: None,
         size_in_bytes: Some(size as _),
     })

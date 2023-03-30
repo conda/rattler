@@ -2,8 +2,10 @@
 
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
+use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_with::serde_as;
 use std::fs::File;
 use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
@@ -47,6 +49,7 @@ impl From<Vec<PathsEntry>> for PrefixPaths {
 /// This struct is similar to the [`crate::package::PathsEntry`] struct. The difference is that this
 /// information refers to installed files whereas [`crate::package::PathsEntry`] describes the
 /// instructions on how to install a file.
+#[serde_as]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct PathsEntry {
     /// The relative path from the root of the package
@@ -64,12 +67,14 @@ pub struct PathsEntry {
     pub no_link: bool,
 
     /// A hex representation of the SHA256 hash of the contents of the file.
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sha256: Option<String>,
+    pub sha256: Option<rattler_digest::Sha256Hash>,
 
     /// A hex representation of the SHA256 hash of the original file from which this was created.
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sha256_in_prefix: Option<String>,
+    pub sha256_in_prefix: Option<rattler_digest::Sha256Hash>,
 
     /// The size of the file in bytes
     #[serde(default, skip_serializing_if = "Option::is_none")]

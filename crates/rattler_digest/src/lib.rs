@@ -53,10 +53,10 @@ pub use md5::Md5;
 pub use sha2::Sha256;
 
 /// A type alias for the output of a SHA256 hash.
-pub type Sha256Array = sha2::digest::Output<Sha256>;
+pub type Sha256Hash = sha2::digest::Output<Sha256>;
 
 /// A type alias for the output of an MD5 hash.
-pub type Md5Array = md5::digest::Output<Md5>;
+pub type Md5Hash = md5::digest::Output<Md5>;
 
 /// Compute a hash of the file at the specified location.
 pub fn compute_file_digest<D: Digest + Default + Write>(

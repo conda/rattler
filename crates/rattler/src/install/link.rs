@@ -2,8 +2,8 @@ use crate::install::python::PythonInfo;
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
+use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
-use rattler_digest::{parse_digest_from_hex, HashingWriter};
 use std::borrow::Cow;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
@@ -42,7 +42,7 @@ pub struct LinkedFile {
     pub clobbered: bool,
 
     /// The SHA256 hash of the resulting file.
-    pub sha256: rattler_digest::Sha256Array,
+    pub sha256: rattler_digest::Sha256Hash,
 
     /// The size of the final file in bytes.
     pub file_size: u64,
@@ -172,11 +172,10 @@ pub fn link_file(
             && *file_mode == FileMode::Binary
         {
             // Did the binary actually change?
-            let original_hash = path_json_entry
-                .sha256
-                .as_deref()
-                .and_then(parse_digest_from_hex::<rattler_digest::Sha256>);
-            let content_changed = original_hash != Some(current_hash);
+            let mut content_changed = false;
+            if let Some(original_hash) = &path_json_entry.sha256 {
+                content_changed = original_hash != &current_hash;
+            }
 
             // If the binary changed it requires resigning.
             if content_changed {
@@ -228,11 +227,7 @@ pub fn link_file(
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
-    } else if let Some(sha256) = path_json_entry
-        .sha256
-        .as_deref()
-        .and_then(rattler_digest::parse_digest_from_hex::<Sha256>)
-    {
+    } else if let Some(sha256) = path_json_entry.sha256 {
         sha256
     } else {
         rattler_digest::compute_file_digest::<Sha256>(&destination_path)

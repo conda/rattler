@@ -11,7 +11,7 @@
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
-use rattler_digest::{compute_file_digest, parse_digest_from_hex};
+use rattler_digest::compute_file_digest;
 use std::{
     fs::Metadata,
     io::ErrorKind,
@@ -159,23 +159,14 @@ fn validate_package_hard_link_entry(
     }
 
     // Check the SHA256 hash of the file
-    if let Some(hash_str) = entry.sha256.as_deref() {
+    if let Some(expected_hash) = &entry.sha256 {
         // Determine the hash of the file on disk
         let hash = compute_file_digest::<rattler_digest::Sha256>(&path)?;
 
-        // Convert the hash to bytes.
-        let expected_hash =
-            parse_digest_from_hex::<rattler_digest::Sha256>(hash_str).ok_or_else(|| {
-                PackageEntryValidationError::HashMismatch(
-                    hash_str.to_owned(),
-                    format!("{:x}", hash),
-                )
-            })?;
-
         // Compare the two hashes
-        if expected_hash != hash {
+        if expected_hash != &hash {
             return Err(PackageEntryValidationError::HashMismatch(
-                hash_str.to_owned(),
+                format!("{:x}", expected_hash),
                 format!("{:x}", hash),
             ));
         }

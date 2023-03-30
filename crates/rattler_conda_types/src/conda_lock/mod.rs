@@ -5,7 +5,7 @@
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::{ParsePlatformError, Platform};
 use rattler_digest::serde::SerializableHash;
-use rattler_digest::{Md5Array, Sha256Array};
+use rattler_digest::{Md5Hash, Sha256Hash};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
@@ -156,11 +156,11 @@ impl Display for VersionConstraint {
 /// If neither field is present it returns an error
 pub enum PackageHashes {
     /// Contains an MD5 hash
-    Md5(Md5Array),
+    Md5(Md5Hash),
     /// Contains as Sha256 Hash
-    Sha256(Sha256Array),
+    Sha256(Sha256Hash),
     /// Contains both hashes
-    Md5Sha256(Md5Array, Sha256Array),
+    Md5Sha256(Md5Hash, Sha256Hash),
 }
 
 #[derive(Serialize, Deserialize)]

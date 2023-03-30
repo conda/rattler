@@ -17,7 +17,8 @@
 use digest::{Digest, Output};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::fmt::LowerHex;
+use serde_with::{DeserializeAs, SerializeAs};
+use std::fmt::{Display, LowerHex};
 use std::ops::Deref;
 
 /// Deserialize into [`Output`] of a [`Digest`]
@@ -41,7 +42,31 @@ where
 }
 
 /// Wrapper type for easily serializing a Hash
+#[derive(Debug, Clone)]
 pub struct SerializableHash<T: Digest>(pub Output<T>);
+
+impl<T: Digest> PartialEq for SerializableHash<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq(&other.0)
+    }
+}
+
+impl<T: Digest> Eq for SerializableHash<T> {}
+
+impl<T: Digest> std::hash::Hash for SerializableHash<T> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state)
+    }
+}
+
+impl<T: Digest> Display for SerializableHash<T>
+where
+    Output<T>: LowerHex,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{digest:x}", digest = self.0)
+    }
+}
 
 impl<T: Digest> Serialize for SerializableHash<T>
 where
@@ -82,6 +107,27 @@ impl<T: Digest> Deref for SerializableHash<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<T: Digest> SerializeAs<Output<T>> for SerializableHash<T>
+where
+    for<'a> &'a Output<T>: LowerHex,
+{
+    fn serialize_as<S>(source: &Output<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serialize::<S, T>(source, serializer)
+    }
+}
+
+impl<'de, T: Digest + Default> DeserializeAs<'de, Output<T>> for SerializableHash<T> {
+    fn deserialize_as<D>(deserializer: D) -> Result<Output<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize::<D, T>(deserializer)
     }
 }
 
