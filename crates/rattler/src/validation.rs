@@ -161,12 +161,16 @@ fn validate_package_hard_link_entry(
     // Check the SHA256 hash of the file
     if let Some(hash_str) = entry.sha256.as_deref() {
         // Determine the hash of the file on disk
-        let hash = compute_file_digest::<sha2::Sha256>(&path)?;
+        let hash = compute_file_digest::<rattler_digest::Sha256>(&path)?;
 
         // Convert the hash to bytes.
-        let expected_hash = parse_digest_from_hex::<sha2::Sha256>(hash_str).ok_or_else(|| {
-            PackageEntryValidationError::HashMismatch(hash_str.to_owned(), format!("{:x}", hash))
-        })?;
+        let expected_hash =
+            parse_digest_from_hex::<rattler_digest::Sha256>(hash_str).ok_or_else(|| {
+                PackageEntryValidationError::HashMismatch(
+                    hash_str.to_owned(),
+                    format!("{:x}", hash),
+                )
+            })?;
 
         // Compare the two hashes
         if expected_hash != hash {

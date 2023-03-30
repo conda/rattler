@@ -5,9 +5,9 @@
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::{ParsePlatformError, Platform};
 use rattler_digest::serde::SerializableHash;
+use rattler_digest::{Md5Array, Sha256Array};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::digest::Output;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -156,17 +156,17 @@ impl Display for VersionConstraint {
 /// If neither field is present it returns an error
 pub enum PackageHashes {
     /// Contains an MD5 hash
-    Md5(Output<md5::Md5>),
+    Md5(Md5Array),
     /// Contains as Sha256 Hash
-    Sha256(Output<sha2::Sha256>),
+    Sha256(Sha256Array),
     /// Contains both hashes
-    Md5Sha256(Output<md5::Md5>, Output<sha2::Sha256>),
+    Md5Sha256(Md5Array, Sha256Array),
 }
 
 #[derive(Serialize, Deserialize)]
 struct RawPackageHashes {
-    md5: Option<SerializableHash<md5::Md5>>,
-    sha256: Option<SerializableHash<sha2::Sha256>>,
+    md5: Option<SerializableHash<rattler_digest::Md5>>,
+    sha256: Option<SerializableHash<rattler_digest::Sha256>>,
 }
 
 impl Serialize for PackageHashes {

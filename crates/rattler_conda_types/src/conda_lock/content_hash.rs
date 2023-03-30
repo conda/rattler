@@ -147,8 +147,8 @@ pub fn calculate_content_hash(
     channels: &[Channel],
 ) -> Result<String, CalculateContentHashError> {
     let content_data = calculate_content_data(platform, input_specs, channels)?;
-    let json_str = serde_json::to_string(&SerializableHash::<sha2::Sha256>(
-        rattler_digest::compute_bytes_digest::<sha2::Sha256>(&content_data),
+    let json_str = serde_json::to_string(&SerializableHash::<rattler_digest::Sha256>(
+        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&content_data),
     ))?;
     Ok(json_str)
 }

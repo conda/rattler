@@ -2,8 +2,8 @@ use crate::install::python::PythonInfo;
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
+use rattler_digest::Sha256;
 use rattler_digest::{parse_digest_from_hex, HashingWriter};
-use sha2::Sha256;
 use std::borrow::Cow;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
@@ -42,7 +42,7 @@ pub struct LinkedFile {
     pub clobbered: bool,
 
     /// The SHA256 hash of the resulting file.
-    pub sha256: sha2::digest::Output<sha2::Sha256>,
+    pub sha256: rattler_digest::Sha256Array,
 
     /// The size of the final file in bytes.
     pub file_size: u64,
@@ -117,7 +117,7 @@ pub fn link_file(
         // Open the destination file
         let destination = std::fs::File::create(&destination_path)
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
-        let mut destination_writer = HashingWriter::<_, sha2::Sha256>::new(destination);
+        let mut destination_writer = HashingWriter::<_, rattler_digest::Sha256>::new(destination);
 
         // Convert back-slashes (\) on windows with forward-slashes (/) to avoid problems with
         // string escaping. For instance if we replace the prefix in the following text
@@ -175,7 +175,7 @@ pub fn link_file(
             let original_hash = path_json_entry
                 .sha256
                 .as_deref()
-                .and_then(parse_digest_from_hex::<sha2::Sha256>);
+                .and_then(parse_digest_from_hex::<rattler_digest::Sha256>);
             let content_changed = original_hash != Some(current_hash);
 
             // If the binary changed it requires resigning.

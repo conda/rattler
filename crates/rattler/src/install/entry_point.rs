@@ -5,7 +5,7 @@ use rattler_conda_types::{
     prefix_record::{PathType, PathsEntry},
 };
 use rattler_digest::HashingWriter;
-use sha2::Sha256;
+use rattler_digest::Sha256;
 use std::{fs::File, io, io::Write, path::Path};
 
 /// Creates an "entry point" on disk for a Python entrypoint. Entrypoints are executable files that
