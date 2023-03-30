@@ -239,7 +239,23 @@ fn is_no_link_default(value: &bool) -> bool {
 
 #[cfg(test)]
 mod test {
+    use crate::package::PackageFile;
+
     use super::PathsJson;
+
+    #[test]
+    pub fn roundtrip_paths_json() {
+        // TODO make sure that paths.json is sorted by `_path`!
+        let package_dir = tempfile::tempdir().unwrap();
+        rattler_package_streaming::fs::extract(
+            &crate::get_test_data_dir().join("mamba-1.0.0-py38hecfeebb_2.tar.bz2"),
+            package_dir.path(),
+        )
+        .unwrap();
+
+        let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
+        insta::assert_yaml_snapshot!(paths_json);
+    }
 
     #[test]
     pub fn test_reconstruct_paths_json() {
