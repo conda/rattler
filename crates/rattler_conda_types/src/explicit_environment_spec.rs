@@ -46,9 +46,9 @@ pub struct ExplicitEnvironmentEntry {
 #[derive(Debug, Clone)]
 pub enum PackageArchiveHash {
     /// An MD5 hash for a given package
-    Md5(md5::digest::Output<md5::Md5>),
+    Md5(rattler_digest::Md5Hash),
     /// A SHA256 hash for a given package
-    Sha256(sha2::digest::Output<sha2::Sha256>),
+    Sha256(rattler_digest::Sha256Hash),
 }
 
 /// An error that can occur when parsing a [`PackageArchiveHash`] from a string
@@ -80,14 +80,14 @@ impl FromStr for PackageArchiveHash {
 
         // Parses a SHA256 hash from a string
         fn parse_sha256(str: &str) -> Result<PackageArchiveHash, ParsePackageArchiveHashError> {
-            let mut hash = <sha2::digest::Output<sha2::Sha256>>::default();
+            let mut hash = <rattler_digest::Sha256Hash>::default();
             hex::decode_to_slice(str, &mut hash)
                 .map_err(ParsePackageArchiveHashError::InvalidSha256Hash)?;
             Ok(PackageArchiveHash::Sha256(hash))
         }
 
         fn parse_md5(str: &str) -> Result<PackageArchiveHash, ParsePackageArchiveHashError> {
-            let mut hash = <md5::digest::Output<md5::Md5>>::default();
+            let mut hash = <rattler_digest::Md5Hash>::default();
             hex::decode_to_slice(str, &mut hash)
                 .map_err(ParsePackageArchiveHashError::InvalidMd5Hash)?;
             Ok(PackageArchiveHash::Md5(hash))

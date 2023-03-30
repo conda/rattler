@@ -17,6 +17,7 @@
 use digest::{Digest, Output};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::{DeserializeAs, SerializeAs};
 use std::fmt::LowerHex;
 use std::ops::Deref;
 
@@ -82,6 +83,27 @@ impl<T: Digest> Deref for SerializableHash<T> {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl<T: Digest> SerializeAs<Output<T>> for SerializableHash<T>
+where
+    for<'a> &'a Output<T>: LowerHex,
+{
+    fn serialize_as<S>(source: &Output<T>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serialize::<S, T>(source, serializer)
+    }
+}
+
+impl<'de, T: Digest + Default> DeserializeAs<'de, Output<T>> for SerializableHash<T> {
+    fn deserialize_as<D>(deserializer: D) -> Result<Output<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserialize::<D, T>(deserializer)
     }
 }
 

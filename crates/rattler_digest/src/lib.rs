@@ -49,6 +49,15 @@ pub use digest;
 use digest::{Digest, Output};
 use std::{fs::File, io::Write, path::Path};
 
+pub use md5::Md5;
+pub use sha2::Sha256;
+
+/// A type alias for the output of a SHA256 hash.
+pub type Sha256Hash = sha2::digest::Output<Sha256>;
+
+/// A type alias for the output of an MD5 hash.
+pub type Md5Hash = md5::digest::Output<Md5>;
+
 /// Compute a hash of the file at the specified location.
 pub fn compute_file_digest<D: Digest + Default + Write>(
     path: impl AsRef<Path>,
