@@ -1,0 +1,155 @@
+---
+source: crates/rattler_conda_types/src/package/paths.rs
+expression: paths_json
+---
+paths_version: 1
+paths:
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/INSTALLER
+    path_type: hardlink
+    sha256: d0edee15f91b406f3f99726e44eb990be6e34fd0345b52b910c568e0eef6a2a8
+    size_in_bytes: 5
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/LICENSE
+    path_type: hardlink
+    sha256: 41fd98a468e39d319911bd94f4e65d6ad6a7ea66559dd5aa4112f138ff9b629a
+    size_in_bytes: 1483
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/METADATA
+    path_type: hardlink
+    sha256: 48d8890aebe423cf5f524a7bb8ac5f76021499653bc5962c66fcb6e39983770c
+    size_in_bytes: 500
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/RECORD
+    path_type: hardlink
+    sha256: 6e3d06d645f2dd605fe3409e923b7d6973d25768d911002b97c39a92b65eed55
+    size_in_bytes: 2600
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/REQUESTED
+    path_type: hardlink
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    size_in_bytes: 0
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/WHEEL
+    path_type: hardlink
+    sha256: d34cac92eb22c54a14b79a1bfc2894a7a2ec9cde65ab34c9a68a8e160fc55487
+    size_in_bytes: 92
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/direct_url.json
+    path_type: hardlink
+    sha256: 04797d13c447a487a309781fb5084be28d320228c3ed797850d6d65c71b78ece
+    size_in_bytes: 78
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/entry_points.txt
+    path_type: hardlink
+    sha256: ee2ddcf64c6755fc11151d0dab39ecf77916cd3b3fa62bd3a229b9fe8c67bf4b
+    size_in_bytes: 43
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/top_level.txt
+    path_type: hardlink
+    sha256: 2a9dc054338292439470e7388cd0eb1cec12d9e1021de15909798a2df9918437
+    size_in_bytes: 6
+  - _path: Lib/site-packages/mamba/__init__.py
+    path_type: hardlink
+    sha256: fa769046d0468ad6e2997ea166d20fe0d2af9a840791692a1ebea6099c96a13e
+    size_in_bytes: 140
+  - _path: Lib/site-packages/mamba/__pycache__/__init__.cpython-38.pyc
+    path_type: hardlink
+    sha256: 42b394c9b72224e6b9c6b5f7766c3a9fb2203dab79829a981f2dbd31256b77ac
+    size_in_bytes: 319
+  - _path: Lib/site-packages/mamba/__pycache__/_version.cpython-38.pyc
+    path_type: hardlink
+    sha256: ead3c8d559ad05aa8dbb9fdc7d5e0a0a12c228616123d7c685dee3af3d54539c
+    size_in_bytes: 208
+  - _path: Lib/site-packages/mamba/__pycache__/api.cpython-38.pyc
+    path_type: hardlink
+    sha256: c872eb14c8abbd6bc65e88e989b65e011995beeb74281b1d6d1f3fb4130749f5
+    size_in_bytes: 5333
+  - _path: Lib/site-packages/mamba/__pycache__/linking.cpython-38.pyc
+    path_type: hardlink
+    sha256: 938005f864481f880bddca841728377a3e3e102001d4d149842d83d3e8246d85
+    size_in_bytes: 1258
+  - _path: Lib/site-packages/mamba/__pycache__/mamba.cpython-38.pyc
+    path_type: hardlink
+    sha256: 5e372596a8a4b1011fdf4693ee535f652acd88b4f96f49b04062e74399a9c9bf
+    size_in_bytes: 23385
+  - _path: Lib/site-packages/mamba/__pycache__/mamba_env.cpython-38.pyc
+    path_type: hardlink
+    sha256: c21977575f0f50556da57610b0f3c75ae75dabae03cf66b4516b84185a282c81
+    size_in_bytes: 5323
+  - _path: Lib/site-packages/mamba/__pycache__/mamba_shell_init.cpython-38.pyc
+    path_type: hardlink
+    sha256: 57989a15a2bd63ebb6ecbcb79b1a61e73bc0044680bb2348f160c9873a209d89
+    size_in_bytes: 2787
+  - _path: Lib/site-packages/mamba/__pycache__/repoquery.cpython-38.pyc
+    path_type: hardlink
+    sha256: a7ba6698a14209e792add6c37a7e1e887137443770dc2079f1419d7b49d94e82
+    size_in_bytes: 1647
+  - _path: Lib/site-packages/mamba/__pycache__/utils.cpython-38.pyc
+    path_type: hardlink
+    sha256: b1eaffcc6958c7b0b4ab520f0d005331110e10071428a0917b3789dbb3447703
+    size_in_bytes: 10096
+  - _path: Lib/site-packages/mamba/_version.py
+    path_type: hardlink
+    sha256: 61b681bb03adafe5818eee7735c34efcdc132dc821817acb6803664957c6e53e
+    size_in_bytes: 72
+  - _path: Lib/site-packages/mamba/api.py
+    path_type: hardlink
+    sha256: 6de1072df5976266b2644807f09057fde89a7ba0490262c0ff7100f8e423d8c6
+    size_in_bytes: 5956
+  - _path: Lib/site-packages/mamba/linking.py
+    path_type: hardlink
+    sha256: e60c7109bdd8f0d8079a1df0dbe10c131ade51796347f23c9633e066a337efe6
+    size_in_bytes: 1671
+  - _path: Lib/site-packages/mamba/mamba.py
+    path_type: hardlink
+    sha256: ab6a0b1635249999541733eadf67d6666a46fb70629163aa05d2c6788a384017
+    size_in_bytes: 31415
+  - _path: Lib/site-packages/mamba/mamba_env.py
+    path_type: hardlink
+    sha256: 331d6a4d26937d918cb816f7d9903e25194a460f663ddb05f6832fd22fdfa7db
+    size_in_bytes: 6476
+  - _path: Lib/site-packages/mamba/mamba_shell_init.py
+    path_type: hardlink
+    sha256: 5c45dc16cef951cf098bcaed6a247ac544251371881138781b1081d79e323ced
+    size_in_bytes: 3661
+  - _path: Lib/site-packages/mamba/repoquery.py
+    path_type: hardlink
+    sha256: b2e1e0a0c1addc9f364cce8475da170624619de56fc9855de7d5cdb744a8af8d
+    size_in_bytes: 1845
+  - _path: Lib/site-packages/mamba/shell_templates/mamba.bat
+    path_type: hardlink
+    sha256: ff8d06fdd15cfaaad06ba341a34d2a02df9e7d41a6b4dd9f14bebc55b9a5b775
+    size_in_bytes: 809
+  - _path: Lib/site-packages/mamba/shell_templates/mamba.fish
+    path_type: hardlink
+    sha256: da5b402785399fa5390d9afb0c93965764dcb28ec95bebbadde43d12ecf5ca6f
+    size_in_bytes: 690
+  - _path: Lib/site-packages/mamba/shell_templates/mamba.sh
+    path_type: hardlink
+    sha256: 41f0a1b9b398bc090fb5c005bba9c2586132cae14cf948b03c1062d130473a20
+    size_in_bytes: 628
+  - _path: Lib/site-packages/mamba/shell_templates/win_redirect/mamba.bat
+    path_type: hardlink
+    sha256: c627e57f922b03d7a48453225ba2ab3639c99ee146df27b8f093330137b1bfa7
+    size_in_bytes: 122
+  - _path: Lib/site-packages/mamba/utils.py
+    path_type: hardlink
+    sha256: 54f2b6d6ae65bc50ff78ab338ee01139f7a1ce9b352aee75304a511d96f28d90
+    size_in_bytes: 14233
+  - _path: Library/bin/mamba.bat
+    path_type: hardlink
+    sha256: c627e57f922b03d7a48453225ba2ab3639c99ee146df27b8f093330137b1bfa7
+    size_in_bytes: 122
+  - _path: Scripts/mamba-script.py
+    path_type: hardlink
+    sha256: a452165ab4b7995b62f560d951d8d02dee024f35960be77cdac303b38d47e48f
+    size_in_bytes: 205
+  - _path: Scripts/mamba.exe
+    path_type: hardlink
+    sha256: 5ea569f2b5bc9c273351641a1a3c52821ce2a9370bc8202f0247c793ebd8a618
+    size_in_bytes: 41984
+  - _path: condabin/mamba.bat
+    path_type: hardlink
+    sha256: ff8d06fdd15cfaaad06ba341a34d2a02df9e7d41a6b4dd9f14bebc55b9a5b775
+    size_in_bytes: 809
+  - _path: etc/fish/conf.d/mamba.fish
+    path_type: hardlink
+    sha256: da5b402785399fa5390d9afb0c93965764dcb28ec95bebbadde43d12ecf5ca6f
+    size_in_bytes: 690
+  - _path: etc/profile.d/mamba.sh
+    path_type: hardlink
+    sha256: 41f0a1b9b398bc090fb5c005bba9c2586132cae14cf948b03c1062d130473a20
+    size_in_bytes: 628
+
