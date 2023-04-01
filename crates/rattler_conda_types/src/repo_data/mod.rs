@@ -11,11 +11,12 @@ use fxhash::{FxHashMap, FxHashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
+use thiserror::Error;
 
 use rattler_macros::sorted;
 
 use crate::package::IndexJson;
-use crate::{Channel, NoArchType, RepoDataRecord, Version};
+use crate::{Channel, NoArchType, Platform, RepoDataRecord, Version};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
@@ -176,6 +177,66 @@ impl RepoData {
     }
 }
 
+/// An error that can occur when parsing a platform from a string.
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
+pub enum ConvertSubdirError {
+    #[error("platform: {platform}, arch: {arch} is not a known combination")]
+    NoKnownCombination {
+        /// The platform string that could not be parsed.
+        platform: String,
+        /// The architecture.
+        arch: String,
+    },
+    #[error("platform key is empty in index.json")]
+    PlatformEmpty,
+    #[error("arch key is empty in index.json")]
+    ArchEmpty,
+}
+
+/// Determine the subdir based on result taken from the prefix.dev
+/// database
+/// These were the combinations that have been found in the database.
+/// and have been represented in the function.
+///
+/// # Why can we not use Platform::FromStr?
+///
+/// We cannot use the Platform FromStr directly because x86 and x86_64
+/// are different architecture strings. Also some combinations have been removed,
+/// because they have not been found.
+fn determine_subdir(
+    platform: Option<String>,
+    arch: Option<String>,
+) -> Result<String, ConvertSubdirError> {
+
+    let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
+    let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
+    let canonical = format!("{platform}-{arch}");
+    // Convert to Platform first
+    let plat = match canonical.as_ref() {
+        "linux-x86" => Platform::Linux32,
+        "linux-x86_64" => Platform::Linux64,
+        "linux-aarch64" => Platform::LinuxAarch64,
+        "linux-armv6l" => Platform::LinuxArmV6l,
+        "linux-armv7l" => Platform::LinuxArmV7l,
+        "linux-ppc64le" => Platform::LinuxPpc64le,
+        "linux-ppc64" => Platform::LinuxPpc64,
+        "linux-s390x" => Platform::LinuxS390X,
+        "osx-x86_64" => Platform::Osx64,
+        "osx-arm64" => Platform::OsxArm64,
+        "win-32" => Platform::Win32,
+        "win-64" => Platform::Win64,
+        "win-arm64" => Platform::WinArm64,
+        _ => {
+            return Err(ConvertSubdirError::NoKnownCombination {
+                platform,
+                arch,
+            })
+        }
+    };
+    // Convert back to Platform string which should correspond to known subdirs
+    Ok(plat.to_string())
+}
+
 impl PackageRecord {
     /// Builds a [`PackageRecord`] from a [`IndexJson`] and optionally a size, sha256 and md5 hash.
     pub fn from_index_json(
@@ -183,8 +244,14 @@ impl PackageRecord {
         size: Option<u64>,
         sha256: Option<String>,
         md5: Option<String>,
-    ) -> Self {
-        PackageRecord {
+    ) -> Result<PackageRecord, ConvertSubdirError> {
+        // Determine the subdir if it can't be found
+        let subdir = match index.subdir {
+            None => determine_subdir(index.platform.clone(), index.arch.clone())?,
+            Some(s) => s,
+        };
+
+        Ok(PackageRecord {
             arch: index.arch,
             build: index.build,
             build_number: index.build_number,
@@ -201,11 +268,11 @@ impl PackageRecord {
             platform: index.platform,
             sha256,
             size,
-            subdir: index.subdir.unwrap(),
+            subdir,
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-        }
+        })
     }
 }
 
@@ -226,8 +293,18 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 #[cfg(test)]
 mod test {
     use fxhash::FxHashSet;
+    use crate::repo_data::determine_subdir;
 
     use crate::RepoData;
+
+    // isl-0.12.2-1.tar.bz2
+    // gmp-5.1.2-6.tar.bz2
+    // Are both package variants in the osx-64 subdir
+    // Will just test for this case
+    #[test]
+    fn test_determine_subdir() {
+        assert_eq!(determine_subdir(Some("osx".to_string()), Some("x86_64".to_string())).unwrap(), "osx-64");
+    }
 
     #[test]
     fn test_serialize() {
