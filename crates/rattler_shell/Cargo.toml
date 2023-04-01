@@ -15,6 +15,7 @@ thiserror = "1.0.30"
 indexmap = "1.9.2"
 serde_json = { version = "1.0.93", features = ["preserve_order"]}
 tracing = "0.1.29"
+rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
 
 [dev-dependencies]
 tempdir = "0.3.7"
