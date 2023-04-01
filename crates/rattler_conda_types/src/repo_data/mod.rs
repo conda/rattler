@@ -207,7 +207,6 @@ fn determine_subdir(
     platform: Option<String>,
     arch: Option<String>,
 ) -> Result<String, ConvertSubdirError> {
-
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
     let canonical = format!("{platform}-{arch}");
@@ -226,12 +225,7 @@ fn determine_subdir(
         "win-32" => Platform::Win32,
         "win-64" => Platform::Win64,
         "win-arm64" => Platform::WinArm64,
-        _ => {
-            return Err(ConvertSubdirError::NoKnownCombination {
-                platform,
-                arch,
-            })
-        }
+        _ => return Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
     };
     // Convert back to Platform string which should correspond to known subdirs
     Ok(plat.to_string())
@@ -292,8 +286,8 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use fxhash::FxHashSet;
     use crate::repo_data::determine_subdir;
+    use fxhash::FxHashSet;
 
     use crate::RepoData;
 
@@ -303,7 +297,10 @@ mod test {
     // Will just test for this case
     #[test]
     fn test_determine_subdir() {
-        assert_eq!(determine_subdir(Some("osx".to_string()), Some("x86_64".to_string())).unwrap(), "osx-64");
+        assert_eq!(
+            determine_subdir(Some("osx".to_string()), Some("x86_64".to_string())).unwrap(),
+            "osx-64"
+        );
     }
 
     #[test]
