@@ -9,19 +9,7 @@ use std::{
 
 use crate::shell::Shell;
 use indexmap::IndexMap;
-
-/// An enumeration of the different operating systems that are supported by rattler
-#[derive(Copy, Clone, Debug)]
-pub enum OperatingSystem {
-    /// The Windows operating system
-    Windows,
-
-    /// The macOS operating systems
-    MacOS,
-
-    /// The Linux family operating systems
-    Linux,
-}
+use rattler_conda_types::Platform;
 
 /// A struct that contains the values of the environment variables that are relevant for the activation process.
 /// The values are stored as strings. Currently, only the `PATH` and `CONDA_PREFIX` environment variables are used.
@@ -66,8 +54,8 @@ pub struct Activator<T: Shell> {
     /// A list of environment variables to set when activating the environment
     pub env_vars: IndexMap<String, String>,
 
-    /// The operating system for which to generate the Activator
-    pub operating_system: OperatingSystem,
+    /// The platform for which to generate the Activator
+    pub platform: Platform,
 }
 
 /// Collect all script files that match a certain shell type from a given path.
@@ -237,21 +225,18 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 /// # Returns
 ///
 /// A vector of path entries
-fn prefix_path_entries(prefix: &Path, operating_system: OperatingSystem) -> Vec<PathBuf> {
-    match operating_system {
-        OperatingSystem::Windows => {
-            vec![
-                prefix.to_path_buf(),
-                prefix.join("Library/mingw-w64/bin"),
-                prefix.join("Library/usr/bin"),
-                prefix.join("Library/bin"),
-                prefix.join("Scripts"),
-                prefix.join("bin"),
-            ]
-        }
-        OperatingSystem::MacOS | OperatingSystem::Linux => {
-            vec![prefix.join("bin")]
-        }
+fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
+    if platform.is_windows() {
+        vec![
+            prefix.to_path_buf(),
+            prefix.join("Library/mingw-w64/bin"),
+            prefix.join("Library/usr/bin"),
+            prefix.join("Library/bin"),
+            prefix.join("Scripts"),
+            prefix.join("bin"),
+        ]
+    } else {
+        vec![prefix.join("bin")]
     }
 }
 
@@ -271,18 +256,19 @@ impl<T: Shell + Clone> Activator<T> {
     /// # Examples
     ///
     /// ```
-    /// use rattler_shell::activation::{Activator, OperatingSystem};
+    /// use rattler_shell::activation::Activator;
     /// use rattler_shell::shell;
+    /// use rattler_conda_types::Platform;
     /// use std::path::PathBuf;
     ///
-    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash, OperatingSystem::MacOS).unwrap();
+    /// let activator = Activator::from_path(&PathBuf::from("tests/fixtures/env_vars"), shell::Bash, Platform::Osx64).unwrap();
     /// assert_eq!(activator.paths.len(), 1);
     /// assert_eq!(activator.paths[0], PathBuf::from("tests/fixtures/env_vars/bin"));
     /// ```
     pub fn from_path(
         path: &Path,
         shell_type: T,
-        operating_system: OperatingSystem,
+        platform: Platform,
     ) -> Result<Activator<T>, ActivationError> {
         let activation_scripts = collect_scripts(&path.join("etc/conda/activate.d"), &shell_type)?;
 
@@ -291,7 +277,7 @@ impl<T: Shell + Clone> Activator<T> {
 
         let env_vars = collect_env_vars(path)?;
 
-        let paths = prefix_path_entries(path, operating_system);
+        let paths = prefix_path_entries(path, &platform);
 
         Ok(Activator {
             target_prefix: path.to_path_buf(),
@@ -300,7 +286,7 @@ impl<T: Shell + Clone> Activator<T> {
             activation_scripts,
             deactivation_scripts,
             env_vars,
-            operating_system,
+            platform,
         })
     }
 
@@ -316,7 +302,7 @@ impl<T: Shell + Clone> Activator<T> {
             let deactivate = Activator::from_path(
                 Path::new(&conda_prefix),
                 self.shell_type.clone(),
-                self.operating_system,
+                self.platform,
             )?;
 
             for (key, _) in &deactivate.env_vars {
@@ -397,8 +383,7 @@ mod tests {
         assert_eq!(scripts[1], script1);
         assert_eq!(scripts[2], script3);
 
-        let activator =
-            Activator::from_path(tdir.path(), shell_type, OperatingSystem::MacOS).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
         assert_eq!(activator.activation_scripts[0], script2);
         assert_eq!(activator.activation_scripts[1], script1);
@@ -468,7 +453,7 @@ mod tests {
     #[test]
     fn test_add_to_path() {
         let prefix = PathBuf::from_str("/opt/conda").unwrap();
-        let new_paths = prefix_path_entries(&prefix, OperatingSystem::MacOS);
+        let new_paths = prefix_path_entries(&prefix, &Platform::Osx64);
         assert_eq!(new_paths.len(), 1);
     }
 
@@ -492,8 +477,7 @@ mod tests {
     {
         let tdir = create_temp_dir();
 
-        let activator =
-            Activator::from_path(tdir.path(), shell_type, OperatingSystem::MacOS).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
 
         let script = activator.activation_script(ActivationVariables {
             conda_prefix: None,
