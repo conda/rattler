@@ -235,8 +235,7 @@ fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
             prefix.join("Scripts"),
             prefix.join("bin"),
         ]
-    }
-    else {
+    } else {
         vec![prefix.join("bin")]
     }
 }
@@ -287,7 +286,7 @@ impl<T: Shell + Clone> Activator<T> {
             activation_scripts,
             deactivation_scripts,
             env_vars,
-            platform: platform.clone(),
+            platform,
         })
     }
 
@@ -384,8 +383,7 @@ mod tests {
         assert_eq!(scripts[1], script1);
         assert_eq!(scripts[2], script3);
 
-        let activator =
-            Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
         assert_eq!(activator.activation_scripts.len(), 3);
         assert_eq!(activator.activation_scripts[0], script2);
         assert_eq!(activator.activation_scripts[1], script1);
@@ -479,8 +477,7 @@ mod tests {
     {
         let tdir = create_temp_dir();
 
-        let activator =
-            Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
+        let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
 
         let script = activator.activation_script(ActivationVariables {
             conda_prefix: None,
