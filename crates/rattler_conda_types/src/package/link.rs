@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
 
 use super::{EntryPoint, PackageFile};
@@ -23,6 +24,7 @@ pub enum NoArchLinks {
 /// A representation of the `link.json` file found in noarch package archives.
 ///
 /// The `link.json` file contains information about entrypoints that need to be installed for the package.
+#[sorted]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LinkJson {
     /// Links for specific noarch packages

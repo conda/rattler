@@ -2,7 +2,8 @@ use super::PackageFile;
 use crate::package::has_prefix::HasPrefixEntry;
 use crate::package::{Files, HasPrefix, NoLink, NoSoftlink};
 use rattler_digest::serde::SerializableHash;
-use serde::{Deserialize, Serialize};
+use rattler_macros::sorted;
+use serde::{Deserialize, Serialize, Serializer};
 use serde_with::serde_as;
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
@@ -11,14 +12,29 @@ use std::path::{Path, PathBuf};
 /// A representation of the `paths.json` file found in package archives.
 ///
 /// The `paths.json` file contains information about every file included with the package.
+#[sorted]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
+    /// All entries included in the package.
+    #[serde(serialize_with = "serialize_sorted_paths")]
+    pub paths: Vec<PathsEntry>,
+
     /// The version of the file
     pub paths_version: u64,
-
-    /// All entries included in the package.
-    pub paths: Vec<PathsEntry>,
 }
+
+fn serialize_sorted_paths<S>(paths: &Vec<PathsEntry>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Sort the paths by the _path attribute
+    let mut sorted_paths = paths.clone();
+    sorted_paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+
+    // Serialize the sorted paths
+    return sorted_paths.serialize(serializer);
+}
+
 
 impl PackageFile for PathsJson {
     fn package_path() -> &'static Path {

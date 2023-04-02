@@ -2,44 +2,7 @@
 source: crates/rattler_conda_types/src/package/paths.rs
 expression: paths_json
 ---
-paths_version: 1
 paths:
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/INSTALLER
-    path_type: hardlink
-    sha256: d0edee15f91b406f3f99726e44eb990be6e34fd0345b52b910c568e0eef6a2a8
-    size_in_bytes: 5
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/LICENSE
-    path_type: hardlink
-    sha256: 41fd98a468e39d319911bd94f4e65d6ad6a7ea66559dd5aa4112f138ff9b629a
-    size_in_bytes: 1483
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/METADATA
-    path_type: hardlink
-    sha256: 48d8890aebe423cf5f524a7bb8ac5f76021499653bc5962c66fcb6e39983770c
-    size_in_bytes: 500
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/RECORD
-    path_type: hardlink
-    sha256: 6e3d06d645f2dd605fe3409e923b7d6973d25768d911002b97c39a92b65eed55
-    size_in_bytes: 2600
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/REQUESTED
-    path_type: hardlink
-    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-    size_in_bytes: 0
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/WHEEL
-    path_type: hardlink
-    sha256: d34cac92eb22c54a14b79a1bfc2894a7a2ec9cde65ab34c9a68a8e160fc55487
-    size_in_bytes: 92
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/direct_url.json
-    path_type: hardlink
-    sha256: 04797d13c447a487a309781fb5084be28d320228c3ed797850d6d65c71b78ece
-    size_in_bytes: 78
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/entry_points.txt
-    path_type: hardlink
-    sha256: ee2ddcf64c6755fc11151d0dab39ecf77916cd3b3fa62bd3a229b9fe8c67bf4b
-    size_in_bytes: 43
-  - _path: Lib/site-packages/mamba-1.0.0.dist-info/top_level.txt
-    path_type: hardlink
-    sha256: 2a9dc054338292439470e7388cd0eb1cec12d9e1021de15909798a2df9918437
-    size_in_bytes: 6
   - _path: Lib/site-packages/mamba/__init__.py
     path_type: hardlink
     sha256: fa769046d0468ad6e2997ea166d20fe0d2af9a840791692a1ebea6099c96a13e
@@ -128,6 +91,42 @@ paths:
     path_type: hardlink
     sha256: 54f2b6d6ae65bc50ff78ab338ee01139f7a1ce9b352aee75304a511d96f28d90
     size_in_bytes: 14233
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/INSTALLER
+    path_type: hardlink
+    sha256: d0edee15f91b406f3f99726e44eb990be6e34fd0345b52b910c568e0eef6a2a8
+    size_in_bytes: 5
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/LICENSE
+    path_type: hardlink
+    sha256: 41fd98a468e39d319911bd94f4e65d6ad6a7ea66559dd5aa4112f138ff9b629a
+    size_in_bytes: 1483
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/METADATA
+    path_type: hardlink
+    sha256: 48d8890aebe423cf5f524a7bb8ac5f76021499653bc5962c66fcb6e39983770c
+    size_in_bytes: 500
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/RECORD
+    path_type: hardlink
+    sha256: 6e3d06d645f2dd605fe3409e923b7d6973d25768d911002b97c39a92b65eed55
+    size_in_bytes: 2600
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/REQUESTED
+    path_type: hardlink
+    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+    size_in_bytes: 0
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/WHEEL
+    path_type: hardlink
+    sha256: d34cac92eb22c54a14b79a1bfc2894a7a2ec9cde65ab34c9a68a8e160fc55487
+    size_in_bytes: 92
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/direct_url.json
+    path_type: hardlink
+    sha256: 04797d13c447a487a309781fb5084be28d320228c3ed797850d6d65c71b78ece
+    size_in_bytes: 78
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/entry_points.txt
+    path_type: hardlink
+    sha256: ee2ddcf64c6755fc11151d0dab39ecf77916cd3b3fa62bd3a229b9fe8c67bf4b
+    size_in_bytes: 43
+  - _path: Lib/site-packages/mamba-1.0.0.dist-info/top_level.txt
+    path_type: hardlink
+    sha256: 2a9dc054338292439470e7388cd0eb1cec12d9e1021de15909798a2df9918437
+    size_in_bytes: 6
   - _path: Library/bin/mamba.bat
     path_type: hardlink
     sha256: c627e57f922b03d7a48453225ba2ab3639c99ee146df27b8f093330137b1bfa7
@@ -152,4 +151,5 @@ paths:
     path_type: hardlink
     sha256: 41f0a1b9b398bc090fb5c005bba9c2586132cae14cf948b03c1062d130473a20
     size_in_bytes: 628
+paths_version: 1
 
