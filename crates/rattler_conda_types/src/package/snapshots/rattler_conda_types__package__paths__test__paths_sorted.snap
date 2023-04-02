@@ -1,0 +1,52 @@
+---
+source: crates/rattler_conda_types/src/package/paths.rs
+expression: "PathsJson { paths, paths_version: 1 }"
+---
+paths:
+  - _path: path_0
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_1
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_10
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_11
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_12
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_13
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_14
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_2
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_3
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_4
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_5
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_6
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_7
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_8
+    path_type: hardlink
+    size_in_bytes: 0
+  - _path: path_9
+    path_type: hardlink
+    size_in_bytes: 0
+paths_version: 1
+
