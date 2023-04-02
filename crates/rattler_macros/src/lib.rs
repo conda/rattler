@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote_spanned;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed, Ident};
+use syn::{parse_macro_input, Data, DeriveInput, Field, Fields, FieldsNamed, Ident, LitStr};
 
 #[proc_macro_attribute]
 pub fn sorted(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -28,12 +28,37 @@ pub fn sorted(_attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
+fn get_rename(field: &Field) -> Option<String> {
+    let mut rename = None;
+    for attr in &field.attrs {
+        if attr.path().is_ident("serde") {
+            let res = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    println!("Found rename");
+                    let value = meta.value()?;
+                    let s: LitStr = value.parse()?;
+                    println!("STRING: {}", s.value());
+                    rename = Some(s.value());
+                }
+                Ok(())
+            });
+            println!("Result: {:?}", res);
+        }
+    }
+    rename
+}
+
 fn check_fields_sorted(outer_ident: &Ident, fields: &FieldsNamed) -> Result<(), TokenStream> {
-    let mut prev_field: Option<&Ident> = None;
+    let mut prev_field: Option<String> = None;
+    // println!("Fields: {:?}", fields);
     for field in &fields.named {
         let current_field = field.ident.as_ref().unwrap();
+        println!("Fields: {:?}", current_field);
+        let current_field_name = get_rename(field).unwrap_or_else(|| current_field.to_string());
+
         if let Some(prev) = prev_field {
-            if *current_field < *prev {
+            println!("{} < {}", current_field_name, prev);
+            if current_field_name < prev {
                 let error = format!(
                     "The field {} must be sorted before {} in struct {}.",
                     current_field, prev, outer_ident
@@ -44,7 +69,8 @@ fn check_fields_sorted(outer_ident: &Ident, fields: &FieldsNamed) -> Result<(), 
                 return Err(TokenStream::from(tokens));
             }
         }
-        prev_field = Some(current_field);
+
+        prev_field = Some(current_field_name);
     }
     Ok(())
 }
