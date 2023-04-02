@@ -190,7 +190,6 @@ pub struct PathsEntry {
     // The alphabetical order of the fields is important for the serialization of the struct.
     // ['_path', 'no_link', 'path_type', 'prefix_placeholder', 'sha256', 'size_in_bytes']
     // rename can't be sorted by the macro yet.
-
     /// The relative path from the root of the package
     #[serde(rename = "_path")]
     pub relative_path: PathBuf,
@@ -258,7 +257,7 @@ fn is_no_link_default(value: &bool) -> bool {
 mod test {
     use crate::package::PackageFile;
 
-    use super::{PathsJson, PathsEntry};
+    use super::{PathsEntry, PathsJson};
 
     #[test]
     pub fn roundtrip_paths_json() {
@@ -327,8 +326,9 @@ mod test {
         let mut rng = rand::thread_rng();
         paths.shuffle(&mut rng);
 
-        insta::assert_yaml_snapshot!(
-            PathsJson {paths, paths_version: 1 }
-        );
+        insta::assert_yaml_snapshot!(PathsJson {
+            paths,
+            paths_version: 1
+        });
     }
 }
