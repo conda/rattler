@@ -23,18 +23,15 @@ pub struct PathsJson {
     pub paths_version: u64,
 }
 
-fn serialize_sorted_paths<S>(paths: &Vec<PathsEntry>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_sorted_paths<S>(paths: &[PathsEntry], serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    // Sort the paths by the _path attribute
-    let mut sorted_paths = paths.clone();
+    // Sort the paths by the relative_path attribute
+    let mut sorted_paths = paths.to_vec();
     sorted_paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
-
-    // Serialize the sorted paths
-    return sorted_paths.serialize(serializer);
+    sorted_paths.serialize(serializer)
 }
-
 
 impl PackageFile for PathsJson {
     fn package_path() -> &'static Path {
