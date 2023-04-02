@@ -1,9 +1,7 @@
 ---
 source: crates/rattler_conda_types/src/package/paths.rs
-assertion_line: 249
 expression: "PathsJson::from_deprecated_package_directory(package_dir.path()).unwrap()"
 ---
-paths_version: 1
 paths:
   - _path: Library/bin/zlib.dll
     path_type: hardlink
@@ -25,4 +23,5 @@ paths:
     path_type: hardlink
     file_mode: text
     prefix_placeholder: "C:/conda/envs/_build"
+paths_version: 1
 

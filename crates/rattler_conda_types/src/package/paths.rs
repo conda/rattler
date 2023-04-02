@@ -2,7 +2,8 @@ use super::PackageFile;
 use crate::package::has_prefix::HasPrefixEntry;
 use crate::package::{Files, HasPrefix, NoLink, NoSoftlink};
 use rattler_digest::serde::SerializableHash;
-use serde::{Deserialize, Serialize};
+use rattler_macros::sorted;
+use serde::{Deserialize, Serialize, Serializer};
 use serde_with::serde_as;
 use std::collections::{HashMap, HashSet};
 use std::io::ErrorKind;
@@ -11,13 +12,25 @@ use std::path::{Path, PathBuf};
 /// A representation of the `paths.json` file found in package archives.
 ///
 /// The `paths.json` file contains information about every file included with the package.
+#[sorted]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PathsJson {
+    /// All entries included in the package.
+    #[serde(serialize_with = "serialize_sorted_paths")]
+    pub paths: Vec<PathsEntry>,
+
     /// The version of the file
     pub paths_version: u64,
+}
 
-    /// All entries included in the package.
-    pub paths: Vec<PathsEntry>,
+fn serialize_sorted_paths<S>(paths: &[PathsEntry], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    // Sort the paths by the relative_path attribute
+    let mut sorted_paths = paths.to_vec();
+    sorted_paths.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+    sorted_paths.serialize(serializer)
 }
 
 impl PackageFile for PathsJson {
@@ -174,9 +187,19 @@ pub struct PrefixPlaceholder {
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PathsEntry {
+    // The alphabetical order of the fields is important for the serialization of the struct.
+    // ['_path', 'no_link', 'path_type', 'prefix_placeholder', 'sha256', 'size_in_bytes']
+    // rename can't be sorted by the macro yet.
     /// The relative path from the root of the package
     #[serde(rename = "_path")]
     pub relative_path: PathBuf,
+
+    /// Whether or not this file should be linked or not when installing the package.
+    #[serde(
+        default = "no_link_default",
+        skip_serializing_if = "is_no_link_default"
+    )]
+    pub no_link: bool,
 
     /// Determines how to include the file when installing the package
     pub path_type: PathType,
@@ -185,13 +208,6 @@ pub struct PathsEntry {
     /// present in the file.
     #[serde(default, flatten, skip_serializing_if = "Option::is_none")]
     pub prefix_placeholder: Option<PrefixPlaceholder>,
-
-    /// Whether or not this file should be linked or not when installing the package.
-    #[serde(
-        default = "no_link_default",
-        skip_serializing_if = "is_no_link_default"
-    )]
-    pub no_link: bool,
 
     /// A hex representation of the SHA256 hash of the contents of the file.
     /// This entry is only present in version 1 of the paths.json file.
@@ -241,7 +257,7 @@ fn is_no_link_default(value: &bool) -> bool {
 mod test {
     use crate::package::PackageFile;
 
-    use super::PathsJson;
+    use super::{PathsEntry, PathsJson};
 
     #[test]
     pub fn roundtrip_paths_json() {
@@ -288,5 +304,31 @@ mod test {
         insta::assert_yaml_snapshot!(
             PathsJson::from_deprecated_package_directory(&package_dir).unwrap()
         );
+    }
+
+    #[test]
+    pub fn test_paths_sorted() {
+        // create some fake data
+        let mut paths = vec![];
+        for i in 0..15 {
+            paths.push(PathsEntry {
+                relative_path: format!("path_{}", i).into(),
+                path_type: super::PathType::HardLink,
+                prefix_placeholder: None,
+                no_link: false,
+                sha256: None,
+                size_in_bytes: Some(0),
+            });
+        }
+
+        // shuffle the data
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        paths.shuffle(&mut rng);
+
+        insta::assert_yaml_snapshot!(PathsJson {
+            paths,
+            paths_version: 1
+        });
     }
 }
