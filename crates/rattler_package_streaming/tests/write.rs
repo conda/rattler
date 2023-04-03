@@ -17,7 +17,7 @@ fn find_all_archives() -> impl Iterator<Item = PathBuf> {
 }
 
 fn find_all_package_files(path: &Path) -> Vec<PathBuf> {
-    WalkDir::new(&path)
+    WalkDir::new(path)
         .into_iter()
         .filter_map(|e| e.ok())
         .map(|e| e.into_path())
@@ -35,11 +35,11 @@ impl Decoder {
         match self {
             Decoder::TarBz2 => {
                 let d = bzip2::read::BzDecoder::new(f);
-                return tar::Archive::new(Box::new(d));
+                tar::Archive::new(Box::new(d))
             }
             Decoder::Zst => {
                 let d = zstd::stream::read::Decoder::new(f).unwrap();
-                return tar::Archive::new(Box::new(d));
+                tar::Archive::new(Box::new(d))
             }
         }
     }
