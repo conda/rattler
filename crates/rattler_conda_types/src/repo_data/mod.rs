@@ -213,35 +213,35 @@ fn determine_subdir(
     let plat = match platform.as_ref() {
         "linux" => {
             match arch.as_ref() {
-                "x86" => Platform::Linux32,
-                "x86_64" => Platform::Linux64,
-                "aarch64" => Platform::LinuxAarch64,
-                "armv61" => Platform::LinuxArmV6l,
-                "armv71" => Platform::LinuxArmV7l,
-                "ppc64le" => Platform::LinuxPpc64le,
-                "ppc64" => Platform::LinuxPpc64,
-                "s390x" => Platform::LinuxS390X,
+                "x86" => Ok(Platform::Linux32),
+                "x86_64" => Ok(Platform::Linux64),
+                "aarch64" => Ok(Platform::LinuxAarch64),
+                "armv61" => Ok(Platform::LinuxArmV6l),
+                "armv71" => Ok(Platform::LinuxArmV7l),
+                "ppc64le" => Ok(Platform::LinuxPpc64le),
+                "ppc64" => Ok(Platform::LinuxPpc64),
+                "s390x" => Ok(Platform::LinuxS390X),
                 _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
             }
 
         },
         "osx" => {
             match arch.as_ref() {
-                "x86_64" => Platform::Osx64,
-                "arm64" => Platform::OsxArm64,
+                "x86_64" => Ok(Platform::Osx64),
+                "arm64" => Ok(Platform::OsxArm64),
                 _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
             }
         },
         "windows" => {
             match arch.as_ref() {
-                "x86" => Platform::Win32,
-                "x86_64" => Platform::Win64,
-                "arm64" => Platform::WinArm64,
+                "x86" => Ok(Platform::Win32),
+                "x86_64" => Ok(Platform::Win64),
+                "arm64" => Ok(Platform::WinArm64),
                 _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
             }
         }
         _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
-    };
+    }?;
     // Convert back to Platform string which should correspond to known subdirs
     Ok(plat.to_string())
 }
