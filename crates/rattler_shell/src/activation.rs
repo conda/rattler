@@ -290,11 +290,12 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
-    /// Create a activation script for a given shell
-    pub fn activation_script(
+    /// Create an activation script for a given shell and platform. This
+    /// returns a tuple of the newly computed PATH variable and the activation script.
+    pub fn activation(
         &self,
         variables: ActivationVariables,
-    ) -> Result<String, ActivationError> {
+    ) -> Result<(Vec<PathBuf>, String), ActivationError> {
         let mut out = String::new();
 
         let mut path_elements = variables.path.clone().unwrap_or_default();
@@ -348,7 +349,7 @@ impl<T: Shell + Clone> Activator<T> {
                 .map_err(ActivationError::FailedToWriteActivationScript)?;
         }
 
-        Ok(out)
+        Ok((path_elements, out))
     }
 }
 
@@ -479,7 +480,7 @@ mod tests {
 
         let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
 
-        let script = activator.activation_script(ActivationVariables {
+        let (_, script) = activator.activation(ActivationVariables {
             conda_prefix: None,
             path: Some(vec![
                 PathBuf::from("/usr/bin"),
@@ -488,10 +489,10 @@ mod tests {
                 PathBuf::from("/sbin"),
                 PathBuf::from("/usr/local/bin"),
             ]),
-        });
+        }).unwrap();
         let prefix = tdir.path().to_str().unwrap();
 
-        script.unwrap().replace(prefix, "__PREFIX__")
+        script.replace(prefix, "__PREFIX__")
     }
 
     #[test]
