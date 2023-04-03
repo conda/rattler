@@ -180,6 +180,7 @@ impl RepoData {
 /// An error that can occur when parsing a platform from a string.
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 pub enum ConvertSubdirError {
+    /// No known combination for this platform is known
     #[error("platform: {platform}, arch: {arch} is not a known combination")]
     NoKnownCombination {
         /// The platform string that could not be parsed.
@@ -187,8 +188,10 @@ pub enum ConvertSubdirError {
         /// The architecture.
         arch: String,
     },
+    /// Platform key is empty
     #[error("platform key is empty in index.json")]
     PlatformEmpty,
+    /// Arc key is empty
     #[error("arch key is empty in index.json")]
     ArchEmpty,
 }
