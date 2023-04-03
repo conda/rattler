@@ -209,23 +209,38 @@ fn determine_subdir(
 ) -> Result<String, ConvertSubdirError> {
     let platform = platform.ok_or(ConvertSubdirError::PlatformEmpty)?;
     let arch = arch.ok_or(ConvertSubdirError::ArchEmpty)?;
-    let canonical = format!("{platform}-{arch}");
-    // Convert to Platform first
-    let plat = match canonical.as_ref() {
-        "linux-x86" => Platform::Linux32,
-        "linux-x86_64" => Platform::Linux64,
-        "linux-aarch64" => Platform::LinuxAarch64,
-        "linux-armv6l" => Platform::LinuxArmV6l,
-        "linux-armv7l" => Platform::LinuxArmV7l,
-        "linux-ppc64le" => Platform::LinuxPpc64le,
-        "linux-ppc64" => Platform::LinuxPpc64,
-        "linux-s390x" => Platform::LinuxS390X,
-        "osx-x86_64" => Platform::Osx64,
-        "osx-arm64" => Platform::OsxArm64,
-        "win-32" => Platform::Win32,
-        "win-64" => Platform::Win64,
-        "win-arm64" => Platform::WinArm64,
-        _ => return Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+
+    let plat = match platform.as_ref() {
+        "linux" => {
+            match arch.as_ref() {
+                "x86" => Platform::Linux32,
+                "x86_64" => Platform::Linux64,
+                "aarch64" => Platform::LinuxAarch64,
+                "armv61" => Platform::LinuxArmV6l,
+                "armv71" => Platform::LinuxArmV7l,
+                "ppc64le" => Platform::LinuxPpc64le,
+                "ppc64" => Platform::LinuxPpc64,
+                "s390x" => Platform::LinuxS390X,
+                _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+            }
+
+        },
+        "osx" => {
+            match arch.as_ref() {
+                "x86_64" => Platform::Osx64,
+                "arm64" => Platform::OsxArm64,
+                _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+            }
+        },
+        "windows" => {
+            match arch.as_ref() {
+                "x86" => Platform::Win32,
+                "x86_64" => Platform::Win64,
+                "arm64" => Platform::WinArm64,
+                _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
+            }
+        }
+        _ => Err(ConvertSubdirError::NoKnownCombination { platform, arch }),
     };
     // Convert back to Platform string which should correspond to known subdirs
     Ok(plat.to_string())
