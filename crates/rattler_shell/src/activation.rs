@@ -240,6 +240,17 @@ fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
     }
 }
 
+/// The result of a activation. It contains the activation script and the new path entries.
+/// The activation script already sets the PATH environment variable, but for "environment stacking"
+/// purposes it's useful to have the new path entries separately.
+pub struct ActivationResult {
+    /// The activation script that sets the environment variables, runs activation/deactivation scripts
+    /// and sets the new PATH environment variable
+    pub script: String,
+    /// The new path entries that are added to the PATH environment variable
+    pub path: Vec<PathBuf>,
+}
+
 impl<T: Shell + Clone> Activator<T> {
     /// Create a new activator for the given conda environment.
     ///
@@ -290,14 +301,15 @@ impl<T: Shell + Clone> Activator<T> {
         })
     }
 
-    /// Create a activation script for a given shell
-    pub fn activation_script(
+    /// Create an activation script for a given shell and platform. This
+    /// returns a tuple of the newly computed PATH variable and the activation script.
+    pub fn activation(
         &self,
         variables: ActivationVariables,
-    ) -> Result<String, ActivationError> {
-        let mut out = String::new();
+    ) -> Result<ActivationResult, ActivationError> {
+        let mut script = String::new();
 
-        let mut path_elements = variables.path.clone().unwrap_or_default();
+        let mut path = variables.path.clone().unwrap_or_default();
         if let Some(conda_prefix) = variables.conda_prefix {
             let deactivate = Activator::from_path(
                 Path::new(&conda_prefix),
@@ -307,30 +319,30 @@ impl<T: Shell + Clone> Activator<T> {
 
             for (key, _) in &deactivate.env_vars {
                 self.shell_type
-                    .unset_env_var(&mut out, key)
+                    .unset_env_var(&mut script, key)
                     .map_err(ActivationError::FailedToWriteActivationScript)?;
             }
 
             for deactivation_script in &deactivate.deactivation_scripts {
                 self.shell_type
-                    .run_script(&mut out, deactivation_script)
+                    .run_script(&mut script, deactivation_script)
                     .map_err(ActivationError::FailedToWriteActivationScript)?;
             }
 
-            path_elements.retain(|x| !deactivate.paths.contains(x));
+            path.retain(|x| !deactivate.paths.contains(x));
         }
 
         // prepend new paths
-        let path_elements = [self.paths.clone(), path_elements].concat();
+        let path = [self.paths.clone(), path].concat();
 
         self.shell_type
-            .set_path(&mut out, path_elements.as_slice())
+            .set_path(&mut script, path.as_slice())
             .map_err(ActivationError::FailedToWriteActivationScript)?;
 
         // deliberately not taking care of `CONDA_SHLVL` or any other complications at this point
         self.shell_type
             .set_env_var(
-                &mut out,
+                &mut script,
                 "CONDA_PREFIX",
                 &self.target_prefix.to_string_lossy(),
             )
@@ -338,17 +350,17 @@ impl<T: Shell + Clone> Activator<T> {
 
         for (key, value) in &self.env_vars {
             self.shell_type
-                .set_env_var(&mut out, key, value)
+                .set_env_var(&mut script, key, value)
                 .map_err(ActivationError::FailedToWriteActivationScript)?;
         }
 
         for activation_script in &self.activation_scripts {
             self.shell_type
-                .run_script(&mut out, activation_script)
+                .run_script(&mut script, activation_script)
                 .map_err(ActivationError::FailedToWriteActivationScript)?;
         }
 
-        Ok(out)
+        Ok(ActivationResult { script, path })
     }
 }
 
@@ -479,19 +491,21 @@ mod tests {
 
         let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();
 
-        let script = activator.activation_script(ActivationVariables {
-            conda_prefix: None,
-            path: Some(vec![
-                PathBuf::from("/usr/bin"),
-                PathBuf::from("/bin"),
-                PathBuf::from("/usr/sbin"),
-                PathBuf::from("/sbin"),
-                PathBuf::from("/usr/local/bin"),
-            ]),
-        });
+        let result = activator
+            .activation(ActivationVariables {
+                conda_prefix: None,
+                path: Some(vec![
+                    PathBuf::from("/usr/bin"),
+                    PathBuf::from("/bin"),
+                    PathBuf::from("/usr/sbin"),
+                    PathBuf::from("/sbin"),
+                    PathBuf::from("/usr/local/bin"),
+                ]),
+            })
+            .unwrap();
         let prefix = tdir.path().to_str().unwrap();
 
-        script.unwrap().replace(prefix, "__PREFIX__")
+        result.script.replace(prefix, "__PREFIX__")
     }
 
     #[test]
