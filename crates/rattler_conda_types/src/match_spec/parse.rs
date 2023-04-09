@@ -119,7 +119,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
             alt((
                 delimited(char('"'), take_until("\""), char('"')),
                 delimited(char('\''), take_until("'"), char('\'')),
-                take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-'),
+                take_till1(|c| c == ',' || c == ']' || c == '\'' || c == '"'),
             )),
         ))(input)
     }
@@ -352,6 +352,7 @@ mod tests {
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
+    use crate::match_spec::parse::parse_bracket_list;
     use crate::VersionSpec;
     use smallvec::smallvec;
 
@@ -446,5 +447,62 @@ mod tests {
         assert_eq!(spec.name, Some("foo".to_string()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
+
+        let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
+        assert_eq!(spec.name, Some("foo".to_string()));
+        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(spec.channel, Some("conda-forge".to_string()));
+    }
+
+    #[test]
+    fn test_parse_bracket_list() {
+        assert_eq!(
+            parse_bracket_list("[version=1.0.1]").unwrap().as_ref(),
+            &[("version", "1.0.1")]
+        );
+        assert_eq!(
+            parse_bracket_list("[version='1.0.1']").unwrap().as_ref(),
+            &[("version", "1.0.1")]
+        );
+        assert_eq!(
+            parse_bracket_list("[version=\"1.0.1\"]").unwrap().as_ref(),
+            &[("version", "1.0.1")]
+        );
+
+        assert_eq!(
+            parse_bracket_list("[version=1.0.1, build=3]")
+                .unwrap()
+                .as_ref(),
+            &[("version", "1.0.1"), ("build", "3")]
+        );
+        assert_eq!(
+            parse_bracket_list("[version='1.0.1', build=3]")
+                .unwrap()
+                .as_ref(),
+            &[("version", "1.0.1"), ("build", "3")]
+        );
+        assert_eq!(
+            parse_bracket_list("[version=\"1.0.1\", build=3]")
+                .unwrap()
+                .as_ref(),
+            &[("version", "1.0.1"), ("build", "3")]
+        );
+
+        assert_eq!(
+            parse_bracket_list("[build=\"py2*\"]").unwrap().as_ref(),
+            &[("build", "py2*")]
+        );
+
+        assert_eq!(
+            parse_bracket_list("[build=py2*]").unwrap().as_ref(),
+            &[("build", "py2*")]
+        );
+
+        assert_eq!(
+            parse_bracket_list("[version=\"1.3,2.0\"]")
+                .unwrap()
+                .as_ref(),
+            &[("version", "1.3,2.0")]
+        );
     }
 }
