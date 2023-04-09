@@ -94,12 +94,18 @@ mod test_libsolv {
         )
     }
 
-    fn dummy_md5_hash() -> &'static str {
-        "b3af409bb8423187c75e6c7f5b683908"
+    fn dummy_md5_hash() -> rattler_digest::Md5Hash {
+        rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
+            "b3af409bb8423187c75e6c7f5b683908",
+        )
+        .unwrap()
     }
 
-    fn dummy_sha256_hash() -> &'static str {
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    fn dummy_sha256_hash() -> rattler_digest::Sha256Hash {
+        rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+        .unwrap()
     }
 
     fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
@@ -128,8 +134,8 @@ mod test_libsolv {
                 build: build.to_string(),
                 build_number,
                 subdir: subdir.to_string(),
-                md5: Some(dummy_md5_hash().to_string()),
-                sha256: Some(dummy_sha256_hash().to_string()),
+                md5: Some(dummy_md5_hash()),
+                sha256: Some(dummy_sha256_hash()),
                 size: None,
                 arch: None,
                 platform: None,
@@ -235,11 +241,19 @@ mod test_libsolv {
         assert_eq!("py36h1af98f8_1", info.package_record.build);
         assert_eq!(1, info.package_record.build_number);
         assert_eq!(
-            "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
+            rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+                "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
+            )
+            .as_ref()
+            .unwrap(),
             info.package_record.sha256.as_ref().unwrap()
         );
         assert_eq!(
-            "fb731d9290f0bcbf3a054665f33ec94f",
+            rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
+                "fb731d9290f0bcbf3a054665f33ec94f"
+            )
+            .as_ref()
+            .unwrap(),
             info.package_record.md5.as_ref().unwrap()
         );
 
@@ -271,11 +285,19 @@ mod test_libsolv {
         assert_eq!("py36h1af98f8_1", info.package_record.build);
         assert_eq!(1, info.package_record.build_number);
         assert_eq!(
-            "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
+            rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
+                "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
+            )
+            .as_ref()
+            .unwrap(),
             info.package_record.sha256.as_ref().unwrap()
         );
         assert_eq!(
-            "fb731d9290f0bcbf3a054665f33ec94f",
+            rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
+                "fb731d9290f0bcbf3a054665f33ec94f"
+            )
+            .as_ref()
+            .unwrap(),
             info.package_record.md5.as_ref().unwrap()
         );
 

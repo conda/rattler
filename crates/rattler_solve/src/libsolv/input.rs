@@ -164,7 +164,12 @@ pub fn add_repodata_records(
 
         // MD5 hash
         if let Some(md5) = record.md5.as_ref() {
-            data.set_checksum(solvable_id, solvable_pkg_id, repo_type_md5, &c_string(md5));
+            data.set_checksum(
+                solvable_id,
+                solvable_pkg_id,
+                repo_type_md5,
+                &c_string(format!("{:x}", md5)),
+            );
         }
 
         // Sha256 hash
@@ -173,7 +178,7 @@ pub fn add_repodata_records(
                 solvable_id,
                 solvable_checksum,
                 repo_type_sha256,
-                &c_string(sha256),
+                &c_string(format!("{:x}", sha256)),
             );
         }
 

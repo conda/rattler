@@ -9,6 +9,7 @@ use std::path::Path;
 
 use fxhash::{FxHashMap, FxHashSet};
 
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
 use thiserror::Error;
@@ -100,7 +101,8 @@ pub struct PackageRecord {
     pub license_family: Option<String>,
 
     /// Optionally a MD5 hash of the package archive
-    pub md5: Option<String>,
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub md5: Option<Md5Hash>,
 
     /// The name of the package
     pub name: String,
@@ -114,7 +116,8 @@ pub struct PackageRecord {
     pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
 
     /// Optionally a SHA256 hash of the package archive
-    pub sha256: Option<String>,
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub sha256: Option<Sha256Hash>,
 
     /// Optionally the size of the package archive in bytes
     pub size: Option<u64>,
@@ -247,8 +250,8 @@ impl PackageRecord {
     pub fn from_index_json(
         index: IndexJson,
         size: Option<u64>,
-        sha256: Option<String>,
-        md5: Option<String>,
+        sha256: Option<Sha256Hash>,
+        md5: Option<Md5Hash>,
     ) -> Result<PackageRecord, ConvertSubdirError> {
         // Determine the subdir if it can't be found
         let subdir = match index.subdir {
