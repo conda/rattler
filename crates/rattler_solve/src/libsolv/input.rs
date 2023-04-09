@@ -131,13 +131,11 @@ pub fn add_repodata_records(
 
         // Timestamp
         if let Some(timestamp) = record.timestamp {
-            // Fixup the timestamp
-            let timestamp = if timestamp > 253402300799 {
-                timestamp / 253402300799
-            } else {
-                timestamp
-            };
-            data.set_num(solvable_id, solvable_buildtime_id, timestamp as u64);
+            data.set_num(
+                solvable_id,
+                solvable_buildtime_id,
+                timestamp.timestamp() as u64,
+            );
         }
 
         // Size

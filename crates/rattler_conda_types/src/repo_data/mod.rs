@@ -126,9 +126,9 @@ pub struct PackageRecord {
     #[serde(default)]
     pub subdir: String,
 
-    /// The UNIX Epoch timestamp when this package was created. Note that sometimes this is specified in
-    /// seconds and sometimes in milliseconds.
-    pub timestamp: Option<u64>,
+    /// The date this entry was created.
+    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
     /// that effect, the number of track features is counted (number of commas) and the package is downweighted
