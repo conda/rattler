@@ -64,7 +64,8 @@ pub struct IndexJson {
     pub features: Option<String>,
 
     /// The timestamp when this package was created
-    pub timestamp: Option<u64>,
+    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
     /// The subdirectory that contains this package
     pub subdir: Option<String>,
