@@ -42,6 +42,7 @@ async fn get_reader(url: Url, client: Client) -> Result<impl tokio::io::AsyncRea
 /// # #[tokio::main]
 /// # async fn main() {
 /// # use std::path::Path;
+/// use url::Url;
 /// use rattler_package_streaming::reqwest::tokio::extract_tar_bz2;
 /// # use reqwest::Client;
 /// let _ = extract_tar_bz2(
@@ -96,6 +97,7 @@ pub async fn extract_conda(
 /// # #[tokio::main]
 /// # async fn main() {
 /// # use std::path::Path;
+/// use url::Url;
 /// use rattler_package_streaming::reqwest::tokio::extract;
 /// # use reqwest::Client;
 /// let _ = extract(
