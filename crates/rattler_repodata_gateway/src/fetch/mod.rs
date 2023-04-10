@@ -185,6 +185,54 @@ pub enum CacheResult {
     CacheNotPresent,
 }
 
+/// handle file:/// urls
+async fn repodata_from_file(
+    subdir_url: Url,
+    out_path: PathBuf,
+    cache_state_path: PathBuf,
+    lock_file: LockedFile,
+) -> Result<CachedRepoData, FetchRepoDataError> {
+    // copy file from subdir_url to out_path
+    tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path)
+        .await
+        .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
+
+    // create a dummy cache state
+    let new_cache_state = RepoDataState {
+        url: subdir_url.clone(),
+        cache_size: tokio::fs::metadata(&out_path)
+            .await
+            .map_err(FetchRepoDataError::FailedToDownloadRepoData)?
+            .len(),
+        cache_headers: CacheHeaders {
+            etag: None,
+            last_modified: None,
+            cache_control: None,
+        },
+        cache_last_modified: SystemTime::now(),
+        blake2_hash: None,
+        has_zst: None,
+        has_bz2: None,
+        has_jlap: None,
+    };
+
+    // write the cache state
+    let new_cache_state = tokio::task::spawn_blocking(move || {
+        new_cache_state
+            .to_path(&cache_state_path)
+            .map(|_| new_cache_state)
+            .map_err(FetchRepoDataError::FailedToWriteCacheState)
+    })
+    .await??;
+
+    Ok(CachedRepoData {
+        lock_file,
+        repo_data_json_path: out_path.to_path_buf(),
+        cache_state: new_cache_state,
+        cache_result: CacheResult::CacheHit,
+    })
+}
+
 /// Fetch the repodata.json file for the given subdirectory. The result is cached on disk using the
 /// HTTP cache headers returned from the server.
 ///
@@ -229,8 +277,21 @@ pub async fn fetch_repo_data(
             .await?
             .map_err(FetchRepoDataError::FailedToAcquireLock)?;
 
+    let cache_action = if subdir_url.scheme() == "file" {
+        // If we are dealing with a local file, we can skip the cache entirely.
+        return repodata_from_file(
+            subdir_url.join(options.variant.file_name()).unwrap(),
+            repo_data_json_path,
+            cache_state_path,
+            lock_file,
+        )
+        .await;
+    } else {
+        options.cache_action
+    };
+
     // Validate the current state of the cache
-    let cache_state = if options.cache_action != CacheAction::NoCache {
+    let cache_state = if cache_action != CacheAction::NoCache {
         let owned_subdir_url = subdir_url.clone();
         let owned_cache_path = cache_path.to_owned();
         let owned_cache_key = cache_key.clone();
@@ -623,22 +684,33 @@ pub async fn check_variant_availability(
 async fn check_valid_download_target(url: &Url, client: &Client) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
-    // Otherwise, perform a HEAD request to determine whether the url seems valid.
-    match client.head(url.clone()).send().await {
-        Ok(response) => {
-            if response.status().is_success() {
-                tracing::debug!("'{url}' seems to be available");
-                true
-            } else {
-                tracing::debug!("'{url}' seems to be unavailable");
+    if url.scheme() == "file" {
+        // If the url is a file url we can simply check if the file exists.
+        let path = url.to_file_path().unwrap();
+        let exists = tokio::fs::metadata(path).await.is_ok();
+        tracing::debug!(
+            "'{url}' seems to be {}",
+            if exists { "available" } else { "unavailable" }
+        );
+        exists
+    } else {
+        // Otherwise, perform a HEAD request to determine whether the url seems valid.
+        match client.head(url.clone()).send().await {
+            Ok(response) => {
+                if response.status().is_success() {
+                    tracing::debug!("'{url}' seems to be available");
+                    true
+                } else {
+                    tracing::debug!("'{url}' seems to be unavailable");
+                    false
+                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "failed to perform HEAD request on '{url}': {e}. Assuming its unavailable.."
+                );
                 false
             }
-        }
-        Err(e) => {
-            tracing::warn!(
-                "failed to perform HEAD request on '{url}': {e}. Assuming its unavailable.."
-            );
-            false
         }
     }
 }
