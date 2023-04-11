@@ -139,6 +139,7 @@ async fn test_extract_url_async() {
         println!("Name: {}", name.display());
 
         let target_dir = temp_dir.join(name);
+        let url = url::Url::parse(url).unwrap();
         rattler_package_streaming::reqwest::tokio::extract(Default::default(), url, &target_dir)
             .await
             .unwrap();
