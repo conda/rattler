@@ -7,7 +7,7 @@ dependencies:
   - openssl
   - pkg-config 
 
-  # Needed for building libsolve
+  # Needed for building libsolv
   - cxx-compiler 
   - cmake
   - make
