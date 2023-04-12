@@ -29,21 +29,27 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 ![Installing an environment](/assets/showcase_create.gif)
 
-## Try it yourself!
+## Give it a try!
 
-To get started with the code:
+Before you begin, make sure you have the following prerequisites:
+- A recent version of [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+- A recent version of [micromamba](https://github.com/mamba-org/micromamba-releases)
 
-* make sure you downloaded the repository (including submodules),
-* have a working Rust installation on your system,
-* have a `c` compiler and `cmake` installed (needed for libsolv).
-
-Then run:
-
+Follow these steps to clone, compile, and run the rattler project:
 ```shell
-cargo run --release create jupyterlab
+# Clone the rattler repository along with its submodules:
+git clone --recursive https://github.com/mamba-org/rattler.git
+cd rattler
+
+# Set up an environment with the required dependencies for compiling rattler and libsolve:
+micromamba create -f environment.yml
+micromamba activate rattler-env
+
+# Compile and execute rattler to create a JupyterLab instance:
+cargo run --release --bin rattler create jupyterlab
 ```
 
-The above command will execute the `rattler-bin` executable in release mode.
+The above command will execute the `rattler` executable in release mode.
 It will download and install an environment into the `.prefix` folder that contains [`jupyterlab`](https://jupyterlab.readthedocs.io/en/stable/getting_started/overview.html) and all the dependencies required to run it (like `python`)
 
 Run the following command to start jupyterlab:

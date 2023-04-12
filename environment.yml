@@ -1,0 +1,13 @@
+name: rattler-env
+channels:
+  - conda-forge
+dependencies:
+  # Needed for building rattler
+  - rust =>1.65.0 
+  - openssl
+  - pkg-config 
+
+  # Needed for building libsolve
+  - cxx-compiler 
+  - cmake
+  - make
