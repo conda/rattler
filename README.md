@@ -41,7 +41,7 @@ Follow these steps to clone, compile, and run the rattler project:
 git clone --recursive https://github.com/mamba-org/rattler.git
 cd rattler
 
-# Set up an environment with the required dependencies for compiling rattler and libsolve:
+# Set up an environment with the required dependencies for compiling rattler and libsolv:
 micromamba create -f environment.yml
 micromamba activate rattler-env
 
