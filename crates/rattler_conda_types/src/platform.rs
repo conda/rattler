@@ -237,7 +237,8 @@ impl Platform {
             "32" => "x86",
             "64" => "x86_64",
             _ => arch,
-        }.to_string()
+        }
+        .to_string()
     }
 }
 
@@ -264,5 +265,62 @@ impl<'de> serde::Deserialize<'de> for Platform {
         String::deserialize(deserializer)?
             .parse()
             .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_platform() {
+        assert_eq!("linux-64".parse::<Platform>().unwrap(), Platform::Linux64);
+        assert_eq!("linux-32".parse::<Platform>().unwrap(), Platform::Linux32);
+        assert_eq!(
+            "linux-aarch64".parse::<Platform>().unwrap(),
+            Platform::LinuxAarch64
+        );
+        assert_eq!(
+            "linux-armv6l".parse::<Platform>().unwrap(),
+            Platform::LinuxArmV6l
+        );
+        assert_eq!("win-arm64".parse::<Platform>().unwrap(), Platform::WinArm64);
+        assert_eq!(
+            "emscripten-32".parse::<Platform>().unwrap(),
+            Platform::Emscripten32
+        );
+        assert_eq!("noarch".parse::<Platform>().unwrap(), Platform::NoArch);
+    }
+
+    #[test]
+    fn test_parse_platform_error() {
+        assert!("foo".parse::<Platform>().is_err());
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(Platform::Linux64.to_string(), "linux-64");
+        assert_eq!(Platform::Linux32.to_string(), "linux-32");
+        assert_eq!(Platform::LinuxAarch64.to_string(), "linux-aarch64");
+    }
+
+    #[test]
+    fn test_arch() {
+        assert_eq!(Platform::Linux64.arch(), "x86_64");
+        assert_eq!(Platform::Linux32.arch(), "x86");
+        assert_eq!(Platform::LinuxAarch64.arch(), "aarch64");
+        assert_eq!(Platform::LinuxArmV6l.arch(), "armv6l");
+        assert_eq!(Platform::LinuxArmV7l.arch(), "armv7l");
+        assert_eq!(Platform::LinuxPpc64le.arch(), "ppc64le");
+        assert_eq!(Platform::LinuxPpc64.arch(), "ppc64");
+        assert_eq!(Platform::LinuxS390X.arch(), "s390x");
+        assert_eq!(Platform::LinuxRiscv32.arch(), "riscv32");
+        assert_eq!(Platform::LinuxRiscv64.arch(), "riscv64");
+        assert_eq!(Platform::Osx64.arch(), "x86_64");
+        assert_eq!(Platform::OsxArm64.arch(), "arm64");
+        assert_eq!(Platform::Win32.arch(), "x86");
+        assert_eq!(Platform::Win64.arch(), "x86_64");
+        assert_eq!(Platform::WinArm64.arch(), "arm64");
+        assert_eq!(Platform::Emscripten32.arch(), "x86");
     }
 }
