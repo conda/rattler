@@ -225,6 +225,22 @@ impl From<Platform> for &'static str {
     }
 }
 
+impl Platform {
+    /// Return the arch string for the platform
+    /// The arch is usually the part after the `-` of the platform string.
+    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64` respectively.
+    pub fn arch(&self) -> String {
+        let s = self.to_string();
+        let arch = s.split('-').last().unwrap();
+        // Note - should we return `wasm32` for emscripten?
+        match arch {
+            "32" => "x86",
+            "64" => "x86_64",
+            _ => arch,
+        }.to_string()
+    }
+}
+
 impl fmt::Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
