@@ -1,5 +1,6 @@
 use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
+use crate::package::ArchiveType;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{ParseChannelError, VersionSpec};
 use nom::branch::alt;
@@ -83,7 +84,7 @@ fn strip_if(input: &str) -> (&str, Option<&str>) {
 
 /// Returns true if the specified string represents a package path.
 fn is_package_file(input: &str) -> bool {
-    input.ends_with(".conda") || input.ends_with(".tar.bz2")
+    ArchiveType::try_from(input).is_some()
 }
 
 /// An optimized data structure to store key value pairs in between a bracket string
