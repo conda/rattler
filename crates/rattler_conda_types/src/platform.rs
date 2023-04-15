@@ -30,6 +30,21 @@ pub enum Platform {
     Emscripten32,
 }
 
+/// Known architectures supported by Conda.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum Arch {
+    X86,
+    X86_64,
+    Aarch64,
+    ArmV6l,
+    ArmV7l,
+    Ppc64le,
+    Ppc64,
+    S390X,
+    Riscv32,
+    Riscv64,
+}
+
 impl Platform {
     /// Returns the platform for which the current binary was build.
     pub const fn current() -> Platform {
@@ -225,6 +240,33 @@ impl From<Platform> for &'static str {
     }
 }
 
+impl Platform {
+    /// Return the arch string for the platform
+    /// The arch is usually the part after the `-` of the platform string.
+    /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64` respectively.
+    pub fn arch(&self) -> Option<Arch> {
+        match self {
+            Platform::NoArch => None,
+            Platform::Linux32 => Some(Arch::X86),
+            Platform::Linux64 => Some(Arch::X86_64),
+            Platform::LinuxAarch64 => Some(Arch::Aarch64),
+            Platform::LinuxArmV6l => Some(Arch::ArmV6l),
+            Platform::LinuxArmV7l => Some(Arch::ArmV7l),
+            Platform::LinuxPpc64le => Some(Arch::Ppc64le),
+            Platform::LinuxPpc64 => Some(Arch::Ppc64),
+            Platform::LinuxS390X => Some(Arch::S390X),
+            Platform::LinuxRiscv32 => Some(Arch::Riscv32),
+            Platform::LinuxRiscv64 => Some(Arch::Riscv64),
+            Platform::Osx64 => Some(Arch::X86_64),
+            Platform::OsxArm64 => Some(Arch::Aarch64),
+            Platform::Win32 => Some(Arch::X86),
+            Platform::Win64 => Some(Arch::X86_64),
+            Platform::WinArm64 => Some(Arch::Aarch64),
+            Platform::Emscripten32 => Some(Arch::X86),
+        }
+    }
+}
+
 impl fmt::Display for Platform {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
@@ -248,5 +290,149 @@ impl<'de> serde::Deserialize<'de> for Platform {
         String::deserialize(deserializer)?
             .parse()
             .map_err(serde::de::Error::custom)
+    }
+}
+
+impl Arch {
+    /// Returns the current arch.
+    pub fn current() -> Self {
+        // this cannot be `noarch` so unwrap is fine
+        Platform::current().arch().unwrap()
+    }
+
+    /// Returns a string representation of the arch.
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+}
+
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
+#[error("'{string}' is not a known arch")]
+pub struct ParseArchError {
+    pub string: String,
+}
+
+impl FromStr for Arch {
+    type Err = ParseArchError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "x86" => Arch::X86,
+            "x86_64" => Arch::X86_64,
+            "aarch64" => Arch::Aarch64,
+            "armv6l" => Arch::ArmV6l,
+            "armv7l" => Arch::ArmV7l,
+            "ppc64le" => Arch::Ppc64le,
+            "ppc64" => Arch::Ppc64,
+            "s390x" => Arch::S390X,
+            "riscv32" => Arch::Riscv32,
+            "riscv64" => Arch::Riscv64,
+            string => {
+                return Err(ParseArchError {
+                    string: string.to_owned(),
+                })
+            }
+        })
+    }
+}
+
+impl From<Arch> for &'static str {
+    fn from(arch: Arch) -> Self {
+        match arch {
+            Arch::X86 => "x86",
+            Arch::X86_64 => "x86_64",
+            Arch::Aarch64 => "aarch64",
+            Arch::ArmV6l => "armv6l",
+            Arch::ArmV7l => "armv7l",
+            Arch::Ppc64le => "ppc64le",
+            Arch::Ppc64 => "ppc64",
+            Arch::S390X => "s390x",
+            Arch::Riscv32 => "riscv32",
+            Arch::Riscv64 => "riscv64",
+        }
+    }
+}
+
+impl fmt::Display for Arch {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl serde::Serialize for Arch {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Arch {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        String::deserialize(deserializer)?
+            .parse()
+            .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_platform() {
+        assert_eq!("linux-64".parse::<Platform>().unwrap(), Platform::Linux64);
+        assert_eq!("linux-32".parse::<Platform>().unwrap(), Platform::Linux32);
+        assert_eq!(
+            "linux-aarch64".parse::<Platform>().unwrap(),
+            Platform::LinuxAarch64
+        );
+        assert_eq!(
+            "linux-armv6l".parse::<Platform>().unwrap(),
+            Platform::LinuxArmV6l
+        );
+        assert_eq!("win-arm64".parse::<Platform>().unwrap(), Platform::WinArm64);
+        assert_eq!(
+            "emscripten-32".parse::<Platform>().unwrap(),
+            Platform::Emscripten32
+        );
+        assert_eq!("noarch".parse::<Platform>().unwrap(), Platform::NoArch);
+    }
+
+    #[test]
+    fn test_parse_platform_error() {
+        assert!("foo".parse::<Platform>().is_err());
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(Platform::Linux64.to_string(), "linux-64");
+        assert_eq!(Platform::Linux32.to_string(), "linux-32");
+        assert_eq!(Platform::LinuxAarch64.to_string(), "linux-aarch64");
+    }
+
+    #[test]
+    fn test_arch() {
+        assert_eq!(Platform::Linux64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::Linux32.arch(), Some(Arch::X86));
+        assert_eq!(Platform::LinuxAarch64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::LinuxArmV6l.arch(), Some(Arch::ArmV6l));
+        assert_eq!(Platform::LinuxArmV7l.arch(), Some(Arch::ArmV7l));
+        assert_eq!(Platform::LinuxPpc64le.arch(), Some(Arch::Ppc64le));
+        assert_eq!(Platform::LinuxPpc64.arch(), Some(Arch::Ppc64));
+        assert_eq!(Platform::LinuxS390X.arch(), Some(Arch::S390X));
+        assert_eq!(Platform::LinuxRiscv32.arch(), Some(Arch::Riscv32));
+        assert_eq!(Platform::LinuxRiscv64.arch(), Some(Arch::Riscv64));
+        assert_eq!(Platform::Osx64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::OsxArm64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::Win32.arch(), Some(Arch::X86));
+        assert_eq!(Platform::Win64.arch(), Some(Arch::X86_64));
+        assert_eq!(Platform::WinArm64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::Emscripten32.arch(), Some(Arch::X86));
+        assert_eq!(Platform::NoArch.arch(), None);
     }
 }
