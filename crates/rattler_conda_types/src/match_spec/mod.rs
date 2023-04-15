@@ -4,7 +4,7 @@ use serde_with::skip_serializing_none;
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod matcher;
-mod parse;
+pub mod parse;
 
 use matcher::StringMatcher;
 
