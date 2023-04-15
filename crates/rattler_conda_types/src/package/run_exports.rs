@@ -9,7 +9,7 @@ use serde_with::{serde_as, skip_serializing_none};
 /// The `run_exports.json` file contains information about the run exports of a package
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
 pub struct RunExportsJson {
     /// weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
