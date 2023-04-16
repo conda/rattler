@@ -24,6 +24,7 @@ rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
 itertools = "0.10.5"
 serde_json = "1.0.94"
 url = "2.3.1"
+chrono = "0.4.24"
 
 [features]
 tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]

@@ -120,6 +120,7 @@ pub fn write_tar_bz2_package<W: Write>(
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
+    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
@@ -130,7 +131,7 @@ pub fn write_tar_bz2_package<W: Write>(
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
     for path in info_paths.chain(other_paths) {
-        append_path_to_archive(&mut archive, base_path, &path)?;
+        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -144,6 +145,7 @@ fn write_zst_archive<W: Write>(
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
+    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // TODO figure out multi-threading for zstd
     let compression_level = compression_level.to_zstd_level()?;
@@ -151,7 +153,7 @@ fn write_zst_archive<W: Write>(
     archive.follow_symlinks(false);
 
     for path in paths {
-        append_path_to_archive(&mut archive, base_path, &path)?;
+        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -182,6 +184,7 @@ pub fn write_conda_package<W: Write + Seek>(
     paths: &[PathBuf],
     compression_level: CompressionLevel,
     out_name: &str,
+    timestamp: Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
@@ -202,18 +205,28 @@ pub fn write_conda_package<W: Write + Seek>(
         base_path,
         other_paths,
         compression_level,
+        &timestamp,
     )?;
 
     // info paths come last
     outer_archive.start_file(format!("info-{out_name}.tar.zst"), options)?;
-    write_zst_archive(&mut outer_archive, base_path, info_paths, compression_level)?;
+    write_zst_archive(
+        &mut outer_archive,
+        base_path,
+        info_paths,
+        compression_level,
+        &timestamp,
+    )?;
 
     outer_archive.finish()?;
 
     Ok(())
 }
 
-fn prepare_header(path: &Path) -> Result<tar::Header, std::io::Error> {
+fn prepare_header(
+    path: &Path,
+    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
+) -> Result<tar::Header, std::io::Error> {
     let mut header = tar::Header::new_gnu();
     let name = b"././@LongLink";
     header.as_gnu_mut().unwrap().name[..name.len()].clone_from_slice(&name[..]);
@@ -226,6 +239,10 @@ fn prepare_header(path: &Path) -> Result<tar::Header, std::io::Error> {
     header.set_gid(0);
     header.set_device_minor(0)?;
     header.set_device_major(0)?;
+
+    if let Some(timestamp) = timestamp {
+        header.set_mtime(timestamp.timestamp() as u64);
+    }
 
     // let file_size = stat.len();
     // TODO do we need this
@@ -243,9 +260,10 @@ fn append_path_to_archive(
     archive: &mut tar::Builder<impl Write>,
     base_path: &Path,
     path: &Path,
+    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // create a tar header
-    let mut header = prepare_header(&base_path.join(path))
+    let mut header = prepare_header(&base_path.join(path), timestamp)
         .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
     if header.entry_type().is_file() {
