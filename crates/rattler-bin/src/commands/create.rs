@@ -10,10 +10,12 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
     RepoDataRecord,
 };
-use rattler_repodata_gateway::fetch::{CacheResult, DownloadProgress, FetchRepoDataOptions};
+use rattler_repodata_gateway::fetch::{
+    CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
+};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{LibsolvRepoData, SolverBackend, SolverTask};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use std::{
     borrow::Cow,
     env,
@@ -113,6 +115,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             }
         })
         .buffer_unordered(channel_and_platform_len)
+        .filter_map(|result| async move {
+            match result {
+                Err(e) => Some(Err(e)),
+                Ok(Some(data)) => Some(Ok(data)),
+                Ok(None) => None,
+            }
+        })
         .collect::<Vec<_>>()
         .await
         // Collect into another iterator where we extract the first erroneous result
@@ -456,7 +465,7 @@ async fn fetch_repo_data_records_with_progress(
     repodata_cache: &Path,
     client: Client,
     multi_progress: indicatif::MultiProgress,
-) -> Result<SparseRepoData, anyhow::Error> {
+) -> Result<Option<SparseRepoData>, anyhow::Error> {
     // Create a progress bar
     let progress_bar = multi_progress.add(
         indicatif::ProgressBar::new(1)
@@ -485,6 +494,15 @@ async fn fetch_repo_data_records_with_progress(
     // Error out if an error occurred, but also update the progress bar
     let result = match result {
         Err(e) => {
+            let not_found = matches!(&e,
+                FetchRepoDataError::HttpError(e) if e.status() == Some(StatusCode::NOT_FOUND)
+            );
+            if not_found && platform != Platform::NoArch {
+                progress_bar.set_style(finished_progress_style());
+                progress_bar.finish_with_message("Not Found");
+                return Ok(None);
+            }
+
             progress_bar.set_style(errored_progress_style());
             progress_bar.finish_with_message("Error");
             return Err(e.into());
@@ -511,7 +529,7 @@ async fn fetch_repo_data_records_with_progress(
                 CacheResult::CacheHit | CacheResult::CacheHitAfterFetch
             );
             progress_bar.finish_with_message(if is_cache_hit { "Using cache" } else { "Done" });
-            Ok(repodata)
+            Ok(Some(repodata))
         }
         Ok(Err(err)) => {
             progress_bar.set_style(errored_progress_style());
