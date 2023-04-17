@@ -94,6 +94,7 @@ impl CompressionLevel {
 /// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner bzip2 encoded files
+/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors
 ///
@@ -109,7 +110,7 @@ impl CompressionLevel {
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
-/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, CompressionLevel::Default).unwrap();
+/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, CompressionLevel::Default, None).unwrap();
 /// ```
 ///
 /// # See also
@@ -120,7 +121,7 @@ pub fn write_tar_bz2_package<W: Write>(
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
-    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
@@ -131,7 +132,7 @@ pub fn write_tar_bz2_package<W: Write>(
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
     for path in info_paths.chain(other_paths) {
-        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
+        append_path_to_archive(&mut archive, base_path, &path, &timestamp)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -145,7 +146,7 @@ fn write_zst_archive<W: Write>(
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
-    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
+    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // TODO figure out multi-threading for zstd
     let compression_level = compression_level.to_zstd_level()?;
@@ -173,6 +174,7 @@ fn write_zst_archive<W: Write>(
 /// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner zstd encoded files
+/// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors
 ///
@@ -184,7 +186,7 @@ pub fn write_conda_package<W: Write + Seek>(
     paths: &[PathBuf],
     compression_level: CompressionLevel,
     out_name: &str,
-    timestamp: Option<chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
@@ -225,7 +227,7 @@ pub fn write_conda_package<W: Write + Seek>(
 
 fn prepare_header(
     path: &Path,
-    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
+    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<tar::Header, std::io::Error> {
     let mut header = tar::Header::new_gnu();
     let name = b"././@LongLink";
@@ -260,7 +262,7 @@ fn append_path_to_archive(
     archive: &mut tar::Builder<impl Write>,
     base_path: &Path,
     path: &Path,
-    timestamp: &Option<chrono::DateTime<chrono::Utc>>,
+    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // create a tar header
     let mut header = prepare_header(&base_path.join(path), timestamp)
