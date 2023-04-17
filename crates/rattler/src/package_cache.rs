@@ -28,14 +28,21 @@ pub struct PackageCache {
     inner: Arc<Mutex<PackageCacheInner>>,
 }
 
+/// The hash of the package archive file.
+#[derive(Debug, Hash, Clone, Eq, PartialEq)]
+pub enum CacheHash {
+    Sha256(rattler_digest::Sha256Hash),
+    Md5(rattler_digest::Md5Hash),
+}
+
 /// Provides a unique identifier for packages in the cache.
 /// TODO: This could not be unique over multiple subdir. How to handle?
-/// TODO: Wouldn't it be better to cache based on hashes?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct CacheKey {
     name: String,
     version: String,
     build_string: String,
+    hash: Option<CacheHash>,
 }
 
 impl From<ArchiveIdentifier> for CacheKey {
@@ -44,6 +51,7 @@ impl From<ArchiveIdentifier> for CacheKey {
             name: pkg.name,
             version: pkg.version,
             build_string: pkg.build_string,
+            hash: None,
         }
     }
 }
@@ -54,13 +62,22 @@ impl From<&PackageRecord> for CacheKey {
             name: record.name.to_string(),
             version: record.version.to_string(),
             build_string: record.build.to_string(),
+            hash: record
+                .sha256
+                .map(CacheHash::Sha256)
+                .or_else(|| record.md5.map(CacheHash::Md5)),
         }
     }
 }
 
 impl Display for CacheKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
+        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)?;
+        match self.hash {
+            Some(CacheHash::Md5(hash)) => write!(f, "-{:x}", hash),
+            Some(CacheHash::Sha256(hash)) => write!(f, "-{:x}", hash),
+            None => Ok(()),
+        }
     }
 }
 
