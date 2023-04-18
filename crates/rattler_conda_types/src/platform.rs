@@ -240,6 +240,15 @@ impl From<Platform> for &'static str {
     }
 }
 
+impl From<&Platform> for String {
+    fn from(platform: &Platform) -> Self {
+        // Convert the reference to a `&'static str` using the existing `From<Platform>` implementation
+        let platform_str: &'static str = (*platform).into();
+        // Convert the `&'static str` to a `String`
+        platform_str.to_string()
+    }
+}
+
 impl Platform {
     /// Return the arch string for the platform
     /// The arch is usually the part after the `-` of the platform string.
