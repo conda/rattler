@@ -3,7 +3,7 @@
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-use crate::ExtractError;
+use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
 use reqwest::blocking::{Client, Response};
 use reqwest::IntoUrl;
@@ -25,7 +25,7 @@ pub fn extract_tar_bz2(
     client: Client,
     url: impl IntoUrl,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
     let response = client
         .get(url)
@@ -53,7 +53,7 @@ pub fn extract_conda(
     client: Client,
     url: impl IntoUrl,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
     let response = client
         .get(url)
@@ -78,7 +78,11 @@ pub fn extract_conda(
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
-pub fn extract(client: Client, url: impl IntoUrl, destination: &Path) -> Result<(), ExtractError> {
+pub fn extract(
+    client: Client,
+    url: impl IntoUrl,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
     let url = url
         .into_url()
         .map_err(reqwest::Error::from)

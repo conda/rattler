@@ -1,7 +1,7 @@
 //! Functionality to stream and extract packages directly from a [`reqwest::Url`] within a [`tokio`]
 //! async context.
 
-use crate::ExtractError;
+use crate::{ExtractError, ExtractResult};
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use reqwest::{Client, Response};
@@ -57,7 +57,7 @@ pub async fn extract_tar_bz2(
     client: Client,
     url: Url,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     let reader = get_reader(url.clone(), client).await?;
     // The `response` is used to stream in the package data
     crate::tokio::async_read::extract_tar_bz2(reader, destination).await
@@ -84,7 +84,7 @@ pub async fn extract_conda(
     client: Client,
     url: Url,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
     let reader = get_reader(url.clone(), client).await?;
     crate::tokio::async_read::extract_conda(reader, destination).await
@@ -108,7 +108,11 @@ pub async fn extract_conda(
 ///     .unwrap();
 /// # }
 /// ```
-pub async fn extract(client: Client, url: Url, destination: &Path) -> Result<(), ExtractError> {
+pub async fn extract(
+    client: Client,
+    url: Url,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
     match ArchiveType::try_from(Path::new(url.path()))
         .ok_or(ExtractError::UnsupportedArchiveType)?
     {

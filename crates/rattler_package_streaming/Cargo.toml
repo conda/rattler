@@ -11,20 +11,21 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-thiserror = "1.0.37"
-tar = { version = "0.4.38" }
 bzip2 = { version = "0.4" }
-zip = { version = "0.6.3" }
-zstd = "0.12.1"
+chrono = "0.4.24"
+futures-util = { version = "0.3.25", optional = true }
+itertools = "0.10.5"
+rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
+rattler_digest = { version = "0.2.0", path = "../rattler_digest" }
 reqwest = { version = "0.11.13", optional = true }
+serde_json = "1.0.94"
+tar = { version = "0.4.38" }
+thiserror = "1.0.37"
 tokio = { version = "1", optional = true }
 tokio-util = { version = "0.7", optional = true }
-futures-util = { version = "0.3.25", optional = true }
-rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
-itertools = "0.10.5"
-serde_json = "1.0.94"
 url = "2.3.1"
-chrono = "0.4.24"
+zip = { version = "0.6.3" }
+zstd = "0.12.1"
 
 [features]
 tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]
@@ -34,3 +35,5 @@ reqwest = ["reqwest/blocking"]
 tempfile = "3.4.0"
 tokio = { version = "1", features = ["rt", "macros"] }
 walkdir = "2.3.2"
+rstest = "0.17.0"
+rstest_reuse = "0.5.0"
