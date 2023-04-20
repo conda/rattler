@@ -2,7 +2,7 @@ use crate::conda_lock::Channel;
 use crate::{MatchSpec, Platform};
 use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
-use serde_json::ser::Formatter;
+use serde_json_python_formatter::PythonFormatter;
 use std::string::FromUtf8Error;
 
 #[derive(Debug, thiserror::Error)]
@@ -96,48 +96,9 @@ pub fn calculate_content_data(
     };
 
     let mut buf = Vec::new();
-    let mut ser = serde_json::Serializer::with_formatter(&mut buf, PythonFormatter {});
+    let mut ser = serde_json::Serializer::with_formatter(&mut buf, PythonFormatter::default());
     content_hash_data.serialize(&mut ser)?;
     Ok(String::from_utf8(buf)?)
-}
-
-/// This implements a formatter that uses the same formatting as
-/// as the standard lib python `json.dumps()`
-#[derive(Clone, Debug)]
-struct PythonFormatter {}
-
-impl Formatter for PythonFormatter {
-    #[inline]
-    fn begin_array_value<W>(&mut self, writer: &mut W, first: bool) -> std::io::Result<()>
-    where
-        W: ?Sized + std::io::Write,
-    {
-        if first {
-            Ok(())
-        } else {
-            writer.write_all(b", ")
-        }
-    }
-
-    #[inline]
-    fn begin_object_key<W>(&mut self, writer: &mut W, first: bool) -> std::io::Result<()>
-    where
-        W: ?Sized + std::io::Write,
-    {
-        if first {
-            Ok(())
-        } else {
-            writer.write_all(b", ")
-        }
-    }
-
-    #[inline]
-    fn begin_object_value<W>(&mut self, writer: &mut W) -> std::io::Result<()>
-    where
-        W: ?Sized + std::io::Write,
-    {
-        writer.write_all(b": ")
-    }
 }
 
 /// Calculate the content hash for a platform and set of match-specs
