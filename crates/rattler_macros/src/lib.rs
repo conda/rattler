@@ -2,6 +2,10 @@ use proc_macro::TokenStream;
 use quote::quote_spanned;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed, Ident};
 
+/// Macro for enforcing alphabetical order on Structs and Enums.
+///
+/// This macro will not automatically sort it for you; ratherm it will fail to compile if the
+/// fields are not defined alphabetically.
 #[proc_macro_attribute]
 pub fn sorted(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let out = item.clone();
