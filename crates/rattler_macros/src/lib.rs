@@ -4,7 +4,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed, Ident};
 
 /// Macro for enforcing alphabetical order on Structs and Enums.
 ///
-/// This macro will not automatically sort it for you; ratherm it will fail to compile if the
+/// This macro will not automatically sort it for you; rather, it will fail to compile if the
 /// fields are not defined alphabetically.
 #[proc_macro_attribute]
 pub fn sorted(_attr: TokenStream, item: TokenStream) -> TokenStream {
