@@ -1,13 +1,13 @@
 ---
 source: crates/rattler_conda_types/src/package/about.rs
-expression: "About::from_package_directory(package_dir.path()).unwrap()"
+expression: "AboutJson::from_package_directory(package_dir.path()).unwrap()"
 ---
+channels:
+  - "https://conda.anaconda.org/conda-forge"
 description: "Conda is an open source package management system and environment management system for installing multiple versions of software packages and their dependencies and switching easily between them. It works on Linux, OS X and Windows, and was created for Python programs but can package and distribute any software.\n"
-summary: "OS-agnostic, system-level binary package and environment manager."
-license: BSD-3-Clause
 dev_url: "https://github.com/conda/conda"
 doc_url: "https://docs.conda.io/projects/conda/en/stable/"
 home: "https://conda.io/"
-channels:
-  - "https://conda.anaconda.org/conda-forge"
+license: BSD-3-Clause
+summary: "OS-agnostic, system-level binary package and environment manager."
 
