@@ -56,4 +56,7 @@ tokio = { version = "1.12.0", features = ["macros", "rt-multi-thread"] }
 rstest = "0.17.0"
 
 [features]
+default = ['native-tls']
+native-tls = ['reqwest/native-tls']
+rustls-tls = ['reqwest/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "ouroboros", "serde_with", "superslice", "itertools"]
