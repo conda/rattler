@@ -9,24 +9,21 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
 
 use url::Url;
 
+use rattler_macros::sorted;
+
 /// The `about.json` file contains metadata about the package
 #[serde_as]
+#[sorted]
 #[skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub struct AboutJson {
+    /// A list of channels that where used during the build
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub channels: Vec<String>,
+
     /// Description of the package
     #[serde_as(deserialize_as = "Option<MultiLineString>")]
     pub description: Option<String>,
-
-    /// Short summary description
-    #[serde_as(deserialize_as = "Option<MultiLineString>")]
-    pub summary: Option<String>,
-
-    /// Optionally, the license
-    pub license: Option<String>,
-
-    /// Optionally, the license family
-    pub license_family: Option<String>,
 
     /// URL to the development page of the package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -52,14 +49,20 @@ pub struct AboutJson {
     )]
     pub home: Vec<Url>,
 
+    /// Optionally, the license
+    pub license: Option<String>,
+
+    /// Optionally, the license family
+    pub license_family: Option<String>,
+
     /// URL to the latest source code of the package
     #[serde(default)]
     #[serde_as(deserialize_as = "LossyUrl")]
     pub source_url: Option<Url>,
 
-    /// A list of channels that where used during the build
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub channels: Vec<String>,
+    /// Short summary description
+    #[serde_as(deserialize_as = "Option<MultiLineString>")]
+    pub summary: Option<String>,
 }
 
 impl PackageFile for AboutJson {
