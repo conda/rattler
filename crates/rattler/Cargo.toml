@@ -12,8 +12,8 @@ readme.workspace = true
 
 [features]
 default = ['native-tls']
-native-tls = ['reqwest/native-tls']
-rustls-tls = ['reqwest/rustls-tls']
+native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
+rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.44"
