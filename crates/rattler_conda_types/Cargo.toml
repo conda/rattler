@@ -44,5 +44,5 @@ hex-literal = "0.4.0"
 
 [features]
 default = ['native-tls']
-native-tls = ['rattler_package_streaming?/native-tls']
-rustls-tls = ['rattler_package_streaming?/rustls-tls']
+native-tls = ['rattler_package_streaming/native-tls']
+rustls-tls = ['rattler_package_streaming/rustls-tls']
