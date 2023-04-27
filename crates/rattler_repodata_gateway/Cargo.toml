@@ -59,4 +59,4 @@ rstest = "0.17.0"
 default = ['native-tls']
 native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros", "serde_with", "superslice", "itertools"]
+sparse = ["rattler_conda_types", "memmap2", "ouroboros", "serde_with", "superslice", "itertools", "serde_json/raw_value"]
