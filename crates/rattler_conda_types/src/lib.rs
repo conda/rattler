@@ -13,7 +13,7 @@ mod repo_data_record;
 mod run_export;
 mod utils;
 mod version;
-mod version_spec;
+pub mod version_spec;
 
 pub mod conda_lock;
 mod generic_virtual_package;
