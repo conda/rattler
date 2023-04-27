@@ -37,7 +37,7 @@ pub use repo_data::{ChannelInfo, ConvertSubdirError, PackageRecord, RepoData};
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
-pub use version_spec::VersionSpec;
+pub use version_spec::{LogicalOperator, ParseVersionSpecError, VersionOperator, VersionSpec};
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
