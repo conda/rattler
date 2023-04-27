@@ -13,7 +13,7 @@ mod repo_data_record;
 mod run_export;
 mod utils;
 mod version;
-mod version_spec;
+pub mod version_spec;
 
 pub mod conda_lock;
 mod generic_virtual_package;
@@ -37,7 +37,7 @@ pub use repo_data::{ChannelInfo, ConvertSubdirError, PackageRecord, RepoData};
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
-pub use version_spec::{LogicalOperator, ParseVersionSpecError, VersionOperator, VersionSpec};
+pub use version_spec::VersionSpec;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
