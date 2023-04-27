@@ -23,12 +23,16 @@ tar = { version = "0.4.38" }
 thiserror = "1.0.37"
 tokio = { version = "1", optional = true }
 tokio-util = { version = "0.7", optional = true }
+reqwest = { version = "0.11.13", optional = true, default-features = false }
 url = "2.3.1"
 zip = { version = "0.6.3" }
 zstd = "0.12.1"
 
 [features]
+default = ['native-tls']
 tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]
+native-tls = ['reqwest?/native-tls']
+rustls-tls = ['reqwest?/rustls-tls']
 reqwest = ["reqwest/blocking"]
 
 [dev-dependencies]
