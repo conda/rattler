@@ -15,9 +15,9 @@ name = "rattler"
 path = "src/main.rs"
 
 [features]
-default = ['native-tls']
-native-tls = ['rattler/native-tls', "rattler_repodata_gateway/native-tls"]
-rustls-tls = ['rattler/rustls-tls', "rattler_repodata_gateway/rustls-tls"]
+default = ["native-tls"]
+native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls"]
+rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
 
 [dependencies]
 anyhow = "1.0.44"
@@ -33,7 +33,7 @@ rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
 rattler_repodata_gateway = { version = "0.2.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
 rattler_solve = { version = "0.2.0", path = "../rattler_solve" }
 rattler_virtual_packages = { version = "0.2.0", path = "../rattler_virtual_packages" }
-reqwest = "0.11.14"
+reqwest = { version = "0.11.14", default-features = false }
 tokio = { version = "1.21.1", features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { version = "0.3.15", features = ["env-filter"] }
 
