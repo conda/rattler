@@ -103,10 +103,12 @@ impl SparseRepoData {
     ///
     /// This will parse the records for the specified packages as well as all the packages these records
     /// depend on.
-    pub fn load_records_recursive(
-        repo_data: &[SparseRepoData],
+    pub fn load_records_recursive<'a>(
+        repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = impl Into<String>>,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
+        let repo_data: Vec<_> = repo_data.into_iter().collect();
+
         // Construct the result map
         let mut result = Vec::from_iter((0..repo_data.len()).map(|_| Vec::new()));
 
@@ -154,6 +156,11 @@ impl SparseRepoData {
         }
 
         Ok(result)
+    }
+
+    /// Returns the subdirectory from which this repodata was loaded
+    pub fn subdir(&self) -> &str {
+        &self.subdir
     }
 }
 
