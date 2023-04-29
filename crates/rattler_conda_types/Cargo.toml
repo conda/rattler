@@ -36,7 +36,7 @@ glob = "0.3.1"
 [dev-dependencies]
 rand = "0.8.4"
 insta = { version = "1.16.0", features = ["yaml", "redactions"] }
-rattler_package_streaming = { path = "../rattler_package_streaming" }
+rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features=["rustls-tls"] }
 tempfile = "3.3.0"
 rstest = "0.17.0"
 assert_matches = "1.5.0"
