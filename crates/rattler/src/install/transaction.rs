@@ -111,7 +111,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                 None => operations.push(TransactionOperation::Remove(record)),
                 Some(desired) => {
                     // If the desired differs from the current it has to be updated.
-                    if requires_relinking(desired.as_ref(), record.as_ref()) {
+                    if !describe_same_content(desired.as_ref(), record.as_ref()) {
                         operations.push(TransactionOperation::Change {
                             old: record,
                             new: desired,
@@ -157,23 +157,21 @@ fn is_python_record(record: &PackageRecord) -> bool {
     record.name == "python"
 }
 
-/// Returns true if the `from` and `to` differ in such a way that it needs relinking.
-fn requires_relinking(from: &PackageRecord, to: &PackageRecord) -> bool {
-    // The name, version and build string must match
-    if from.name != to.name || from.version != to.version || from.build != to.build {
-        return true;
+/// Returns true if the `from` and `to` describe the same package content
+fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
+    // If the hashes of the packages match we consider them to be equal
+    if let (Some(a), Some(b)) = (from.sha256.as_ref(), to.sha256.as_ref()) {
+        return a == b;
+    }
+    if let (Some(a), Some(b)) = (from.md5.as_ref(), to.md5.as_ref()) {
+        return a == b;
     }
 
-    // If the SHA256 hash of the packages match we consider them equal
-    if matches!((from.sha256.as_ref(), to.sha256.as_ref()), (Some(a), Some(b)) if a == b) {
+    // If the size doesnt match, the contents must be different
+    if matches!((from.size.as_ref(), to.size.as_ref()), (Some(a), Some(b)) if a == b) {
         return false;
     }
 
-    // If the MD5 hash of the packages match we consider them equal
-    if matches!((from.md5.as_ref(), to.md5.as_ref()), (Some(a), Some(b)) if a == b) {
-        return false;
-    }
-
-    // Otherwise just compare all fields
-    return from != to;
+    // Otherwise, just check that the name, version and build string match
+    from.name == to.name && from.version == to.version && from.build == to.build
 }
