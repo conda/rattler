@@ -84,6 +84,13 @@ impl CondaLock {
     pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
         Self::from_reader(File::open(path)?)
     }
+
+    /// Writes the conda lock to a file
+    pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
+        let file = std::fs::File::create(path)?;
+        serde_yaml::to_writer(file, self)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+    }
 }
 
 #[derive(Serialize, Deserialize)]
