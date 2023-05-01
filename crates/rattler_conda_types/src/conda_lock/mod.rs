@@ -3,7 +3,7 @@
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
 use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
-use crate::{ParsePlatformError, Platform};
+use crate::{NamelessMatchSpec, ParsePlatformError, Platform};
 use rattler_digest::serde::SerializableHash;
 use rattler_digest::{Md5Hash, Sha256Hash};
 use serde::de::Error;
@@ -146,11 +146,18 @@ pub enum Manager {
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
 /// This is basically a MatchSpec but will never contain the package name
+/// TODO: Should this just wrap [`NamelessMatchSpec`]?
 pub struct VersionConstraint(String);
 
 impl Display for VersionConstraint {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<NamelessMatchSpec> for VersionConstraint {
+    fn from(spec: NamelessMatchSpec) -> Self {
+        Self(spec.to_string())
     }
 }
 
