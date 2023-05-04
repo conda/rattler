@@ -1,7 +1,9 @@
 //! This module contains the [`Shell`] trait and implementations for various shells.
 
+use enum_dispatch::enum_dispatch;
+use itertools::Itertools;
+use std::process::Command;
 use std::{
-    ffi::OsStr,
     fmt::Write,
     path::{Path, PathBuf},
 };
@@ -22,6 +24,7 @@ use std::{
 ///
 /// assert_eq!(script, "export FOO=\"bar\"\n");
 /// ```
+#[enum_dispatch(ShellEnum)]
 pub trait Shell {
     /// Set an env var by `export`-ing it.
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result;
@@ -32,6 +35,16 @@ pub trait Shell {
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
+    /// Executes a command in the current shell. Use [`Self::run_script`] when you want to run
+    /// another shell script.
+    fn run_command<'a>(
+        &self,
+        f: &mut impl Write,
+        command: impl IntoIterator<Item = &'a str> + 'a,
+    ) -> std::fmt::Result {
+        write!(f, "{}", command.into_iter().join(" "))
+    }
+
     /// Set the PATH variable to the given paths.
     fn set_path(&self, f: &mut impl Write, paths: &[PathBuf]) -> std::fmt::Result {
         let path = std::env::join_paths(paths).unwrap();
@@ -39,7 +52,10 @@ pub trait Shell {
     }
 
     /// The extension that shell scripts for this interpreter usually use.
-    fn extension(&self) -> &OsStr;
+    fn extension(&self) -> &str;
+
+    /// Constructs a [`Command`] that will execute the specified script by this shell.
+    fn create_run_script_command(&self, path: &Path) -> Command;
 }
 
 /// Convert a native PATH on Windows to a Unix style path usign cygpath.
@@ -86,8 +102,8 @@ impl Shell for Bash {
         writeln!(f, ". \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("sh")
+    fn extension(&self) -> &str {
+        "sh"
     }
 
     fn set_path(&self, f: &mut impl Write, paths: &[PathBuf]) -> std::fmt::Result {
@@ -100,6 +116,19 @@ impl Shell for Bash {
         }
 
         self.set_env_var(f, "PATH", path.to_str().unwrap())
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("bash");
+
+        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+        if cfg!(windows) {
+            cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
+        } else {
+            cmd.arg(path);
+        }
+
+        cmd
     }
 }
 
@@ -120,8 +149,14 @@ impl Shell for Zsh {
         writeln!(f, ". \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("zsh")
+    fn extension(&self) -> &str {
+        "zsh"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("zsh");
+        cmd.arg(path);
+        cmd
     }
 }
 
@@ -142,8 +177,14 @@ impl Shell for Xonsh {
         writeln!(f, "source-bash \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("sh")
+    fn extension(&self) -> &str {
+        "sh"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("xonsh");
+        cmd.arg(path);
+        cmd
     }
 }
 
@@ -164,8 +205,22 @@ impl Shell for CmdExe {
         writeln!(f, "@CALL \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("bat")
+    fn run_command<'a>(
+        &self,
+        f: &mut impl Write,
+        command: impl IntoIterator<Item = &'a str> + 'a,
+    ) -> std::fmt::Result {
+        write!(f, "@{}", command.into_iter().join(" "))
+    }
+
+    fn extension(&self) -> &str {
+        "bat"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("cmd.exe");
+        cmd.arg("/D").arg("/C").arg(path);
+        cmd
     }
 }
 
@@ -186,8 +241,14 @@ impl Shell for PowerShell {
         writeln!(f, ". \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("ps1")
+    fn extension(&self) -> &str {
+        "ps1"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("powershell");
+        cmd.arg(path);
+        cmd
     }
 }
 
@@ -208,8 +269,39 @@ impl Shell for Fish {
         writeln!(f, "source \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &OsStr {
-        OsStr::new("fish")
+    fn extension(&self) -> &str {
+        "fish"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new("fish");
+        cmd.arg(path);
+        cmd
+    }
+}
+
+/// A generic [`Shell`] implementation for concrete shell types.
+#[enum_dispatch]
+#[allow(missing_docs)]
+#[derive(Clone)]
+pub enum ShellEnum {
+    Bash,
+    Zsh,
+    Xonsh,
+    CmdExe,
+    PowerShell,
+    Fish,
+}
+
+impl ShellEnum {
+    /// Returns the shell for the current system.
+    pub fn detect_from_environment() -> Option<Self> {
+        // TODO: Make this a bit better
+        if cfg!(windows) {
+            Some(CmdExe.into())
+        } else {
+            Some(Bash.into())
+        }
     }
 }
 
