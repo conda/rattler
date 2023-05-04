@@ -35,8 +35,8 @@ pub trait Shell {
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
-    /// Executes a command in the current shell. Use [`run_script`] when you want to run another
-    /// shell script.
+    /// Executes a command in the current shell. Use [`Self::run_script`] when you want to run
+    /// another shell script.
     fn run_command<'a>(
         &self,
         f: &mut impl Write,
