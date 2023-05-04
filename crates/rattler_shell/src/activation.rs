@@ -2,6 +2,7 @@
 
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
+use std::ffi::OsStr;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -87,7 +88,10 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
         .into_iter()
         .filter_map(|r| r.ok())
         .map(|r| r.path())
-        .filter(|path| path.is_file() && path.extension() == Some(shell_type.extension()))
+        .filter(|path| {
+            path.is_file()
+                && path.extension().and_then(OsStr::to_str) == Some(shell_type.extension())
+        })
         .collect::<Vec<_>>();
 
     scripts.sort();
