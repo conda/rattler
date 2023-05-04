@@ -120,7 +120,14 @@ impl Shell for Bash {
 
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new("bash");
-        cmd.arg("-c").arg(path);
+
+        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+        if cfg!(windows) {
+            cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
+        } else {
+            cmd.arg(path);
+        }
+
         cmd
     }
 }
@@ -148,7 +155,7 @@ impl Shell for Zsh {
 
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new("zsh");
-        cmd.arg("-c").arg(path);
+        cmd.arg(path);
         cmd
     }
 }
@@ -176,7 +183,7 @@ impl Shell for Xonsh {
 
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new("xonsh");
-        cmd.arg("-c").arg(path);
+        cmd.arg(path);
         cmd
     }
 }
@@ -268,7 +275,7 @@ impl Shell for Fish {
 
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new("fish");
-        cmd.arg("-c").arg(path);
+        cmd.arg(path);
         cmd
     }
 }
