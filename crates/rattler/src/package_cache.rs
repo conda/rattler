@@ -184,7 +184,9 @@ impl PackageCache {
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
             tracing::debug!("downloading {} to {}", &url, destination.display());
-            rattler_package_streaming::reqwest::tokio::extract(client, url, &destination).await
+            rattler_package_streaming::reqwest::tokio::extract(client, url, &destination)
+                .await
+                .map(|_| ())
         })
         .await
     }
@@ -268,6 +270,7 @@ mod test {
                 move |destination| async move {
                     rattler_package_streaming::tokio::fs::extract(&tar_archive_path, &destination)
                         .await
+                        .map(|_| ())
                 },
             )
             .await

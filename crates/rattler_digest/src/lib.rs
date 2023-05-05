@@ -47,6 +47,7 @@ pub mod serde;
 pub use digest;
 
 use digest::{Digest, Output};
+use std::io::Read;
 use std::{fs::File, io::Write, path::Path};
 
 pub use md5::Md5;
@@ -129,9 +130,49 @@ impl<W: Write, D: Digest> Write for HashingWriter<W, D> {
     }
 }
 
+/// A simple object that provides a [`Read`] implementation that also immediately hashes the bytes
+/// read from it. Call [`HashingReader::finalize`] to retrieve both the original `impl Read`
+/// object as well as the hash.
+///
+/// If the `tokio` feature is enabled this object also implements [`::tokio::io::AsyncRead`] which
+/// allows you to use it in an async context as well.
+pub struct HashingReader<R, D: Digest> {
+    reader: R,
+    hasher: D,
+}
+
+impl<R, D: Digest + Default> HashingReader<R, D> {
+    /// Constructs a new instance from a reader and a new (empty) hasher.
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            hasher: Default::default(),
+        }
+    }
+}
+
+impl<R, D: Digest> HashingReader<R, D> {
+    /// Consumes this instance and returns the original reader and the hash of all bytes read from
+    /// this instance.
+    pub fn finalize(self) -> (R, Output<D>) {
+        (self.reader, self.hasher.finalize())
+    }
+}
+
+impl<R: Read, D: Digest> Read for HashingReader<R, D> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.reader.read(buf)?;
+        self.hasher.update(&buf[..bytes_read]);
+        Ok(bytes_read)
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use super::HashingReader;
     use rstest::rstest;
+    use sha2::Sha256;
+    use std::io::Read;
 
     #[rstest]
     #[case(
@@ -151,6 +192,24 @@ mod test {
         std::fs::write(&file_path, input).unwrap();
         let hash = super::compute_file_digest::<sha2::Sha256>(&file_path).unwrap();
 
+        assert_eq!(format!("{hash:x}"), expected_hash)
+    }
+
+    #[rstest]
+    #[case(
+        "1234567890",
+        "c775e7b757ede630cd0aa1113bd102661ab38829ca52a6422ab782862f268646"
+    )]
+    #[case(
+        "Hello, world!",
+        "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
+    )]
+    fn test_hashing_reader_sha256(#[case] input: &str, #[case] expected_hash: &str) {
+        let mut cursor = HashingReader::<_, Sha256>::new(std::io::Cursor::new(input));
+        let mut cursor_string = String::new();
+        cursor.read_to_string(&mut cursor_string).unwrap();
+        assert_eq!(&cursor_string, input);
+        let (_, hash) = cursor.finalize();
         assert_eq!(format!("{hash:x}"), expected_hash)
     }
 }
