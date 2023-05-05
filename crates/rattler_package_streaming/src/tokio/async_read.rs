@@ -1,7 +1,7 @@
 //! Functions that enable extracting or streaming a Conda package for objects that implement the
 //! [`tokio::io::AsyncRead`] trait.
 
-use crate::ExtractError;
+use crate::{ExtractError, ExtractResult};
 use std::path::Path;
 use tokio::io::AsyncRead;
 use tokio_util::io::SyncIoBridge;
@@ -10,7 +10,7 @@ use tokio_util::io::SyncIoBridge;
 pub async fn extract_tar_bz2(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     // Create a async -> sync bridge
     let reader = SyncIoBridge::new(Box::pin(reader));
 
@@ -33,7 +33,7 @@ pub async fn extract_tar_bz2(
 pub async fn extract_conda(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
-) -> Result<(), ExtractError> {
+) -> Result<ExtractResult, ExtractError> {
     // Create a async -> sync bridge
     let reader = SyncIoBridge::new(Box::pin(reader));
 

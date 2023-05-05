@@ -1,6 +1,6 @@
 //! Functions to extracting or stream a Conda package from a file on disk.
 
-use crate::ExtractError;
+use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
 use std::fs::File;
 use std::path::Path;
@@ -15,7 +15,7 @@ use std::path::Path;
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
-pub fn extract_tar_bz2(archive: &Path, destination: &Path) -> Result<(), ExtractError> {
+pub fn extract_tar_bz2(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
     let file = File::open(archive)?;
     crate::read::extract_tar_bz2(file, destination)
 }
@@ -30,7 +30,7 @@ pub fn extract_tar_bz2(archive: &Path, destination: &Path) -> Result<(), Extract
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
-pub fn extract_conda(archive: &Path, destination: &Path) -> Result<(), ExtractError> {
+pub fn extract_conda(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
     let file = File::open(archive)?;
     crate::read::extract_conda(file, destination)
 }
@@ -46,7 +46,7 @@ pub fn extract_conda(archive: &Path, destination: &Path) -> Result<(), ExtractEr
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
-pub fn extract(archive: &Path, destination: &Path) -> Result<(), ExtractError> {
+pub fn extract(archive: &Path, destination: &Path) -> Result<ExtractResult, ExtractError> {
     match ArchiveType::try_from(archive).ok_or(ExtractError::UnsupportedArchiveType)? {
         ArchiveType::TarBz2 => extract_tar_bz2(archive, destination),
         ArchiveType::Conda => extract_conda(archive, destination),
