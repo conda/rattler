@@ -19,6 +19,9 @@ pub struct PythonEntryPoints {
 pub enum NoArchLinks {
     /// Python noarch specific entry points.
     Python(PythonEntryPoints),
+
+    /// Generic variant (doesn't have any special entry points)
+    Generic,
 }
 
 /// A representation of the `link.json` file found in noarch package archives.
@@ -52,6 +55,7 @@ mod test {
     #[rstest]
     #[case::jupyterlab("link-json/jupyterlab-link.json")]
     #[case::setuptools("link-json/setuptools-link.json")]
+    #[case::tzdata("link-json/tzdata-link.json")]
     fn test_link_json(#[case] path: &str) {
         let test_file = &crate::get_test_data_dir().join(path);
         let link_json: LinkJson =
