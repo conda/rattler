@@ -269,6 +269,9 @@ pub async fn link_package(
         // Parse the `link.json` file and extract entry points from it.
         let entry_points = match link_json.noarch {
             NoArchLinks::Python(entry_points) => entry_points.entry_points,
+            NoArchLinks::Generic => {
+                unreachable!("we only use link.json for noarch: python packages")
+            }
         };
 
         // Get python info
