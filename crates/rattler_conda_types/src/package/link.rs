@@ -55,6 +55,7 @@ mod test {
     #[rstest]
     #[case::jupyterlab("link-json/jupyterlab-link.json")]
     #[case::setuptools("link-json/setuptools-link.json")]
+    #[case::tzdata("link-json/tzdata-link.json")]
     fn test_link_json(#[case] path: &str) {
         let test_file = &crate::get_test_data_dir().join(path);
         let link_json: LinkJson =
