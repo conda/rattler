@@ -19,6 +19,9 @@ pub struct PythonEntryPoints {
 pub enum NoArchLinks {
     /// Python noarch specific entry points.
     Python(PythonEntryPoints),
+
+    /// Generic variant (doesn't have any special entry points)
+    Generic,
 }
 
 /// A representation of the `link.json` file found in noarch package archives.

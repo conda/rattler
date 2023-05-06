@@ -122,7 +122,7 @@ pub fn create_unix_python_entry_point(
 
 /// Returns Python code that, when placed in an executable file, invokes the specified
 /// [`EntryPoint`].
-fn python_entry_point_template(
+pub fn python_entry_point_template(
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
