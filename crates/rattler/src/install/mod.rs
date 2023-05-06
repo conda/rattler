@@ -4,10 +4,10 @@ pub mod link;
 mod python;
 mod transaction;
 
+pub use crate::install::entry_point::python_entry_point_template;
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
 pub use transaction::{Transaction, TransactionOperation};
-pub use crate::install::entry_point::python_entry_point_template;
 
 use crate::install::entry_point::{
     create_unix_python_entry_point, create_windows_python_entry_point,
