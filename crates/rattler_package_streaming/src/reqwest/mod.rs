@@ -27,8 +27,8 @@ pub fn extract_tar_bz2(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let response = client
-        .get(url)
+    let request_builder = rattler_auth::authenticated_request_blocking(&client, url);
+    let response = request_builder
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;
@@ -55,8 +55,8 @@ pub fn extract_conda(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let response = client
-        .get(url)
+    let request_builder = rattler_auth::authenticated_request_blocking(&client, url);
+    let response = request_builder
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;

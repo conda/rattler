@@ -1,0 +1,17 @@
+[package]
+name = "rattler_auth"
+version.workspace = true
+edition.workspace = true
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
+description = "Authenticate requests in the conda ecosystem"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+keyring = "2.0.2"
+reqwest = {version = "0.11.17", features = ["blocking"]}
+
+[dev-dependencies]

@@ -20,8 +20,9 @@ async fn get_reader(url: Url, client: Client) -> Result<impl tokio::io::AsyncRea
         Ok(Either::Left(BufReader::new(file)))
     } else {
         // Send the request for the file
-        let response = client
-            .get(url.clone())
+        let request_builder = rattler_auth::authenticated_request(&client, url.clone());
+
+        let response = request_builder
             .send()
             .await
             .and_then(Response::error_for_status)

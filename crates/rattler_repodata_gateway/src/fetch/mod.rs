@@ -417,8 +417,9 @@ pub async fn fetch_repo_data(
 
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = client.get(repo_data_url.clone());
-
+    let request_builder = rattler_auth::authenticated_request(&client, repo_data_url.clone());
+    // let request_builder = client.get(repo_data_url.clone());
+    
     let mut headers = HeaderMap::default();
 
     // We can handle g-zip encoding which is often used. We could also set this option on the
@@ -438,7 +439,6 @@ pub async fn fetch_repo_data(
     if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
         cache_headers.add_to_request(&mut headers)
     }
-
     // Send the request and wait for a reply
     let response = request_builder
         .headers(headers)
