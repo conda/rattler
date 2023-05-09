@@ -6,7 +6,7 @@ pub mod tokio;
 use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
 use rattler_networking::AuthenticatedClientBlocking;
-use reqwest::blocking::{Client, Response};
+use reqwest::blocking::{Response};
 use reqwest::IntoUrl;
 use std::path::Path;
 
@@ -28,7 +28,8 @@ pub fn extract_tar_bz2(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let response = client.get(url)
+    let response = client
+        .get(url)
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;
@@ -55,7 +56,8 @@ pub fn extract_conda(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let response = client.get(url)
+    let response = client
+        .get(url)
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;

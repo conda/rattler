@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use keyring::Entry;
-use reqwest::{Client, IntoUrl, blocking::RequestBuilder, Url};
+use reqwest::{Client, IntoUrl, Url};
 
 #[derive(Clone)]
 pub enum Authentication {
@@ -31,7 +31,10 @@ pub struct AuthenticationStorage {
 
 impl AuthenticationStorage {
     pub fn new(store_key: &str) -> AuthenticationStorage {
-        AuthenticationStorage { store_key: store_key.to_string(), authentication_cache: Default::default() }
+        AuthenticationStorage {
+            store_key: store_key.to_string(),
+            authentication_cache: Default::default(),
+        }
     }
 }
 
@@ -45,7 +48,7 @@ impl FromStr for Authentication {
         match scheme {
             "Bearer" => Ok(Authentication::BearerToken(token.to_string())),
             "Basic" => {
-                let mut token_parts = token.split(":");
+                let mut token_parts = token.split(':');
                 let username = token_parts.next().unwrap_or_default();
                 let password = token_parts.next().unwrap_or_default();
                 Ok(Authentication::Basic {
@@ -95,17 +98,15 @@ impl AuthenticationStorage {
         let entry = Entry::new(&self.store_key, host)?;
         let password = entry.get_password();
 
-        let result = match password {
+        match password {
             Ok(password) => Ok(Some(Authentication::from_str(&password).map_err(|_| {
                 AuthenticationStorageError::ParseCredentialsError {
                     host: host.to_string(),
                 }
             })?)),
             Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => return Err(AuthenticationStorageError::StorageError(e)),
-        };
-
-        result
+            Err(e) => Err(AuthenticationStorageError::StorageError(e)),
+        }
     }
 
     pub fn delete(&self, host: &str) -> keyring::Result<()> {
@@ -226,11 +227,20 @@ pub struct AuthenticatedClient {
     auth_storage: AuthenticationStorage,
 }
 
+impl Default for AuthenticatedClient {
+    fn default() -> Self {
+        AuthenticatedClient {
+            client: Client::default(),
+            auth_storage: AuthenticationStorage::new("rattler"),
+        }
+    }
+}
+
 impl AuthenticatedClient {
     pub fn from_client(client: Client, auth_storage: AuthenticationStorage) -> AuthenticatedClient {
         AuthenticatedClient {
             client,
-            auth_storage
+            auth_storage,
         }
     }
 }
@@ -257,19 +267,17 @@ impl AuthenticatedClient {
             let credentials = match credentials {
                 Ok(None) => return builder,
                 Ok(Some(credentials)) => credentials,
-                Err(e) => {
+                Err(_e) => {
                     tracing::warn!("Error retrieving credentials for {}", host);
-                    return builder;    
-                },
+                    return builder;
+                }
             };
 
             match credentials {
-                Authentication::BearerToken(token) => {
-                    builder.bearer_auth(token)
-                },
+                Authentication::BearerToken(token) => builder.bearer_auth(token),
                 Authentication::Basic { username, password } => {
                     builder.basic_auth(username, Some(password))
-                },
+                }
                 Authentication::CondaToken(_token) => {
                     builder
                     // let path = url.path();
@@ -279,14 +287,13 @@ impl AuthenticatedClient {
                     // let mut url = url.clone();
                     // url.set_path(&new_path);
                     // builder.
-                },
+                }
             }
         } else {
             builder
         }
     }
 }
-
 
 pub struct AuthenticatedClientBlocking {
     client: reqwest::blocking::Client,
@@ -295,10 +302,22 @@ pub struct AuthenticatedClientBlocking {
 }
 
 impl AuthenticatedClientBlocking {
-    fn from_client(client: reqwest::blocking::Client, auth_storage: AuthenticationStorage) -> AuthenticatedClientBlocking {
+    pub fn from_client(
+        client: reqwest::blocking::Client,
+        auth_storage: AuthenticationStorage,
+    ) -> AuthenticatedClientBlocking {
         AuthenticatedClientBlocking {
             client,
-            auth_storage
+            auth_storage,
+        }
+    }
+}
+
+impl Default for AuthenticatedClientBlocking {
+    fn default() -> Self {
+        AuthenticatedClientBlocking {
+            client: Default::default(),
+            auth_storage: AuthenticationStorage::new("rattler")
         }
     }
 }
@@ -319,25 +338,27 @@ impl AuthenticatedClientBlocking {
         self.authenticate(self.client.head(url.clone()), url)
     }
 
-    fn authenticate(&self, builder: reqwest::blocking::RequestBuilder, url: Url) -> reqwest::blocking::RequestBuilder {
+    fn authenticate(
+        &self,
+        builder: reqwest::blocking::RequestBuilder,
+        url: Url,
+    ) -> reqwest::blocking::RequestBuilder {
         if let Some(host) = url.host_str() {
             let credentials = self.auth_storage.get(host);
             let credentials = match credentials {
                 Ok(None) => return builder,
                 Ok(Some(credentials)) => credentials,
-                Err(e) => {
+                Err(_e) => {
                     tracing::warn!("Error retrieving credentials for {}", host);
-                    return builder;    
-                },
+                    return builder;
+                }
             };
 
             match credentials {
-                Authentication::BearerToken(token) => {
-                    builder.bearer_auth(token)
-                },
+                Authentication::BearerToken(token) => builder.bearer_auth(token),
                 Authentication::Basic { username, password } => {
                     builder.basic_auth(username, Some(password))
-                },
+                }
                 Authentication::CondaToken(_token) => {
                     builder
                     // let path = url.path();
@@ -347,7 +368,7 @@ impl AuthenticatedClientBlocking {
                     // let mut url = url.clone();
                     // url.set_path(&new_path);
                     // builder.
-                },
+                }
             }
         } else {
             builder

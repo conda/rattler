@@ -8,8 +8,7 @@ use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
 use rattler_networking::AuthenticatedClient;
 use reqwest::{
-    header::{HeaderMap, HeaderValue},
-    Client, Response, StatusCode,
+    header::{HeaderMap, HeaderValue}, Response, StatusCode,
 };
 use std::{
     io::ErrorKind,
@@ -419,7 +418,7 @@ pub async fn fetch_repo_data(
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
     let request_builder = client.get(repo_data_url.clone());
-    
+
     let mut headers = HeaderMap::default();
 
     // We can handle g-zip encoding which is often used. We could also set this option on the
@@ -975,6 +974,7 @@ mod test {
     use crate::utils::Encoding;
     use assert_matches::assert_matches;
     use hex_literal::hex;
+    use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
     use reqwest::Client;
     use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1070,7 +1070,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1099,7 +1099,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1111,7 +1111,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1134,7 +1134,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1162,7 +1162,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1203,7 +1203,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1251,7 +1251,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1295,9 +1295,11 @@ mod test {
 
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
+        let client = Client::builder().no_gzip().build().unwrap();
+        let authenticated_client = AuthenticatedClient::from_client(client, AuthenticationStorage::new("rattler"));
         let result = fetch_repo_data(
             server.url(),
-            Client::builder().no_gzip().build().unwrap(),
+            authenticated_client,
             cache_dir.path(),
             Default::default(),
         )
@@ -1329,7 +1331,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let _result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             FetchRepoDataOptions {
                 download_progress: Some(Box::new(download_progress)),

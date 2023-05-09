@@ -5,14 +5,17 @@ use crate::{ExtractError, ExtractResult};
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_networking::AuthenticatedClient;
-use reqwest::{Client, Response};
+use reqwest::{Response};
 use std::path::Path;
 use tokio::io::BufReader;
 use tokio_util::either::Either;
 use tokio_util::io::StreamReader;
 use url::Url;
 
-async fn get_reader(url: Url, client: AuthenticatedClient) -> Result<impl tokio::io::AsyncRead, ExtractError> {
+async fn get_reader(
+    url: Url,
+    client: AuthenticatedClient,
+) -> Result<impl tokio::io::AsyncRead, ExtractError> {
     if url.scheme() == "file" {
         let file = tokio::fs::File::open(url.to_file_path().expect("..."))
             .await
@@ -21,7 +24,8 @@ async fn get_reader(url: Url, client: AuthenticatedClient) -> Result<impl tokio:
         Ok(Either::Left(BufReader::new(file)))
     } else {
         // Send the request for the file
-        let response = client.get(url.clone())
+        let response = client
+            .get(url.clone())
             .send()
             .await
             .and_then(Response::error_for_status)

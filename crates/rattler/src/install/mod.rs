@@ -563,7 +563,8 @@ mod test {
     use rattler_conda_types::conda_lock::CondaLock;
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
-    use reqwest::Client;
+    use rattler_networking::AuthenticatedClient;
+    
     use std::env::temp_dir;
     use std::process::Command;
     use std::str::FromStr;
@@ -618,7 +619,7 @@ mod test {
         let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
-        let client = Client::new();
+        let client = AuthenticatedClient::default();
 
         // Specify python version
         let python_version =

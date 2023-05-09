@@ -197,6 +197,8 @@ async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[c
 #[cfg(feature = "reqwest")]
 #[apply(url_archives)]
 fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
+    use rattler_networking::AuthenticatedClientBlocking;
+
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
 
@@ -206,7 +208,7 @@ fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) 
 
     let target_dir = temp_dir.join(name);
     let result =
-        rattler_package_streaming::reqwest::extract(Default::default(), url, &target_dir).unwrap();
+        rattler_package_streaming::reqwest::extract(AuthenticatedClientBlocking::default(), url, &target_dir).unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
