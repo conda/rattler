@@ -5,6 +5,7 @@ pub mod tokio;
 
 use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
+use rattler_networking::AuthenticatedClientBlocking;
 use reqwest::blocking::{Client, Response};
 use reqwest::IntoUrl;
 use std::path::Path;
@@ -22,13 +23,12 @@ use std::path::Path;
 ///     .unwrap();
 /// ```
 pub fn extract_tar_bz2(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let request_builder = rattler_auth::authenticated_request_blocking(&client, url);
-    let response = request_builder
+    let response = client.get(url)
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;
@@ -50,13 +50,12 @@ pub fn extract_tar_bz2(
 ///     .unwrap();
 /// ```
 pub fn extract_conda(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     // Send the request for the file
-    let request_builder = rattler_auth::authenticated_request_blocking(&client, url);
-    let response = request_builder
+    let response = client.get(url)
         .send()
         .and_then(Response::error_for_status)
         .map_err(ExtractError::ReqwestError)?;
@@ -79,7 +78,7 @@ pub fn extract_conda(
 ///     .unwrap();
 /// ```
 pub fn extract(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {

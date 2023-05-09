@@ -40,7 +40,7 @@ superslice = { version = "1.0.0", optional = true }
 itertools = { version = "0.10.5", optional = true }
 json-patch = "1.0.0"
 hex = { version = "0.4.3", features = ["serde"] }
-rattler_auth = { version = "0.2.0", path = "../rattler_auth" }
+rattler_networking = { version = "0.2.0", path = "../rattler_networking" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

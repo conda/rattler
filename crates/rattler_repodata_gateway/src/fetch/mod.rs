@@ -6,6 +6,7 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
+use rattler_networking::AuthenticatedClient;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -247,7 +248,7 @@ async fn repodata_from_file(
 #[instrument(err, skip_all, fields(subdir_url, cache_path = %cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: Client,
+    client: AuthenticatedClient,
     cache_path: &Path,
     options: FetchRepoDataOptions,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
@@ -417,8 +418,7 @@ pub async fn fetch_repo_data(
 
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = rattler_auth::authenticated_request(&client, repo_data_url.clone());
-    // let request_builder = client.get(repo_data_url.clone());
+    let request_builder = client.get(repo_data_url.clone());
     
     let mut headers = HeaderMap::default();
 
@@ -665,7 +665,7 @@ impl VariantAvailability {
 /// Determine the availability of `repodata.json` variants (like a `.zst` or `.bz2`) by checking
 /// a cache or the internet.
 pub async fn check_variant_availability(
-    client: &Client,
+    client: &AuthenticatedClient,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
@@ -754,7 +754,7 @@ pub async fn check_variant_availability(
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
-async fn check_valid_download_target(url: &Url, client: &Client) -> bool {
+async fn check_valid_download_target(url: &Url, client: &AuthenticatedClient) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
     if url.scheme() == "file" {

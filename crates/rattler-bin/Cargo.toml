@@ -29,7 +29,7 @@ indicatif = "0.17.5"
 itertools = "0.10.5"
 once_cell = "1.18.0"
 rattler = { version = "0.2.0", path = "../rattler", default-features = false }
-rattler_auth = { version = "0.2.0", path = "../rattler_auth" }
+rattler_networking = { version = "0.2.0", path = "../rattler_networking" }
 rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
 rattler_repodata_gateway = { version = "0.2.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
 rattler_solve = { version = "0.2.0", path = "../rattler_solve" }
