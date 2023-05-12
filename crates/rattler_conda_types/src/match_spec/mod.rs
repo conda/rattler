@@ -189,3 +189,91 @@ impl MatchSpec {
         true
     }
 }
+
+/// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
+/// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
+#[skip_serializing_none]
+#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
+pub struct NamelessMatchSpec {
+    /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
+    pub version: Option<VersionSpec>,
+    /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
+    pub build: Option<StringMatcher>,
+    /// The build number of the package
+    pub build_number: Option<u64>,
+    /// Match the specific filename of the package
+    pub file_name: Option<String>,
+    /// The channel of the package
+    pub channel: Option<String>,
+    /// The subdir of the channel
+    pub subdir: Option<String>,
+    /// The namespace of the package (currently not used)
+    pub namespace: Option<String>,
+}
+
+impl NamelessMatchSpec {
+    /// Match a MatchSpec against a PackageRecord
+    pub fn matches(&self, record: &PackageRecord) -> bool {
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&record.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&record.build) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Display for NamelessMatchSpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match &self.version {
+            Some(version) => write!(f, "{version}")?,
+            None => write!(f, "*")?,
+        }
+
+        match &self.build {
+            Some(build) => write!(f, " {build}")?,
+            None => (),
+        }
+
+        // TODO: Add any additional properties as bracket arguments (e.g. `[channel=..]`)
+
+        Ok(())
+    }
+}
+
+impl From<MatchSpec> for NamelessMatchSpec {
+    fn from(spec: MatchSpec) -> Self {
+        Self {
+            version: spec.version,
+            build: spec.build,
+            build_number: spec.build_number,
+            file_name: spec.file_name,
+            channel: spec.channel,
+            subdir: spec.subdir,
+            namespace: spec.namespace,
+        }
+    }
+}
+
+impl MatchSpec {
+    /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
+    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<String>) -> Self {
+        Self {
+            name,
+            version: spec.version,
+            build: spec.build,
+            build_number: spec.build_number,
+            file_name: spec.file_name,
+            channel: spec.channel,
+            subdir: spec.subdir,
+            namespace: spec.namespace,
+        }
+    }
+}

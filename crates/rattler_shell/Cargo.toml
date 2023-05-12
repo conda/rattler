@@ -11,11 +11,13 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-thiserror = "1.0.30"
+enum_dispatch = "0.3.11"
 indexmap = "1.9.2"
-serde_json = { version = "1.0.93", features = ["preserve_order"]}
-tracing = "0.1.29"
+itertools = "0.10.5"
 rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
+serde_json = { version = "1.0.93", features = ["preserve_order"]}
+thiserror = "1.0.30"
+tracing = "0.1.29"
 
 [dev-dependencies]
 tempdir = "0.3.7"

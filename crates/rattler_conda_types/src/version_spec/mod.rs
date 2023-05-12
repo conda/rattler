@@ -1,3 +1,6 @@
+//! This module contains code to work with "versionspec". It represents the version part of
+//! [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
+
 mod constraint;
 mod version_tree;
 
@@ -13,6 +16,8 @@ use version_tree::VersionTree;
 
 pub(crate) use constraint::is_start_of_version_constraint;
 
+/// An operator to compare two versions.
+#[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 pub enum VersionOperator {
     Equals,
@@ -28,6 +33,7 @@ pub enum VersionOperator {
 }
 
 impl VersionOperator {
+    /// Returns the complement of the current operator.
     pub fn complement(self) -> Self {
         match self {
             VersionOperator::Equals => VersionOperator::NotEquals,
@@ -44,13 +50,19 @@ impl VersionOperator {
     }
 }
 
+/// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or
+/// `>=3.4|<4.0`,
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 pub enum LogicalOperator {
+    /// All comparators must evaluate to true for the group to evaluate to true.
     And,
+
+    /// Any comparators must evaluate to true for the group to evaluate to true.
     Or,
 }
 
 impl LogicalOperator {
+    /// Returns the complement of the operator.
     pub fn complement(self) -> Self {
         match self {
             LogicalOperator::And => LogicalOperator::Or,
@@ -73,7 +85,7 @@ pub enum VersionSpec {
     Group(LogicalOperator, Vec<VersionSpec>),
 }
 
-#[allow(clippy::enum_variant_names)]
+#[allow(clippy::enum_variant_names, missing_docs)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseVersionSpecError {
     #[error("invalid version: {0}")]

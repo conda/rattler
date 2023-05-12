@@ -2,6 +2,8 @@
 
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
+use rattler_digest::{Md5Hash, Sha256Hash};
+
 pub mod read;
 pub mod seek;
 
@@ -41,4 +43,14 @@ pub enum ExtractError {
 
     #[error("the task was cancelled")]
     Cancelled,
+}
+
+/// Result struct returned by extraction functions.
+#[derive(Debug)]
+pub struct ExtractResult {
+    /// The SHA256 hash of the extracted archive.
+    pub sha256: Sha256Hash,
+
+    /// The Md5 hash of the extracted archive.
+    pub md5: Md5Hash,
 }

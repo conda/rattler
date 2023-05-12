@@ -238,7 +238,7 @@ async fn repodata_from_file(
 ///
 /// The successful result of this function also returns a lockfile which ensures that both the state
 /// and the repodata that is pointed to remain in sync. However, not releasing the lockfile (by
-/// dropping it) could block other threads and processes, it is therefor advices to release it as
+/// dropping it) could block other threads and processes, it is therefore advisable to release it as
 /// quickly as possible.
 ///
 /// This method implements several different methods to download the repodata.json file from the

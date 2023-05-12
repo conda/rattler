@@ -2,7 +2,7 @@ use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
 use crate::package::ArchiveType;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{ParseChannelError, VersionSpec};
+use crate::{NamelessMatchSpec, ParseChannelError, VersionSpec};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
@@ -168,8 +168,8 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec), ParseMatchS
 /// Parses a BracketVec into precise components
 fn parse_bracket_vec_into_components(
     bracket: BracketVec,
-    match_spec: MatchSpec,
-) -> Result<MatchSpec, ParseMatchSpecError> {
+    match_spec: NamelessMatchSpec,
+) -> Result<NamelessMatchSpec, ParseMatchSpecError> {
     let mut match_spec = match_spec;
 
     for elem in bracket {
@@ -182,6 +182,7 @@ fn parse_bracket_vec_into_components(
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
+
     Ok(match_spec)
 }
 
@@ -255,6 +256,44 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
     }
 }
 
+impl FromStr for NamelessMatchSpec {
+    type Err = ParseMatchSpecError;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        // Strip off brackets portion
+        let (input, brackets) = strip_brackets(input.trim())?;
+        let mut match_spec = parse_bracket_vec_into_components(brackets, Default::default())?;
+
+        // Get the version and optional build string
+        let input = input.trim();
+        if !input.is_empty() {
+            if input.find('[').is_some() {
+                return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
+            }
+
+            let (version_str, build_str) = split_version_and_build(input)?;
+
+            let version_str = if version_str.find(char::is_whitespace).is_some() {
+                Cow::Owned(version_str.replace(char::is_whitespace, ""))
+            } else {
+                Cow::Borrowed(version_str)
+            };
+
+            // Parse the version spec
+            match_spec.version = Some(
+                VersionSpec::from_str(version_str.as_ref())
+                    .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
+            );
+
+            if let Some(build) = build_str {
+                match_spec.build = Some(StringMatcher::from_str(build)?);
+            }
+        }
+
+        Ok(match_spec)
+    }
+}
+
 /// Parses a conda match spec.
 /// This is based on: https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569
 fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
@@ -277,11 +316,9 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         unimplemented!()
     }
 
-    let match_spec = MatchSpec::default();
-
     // 3. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
-    let mut match_spec = parse_bracket_vec_into_components(brackets, match_spec)?;
+    let mut nameless_match_spec = parse_bracket_vec_into_components(brackets, Default::default())?;
 
     // 4. Strip off parens portion
     // TODO: What is this? I've never seen in
@@ -302,20 +339,22 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         _ => return Err(ParseMatchSpecError::InvalidNumberOfColons),
     };
 
-    match_spec.namespace = namespace.map(ToOwned::to_owned).or(match_spec.namespace);
+    nameless_match_spec.namespace = namespace
+        .map(ToOwned::to_owned)
+        .or(nameless_match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
         if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            match_spec.channel = Some(channel.to_string());
-            match_spec.subdir = Some(subdir.to_string());
+            nameless_match_spec.channel = Some(channel.to_string());
+            nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
-            match_spec.channel = Some(channel_str.to_string());
+            nameless_match_spec.channel = Some(channel_str.to_string());
         }
     }
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    match_spec.name = Some(name.to_owned());
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name.to_owned()));
 
     // Step 7. Otherwise sort our version + build
     let input = input.trim();
@@ -354,7 +393,7 @@ mod tests {
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::match_spec::parse::parse_bracket_list;
-    use crate::VersionSpec;
+    use crate::{NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
@@ -438,6 +477,25 @@ mod tests {
           build: py27_0
         - name: foo
           version: "==1.0"
+          build: py27_0
+        "###);
+    }
+
+    #[test]
+    fn test_nameless_match_spec() {
+        insta::assert_yaml_snapshot!([
+            NamelessMatchSpec::from_str("3.8.* *_cpython").unwrap(),
+            NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]").unwrap(),
+            NamelessMatchSpec::from_str("=1.0 py27_0").unwrap(),
+        ],
+        @r###"
+        ---
+        - version: 3.8.*
+          build: "*_cpython"
+        - version: "==1.0"
+          build: py27_0
+          file_name: bla
+        - version: 1.0.*
           build: py27_0
         "###);
     }

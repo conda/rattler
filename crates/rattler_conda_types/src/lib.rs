@@ -13,7 +13,7 @@ mod repo_data_record;
 mod run_export;
 mod utils;
 mod version;
-mod version_spec;
+pub mod version_spec;
 
 pub mod conda_lock;
 mod generic_virtual_package;
@@ -28,7 +28,7 @@ pub use explicit_environment_spec::{
 };
 pub use generic_virtual_package::GenericVirtualPackage;
 pub use match_spec::matcher::StringMatcher;
-pub use match_spec::MatchSpec;
+pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use platform::{ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
