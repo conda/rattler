@@ -21,6 +21,7 @@ use tracing::instrument;
 use url::Url;
 
 mod cache;
+pub mod jlap;
 
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
@@ -323,12 +324,12 @@ pub async fn fetch_repo_data(
                 ValidatedCacheState::Mismatched(_),
                 CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly,
             ) => {
-                // The cache doesnt match the repodata.json that is on disk. This means the cache is
+                // The cache doesn't match the repodata.json that is on disk. This means the cache is
                 // not usable.
                 return Err(FetchRepoDataError::NoCacheAvailable);
             }
             (ValidatedCacheState::Mismatched(cache_state), _) => {
-                // The cache doesnt match the data that is on disk. but it might contain some other
+                // The cache doesn't match the data that is on disk. but it might contain some other
                 // interesting cached data as well...
                 Some(cache_state)
             }
@@ -358,7 +359,7 @@ pub async fn fetch_repo_data(
     .await;
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
-    // variants. We dont check the expiration here since we just refreshed it.
+    // variants. We don't check the expiration here since we just refreshed it.
     let has_zst = variant_availability.has_zst();
     let has_bz2 = variant_availability.has_bz2();
 
