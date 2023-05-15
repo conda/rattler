@@ -379,6 +379,11 @@ mod tests {
         let storage = super::AuthenticationStorage::new("rattler_test");
         let host = "test.example.com";
         let retrieved = storage.get(host);
+
+        if let Err(e) = retrieved.as_ref() {
+            println!("{:?}", e);
+        }
+
         assert!(retrieved.is_ok());
         assert!(retrieved.unwrap().is_none());
 
