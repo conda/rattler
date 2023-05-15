@@ -564,7 +564,7 @@ mod test {
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
     use rattler_networking::AuthenticatedClient;
-    
+
     use std::env::temp_dir;
     use std::process::Command;
     use std::str::FromStr;

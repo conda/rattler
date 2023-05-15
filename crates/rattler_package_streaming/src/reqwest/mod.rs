@@ -6,7 +6,7 @@ pub mod tokio;
 use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
 use rattler_networking::AuthenticatedClientBlocking;
-use reqwest::blocking::{Response};
+use reqwest::blocking::Response;
 use reqwest::IntoUrl;
 use std::path::Path;
 

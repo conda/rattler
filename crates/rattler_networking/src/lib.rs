@@ -1,7 +1,7 @@
 use std::{collections::HashMap, str::FromStr};
 
 use keyring::Entry;
-use reqwest::{Client, IntoUrl, Url};
+use reqwest::{Client, IntoUrl, Method, Url};
 
 #[derive(Clone)]
 pub enum Authentication {
@@ -109,6 +109,27 @@ impl AuthenticationStorage {
         }
     }
 
+    pub fn get_by_url<U: IntoUrl>(
+        &self,
+        url: U,
+    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
+        let url = url.into_url()?;
+
+        if let Some(host) = url.host_str() {
+            let credentials = self.get(host);
+            match credentials {
+                Ok(None) => Ok((url, None)),
+                Ok(Some(credentials)) => Ok((url, Some(credentials))),
+                Err(e) => {
+                    tracing::warn!("Error retrieving credentials for {}: {}", host, e);
+                    Ok((url, None))
+                }
+            }
+        } else {
+            Ok((url, None))
+        }
+    }
+
     pub fn delete(&self, host: &str) -> keyring::Result<()> {
         let entry = Entry::new(&self.store_key, host)?;
         entry.delete_password()
@@ -142,47 +163,63 @@ impl AuthenticatedClient {
 
 impl AuthenticatedClient {
     pub fn get<U: IntoUrl>(&self, url: U) -> reqwest::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.get(url.clone()), url)
+        self.request(Method::GET, url)
     }
 
     pub fn post<U: IntoUrl>(&self, url: U) -> reqwest::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.post(url.clone()), url)
+        self.request(Method::POST, url)
     }
 
     pub fn head<U: IntoUrl>(&self, url: U) -> reqwest::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.head(url.clone()), url)
+        self.request(Method::HEAD, url)
     }
 
-    fn authenticate(&self, builder: reqwest::RequestBuilder, url: Url) -> reqwest::RequestBuilder {
-        if let Some(host) = url.host_str() {
-            let credentials = self.auth_storage.get(host);
-            let credentials = match credentials {
-                Ok(None) => return builder,
-                Ok(Some(credentials)) => credentials,
-                Err(_e) => {
-                    tracing::warn!("Error retrieving credentials for {}", host);
-                    return builder;
-                }
-            };
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> reqwest::RequestBuilder {
+        let url_clone = url.as_str().to_string();
+        match self.auth_storage.get_by_url(url) {
+            Err(_) => {
+                // forward error to caller (invalid URL)
+                self.client.request(method, url_clone)
+            }
+            Ok((url, auth)) => {
+                let url = self.authenticate_url(url, &auth);
+                let request_builder = self.client.request(method, url);
+                self.authenticate_request(request_builder, &auth)
+            }
+        }
+    }
 
+    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+        if let Some(credentials) = auth {
+            match credentials {
+                Authentication::CondaToken(token) => {
+                    let path = url.path();
+                    let mut new_path = String::new();
+                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(path);
+                    let mut url = url.clone();
+                    url.set_path(&new_path);
+                    url
+                }
+                _ => url,
+            }
+        } else {
+            url
+        }
+    }
+
+    fn authenticate_request(
+        &self,
+        builder: reqwest::RequestBuilder,
+        auth: &Option<Authentication>,
+    ) -> reqwest::RequestBuilder {
+        if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => builder.bearer_auth(token),
                 Authentication::Basic { username, password } => {
                     builder.basic_auth(username, Some(password))
                 }
-                Authentication::CondaToken(_token) => {
-                    builder
-                    // let path = url.path();
-                    // let mut new_path = String::new();
-                    // new_path.push_str(format!("/t/{}", token).as_str());
-                    // new_path.push_str(path);
-                    // let mut url = url.clone();
-                    // url.set_path(&new_path);
-                    // builder.
-                }
+                Authentication::CondaToken(_) => builder,
             }
         } else {
             builder
@@ -212,58 +249,70 @@ impl Default for AuthenticatedClientBlocking {
     fn default() -> Self {
         AuthenticatedClientBlocking {
             client: Default::default(),
-            auth_storage: AuthenticationStorage::new("rattler")
+            auth_storage: AuthenticationStorage::new("rattler"),
         }
     }
 }
 
 impl AuthenticatedClientBlocking {
     pub fn get<U: IntoUrl>(&self, url: U) -> reqwest::blocking::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.get(url.clone()), url)
+        self.request(Method::GET, url)
     }
 
     pub fn post<U: IntoUrl>(&self, url: U) -> reqwest::blocking::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.post(url.clone()), url)
+        self.request(Method::POST, url)
     }
 
     pub fn head<U: IntoUrl>(&self, url: U) -> reqwest::blocking::RequestBuilder {
-        let url = url.into_url().unwrap();
-        self.authenticate(self.client.head(url.clone()), url)
+        self.request(Method::HEAD, url)
     }
 
-    fn authenticate(
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> reqwest::blocking::RequestBuilder {
+        let url_clone = url.as_str().to_string();
+        match self.auth_storage.get_by_url(url) {
+            Err(_) => {
+                // forward error to caller (invalid URL)
+                self.client.request(method, url_clone)
+            }
+            Ok((url, auth)) => {
+                let url = self.authenticate_url(url, &auth);
+                let request_builder = self.client.request(method, url);
+                self.authenticate_request(request_builder, &auth)
+            }
+        }
+    }
+
+    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+        if let Some(credentials) = auth {
+            match credentials {
+                Authentication::CondaToken(token) => {
+                    let path = url.path();
+                    let mut new_path = String::new();
+                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(path);
+                    let mut url = url.clone();
+                    url.set_path(&new_path);
+                    url
+                }
+                _ => url,
+            }
+        } else {
+            url
+        }
+    }
+
+    fn authenticate_request(
         &self,
         builder: reqwest::blocking::RequestBuilder,
-        url: Url,
+        auth: &Option<Authentication>,
     ) -> reqwest::blocking::RequestBuilder {
-        if let Some(host) = url.host_str() {
-            let credentials = self.auth_storage.get(host);
-            let credentials = match credentials {
-                Ok(None) => return builder,
-                Ok(Some(credentials)) => credentials,
-                Err(_e) => {
-                    tracing::warn!("Error retrieving credentials for {}", host);
-                    return builder;
-                }
-            };
-
+        if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => builder.bearer_auth(token),
                 Authentication::Basic { username, password } => {
                     builder.basic_auth(username, Some(password))
                 }
-                Authentication::CondaToken(_token) => {
-                    builder
-                    // let path = url.path();
-                    // let mut new_path = String::new();
-                    // new_path.push_str(format!("/t/{}", token).as_str());
-                    // new_path.push_str(path);
-                    // let mut url = url.clone();
-                    // url.set_path(&new_path);
-                    // builder.
-                }
+                Authentication::CondaToken(_) => builder,
             }
         } else {
             builder

@@ -8,7 +8,8 @@ use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
 use rattler_networking::AuthenticatedClient;
 use reqwest::{
-    header::{HeaderMap, HeaderValue}, Response, StatusCode,
+    header::{HeaderMap, HeaderValue},
+    Response, StatusCode,
 };
 use std::{
     io::ErrorKind,
@@ -1296,7 +1297,8 @@ mod test {
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
         let client = Client::builder().no_gzip().build().unwrap();
-        let authenticated_client = AuthenticatedClient::from_client(client, AuthenticationStorage::new("rattler"));
+        let authenticated_client =
+            AuthenticatedClient::from_client(client, AuthenticationStorage::new("rattler"));
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,

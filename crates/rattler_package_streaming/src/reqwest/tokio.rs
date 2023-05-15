@@ -5,7 +5,7 @@ use crate::{ExtractError, ExtractResult};
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_networking::AuthenticatedClient;
-use reqwest::{Response};
+use reqwest::Response;
 use std::path::Path;
 use tokio::io::BufReader;
 use tokio_util::either::Either;

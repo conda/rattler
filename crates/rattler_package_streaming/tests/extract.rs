@@ -207,8 +207,12 @@ fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) 
     println!("Name: {}", name.display());
 
     let target_dir = temp_dir.join(name);
-    let result =
-        rattler_package_streaming::reqwest::extract(AuthenticatedClientBlocking::default(), url, &target_dir).unwrap();
+    let result = rattler_package_streaming::reqwest::extract(
+        AuthenticatedClientBlocking::default(),
+        url,
+        &target_dir,
+    )
+    .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
