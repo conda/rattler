@@ -1,15 +1,17 @@
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
 
 //! Networking utilities for Rattler, specifically authenticating requests
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, path::PathBuf};
 
+mod fallback_storage;
 use keyring::Entry;
 use reqwest::{Client, IntoUrl, Method, Url};
+use serde::{Deserialize, Serialize};
 
 /// The different Authentication methods that are supported in the conda
 /// ecosystem
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Authentication {
     /// A bearer token is sent as a header of the form
     /// `Authorization: Bearer {TOKEN}`
@@ -43,15 +45,23 @@ pub struct AuthenticationStorage {
     pub store_key: String,
 
     /// Fallback JSON location
-    // pub fallback_json_location: PathBuf,
+    pub fallback_json_location: PathBuf,
+
+    /// A cache of authentication information
     authentication_cache: HashMap<String, Option<Authentication>>,
 }
 
 impl AuthenticationStorage {
     /// Create a new authentication storage with the given store key
     pub fn new(store_key: &str) -> AuthenticationStorage {
+
+        keyring::set_default_credential_builder(Box::new(fallback_storage::JsonFileCredentialBuilder::new(
+            "auth_store.json",
+        )));
+
         AuthenticationStorage {
             store_key: store_key.to_string(),
+            fallback_json_location: PathBuf::from("auth_store.json"),
             authentication_cache: Default::default(),
         }
     }
@@ -62,23 +72,7 @@ impl FromStr for Authentication {
 
     /// Parse an authentication string into an Authentication struct
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let mut parts = s.split_whitespace();
-        let scheme = parts.next().unwrap_or_default();
-        let token = parts.next().unwrap_or_default();
-        match scheme {
-            "Bearer" => Ok(Authentication::BearerToken(token.to_string())),
-            "Basic" => {
-                let mut token_parts = token.split(':');
-                let username = token_parts.next().unwrap_or_default();
-                let password = token_parts.next().unwrap_or_default();
-                Ok(Authentication::Basic {
-                    username: username.to_string(),
-                    password: password.to_string(),
-                })
-            }
-            "CondaToken" => Ok(Authentication::CondaToken(token.to_string())),
-            _ => Err(AuthenticationParseError::InvalidScheme),
-        }
+        serde_json::from_str(s).map_err(|_| AuthenticationParseError::InvalidToken)
     }
 }
 
@@ -88,6 +82,10 @@ pub enum AuthenticationStorageError {
     /// An error occurred when accessing the authentication storage
     #[error("Could not retrieve credentials from authentication storage: {0}")]
     StorageError(#[from] keyring::Error),
+
+    /// An error occurred when serializing the credentials
+    #[error("Could not serialize credentials {0}")]
+    SerializeCredentialsError(#[from] serde_json::Error),
 
     /// An error occurred when parsing the credentials
     #[error("Could not parse credentials stored for {host}")]
@@ -99,22 +97,14 @@ pub enum AuthenticationStorageError {
 
 impl AuthenticationStorage {
     /// Store the given authentication information for the given host
-    pub fn store(&self, host: &str, authentication: &Authentication) -> keyring::Result<()> {
+    pub fn store(
+        &self,
+        host: &str,
+        authentication: &Authentication,
+    ) -> Result<(), AuthenticationStorageError> {
         let entry = Entry::new(&self.store_key, host)?;
-        match authentication {
-            Authentication::BearerToken(token) => {
-                let password = format!("Bearer {}", token);
-                entry.set_password(&password)
-            }
-            Authentication::Basic { username, password } => {
-                let password = format!("Basic {}:{}", username, password);
-                entry.set_password(&password)
-            }
-            Authentication::CondaToken(token) => {
-                let password = format!("CondaToken {}", token);
-                entry.set_password(&password)
-            }
-        }
+        entry.set_password(&serde_json::to_string(authentication)?)?;
+        Ok(())
     }
 
     /// Retrieve the authentication information for the given host
@@ -375,7 +365,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_storage() -> anyhow::Result<()> {
+    fn test_store_fallback() -> anyhow::Result<()> {
+        println!("Starting up");
+        let storage = super::AuthenticationStorage::new("rattler_test");
+        println!("Storage created");
+        let host = "test.example.com";
+        let authentication = Authentication::CondaToken("testtoken".to_string());
+        println!("Storage storing");
+        storage.store(host, &authentication)?;
+        println!("Storage done");
+        Ok(())
+    }
+
+    #[test]
+    fn test_conda_token_storage() -> anyhow::Result<()> {
         let storage = super::AuthenticationStorage::new("rattler_test");
         let host = "test.example.com";
         let retrieved = storage.get(host);
@@ -402,6 +405,84 @@ mod tests {
         let request = request.build().unwrap();
         let url = request.url();
         assert!(url.path().starts_with("/t/testtoken"));
+
+        storage.delete(host)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_bearer_storage() -> anyhow::Result<()> {
+        let storage = super::AuthenticationStorage::new("rattler_test");
+        let host = "bearer.example.com";
+        let retrieved = storage.get(host);
+
+        if let Err(e) = retrieved.as_ref() {
+            println!("{:?}", e);
+        }
+
+        assert!(retrieved.is_ok());
+        assert!(retrieved.unwrap().is_none());
+
+        let authentication = Authentication::BearerToken("xyztokytoken".to_string());
+        storage.store(host, &authentication)?;
+
+        let retrieved = storage.get(host);
+        assert!(retrieved.is_ok());
+        let retrieved = retrieved.unwrap();
+        assert!(retrieved.is_some());
+        let auth = retrieved.unwrap();
+        assert!(auth == authentication);
+
+        let client = AuthenticatedClient::from_client(reqwest::Client::default(), storage.clone());
+        let request = client.get("https://bearer.example.com/conda-forge/noarch/testpkg.tar.bz2");
+        let request = request.build().unwrap();
+        let url = request.url();
+        assert!(url.to_string() == "https://bearer.example.com/conda-forge/noarch/testpkg.tar.bz2");
+        assert_eq!(
+            request.headers().get("Authorization").unwrap(),
+            "Bearer xyztokytoken"
+        );
+
+        storage.delete(host)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_basic_auth_storage() -> anyhow::Result<()> {
+        let storage = super::AuthenticationStorage::new("rattler_test");
+        let host = "basic.example.com";
+        let retrieved = storage.get(host);
+
+        if let Err(e) = retrieved.as_ref() {
+            println!("{:?}", e);
+        }
+
+        assert!(retrieved.is_ok());
+        assert!(retrieved.unwrap().is_none());
+
+        let authentication = Authentication::Basic {
+            username: "testuser".to_string(),
+            password: "testpassword".to_string(),
+        };
+        storage.store(host, &authentication)?;
+
+        let retrieved = storage.get(host);
+        assert!(retrieved.is_ok());
+        let retrieved = retrieved.unwrap();
+        assert!(retrieved.is_some());
+        let auth = retrieved.unwrap();
+        assert!(auth == authentication);
+
+        let client = AuthenticatedClient::from_client(reqwest::Client::default(), storage.clone());
+        let request = client.get("https://basic.example.com/conda-forge/noarch/testpkg.tar.bz2");
+        let request = request.build().unwrap();
+        let url = request.url();
+        assert!(url.to_string() == "https://basic.example.com/conda-forge/noarch/testpkg.tar.bz2");
+        assert_eq!(
+            request.headers().get("Authorization").unwrap(),
+            // this is the base64 encoding of "testuser:testpassword"
+            "Basic dGVzdHVzZXI6dGVzdHBhc3N3b3Jk"
+        );
 
         storage.delete(host)?;
         Ok(())
