@@ -71,9 +71,9 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 
 /// Converts the body of a JLAP request to JSON objects
 ///
-/// To do this, we simply see which lines begin with "{", which would be the
-/// opening of the JSON object. The last two lines of the string we receive
-/// do not contain patches and we therefore skip them.
+/// We take the text value and the offset value. Sometimes this string
+/// may be begin with a hash value that we will want to skip via the offset
+/// value.
 pub fn convert_jlap_string_to_patch_set (text: &str, offset: usize) -> Result<Vec<Patch>, JLAPError>  {
     let lines: Vec<&str> = text.split("\n").collect();
     let length = lines.len();
