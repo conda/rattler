@@ -8,6 +8,8 @@
 //! this file you will build the entire `repodata.json` from scratch, but subsequent request
 //! can retrieve only the updates to the file, which can have a drastic effect on how fast
 //! this file is updated.
+//!
+//!
 
 use reqwest::{Client};
 use serde::{Serialize, Deserialize};
@@ -54,7 +56,7 @@ pub struct JLAPMetadata {
 pub async fn fetch_jlap (url: &str, client: &Client) -> Result<reqwest::Response, reqwest::Error> {
     let request_builder = client.get(url);
 
-    // TODO: Build headers here; this is where the incremental retrieving magic happens...
+    // TODO: Build headers here; this is where the range request stuff happens...
 
     request_builder.send().await
 }
@@ -72,16 +74,14 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 /// To do this, we simply see which lines begin with "{", which would be the
 /// opening of the JSON object. The last two lines of the string we receive
 /// do not contain patches and we therefore skip them.
-pub fn convert_jlap_string_to_patch_set (text: &str) -> Result<Vec<Patch>, JLAPError>  {
+pub fn convert_jlap_string_to_patch_set (text: &str, offset: usize) -> Result<Vec<Patch>, JLAPError>  {
     let lines: Vec<&str> = text.split("\n").collect();
     let length = lines.len();
     let jlap_footer_offset: usize = 2; // Last two lines do not contain patches
 
     if length > 1 {
-        let patch_lines = lines[..length - jlap_footer_offset].iter();
-        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.filter(
-            |line| line.starts_with("{")
-        ).map(
+        let patch_lines = lines[offset..length - jlap_footer_offset].iter();
+        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
             parse_patch_json
         ).collect();
 
@@ -100,15 +100,6 @@ pub fn convert_jlap_string_to_patch_set (text: &str) -> Result<Vec<Patch>, JLAPE
     }
 
     return Err(JLAPError::NoPatchesFoundError);
-}
-
-/// Converts the body of a JLAP request to a vector of hashes
-pub fn convert_string_to_hashes (text: &str) -> Vec<&str> {
-    text.split(
-        "\n"
-    ).filter(
-        |line | !line.starts_with("{")
-    ).collect()
 }
 
 #[cfg(test)]
@@ -130,21 +121,21 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         let test_string = "bad_data\nbad_data\nbad_data\nbad_data";
 
         assert_matches!(
-            convert_jlap_string_to_patch_set(test_string),
+            convert_jlap_string_to_patch_set(test_string, 1),
             Err(JLAPError::NoPatchesFoundError)
         );
 
         let test_string = "bad_data\nbad_data";
 
         assert_matches!(
-            convert_jlap_string_to_patch_set(test_string),
+            convert_jlap_string_to_patch_set(test_string, 1),
             Err(JLAPError::NoPatchesFoundError)
         );
 
         let test_string = "";
 
         assert_matches!(
-            convert_jlap_string_to_patch_set(test_string),
+            convert_jlap_string_to_patch_set(test_string, 1),
             Err(JLAPError::NoPatchesFoundError)
         );
     }
