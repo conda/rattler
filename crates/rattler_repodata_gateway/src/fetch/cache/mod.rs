@@ -15,7 +15,7 @@ use tokio::io::AsyncReadExt;
 use url::Url;
 
 /// Custom blake2b type
-type Blake2b256 = Blake2b<U32>;
+pub type Blake2b256 = Blake2b<U32>;
 
 /// Representation of the `.state.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,16 +48,7 @@ pub struct RepoDataState {
         deserialize_with = "deserialize_blake2_hash",
         serialize_with = "serialize_blake2_hash"
     )]
-    pub blake2_hash: Option<blake2::digest::Output<blake2::Blake2s256>>,
-
-    /// The blake2b hash of the file
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_blake2b_hash",
-        serialize_with = "serialize_blake2b_hash"
-    )]
-    pub blake2b_hash: Option<blake2::digest::Output<Blake2b256>>,
+    pub blake2_hash: Option<blake2::digest::Output<Blake2b256>>,
 
     /// Whether or not zst is available for the subdirectory
     pub has_zst: Option<Expiring<bool>>,
@@ -140,32 +131,6 @@ fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S:
 
 fn deserialize_blake2_hash<'de, D>(
     deserializer: D,
-) -> Result<Option<blake2::digest::Output<blake2::Blake2s256>>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de::Error;
-    match Option::<&'de str>::deserialize(deserializer)? {
-        Some(str) => Ok(Some(
-            rattler_digest::parse_digest_from_hex::<blake2::Blake2s256>(str)
-                .ok_or_else(|| D::Error::custom("failed to parse blake2 hash"))?,
-        )),
-        None => Ok(None),
-    }
-}
-
-fn serialize_blake2_hash<S: Serializer>(
-    time: &Option<blake2::digest::Output<blake2::Blake2s256>>,
-    s: S,
-) -> Result<S::Ok, S::Error> {
-    match time.as_ref() {
-        None => s.serialize_none(),
-        Some(hash) => format!("{:x}", hash).serialize(s),
-    }
-}
-
-fn deserialize_blake2b_hash<'de, D>(
-    deserializer: D,
 ) -> Result<Option<blake2::digest::Output<Blake2b256>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -173,14 +138,14 @@ where
     use serde::de::Error;
     match Option::<&'de str>::deserialize(deserializer)? {
         Some(str) => Ok(Some(
-            rattler_digest::parse_digest_from_hex::<blake2::Blake2s256>(str)
+            rattler_digest::parse_digest_from_hex::<Blake2b256>(str)
                 .ok_or_else(|| D::Error::custom("failed to parse blake2 hash"))?,
         )),
         None => Ok(None),
     }
 }
 
-fn serialize_blake2b_hash<S: Serializer>(
+fn serialize_blake2_hash<S: Serializer>(
     time: &Option<blake2::digest::Output<Blake2b256>>,
     s: S,
 ) -> Result<S::Ok, S::Error> {
@@ -188,23 +153,6 @@ fn serialize_blake2b_hash<S: Serializer>(
         None => s.serialize_none(),
         Some(hash) => format!("{:x}", hash).serialize(s),
     }
-}
-
-/// Calculate the blake2b256 hash of a file
-pub async fn generate_blake2b256_hash(
-    path: &PathBuf,
-) -> Result<blake2::digest::Output<Blake2b256>, tokio::io::Error> {
-    let mut file = tokio::fs::File::open(path).await?;
-
-    let mut hasher = Blake2b256::new();
-    let mut content = vec![];
-
-    file.read_to_end(&mut content).await?;
-    hasher.update(content);
-
-    let hash: blake2::digest::Output<Blake2b256> = hasher.finalize();
-
-    Ok(hash)
 }
 
 #[cfg(test)]
@@ -232,8 +180,7 @@ mod test {
       "cache_control": "public, max-age=30",
       "mtime_ns": 1684418349941482193,
       "size": 38001429,
-      "blake2_hash": "341dce25d4d93d64c6f2d27f524bc992d968c04361354577f0deb1f7c2c4d67e",
-      "blake2b_hash": "a1bb42ccd11d5610189380b8b0a71ca0fa7e3273ff6235ae1d543606041eb3bd",
+      "blake2_hash": "a1bb42ccd11d5610189380b8b0a71ca0fa7e3273ff6235ae1d543606041eb3bd",
       "has_zst": {
         "value": true,
         "last_checked": "2023-05-18T13:59:07.112638Z"

@@ -211,7 +211,6 @@ async fn repodata_from_file(
         },
         cache_last_modified: SystemTime::now(),
         blake2_hash: None,
-        blake2b_hash: None,
         has_zst: None,
         has_bz2: None,
         has_jlap: None,
@@ -467,11 +466,6 @@ pub async fn fetch_repo_data(
     })
     .await??;
 
-    // Calculate blake2b hash
-    let blake2b_hash = cache::generate_blake2b256_hash(&repo_data_json_path)
-        .await
-        .map_err(FetchRepoDataError::FailedToGetMetadata)?;
-
     // Update the cache on disk.
     let had_cache = cache_state.is_some();
     let new_cache_state = RepoDataState {
@@ -482,7 +476,6 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        blake2b_hash: Some(blake2b_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         // We dont do anything with JLAP so just copy over the value.
@@ -517,7 +510,7 @@ async fn stream_and_decode_to_file(
     content_encoding: Encoding,
     temp_dir: &Path,
     mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
-) -> Result<(NamedTempFile, blake2::digest::Output<blake2::Blake2s256>), FetchRepoDataError> {
+) -> Result<(NamedTempFile, blake2::digest::Output<cache::Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
@@ -573,7 +566,7 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
     let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
-    let mut hashing_file_writer = HashingWriter::<_, blake2::Blake2s256>::new(file);
+    let mut hashing_file_writer = HashingWriter::<_, cache::Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
@@ -1013,7 +1006,7 @@ mod test {
 
         assert_eq!(
             result.cache_state.blake2_hash.unwrap()[..],
-            hex!("791749939c9d6e26801bbcd525b908da15d42d3249f01efaca1ed1133f38bb87")[..]
+            hex!("a1861e448e4a62b88dce47c95351bfbe7fc22451a73f89a09d782492540e0675")[..]
         );
         assert_eq!(
             std::fs::read_to_string(result.repo_data_json_path).unwrap(),
