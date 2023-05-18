@@ -211,6 +211,7 @@ async fn repodata_from_file(
         },
         cache_last_modified: SystemTime::now(),
         blake2_hash: None,
+        blake2b_hash: None,
         has_zst: None,
         has_bz2: None,
         has_jlap: None,
@@ -466,6 +467,13 @@ pub async fn fetch_repo_data(
     })
     .await??;
 
+    // Calculate blake2b hash
+    let blake2b_hash = cache::generate_blake2b256_hash(
+        &repo_data_json_path
+    ).await.map_err(
+        FetchRepoDataError::FailedToGetMetadata
+    )?;
+
     // Update the cache on disk.
     let had_cache = cache_state.is_some();
     let new_cache_state = RepoDataState {
@@ -476,6 +484,7 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
+        blake2b_hash: Some(blake2b_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         // We dont do anything with JLAP so just copy over the value.
