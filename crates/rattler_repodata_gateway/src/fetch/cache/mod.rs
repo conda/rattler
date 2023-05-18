@@ -2,11 +2,10 @@ mod cache_headers;
 
 pub use cache_headers::CacheHeaders;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fs::File, io::Read, path, path::Path, str::FromStr, time::SystemTime};
+use std::{fs::File, io::Read, path::{Path, PathBuf}, str::FromStr, time::SystemTime};
 use url::Url;
 use blake2::{Blake2b, Digest};
 use blake2::digest::consts::U32;
-use path::PathBuf;
 use tokio::io::AsyncReadExt;
 
 /// Custom blake2b type
