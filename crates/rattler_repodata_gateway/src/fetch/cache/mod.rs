@@ -1,12 +1,18 @@
 mod cache_headers;
 
+use blake2::digest::consts::U32;
+use blake2::{Blake2b, Digest};
 pub use cache_headers::CacheHeaders;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{fs::File, io::Read, path::{Path, PathBuf}, str::FromStr, time::SystemTime};
-use url::Url;
-use blake2::{Blake2b, Digest};
-use blake2::digest::consts::U32;
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::SystemTime,
+};
 use tokio::io::AsyncReadExt;
+use url::Url;
 
 /// Custom blake2b type
 type Blake2b256 = Blake2b<U32>;
@@ -161,8 +167,8 @@ fn serialize_blake2_hash<S: Serializer>(
 fn deserialize_blake2b_hash<'de, D>(
     deserializer: D,
 ) -> Result<Option<blake2::digest::Output<Blake2b256>>, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     use serde::de::Error;
     match Option::<&'de str>::deserialize(deserializer)? {
@@ -185,7 +191,9 @@ fn serialize_blake2b_hash<S: Serializer>(
 }
 
 /// Calculate the blake2b256 hash of a file
-pub async fn generate_blake2b256_hash(path: &PathBuf) -> Result<blake2::digest::Output<Blake2b256>, tokio::io::Error> {
+pub async fn generate_blake2b256_hash(
+    path: &PathBuf,
+) -> Result<blake2::digest::Output<Blake2b256>, tokio::io::Error> {
     let mut file = tokio::fs::File::open(path).await?;
 
     let mut hasher = Blake2b256::new();
@@ -194,7 +202,7 @@ pub async fn generate_blake2b256_hash(path: &PathBuf) -> Result<blake2::digest::
     file.read_to_end(&mut content).await?;
     hasher.update(content);
 
-    let hash: blake2::digest::Output<Blake2b256> = hasher.finalize().into();
+    let hash: blake2::digest::Output<Blake2b256> = hasher.finalize();
 
     Ok(hash)
 }

@@ -468,11 +468,9 @@ pub async fn fetch_repo_data(
     .await??;
 
     // Calculate blake2b hash
-    let blake2b_hash = cache::generate_blake2b256_hash(
-        &repo_data_json_path
-    ).await.map_err(
-        FetchRepoDataError::FailedToGetMetadata
-    )?;
+    let blake2b_hash = cache::generate_blake2b256_hash(&repo_data_json_path)
+        .await
+        .map_err(FetchRepoDataError::FailedToGetMetadata)?;
 
     // Update the cache on disk.
     let had_cache = cache_state.is_some();
