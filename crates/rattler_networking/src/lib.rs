@@ -2,9 +2,11 @@
 
 //! Networking utilities for Rattler, specifically authenticating requests
 
-use std::{collections::HashMap, str::FromStr, path::PathBuf};
+use std::{collections::HashMap, str::FromStr, path::PathBuf, sync::{Mutex, atomic::Ordering}, cell::RefCell};
 
 mod fallback_storage;
+mod flock;
+
 use keyring::Entry;
 use reqwest::{Client, IntoUrl, Method, Url};
 use serde::{Deserialize, Serialize};
@@ -17,7 +19,7 @@ pub enum Authentication {
     /// `Authorization: Bearer {TOKEN}`
     BearerToken(String),
     /// A basic authentication token is sent as HTTP basic auth
-    Basic {
+    BasicHTTP {
         /// The username to use for basic auth
         username: String,
         /// The password to use for basic auth
@@ -50,14 +52,35 @@ pub struct AuthenticationStorage {
     /// A cache of authentication information
     authentication_cache: HashMap<String, Option<Authentication>>,
 }
+use std::sync::atomic::AtomicBool;
+
+use lazy_static::lazy_static;
+
+
+lazy_static! {
+
+    static ref FALLBACK_DATABASE : &'static str = {
+        println!("Setting up fallback database");
+        let credential = fallback_storage::JsonFileCredentialBuilder::new("auth_store.json");
+        keyring::set_default_credential_builder(Box::new(credential));
+        "Ok"
+    };
+}
+
+static USES_FALLBACK : Mutex<Option<bool>> = Mutex::new(None);
 
 impl AuthenticationStorage {
     /// Create a new authentication storage with the given store key
     pub fn new(store_key: &str) -> AuthenticationStorage {
-
-        keyring::set_default_credential_builder(Box::new(fallback_storage::JsonFileCredentialBuilder::new(
-            "auth_store.json",
-        )));
+        
+        let mut inner = USES_FALLBACK.lock().unwrap();
+        if inner.is_none() {
+            println!("Setting up fallback database");
+            keyring::set_default_credential_builder(Box::new(fallback_storage::JsonFileCredentialBuilder::new(
+                "auth_store.json",
+            )));
+            inner.replace(true);
+        }
 
         AuthenticationStorage {
             store_key: store_key.to_string(),
@@ -246,7 +269,7 @@ impl AuthenticatedClient {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => builder.bearer_auth(token),
-                Authentication::Basic { username, password } => {
+                Authentication::BasicHTTP { username, password } => {
                     builder.basic_auth(username, Some(password))
                 }
                 Authentication::CondaToken(_) => builder,
@@ -349,7 +372,7 @@ impl AuthenticatedClientBlocking {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => builder.bearer_auth(token),
-                Authentication::Basic { username, password } => {
+                Authentication::BasicHTTP { username, password } => {
                     builder.basic_auth(username, Some(password))
                 }
                 Authentication::CondaToken(_) => builder,
@@ -391,6 +414,7 @@ mod tests {
         assert!(retrieved.unwrap().is_none());
 
         let authentication = Authentication::CondaToken("testtoken".to_string());
+        insta::assert_json_snapshot!(authentication);
         storage.store(host, &authentication)?;
 
         let retrieved = storage.get(host);
@@ -424,6 +448,9 @@ mod tests {
         assert!(retrieved.unwrap().is_none());
 
         let authentication = Authentication::BearerToken("xyztokytoken".to_string());
+
+        insta::assert_json_snapshot!(authentication);
+
         storage.store(host, &authentication)?;
 
         let retrieved = storage.get(host);
@@ -460,10 +487,11 @@ mod tests {
         assert!(retrieved.is_ok());
         assert!(retrieved.unwrap().is_none());
 
-        let authentication = Authentication::Basic {
+        let authentication = Authentication::BasicHTTP {
             username: "testuser".to_string(),
             password: "testpassword".to_string(),
         };
+        insta::assert_json_snapshot!(authentication);
         storage.store(host, &authentication)?;
 
         let retrieved = storage.get(host);
