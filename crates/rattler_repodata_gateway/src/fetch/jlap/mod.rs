@@ -124,12 +124,12 @@ pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Resu
     let length = lines.len();
 
     if length > 1 {
-        let patches = lines[0..length - JLAP_FOOTER_OFFSET].iter().join("");
-
-        return Ok(format!("{}", patches.into_bytes().len()));
+        let patches = lines[0..length - JLAP_FOOTER_OFFSET].iter().join("\n");
+        return Ok(format!("bytes={}-", patches.into_bytes().len()));
     }
 
-    Ok(String::from("TBD"))
+    // We default to starting from the beginning of the file.
+    Ok(String::from("bytes=0-"))
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
