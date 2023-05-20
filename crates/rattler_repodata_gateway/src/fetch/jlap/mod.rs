@@ -10,9 +10,18 @@
 //! this file is updated.
 //!
 //!
-
-use reqwest::{Client};
+use std::path::{Path, PathBuf};
+use itertools::Itertools;
+use reqwest::{Client, Response, header::{HeaderMap, HeaderValue}};
 use serde::{Serialize, Deserialize};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use url::Url;
+
+/// File suffix for JLAP files
+const JLAP_FILE_SUFFIX: &str = "jlap";
+
+/// File suffix for JLAP files
+const JLAP_FOOTER_OFFSET: usize = 2;
 
 /// Represents the variety of errors that we come across while processing JLAP files
 #[derive(Debug, thiserror::Error)]
@@ -30,9 +39,14 @@ pub enum JLAPError {
 /// of the file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Patch {
-    to: String,
-    from: String,
-    patch: json_patch::Patch, // [] is a valid, empty patch
+    /// Next hash of `repodata.json` file
+    pub to: String,
+
+    /// Previous hash of `repodata.json` file
+    pub from: String,
+
+    /// Patches to apply to current `repodata.json` file
+    pub patch: json_patch::Patch, // [] is a valid, empty patch
 }
 
 /// Represents the metadata for a JLAP file, which is typically found at the very end
@@ -47,18 +61,75 @@ pub struct JLAPMetadata {
 //     patches: Vec<String>
 // }
 
-/// Fetches a JLAP object from server.
+/// Fetches a JLAP object from server
 ///
-/// To do this, we first need information about the current JLAP file that we have
-/// on disk if it is in fact there. If we have an existing JLAP file, we need to figure
-/// out how many patches to fetch from the server.
-///
-pub async fn fetch_jlap (url: &str, client: &Client) -> Result<reqwest::Response, reqwest::Error> {
+pub async fn fetch_jlap (url: &str, client: &Client, range: Option<String>) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
+    let mut headers = HeaderMap::default();
 
-    // TODO: Build headers here; this is where the range request stuff happens...
+    if let Some(value) = range {
+        headers.insert(
+            reqwest::header::RANGE, HeaderValue::from_str(&value).unwrap()
+        );
+    }
 
-    request_builder.send().await
+    request_builder.headers(headers).send().await
+}
+
+
+/// Builds a cache key used in storing JLAP cache
+pub fn get_jlap_cache_key(subdir_url: &Url, cache_path: &Path) -> String {
+    let cache_key = crate::utils::url_to_cache_filename(&subdir_url);
+
+    format!("{}.{}", cache_key, JLAP_FILE_SUFFIX)
+
+}
+
+/// Persist a JLAP file to a cache location
+///
+/// This is done by first determining where the file should be written to provided
+/// the input arguments, writing the file and then return the `PathBuf` object so the
+/// caller can also keep track of where this is stored.
+pub async fn cache_jlap_response (subdir_url: &Url, response_bytes: &[u8], cache_path: &Path) -> Result<PathBuf, tokio::io::Error>{
+    let jlap_cache_key = get_jlap_cache_key(subdir_url, cache_path);
+    let jlap_cache_path = cache_path.join(jlap_cache_key);
+
+    let mut jlap_file = tokio::fs::File::create(&jlap_cache_path).await?;
+    jlap_file.write_all(response_bytes).await?;
+
+    Ok(jlap_cache_path)
+}
+
+/// Determines if a JLAP cache file already exists on the filesystem
+pub fn cache_jlap_exists(subdir_url: &Url, cache_path: &Path) -> bool {
+    let jlap_cache_key = get_jlap_cache_key(subdir_url, cache_path);
+    let jlap_cache_path = cache_path.join(jlap_cache_key);
+
+    jlap_cache_path.is_file()
+}
+
+/// Determines the byte offset to use for JLAP range requests
+///
+/// This file assumes we already have a locally cached version of the JLAP file
+pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Result<String, tokio::io::Error> {
+    let cache_key = get_jlap_cache_key(subdir_url, cache_path);
+    let jlap_cache_path = cache_path.join(cache_key);
+
+    let mut cache_file = tokio::fs::File::open(jlap_cache_path).await?;
+    let mut contents = String::from("");
+
+    cache_file.read_to_string(&mut contents).await?;
+
+    let lines: Vec<&str> = contents.split("\n").collect();
+    let length = lines.len();
+
+    if length > 1 {
+        let patches = lines[0..length - JLAP_FOOTER_OFFSET].iter().join("");
+
+        return Ok(format!("{}", patches.into_bytes().len()));
+    }
+
+    Ok(String::from("TBD"))
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
@@ -77,10 +148,9 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 pub fn convert_jlap_string_to_patch_set (text: &str, offset: usize) -> Result<Vec<Patch>, JLAPError>  {
     let lines: Vec<&str> = text.split("\n").collect();
     let length = lines.len();
-    let jlap_footer_offset: usize = 2; // Last two lines do not contain patches
 
     if length > 1 {
-        let patch_lines = lines[offset..length - jlap_footer_offset].iter();
+        let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
         let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
             parse_patch_json
         ).collect();
