@@ -364,6 +364,22 @@ pub async fn fetch_repo_data(
     let has_bz2 = variant_availability.has_bz2();
     let has_jlap = variant_availability.has_jlap();
 
+    // TODO: This is where we should decide whether to use JLAP or not
+    if has_jlap {
+        let jlap_manager = jlap::JLAPManager::new(subdir_url, &client, &cache_path).await;
+
+        match jlap_manager.patch_repo_data(&repo_data_json_path).await {
+            Ok(_) => {
+                // TODO: return the CachedRepoData object; we were successful so this means we've
+                //       updated the `repodata.json` file.
+            },
+            Err(error) => {
+                // TODO: We ran into an error while patching repo data, this means we just want
+                //       to continue on with normal program flow; maybe log a warning though?
+            }
+        }
+    }
+
     // Determine which variant to download
     let repo_data_url = if has_zst {
         subdir_url
@@ -380,8 +396,6 @@ pub async fn fetch_repo_data(
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
     let request_builder = client.get(repo_data_url.clone());
-
-    // TODO: This is where we should decide whether to use JLAP or not
 
     let mut headers = HeaderMap::default();
 

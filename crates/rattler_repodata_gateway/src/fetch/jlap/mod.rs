@@ -17,6 +17,8 @@ use serde::{Serialize, Deserialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
+use crate::fetch::CachedRepoData;
+
 /// File suffix for JLAP files
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
 
@@ -32,6 +34,10 @@ pub enum JLAPError {
     #[error(transparent)]
     /// Pass-thru for JSON errors found while parsing JLAP file
     JSONParseError(serde_json::Error),
+
+    #[error(transparent)]
+    /// Pass-thru for HTTP errors encountered while requesting JLAP
+    HTTPError(reqwest::Error),
 
     #[error("No patches found in the JLAP file")]
     /// Error returned when JLAP file has no patches in it
@@ -63,10 +69,132 @@ pub struct JLAPMetadata {
     latest: String
 }
 
-// #[derive(Debug)]
-// pub struct JLAP {
-//     patches: Vec<String>
-// }
+/// Encapsulates data and behavior related to patching `repodata.json` with remote
+/// `repodata.jlap` data.
+#[derive(Debug)]
+pub struct JLAPManager<'a, 'b> {
+    /// Subdir URL; this is used to construct the URL for fetching JLAP data
+    subdir_url: Url,
+
+    /// HTTP client used to make requests
+    client: &'a Client,
+
+    /// Path to local cache folder; this is where our methods read/write JLAP cache
+    cache_path: &'b Path,
+
+    /// Path to the current cached copy of `repodata.jlap`
+    pub repo_data_jlap_path: Option<PathBuf>,
+
+    /// Range request data
+    pub range: Option<String>,
+
+    /// Remote URL where JLAP data can be fetched
+    pub jlap_url: Url,
+}
+
+impl<'a, 'b> JLAPManager<'a, 'b> {
+    /// Creates a new JLAP object
+    ///
+    /// This associated function is a special constructor method for the JLAP struct.
+    /// It is used to check for the existence of a cached copy of the JLAP file and to
+    /// store some of what we need to fetch new JLAP data.
+    pub async fn new(subdir_url: Url, client: &'a Client, cache_path: &'b Path) -> JLAPManager<'a, 'b> {
+        // Determines the range for our request; error are okay, we fallback to `None`
+        let repo_data_jlap_path= get_jlap_cache_path(&subdir_url, &cache_path);
+
+        // This is the byte offset range we use while fetching JLAP updates
+        let range = if repo_data_jlap_path.is_file() {
+            match get_jlap_request_range(&subdir_url, &cache_path).await {
+                Ok(value) => Some(value),
+                // TODO: Maybe add a warning here? This means there was a problem opening
+                //       and reading the file.
+                Err(_) => None
+            }
+        } else {
+            None
+        };
+
+        // Set `repo_data_jlap_path` to none if the file doesn't exist
+        let repo_data_jlap_path = if repo_data_jlap_path.is_file() {
+            Some(repo_data_jlap_path)
+        } else {
+            None
+        };
+
+        let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
+
+        Self {
+            subdir_url,
+            client,
+            cache_path,
+            repo_data_jlap_path,
+            range,
+            jlap_url,
+        }
+    }
+
+    /// Attempts to patch current `repodata.json` file
+    ///
+    /// This method first makes a request to fetch JLAP data given everything stored on the
+    /// struct. If it successfully retrieves, it will then try to cache this file. This will
+    /// either write a new file update the existing one with the new lines we fetched (if any).
+    ///
+    /// After this, it will then actually proceed to applying JSON patches to the `repo_data_json_path`
+    /// file provided as an argument.
+    pub async fn patch_repo_data(self, repo_data_json_path: &PathBuf) -> Result<(), JLAPError> {
+        // Collect the JLAP file
+        let result = fetch_jlap(
+            self.jlap_url.as_str(),
+            &self.client,
+            self.range.clone()
+        ).await;
+        let response: Response = match result {
+            Ok(response) => {
+                response
+            },
+            Err(error) => {
+                return Err(JLAPError::HTTPError(error));
+            }
+        };
+
+        // TODO: is there a way to do this without making two copies of the response in memory?
+        let response_text = response.text().await.unwrap();
+        let response_bytes = response_text.clone().into_bytes();
+
+        // Updates existing or creates new JLAP cache file
+        self.save_jlap_cache(&response_bytes).await?;
+
+        // Update existing `repodata.json`
+        let patches = convert_jlap_string_to_patch_set(&response_text, 1)?;
+
+        // TODO: Apply patches to `repo_data_json_path`
+        Ok(())
+    }
+
+    /// Updates or creates the JLAP file we currently have cached
+    ///
+    /// If the file exists, then we update it otherwise, we just write an
+    /// entire new file to cache.
+    async fn save_jlap_cache(mut self, response_bytes: &[u8]) -> Result<(), JLAPError> {
+        if let Some(path) = self.repo_data_jlap_path {
+            if path.is_file() {
+                // TODO: Update existing JLAP file
+                return Ok(())
+            }
+        }
+
+        match cache_jlap_response(&self.subdir_url, &response_bytes, &self.cache_path).await {
+            Ok(jlap_cache_path) => {
+                // Update the `repo_data_jlap_path` property with new value
+                self.repo_data_jlap_path = Some(jlap_cache_path);
+            },
+            Err(_) => {}  // TODO: this means we failed to write a cache file; maybe just log a warning?
+        }
+
+        Ok(())
+    }
+}
+
 
 /// Fetches a JLAP object from server
 ///
@@ -85,11 +213,11 @@ pub async fn fetch_jlap (url: &str, client: &Client, range: Option<String>) -> R
 
 
 /// Builds a cache key used in storing JLAP cache
-pub fn get_jlap_cache_key(subdir_url: &Url, cache_path: &Path) -> String {
+pub fn get_jlap_cache_path(subdir_url: &Url, cache_path: &Path) -> PathBuf {
     let cache_key = crate::utils::url_to_cache_filename(&subdir_url);
+    let cache_file_name = format!("{}.{}", cache_key, JLAP_FILE_SUFFIX);
 
-    format!("{}.{}", cache_key, JLAP_FILE_SUFFIX)
-
+    cache_path.join(cache_file_name)
 }
 
 /// Persist a JLAP file to a cache location
@@ -98,8 +226,7 @@ pub fn get_jlap_cache_key(subdir_url: &Url, cache_path: &Path) -> String {
 /// the input arguments, writing the file and then return the `PathBuf` object so the
 /// caller can also keep track of where this is stored.
 pub async fn cache_jlap_response (subdir_url: &Url, response_bytes: &[u8], cache_path: &Path) -> Result<PathBuf, tokio::io::Error>{
-    let jlap_cache_key = get_jlap_cache_key(subdir_url, cache_path);
-    let jlap_cache_path = cache_path.join(jlap_cache_key);
+    let jlap_cache_path = get_jlap_cache_path(subdir_url, cache_path);
 
     let mut jlap_file = tokio::fs::File::create(&jlap_cache_path).await?;
     jlap_file.write_all(response_bytes).await?;
@@ -107,20 +234,11 @@ pub async fn cache_jlap_response (subdir_url: &Url, response_bytes: &[u8], cache
     Ok(jlap_cache_path)
 }
 
-/// Determines if a JLAP cache file already exists on the filesystem
-pub fn cache_jlap_exists(subdir_url: &Url, cache_path: &Path) -> bool {
-    let jlap_cache_key = get_jlap_cache_key(subdir_url, cache_path);
-    let jlap_cache_path = cache_path.join(jlap_cache_key);
-
-    jlap_cache_path.is_file()
-}
-
 /// Determines the byte offset to use for JLAP range requests
 ///
 /// This file assumes we already have a locally cached version of the JLAP file
 pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Result<String, tokio::io::Error> {
-    let cache_key = get_jlap_cache_key(subdir_url, cache_path);
-    let jlap_cache_path = cache_path.join(cache_key);
+    let jlap_cache_path = get_jlap_cache_path(subdir_url, cache_path);
 
     let mut cache_file = tokio::fs::File::open(jlap_cache_path).await?;
     let mut contents = String::from("");
