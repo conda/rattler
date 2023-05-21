@@ -18,10 +18,13 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
 /// File suffix for JLAP files
-const JLAP_FILE_SUFFIX: &str = "jlap";
+pub const JLAP_FILE_SUFFIX: &str = "jlap";
+
+/// File name of JLAP file
+pub const JLAP_FILE_NAME: &str = "repodata.jlap";
 
 /// File suffix for JLAP files
-const JLAP_FOOTER_OFFSET: usize = 2;
+pub const JLAP_FOOTER_OFFSET: usize = 2;
 
 /// Represents the variety of errors that we come across while processing JLAP files
 #[derive(Debug, thiserror::Error)]
@@ -30,9 +33,13 @@ pub enum JLAPError {
     /// Pass-thru for JSON errors found while parsing JLAP file
     JSONParseError(serde_json::Error),
 
-    #[error("No patches found in JLAP file")]
+    #[error("No patches found in the JLAP file")]
     /// Error returned when JLAP file has no patches in it
-    NoPatchesFoundError
+    NoPatchesFoundError,
+
+    #[error("No matching hashes can be found in the JLAP file")]
+    /// Error returned when none of the patches match the hash of our current `repodata.json`
+    NoHashesFoundError
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority

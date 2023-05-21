@@ -362,6 +362,7 @@ pub async fn fetch_repo_data(
     // variants. We don't check the expiration here since we just refreshed it.
     let has_zst = variant_availability.has_zst();
     let has_bz2 = variant_availability.has_bz2();
+    let has_jlap = variant_availability.has_jlap();
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -379,6 +380,8 @@ pub async fn fetch_repo_data(
     // Construct the HTTP request
     tracing::debug!("fetching '{}'", &repo_data_url);
     let request_builder = client.get(repo_data_url.clone());
+
+    // TODO: This is where we should decide whether to use JLAP or not
 
     let mut headers = HeaderMap::default();
 
@@ -416,6 +419,7 @@ pub async fn fetch_repo_data(
             url: repo_data_url,
             has_zst: variant_availability.has_zst,
             has_bz2: variant_availability.has_bz2,
+            has_jlap: variant_availability.has_jlap,
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
@@ -479,8 +483,7 @@ pub async fn fetch_repo_data(
         blake2_hash: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
-        // We dont do anything with JLAP so just copy over the value.
-        has_jlap: cache_state.and_then(|state| state.has_jlap),
+        has_jlap: variant_availability.has_jlap,
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {
@@ -592,6 +595,7 @@ async fn stream_and_decode_to_file(
 pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
     has_bz2: Option<Expiring<bool>>,
+    has_jlap: Option<Expiring<bool>>,
 }
 
 impl VariantAvailability {
@@ -606,6 +610,14 @@ impl VariantAvailability {
     /// Returns true if there is a Bz2 variant available, regardless of when it was checked
     pub fn has_bz2(&self) -> bool {
         self.has_bz2
+            .as_ref()
+            .map(|state| state.value)
+            .unwrap_or(false)
+    }
+
+    /// Returns true if there is a JLAP variant available, regardless of when it was checked
+    pub fn has_jlap(&self) -> bool {
+        self.has_jlap
             .as_ref()
             .map(|state| state.value)
             .unwrap_or(false)
@@ -631,13 +643,19 @@ pub async fn check_variant_availability(
         .and_then(|state| state.has_bz2.as_ref())
         .and_then(|value| value.value(expiration_duration))
         .copied();
+    let has_jlap = cache_state
+        .and_then(|state| state.has_jlap.as_ref())
+        .and_then(|value| value.value(expiration_duration))
+        .copied();
 
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
     let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
+    let jlap_repodata_url = subdir_url.join(&jlap::JLAP_FILE_NAME).unwrap();
+
     let zst_future = match has_zst {
         Some(_) => {
-            // The last cached value was value so we simply copy that
+            // The last cached value was valid, so we simply copy that
             ready(cache_state.and_then(|state| state.has_zst.clone())).left_future()
         }
         None => async {
@@ -650,7 +668,7 @@ pub async fn check_variant_availability(
     };
 
     // Create a future to determine if bz2 is available. We only check this if we dont already know that
-    // zst is available because if thats available we're going to use that anyway.
+    // zst is available because if that's available we're going to use that anyway.
     let bz2_future = if has_zst != Some(true) {
         // If the zst variant might not be available we need to check whether bz2 is available.
         async {
@@ -672,13 +690,28 @@ pub async fn check_variant_availability(
         ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
     };
 
-    // TODO: Implement JLAP
+    let jlap_future = match has_jlap {
+        Some(_) => {
+            // The last cached value is valid, so we simply copy that
+            ready(cache_state.and_then(|state| state.has_jlap.clone())).left_future()
+        }
+        None => async {
+            Some(Expiring {
+                value: check_valid_download_target(&jlap_repodata_url, client).await,
+                last_checked: chrono::Utc::now(),
+            })
+        }.right_future(),
+    };
 
-    // Await both futures so they happen concurrently. Note that a request might not actually happen if
+    // Await all futures so they happen concurrently. Note that a request might not actually happen if
     // the cache is still valid.
-    let (has_zst, has_bz2) = futures::join!(zst_future, bz2_future);
+    let (
+        has_zst,
+        has_bz2,
+        has_jlap,
+    ) = futures::join!(zst_future, bz2_future, jlap_future);
 
-    VariantAvailability { has_zst, has_bz2 }
+    VariantAvailability { has_zst, has_bz2, has_jlap }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
