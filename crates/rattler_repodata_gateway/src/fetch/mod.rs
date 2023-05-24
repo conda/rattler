@@ -366,7 +366,17 @@ pub async fn fetch_repo_data(
 
     // TODO: This is where we should decide whether to use JLAP or not
     if has_jlap {
-        let jlap_manager = jlap::JLAPManager::new(subdir_url, &client, &cache_path).await;
+        let blake2_hash = match cache_state.as_ref().unwrap().blake2_hash {
+            Some(hash) => Some(format!("{:x}", hash)),
+            None => None
+        };
+
+        let jlap_manager = jlap::JLAPManager::new(
+            subdir_url.clone(),
+            &client,
+            &cache_path,
+            blake2_hash
+        ).await;
 
         match jlap_manager.patch_repo_data(&repo_data_json_path).await {
             Ok(_) => {

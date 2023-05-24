@@ -11,6 +11,7 @@
 //!
 //!
 use std::path::{Path, PathBuf};
+use std::str;
 use itertools::Itertools;
 use reqwest::{Client, Response, header::{HeaderMap, HeaderValue}};
 use serde::{Serialize, Deserialize};
@@ -19,7 +20,7 @@ use url::Url;
 
 use crate::fetch::CachedRepoData;
 
-/// File suffix for JLAP files
+/// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
 
 /// File name of JLAP file
@@ -45,7 +46,7 @@ pub enum JLAPError {
 
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
-    NoHashesFoundError
+    NoHashesFoundError,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -65,8 +66,11 @@ pub struct Patch {
 /// Represents the metadata for a JLAP file, which is typically found at the very end
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JLAPMetadata {
-    url: String,
-    latest: String
+    /// URL of the `repodata.json` file
+    pub url: String,
+
+    /// blake2b hash of the latest `repodata.json` file
+    pub latest: String
 }
 
 /// Encapsulates data and behavior related to patching `repodata.json` with remote
@@ -82,8 +86,11 @@ pub struct JLAPManager<'a, 'b> {
     /// Path to local cache folder; this is where our methods read/write JLAP cache
     cache_path: &'b Path,
 
+    /// Hash of the current `repodata.json` file
+    blake2_hash: Option<String>,
+
     /// Path to the current cached copy of `repodata.jlap`
-    pub repo_data_jlap_path: Option<PathBuf>,
+    pub repo_data_jlap_path: PathBuf,
 
     /// Range request data
     pub range: Option<String>,
@@ -98,7 +105,12 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     /// This associated function is a special constructor method for the JLAP struct.
     /// It is used to check for the existence of a cached copy of the JLAP file and to
     /// store some of what we need to fetch new JLAP data.
-    pub async fn new(subdir_url: Url, client: &'a Client, cache_path: &'b Path) -> JLAPManager<'a, 'b> {
+    pub async fn new(
+        subdir_url: Url,
+        client: &'a Client,
+        cache_path: &'b Path,
+        blake2_hash: Option<String>
+    ) -> JLAPManager<'a, 'b> {
         // Determines the range for our request; error are okay, we fallback to `None`
         let repo_data_jlap_path= get_jlap_cache_path(&subdir_url, &cache_path);
 
@@ -114,19 +126,13 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
             None
         };
 
-        // Set `repo_data_jlap_path` to none if the file doesn't exist
-        let repo_data_jlap_path = if repo_data_jlap_path.is_file() {
-            Some(repo_data_jlap_path)
-        } else {
-            None
-        };
-
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
 
         Self {
             subdir_url,
             client,
             cache_path,
+            blake2_hash,
             repo_data_jlap_path,
             range,
             jlap_url,
@@ -175,18 +181,21 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     ///
     /// If the file exists, then we update it otherwise, we just write an
     /// entire new file to cache.
-    async fn save_jlap_cache(mut self, response_bytes: &[u8]) -> Result<(), JLAPError> {
-        if let Some(path) = self.repo_data_jlap_path {
-            if path.is_file() {
-                // TODO: Update existing JLAP file
-                return Ok(())
+    async fn save_jlap_cache(self, response_bytes: &[u8]) -> Result<(), JLAPError> {
+        if self.repo_data_jlap_path.is_file() {
+            let response_string = String::from_utf8_lossy(response_bytes);
+            let parts: Vec<&str> = response_string.split("\n").into_iter().filter(|s| !s.is_empty()).collect();
+
+            // We only care about updating if the response is greater than 2 lines
+            if parts.len() > 2 {
+                println!("{:?}", parts);
             }
+            return Ok(())
         }
 
-        match cache_jlap_response(&self.subdir_url, &response_bytes, &self.cache_path).await {
-            Ok(jlap_cache_path) => {
-                // Update the `repo_data_jlap_path` property with new value
-                self.repo_data_jlap_path = Some(jlap_cache_path);
+        match cache_jlap_response(&self.repo_data_jlap_path, &response_bytes).await {
+            Ok(_) => {
+                return Ok(())
             },
             Err(_) => {}  // TODO: this means we failed to write a cache file; maybe just log a warning?
         }
@@ -220,23 +229,17 @@ pub fn get_jlap_cache_path(subdir_url: &Url, cache_path: &Path) -> PathBuf {
     cache_path.join(cache_file_name)
 }
 
-/// Persist a JLAP file to a cache location
-///
-/// This is done by first determining where the file should be written to provided
-/// the input arguments, writing the file and then return the `PathBuf` object so the
-/// caller can also keep track of where this is stored.
-pub async fn cache_jlap_response (subdir_url: &Url, response_bytes: &[u8], cache_path: &Path) -> Result<PathBuf, tokio::io::Error>{
-    let jlap_cache_path = get_jlap_cache_path(subdir_url, cache_path);
-
+/// Persist a JLAP file to the provided location
+pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_bytes: &[u8]) -> Result<(), tokio::io::Error> {
     let mut jlap_file = tokio::fs::File::create(&jlap_cache_path).await?;
     jlap_file.write_all(response_bytes).await?;
 
-    Ok(jlap_cache_path)
+    Ok(())
 }
 
 /// Determines the byte offset to use for JLAP range requests
 ///
-/// This file assumes we already have a locally cached version of the JLAP file
+/// This function assumes we already have a locally cached version of the JLAP file
 pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Result<String, tokio::io::Error> {
     let jlap_cache_path = get_jlap_cache_path(subdir_url, cache_path);
 
@@ -296,6 +299,7 @@ pub fn convert_jlap_string_to_patch_set (text: &str, offset: usize) -> Result<Ve
 
     return Err(JLAPError::NoPatchesFoundError);
 }
+
 
 #[cfg(test)]
 mod test {
