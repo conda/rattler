@@ -260,7 +260,7 @@ impl Display for NumeralOrOther {
     }
 }
 
-#[derive(Default, Clone, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default, Clone, Eq, Serialize, Deserialize)]
 struct VersionComponent {
     components: SmallVec<[NumeralOrOther; 4]>,
     ranges: SmallVec<[Range<usize>; 4]>,
@@ -308,6 +308,19 @@ impl VersionComponent {
             }
         }
         true
+    }
+}
+
+impl Hash for VersionComponent {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let default = NumeralOrOther::default();
+        for range in self.ranges.iter().cloned() {
+            for component in self.components[range].iter() {
+                if component != &default {
+                    component.hash(state);
+                }
+            }
+        }
     }
 }
 
