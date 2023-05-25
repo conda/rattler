@@ -171,7 +171,26 @@ impl Version {
 
 impl PartialEq<Self> for Version {
     fn eq(&self, other: &Self) -> bool {
-        self.version == other.version && self.local == other.local
+        for ranges in self
+            .version
+            .components
+            .iter()
+            .zip_longest(other.version.components.iter())
+        {
+            match ranges {
+                EitherOrBoth::Both(left, right) => {
+                    if left != right {
+                        return false;
+                    }
+                }
+                EitherOrBoth::Left(el) | EitherOrBoth::Right(el) => {
+                    if el != &NumeralOrOther::Numeral(0) {
+                        return false;
+                    }
+                }
+            }
+        }
+        self.local.components == other.local.components
     }
 }
 
