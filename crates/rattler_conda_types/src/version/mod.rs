@@ -115,7 +115,7 @@ mod parse;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Version {
     /// The epoch of this version. This is an optional number that can be used to indicate a change
     /// in the versioning scheme.
@@ -171,30 +171,9 @@ impl Version {
 
 impl PartialEq<Self> for Version {
     fn eq(&self, other: &Self) -> bool {
-        for ranges in self
-            .version
-            .components
-            .iter()
-            .zip_longest(other.version.components.iter())
-        {
-            match ranges {
-                EitherOrBoth::Both(left, right) => {
-                    if left != right {
-                        return false;
-                    }
-                }
-                EitherOrBoth::Left(el) | EitherOrBoth::Right(el) => {
-                    if el != &NumeralOrOther::Numeral(0) {
-                        return false;
-                    }
-                }
-            }
-        }
-        self.local.components == other.local.components
+        self.version == other.version && self.local == other.local
     }
 }
-
-impl Eq for Version {}
 
 impl Hash for Version {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -281,7 +260,7 @@ impl Display for NumeralOrOther {
     }
 }
 
-#[derive(Default, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Default, Clone, Eq, Hash, Serialize, Deserialize)]
 struct VersionComponent {
     components: SmallVec<[NumeralOrOther; 4]>,
     ranges: SmallVec<[Range<usize>; 4]>,
@@ -349,6 +328,34 @@ impl Debug for VersionComponent {
             write!(f, "]")?;
         }
         write!(f, "]")
+    }
+}
+
+impl PartialEq for VersionComponent {
+    fn eq(&self, other: &Self) -> bool {
+        for ranges in self
+            .ranges
+            .iter()
+            .cloned()
+            .zip_longest(other.ranges.iter().cloned())
+        {
+            let (a_range, b_range) = ranges.or_default();
+            let default = NumeralOrOther::default();
+            for components in self.components[a_range]
+                .iter()
+                .zip_longest(other.components[b_range].iter())
+            {
+                let (a_component, b_component) = match components {
+                    EitherOrBoth::Left(l) => (l, &default),
+                    EitherOrBoth::Right(r) => (&default, r),
+                    EitherOrBoth::Both(l, r) => (l, r),
+                };
+                if a_component != b_component {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 
