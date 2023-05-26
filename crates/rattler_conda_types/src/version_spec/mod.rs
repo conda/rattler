@@ -230,6 +230,8 @@ impl VersionSpec {
 mod tests {
     use crate::version_spec::{LogicalOperator, VersionOperator};
     use crate::{Version, VersionSpec};
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     use std::str::FromStr;
 
     #[test]
@@ -309,8 +311,6 @@ mod tests {
         assert!(!vs1.matches(&v1));
 
         let vs2 = VersionSpec::from_str("1.2").unwrap();
-        println!("{:?}", vs2);
-        println!("{:?}", v1);
         assert!(vs2.matches(&v1));
 
         let v2 = Version::from_str("1.2.3").unwrap();

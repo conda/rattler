@@ -117,10 +117,11 @@ mod parse;
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
 #[derive(Clone, Debug, Eq)]
 pub struct Version {
-    /// The epoch of this version. This is an optional number that can be used to indicate a change
-    /// in the versioning scheme.
+    /// A normed copy of the original version string trimmed and converted to lower case.
+    /// Also dashes are replaced with underscores if the version string does not contain
+    /// any underscores.
     norm: String,
-    /// The version of this version. This is the actual version string.
+    /// The version of this version. This is the actual version string, including the epoch.
     version: VersionComponent,
     /// The local version of this version (everything following a `+`).
     /// This is an optional string that can be used to indicate a local version of a package.
@@ -315,11 +316,12 @@ impl Hash for VersionComponent {
     fn hash<H: Hasher>(&self, state: &mut H) {
         let default = NumeralOrOther::default();
         for range in self.ranges.iter().cloned() {
-            for component in self.components[range].iter() {
-                if component != &default {
-                    component.hash(state);
-                }
-            }
+            // skip trailing default components
+            self.components[range]
+                .iter()
+                .rev()
+                .skip_while(|c| **c == default)
+                .for_each(|c| c.hash(state));
         }
     }
 }
@@ -441,6 +443,9 @@ impl Serialize for Version {
 mod test {
     use std::cmp::Ordering;
     use std::str::FromStr;
+
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     use rand::seq::SliceRandom;
 
@@ -646,5 +651,32 @@ mod test {
         assert!(Version::from_str("1.2.3")
             .unwrap()
             .starts_with(&Version::from_str("1.2").unwrap()));
+    }
+
+    fn get_hash(spec: &Version) -> u64 {
+        let mut s = DefaultHasher::new();
+        spec.hash(&mut s);
+        s.finish()
+    }
+
+    #[test]
+    fn hash() {
+        let v1 = Version::from_str("1.2.0").unwrap();
+
+        let vx2 = Version::from_str("1.2.0").unwrap();
+        assert_eq!(get_hash(&v1), get_hash(&vx2));
+        let vx2 = Version::from_str("1.2.0.0.0").unwrap();
+        assert_eq!(get_hash(&v1), get_hash(&vx2));
+        let vx2 = Version::from_str("1!1.2.0").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&vx2));
+
+        let vx2 = Version::from_str("1.2.0+post1").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&vx2));
+
+        let vx1 = Version::from_str("1.2+post1").unwrap();
+        assert_eq!(get_hash(&vx1), get_hash(&vx2));
+
+        let v2 = Version::from_str("1.2.3").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&v2));
     }
 }
