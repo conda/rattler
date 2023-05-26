@@ -115,12 +115,13 @@ mod parse;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 pub struct Version {
-    /// The epoch of this version. This is an optional number that can be used to indicate a change
-    /// in the versioning scheme.
+    /// A normed copy of the original version string trimmed and converted to lower case.
+    /// Also dashes are replaced with underscores if the version string does not contain
+    /// any underscores.
     norm: String,
-    /// The version of this version. This is the actual version string.
+    /// The version of this version. This is the actual version string, including the epoch.
     version: VersionComponent,
     /// The local version of this version (everything following a `+`).
     /// This is an optional string that can be used to indicate a local version of a package.
@@ -174,8 +175,6 @@ impl PartialEq<Self> for Version {
         self.version == other.version && self.local == other.local
     }
 }
-
-impl Eq for Version {}
 
 impl Hash for Version {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -262,7 +261,7 @@ impl Display for NumeralOrOther {
     }
 }
 
-#[derive(Default, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Default, Clone, Eq, Serialize, Deserialize)]
 struct VersionComponent {
     components: SmallVec<[NumeralOrOther; 4]>,
     ranges: SmallVec<[Range<usize>; 4]>,
@@ -313,6 +312,20 @@ impl VersionComponent {
     }
 }
 
+impl Hash for VersionComponent {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let default = NumeralOrOther::default();
+        for range in self.ranges.iter().cloned() {
+            // skip trailing default components
+            self.components[range]
+                .iter()
+                .rev()
+                .skip_while(|c| **c == default)
+                .for_each(|c| c.hash(state));
+        }
+    }
+}
+
 impl Debug for VersionComponent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "[")?;
@@ -330,6 +343,34 @@ impl Debug for VersionComponent {
             write!(f, "]")?;
         }
         write!(f, "]")
+    }
+}
+
+impl PartialEq for VersionComponent {
+    fn eq(&self, other: &Self) -> bool {
+        for ranges in self
+            .ranges
+            .iter()
+            .cloned()
+            .zip_longest(other.ranges.iter().cloned())
+        {
+            let (a_range, b_range) = ranges.or_default();
+            let default = NumeralOrOther::default();
+            for components in self.components[a_range]
+                .iter()
+                .zip_longest(other.components[b_range].iter())
+            {
+                let (a_component, b_component) = match components {
+                    EitherOrBoth::Left(l) => (l, &default),
+                    EitherOrBoth::Right(r) => (&default, r),
+                    EitherOrBoth::Both(l, r) => (l, r),
+                };
+                if a_component != b_component {
+                    return false;
+                }
+            }
+        }
+        true
     }
 }
 
@@ -402,6 +443,9 @@ impl Serialize for Version {
 mod test {
     use std::cmp::Ordering;
     use std::str::FromStr;
+
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     use rand::seq::SliceRandom;
 
@@ -607,5 +651,32 @@ mod test {
         assert!(Version::from_str("1.2.3")
             .unwrap()
             .starts_with(&Version::from_str("1.2").unwrap()));
+    }
+
+    fn get_hash(spec: &Version) -> u64 {
+        let mut s = DefaultHasher::new();
+        spec.hash(&mut s);
+        s.finish()
+    }
+
+    #[test]
+    fn hash() {
+        let v1 = Version::from_str("1.2.0").unwrap();
+
+        let vx2 = Version::from_str("1.2.0").unwrap();
+        assert_eq!(get_hash(&v1), get_hash(&vx2));
+        let vx2 = Version::from_str("1.2.0.0.0").unwrap();
+        assert_eq!(get_hash(&v1), get_hash(&vx2));
+        let vx2 = Version::from_str("1!1.2.0").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&vx2));
+
+        let vx2 = Version::from_str("1.2.0+post1").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&vx2));
+
+        let vx1 = Version::from_str("1.2+post1").unwrap();
+        assert_eq!(get_hash(&vx1), get_hash(&vx2));
+
+        let v2 = Version::from_str("1.2.3").unwrap();
+        assert_ne!(get_hash(&v1), get_hash(&v2));
     }
 }
