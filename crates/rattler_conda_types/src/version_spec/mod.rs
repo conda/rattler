@@ -230,8 +230,6 @@ impl VersionSpec {
 mod tests {
     use crate::version_spec::{LogicalOperator, VersionOperator};
     use crate::{Version, VersionSpec};
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
     use std::str::FromStr;
 
     #[test]
