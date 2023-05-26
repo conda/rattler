@@ -40,6 +40,10 @@ pub enum JLAPError {
     /// Pass-thru for HTTP errors encountered while requesting JLAP
     HTTPError(reqwest::Error),
 
+    #[error(transparent)]
+    /// Pass-thru for file system errors encountered while requesting JLAP
+    FileSystemError(tokio::io::Error),
+
     #[error("No patches found in the JLAP file")]
     /// Error returned when JLAP file has no patches in it
     NoPatchesFoundError,
@@ -97,6 +101,9 @@ pub struct JLAPManager<'a, 'b> {
 
     /// Remote URL where JLAP data can be fetched
     pub jlap_url: Url,
+
+    /// Offset to use when reading JLAP response; 0 means partial response; 1 means full response
+    pub offset: usize,
 }
 
 impl<'a, 'b> JLAPManager<'a, 'b> {
@@ -116,8 +123,8 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
 
         // This is the byte offset range we use while fetching JLAP updates
         let range = if repo_data_jlap_path.is_file() {
-            match get_jlap_request_range(&subdir_url, &cache_path).await {
-                Ok(value) => Some(value),
+            match get_jlap_request_range(&repo_data_jlap_path).await {
+                Ok(value) => if value == "" { None } else { Some(value) }
                 // TODO: Maybe add a warning here? This means there was a problem opening
                 //       and reading the file.
                 Err(_) => None
@@ -128,6 +135,13 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
 
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
 
+        let mut offset;
+        if range == None {
+            offset = 1;
+        } else {
+            offset = 0;
+        }
+
         Self {
             subdir_url,
             client,
@@ -136,6 +150,7 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
             repo_data_jlap_path,
             range,
             jlap_url,
+            offset,
         }
     }
 
@@ -163,15 +178,14 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
             }
         };
 
-        // TODO: is there a way to do this without making two copies of the response in memory?
         let response_text = response.text().await.unwrap();
-        let response_bytes = response_text.clone().into_bytes();
 
         // Updates existing or creates new JLAP cache file
-        self.save_jlap_cache(&response_bytes).await?;
+        self.save_jlap_cache(&response_text).await?;
 
-        // Update existing `repodata.json`
-        let patches = convert_jlap_string_to_patch_set(&response_text, 1)?;
+        // At this point, our JLAP file is supposed to be up-to-date.
+        // We can now read from it and find the applicable patches to
+        // use with self.blake2_hash
 
         // TODO: Apply patches to `repo_data_json_path`
         Ok(())
@@ -181,19 +195,13 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     ///
     /// If the file exists, then we update it otherwise, we just write an
     /// entire new file to cache.
-    async fn save_jlap_cache(self, response_bytes: &[u8]) -> Result<(), JLAPError> {
+    async fn save_jlap_cache(self, response_text: &str) -> Result<(), JLAPError> {
         if self.repo_data_jlap_path.is_file() {
-            let response_string = String::from_utf8_lossy(response_bytes);
-            let parts: Vec<&str> = response_string.split("\n").into_iter().filter(|s| !s.is_empty()).collect();
-
-            // We only care about updating if the response is greater than 2 lines
-            if parts.len() > 2 {
-                println!("{:?}", parts);
-            }
+            update_jlap_file(&self.repo_data_jlap_path, &response_text).await?;
             return Ok(())
         }
 
-        match cache_jlap_response(&self.repo_data_jlap_path, &response_bytes).await {
+        match cache_jlap_response(&self.repo_data_jlap_path, &response_text).await {
             Ok(_) => {
                 return Ok(())
             },
@@ -205,8 +213,7 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
 }
 
 
-/// Fetches a JLAP object from server
-///
+/// Fetches a JLAP response from server
 pub async fn fetch_jlap (url: &str, client: &Client, range: Option<String>) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
@@ -230,9 +237,50 @@ pub fn get_jlap_cache_path(subdir_url: &Url, cache_path: &Path) -> PathBuf {
 }
 
 /// Persist a JLAP file to the provided location
-pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_bytes: &[u8]) -> Result<(), tokio::io::Error> {
+pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_text: &str) -> Result<(), tokio::io::Error> {
+    let response_bytes = response_text.as_bytes();
     let mut jlap_file = tokio::fs::File::create(&jlap_cache_path).await?;
     jlap_file.write_all(response_bytes).await?;
+
+    Ok(())
+}
+
+/// Update an existing cached JLAP file
+pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_string: &str) -> Result<(), JLAPError> {
+    let mut parts: Vec<&str> = jlap_string.split("\n").into_iter().filter(
+        |s| !s.is_empty()
+    ).collect();
+
+    // We only care about updating if the response is greater than 2 lines.
+    // This means we received some new patches.
+    if parts.len() > 2 {
+        let mut cache_file = match tokio::fs::File::open(jlap_file).await {
+            Ok(value) => value,
+            Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+        };
+
+        let mut contents = String::new();
+        match cache_file.read_to_string(&mut contents).await {
+            Ok(_) => (),
+            Err(error) => { return Err(JLAPError::FileSystemError(error)) }
+        }
+
+        let mut current_parts: Vec<&str> = contents.split("\n").collect();
+        current_parts.truncate(current_parts.len() - 2);
+        current_parts.extend(parts);
+
+        let updated_jlap = current_parts.join("\n").into_bytes();
+
+        let mut updated_file = match tokio::fs::File::create(jlap_file).await {
+            Ok(file) => file,
+            Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+        };
+
+        return match updated_file.write_all(&updated_jlap).await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(JLAPError::FileSystemError(err))
+        };
+    }
 
     Ok(())
 }
@@ -240,9 +288,7 @@ pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_bytes: &[u
 /// Determines the byte offset to use for JLAP range requests
 ///
 /// This function assumes we already have a locally cached version of the JLAP file
-pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Result<String, tokio::io::Error> {
-    let jlap_cache_path = get_jlap_cache_path(subdir_url, cache_path);
-
+pub async fn get_jlap_request_range(jlap_cache_path: &PathBuf) -> Result<String, tokio::io::Error> {
     let mut cache_file = tokio::fs::File::open(jlap_cache_path).await?;
     let mut contents = String::from("");
 
@@ -257,7 +303,7 @@ pub async fn get_jlap_request_range(subdir_url: &Url, cache_path: &Path) -> Resu
     }
 
     // We default to starting from the beginning of the file.
-    Ok(String::from("bytes=0-"))
+    Ok(String::from(""))
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
@@ -273,11 +319,14 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 /// We take the text value and the offset value. Sometimes this string
 /// may be begin with a hash value that we will want to skip via the offset
 /// value.
-pub fn convert_jlap_string_to_patch_set (text: &str, offset: usize) -> Result<Vec<Patch>, JLAPError>  {
-    let lines: Vec<&str> = text.split("\n").collect();
+pub fn convert_jlap_string_to_patch_set (
+    text: &str,
+    offset: usize
+) -> Result<Vec<Patch>, JLAPError> {
+    let lines: Vec<&str> = text.split("\n").filter(|&x| !x.is_empty()).collect();
     let length = lines.len();
 
-    if length > 1 {
+    if length > 2 {
         let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
         let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
             parse_patch_json
