@@ -10,13 +10,14 @@
 //! this file is updated.
 //!
 //!
-use std::fs::File;
-use std::path::{Path, PathBuf};
-use std::io::BufWriter;
-use std::str;
 use itertools::Itertools;
-use reqwest::{Client, Response, header::{HeaderMap, HeaderValue}};
-use serde::{Serialize, Deserialize, Deserializer};
+use reqwest::{
+    header::{HeaderMap, HeaderValue},
+    Client, Response,
+};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
@@ -80,21 +81,15 @@ pub struct JLAPMetadata {
     pub url: String,
 
     /// blake2b hash of the latest `repodata.json` file
-    pub latest: String
+    pub latest: String,
 }
 
 /// Encapsulates data and behavior related to patching `repodata.json` with remote
 /// `repodata.jlap` data.
 #[derive(Debug)]
-pub struct JLAPManager<'a, 'b> {
-    /// Subdir URL; this is used to construct the URL for fetching JLAP data
-    subdir_url: Url,
-
+pub struct JLAPManager<'a> {
     /// HTTP client used to make requests
     client: &'a Client,
-
-    /// Path to local cache folder; this is where our methods read/write JLAP cache
-    cache_path: &'b Path,
 
     /// Hash of the current `repodata.json` file
     blake2_hash: Option<String>,
@@ -112,7 +107,7 @@ pub struct JLAPManager<'a, 'b> {
     pub offset: usize,
 }
 
-impl<'a, 'b> JLAPManager<'a, 'b> {
+impl<'a, 'b> JLAPManager<'a> {
     /// Creates a new JLAP object
     ///
     /// This associated function is a special constructor method for the JLAP struct.
@@ -121,37 +116,29 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     pub async fn new(
         subdir_url: Url,
         client: &'a Client,
-        cache_path: &'b Path,
-        blake2_hash: Option<String>
-    ) -> JLAPManager<'a, 'b> {
+        cache_path: &Path,
+        blake2_hash: Option<String>,
+    ) -> JLAPManager<'a> {
         // Determines the range for our request; error are okay, we fallback to `None`
-        let repo_data_jlap_path= get_jlap_cache_path(&subdir_url, &cache_path);
+        let repo_data_jlap_path = get_jlap_cache_path(&subdir_url, cache_path);
 
         // This is the byte offset range we use while fetching JLAP updates
         let range = if repo_data_jlap_path.is_file() {
             match get_jlap_request_range(&repo_data_jlap_path).await {
-                Ok(value) => if value == "" { None } else { Some(value) }
+                Ok(value) => value,
                 // TODO: Maybe add a warning here? This means there was a problem opening
                 //       and reading the file.
-                Err(_) => None
+                Err(_) => None,
             }
         } else {
             None
         };
 
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
-
-        let offset;
-        if range == None {
-            offset = 1;
-        } else {
-            offset = 0;
-        }
+        let offset = usize::from(range.is_none());
 
         Self {
-            subdir_url,
             client,
-            cache_path,
             blake2_hash,
             repo_data_jlap_path,
             range,
@@ -170,15 +157,9 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     /// file provided as an argument.
     pub async fn patch_repo_data(self, repo_data_json_path: &PathBuf) -> Result<(), JLAPError> {
         // Collect the JLAP file
-        let result = fetch_jlap(
-            self.jlap_url.as_str(),
-            &self.client,
-            self.range.clone()
-        ).await;
+        let result = fetch_jlap(self.jlap_url.as_str(), self.client, self.range.clone()).await;
         let response: Response = match result {
-            Ok(response) => {
-                response
-            },
+            Ok(response) => response,
             Err(error) => {
                 return Err(JLAPError::HTTPError(error));
             }
@@ -192,7 +173,7 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
         let (metadata, patches) = get_jlap_metadata_and_patches(&self.repo_data_jlap_path).await?;
 
         // We already have the latest version; nothing to do
-        let hash = self.blake2_hash.unwrap_or(String::new());
+        let hash = self.blake2_hash.unwrap_or_default();
         if metadata.latest == hash {
             return Ok(());
         }
@@ -200,11 +181,10 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
         let current_idx = find_current_patch_index(&patches, &hash);
 
         if let Some(idx) = current_idx {
-            let applicable_patches: Vec<&Patch> = patches[idx .. patches.len()].iter().collect();
-            apply_jlap_patches(&applicable_patches, &repo_data_json_path).await?;
-
+            let applicable_patches: Vec<&Patch> = patches[idx..patches.len()].iter().collect();
+            apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
         } else {
-            return Err(JLAPError::NoHashFoundError)
+            return Err(JLAPError::NoHashFoundError);
         }
 
         Ok(())
@@ -216,75 +196,79 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     /// entire new file to cache.
     async fn save_jlap_cache(&self, response_text: &str) -> Result<(), JLAPError> {
         if self.repo_data_jlap_path.is_file() {
-            update_jlap_file(&self.repo_data_jlap_path, &response_text).await?;
-            return Ok(())
+            update_jlap_file(&self.repo_data_jlap_path, response_text).await?;
+            return Ok(());
         }
 
-        match cache_jlap_response(&self.repo_data_jlap_path, &response_text).await {
-            Ok(_) => {
-                return Ok(())
-            },
-            Err(_) => {}  // TODO: this means we failed to write a cache file; maybe just log a warning?
+        if (cache_jlap_response(&self.repo_data_jlap_path, response_text).await).is_ok() {
+            return Ok(());
         }
 
         Ok(())
     }
 }
 
-
 /// Fetches a JLAP response from server
-pub async fn fetch_jlap (url: &str, client: &Client, range: Option<String>) -> Result<Response, reqwest::Error> {
+pub async fn fetch_jlap(
+    url: &str,
+    client: &Client,
+    range: Option<String>,
+) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
 
     if let Some(value) = range {
         headers.insert(
-            reqwest::header::RANGE, HeaderValue::from_str(&value).unwrap()
+            reqwest::header::RANGE,
+            HeaderValue::from_str(&value).unwrap(),
         );
     }
 
     request_builder.headers(headers).send().await
 }
 
-
 /// Builds a cache key used in storing JLAP cache
 pub fn get_jlap_cache_path(subdir_url: &Url, cache_path: &Path) -> PathBuf {
-    let cache_key = crate::utils::url_to_cache_filename(&subdir_url);
+    let cache_key = crate::utils::url_to_cache_filename(subdir_url);
     let cache_file_name = format!("{}.{}", cache_key, JLAP_FILE_SUFFIX);
 
     cache_path.join(cache_file_name)
 }
 
 /// Persist a JLAP file to the provided location
-pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_text: &str) -> Result<(), tokio::io::Error> {
-    let response_bytes = response_text.as_bytes();
+pub async fn cache_jlap_response(
+    jlap_cache_path: &PathBuf,
+    response_text: &str,
+) -> Result<(), tokio::io::Error> {
     let mut jlap_file = tokio::fs::File::create(&jlap_cache_path).await?;
-    jlap_file.write_all(response_bytes).await?;
+    jlap_file.write_all(response_text.as_bytes()).await?;
 
     Ok(())
 }
 
 /// Update an existing cached JLAP file
-pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_string: &str) -> Result<(), JLAPError> {
-    let parts: Vec<&str> = jlap_string.split("\n").into_iter().filter(
-        |s| !s.is_empty()
-    ).collect();
+pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_contents: &str) -> Result<(), JLAPError> {
+    let parts: Vec<&str> = jlap_contents
+        .split('\n')
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect();
 
     // We only care about updating if the response is greater than 2 lines.
     // This means we received some new patches.
     if parts.len() > 2 {
         let mut cache_file = match tokio::fs::File::open(jlap_file).await {
             Ok(value) => value,
-            Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+            Err(err) => return Err(JLAPError::FileSystemError(err)),
         };
 
         let mut contents = String::new();
         match cache_file.read_to_string(&mut contents).await {
             Ok(_) => (),
-            Err(error) => { return Err(JLAPError::FileSystemError(error)) }
+            Err(error) => return Err(JLAPError::FileSystemError(error)),
         }
 
-        let mut current_parts: Vec<&str> = contents.split("\n").collect();
+        let mut current_parts: Vec<&str> = contents.split('\n').collect();
         current_parts.truncate(current_parts.len() - 2);
         current_parts.extend(parts);
 
@@ -292,12 +276,12 @@ pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_string: &str) -> Result<
 
         let mut updated_file = match tokio::fs::File::create(jlap_file).await {
             Ok(file) => file,
-            Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+            Err(err) => return Err(JLAPError::FileSystemError(err)),
         };
 
         return match updated_file.write_all(&updated_jlap).await {
             Ok(_) => Ok(()),
-            Err(err) => Err(JLAPError::FileSystemError(err))
+            Err(err) => Err(JLAPError::FileSystemError(err)),
         };
     }
 
@@ -307,47 +291,47 @@ pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_string: &str) -> Result<
 /// Determines the byte offset to use for JLAP range requests
 ///
 /// This function assumes we already have a locally cached version of the JLAP file
-pub async fn get_jlap_request_range(jlap_cache_path: &PathBuf) -> Result<String, tokio::io::Error> {
-    let mut cache_file = tokio::fs::File::open(jlap_cache_path).await?;
+pub async fn get_jlap_request_range(
+    jlap_cache: &PathBuf,
+) -> Result<Option<String>, tokio::io::Error> {
+    let mut cache_file = tokio::fs::File::open(jlap_cache).await?;
     let mut contents = String::from("");
 
     cache_file.read_to_string(&mut contents).await?;
 
-    let lines: Vec<&str> = contents.split("\n").collect();
+    let lines: Vec<&str> = contents.split('\n').collect();
     let length = lines.len();
 
     if length > 1 {
         let patches = lines[0..length - JLAP_FOOTER_OFFSET].iter().join("\n");
-        return Ok(format!("bytes={}-", patches.into_bytes().len()));
+        return Ok(Some(format!("bytes={}-", patches.into_bytes().len())));
     }
 
     // We default to starting from the beginning of the file.
-    Ok(String::from(""))
+    Ok(None)
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
-    serde_json::from_str(
-        line
-    ).map_err(
-        JLAPError::JSONParseError
-    )
+    serde_json::from_str(line).map_err(JLAPError::JSONParseError)
 }
 
 /// Given the path to a JLAP file, parse it and return the JLAPMetadata and Patch
 /// objects.
-pub async fn get_jlap_metadata_and_patches(jlap_path: &PathBuf) -> Result<(JLAPMetadata, Vec<Patch>), JLAPError> {
-    let mut cache_file = match tokio::fs::File::open(jlap_path).await {
+pub async fn get_jlap_metadata_and_patches(
+    jlap_cache: &PathBuf,
+) -> Result<(JLAPMetadata, Vec<Patch>), JLAPError> {
+    let mut cache_file = match tokio::fs::File::open(jlap_cache).await {
         Ok(value) => value,
-        Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+        Err(err) => return Err(JLAPError::FileSystemError(err)),
     };
     let mut contents = String::new();
 
     match cache_file.read_to_string(&mut contents).await {
         Ok(_) => (),
-        Err(error) => { return Err(JLAPError::FileSystemError(error)) }
+        Err(error) => return Err(JLAPError::FileSystemError(error)),
     }
 
-    let parts: Vec<&str> = contents.split("\n").collect();
+    let parts: Vec<&str> = contents.split('\n').collect();
     let length = parts.len();
 
     if parts.len() > 2 {
@@ -355,27 +339,22 @@ pub async fn get_jlap_metadata_and_patches(jlap_path: &PathBuf) -> Result<(JLAPM
 
         let metadata: JLAPMetadata = match serde_json::from_str(metadata_line) {
             Ok(value) => value,
-            Err(err) => { return Err(JLAPError::JSONParseError(err))}
+            Err(err) => return Err(JLAPError::JSONParseError(err)),
         };
 
         let patch_lines = parts[1..length - JLAP_FOOTER_OFFSET].iter();
-        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
-            parse_patch_json
-        ).collect();
+        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(parse_patch_json).collect();
 
-        return match patches {
+        match patches {
             Ok(patches) => {
-                if patches.len() > 0 {
+                if !patches.is_empty() {
                     Ok((metadata, patches))
                 } else {
                     Err(JLAPError::NoPatchesFoundError)
                 }
-            },
-            Err(error) => {
-                Err(error)
             }
+            Err(error) => Err(error),
         }
-
     } else {
         Err(JLAPError::NoPatchesFoundError)
     }
@@ -389,53 +368,56 @@ pub async fn get_jlap_metadata_and_patches(jlap_path: &PathBuf) -> Result<(JLAPM
 /// 2. Applying patches to this repodata file
 /// 3. Sorting the repodata file? (not sure)
 /// 4. Saving this repodata file
-pub async fn apply_jlap_patches(patches: &Vec<&Patch>, repo_data_path: &PathBuf) -> Result<(), JLAPError> {
+pub async fn apply_jlap_patches(
+    patches: &Vec<&Patch>,
+    repo_data_path: &PathBuf,
+) -> Result<(), JLAPError> {
     // Open and read the current repodata into a JSON doc
-    let mut repo_data_file = match tokio::fs::File::open(repo_data_path).await {
+    let mut repo_data = match tokio::fs::File::open(repo_data_path).await {
         Ok(contents) => contents,
-        Err(error) => return Err(JLAPError::FileSystemError(error))
+        Err(error) => return Err(JLAPError::FileSystemError(error)),
     };
 
-    let mut repo_data_str = String::new();
-    match repo_data_file.read_to_string(&mut repo_data_str).await {
+    let mut repo_data_contents = String::new();
+    match repo_data.read_to_string(&mut repo_data_contents).await {
         Ok(_) => (),
-        Err(error) => return Err(JLAPError::FileSystemError(error))
+        Err(error) => return Err(JLAPError::FileSystemError(error)),
     }
-    let mut doc = match serde_json::from_str(&repo_data_str) {
+    let mut doc = match serde_json::from_str(&repo_data_contents) {
         Ok(doc) => doc,
-        Err(error) => return Err(JLAPError::JSONParseError(error))
+        Err(error) => return Err(JLAPError::JSONParseError(error)),
     };
 
     // Apply the patches we current have to it
     for patch in patches {
         match json_patch::patch(&mut doc, &patch.patch) {
             Ok(_) => (),
-            Err(error) => return Err(JLAPError::JSONPatchError(error))
+            Err(error) => return Err(JLAPError::JSONPatchError(error)),
         }
     }
 
     // Save the updated repodata JSON doc
     let mut updated_file = match tokio::fs::File::create(repo_data_path).await {
         Ok(file) => file,
-        Err(error) => return Err(JLAPError::FileSystemError(error))
+        Err(error) => return Err(JLAPError::FileSystemError(error)),
     };
 
     let mut updated_json = match serde_json::to_string_pretty(&doc) {
         Ok(value) => value,
-        Err(error)  => return Err(JLAPError::JSONParseError(error))
+        Err(error) => return Err(JLAPError::JSONParseError(error)),
     };
 
-    // We need to add an extra newline character to the end of our string so the hashes match
+    // We need to add an extra newline character to the end of our string so the hashes match 🤷‍
     updated_json.insert(updated_json.len(), '\n');
 
-    return match updated_file.write_all(&updated_json.into_bytes()).await {
+    match updated_file.write_all(&updated_json.into_bytes()).await {
         Ok(_) => Ok(()),
-        Err(error) => Err(JLAPError::FileSystemError(error))
-    };
+        Err(error) => Err(JLAPError::FileSystemError(error)),
+    }
 }
 
 /// Finds the index of the of the most applicable patch to use
-fn find_current_patch_index(patches: &Vec<Patch>, hash: &str) -> Option<usize> {
+fn find_current_patch_index(patches: &[Patch], hash: &str) -> Option<usize> {
     for (idx, patch) in patches.iter().enumerate() {
         if hash == patch.from {
             return Some(idx);
@@ -445,84 +427,120 @@ fn find_current_patch_index(patches: &Vec<Patch>, hash: &str) -> Option<usize> {
     None
 }
 
-/// Converts the body of a JLAP request to JSON objects
-///
-/// We take the text value and the offset value. Sometimes this string
-/// may be begin with a hash value that we will want to skip via the offset
-/// value.
-pub fn convert_jlap_string_to_patch_set (
-    text: &str,
-    offset: usize
-) -> Result<Vec<Patch>, JLAPError> {
-    let lines: Vec<&str> = text.split("\n").filter(|&x| !x.is_empty()).collect();
-    let length = lines.len();
-
-    if length > 2 {
-        let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
-        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
-            parse_patch_json
-        ).collect();
-
-        return match patches {
-            Ok(patches) => {
-                if patches.len() > 0 {
-                    Ok(patches)
-                } else {
-                    Err(JLAPError::NoPatchesFoundError)
-                }
-            },
-            Err(error) => {
-                Err(error)
-            }
-        }
-    }
-
-    return Err(JLAPError::NoPatchesFoundError);
-}
-
-
 #[cfg(test)]
 mod test {
-    use super::{
-        convert_jlap_string_to_patch_set, JLAPError
-    };
+    use super::JLAPManager;
+
+    use crate::utils::simple_channel_server::SimpleChannelServer;
+
     use assert_matches::assert_matches;
+    use tempfile::TempDir;
+
+    const FAKE_REPO_DATA_INITIAL: &str = r#"{
+        "info": {
+            "subdir": "osx-64"
+        },
+        "packages.conda": {
+            "zstd-1.5.4-hc035e20_0.conda": {
+                "build": "hc035e20_0",
+                "build_number": 0,
+                "depends": [
+                  "libcxx >=14.0.6",
+                  "lz4-c >=1.9.4,<1.10.0a0",
+                  "xz >=5.2.10,<6.0a0",
+                  "zlib >=1.2.13,<1.3.0a0"
+                ],
+                "license": "BSD-3-Clause AND GPL-2.0-or-later",
+                "license_family": "BSD",
+                "md5": "f284fea068c51b1a0eaea3ac58c300c0",
+                "name": "zstd",
+                "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
+                "size": 605550,
+                "subdir": "osx-64",
+                "timestamp": 1680034665911,
+                "version": "1.5.4"
+            }
+        },
+        "repodata_version": 1
+    }"#;
+
+    const FAKE_REPO_DATA_UPDATED: &str = r#"{
+        "info": {
+            "subdir": "osx-64"
+        },
+        "packages.conda": {
+            "zstd-1.5.4-hc035e20_0.conda": {
+                "build": "hc035e20_0",
+                "build_number": 0,
+                "depends": [
+                  "libcxx >=14.0.6",
+                  "lz4-c >=1.9.4,<1.10.0a0",
+                  "xz >=5.2.10,<6.0a0",
+                  "zlib >=1.2.13,<1.3.0a0"
+                ],
+                "license": "BSD-3-Clause AND GPL-2.0-or-later",
+                "license_family": "BSD",
+                "md5": "f284fea068c51b1a0eaea3ac58c300c0",
+                "name": "zstd",
+                "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
+                "size": 605550,
+                "subdir": "osx-64",
+                "timestamp": 1680034665911,
+                "version": "1.5.4"
+            },
+            "zstd-1.5.5-hc035e20_0.conda": {
+                "build": "hc035e20_0",
+                "build_number": 0,
+                "depends": [
+                    "libcxx >=14.0.6",
+                    "lz4-c >=1.9.4,<1.10.0a0",
+                    "xz >=5.2.10,<6.0a0",
+                    "zlib >=1.2.13,<1.3.0a0"
+                ],
+                "license": "BSD-3-Clause AND GPL-2.0-or-later",
+                "license_family": "BSD",
+                "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
+                "name": "zstd",
+                "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
+                "size": 622467,
+                "subdir": "osx-64",
+                "timestamp": 1681304595869,
+                "version": "1.5.5"
+            }
+        },
+        "repodata_version": 1
+    }"#;
+
+    const FAKE_REPO_DATA_INITIAL_HASH: &str =
+        "a5996ff050e93d1e25af0713dd60bf9bbeadf768585cf4864ed3036edb7c0762";
+
+    const FAKE_REPO_DATA_UPDATED_HASH: &str =
+        "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7";
 
     const FAKE_JLAP_DATA: &str = r#"
-ea3f3b1853071a4b1004b9f33594938b01e01cc8ca569f20897e793c35037de4
-{"to": "20af8f45bf8bc15e404bea61f608881c2297bee8a8917bee1de046da985d6d89", "from": "4324630c4aa09af986e90a1c9b45556308a4ec8a46cee186dd7013cdd7a251b7", "patch": [{"op": "add", "path": "/packages/snowflake-snowpark-python-0.10.0-py38hecd8cb5_0.tar.bz2", "value": {"build": "py38hecd8cb5_0", "build_number": 0, "constrains": ["pandas >1,<1.4"], "depends": ["cloudpickle >=1.6.0,<=2.0.0", "python >=3.8,<3.9.0a0", "snowflake-connector-python >=2.7.12", "typing-extensions >=4.1.0"], "license": "Apache-2.0", "license_family": "Apache", "md5": "91fc7aac6ea0c4380a334b77455b1454", "name": "snowflake-snowpark-python", "sha256": "3cbfed969c8702673d1b281e8dd7122e2150d27f8963d1d562cd66b3308b0b31", "size": 359503, "subdir": "osx-64", "timestamp": 1663585464882, "version": "0.10.0"}}, {"op": "add", "path": "/packages.conda/snowflake-snowpark-python-0.10.0-py38hecd8cb5_0.conda", "value": {"build": "py38hecd8cb5_0", "build_number": 0, "constrains": ["pandas >1,<1.4"], "depends": ["cloudpickle >=1.6.0,<=2.0.0", "python >=3.8,<3.9.0a0", "snowflake-connector-python >=2.7.12", "typing-extensions >=4.1.0"], "license": "Apache-2.0", "license_family": "Apache", "md5": "7353a428613fa62f4c8ec9b5a1e4f16d", "name": "snowflake-snowpark-python", "sha256": "e3b5fa220262e23480d32a883b19971d1bd88df33eb90e9556e2a3cfce32b0a4", "size": 316623, "subdir": "osx-64", "timestamp": 1663585464882, "version": "0.10.0"}}]}
-{"url": "repodata.json", "latest": "20af8f45bf8bc15e404bea61f608881c2297bee8a8917bee1de046da985d6d89"}
+{"to": "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7", "from": "a5996ff050e93d1e25af0713dd60bf9bbeadf768585cf4864ed3036edb7c0762", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}]}
+{"url": "repodata.json", "latest": "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7"}
 c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
     #[test]
-    pub fn test_convert_jlap_string_to_patch_set_no_patches_found() {
-        // TODO: this would be way better as a parameterized test.
-        let test_string = "bad_data\nbad_data\nbad_data\nbad_data";
+    pub fn test_patch_repo_data() {
+        // Create a directory with some repodata.
+        let subdir_path = TempDir::new().unwrap();
+        std::fs::write(
+            subdir_path.path().join("repodata.json"),
+            FAKE_REPO_DATA_INITIAL,
+        )
+        .unwrap();
 
-        assert_matches!(
-            convert_jlap_string_to_patch_set(test_string, 1),
-            Err(JLAPError::NoPatchesFoundError)
-        );
+        let jlap_path = TempDir::new().unwrap();
+        std::fs::write(
+            subdir_path.path().join("repodata.jlap"),
+            FAKE_REPO_DATA_INITIAL,
+        )
+        .unwrap();
 
-        let test_string = "bad_data\nbad_data";
+        let server = SimpleChannelServer::new(subdir_path.path());
 
-        assert_matches!(
-            convert_jlap_string_to_patch_set(test_string, 1),
-            Err(JLAPError::NoPatchesFoundError)
-        );
-
-        let test_string = "";
-
-        assert_matches!(
-            convert_jlap_string_to_patch_set(test_string, 1),
-            Err(JLAPError::NoPatchesFoundError)
-        );
-    }
-
-    #[test]
-    pub fn test_convert_jlap_string_to_patch_set_success() {
-        let patches = convert_jlap_string_to_patch_set(FAKE_JLAP_DATA).unwrap();
-
-        assert_eq!(patches.len(), 1);
+        let cache_dir = TempDir::new().unwrap();
     }
 }
