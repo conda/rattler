@@ -10,15 +10,17 @@
 //! this file is updated.
 //!
 //!
+use std::fs::File;
 use std::path::{Path, PathBuf};
+use std::io::BufWriter;
 use std::str;
 use itertools::Itertools;
 use reqwest::{Client, Response, header::{HeaderMap, HeaderValue}};
-use serde::{Serialize, Deserialize};
+use serde::{Serialize, Deserialize, Deserializer};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
 
-use crate::fetch::CachedRepoData;
+// use crate::fetch::CachedRepoData;
 
 /// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
@@ -37,6 +39,10 @@ pub enum JLAPError {
     JSONParseError(serde_json::Error),
 
     #[error(transparent)]
+    /// Pass-thru for JSON errors found while patching
+    JSONPatchError(json_patch::PatchError),
+
+    #[error(transparent)]
     /// Pass-thru for HTTP errors encountered while requesting JLAP
     HTTPError(reqwest::Error),
 
@@ -50,7 +56,7 @@ pub enum JLAPError {
 
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
-    NoHashesFoundError,
+    NoHashFoundError,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -135,7 +141,7 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
 
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
 
-        let mut offset;
+        let offset;
         if range == None {
             offset = 1;
         } else {
@@ -183,11 +189,24 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
         // Updates existing or creates new JLAP cache file
         self.save_jlap_cache(&response_text).await?;
 
-        // At this point, our JLAP file is supposed to be up-to-date.
-        // We can now read from it and find the applicable patches to
-        // use with self.blake2_hash
+        let (metadata, patches) = get_jlap_metadata_and_patches(&self.repo_data_jlap_path).await?;
 
-        // TODO: Apply patches to `repo_data_json_path`
+        // We already have the latest version; nothing to do
+        let hash = self.blake2_hash.unwrap_or(String::new());
+        if metadata.latest == hash {
+            return Ok(());
+        }
+
+        let current_idx = find_current_patch_index(&patches, &hash);
+
+        if let Some(idx) = current_idx {
+            let applicable_patches: Vec<&Patch> = patches[idx .. patches.len()].iter().collect();
+            apply_jlap_patches(&applicable_patches, &repo_data_json_path).await?;
+
+        } else {
+            return Err(JLAPError::NoHashFoundError)
+        }
+
         Ok(())
     }
 
@@ -195,7 +214,7 @@ impl<'a, 'b> JLAPManager<'a, 'b> {
     ///
     /// If the file exists, then we update it otherwise, we just write an
     /// entire new file to cache.
-    async fn save_jlap_cache(self, response_text: &str) -> Result<(), JLAPError> {
+    async fn save_jlap_cache(&self, response_text: &str) -> Result<(), JLAPError> {
         if self.repo_data_jlap_path.is_file() {
             update_jlap_file(&self.repo_data_jlap_path, &response_text).await?;
             return Ok(())
@@ -247,7 +266,7 @@ pub async fn cache_jlap_response (jlap_cache_path: &PathBuf, response_text: &str
 
 /// Update an existing cached JLAP file
 pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_string: &str) -> Result<(), JLAPError> {
-    let mut parts: Vec<&str> = jlap_string.split("\n").into_iter().filter(
+    let parts: Vec<&str> = jlap_string.split("\n").into_iter().filter(
         |s| !s.is_empty()
     ).collect();
 
@@ -312,6 +331,118 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
     ).map_err(
         JLAPError::JSONParseError
     )
+}
+
+/// Given the path to a JLAP file, parse it and return the JLAPMetadata and Patch
+/// objects.
+pub async fn get_jlap_metadata_and_patches(jlap_path: &PathBuf) -> Result<(JLAPMetadata, Vec<Patch>), JLAPError> {
+    let mut cache_file = match tokio::fs::File::open(jlap_path).await {
+        Ok(value) => value,
+        Err(err) => { return Err(JLAPError::FileSystemError(err)) }
+    };
+    let mut contents = String::new();
+
+    match cache_file.read_to_string(&mut contents).await {
+        Ok(_) => (),
+        Err(error) => { return Err(JLAPError::FileSystemError(error)) }
+    }
+
+    let parts: Vec<&str> = contents.split("\n").collect();
+    let length = parts.len();
+
+    if parts.len() > 2 {
+        let metadata_line = parts[length - 2];
+
+        let metadata: JLAPMetadata = match serde_json::from_str(metadata_line) {
+            Ok(value) => value,
+            Err(err) => { return Err(JLAPError::JSONParseError(err))}
+        };
+
+        let patch_lines = parts[1..length - JLAP_FOOTER_OFFSET].iter();
+        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(
+            parse_patch_json
+        ).collect();
+
+        return match patches {
+            Ok(patches) => {
+                if patches.len() > 0 {
+                    Ok((metadata, patches))
+                } else {
+                    Err(JLAPError::NoPatchesFoundError)
+                }
+            },
+            Err(error) => {
+                Err(error)
+            }
+        }
+
+    } else {
+        Err(JLAPError::NoPatchesFoundError)
+    }
+}
+
+/// Applies JLAP patches to a `repodata.json` file
+///
+/// This is a multi-step process that involves:
+///
+/// 1. Opening and parsing the current repodata file
+/// 2. Applying patches to this repodata file
+/// 3. Sorting the repodata file? (not sure)
+/// 4. Saving this repodata file
+pub async fn apply_jlap_patches(patches: &Vec<&Patch>, repo_data_path: &PathBuf) -> Result<(), JLAPError> {
+    // Open and read the current repodata into a JSON doc
+    let mut repo_data_file = match tokio::fs::File::open(repo_data_path).await {
+        Ok(contents) => contents,
+        Err(error) => return Err(JLAPError::FileSystemError(error))
+    };
+
+    let mut repo_data_str = String::new();
+    match repo_data_file.read_to_string(&mut repo_data_str).await {
+        Ok(_) => (),
+        Err(error) => return Err(JLAPError::FileSystemError(error))
+    }
+    let mut doc = match serde_json::from_str(&repo_data_str) {
+        Ok(doc) => doc,
+        Err(error) => return Err(JLAPError::JSONParseError(error))
+    };
+
+    // Apply the patches we current have to it
+    for patch in patches {
+        match json_patch::patch(&mut doc, &patch.patch) {
+            Ok(_) => (),
+            Err(error) => return Err(JLAPError::JSONPatchError(error))
+        }
+    }
+
+    // Save the updated repodata JSON doc
+    let mut updated_file = match tokio::fs::File::create(repo_data_path).await {
+        Ok(file) => file,
+        Err(error) => return Err(JLAPError::FileSystemError(error))
+    };
+
+    let mut updated_json = match serde_json::to_string_pretty(&doc) {
+        Ok(value) => value,
+        Err(error)  => return Err(JLAPError::JSONParseError(error))
+    };
+
+    // We need to add an extra newline character to the end of our string so the hashes match
+    updated_json.insert(updated_json.len(), '\n');
+
+    return match updated_file.write_all(&updated_json.into_bytes()).await {
+        Ok(_) => Ok(()),
+        Err(error) => Err(JLAPError::FileSystemError(error))
+    };
+}
+
+/// Finds the index of the of the most applicable patch to use
+fn find_current_patch_index(patches: &Vec<Patch>, hash: &str) -> Option<usize> {
+    for (idx, patch) in patches.iter().enumerate() {
+        if hash == patch.from {
+            return Some(idx);
+        }
+    }
+
+    None
 }
 
 /// Converts the body of a JLAP request to JSON objects
