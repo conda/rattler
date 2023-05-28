@@ -10,7 +10,6 @@
 //! this file is updated.
 //!
 //!
-use itertools::Itertools;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response,
@@ -299,11 +298,12 @@ pub async fn get_jlap_request_range(
 
     cache_file.read_to_string(&mut contents).await?;
 
-    let lines: Vec<&str> = contents.split('\n').collect();
+    let mut lines: Vec<&str> = contents.split('\n').collect();
     let length = lines.len();
 
-    if length > 1 {
-        let patches = lines[0..length - JLAP_FOOTER_OFFSET].iter().join("\n");
+    if length >= JLAP_FOOTER_OFFSET {
+        lines.truncate(length - JLAP_FOOTER_OFFSET);
+        let patches = lines.join("\n");
         return Ok(Some(format!("bytes={}-", patches.into_bytes().len())));
     }
 
@@ -315,8 +315,7 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
     serde_json::from_str(line).map_err(JLAPError::JSONParseError)
 }
 
-/// Given the path to a JLAP file, parse it and return the JLAPMetadata and Patch
-/// objects.
+/// Given the path to a JLAP file, deserialize it and return the JLAPMetadata and Patch structs.
 pub async fn get_jlap_metadata_and_patches(
     jlap_cache: &PathBuf,
 ) -> Result<(JLAPMetadata, Vec<Patch>), JLAPError> {
@@ -433,114 +432,134 @@ mod test {
 
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
-    use assert_matches::assert_matches;
+    use reqwest::Client;
     use tempfile::TempDir;
 
     const FAKE_REPO_DATA_INITIAL: &str = r#"{
-        "info": {
-            "subdir": "osx-64"
-        },
-        "packages.conda": {
-            "zstd-1.5.4-hc035e20_0.conda": {
-                "build": "hc035e20_0",
-                "build_number": 0,
-                "depends": [
-                  "libcxx >=14.0.6",
-                  "lz4-c >=1.9.4,<1.10.0a0",
-                  "xz >=5.2.10,<6.0a0",
-                  "zlib >=1.2.13,<1.3.0a0"
-                ],
-                "license": "BSD-3-Clause AND GPL-2.0-or-later",
-                "license_family": "BSD",
-                "md5": "f284fea068c51b1a0eaea3ac58c300c0",
-                "name": "zstd",
-                "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
-                "size": 605550,
-                "subdir": "osx-64",
-                "timestamp": 1680034665911,
-                "version": "1.5.4"
-            }
-        },
-        "repodata_version": 1
-    }"#;
+  "info": {
+    "subdir": "osx-64"
+  },
+  "packages.conda": {
+    "zstd-1.5.4-hc035e20_0.conda": {
+      "build": "hc035e20_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=14.0.6",
+        "lz4-c >=1.9.4,<1.10.0a0",
+        "xz >=5.2.10,<6.0a0",
+        "zlib >=1.2.13,<1.3.0a0"
+      ],
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "BSD",
+      "md5": "f284fea068c51b1a0eaea3ac58c300c0",
+      "name": "zstd",
+      "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
+      "size": 605550,
+      "subdir": "osx-64",
+      "timestamp": 1680034665911,
+      "version": "1.5.4"
+    }
+  },
+  "repodata_version": 1
+}
+"#;
 
     const FAKE_REPO_DATA_UPDATED: &str = r#"{
-        "info": {
-            "subdir": "osx-64"
-        },
-        "packages.conda": {
-            "zstd-1.5.4-hc035e20_0.conda": {
-                "build": "hc035e20_0",
-                "build_number": 0,
-                "depends": [
-                  "libcxx >=14.0.6",
-                  "lz4-c >=1.9.4,<1.10.0a0",
-                  "xz >=5.2.10,<6.0a0",
-                  "zlib >=1.2.13,<1.3.0a0"
-                ],
-                "license": "BSD-3-Clause AND GPL-2.0-or-later",
-                "license_family": "BSD",
-                "md5": "f284fea068c51b1a0eaea3ac58c300c0",
-                "name": "zstd",
-                "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
-                "size": 605550,
-                "subdir": "osx-64",
-                "timestamp": 1680034665911,
-                "version": "1.5.4"
-            },
-            "zstd-1.5.5-hc035e20_0.conda": {
-                "build": "hc035e20_0",
-                "build_number": 0,
-                "depends": [
-                    "libcxx >=14.0.6",
-                    "lz4-c >=1.9.4,<1.10.0a0",
-                    "xz >=5.2.10,<6.0a0",
-                    "zlib >=1.2.13,<1.3.0a0"
-                ],
-                "license": "BSD-3-Clause AND GPL-2.0-or-later",
-                "license_family": "BSD",
-                "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
-                "name": "zstd",
-                "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
-                "size": 622467,
-                "subdir": "osx-64",
-                "timestamp": 1681304595869,
-                "version": "1.5.5"
-            }
-        },
-        "repodata_version": 1
-    }"#;
+  "info": {
+    "subdir": "osx-64"
+  },
+  "packages.conda": {
+    "zstd-1.5.4-hc035e20_0.conda": {
+      "build": "hc035e20_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=14.0.6",
+        "lz4-c >=1.9.4,<1.10.0a0",
+        "xz >=5.2.10,<6.0a0",
+        "zlib >=1.2.13,<1.3.0a0"
+      ],
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "BSD",
+      "md5": "f284fea068c51b1a0eaea3ac58c300c0",
+      "name": "zstd",
+      "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
+      "size": 605550,
+      "subdir": "osx-64",
+      "timestamp": 1680034665911,
+      "version": "1.5.4"
+    },
+    "zstd-1.5.5-hc035e20_0.conda": {
+      "build": "hc035e20_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=14.0.6",
+        "lz4-c >=1.9.4,<1.10.0a0",
+        "xz >=5.2.10,<6.0a0",
+        "zlib >=1.2.13,<1.3.0a0"
+      ],
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "BSD",
+      "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
+      "name": "zstd",
+      "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
+      "size": 622467,
+      "subdir": "osx-64",
+      "timestamp": 1681304595869,
+      "version": "1.5.5"
+    }
+  },
+  "repodata_version": 1
+}
+"#;
 
     const FAKE_REPO_DATA_INITIAL_HASH: &str =
-        "a5996ff050e93d1e25af0713dd60bf9bbeadf768585cf4864ed3036edb7c0762";
+        "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6";
 
     const FAKE_REPO_DATA_UPDATED_HASH: &str =
-        "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7";
+        "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9";
 
-    const FAKE_JLAP_DATA: &str = r#"
-{"to": "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7", "from": "a5996ff050e93d1e25af0713dd60bf9bbeadf768585cf4864ed3036edb7c0762", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}]}
-{"url": "repodata.json", "latest": "a6c46c455358c526242675af34f30ac0e1aecbf08645834e41f72734942bb7c7"}
+    const FAKE_JLAP_DATA: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
+{"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
+{"url": "repodata.json", "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"}
 c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
-    #[test]
-    pub fn test_patch_repo_data() {
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    /// Performs a simple to test to make sure that patches can be applied when we retrieve
+    /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
+    ///
+    /// TODO: We should also make sure that the updated JLAP also matches the expected hash
+    ///       value that we have.
+    pub async fn test_patch_repo_data() {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
-        std::fs::write(
-            subdir_path.path().join("repodata.json"),
-            FAKE_REPO_DATA_INITIAL,
-        )
-        .unwrap();
-
-        let jlap_path = TempDir::new().unwrap();
-        std::fs::write(
-            subdir_path.path().join("repodata.jlap"),
-            FAKE_REPO_DATA_INITIAL,
-        )
-        .unwrap();
+        let repodata = subdir_path.path().join("repodata.json");
+        std::fs::write(repodata.clone(), FAKE_REPO_DATA_INITIAL).unwrap();
+        std::fs::write(subdir_path.path().join("repodata.jlap"), FAKE_JLAP_DATA).unwrap();
 
         let server = SimpleChannelServer::new(subdir_path.path());
 
         let cache_dir = TempDir::new().unwrap();
+        let client = Client::default();
+
+        let manager = JLAPManager::new(
+            server.url(),
+            &client,
+            cache_dir.path(),
+            Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
+        )
+        .await;
+
+        let jlap_cache = manager.repo_data_jlap_path.clone();
+
+        manager.patch_repo_data(&repodata).await.unwrap();
+
+        // Make sure
+        assert_eq!(
+            std::fs::read_to_string(repodata).unwrap(),
+            FAKE_REPO_DATA_UPDATED
+        );
+
+        assert_eq!(std::fs::read_to_string(jlap_cache).unwrap(), FAKE_JLAP_DATA)
     }
 }

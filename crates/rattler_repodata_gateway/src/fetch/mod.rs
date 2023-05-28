@@ -362,33 +362,33 @@ pub async fn fetch_repo_data(
     // variants. We don't check the expiration here since we just refreshed it.
     let has_zst = variant_availability.has_zst();
     let has_bz2 = variant_availability.has_bz2();
-    let has_jlap = variant_availability.has_jlap();
+    // let has_jlap = variant_availability.has_jlap();
 
     // TODO: This is where we should decide whether to use JLAP or not
-    if has_jlap {
-        let blake2_hash = match cache_state.as_ref().unwrap().blake2_hash {
-            Some(hash) => Some(format!("{:x}", hash)),
-            None => None
-        };
+    // if has_jlap {
+    //     let blake2_hash = match cache_state.as_ref().unwrap().blake2_hash {
+    //         Some(hash) => Some(format!("{:x}", hash)),
+    //         None => None
+    //     };
 
-        let jlap_manager = jlap::JLAPManager::new(
-            subdir_url.clone(),
-            &client,
-            &cache_path,
-            blake2_hash
-        ).await;
+    //     let jlap_manager = jlap::JLAPManager::new(
+    //         subdir_url.clone(),
+    //         &client,
+    //         &cache_path,
+    //         blake2_hash
+    //     ).await;
 
-        match jlap_manager.patch_repo_data(&repo_data_json_path).await {
-            Ok(_) => {
-                // TODO: return the CachedRepoData object; we were successful so this means we've
-                //       updated the `repodata.json` file.
-            },
-            Err(error) => {
-                // TODO: We ran into an error while patching repo data, this means we just want
-                //       to continue on with normal program flow; maybe log a warning though?
-            }
-        }
-    }
+    //     match jlap_manager.patch_repo_data(&repo_data_json_path).await {
+    //         Ok(_) => {
+    //             // TODO: return the CachedRepoData object; we were successful so this means we've
+    //             //       updated the `repodata.json` file.
+    //         },
+    //         Err(error) => {
+    //             // TODO: We ran into an error while patching repo data, this means we just want
+    //             //       to continue on with normal program flow; maybe log a warning though?
+    //         }
+    //     }
+    // }
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -724,18 +724,19 @@ pub async fn check_variant_availability(
                 value: check_valid_download_target(&jlap_repodata_url, client).await,
                 last_checked: chrono::Utc::now(),
             })
-        }.right_future(),
+        }
+        .right_future(),
     };
 
     // Await all futures so they happen concurrently. Note that a request might not actually happen if
     // the cache is still valid.
-    let (
+    let (has_zst, has_bz2, has_jlap) = futures::join!(zst_future, bz2_future, jlap_future);
+
+    VariantAvailability {
         has_zst,
         has_bz2,
         has_jlap,
-    ) = futures::join!(zst_future, bz2_future, jlap_future);
-
-    VariantAvailability { has_zst, has_bz2, has_jlap }
+    }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
