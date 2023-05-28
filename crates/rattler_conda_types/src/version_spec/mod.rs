@@ -249,6 +249,7 @@ mod tests {
             ))
         );
     }
+
     #[test]
     fn test_group() {
         assert_eq!(
@@ -299,5 +300,28 @@ mod tests {
                 ]
             ))
         );
+    }
+
+    #[test]
+    fn test_matches() {
+        let v1 = Version::from_str("1.2.0").unwrap();
+        let vs1 = VersionSpec::from_str(">=1.2.3,<2.0.0").unwrap();
+        assert!(!vs1.matches(&v1));
+
+        let vs2 = VersionSpec::from_str("1.2").unwrap();
+        assert!(vs2.matches(&v1));
+
+        let v2 = Version::from_str("1.2.3").unwrap();
+        assert!(vs1.matches(&v2));
+        assert!(!vs2.matches(&v2));
+
+        let v3 = Version::from_str("1!1.2.3").unwrap();
+        println!("{:?}", v3);
+
+        assert!(!vs1.matches(&v3));
+        assert!(!vs2.matches(&v3));
+
+        let vs3 = VersionSpec::from_str(">=1!1.2,<1!2").unwrap();
+        assert!(vs3.matches(&v3));
     }
 }
