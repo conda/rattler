@@ -17,7 +17,7 @@
 //!
 //! Below is an example of how to initialize the struct and patch an existing `repodata.json` file:
 //!
-//! ```rust
+//! ```no_run
 //! use std::{path::Path};
 //! use reqwest::Client;
 //! use url::Url;
@@ -637,7 +637,6 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
 c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
-    #[tracing_test::traced_test]
     #[tokio::test]
     /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
@@ -649,10 +648,11 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         let server = SimpleChannelServer::new(subdir_path.path());
 
         // Add files we need to request to the server
-        std::fs::write(
+        tokio::fs::write(
             subdir_path.path().join("repodata.jlap"),
             FAKE_JLAP_DATA_INITIAL,
         )
+        .await
         .unwrap();
 
         // Create our cache location and files we need there
@@ -666,7 +666,9 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
                 .expect("file name is valid"),
         );
         let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
-        std::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_INITIAL).unwrap();
+        tokio::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_INITIAL)
+            .await
+            .unwrap();
 
         // HTTP client we need to initialize the JLAPManager object.
         let client = Client::default();
@@ -690,19 +692,15 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
             .unwrap();
 
         // Make assertions
+        let repo_data = tokio::fs::read_to_string(repo_data_json_path)
+            .await
+            .unwrap();
+        let jlap_data = tokio::fs::read_to_string(jlap_cache).await.unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(repo_data_json_path).unwrap(),
-            FAKE_REPO_DATA_UPDATE_ONE
-        );
-
-        assert_eq!(
-            std::fs::read_to_string(jlap_cache).unwrap(),
-            FAKE_JLAP_DATA_INITIAL
-        )
+        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_ONE);
+        assert_eq!(jlap_data, FAKE_JLAP_DATA_INITIAL);
     }
 
-    #[tracing_test::traced_test]
     #[tokio::test]
     /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "partial" (i.e. one with a byte offset) version of the JLAP file.
@@ -714,10 +712,11 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         let server = SimpleChannelServer::new(subdir_path.path());
 
         // Add files we need to request to the server
-        std::fs::write(
+        tokio::fs::write(
             subdir_path.path().join("repodata.jlap"),
             FAKE_JLAP_DATA_UPDATE_ONE,
         )
+        .await
         .unwrap();
 
         // Create our cache location and files we need there
@@ -731,11 +730,15 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
                 .expect("file name is valid"),
         );
         let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
-        std::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_UPDATE_ONE).unwrap();
+        tokio::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_UPDATE_ONE)
+            .await
+            .unwrap();
 
         // Write the an out of data version of JLAP to the cache
         let jlap_cache = get_jlap_cache_path(&server.url(), cache_dir.path());
-        std::fs::write(jlap_cache, FAKE_JLAP_DATA_INITIAL).unwrap();
+        tokio::fs::write(jlap_cache, FAKE_JLAP_DATA_INITIAL)
+            .await
+            .unwrap();
 
         // HTTP client we need to initialize the JLAPManager object.
         let client = Client::default();
@@ -759,14 +762,12 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
             .unwrap();
 
         // Make assertions
-        assert_eq!(
-            std::fs::read_to_string(repo_data_json_path).unwrap(),
-            FAKE_REPO_DATA_UPDATE_TWO
-        );
+        let repo_data = tokio::fs::read_to_string(repo_data_json_path)
+            .await
+            .unwrap();
+        let jlap_data = tokio::fs::read_to_string(jlap_cache).await.unwrap();
 
-        assert_eq!(
-            std::fs::read_to_string(jlap_cache).unwrap(),
-            FAKE_JLAP_DATA_UPDATE_ONE
-        )
+        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
+        assert_eq!(jlap_data, FAKE_JLAP_DATA_UPDATE_ONE);
     }
 }
