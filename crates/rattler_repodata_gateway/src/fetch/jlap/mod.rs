@@ -4,12 +4,58 @@
 //! files.
 //!
 //! JLAP files provide a way to incrementally retrieve and build the `repodata.json` files
-//! that conda compatible applications use to query conda packages. The first time you download
-//! this file you will build the entire `repodata.json` from scratch, but subsequent request
-//! can retrieve only the updates to the file, which can have a drastic effect on how fast
-//! this file is updated.
+//! that conda compatible applications use to query conda packages. For more information about
+//! how this file format works, please read this CEP proposal:
 //!
+//! - https://github.com/conda-incubator/ceps/pull/20/files
 //!
+//! ## Example
+//!
+//! The recommended way to use this module is by using the JLAPManager struct. This struct is meant
+//! to act as a kind of "facade" object which orchestrates the underlying operations necessary
+//! to fetch JLAP data used to update our current `repodata.json` file.
+//!
+//! Below is an example of how to initialize the struct and patch an existing `repodata.json` file:
+//!
+//! ```rust
+//! use std::{path::Path};
+//! use reqwest::Client;
+//! use url::Url;
+//! use rattler_repodata_gateway::fetch::jlap::JLAPManager;
+//!
+//! #[tokio::main]
+//! pub async fn main() {
+//!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
+//!     let client = Client::new();
+//!     let cache = Path::new("./cache");
+//!     let current_repo_data = cache.join("c93ef9c9.json");
+//!     let current_repodata_hash = String::from(
+//!         "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"
+//!     );
+//!
+//!     let manager = JLAPManager::new(
+//!         repodata_url,
+//!         &client,
+//!         cache,
+//!         Some(current_repodata_hash)
+//!     )
+//!     .await;
+//!
+//!     manager
+//!         .patch_repo_data(&current_repo_data.clone())
+//!         .await
+//!         .unwrap();
+//! }
+//! ```
+//!
+//! ## TODO
+//!
+//! The following items still need to be implemented before this module should be considered
+//! complete:
+//!  - Use the checksum to validate our JLAP file after we update it
+//!  - Generate a new `blake2b` hash of the updated repodata.json file and compare it to the
+//!    metadata contained on the updated JLAP response. This also need to be made available
+//!    so that we can update the `*.state.json` file
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response,
@@ -19,8 +65,6 @@ use std::path::{Path, PathBuf};
 use std::str;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url::Url;
-
-// use crate::fetch::CachedRepoData;
 
 /// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
@@ -428,7 +472,7 @@ fn find_current_patch_index(patches: &[Patch], hash: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod test {
-    use super::JLAPManager;
+    use super::{get_jlap_cache_path, JLAPManager};
 
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
@@ -464,7 +508,7 @@ mod test {
 }
 "#;
 
-    const FAKE_REPO_DATA_UPDATED: &str = r#"{
+    const FAKE_REPO_DATA_UPDATE_ONE: &str = r#"{
   "info": {
     "subdir": "osx-64"
   },
@@ -512,36 +556,124 @@ mod test {
 }
 "#;
 
+    const FAKE_REPO_DATA_UPDATE_TWO: &str = r#"{
+  "info": {
+    "subdir": "osx-64"
+  },
+  "packages.conda": {
+    "zstd-1.5.4-hc035e20_0.conda": {
+      "build": "hc035e20_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=14.0.6",
+        "lz4-c >=1.9.4,<1.10.0a0",
+        "xz >=5.2.10,<6.0a0",
+        "zlib >=1.2.13,<1.3.0a0"
+      ],
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "BSD",
+      "md5": "f284fea068c51b1a0eaea3ac58c300c0",
+      "name": "zstd",
+      "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
+      "size": 605550,
+      "subdir": "osx-64",
+      "timestamp": 1680034665911,
+      "version": "1.5.4"
+    },
+    "zstd-1.5.5-hc035e20_0.conda": {
+      "build": "hc035e20_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=14.0.6",
+        "lz4-c >=1.9.4,<1.10.0a0",
+        "xz >=5.2.10,<6.0a0",
+        "zlib >=1.2.13,<1.3.0a0"
+      ],
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "BSD",
+      "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
+      "name": "zstd",
+      "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
+      "size": 622467,
+      "subdir": "osx-64",
+      "timestamp": 1681304595869,
+      "version": "1.5.5"
+    },
+    "zstd-static-1.4.5-hb1e8313_0.conda": {
+      "build": "hb1e8313_0",
+      "build_number": 0,
+      "depends": [
+        "libcxx >=10.0.0",
+        "zstd 1.4.5 h41d2c2f_0"
+      ],
+      "license": "BSD 3-Clause",
+      "md5": "5447986040e0b73d6c681a4d8f615d6c",
+      "name": "zstd-static",
+      "sha256": "3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658",
+      "size": 13930,
+      "subdir": "osx-64",
+      "timestamp": 1595965109852,
+      "version": "1.4.5"
+    }
+  },
+  "repodata_version": 1
+}
+"#;
+
     const FAKE_REPO_DATA_INITIAL_HASH: &str =
         "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6";
 
-    const FAKE_REPO_DATA_UPDATED_HASH: &str =
+    const FAKE_REPO_DATA_UPDATE_ONE_HASH: &str =
         "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9";
 
-    const FAKE_JLAP_DATA: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
+    const FAKE_JLAP_DATA_INITIAL: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
 {"url": "repodata.json", "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"}
 c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
+    const FAKE_JLAP_DATA_UPDATE_ONE: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
+{"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
+{"to": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9", "from": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "patch": [{"op": "add", "path": "/packages.conda/zstd-static-1.4.5-hb1e8313_0.conda", "value": {"build": "hb1e8313_0", "build_number": 0, "depends": ["libcxx >=10.0.0", "zstd 1.4.5 h41d2c2f_0"], "license": "BSD 3-Clause", "md5": "5447986040e0b73d6c681a4d8f615d6c", "name": "zstd-static", "sha256": "3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658", "size": 13930, "subdir": "osx-64", "timestamp": 1595965109852, "version": "1.4.5"}}]}
+{"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
+c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
+
     #[tracing_test::traced_test]
     #[tokio::test]
-    /// Performs a simple to test to make sure that patches can be applied when we retrieve
+    /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
-    ///
-    /// TODO: We should also make sure that the updated JLAP also matches the expected hash
-    ///       value that we have.
     pub async fn test_patch_repo_data() {
+        // Begin setup (this can probably be put somewhere else)
+
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
-        let repodata = subdir_path.path().join("repodata.json");
-        std::fs::write(repodata.clone(), FAKE_REPO_DATA_INITIAL).unwrap();
-        std::fs::write(subdir_path.path().join("repodata.jlap"), FAKE_JLAP_DATA).unwrap();
-
         let server = SimpleChannelServer::new(subdir_path.path());
 
+        // Add files we need to request to the server
+        std::fs::write(
+            subdir_path.path().join("repodata.jlap"),
+            FAKE_JLAP_DATA_INITIAL,
+        )
+        .unwrap();
+
+        // Create our cache location and files we need there
         let cache_dir = TempDir::new().unwrap();
+
+        // This is the existing `repodata.json` file that will be patched
+        let cache_key = crate::utils::url_to_cache_filename(
+            &server
+                .url()
+                .join("repodata.json")
+                .expect("file name is valid"),
+        );
+        let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
+        std::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_INITIAL).unwrap();
+
+        // HTTP client we need to initialize the JLAPManager object.
         let client = Client::default();
 
+        // End setup
+
+        // Run the code under test
         let manager = JLAPManager::new(
             server.url(),
             &client,
@@ -552,14 +684,89 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
         let jlap_cache = manager.repo_data_jlap_path.clone();
 
-        manager.patch_repo_data(&repodata).await.unwrap();
+        manager
+            .patch_repo_data(&repo_data_json_path.clone())
+            .await
+            .unwrap();
 
-        // Make sure
+        // Make assertions
+
         assert_eq!(
-            std::fs::read_to_string(repodata).unwrap(),
-            FAKE_REPO_DATA_UPDATED
+            std::fs::read_to_string(repo_data_json_path).unwrap(),
+            FAKE_REPO_DATA_UPDATE_ONE
         );
 
-        assert_eq!(std::fs::read_to_string(jlap_cache).unwrap(), FAKE_JLAP_DATA)
+        assert_eq!(
+            std::fs::read_to_string(jlap_cache).unwrap(),
+            FAKE_JLAP_DATA_INITIAL
+        )
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    /// Performs a test to make sure that patches can be applied when we retrieve
+    /// a "partial" (i.e. one with a byte offset) version of the JLAP file.
+    pub async fn test_patch_repo_data_partial() {
+        // Begin setup (this can probably be put somewhere else)
+
+        // Create a directory with some repodata.
+        let subdir_path = TempDir::new().unwrap();
+        let server = SimpleChannelServer::new(subdir_path.path());
+
+        // Add files we need to request to the server
+        std::fs::write(
+            subdir_path.path().join("repodata.jlap"),
+            FAKE_JLAP_DATA_UPDATE_ONE,
+        )
+        .unwrap();
+
+        // Create our cache location and files we need there
+        let cache_dir = TempDir::new().unwrap();
+
+        // This is the existing `repodata.json` file that will be patched
+        let cache_key = crate::utils::url_to_cache_filename(
+            &server
+                .url()
+                .join("repodata.json")
+                .expect("file name is valid"),
+        );
+        let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
+        std::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_UPDATE_ONE).unwrap();
+
+        // Write the an out of data version of JLAP to the cache
+        let jlap_cache = get_jlap_cache_path(&server.url(), cache_dir.path());
+        std::fs::write(jlap_cache, FAKE_JLAP_DATA_INITIAL).unwrap();
+
+        // HTTP client we need to initialize the JLAPManager object.
+        let client = Client::default();
+
+        // End setup
+
+        // Run the code under test
+        let manager = JLAPManager::new(
+            server.url(),
+            &client,
+            cache_dir.path(),
+            Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
+        )
+        .await;
+
+        let jlap_cache = manager.repo_data_jlap_path.clone();
+
+        manager
+            .patch_repo_data(&repo_data_json_path.clone())
+            .await
+            .unwrap();
+
+        // Make assertions
+        assert_eq!(
+            std::fs::read_to_string(repo_data_json_path).unwrap(),
+            FAKE_REPO_DATA_UPDATE_TWO
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(jlap_cache).unwrap(),
+            FAKE_JLAP_DATA_UPDATE_ONE
+        )
     }
 }
