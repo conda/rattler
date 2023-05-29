@@ -1,14 +1,10 @@
 mod cache_headers;
 
-use blake2::digest::consts::U32;
-use blake2::Blake2b;
 pub use cache_headers::CacheHeaders;
+use rattler_digest::Blake2b256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
 use url::Url;
-
-/// Custom blake2b type
-pub type Blake2b256 = Blake2b<U32>;
 
 /// Representation of the `.state.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]

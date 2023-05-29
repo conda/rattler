@@ -7,7 +7,7 @@
 //! that conda compatible applications use to query conda packages. For more information about
 //! how this file format works, please read this CEP proposal:
 //!
-//! - https://github.com/conda-incubator/ceps/pull/20/files
+//! - <https://github.com/conda-incubator/ceps/pull/20/files>
 //!
 //! ## Example
 //!
@@ -22,6 +22,7 @@
 //! use reqwest::Client;
 //! use url::Url;
 //!
+//! use rattler_digest::{compute_bytes_digest, Blake2b256};
 //! use rattler_repodata_gateway::fetch::jlap::JLAPManager;
 //!
 //! #[tokio::main]
@@ -30,7 +31,7 @@
 //!     let client = Client::new();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");
-//!     let current_repodata_hash = String::from(
+//!     let current_repodata_hash = compute_bytes_digest::<Blake2b256>(
 //!         "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"
 //!     );
 //!
@@ -57,9 +58,9 @@
 //!  - Our tests do not exhaustively cover our error states. Some of these are pretty easy to
 //!    trigger (e.g. invalid JLAP file or invalid JSON within), so we should definitely make
 //!    tests for them.
-use crate::fetch::cache::Blake2b256;
 
-use blake2::Digest;
+use blake2::digest::Output;
+use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Blake2b256};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response,
@@ -145,7 +146,7 @@ pub struct JLAPManager<'a> {
     client: &'a Client,
 
     /// Hash of the current `repodata.json` file
-    blake2_hash: Option<String>,
+    blake2_hash: Option<Output<Blake2b256>>,
 
     /// Path to the current cached copy of `repodata.jlap`
     pub repo_data_jlap_path: PathBuf,
@@ -160,7 +161,7 @@ impl<'a> JLAPManager<'a> {
         subdir_url: Url,
         client: &'a Client,
         cache_path: &Path,
-        blake2_hash: Option<String>,
+        blake2_hash: Option<Output<Blake2b256>>,
     ) -> JLAPManager<'a> {
         let repo_data_jlap_path = get_jlap_cache_path(&subdir_url, cache_path);
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
@@ -187,7 +188,7 @@ impl<'a> JLAPManager<'a> {
     pub async fn patch_repo_data(
         self,
         repo_data_json_path: &PathBuf,
-    ) -> Result<Option<String>, JLAPError> {
+    ) -> Result<Option<Output<Blake2b256>>, JLAPError> {
         let range = self.get_request_range().await;
 
         let result = fetch_jlap(self.jlap_url.as_str(), self.client, range).await;
@@ -207,7 +208,8 @@ impl<'a> JLAPManager<'a> {
 
         // We already have the latest version; nothing to do
         let hash = self.blake2_hash.unwrap_or_default();
-        if metadata.latest == hash {
+        let latest_hash = parse_digest_from_hex::<Blake2b256>(&metadata.latest).unwrap_or_default();
+        if latest_hash == hash {
             return Ok(None);
         }
 
@@ -217,7 +219,7 @@ impl<'a> JLAPManager<'a> {
             let applicable_patches: Vec<&Patch> = patches[idx..patches.len()].iter().collect();
             let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
 
-            if new_hash != metadata.latest {
+            if new_hash != latest_hash {
                 return Err(JLAPError::HashesNotMatchingError);
             }
 
@@ -425,7 +427,7 @@ pub async fn get_jlap_metadata_and_patches(
 pub async fn apply_jlap_patches(
     patches: &Vec<&Patch>,
     repo_data_path: &PathBuf,
-) -> Result<String, JLAPError> {
+) -> Result<Output<Blake2b256>, JLAPError> {
     // Open and read the current repodata into a JSON doc
     let mut repo_data = match tokio::fs::File::open(repo_data_path).await {
         Ok(contents) => contents,
@@ -466,22 +468,19 @@ pub async fn apply_jlap_patches(
     let content = updated_json.into_bytes();
 
     match updated_file.write_all(&content).await {
-        Ok(_) => {
-            // Generate new blake2b hash
-            let mut hasher = Blake2b256::new();
-            hasher.update(content);
-            let result: [u8; 32] = hasher.finalize().into();
-
-            Ok(hex::encode(result))
-        }
+        Ok(_) => Ok(compute_bytes_digest::<Blake2b256>(content)),
         Err(error) => Err(JLAPError::FileSystemError(error)),
     }
 }
 
 /// Finds the index of the of the most applicable patch to use
-fn find_current_patch_index(patches: &[Patch], hash: &str) -> Option<usize> {
+fn find_current_patch_index(patches: &[Patch], hash: &Output<Blake2b256>) -> Option<usize> {
+    let search_hash = format!("{:x}", hash);
+
+    println!("Hash: {}", search_hash);
+
     for (idx, patch) in patches.iter().enumerate() {
-        if hash == patch.from {
+        if search_hash == patch.from {
             return Some(idx);
         }
     }
@@ -496,6 +495,7 @@ mod test {
 
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
+    use rattler_digest::{parse_digest_from_hex, Blake2b256};
     use reqwest::Client;
     use tempfile::TempDir;
     use url::Url;
@@ -734,7 +734,7 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
             server_url,
             &client,
             cache_dir.path(),
-            Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
+            Some(parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_INITIAL_HASH).unwrap()),
         );
 
         let jlap_cache = manager.repo_data_jlap_path.clone();
@@ -778,7 +778,7 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
             server.url(),
             &client,
             cache_dir.path(),
-            Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
+            Some(parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_INITIAL_HASH).unwrap()),
         );
 
         let jlap_cache = manager.repo_data_jlap_path.clone();

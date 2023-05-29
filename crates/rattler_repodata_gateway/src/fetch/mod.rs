@@ -5,7 +5,7 @@ use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
-use rattler_digest::{compute_file_digest, HashingWriter};
+use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -538,7 +538,7 @@ async fn stream_and_decode_to_file(
     content_encoding: Encoding,
     temp_dir: &Path,
     mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
-) -> Result<(NamedTempFile, blake2::digest::Output<cache::Blake2b256>), FetchRepoDataError> {
+) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
@@ -594,7 +594,7 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
     let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
-    let mut hashing_file_writer = HashingWriter::<_, cache::Blake2b256>::new(file);
+    let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
