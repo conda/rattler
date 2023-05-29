@@ -21,6 +21,7 @@
 //! use std::{path::Path};
 //! use reqwest::Client;
 //! use url::Url;
+//!
 //! use rattler_repodata_gateway::fetch::jlap::JLAPManager;
 //!
 //! #[tokio::main]
@@ -38,13 +39,13 @@
 //!         &client,
 //!         cache,
 //!         Some(current_repodata_hash)
-//!     )
-//!     .await;
+//!     );
 //!
-//!     manager
-//!         .patch_repo_data(&current_repo_data.clone())
-//!         .await
-//!         .unwrap();
+//!     let new_hash = manager.patch_repo_data(&current_repo_data).await.unwrap();
+//!
+//!     if let Some(hash) = new_hash {
+//!         // Here, we can do something with this hash value
+//!     }
 //! }
 //! ```
 //!
@@ -53,9 +54,9 @@
 //! The following items still need to be implemented before this module should be considered
 //! complete:
 //!  - Use the checksum to validate our JLAP file after we update it
-//!  - Generate a new `blake2b` hash of the updated repodata.json file and compare it to the
-//!    metadata contained on the updated JLAP response. This also need to be made available
-//!    so that we can update the `*.state.json` file
+use crate::fetch::cache::Blake2b256;
+
+use blake2::Digest;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response,
@@ -101,6 +102,12 @@ pub enum JLAPError {
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
     NoHashFoundError,
+
+    #[error("Hash from the JLAP metadata and hash from updated repodata file do not match")]
+    /// Error when we have mismatched hash values after updating our `repodata.json` file
+    /// At this point, we should consider the `repodata.json` file corrupted and fetch a new
+    /// version from the server.
+    HashesNotMatchingError,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -140,14 +147,8 @@ pub struct JLAPManager<'a> {
     /// Path to the current cached copy of `repodata.jlap`
     pub repo_data_jlap_path: PathBuf,
 
-    /// Range request data
-    pub range: Option<String>,
-
     /// Remote URL where JLAP data can be fetched
     pub jlap_url: Url,
-
-    /// Offset to use when reading JLAP response; 0 means partial response; 1 means full response
-    pub offset: usize,
 }
 
 impl<'a, 'b> JLAPManager<'a> {
@@ -156,51 +157,41 @@ impl<'a, 'b> JLAPManager<'a> {
     /// This associated function is a special constructor method for the JLAP struct.
     /// It is used to check for the existence of a cached copy of the JLAP file and to
     /// store some of what we need to fetch new JLAP data.
-    pub async fn new(
+    pub fn new(
         subdir_url: Url,
         client: &'a Client,
         cache_path: &Path,
         blake2_hash: Option<String>,
     ) -> JLAPManager<'a> {
-        // Determines the range for our request; error are okay, we fallback to `None`
         let repo_data_jlap_path = get_jlap_cache_path(&subdir_url, cache_path);
-
-        // This is the byte offset range we use while fetching JLAP updates
-        let range = if repo_data_jlap_path.is_file() {
-            match get_jlap_request_range(&repo_data_jlap_path).await {
-                Ok(value) => value,
-                // TODO: Maybe add a warning here? This means there was a problem opening
-                //       and reading the file.
-                Err(_) => None,
-            }
-        } else {
-            None
-        };
-
         let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
-        let offset = usize::from(range.is_none());
 
         Self {
             client,
             blake2_hash,
             repo_data_jlap_path,
-            range,
             jlap_url,
-            offset,
         }
     }
 
     /// Attempts to patch current `repodata.json` file
     ///
     /// This method first makes a request to fetch JLAP data given everything stored on the
-    /// struct. If it successfully retrieves, it will then try to cache this file. This will
-    /// either write a new file update the existing one with the new lines we fetched (if any).
+    /// struct. If successful, it will then try to cache this file. This will either write a new
+    /// file or update the existing one with the new lines we fetched (if any).
     ///
-    /// After this, it will then actually proceed to applying JSON patches to the `repo_data_json_path`
-    /// file provided as an argument.
-    pub async fn patch_repo_data(self, repo_data_json_path: &PathBuf) -> Result<(), JLAPError> {
-        // Collect the JLAP file
-        let result = fetch_jlap(self.jlap_url.as_str(), self.client, self.range.clone()).await;
+    /// After this, it will then proceed to applying JSON patches to the `repo_data_json_path`
+    /// file provided as an argument. We compare the new `blake2b` hash with what was listed
+    /// in the JLAP metadata to ensure the file is correct.
+    ///
+    /// The return value is the updated `blake2b` hash.
+    pub async fn patch_repo_data(
+        self,
+        repo_data_json_path: &PathBuf,
+    ) -> Result<Option<String>, JLAPError> {
+        let range = self.get_request_range().await;
+
+        let result = fetch_jlap(self.jlap_url.as_str(), self.client, range).await;
         let response: Response = match result {
             Ok(response) => response,
             Err(error) => {
@@ -218,19 +209,37 @@ impl<'a, 'b> JLAPManager<'a> {
         // We already have the latest version; nothing to do
         let hash = self.blake2_hash.unwrap_or_default();
         if metadata.latest == hash {
-            return Ok(());
+            return Ok(None);
         }
 
         let current_idx = find_current_patch_index(&patches, &hash);
 
-        if let Some(idx) = current_idx {
+        return if let Some(idx) = current_idx {
             let applicable_patches: Vec<&Patch> = patches[idx..patches.len()].iter().collect();
-            apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
-        } else {
-            return Err(JLAPError::NoHashFoundError);
-        }
+            let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
 
-        Ok(())
+            if new_hash != metadata.latest {
+                return Err(JLAPError::HashesNotMatchingError);
+            }
+
+            Ok(Some(new_hash))
+        } else {
+            Err(JLAPError::NoHashFoundError)
+        };
+    }
+
+    /// Retrieves the byte offset to use for our range request
+    async fn get_request_range(&self) -> Option<String> {
+        if self.repo_data_jlap_path.is_file() {
+            match get_jlap_request_range(&self.repo_data_jlap_path).await {
+                Ok(value) => value,
+                // TODO: Maybe add a warning here? This means there was a problem opening
+                //       and reading the file.
+                Err(_) => None,
+            }
+        } else {
+            None
+        }
     }
 
     /// Updates or creates the JLAP file we currently have cached
@@ -299,7 +308,7 @@ pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_contents: &str) -> Resul
 
     // We only care about updating if the response is greater than 2 lines.
     // This means we received some new patches.
-    if parts.len() > 2 {
+    if parts.len() > JLAP_FOOTER_OFFSET {
         let mut cache_file = match tokio::fs::File::open(jlap_file).await {
             Ok(value) => value,
             Err(err) => return Err(JLAPError::FileSystemError(err)),
@@ -409,12 +418,15 @@ pub async fn get_jlap_metadata_and_patches(
 ///
 /// 1. Opening and parsing the current repodata file
 /// 2. Applying patches to this repodata file
-/// 3. Sorting the repodata file? (not sure)
-/// 4. Saving this repodata file
+/// 3. Saving this repodata file to disk
+/// 4. Generating a new `blake2b` hash
+///
+/// The return value is the string representation of the `blake2b` hash that
+/// can be verified against our `Metadata` object.
 pub async fn apply_jlap_patches(
     patches: &Vec<&Patch>,
     repo_data_path: &PathBuf,
-) -> Result<(), JLAPError> {
+) -> Result<String, JLAPError> {
     // Open and read the current repodata into a JSON doc
     let mut repo_data = match tokio::fs::File::open(repo_data_path).await {
         Ok(contents) => contents,
@@ -452,9 +464,17 @@ pub async fn apply_jlap_patches(
 
     // We need to add an extra newline character to the end of our string so the hashes match 🤷‍
     updated_json.insert(updated_json.len(), '\n');
+    let content = updated_json.into_bytes();
 
-    match updated_file.write_all(&updated_json.into_bytes()).await {
-        Ok(_) => Ok(()),
+    match updated_file.write_all(&content).await {
+        Ok(_) => {
+            // Generate new blake2b hash
+            let mut hasher = Blake2b256::new();
+            hasher.update(content);
+            let result: [u8; 32] = hasher.finalize().into();
+
+            Ok(hex::encode(result))
+        }
         Err(error) => Err(JLAPError::FileSystemError(error)),
     }
 }
@@ -473,11 +493,13 @@ fn find_current_patch_index(patches: &[Patch], hash: &str) -> Option<usize> {
 #[cfg(test)]
 mod test {
     use super::{get_jlap_cache_path, JLAPManager};
+    use std::path::PathBuf;
 
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
     use reqwest::Client;
     use tempfile::TempDir;
+    use url::Url;
 
     const FAKE_REPO_DATA_INITIAL: &str = r#"{
   "info": {
@@ -637,62 +659,97 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
 c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
-    #[tokio::test]
-    /// Performs a test to make sure that patches can be applied when we retrieve
-    /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
-    pub async fn test_patch_repo_data() {
-        // Begin setup (this can probably be put somewhere else)
-
-        // Create a directory with some repodata.
+    /// Writes the desired files to the "server" environment
+    async fn setup_server_environment(
+        server_repo_data: Option<&str>,
+        server_jlap: Option<&str>,
+    ) -> TempDir {
+        // Create a directory with some repodata; this is the "server" data
         let subdir_path = TempDir::new().unwrap();
-        let server = SimpleChannelServer::new(subdir_path.path());
 
-        // Add files we need to request to the server
-        tokio::fs::write(
-            subdir_path.path().join("repodata.jlap"),
-            FAKE_JLAP_DATA_INITIAL,
-        )
-        .await
-        .unwrap();
+        if let Some(content) = server_jlap {
+            // Add files we need to request to the server
+            tokio::fs::write(subdir_path.path().join("repodata.jlap"), content)
+                .await
+                .unwrap();
+        }
 
-        // Create our cache location and files we need there
+        if let Some(content) = server_repo_data {
+            // Add files we need to request to the server
+            tokio::fs::write(subdir_path.path().join("repodata.json"), content)
+                .await
+                .unwrap();
+        }
+
+        subdir_path
+    }
+
+    /// Writes the desired files to the "client" environment
+    async fn setup_client_environment(
+        server_url: &Url,
+        cache_repo_data: Option<&str>,
+        cache_jlap: Option<&str>,
+    ) -> (TempDir, PathBuf) {
+        // Create our cache location and files we need there; this is our "cache" location
         let cache_dir = TempDir::new().unwrap();
 
         // This is the existing `repodata.json` file that will be patched
         let cache_key = crate::utils::url_to_cache_filename(
-            &server
-                .url()
+            &server_url
                 .join("repodata.json")
                 .expect("file name is valid"),
         );
-        let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
-        tokio::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_INITIAL)
-            .await
-            .unwrap();
+        let cache_repo_data_path = cache_dir.path().join(format!("{}.json", cache_key));
 
-        // HTTP client we need to initialize the JLAPManager object.
+        if let Some(content) = cache_repo_data {
+            tokio::fs::write(cache_repo_data_path.clone(), content)
+                .await
+                .unwrap();
+        }
+
+        let cache_jlap_path = get_jlap_cache_path(server_url, cache_dir.path());
+
+        if let Some(content) = cache_jlap {
+            tokio::fs::write(cache_jlap_path.clone(), content)
+                .await
+                .unwrap();
+        }
+
+        (cache_dir, cache_repo_data_path)
+    }
+
+    #[tokio::test]
+    /// Performs a test to make sure that patches can be applied when we retrieve
+    /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
+    pub async fn test_patch_repo_data() {
+        // Begin setup
+        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_INITIAL)).await;
+        let server = SimpleChannelServer::new(subdir_path.path());
+        let server_url = server.url();
+
+        let (cache_dir, cache_repo_data_path) =
+            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_INITIAL), None).await;
+
         let client = Client::default();
-
         // End setup
 
         // Run the code under test
         let manager = JLAPManager::new(
-            server.url(),
+            server_url,
             &client,
             cache_dir.path(),
             Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
-        )
-        .await;
+        );
 
         let jlap_cache = manager.repo_data_jlap_path.clone();
 
         manager
-            .patch_repo_data(&repo_data_json_path.clone())
+            .patch_repo_data(&cache_repo_data_path.clone())
             .await
             .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(repo_data_json_path)
+        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
             .await
             .unwrap();
         let jlap_data = tokio::fs::read_to_string(jlap_cache).await.unwrap();
@@ -705,44 +762,19 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
     /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "partial" (i.e. one with a byte offset) version of the JLAP file.
     pub async fn test_patch_repo_data_partial() {
-        // Begin setup (this can probably be put somewhere else)
-
-        // Create a directory with some repodata.
-        let subdir_path = TempDir::new().unwrap();
+        // Begin setup
+        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
         let server = SimpleChannelServer::new(subdir_path.path());
+        let server_url = server.url();
 
-        // Add files we need to request to the server
-        tokio::fs::write(
-            subdir_path.path().join("repodata.jlap"),
-            FAKE_JLAP_DATA_UPDATE_ONE,
+        let (cache_dir, cache_repo_data_path) = setup_client_environment(
+            &server_url,
+            Some(FAKE_REPO_DATA_UPDATE_ONE),
+            Some(FAKE_JLAP_DATA_INITIAL),
         )
-        .await
-        .unwrap();
+        .await;
 
-        // Create our cache location and files we need there
-        let cache_dir = TempDir::new().unwrap();
-
-        // This is the existing `repodata.json` file that will be patched
-        let cache_key = crate::utils::url_to_cache_filename(
-            &server
-                .url()
-                .join("repodata.json")
-                .expect("file name is valid"),
-        );
-        let repo_data_json_path = cache_dir.path().join(format!("{}.json", cache_key));
-        tokio::fs::write(repo_data_json_path.clone(), FAKE_REPO_DATA_UPDATE_ONE)
-            .await
-            .unwrap();
-
-        // Write the an out of data version of JLAP to the cache
-        let jlap_cache = get_jlap_cache_path(&server.url(), cache_dir.path());
-        tokio::fs::write(jlap_cache, FAKE_JLAP_DATA_INITIAL)
-            .await
-            .unwrap();
-
-        // HTTP client we need to initialize the JLAPManager object.
         let client = Client::default();
-
         // End setup
 
         // Run the code under test
@@ -751,18 +783,17 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
             &client,
             cache_dir.path(),
             Some(FAKE_REPO_DATA_INITIAL_HASH.to_string()),
-        )
-        .await;
+        );
 
         let jlap_cache = manager.repo_data_jlap_path.clone();
 
         manager
-            .patch_repo_data(&repo_data_json_path.clone())
+            .patch_repo_data(&cache_repo_data_path.clone())
             .await
             .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(repo_data_json_path)
+        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
             .await
             .unwrap();
         let jlap_data = tokio::fs::read_to_string(jlap_cache).await.unwrap();
