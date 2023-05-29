@@ -54,6 +54,9 @@
 //! The following items still need to be implemented before this module should be considered
 //! complete:
 //!  - Use the checksum to validate our JLAP file after we update it
+//!  - Our tests do not exhaustively cover our error states. Some of these are pretty easy to
+//!    trigger (e.g. invalid JLAP file or invalid JSON within), so we should definitely make
+//!    tests for them.
 use crate::fetch::cache::Blake2b256;
 
 use blake2::Digest;
@@ -151,12 +154,8 @@ pub struct JLAPManager<'a> {
     pub jlap_url: Url,
 }
 
-impl<'a, 'b> JLAPManager<'a> {
-    /// Creates a new JLAP object
-    ///
-    /// This associated function is a special constructor method for the JLAP struct.
-    /// It is used to check for the existence of a cached copy of the JLAP file and to
-    /// store some of what we need to fetch new JLAP data.
+impl<'a> JLAPManager<'a> {
+    /// Creates a new JLAPManager object
     pub fn new(
         subdir_url: Url,
         client: &'a Client,
@@ -242,10 +241,10 @@ impl<'a, 'b> JLAPManager<'a> {
         }
     }
 
-    /// Updates or creates the JLAP file we currently have cached
+    /// Updates or creates the cached copy of the JLAP file
     ///
     /// If the file exists, then we update it otherwise, we just write an
-    /// entire new file to cache.
+    /// entirely new file to cache.
     async fn save_jlap_cache(&self, response_text: &str) -> Result<(), JLAPError> {
         if self.repo_data_jlap_path.is_file() {
             update_jlap_file(&self.repo_data_jlap_path, response_text).await?;
@@ -306,7 +305,7 @@ pub async fn update_jlap_file(jlap_file: &PathBuf, jlap_contents: &str) -> Resul
         .filter(|s| !s.is_empty())
         .collect();
 
-    // We only care about updating if the response is greater than 2 lines.
+    // We only care about updating if the response is greater than JLAP_FOOTER_OFFSET (2).
     // This means we received some new patches.
     if parts.len() > JLAP_FOOTER_OFFSET {
         let mut cache_file = match tokio::fs::File::open(jlap_file).await {
@@ -644,9 +643,6 @@ mod test {
 
     const FAKE_REPO_DATA_INITIAL_HASH: &str =
         "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6";
-
-    const FAKE_REPO_DATA_UPDATE_ONE_HASH: &str =
-        "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9";
 
     const FAKE_JLAP_DATA_INITIAL: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
