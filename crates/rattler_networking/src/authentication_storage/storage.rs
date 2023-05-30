@@ -1,3 +1,4 @@
+//! Storage and access of authentication information
 use std::{
     path::{Path, PathBuf},
     str::FromStr,
@@ -26,7 +27,7 @@ impl AuthenticationStorage {
         let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
         AuthenticationStorage {
             store_key: store_key.to_string(),
-            fallback_json_location: fallback_location
+            fallback_json_location: fallback_location,
         }
     }
 }

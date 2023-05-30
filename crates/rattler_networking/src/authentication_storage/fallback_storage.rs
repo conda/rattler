@@ -1,21 +1,30 @@
+//! Fallback storage for passwords.
 use std::{path::PathBuf, sync::Mutex};
 
+/// A struct that implements storage and access of authentication
+/// information backed by a on-disk JSON file
 pub struct FallbackStorage {
+    /// The path to the JSON file
     pub path: PathBuf,
 
+    /// A mutex to ensure that only one thread accesses the file at a time
     mutex: Mutex<()>,
 }
 
+/// An error that can occur when accessing the fallback storage
 #[derive(thiserror::Error, Debug)]
 pub enum FallbackStorageError {
+    /// An IO error occurred when accessing the fallback storage
     #[error("IO error: {0}")]
     IOError(#[from] std::io::Error),
 
+    /// An error occurred when (de)serializing the credentials
     #[error("JSON error: {0}")]
     JSONError(#[from] serde_json::Error),
 }
 
 impl FallbackStorage {
+    /// Create a new fallback storage with the given path
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
@@ -23,6 +32,7 @@ impl FallbackStorage {
         }
     }
 
+    /// Store the given authentication information for the given host
     pub fn set_password(&self, host: &str, password: &str) -> Result<(), FallbackStorageError> {
         let _lock = self.mutex.lock().unwrap();
         let mut dict = self.read_json()?;
@@ -30,6 +40,7 @@ impl FallbackStorage {
         self.write_json(&dict)
     }
 
+    /// Retrieve the authentication information for the given host
     pub fn get_password(&self, host: &str) -> Result<Option<String>, FallbackStorageError> {
         let _lock = self.mutex.lock().unwrap();
         let dict = self.read_json()?;
@@ -37,6 +48,7 @@ impl FallbackStorage {
         Ok(dict.get(host).cloned())
     }
 
+    /// Delete the authentication information for the given host
     pub fn delete_password(&self, host: &str) -> Result<(), FallbackStorageError> {
         let _lock = self.mutex.lock().unwrap();
         let mut dict = self.read_json()?;
@@ -44,6 +56,8 @@ impl FallbackStorage {
         self.write_json(&dict)
     }
 
+    /// Read the JSON file and deserialize it into a HashMap, or return an empty HashMap if the file
+    /// does not exist
     fn read_json(&self) -> Result<std::collections::HashMap<String, String>, FallbackStorageError> {
         if !self.path.exists() {
             return Ok(std::collections::HashMap::new());
@@ -54,6 +68,7 @@ impl FallbackStorage {
         Ok(dict)
     }
 
+    /// Serialize the given HashMap and write it to the JSON file
     fn write_json(
         &self,
         dict: &std::collections::HashMap<String, String>,

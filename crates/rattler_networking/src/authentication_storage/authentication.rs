@@ -1,3 +1,4 @@
+//! Authentication methods for the conda ecosystem
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
