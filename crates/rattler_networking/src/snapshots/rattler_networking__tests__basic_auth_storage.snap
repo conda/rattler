@@ -1,0 +1,10 @@
+---
+source: crates/rattler_networking/src/lib.rs
+expression: authentication
+---
+{
+  "BasicHTTP": {
+    "username": "testuser",
+    "password": "testpassword"
+  }
+}

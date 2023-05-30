@@ -2,182 +2,12 @@
 
 //! Networking utilities for Rattler, specifically authenticating requests
 
-use std::{collections::HashMap, str::FromStr, path::PathBuf, sync::{Mutex, atomic::Ordering}, cell::RefCell};
+use std::path::PathBuf;
 
-mod fallback_storage;
-mod flock;
-
-use keyring::Entry;
+use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 use reqwest::{Client, IntoUrl, Method, Url};
-use serde::{Deserialize, Serialize};
 
-/// The different Authentication methods that are supported in the conda
-/// ecosystem
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Authentication {
-    /// A bearer token is sent as a header of the form
-    /// `Authorization: Bearer {TOKEN}`
-    BearerToken(String),
-    /// A basic authentication token is sent as HTTP basic auth
-    BasicHTTP {
-        /// The username to use for basic auth
-        username: String,
-        /// The password to use for basic auth
-        password: String,
-    },
-    /// A conda token is sent in the URL as `/t/{TOKEN}/...`
-    CondaToken(String),
-}
-
-/// An error that can occur when parsing an authentication string
-#[derive(Debug)]
-pub enum AuthenticationParseError {
-    /// The scheme is not valid
-    InvalidScheme,
-    /// The token could not be parsed
-    InvalidToken,
-}
-
-/// A struct that implements storage and access of authentication
-/// information
-#[derive(Clone)]
-pub struct AuthenticationStorage {
-    /// The store_key needs to be unique per program as it is stored
-    /// in a global dictionary in the operating system
-    pub store_key: String,
-
-    /// Fallback JSON location
-    pub fallback_json_location: PathBuf,
-
-    /// A cache of authentication information
-    authentication_cache: HashMap<String, Option<Authentication>>,
-}
-use std::sync::atomic::AtomicBool;
-
-use lazy_static::lazy_static;
-
-
-lazy_static! {
-
-    static ref FALLBACK_DATABASE : &'static str = {
-        println!("Setting up fallback database");
-        let credential = fallback_storage::JsonFileCredentialBuilder::new("auth_store.json");
-        keyring::set_default_credential_builder(Box::new(credential));
-        "Ok"
-    };
-}
-
-static USES_FALLBACK : Mutex<Option<bool>> = Mutex::new(None);
-
-impl AuthenticationStorage {
-    /// Create a new authentication storage with the given store key
-    pub fn new(store_key: &str) -> AuthenticationStorage {
-        
-        let mut inner = USES_FALLBACK.lock().unwrap();
-        if inner.is_none() {
-            println!("Setting up fallback database");
-            keyring::set_default_credential_builder(Box::new(fallback_storage::JsonFileCredentialBuilder::new(
-                "auth_store.json",
-            )));
-            inner.replace(true);
-        }
-
-        AuthenticationStorage {
-            store_key: store_key.to_string(),
-            fallback_json_location: PathBuf::from("auth_store.json"),
-            authentication_cache: Default::default(),
-        }
-    }
-}
-
-impl FromStr for Authentication {
-    type Err = AuthenticationParseError;
-
-    /// Parse an authentication string into an Authentication struct
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(|_| AuthenticationParseError::InvalidToken)
-    }
-}
-
-/// An error that can occur when accessing the authentication storage
-#[derive(thiserror::Error, Debug)]
-pub enum AuthenticationStorageError {
-    /// An error occurred when accessing the authentication storage
-    #[error("Could not retrieve credentials from authentication storage: {0}")]
-    StorageError(#[from] keyring::Error),
-
-    /// An error occurred when serializing the credentials
-    #[error("Could not serialize credentials {0}")]
-    SerializeCredentialsError(#[from] serde_json::Error),
-
-    /// An error occurred when parsing the credentials
-    #[error("Could not parse credentials stored for {host}")]
-    ParseCredentialsError {
-        /// The host for which the credentials could not be parsed
-        host: String,
-    },
-}
-
-impl AuthenticationStorage {
-    /// Store the given authentication information for the given host
-    pub fn store(
-        &self,
-        host: &str,
-        authentication: &Authentication,
-    ) -> Result<(), AuthenticationStorageError> {
-        let entry = Entry::new(&self.store_key, host)?;
-        entry.set_password(&serde_json::to_string(authentication)?)?;
-        Ok(())
-    }
-
-    /// Retrieve the authentication information for the given host
-    pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-        if let Some(cached) = self.authentication_cache.get(host) {
-            return Ok(cached.clone());
-        }
-
-        let entry = Entry::new(&self.store_key, host)?;
-        let password = entry.get_password();
-
-        match password {
-            Ok(password) => Ok(Some(Authentication::from_str(&password).map_err(|_| {
-                AuthenticationStorageError::ParseCredentialsError {
-                    host: host.to_string(),
-                }
-            })?)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(AuthenticationStorageError::StorageError(e)),
-        }
-    }
-
-    /// Retrieve the authentication information for the given URL
-    pub fn get_by_url<U: IntoUrl>(
-        &self,
-        url: U,
-    ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
-        let url = url.into_url()?;
-
-        if let Some(host) = url.host_str() {
-            let credentials = self.get(host);
-            match credentials {
-                Ok(None) => Ok((url, None)),
-                Ok(Some(credentials)) => Ok((url, Some(credentials))),
-                Err(e) => {
-                    tracing::warn!("Error retrieving credentials for {}: {}", host, e);
-                    Ok((url, None))
-                }
-            }
-        } else {
-            Ok((url, None))
-        }
-    }
-
-    /// Delete the authentication information for the given host
-    pub fn delete(&self, host: &str) -> keyring::Result<()> {
-        let entry = Entry::new(&self.store_key, host)?;
-        entry.delete_password()
-    }
-}
+pub mod authentication_storage;
 
 /// A client that can be used to make authenticated requests, based on the [`reqwest::Client`]
 #[derive(Clone)]
@@ -193,7 +23,7 @@ impl Default for AuthenticatedClient {
     fn default() -> Self {
         AuthenticatedClient {
             client: Client::default(),
-            auth_storage: AuthenticationStorage::new("rattler"),
+            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
         }
     }
 }
@@ -306,7 +136,7 @@ impl Default for AuthenticatedClientBlocking {
     fn default() -> Self {
         AuthenticatedClientBlocking {
             client: Default::default(),
-            auth_storage: AuthenticationStorage::new("rattler"),
+            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
         }
     }
 }
@@ -387,23 +217,24 @@ impl AuthenticatedClientBlocking {
 mod tests {
     use super::*;
 
+    use tempfile::tempdir;
+
     #[test]
     fn test_store_fallback() -> anyhow::Result<()> {
-        println!("Starting up");
-        let storage = super::AuthenticationStorage::new("rattler_test");
-        println!("Storage created");
+        let tdir = tempdir()?;
+        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
-        println!("Storage storing");
         storage.store(host, &authentication)?;
-        println!("Storage done");
+        storage.delete(host)?;
         Ok(())
     }
 
     #[test]
     fn test_conda_token_storage() -> anyhow::Result<()> {
-        let storage = super::AuthenticationStorage::new("rattler_test");
-        let host = "test.example.com";
+        let tdir = tempdir()?;
+        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
+        let host = "conda.example.com";
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -425,9 +256,10 @@ mod tests {
         assert!(auth == authentication);
 
         let client = AuthenticatedClient::from_client(reqwest::Client::default(), storage.clone());
-        let request = client.get("https://test.example.com/conda-forge/noarch/testpkg.tar.bz2");
+        let request = client.get("https://conda.example.com/conda-forge/noarch/testpkg.tar.bz2");
         let request = request.build().unwrap();
         let url = request.url();
+
         assert!(url.path().starts_with("/t/testtoken"));
 
         storage.delete(host)?;
@@ -436,7 +268,8 @@ mod tests {
 
     #[test]
     fn test_bearer_storage() -> anyhow::Result<()> {
-        let storage = super::AuthenticationStorage::new("rattler_test");
+        let tdir = tempdir()?;
+        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "bearer.example.com";
         let retrieved = storage.get(host);
 
@@ -476,7 +309,8 @@ mod tests {
 
     #[test]
     fn test_basic_auth_storage() -> anyhow::Result<()> {
-        let storage = super::AuthenticationStorage::new("rattler_test");
+        let tdir = tempdir()?;
+        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "basic.example.com";
         let retrieved = storage.get(host);
 
