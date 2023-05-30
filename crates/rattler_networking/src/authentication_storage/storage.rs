@@ -121,14 +121,13 @@ impl AuthenticationStorage {
     /// Delete the authentication information for the given host
     pub fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
         let entry = Entry::new(&self.store_key, host)?;
-        let _ = entry.delete_password().map_err(|e| {
-            tracing::warn!(
-                "Error deleting credentials for {}: {}, using fallback storage at {}",
-                host,
-                e,
-                self.fallback_json_location.display()
-            );
-        });
+        match entry.delete_password() {
+            Ok(_) => {}
+            Err(keyring::Error::NoEntry) => {}
+            Err(e) => {
+                tracing::warn!("Error deleting credentials for {}: {}", host, e);
+            }
+        }
 
         let fallback_storage =
             fallback_storage::FallbackStorage::new(self.fallback_json_location.clone());
