@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -19,9 +18,6 @@ pub struct AuthenticationStorage {
 
     /// Fallback JSON location
     pub fallback_json_location: PathBuf,
-
-    /// A cache of authentication information
-    authentication_cache: HashMap<String, Option<Authentication>>,
 }
 
 impl AuthenticationStorage {
@@ -30,8 +26,7 @@ impl AuthenticationStorage {
         let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
         AuthenticationStorage {
             store_key: store_key.to_string(),
-            fallback_json_location: fallback_location,
-            authentication_cache: Default::default(),
+            fallback_json_location: fallback_location
         }
     }
 }
@@ -90,16 +85,14 @@ impl AuthenticationStorage {
 
     /// Retrieve the authentication information for the given host
     pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
-        if let Some(cached) = self.authentication_cache.get(host) {
-            return Ok(cached.clone());
-        }
-
         let entry = Entry::new(&self.store_key, host)?;
         let password = entry.get_password();
 
         let p_string = match password {
             Ok(password) => password,
-            Err(keyring::Error::NoEntry) => return Ok(None),
+            Err(keyring::Error::NoEntry) => {
+                return Ok(None);
+            }
             Err(e) => {
                 tracing::warn!(
                     "Error retrieving credentials for {}: {}, using fallback storage at {}",
