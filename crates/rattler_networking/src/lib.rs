@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
+pub use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 use reqwest::{Client, IntoUrl, Method, Url};
 
 pub mod authentication_storage;

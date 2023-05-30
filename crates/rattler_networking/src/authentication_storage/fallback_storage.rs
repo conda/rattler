@@ -58,6 +58,9 @@ impl FallbackStorage {
         &self,
         dict: &std::collections::HashMap<String, String>,
     ) -> Result<(), FallbackStorageError> {
+        if !self.path.exists() {
+            std::fs::create_dir_all(self.path.parent().unwrap())?;
+        }
         let file = std::fs::File::create(&self.path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer(writer, dict)?;
