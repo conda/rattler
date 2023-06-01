@@ -16,3 +16,6 @@ Cargo.lock
 *.pdb
 
 **/.DS_Store
+
+# rattler
+.prefix

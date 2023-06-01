@@ -40,6 +40,7 @@ use std::str::FromStr;
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
+use serde::Deserialize;
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -153,9 +154,10 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
 }
 
 /// Linux virtual package description
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Linux {
     /// The version of linux
+    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -186,12 +188,13 @@ impl From<Linux> for VirtualPackage {
 }
 
 /// LibC virtual package description
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
     /// The family of LibC. This could be glibc for instance.
     pub family: String,
 
     /// The version of the libc distribution.
+    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -222,9 +225,10 @@ impl From<LibC> for VirtualPackage {
 }
 
 /// Cuda virtual package description
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Cuda {
     /// The maximum supported Cuda version.
+    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -252,7 +256,7 @@ impl From<Cuda> for VirtualPackage {
 }
 
 /// Archspec describes the CPU architecture
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Archspec {
     /// A specification of the architecture family. This could be `x86_64` but it could also include
     /// the full CPU family.
@@ -306,9 +310,10 @@ impl From<Archspec> for VirtualPackage {
 }
 
 /// OSX virtual package description
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Osx {
     /// The OSX version
+    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
