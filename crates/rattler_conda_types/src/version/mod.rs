@@ -115,7 +115,7 @@ mod parse;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug, Eq, Deserialize)]
 pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
