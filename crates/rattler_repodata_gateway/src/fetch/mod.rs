@@ -1,5 +1,6 @@
 //! This module provides functionality to download and cache `repodata.json` from a remote location.
 
+use crate::fetch::jlap::JLAPState;
 use crate::utils::{AsyncEncoding, Encoding, LockedFile};
 use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
@@ -215,6 +216,7 @@ async fn repodata_from_file(
         has_zst: None,
         has_bz2: None,
         has_jlap: None,
+        jlap: None,
     };
 
     // write the cache state
@@ -362,33 +364,30 @@ pub async fn fetch_repo_data(
     // variants. We don't check the expiration here since we just refreshed it.
     let has_zst = variant_availability.has_zst();
     let has_bz2 = variant_availability.has_bz2();
-    // let has_jlap = variant_availability.has_jlap();
+    let has_jlap = variant_availability.has_jlap();
 
-    // TODO: This is where we should decide whether to use JLAP or not
-    // if has_jlap {
-    //     let blake2_hash = match cache_state.as_ref().unwrap().blake2_hash {
-    //         Some(hash) => Some(format!("{:x}", hash)),
-    //         None => None
-    //     };
-
-    //     let jlap_manager = jlap::JLAPManager::new(
-    //         subdir_url.clone(),
-    //         &client,
-    //         &cache_path,
-    //         blake2_hash
-    //     ).await;
-
-    //     match jlap_manager.patch_repo_data(&repo_data_json_path).await {
-    //         Ok(_) => {
-    //             // TODO: return the CachedRepoData object; we were successful so this means we've
-    //             //       updated the `repodata.json` file.
-    //         },
-    //         Err(error) => {
-    //             // TODO: We ran into an error while patching repo data, this means we just want
-    //             //       to continue on with normal program flow; maybe log a warning though?
-    //         }
-    //     }
-    // }
+    // TODO: We still need to somehow inspect this state and then decide what to do next.
+    //       If everything was successful, we're ready to return at this point and update
+    //       our .state.json file.
+    let jlap_state = if has_jlap {
+        let repo_data_state = cache_state.as_ref().unwrap();
+        match jlap::patch_repo_data(
+            &client,
+            subdir_url.clone(),
+            repo_data_state.clone(),
+            &repo_data_json_path,
+        )
+        .await
+        {
+            Ok(state) => state,
+            // TODO: There are a variety of errors that could be thrown. We might want to behave
+            //       differently depending on what they instead of always returning a default
+            //       JLAPState object.
+            Err(_) => JLAPState::default(),
+        }
+    } else {
+        JLAPState::default()
+    };
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -444,6 +443,7 @@ pub async fn fetch_repo_data(
             has_zst: variant_availability.has_zst,
             has_bz2: variant_availability.has_bz2,
             has_jlap: variant_availability.has_jlap,
+            jlap: Some(jlap_state),
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
@@ -508,6 +508,7 @@ pub async fn fetch_repo_data(
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         has_jlap: variant_availability.has_jlap,
+        jlap: Some(jlap_state),
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {

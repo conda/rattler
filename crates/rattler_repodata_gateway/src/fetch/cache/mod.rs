@@ -47,6 +47,9 @@ pub struct RepoDataState {
 
     /// Whether or not JLAP is available for the subdirectory
     pub has_jlap: Option<Expiring<bool>>,
+
+    /// State information related to JLAP
+    pub jlap: Option<JLAPState>,
 }
 
 impl RepoDataState {
@@ -74,6 +77,36 @@ impl FromStr for RepoDataState {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
     }
+}
+
+/// Used inside of the `RepoDataState` to store information related to our JLAP state
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct JLAPState {
+    /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
+    /// JLAP file.
+    pub iv: String,
+
+    /// Current position to use for the bytes offset in the range request for JLAP
+    pub pos: u64,
+
+    /// Footer contains metadata about the JLAP file such as which url it is for
+    pub footer: JLAPFooter,
+}
+
+/// Represents the metadata for a JLAP file, which is typically found at the very end
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct JLAPFooter {
+    /// URL of the `repodata.json` file
+    pub url: Option<String>,
+
+    /// blake2b hash of the latest `repodata.json` file
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_blake2_hash",
+        serialize_with = "serialize_blake2_hash"
+    )]
+    pub latest: Option<blake2::digest::Output<Blake2b256>>,
 }
 
 /// Represents a value and when the value was last checked.
@@ -118,7 +151,7 @@ fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S:
         .serialize(s)
 }
 
-fn deserialize_blake2_hash<'de, D>(
+pub fn deserialize_blake2_hash<'de, D>(
     deserializer: D,
 ) -> Result<Option<blake2::digest::Output<Blake2b256>>, D::Error>
 where
@@ -134,7 +167,7 @@ where
     }
 }
 
-fn serialize_blake2_hash<S: Serializer>(
+pub fn serialize_blake2_hash<S: Serializer>(
     time: &Option<blake2::digest::Output<Blake2b256>>,
     s: S,
 ) -> Result<S::Ok, S::Error> {
