@@ -27,13 +27,13 @@
 //!
 //! #[tokio::main]
 //! pub async fn main() {
-//!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
+//!     let subdir_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
 //!     let client = Client::new();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");
 //!
 //!     let repo_data_state: RepoDataState =  serde_json::from_str(r#"{
-//!        "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
+//!        "url": "https://conda.anaconda.org/conda-forge/osx-64/repodata.json.zst",
 //!        "etag": "W/\"49aa6d9ea6f3285efe657780a7c8cd58\"",
 //!        "mod": "Tue, 30 May 2023 20:03:48 GMT",
 //!        "cache_control": "public, max-age=30",
@@ -65,7 +65,7 @@
 //!     // Patches `current_repo_data` and returns an updated JLAP state object
 //!     let updated_jlap_state = patch_repo_data(
 //!         &client,
-//!         repodata_url,
+//!         subdir_url,
 //!         repo_data_state,
 //!         &current_repo_data
 //!     ).await.unwrap();
@@ -275,7 +275,7 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 }
 
 /// Builds a new JLAP object based on the response
-pub async fn get_jlap_data(jlap_response: &String) -> Result<(JLAPFooter, Vec<Patch>), JLAPError> {
+pub async fn get_jlap_data(jlap_response: &str) -> Result<(JLAPFooter, Vec<Patch>), JLAPError> {
     let parts: Vec<&str> = jlap_response.split('\n').collect();
     let length = parts.len();
 

@@ -676,7 +676,7 @@ pub async fn check_variant_availability(
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
     let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
-    let jlap_repodata_url = subdir_url.join(&jlap::JLAP_FILE_NAME).unwrap();
+    let jlap_repodata_url = subdir_url.join(jlap::JLAP_FILE_NAME).unwrap();
 
     let zst_future = match has_zst {
         Some(_) => {
