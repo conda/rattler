@@ -65,7 +65,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .channels
         .unwrap_or_else(|| vec![String::from("conda-forge")])
         .into_iter()
-        .map(|channel_str| Channel::from_str(&channel_str, &channel_config))
+        .map(|channel_str| Channel::from_str(channel_str, &channel_config))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Each channel contains multiple subdirectories. Users can specify the subdirectories they want
