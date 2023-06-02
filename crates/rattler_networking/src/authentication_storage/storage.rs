@@ -1,7 +1,9 @@
 //! Storage and access of authentication information
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::{Arc, Mutex},
 };
 
 use keyring::Entry;
@@ -19,6 +21,9 @@ pub struct AuthenticationStorage {
 
     /// Fallback JSON location
     pub fallback_json_location: PathBuf,
+
+    /// A cache so that we don't have to access the keyring all the time
+    cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
 }
 
 impl AuthenticationStorage {
@@ -28,6 +33,7 @@ impl AuthenticationStorage {
         AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_json_location: fallback_location,
+            cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -52,7 +58,6 @@ pub enum AuthenticationStorageError {
 
     /// An error occurred when accessing the fallback storage
     /// (e.g. the JSON file)
-    /// TODO: This should be a separate error type
     #[error("Could not retrieve credentials from fallback storage: {0}")]
     FallbackStorageError(#[from] fallback_storage::FallbackStorageError),
 }
@@ -86,6 +91,13 @@ impl AuthenticationStorage {
 
     /// Retrieve the authentication information for the given host
     pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
+        {
+            let cache = self.cache.lock().unwrap();
+            if let Some(auth) = cache.get(host) {
+                return Ok(auth.clone());
+            }
+        }
+
         let entry = Entry::new(&self.store_key, host)?;
         let password = entry.get_password();
 
@@ -111,15 +123,28 @@ impl AuthenticationStorage {
             }
         };
 
-        Ok(Some(Authentication::from_str(&p_string).map_err(|_| {
-            AuthenticationStorageError::ParseCredentialsError {
-                host: host.to_string(),
+        match Authentication::from_str(&p_string) {
+            Ok(auth) => {
+                let mut cache = self.cache.lock().unwrap();
+                cache.insert(host.to_string(), Some(auth.clone()));
+                Ok(Some(auth))
             }
-        })?))
+            Err(err) => {
+                tracing::warn!("Error parsing credentials for {}: {:?}", host, err);
+                Err(AuthenticationStorageError::ParseCredentialsError {
+                    host: host.to_string(),
+                })
+            }
+        }
     }
 
     /// Delete the authentication information for the given host
     pub fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
+        {
+            let mut cache = self.cache.lock().unwrap();
+            cache.remove(host);
+        }
+
         let entry = Entry::new(&self.store_key, host)?;
         match entry.delete_password() {
             Ok(_) => {}
