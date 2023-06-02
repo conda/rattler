@@ -87,7 +87,7 @@ use blake2::digest::Output;
 use rattler_digest::{compute_bytes_digest, Blake2b256};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
-    Client, Response,
+    Client, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -132,6 +132,8 @@ pub enum JLAPError {
 
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
+    /// This also means we need to reset the `position` in our JLAPState to zero so we can
+    /// begin our search from the beginning next time.
     NoHashFoundError,
 
     #[error("Hash from the JLAP metadata and hash from updated repodata file do not match")]
@@ -139,6 +141,11 @@ pub enum JLAPError {
     /// At this point, we should consider the `repodata.json` file corrupted and fetch a new
     /// version from the server.
     HashesNotMatchingError,
+
+    #[error("A mismatch occurred when validating the checksum on the JLAP response")]
+    /// Error returned when we are unable to validate the checksum on the JLAP response.
+    /// The checksum is the last line of the response.
+    ChecksumMismatchError,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -167,16 +174,153 @@ pub struct Patch {
     pub patch: json_patch::Patch, // [] is a valid, empty patch
 }
 
+/// Represents a single JLAP response
+///
+/// All of the data contained in this struct is everything we can determine from the
+/// JLAP response itself.
+#[derive(Debug)]
+pub struct JLAP {
+    /// First line of the JLAP response
+    initialization_vector: String,
+
+    /// List of patches parsed from the JLAP Response
+    patches: Vec<Patch>,
+
+    /// Footer of the request which contains data like the latest hash
+    footer: JLAPFooter,
+
+    /// Checksum located at the end of the request
+    checksum: String,
+
+    /// Bytes offset to use for next JLAP request
+    bytes_offset: u64,
+}
+
+impl JLAP {
+    /// Parses a JLAP object from Response string.
+    ///
+    /// To successfully parse the response, it needs to at least be three lines long.
+    /// This would include a `Patch`, `JLAPFooter` and a `checksum`.
+    pub fn parse(response: &str) -> Result<Self, JLAPError> {
+        let parts: Vec<&str> = response.split('\n').collect();
+        let length = parts.len();
+
+        if parts.len() > JLAP_FOOTER_OFFSET {
+            let initialization_vector = parts[0];
+            let footer = parts[length - 2];
+            let checksum = parts[length - 1];
+            let bytes_offset = get_bytes_offset(&parts);
+
+            let footer: JLAPFooter = match serde_json::from_str(footer) {
+                Ok(value) => value,
+                Err(err) => return Err(JLAPError::JSONParseError(err)),
+            };
+
+            let patch_lines = parts[1..length - JLAP_FOOTER_OFFSET].iter();
+            let patches: Result<Vec<Patch>, JLAPError> =
+                patch_lines.map(parse_patch_json).collect();
+
+            match patches {
+                Ok(patches) => {
+                    if !patches.is_empty() {
+                        Ok(JLAP {
+                            initialization_vector: initialization_vector.to_string(),
+                            patches,
+                            footer,
+                            checksum: checksum.to_string(),
+                            bytes_offset,
+                        })
+                    } else {
+                        Err(JLAPError::NoPatchesFoundError)
+                    }
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            Err(JLAPError::NoPatchesFoundError)
+        }
+    }
+
+    /// Applies patches to a `repo_data_json_path` file provided using the `hash` value to
+    /// find the correct ones to apply.
+    pub async fn apply(
+        &self,
+        repo_data_json_path: &Path,
+        hash: Output<Blake2b256>,
+    ) -> Result<(), JLAPError> {
+        // We use the current hash to find which patches we need to apply
+        let current_idx = find_current_patch_index(&self.patches, hash);
+
+        return if let Some(idx) = current_idx {
+            let applicable_patches: Vec<&Patch> =
+                self.patches[idx..self.patches.len()].iter().collect();
+            let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
+
+            if new_hash != self.footer.latest.unwrap_or_default() {
+                return Err(JLAPError::HashesNotMatchingError);
+            }
+
+            Ok(())
+        } else {
+            Err(JLAPError::NoHashFoundError)
+        };
+    }
+
+    /// Returns a new JLAPState based on values in JLAP object
+    ///
+    /// We accept `position` as an argument because it is not derived from the JLAP response.
+    pub fn get_state(&self, position: u64) -> JLAPState {
+        JLAPState {
+            pos: position + self.bytes_offset,
+            iv: self.initialization_vector.clone(),
+            footer: self.footer.clone(),
+        }
+    }
+
+    /// Validates the checksum present on a JLAP object
+    pub fn validate_checksum(&self) -> Result<(), JLAPError> {
+        todo!()
+    }
+}
+
+/// Calculates the bytes offset. We default to zero if we receive a shorter than
+/// expected vector.
+fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
+    if lines.len() >= JLAP_FOOTER_OFFSET {
+        lines[0..lines.len() - JLAP_FOOTER_OFFSET]
+            .iter()
+            .map(|x| format!("{}\n", x).into_bytes().len() as u64)
+            .sum()
+    } else {
+        0
+    }
+}
+
+/// Finds the index of the of the most applicable patch to use
+fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Option<usize> {
+    for (idx, patch) in patches.iter().enumerate() {
+        if hash == patch.from.unwrap_or_default() {
+            return Some(idx);
+        }
+    }
+
+    None
+}
+
+fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
+    serde_json::from_str(line).map_err(JLAPError::JSONParseError)
+}
+
 /// Attempts to patch a current `repodata.json` file
 ///
 /// This method first makes a request to fetch JLAP data we need. It relies on the information we
-/// pass via the `jlap_state` argument to retrieve the correct response.
+/// pass via the `repo_data_state` argument to retrieve the correct response.
 ///
 /// After this, it will apply JSON patches to the file located at `repo_data_json_path`.
 /// At the end, we compare the new `blake2b` hash with what was listed in the JLAP metadata to
 /// ensure the file is correct.
 ///
-/// The return value is the updated `blake2b` hash.
+/// The return value is the updated `JLAPState`
 pub async fn patch_repo_data(
     client: &Client,
     subdir_url: Url,
@@ -185,65 +329,35 @@ pub async fn patch_repo_data(
 ) -> Result<JLAPState, JLAPError> {
     let jlap_state = repo_data_state.jlap.unwrap_or_default();
     let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
-    let range = format!("bytes={}-", jlap_state.pos);
 
-    let response = match fetch_jlap(jlap_url.as_str(), client, range).await {
-        Ok(response) => response,
-        Err(error) => {
-            return Err(JLAPError::HTTPError(error));
-        }
-    };
-
+    let (response, position) =
+        fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.pos).await?;
     let response_text = response.text().await.unwrap();
-    let new_initial_vector = get_initial_vector(&response_text).unwrap_or(jlap_state.iv);
-    let new_bytes_offset = calculate_bytes_offset(&response_text) as u64;
 
-    // Get the patches and apply the new patches if any found
-    let (footer, patches) = get_jlap_data(&response_text).await?;
+    let jlap = JLAP::parse(&response_text)?;
+
+    // TODO: re-enable when checksum is working
+    // jlap.validate_checksum()?;
 
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
-    let latest_hash = footer.latest.unwrap_or_default();
+    let latest_hash = jlap.footer.latest.unwrap_or_default();
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
-        let new_state = JLAPState {
-            pos: jlap_state.pos + new_bytes_offset,
-            iv: new_initial_vector,
-            footer,
-        };
-        return Ok(new_state);
+        return Ok(jlap.get_state(position));
     }
 
-    // We use the current hash to find which patches we need to apply
-    let current_idx = find_current_patch_index(&patches, hash);
+    // Applies patches and returns early if an error is encountered
+    jlap.apply(repo_data_json_path, hash).await?;
 
-    return if let Some(idx) = current_idx {
-        let applicable_patches: Vec<&Patch> = patches[idx..patches.len()].iter().collect();
-        let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
-
-        if new_hash != latest_hash {
-            return Err(JLAPError::HashesNotMatchingError);
-        }
-
-        let new_bytes_offset = calculate_bytes_offset(&response_text) as u64;
-
-        let new_state = JLAPState {
-            pos: jlap_state.pos + new_bytes_offset,
-            iv: new_initial_vector,
-            footer,
-        };
-
-        Ok(new_state)
-    } else {
-        Err(JLAPError::NoHashFoundError)
-    };
+    Ok(jlap.get_state(position))
 }
 
 /// Fetches a JLAP response from server
 pub async fn fetch_jlap(
     url: &str,
     client: &Client,
-    range: String,
+    range: &str,
 ) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
@@ -256,52 +370,35 @@ pub async fn fetch_jlap(
     request_builder.headers(headers).send().await
 }
 
-/// Utility function to calculate the bytes offset for the next JLAP request
-pub fn calculate_bytes_offset(jlap_response: &str) -> usize {
-    let mut lines: Vec<&str> = jlap_response.split('\n').collect();
-    let length = lines.len();
+/// Fetches the JLAP response but also retries in the case of a RANGE_NOT_SATISFIABLE error
+///
+/// When a JLAP file is updated on the server, it may cause new requests to trigger a
+/// RANGE_NOT_SATISFIABLE error because the local cache is now out of sync. In this case, we
+/// try the request once more from the beginning.
+///
+/// We return a new value for position if this was triggered so that we can update the
+/// JLAPState accordingly.
+pub async fn fetch_jlap_with_retry(
+    url: &str,
+    client: &Client,
+    position: u64,
+) -> Result<(Response, u64), JLAPError> {
+    let range = format!("bytes={}-", position);
 
-    if length >= JLAP_FOOTER_OFFSET {
-        lines.truncate(length - JLAP_FOOTER_OFFSET);
-        let patches = lines.join("\n");
-        return patches.into_bytes().len();
-    }
-
-    0
-}
-
-fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
-    serde_json::from_str(line).map_err(JLAPError::JSONParseError)
-}
-
-/// Builds a new JLAP object based on the response
-pub async fn get_jlap_data(jlap_response: &str) -> Result<(JLAPFooter, Vec<Patch>), JLAPError> {
-    let parts: Vec<&str> = jlap_response.split('\n').collect();
-    let length = parts.len();
-
-    if parts.len() > 2 {
-        let footer = parts[length - 2];
-
-        let metadata: JLAPFooter = match serde_json::from_str(footer) {
-            Ok(value) => value,
-            Err(err) => return Err(JLAPError::JSONParseError(err)),
-        };
-
-        let patch_lines = parts[1..length - JLAP_FOOTER_OFFSET].iter();
-        let patches: Result<Vec<Patch>, JLAPError> = patch_lines.map(parse_patch_json).collect();
-
-        match patches {
-            Ok(patches) => {
-                if !patches.is_empty() {
-                    Ok((metadata, patches))
-                } else {
-                    Err(JLAPError::NoPatchesFoundError)
-                }
+    match fetch_jlap(url, client, &range).await {
+        Ok(response) => Ok((response, position)),
+        Err(error) => {
+            if error.status().unwrap_or_default() == StatusCode::RANGE_NOT_SATISFIABLE
+                && position != 0
+            {
+                let range = "bytes=0-";
+                return match fetch_jlap(url, client, range).await {
+                    Ok(response) => Ok((response, 0)),
+                    Err(error) => Err(JLAPError::HTTPError(error)),
+                };
             }
-            Err(error) => Err(error),
+            Err(JLAPError::HTTPError(error))
         }
-    } else {
-        Err(JLAPError::NoPatchesFoundError)
     }
 }
 
@@ -356,28 +453,6 @@ pub async fn apply_jlap_patches(
     match updated_file.write_all(&content).await {
         Ok(_) => Ok(compute_bytes_digest::<Blake2b256>(content)),
         Err(error) => Err(JLAPError::FileSystemError(error)),
-    }
-}
-
-/// Finds the index of the of the most applicable patch to use
-fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Option<usize> {
-    for (idx, patch) in patches.iter().enumerate() {
-        if hash == patch.from.unwrap_or_default() {
-            return Some(idx);
-        }
-    }
-
-    None
-}
-
-/// Finds the initial vector in the JLAP response; this is the first line of a full request
-fn get_initial_vector(jlap_response: &str) -> Option<String> {
-    let parts: Vec<&str> = jlap_response.split('\n').collect();
-
-    if !parts.is_empty() {
-        Some(parts[0].to_string())
-    } else {
-        None
     }
 }
 
@@ -663,7 +738,7 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_ONE);
 
         // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.pos, 737);
+        assert_eq!(updated_jlap_state.pos, 738);
         assert_eq!(
             updated_jlap_state.footer.latest.unwrap_or_default(),
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_ONE_HASH).unwrap()
@@ -702,7 +777,7 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
 
         // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.pos, 1340);
+        assert_eq!(updated_jlap_state.pos, 1341);
         assert_eq!(
             updated_jlap_state.footer.latest.unwrap_or_default(),
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
