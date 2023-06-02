@@ -2,13 +2,13 @@ use super::{ffi, repo::Repo, solvable::SolvableId, solver::Solver};
 use crate::libsolv::c_string;
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
+use std::ffi::c_char;
 use std::{
     convert::TryInto,
     ffi::{CStr, CString},
     os::raw::c_void,
     ptr::NonNull,
 };
-use std::ffi::c_char;
 
 /// The type of distribution that the pool is being used for
 /// Note: rattler only supports conda
