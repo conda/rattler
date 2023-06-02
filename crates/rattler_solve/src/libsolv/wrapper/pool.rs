@@ -8,6 +8,7 @@ use std::{
     os::raw::c_void,
     ptr::NonNull,
 };
+use std::ffi::c_char;
 
 /// The type of distribution that the pool is being used for
 /// Note: rattler only supports conda
@@ -66,7 +67,7 @@ extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
     user_data: *mut c_void,
     flags: i32,
-    str: *const i8,
+    str: *const c_char,
 ) {
     unsafe {
         // We have previously stored a `BoxedLogCallback` in `user_data`, so now we can retrieve it
