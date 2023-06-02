@@ -54,6 +54,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          submodules: recursive
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
@@ -68,12 +70,26 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { name: "Linux-x86_64",   target: x86_64-unknown-linux-musl,  os: ubuntu-20.04, use-cross: true }
+          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-20.04, use-cross: true                   }
 
-          - { name: "macOS-x86_64",   target: x86_64-apple-darwin,        os: macOS-latest }
-          - { name: "macOS-aarch64",  target: aarch64-apple-darwin,       os: macOS-latest, skip-tests: true }
+          - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-mips64",      target: mips64-unknown-linux-muslabi64,   os: ubuntu-20.04, use-cross: true, skip-tests: true }
+          - { name: "Linux-mips64el",    target: mips64el-unknown-linux-muslabi64, os: ubuntu-20.04, use-cross: true, skip-tests: true }
 
-          - { name: "Windows-x86_64", target: x86_64-pc-windows-msvc,     os: windows-2019 }
+          - { name: "Linux-powerpc",     target: powerpc-unknown-linux-gnu,        os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-powerpc64",   target: powerpc64-unknown-linux-gnu,      os: ubuntu-20.04, use-cross: true                   }
+          - { name: "Linux-powerpc64le", target: powerpc-unknown-linux-gnu,        os: ubuntu-20.04, use-cross: true                   }
+
+          - { name: "Linux-s390x",       target: s390x-unknown-linux-gnu,          os: ubuntu-20.04, use-cross: true                   }
+
+          - { name: "macOS-x86_64",      target: x86_64-apple-darwin,              os: macOS-latest                                    }
+          - { name: "macOS-aarch64",     target: aarch64-apple-darwin,             os: macOS-latest,                  skip-tests: true }
+
+          - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-2019                                    }
+          - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-2019,                  skip-tests: true }
     env:
       BUILD_CMD: cargo  # The build and test command to use if not overwritten
     steps:
