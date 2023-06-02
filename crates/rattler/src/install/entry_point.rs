@@ -41,7 +41,7 @@ pub fn create_windows_python_entry_point(
             .expect("since we joined with target_dir there must be a parent"),
     )?;
     let script_contents = python_entry_point_template(target_prefix, entry_point, python_info);
-    let (hash, size) = write_and_hash(&script_path, &script_contents)?;
+    let (hash, size) = write_and_hash(&script_path, script_contents)?;
 
     // Construct a path to where we will create the python launcher executable.
     let relative_path_script_exe = python_info
@@ -101,7 +101,7 @@ pub fn create_unix_python_entry_point(
             .expect("since we joined with target_dir there must be a parent"),
     )?;
     let script_contents = python_entry_point_template(target_prefix, entry_point, python_info);
-    let (hash, size) = write_and_hash(&script_path, &script_contents)?;
+    let (hash, size) = write_and_hash(&script_path, script_contents)?;
 
     // Make the script executable. This is only supported on Unix based filesystems.
     #[cfg(unix)]

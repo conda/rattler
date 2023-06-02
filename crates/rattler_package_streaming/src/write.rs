@@ -29,22 +29,17 @@ fn sort_paths<'a>(
 }
 
 /// Select the compression level to use for the package
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionLevel {
     /// Use the lowest compression level (zstd: 1, bzip2: 1)
     Lowest,
     /// Use the highest compression level (zstd: 22, bzip2: 9)
     Highest,
     /// Use the default compression level (zstd: 15, bzip2: 9)
+    #[default]
     Default,
     /// Use a numeric compression level (zstd: 1-22, bzip2: 1-9)
     Numeric(u32),
-}
-
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        CompressionLevel::Default
-    }
 }
 
 impl CompressionLevel {
@@ -274,7 +269,7 @@ fn append_path_to_archive(
 
         archive.append_data(&mut header, path, file)?;
     } else if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
-        let target = fs::read_link(&base_path.join(path))
+        let target = fs::read_link(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
         archive.append_link(&mut header, path, target)?;

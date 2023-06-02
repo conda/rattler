@@ -140,7 +140,7 @@ pub fn add_repodata_records(
 
         // Size
         if let Some(size) = record.size {
-            data.set_num(solvable_id, solvable_download_size_id, size as u64);
+            data.set_num(solvable_id, solvable_download_size_id, size);
         }
 
         // Build string
