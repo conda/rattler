@@ -90,9 +90,9 @@ use reqwest::{
     Client, Response,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::Path;
 use std::str;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use crate::fetch::cache;
@@ -181,7 +181,7 @@ pub async fn patch_repo_data(
     client: &Client,
     subdir_url: Url,
     repo_data_state: RepoDataState,
-    repo_data_json_path: &PathBuf,
+    repo_data_json_path: &Path,
 ) -> Result<JLAPState, JLAPError> {
     let jlap_state = repo_data_state.jlap.unwrap_or_default();
     let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
@@ -314,23 +314,17 @@ pub async fn get_jlap_data(jlap_response: &str) -> Result<(JLAPFooter, Vec<Patch
 /// 3. Saving this repodata file to disk
 /// 4. Generating a new `blake2b` hash
 ///
-/// The return value is the string representation of the `blake2b` hash that
-/// can be verified against our `Metadata` object.
+/// The return value is the `blake2b` hash we used to verify the updated file's contents.
 pub async fn apply_jlap_patches(
     patches: &Vec<&Patch>,
-    repo_data_path: &PathBuf,
+    repo_data_path: &Path,
 ) -> Result<Output<Blake2b256>, JLAPError> {
     // Open and read the current repodata into a JSON doc
-    let mut repo_data = match tokio::fs::File::open(repo_data_path).await {
+    let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
         Ok(contents) => contents,
         Err(error) => return Err(JLAPError::FileSystemError(error)),
     };
 
-    let mut repo_data_contents = String::new();
-    match repo_data.read_to_string(&mut repo_data_contents).await {
-        Ok(_) => (),
-        Err(error) => return Err(JLAPError::FileSystemError(error)),
-    }
     let mut doc = match serde_json::from_str(&repo_data_contents) {
         Ok(doc) => doc,
         Err(error) => return Err(JLAPError::JSONParseError(error)),
