@@ -44,7 +44,6 @@ impl FallbackStorage {
     pub fn get_password(&self, host: &str) -> Result<Option<String>, FallbackStorageError> {
         let _lock = self.mutex.lock().unwrap();
         let dict = self.read_json()?;
-        println!("{} {:?}", host, dict);
         Ok(dict.get(host).cloned())
     }
 
