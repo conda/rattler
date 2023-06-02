@@ -159,10 +159,22 @@ jobs:
           command: build
           args: --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
 
+      - name: Set test options
+        id: test-options
+        if: ${{ !matrix.job.skip-tests }}
+        shell: bash
+        run: |
+          unset CARGO_TEST_OPTIONS
+          case ${{ matrix.job.target }} in
+            *-musl*) CARGO_TEST_OPTIONS="--exclude tools"  ;;
+            *) CARGO_TEST_OPTIONS=""  ;;
+          esac
+          echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
+
       - name: Run tests
         if: ${{ !matrix.job.skip-tests }}
         uses: actions-rs/cargo@v1
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: test
-          args: --all-features --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} -- --nocapture
+          args: --all-features --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
