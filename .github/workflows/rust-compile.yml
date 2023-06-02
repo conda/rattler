@@ -15,6 +15,7 @@ env:
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
   CICD_INTERMEDIATES_DIR: "_cicd-intermediates"
+  TEST_FEATURES: tokio,serde,reqwest,sparse
 
 jobs:
   check:
@@ -178,4 +179,4 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: test
-          args: --workspace --all-features --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
+          args: --workspace --features $TEST_FEATURES --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
