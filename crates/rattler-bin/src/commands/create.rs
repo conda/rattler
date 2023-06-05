@@ -212,6 +212,21 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         rattler_solve::LibsolvBackend.solve(solver_task)
     })?;
 
+    if opt.dry_run {
+        println!("The following operations would be performed:");
+        let mut sorted = required_packages.clone();
+        sorted.sort_by(|a, b| a.package_record.name.cmp(&b.package_record.name));
+        for op in sorted {
+            println!(
+                "{: <30} {: >20} {: <20}",
+                op.package_record.name,
+                format!("{}", op.package_record.version),
+                op.package_record.build
+            );
+        }
+        return Ok(());
+    }
+
     // Construct a transaction to
     let transaction = Transaction::from_current_and_desired(
         installed_packages,

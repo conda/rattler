@@ -1,22 +1,14 @@
 use crate::{SolveError, SolverBackend, SolverTask};
-pub use input::cache_repodata;
-use input::{add_repodata_records, add_solv_file, add_virtual_packages};
-pub use libc_byte_slice::LibcByteSlice;
+use input::{add_repodata_records, add_virtual_packages};
+use libsolv_rs::pool::Pool;
+use libsolv_rs::solve_jobs::SolveJobs;
+use libsolv_rs::solver::Solver;
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
-use std::ffi::CString;
-use wrapper::{
-    flags::SolverFlag,
-    pool::{Pool, Verbosity},
-    repo::Repo,
-    solve_goal::SolveGoal,
-};
 
 mod input;
-mod libc_byte_slice;
 mod output;
-mod wrapper;
 
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
@@ -24,40 +16,13 @@ mod wrapper;
 pub struct LibsolvRepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: &'a [RepoDataRecord],
-
-    /// The in-memory .solv file built from the records (if available)
-    pub solv_file: Option<&'a LibcByteSlice>,
 }
 
 impl LibsolvRepoData<'_> {
     /// Constructs a new `LibsolvRepoData` without a corresponding .solv file
     pub fn from_records(records: &[RepoDataRecord]) -> LibsolvRepoData {
-        LibsolvRepoData {
-            records,
-            solv_file: None,
-        }
+        LibsolvRepoData { records }
     }
-}
-
-/// Convenience method that converts a string reference to a CString, replacing NUL characters with
-/// whitespace (` `)
-fn c_string<T: AsRef<str>>(str: T) -> CString {
-    let bytes = str.as_ref().as_bytes();
-
-    let mut vec = Vec::with_capacity(bytes.len() + 1);
-    vec.extend_from_slice(bytes);
-
-    for byte in &mut vec {
-        if *byte == 0 {
-            *byte = b' ';
-        }
-    }
-
-    // Trailing 0
-    vec.push(0);
-
-    // Safe because the string does is guaranteed to have no NUL bytes other than the trailing one
-    unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
@@ -71,20 +36,11 @@ impl SolverBackend for LibsolvBackend {
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
-        let pool = Pool::default();
-
-        // Setup proper logging for the pool
-        pool.set_debug_callback(|msg, _flags| {
-            tracing::event!(tracing::Level::DEBUG, "{}", msg.trim_end());
-        });
-        pool.set_debug_level(Verbosity::Low);
+        let mut pool = Pool::new();
 
         // Add virtual packages
-        let repo = Repo::new(&pool, "virtual_packages");
-        add_virtual_packages(&pool, &repo, &task.virtual_packages);
-
-        // Mark the virtual packages as installed.
-        pool.set_installed(&repo);
+        let repo_id = pool.new_repo("virtual_packages");
+        add_virtual_packages(&mut pool, repo_id, &task.virtual_packages);
 
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
@@ -95,43 +51,32 @@ impl SolverBackend for LibsolvBackend {
             }
 
             let channel_name = &repodata.records[0].channel;
-            let repo = Repo::new(&pool, channel_name);
-
-            if let Some(solv_file) = repodata.solv_file {
-                add_solv_file(&pool, &repo, solv_file);
-            } else {
-                add_repodata_records(&pool, &repo, repodata.records);
-            }
+            let repo_id = pool.new_repo(channel_name);
+            add_repodata_records(&mut pool, repo_id, repodata.records);
 
             // Keep our own info about repodata_records
-            repo_mapping.insert(repo.id(), repo_mapping.len());
+            repo_mapping.insert(repo_id, repo_mapping.len());
             all_repodata_records.push(repodata.records);
-
-            // We dont want to drop the Repo, its stored in the pool anyway, so just forget it.
-            std::mem::forget(repo);
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo = Repo::new(&pool, "locked");
-        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
+        let repo_id = pool.new_repo("locked");
+        let installed_solvables = add_repodata_records(&mut pool, repo_id, &task.locked_packages);
 
         // Also add the installed records to the repodata
-        repo_mapping.insert(repo.id(), repo_mapping.len());
+        repo_mapping.insert(repo_id, repo_mapping.len());
         all_repodata_records.push(&task.locked_packages);
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo = Repo::new(&pool, "pinned");
-        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
+        let repo_id = pool.new_repo("pinned");
+        let pinned_solvables = add_repodata_records(&mut pool, repo_id, &task.pinned_packages);
 
         // Also add the installed records to the repodata
-        repo_mapping.insert(repo.id(), repo_mapping.len());
+        repo_mapping.insert(repo_id, repo_mapping.len());
         all_repodata_records.push(&task.pinned_packages);
 
-        // Create datastructures for solving
-        pool.create_whatprovides();
-
         // Add matchspec to the queue
-        let mut goal = SolveGoal::default();
+        let mut goal = SolveJobs::default();
 
         // Favor the currently installed packages
         for favor_solvable in installed_solvables {
@@ -145,19 +90,15 @@ impl SolverBackend for LibsolvBackend {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            let id = pool.intern_matchspec(&spec);
-            goal.install(id, false)
+            goal.install(spec);
         }
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = pool.create_solver();
-        solver.set_flag(SolverFlag::allow_uninstall(), true);
-        solver.set_flag(SolverFlag::allow_downgrade(), true);
-
-        let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
+        let mut solver = Solver::new(pool);
+        let transaction = solver.solve(goal).map_err(SolveError::Unsolvable)?;
 
         let required_records = get_required_packages(
-            &pool,
+            solver.pool(),
             &repo_mapping,
             &transaction,
             all_repodata_records.as_slice(),
@@ -172,21 +113,5 @@ impl SolverBackend for LibsolvBackend {
         })?;
 
         Ok(required_records)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::libsolv::c_string;
-    use rstest::rstest;
-
-    #[rstest]
-    #[case("", "")]
-    #[case("a\0b\0c\0d\0", "a b c d ")]
-    #[case("a b c d", "a b c d")]
-    #[case("😒", "😒")]
-    fn test_c_string(#[case] input: &str, #[case] expected_output: &str) {
-        let output = c_string(input);
-        assert_eq!(output.as_bytes(), expected_output.as_bytes());
     }
 }

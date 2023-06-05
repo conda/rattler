@@ -6,9 +6,7 @@
 mod libsolv;
 mod solver_backend;
 
-pub use libsolv::{
-    cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
-};
+pub use libsolv::{LibsolvBackend, LibsolvRepoData};
 pub use solver_backend::SolverBackend;
 use std::fmt;
 
@@ -85,6 +83,7 @@ mod test_libsolv {
     };
     use std::str::FromStr;
     use url::Url;
+    use rattler_repodata_gateway::sparse::SparseRepoData;
 
     fn conda_json_path() -> String {
         format!(
@@ -132,6 +131,10 @@ mod test_libsolv {
         )
     }
 
+    fn read_sparse_repodata(path: &str) -> SparseRepoData {
+        SparseRepoData::new(Channel::from_str("dummy", &ChannelConfig::default()).unwrap(), "dummy".to_string(), path).unwrap()
+    }
+
     fn installed_package(
         channel: &str,
         subdir: &str,
@@ -169,17 +172,19 @@ mod test_libsolv {
         }
     }
 
-    #[test]
-    fn test_solve_python() {
+    fn solve_real_world(specs: Vec<&str>) -> Vec<String> {
+        let specs = specs.iter().map(|s| MatchSpec::from_str(s).unwrap()).collect::<Vec<_>>();
+
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
 
-        let repo_data = read_repodata(&json_file);
-        let repo_data_noarch = read_repodata(&json_file_noarch);
+        let sparse_repo_datas = vec![
+            read_sparse_repodata(&json_file),
+            read_sparse_repodata(&json_file_noarch)
+        ];
 
-        let available_packages = vec![repo_data, repo_data_noarch];
-
-        let specs = vec![MatchSpec::from_str("python=3.9").unwrap()];
+        let names = specs.iter().map(|s| s.name.clone().unwrap());
+        let available_packages = SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
 
         let solver_task = SolverTask {
             available_packages: available_packages
@@ -206,7 +211,18 @@ mod test_libsolv {
         // The order of packages is nondeterministic, so we sort them to ensure we can compare them
         // to a previous run
         pkgs.sort();
+        pkgs
+    }
 
+    #[test]
+    fn test_solve_tensorboard() {
+        let pkgs = solve_real_world(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+        insta::assert_yaml_snapshot!(pkgs);
+    }
+
+    #[test]
+    fn test_solve_python() {
+        let pkgs = solve_real_world(vec!["python=3.9"]);
         insta::assert_yaml_snapshot!(pkgs);
     }
 
