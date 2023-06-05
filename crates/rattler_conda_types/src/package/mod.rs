@@ -80,6 +80,6 @@ pub trait PackageFile: Sized {
     /// the archive, parse the JSON string and return the resulting object. If the file is not in a
     /// parsable format or if the file could not be read, this function returns an error.
     fn from_package_directory(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
-        Self::from_path(&path.as_ref().join(Self::package_path()))
+        Self::from_path(path.as_ref().join(Self::package_path()))
     }
 }

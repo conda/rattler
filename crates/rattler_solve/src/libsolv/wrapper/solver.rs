@@ -103,13 +103,13 @@ impl Solver<'_> {
 
                     let nsolvables = unsafe { (*pool).nsolvables };
 
-                    let target = if target_id < 0 || target_id >= nsolvables as i32 {
+                    let target = if target_id < 0 || target_id >= nsolvables {
                         None
                     } else {
                         Some(SolvableId(target_id))
                     };
 
-                    let source = if source_id < 0 || source_id >= nsolvables as i32 {
+                    let source = if source_id < 0 || source_id >= nsolvables {
                         None
                     } else {
                         Some(SolvableId(target_id))

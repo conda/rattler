@@ -421,7 +421,7 @@ async fn read_index_json(
             let package_dir = package_dir.to_owned();
             driver
                 .spawn_throttled(move || {
-                    IndexJson::from_package_directory(&package_dir)
+                    IndexJson::from_package_directory(package_dir)
                         .map_err(InstallError::FailedToReadIndexJson)
                 })
                 .await
@@ -442,7 +442,7 @@ async fn read_link_json(
             let package_dir = package_dir.to_owned();
             driver
                 .spawn_throttled(move || {
-                    LinkJson::from_package_directory(&package_dir)
+                    LinkJson::from_package_directory(package_dir)
                         .map_or_else(
                             |e| {
                                 // Its ok if the file is not present.

@@ -68,9 +68,10 @@ impl From<tokio::task::JoinError> for FetchRepoDataError {
 }
 
 /// Defines how to use the repodata cache.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum CacheAction {
     /// Use the cache if its up to date or fetch from the URL if there is no valid cached value.
+    #[default]
     CacheOrFetch,
 
     /// Only use the cache, but error out if the cache is not up to date
@@ -83,18 +84,13 @@ pub enum CacheAction {
     NoCache,
 }
 
-impl Default for CacheAction {
-    fn default() -> Self {
-        CacheAction::CacheOrFetch
-    }
-}
-
 /// Defines which type of repodata.json file to download. Usually you want to use the
 /// [`Variant::AfterPatches`] variant because that reflects the repodata with any patches applied.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Variant {
     /// Fetch the `repodata.json` file. This `repodata.json` has repodata patches applied. Packages
     /// may have also been removed from this file (yanked).
+    #[default]
     AfterPatches,
 
     /// Fetch the `repodata_from_packages.json` file. This file contains all packages with the
@@ -111,12 +107,6 @@ pub enum Variant {
     /// Note that this file is not available for all channels. This only seems to be available for
     /// the conda-forge and bioconda channels on anaconda.org.
     Current,
-}
-
-impl Default for Variant {
-    fn default() -> Self {
-        Variant::AfterPatches
-    }
 }
 
 impl Variant {

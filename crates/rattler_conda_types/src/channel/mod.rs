@@ -67,7 +67,7 @@ impl Channel {
         } else if is_path(channel) {
             let path = PathBuf::from(channel);
             let absolute_path = absolute_path(&path);
-            let url = Url::from_directory_path(&absolute_path)
+            let url = Url::from_directory_path(absolute_path)
                 .map_err(|_| ParseChannelError::InvalidPath(path))?;
             Self {
                 platforms,
