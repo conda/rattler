@@ -47,7 +47,7 @@ pub mod serde;
 pub use digest;
 
 use blake2::digest::consts::U32;
-use blake2::Blake2b;
+use blake2::{Blake2b, Blake2bMac};
 use digest::{Digest, Output};
 use std::io::Read;
 use std::{fs::File, io::Write, path::Path};
@@ -63,6 +63,9 @@ pub type Md5Hash = md5::digest::Output<Md5>;
 
 /// A type alias for the output of a blake2b256 hash.
 pub type Blake2b256 = Blake2b<U32>;
+
+/// A type alias for the output of a blake2b256 hash.
+pub type Blake2bMac256 = Blake2bMac<U32>;
 
 /// Compute a hash of the file at the specified location.
 pub fn compute_file_digest<D: Digest + Default + Write>(

@@ -84,7 +84,8 @@
 //!    tests for them.
 
 use blake2::digest::Output;
-use rattler_digest::{compute_bytes_digest, Blake2b256};
+use blake2::digest::{FixedOutput, Update};
+use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Blake2b256, Blake2bMac256};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -112,40 +113,44 @@ pub const JLAP_FOOTER_OFFSET: usize = 2;
 pub enum JLAPError {
     #[error(transparent)]
     /// Pass-thru for JSON errors found while parsing JLAP file
-    JSONParseError(serde_json::Error),
+    JSONParse(serde_json::Error),
 
     #[error(transparent)]
     /// Pass-thru for JSON errors found while patching
-    JSONPatchError(json_patch::PatchError),
+    JSONPatch(json_patch::PatchError),
 
     #[error(transparent)]
     /// Pass-thru for HTTP errors encountered while requesting JLAP
-    HTTPError(reqwest::Error),
+    HTTP(reqwest::Error),
 
     #[error(transparent)]
     /// Pass-thru for file system errors encountered while requesting JLAP
-    FileSystemError(tokio::io::Error),
+    FileSystem(tokio::io::Error),
 
     #[error("No patches found in the JLAP file")]
     /// Error returned when JLAP file has no patches in it
-    NoPatchesFoundError,
+    NoPatchesFound,
 
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
     /// This also means we need to reset the `position` in our JLAPState to zero so we can
     /// begin our search from the beginning next time.
-    NoHashFoundError,
+    NoHashFound,
 
     #[error("Hash from the JLAP metadata and hash from updated repodata file do not match")]
     /// Error when we have mismatched hash values after updating our `repodata.json` file
     /// At this point, we should consider the `repodata.json` file corrupted and fetch a new
     /// version from the server.
-    HashesNotMatchingError,
+    HashesNotMatching,
 
     #[error("A mismatch occurred when validating the checksum on the JLAP response")]
     /// Error returned when we are unable to validate the checksum on the JLAP response.
     /// The checksum is the last line of the response.
-    ChecksumMismatchError,
+    ChecksumMismatch,
+
+    #[error("Unable to parse hex values in hash; cache is corrupted")]
+    /// Error that occurs when we are unable to parse a hex values in the cache file.
+    HexParse,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -179,7 +184,7 @@ pub struct Patch {
 /// All of the data contained in this struct is everything we can determine from the
 /// JLAP response itself.
 #[derive(Debug)]
-pub struct JLAP {
+pub struct JLAP<'a> {
     /// First line of the JLAP response
     initialization_vector: String,
 
@@ -190,33 +195,56 @@ pub struct JLAP {
     footer: JLAPFooter,
 
     /// Checksum located at the end of the request
-    checksum: String,
+    checksum: Output<Blake2b256>,
 
     /// Bytes offset to use for next JLAP request
     bytes_offset: u64,
+
+    /// All the lines of the JLAP request (raw response, minus '\n' characters
+    lines: Vec<&'a str>,
+
+    /// Offset to use when iterating through JLAP response lines (i.e. position where the patches
+    /// begin).
+    offset: usize,
 }
 
-impl JLAP {
+impl<'a> JLAP<'a> {
     /// Parses a JLAP object from Response string.
     ///
     /// To successfully parse the response, it needs to at least be three lines long.
     /// This would include a `Patch`, `JLAPFooter` and a `checksum`.
-    pub fn parse(response: &str) -> Result<Self, JLAPError> {
-        let parts: Vec<&str> = response.split('\n').collect();
-        let length = parts.len();
+    ///
+    /// On top of the response string, we also pass in a value for `initialization_vector`.
+    /// If the response is not partial (i.e. it does not begin with an initialization vector,
+    /// then this is the value we use. This is an important value for validating the checksum.
+    pub fn parse(response: &'a str, initialization_vector: &str) -> Result<Self, JLAPError> {
+        let lines: Vec<&str> = response.split('\n').collect();
+        let length = lines.len();
 
-        if parts.len() > JLAP_FOOTER_OFFSET {
-            let initialization_vector = parts[0];
-            let footer = parts[length - 2];
-            let checksum = parts[length - 1];
-            let bytes_offset = get_bytes_offset(&parts);
+        if lines.len() > JLAP_FOOTER_OFFSET {
+            let mut offset = 0;
+
+            // The first line can either be a valid hex string or JSON. We determine the `offset`
+            // value to use and the value of the initialization vector here.
+            let initialization_vector = match hex::decode(lines[0]) {
+                Ok(value) => {
+                    offset = 1;
+                    hex::encode(value)
+                }
+                Err(_) => initialization_vector.to_string(),
+            };
+
+            let footer = lines[length - 2];
+            let checksum =
+                parse_digest_from_hex::<Blake2b256>(lines[length - 1]).unwrap_or_default();
+            let bytes_offset = get_bytes_offset(&lines);
 
             let footer: JLAPFooter = match serde_json::from_str(footer) {
                 Ok(value) => value,
-                Err(err) => return Err(JLAPError::JSONParseError(err)),
+                Err(err) => return Err(JLAPError::JSONParse(err)),
             };
 
-            let patch_lines = parts[1..length - JLAP_FOOTER_OFFSET].iter();
+            let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
             let patches: Result<Vec<Patch>, JLAPError> =
                 patch_lines.map(parse_patch_json).collect();
 
@@ -224,20 +252,22 @@ impl JLAP {
                 Ok(patches) => {
                     if !patches.is_empty() {
                         Ok(JLAP {
-                            initialization_vector: initialization_vector.to_string(),
+                            initialization_vector,
                             patches,
                             footer,
-                            checksum: checksum.to_string(),
+                            checksum,
                             bytes_offset,
+                            lines,
+                            offset,
                         })
                     } else {
-                        Err(JLAPError::NoPatchesFoundError)
+                        Err(JLAPError::NoPatchesFound)
                     }
                 }
                 Err(error) => Err(error),
             }
         } else {
-            Err(JLAPError::NoPatchesFoundError)
+            Err(JLAPError::NoPatchesFound)
         }
     }
 
@@ -256,30 +286,70 @@ impl JLAP {
                 self.patches[idx..self.patches.len()].iter().collect();
             let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
 
+            // TODO: This check might be a little redundant considering we have validated our
+            //       checksums by now, but it could be nice to keep here for extra validation.
+            //       We could remove it if performance would benefit.
             if new_hash != self.footer.latest.unwrap_or_default() {
-                return Err(JLAPError::HashesNotMatchingError);
+                return Err(JLAPError::HashesNotMatching);
             }
 
             Ok(())
         } else {
-            Err(JLAPError::NoHashFoundError)
+            Err(JLAPError::NoHashFound)
         };
     }
 
     /// Returns a new JLAPState based on values in JLAP object
     ///
     /// We accept `position` as an argument because it is not derived from the JLAP response.
-    pub fn get_state(&self, position: u64) -> JLAPState {
+    ///
+    /// The `iv` (initialization vector) value is optionally passed in because we may wish
+    /// to override what was initially stored there, which would be the value calculated
+    /// with `validate_checksum`.
+    pub fn get_state(&self, position: u64, iv: Option<Output<Blake2b256>>) -> JLAPState {
+        let iv = match iv {
+            Some(value) => format!("{:x}", value),
+            None => self.initialization_vector.clone(),
+        };
         JLAPState {
             pos: position + self.bytes_offset,
-            iv: self.initialization_vector.clone(),
+            iv,
             footer: self.footer.clone(),
         }
     }
 
     /// Validates the checksum present on a JLAP object
-    pub fn validate_checksum(&self) -> Result<(), JLAPError> {
-        todo!()
+    pub fn validate_checksum(&self) -> Result<Output<Blake2b256>, JLAPError> {
+        let start_iv = match hex::decode(self.initialization_vector.clone()) {
+            Ok(value) => value,
+            Err(_) => return Err(JLAPError::HexParse),
+        };
+        let mut iv: Option<Output<Blake2b256>> = None;
+        let mut iv_values: Vec<Output<Blake2bMac256>> = vec![];
+        let end = self.lines.len() - JLAP_FOOTER_OFFSET;
+
+        for line in &self.lines[self.offset..end] {
+            match iv {
+                Some(value) => {
+                    iv = Some(blake2b_256_hash_with_key(line.as_bytes(), &value));
+                }
+                None => {
+                    iv = Some(blake2b_256_hash_with_key(line.as_bytes(), &start_iv));
+                }
+            }
+            iv_values.push(iv.unwrap());
+        }
+
+        if !iv_values.is_empty() {
+            let new_iv = iv_values[iv_values.len() - 1];
+            if new_iv != self.checksum {
+                return Err(JLAPError::ChecksumMismatch);
+            }
+
+            Ok(new_iv)
+        } else {
+            Err(JLAPError::NoPatchesFound)
+        }
     }
 }
 
@@ -308,7 +378,7 @@ fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Opti
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
-    serde_json::from_str(line).map_err(JLAPError::JSONParseError)
+    serde_json::from_str(line).map_err(JLAPError::JSONParse)
 }
 
 /// Attempts to patch a current `repodata.json` file
@@ -334,23 +404,21 @@ pub async fn patch_repo_data(
         fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.pos).await?;
     let response_text = response.text().await.unwrap();
 
-    let jlap = JLAP::parse(&response_text)?;
-
-    // TODO: re-enable when checksum is working
-    // jlap.validate_checksum()?;
-
+    let jlap = JLAP::parse(&response_text, &jlap_state.iv)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
     let latest_hash = jlap.footer.latest.unwrap_or_default();
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
-        return Ok(jlap.get_state(position));
+        return Ok(jlap.get_state(position, None));
     }
+
+    let new_iv = jlap.validate_checksum()?;
 
     // Applies patches and returns early if an error is encountered
     jlap.apply(repo_data_json_path, hash).await?;
 
-    Ok(jlap.get_state(position))
+    Ok(jlap.get_state(position, Some(new_iv)))
 }
 
 /// Fetches a JLAP response from server
@@ -364,7 +432,7 @@ pub async fn fetch_jlap(
 
     headers.insert(
         reqwest::header::RANGE,
-        HeaderValue::from_str(&range).unwrap(),
+        HeaderValue::from_str(range).unwrap(),
     );
 
     request_builder.headers(headers).send().await
@@ -394,10 +462,10 @@ pub async fn fetch_jlap_with_retry(
                 let range = "bytes=0-";
                 return match fetch_jlap(url, client, range).await {
                     Ok(response) => Ok((response, 0)),
-                    Err(error) => Err(JLAPError::HTTPError(error)),
+                    Err(error) => Err(JLAPError::HTTP(error)),
                 };
             }
-            Err(JLAPError::HTTPError(error))
+            Err(JLAPError::HTTP(error))
         }
     }
 }
@@ -419,31 +487,30 @@ pub async fn apply_jlap_patches(
     // Open and read the current repodata into a JSON doc
     let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
         Ok(contents) => contents,
-        Err(error) => return Err(JLAPError::FileSystemError(error)),
+        Err(error) => return Err(JLAPError::FileSystem(error)),
     };
 
     let mut doc = match serde_json::from_str(&repo_data_contents) {
         Ok(doc) => doc,
-        Err(error) => return Err(JLAPError::JSONParseError(error)),
+        Err(error) => return Err(JLAPError::JSONParse(error)),
     };
 
     // Apply the patches we current have to it
     for patch in patches {
-        match json_patch::patch(&mut doc, &patch.patch) {
-            Ok(_) => (),
-            Err(error) => return Err(JLAPError::JSONPatchError(error)),
+        if let Err(error) = json_patch::patch(&mut doc, &patch.patch) {
+            return Err(JLAPError::JSONPatch(error));
         }
     }
 
     // Save the updated repodata JSON doc
     let mut updated_file = match tokio::fs::File::create(repo_data_path).await {
         Ok(file) => file,
-        Err(error) => return Err(JLAPError::FileSystemError(error)),
+        Err(error) => return Err(JLAPError::FileSystem(error)),
     };
 
     let mut updated_json = match serde_json::to_string_pretty(&doc) {
         Ok(value) => value,
-        Err(error) => return Err(JLAPError::JSONParseError(error)),
+        Err(error) => return Err(JLAPError::JSONParse(error)),
     };
 
     // We need to add an extra newline character to the end of our string so the hashes match 🤷‍
@@ -452,8 +519,15 @@ pub async fn apply_jlap_patches(
 
     match updated_file.write_all(&content).await {
         Ok(_) => Ok(compute_bytes_digest::<Blake2b256>(content)),
-        Err(error) => Err(JLAPError::FileSystemError(error)),
+        Err(error) => Err(JLAPError::FileSystem(error)),
     }
+}
+
+/// Creates a keyed hash
+fn blake2b_256_hash_with_key(data: &[u8], key: &[u8]) -> Output<Blake2bMac256> {
+    let mut state = Blake2bMac256::new_with_salt_and_personal(key, &[], &[]).unwrap();
+    state.update(data);
+    state.finalize_fixed()
 }
 
 #[cfg(test)]
@@ -488,13 +562,35 @@ mod test {
   "has_jlap": {
     "value": true,
     "last_checked": "2023-05-21T12:14:21.903512Z"
+  }
+}"#;
+
+    const FAKE_STATE_DATA_PARTIAL: &str = r#"{
+  "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
+  "etag": "W/\"49aa6d9ea6f3285efe657780a7c8cd58\"",
+  "mod": "Tue, 30 May 2023 20:03:48 GMT",
+  "cache_control": "public, max-age=30",
+  "mtime_ns": 1685509481332236078,
+  "size": 38317593,
+  "blake2_hash": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9",
+  "has_zst": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_bz2": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_jlap": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.903512Z"
   },
   "jlap": {
-    "iv": "0000000000000000000000000000000000000000000000000000000000000000",
-    "pos": 0,
+    "iv": "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff",
+    "pos": 738,
     "footer": {
       "url": "repodata.json",
-      "latest": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6"
+      "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"
     }
   }
 }"#;
@@ -649,13 +745,13 @@ mod test {
     const FAKE_JLAP_DATA_INITIAL: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
 {"url": "repodata.json", "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"}
-c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
+5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"#;
 
     const FAKE_JLAP_DATA_UPDATE_ONE: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
 {"to": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9", "from": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "patch": [{"op": "add", "path": "/packages.conda/zstd-static-1.4.5-hb1e8313_0.conda", "value": {"build": "hb1e8313_0", "build_number": 0, "depends": ["libcxx >=10.0.0", "zstd 1.4.5 h41d2c2f_0"], "license": "BSD 3-Clause", "md5": "5447986040e0b73d6c681a4d8f615d6c", "name": "zstd-static", "sha256": "3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658", "size": 13930, "subdir": "osx-64", "timestamp": 1595965109852, "version": "1.4.5"}}]}
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
-c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
+7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"#;
 
     /// Writes the desired files to the "server" environment
     async fn setup_server_environment(
@@ -740,6 +836,10 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
         // Ensure the the updated JLAP state matches what it should
         assert_eq!(updated_jlap_state.pos, 738);
         assert_eq!(
+            updated_jlap_state.iv,
+            "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
+        );
+        assert_eq!(
             updated_jlap_state.footer.latest.unwrap_or_default(),
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_ONE_HASH).unwrap()
         );
@@ -759,7 +859,7 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
         let client = Client::default();
 
-        let repo_data_state: RepoDataState = serde_json::from_str(FAKE_STATE_DATA_INITIAL).unwrap();
+        let repo_data_state: RepoDataState = serde_json::from_str(FAKE_STATE_DATA_PARTIAL).unwrap();
         // End setup
 
         // Run the code under test
@@ -778,6 +878,10 @@ c540a2ab0ab4674dada39063205a109d26027a55bd8d7a5a5b711be03ffc3a9d"#;
 
         // Ensure the the updated JLAP state matches what it should
         assert_eq!(updated_jlap_state.pos, 1341);
+        assert_eq!(
+            updated_jlap_state.iv,
+            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
+        );
         assert_eq!(
             updated_jlap_state.footer.latest.unwrap_or_default(),
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
