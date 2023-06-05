@@ -10,6 +10,7 @@ pub use libsolv::{
     cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
 };
 pub use solver_backend::SolverBackend;
+use std::fmt;
 
 use rattler_conda_types::GenericVirtualPackage;
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
@@ -18,14 +19,29 @@ use rattler_conda_types::{MatchSpec, RepoDataRecord};
 #[derive(thiserror::Error, Debug)]
 pub enum SolveError {
     /// There is no set of dependencies that satisfies the requirements
-    #[error("unsolvable")]
     Unsolvable(Vec<String>),
 
     /// The solver backend returned operations that we dont know how to install.
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
     /// and can be used for error reporting
-    #[error("unsupported operations")]
     UnsupportedOperations(Vec<String>),
+}
+
+impl fmt::Display for SolveError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SolveError::Unsolvable(operations) => {
+                write!(
+                    f,
+                    "Cannot solve the request because of: {}",
+                    operations.join(", ")
+                )
+            }
+            SolveError::UnsupportedOperations(operations) => {
+                write!(f, "Unsupported operations: {}", operations.join(", "))
+            }
+        }
+    }
 }
 
 /// Represents a dependency resolution task, to be solved by one of the backends (currently only
