@@ -1,4 +1,6 @@
-# Rattler
+![An image of a snake in a box](assets/rattler-readme-image.png)
+
+# Rattler: Rust crates for fast handling of conda packages
 
 ![License][license-badge]
 [![Build Status][build-badge]][build]
