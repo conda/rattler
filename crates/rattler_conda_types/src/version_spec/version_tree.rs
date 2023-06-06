@@ -357,6 +357,12 @@ mod tests {
             parse_version_epoch::<Err>("1!1.0b2.post345.dev456"),
             Ok(("1.0b2.post345.dev456", 1))
         );
+
+        // Epochs must be integers
+        assert!(
+            parse_version_epoch::<Err>("12.23!1").is_err(),
+            "epochs should only be integers"
+        );
     }
 
     #[test]
