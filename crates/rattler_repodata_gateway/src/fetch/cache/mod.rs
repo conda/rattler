@@ -1,8 +1,9 @@
 mod cache_headers;
 
 pub use cache_headers::CacheHeaders;
-use rattler_digest::Blake2b256;
+use rattler_digest::{serde::SerializableHash, Blake2b256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::serde_as;
 use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
 use url::Url;
 
@@ -94,19 +95,15 @@ pub struct JLAPState {
 }
 
 /// Represents the metadata for a JLAP file, which is typically found at the very end
+#[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JLAPFooter {
     /// URL of the `repodata.json` file
     pub url: String,
 
     /// blake2b hash of the latest `repodata.json` file
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "deserialize_blake2_hash",
-        serialize_with = "serialize_blake2_hash"
-    )]
-    pub latest: Option<blake2::digest::Output<Blake2b256>>,
+    #[serde_as(as = "SerializableHash::<rattler_digest::Blake2b256>")]
+    pub latest: blake2::digest::Output<Blake2b256>,
 }
 
 /// Represents a value and when the value was last checked.

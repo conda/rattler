@@ -61,7 +61,7 @@ pub type Sha256Hash = sha2::digest::Output<Sha256>;
 /// A type alias for the output of an MD5 hash.
 pub type Md5Hash = md5::digest::Output<Md5>;
 
-/// A type alias for the output of a blake2b256 hash.
+/// A type for a 32 bit length blake2b digest.
 pub type Blake2b256 = Blake2b<U32>;
 
 /// A type alias for the output of a blake2b256 hash.

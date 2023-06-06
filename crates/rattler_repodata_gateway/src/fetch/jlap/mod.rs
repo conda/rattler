@@ -84,18 +84,20 @@
 
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
-use rattler_digest::{compute_bytes_digest, parse_digest_from_hex, Blake2b256, Blake2bMac256};
+use rattler_digest::{
+    compute_bytes_digest, parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2bMac256,
+};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 use std::path::Path;
 use std::str;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
-use crate::fetch::cache;
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
 
 /// File suffix for JLAP file
@@ -160,25 +162,16 @@ pub enum JLAPError {
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
 /// of the file
+#[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Patch {
     /// Next hash of `repodata.json` file
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "cache::deserialize_blake2_hash",
-        serialize_with = "cache::serialize_blake2_hash"
-    )]
-    pub to: Option<Output<Blake2b256>>,
+    #[serde_as(as = "SerializableHash::<rattler_digest::Blake2b256>")]
+    pub to: Output<Blake2b256>,
 
     /// Previous hash of `repodata.json` file
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "cache::deserialize_blake2_hash",
-        serialize_with = "cache::serialize_blake2_hash"
-    )]
-    pub from: Option<Output<Blake2b256>>,
+    #[serde_as(as = "SerializableHash::<rattler_digest::Blake2b256>")]
+    pub from: Output<Blake2b256>,
 
     /// Patches to apply to current `repodata.json` file
     pub patch: json_patch::Patch, // [] is a valid, empty patch
@@ -294,7 +287,7 @@ impl<'a> JLAP<'a> {
             // TODO: This check might be a little redundant considering we have validated our
             //       checksums by now, but it could be nice to keep here for extra validation.
             //       We could remove it if performance would benefit.
-            if new_hash != self.footer.latest.unwrap_or_default() {
+            if new_hash != self.footer.latest {
                 return Err(JLAPError::HashesNotMatching);
             }
 
@@ -372,7 +365,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 
 /// Finds the index of the of the most applicable patch to use
 fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Option<usize> {
-    patches.iter().position(|patch| patch.from == Some(hash))
+    patches.iter().position(|patch| patch.from == hash)
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
@@ -406,7 +399,7 @@ pub async fn patch_repo_data(
 
     let jlap = JLAP::new(&response_text, &initialization_vector)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
-    let latest_hash = jlap.footer.latest.unwrap_or_default();
+    let latest_hash = jlap.footer.latest;
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
@@ -863,7 +856,7 @@ mod test {
             "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
         );
         assert_eq!(
-            updated_jlap_state.footer.latest.unwrap_or_default(),
+            updated_jlap_state.footer.latest,
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_ONE_HASH).unwrap()
         );
     }
@@ -906,7 +899,7 @@ mod test {
             "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
         );
         assert_eq!(
-            updated_jlap_state.footer.latest.unwrap_or_default(),
+            updated_jlap_state.footer.latest,
             parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
         );
     }
