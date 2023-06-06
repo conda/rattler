@@ -105,8 +105,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let multi_progress = global_multi_progress();
 
     let repodata_cache_path = cache_dir.join("repodata");
-    println!("Downloading repodata for {} channels", channel_urls.len());
-    print!("Cache folder: {}", repodata_cache_path.display());
     let channel_and_platform_len = channel_urls.len();
     let repodata_download_client = download_client.clone();
     let sparse_repo_datas = futures::stream::iter(channel_urls)

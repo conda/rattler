@@ -1,14 +1,18 @@
 //! Fallback storage for passwords.
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
+#[derive(Clone)]
 pub struct FallbackStorage {
     /// The path to the JSON file
     pub path: PathBuf,
 
     /// A mutex to ensure that only one thread accesses the file at a time
-    mutex: Mutex<()>,
+    mutex: Arc<Mutex<()>>,
 }
 
 /// An error that can occur when accessing the fallback storage
@@ -28,7 +32,7 @@ impl FallbackStorage {
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,
-            mutex: Mutex::new(()),
+            mutex: Arc::new(Mutex::new(())),
         }
     }
 

@@ -1,7 +1,7 @@
 //! Storage and access of authentication information
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::Path,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -19,8 +19,8 @@ pub struct AuthenticationStorage {
     /// in a global dictionary in the operating system
     pub store_key: String,
 
-    /// Fallback JSON location
-    pub fallback_json_location: PathBuf,
+    /// Fallback Storage
+    fallback_storage: fallback_storage::FallbackStorage,
 
     /// A cache so that we don't have to access the keyring all the time
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
@@ -32,7 +32,7 @@ impl AuthenticationStorage {
         let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
         AuthenticationStorage {
             store_key: store_key.to_string(),
-            fallback_json_location: fallback_location,
+            fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
             cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -79,11 +79,9 @@ impl AuthenticationStorage {
                     "Error storing credentials for {}: {}, using fallback storage at {}",
                     host,
                     e,
-                    self.fallback_json_location.display()
+                    self.fallback_storage.path.display()
                 );
-                let fallback_storage =
-                    fallback_storage::FallbackStorage::new(self.fallback_json_location.clone());
-                fallback_storage.set_password(host, &password)?;
+                self.fallback_storage.set_password(host, &password)?;
             }
         }
         Ok(())
@@ -111,11 +109,9 @@ impl AuthenticationStorage {
                     "Error retrieving credentials for {}: {}, using fallback storage at {}",
                     host,
                     e,
-                    self.fallback_json_location.display()
+                    self.fallback_storage.path.display()
                 );
-                let fallback_storage =
-                    fallback_storage::FallbackStorage::new(self.fallback_json_location.clone());
-                let fb_pw = fallback_storage.get_password(host)?;
+                let fb_pw = self.fallback_storage.get_password(host)?;
                 if fb_pw.is_none() {
                     return Ok(None);
                 }
@@ -154,9 +150,7 @@ impl AuthenticationStorage {
             }
         }
 
-        let fallback_storage =
-            fallback_storage::FallbackStorage::new(self.fallback_json_location.clone());
-        Ok(fallback_storage.delete_password(host)?)
+        Ok(self.fallback_storage.delete_password(host)?)
     }
 
     /// Retrieve the authentication information for the given URL
