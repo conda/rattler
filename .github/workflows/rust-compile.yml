@@ -14,7 +14,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  TEST_FEATURES: tokio,serde,reqwest,sparse
+  DEFAULT_FEATURES: tokio,serde,reqwest,sparse
 
 jobs:
   check:
@@ -158,7 +158,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+          args: --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} --features ${{ env.DEFAULT_FEATURES }}
 
       - name: Set test options
         id: test-options
@@ -178,4 +178,4 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: test
-          args: --workspace --features ${{ env.TEST_FEATURES }} --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
+          args: --workspace --features ${{ env.DEFAULT_FEATURES }} --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
