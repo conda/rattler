@@ -2,6 +2,7 @@ use super::{ffi, repo::Repo, solvable::SolvableId, solver::Solver};
 use crate::libsolv::c_string;
 use crate::libsolv::wrapper::ffi::Id;
 use rattler_conda_types::MatchSpec;
+use std::ffi::c_char;
 use std::{
     convert::TryInto,
     ffi::{CStr, CString},
@@ -66,7 +67,7 @@ extern "C" fn log_callback(
     _pool: *mut ffi::Pool,
     user_data: *mut c_void,
     flags: i32,
-    str: *const i8,
+    str: *const c_char,
 ) {
     unsafe {
         // We have previously stored a `BoxedLogCallback` in `user_data`, so now we can retrieve it
