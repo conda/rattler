@@ -83,8 +83,10 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::iter::Iterator;
 use std::path::Path;
 use std::str;
+use std::str::FromStr;
 use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
@@ -160,6 +162,14 @@ pub struct Patch {
     pub patch: json_patch::Patch, // [] is a valid, empty patch
 }
 
+impl FromStr for Patch {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
 /// Represents a single JLAP response
 ///
 /// All of the data contained in this struct is everything we can determine from the
@@ -226,8 +236,9 @@ impl<'a> JLAPResponse<'a> {
             };
 
             let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
-            let patches: Result<Vec<Patch>, JLAPError> =
-                patch_lines.map(parse_patch_json).collect();
+            let patches: Result<Vec<Patch>, JLAPError> = patch_lines
+                .map(|x| Patch::from_str(x).map_err(JLAPError::JSONParse))
+                .collect();
 
             match patches {
                 Ok(patches) => {
@@ -260,12 +271,11 @@ impl<'a> JLAPResponse<'a> {
         hash: Output<Blake2b256>,
     ) -> Result<(), JLAPError> {
         // We use the current hash to find which patches we need to apply
-        let current_idx = find_current_patch_index(&self.patches, hash);
+        let current_idx = self.patches.iter().position(|patch| patch.from == hash);
 
         return if let Some(idx) = current_idx {
-            let applicable_patches: Vec<&Patch> =
-                self.patches[idx..self.patches.len()].iter().collect();
-            apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
+            let applicable_patches = self.patches[idx..self.patches.len()].iter();
+            apply_jlap_patches(applicable_patches, repo_data_json_path).await?;
 
             Ok(())
         } else {
@@ -336,15 +346,6 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
     }
 }
 
-/// Finds the index of the of the most applicable patch to use
-fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Option<usize> {
-    patches.iter().position(|patch| patch.from == hash)
-}
-
-fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
-    serde_json::from_str(line).map_err(JLAPError::JSONParse)
-}
-
 /// Attempts to patch a current `repodata.json` file
 ///
 /// This method first makes a request to fetch JLAP data we need. It relies on the information we
@@ -365,10 +366,15 @@ pub async fn patch_repo_data(
     let (position, initialization_vector) =
         get_position_and_initialization_vector(repo_data_state.jlap)?;
 
-    let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
+    let jlap_url = subdir_url
+        .join(JLAP_FILE_NAME)
+        .expect("Valid URLs should always be join-able with this constant value");
 
     let (response, position) = fetch_jlap_with_retry(jlap_url.as_str(), client, position).await?;
-    let response_text = response.text().await.unwrap();
+    let response_text = match response.text().await {
+        Ok(value) => value,
+        Err(error) => return Err(JLAPError::HTTP(error)),
+    };
 
     let jlap = JLAPResponse::new(&response_text, &initialization_vector)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
@@ -388,11 +394,7 @@ pub async fn patch_repo_data(
 }
 
 /// Fetches a JLAP response from server
-pub async fn fetch_jlap(
-    url: &str,
-    client: &Client,
-    range: &str,
-) -> Result<Response, reqwest::Error> {
+async fn fetch_jlap(url: &str, client: &Client, range: &str) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
 
@@ -412,7 +414,7 @@ pub async fn fetch_jlap(
 ///
 /// We return a new value for position if this was triggered so that we can update the
 /// JLAPState accordingly.
-pub async fn fetch_jlap_with_retry(
+async fn fetch_jlap_with_retry(
     url: &str,
     client: &Client,
     position: u64,
@@ -443,10 +445,10 @@ pub async fn fetch_jlap_with_retry(
 /// 1. Opening and parsing the current repodata file
 /// 2. Applying patches to this repodata file
 /// 3. Saving this repodata file to disk
-pub async fn apply_jlap_patches(
-    patches: &Vec<&Patch>,
-    repo_data_path: &Path,
-) -> Result<(), JLAPError> {
+async fn apply_jlap_patches<'a, I>(patches: I, repo_data_path: &Path) -> Result<(), JLAPError>
+where
+    I: Iterator<Item = &'a Patch>,
+{
     // Open and read the current repodata into a JSON doc
     let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
         Ok(contents) => contents,
