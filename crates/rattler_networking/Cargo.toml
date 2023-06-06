@@ -10,6 +10,10 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 
+[features]
+native-tls = ['reqwest/native-tls']
+rustls-tls = ['reqwest/rustls-tls']
+
 [dependencies]
 anyhow = "1.0.71"
 dirs = "5.0.1"
