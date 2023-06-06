@@ -324,4 +324,9 @@ mod tests {
         let vs3 = VersionSpec::from_str(">=1!1.2,<1!2").unwrap();
         assert!(vs3.matches(&v3));
     }
+
+    #[test]
+    fn issue_204() {
+        assert!(VersionSpec::from_str(">=3.8<3.9").is_err());
+    }
 }
