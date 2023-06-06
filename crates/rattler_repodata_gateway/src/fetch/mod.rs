@@ -367,8 +367,8 @@ pub async fn fetch_repo_data(
         {
             Ok(state) => Some(state),
             // TODO: There are a variety of errors that could be thrown. We might want to behave
-            //       differently depending on what they instead of always returning a default
-            //       JLAPState object.
+            //       differently depending on what they instead of always setting jlap_state to
+            //       None.
             Err(_) => None,
         }
     } else {
