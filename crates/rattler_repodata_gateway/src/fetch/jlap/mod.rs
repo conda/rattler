@@ -165,7 +165,7 @@ pub struct Patch {
 /// All of the data contained in this struct is everything we can determine from the
 /// JLAP response itself.
 #[derive(Debug)]
-pub struct JLAP<'a> {
+pub struct JLAPResponse<'a> {
     /// First line of the JLAP response
     initialization_vector: Vec<u8>,
 
@@ -189,11 +189,11 @@ pub struct JLAP<'a> {
     offset: usize,
 }
 
-impl<'a> JLAP<'a> {
+impl<'a> JLAPResponse<'a> {
     /// Parses a JLAP object from Response string.
     ///
     /// To successfully parse the response, it needs to at least be three lines long.
-    /// This would include a `Patch`, `JLAPFooter` and a `checksum`.
+    /// This would include a [`Patch`], [`JLAPFooter`] and a `checksum`.
     ///
     /// On top of the response string, we also pass in a value for `initialization_vector`.
     /// If the response is not partial (i.e. it does not begin with an initialization vector,
@@ -232,7 +232,7 @@ impl<'a> JLAP<'a> {
             match patches {
                 Ok(patches) => {
                     if !patches.is_empty() {
-                        Ok(JLAP {
+                        Ok(JLAPResponse {
                             initialization_vector,
                             patches,
                             footer,
@@ -273,52 +273,49 @@ impl<'a> JLAP<'a> {
         };
     }
 
-    /// Returns a new JLAPState based on values in JLAP object
+    /// Returns a new [`JLAPState`] based on values in [`JLAPResponse`] struct
     ///
     /// We accept `position` as an argument because it is not derived from the JLAP response.
     ///
     /// The `iv` (initialization vector) value is optionally passed in because we may wish
     /// to override what was initially stored there, which would be the value calculated
     /// with `validate_checksum`.
-    pub fn get_state(&self, position: u64, iv: Option<Output<Blake2b256>>) -> JLAPState {
-        let iv = match iv {
+    pub fn get_state(
+        &self,
+        position: u64,
+        initialization_vector: Option<Output<Blake2b256>>,
+    ) -> JLAPState {
+        let initialization_vector = match initialization_vector {
             Some(value) => format!("{:x}", value),
             None => hex::encode(&self.initialization_vector),
         };
         JLAPState {
-            pos: position + self.bytes_offset,
-            iv,
+            position: position + self.bytes_offset,
+            initialization_vector,
             footer: self.footer.clone(),
         }
     }
 
-    /// Validates the checksum present on a JLAP object
+    /// Validates the checksum present on a [`JLAPResponse`] struct
     pub fn validate_checksum(&self) -> Result<Output<Blake2b256>, JLAPError> {
-        let mut iv: Option<Output<Blake2b256>> = None;
+        let mut initialization_vector: Option<Output<Blake2b256>> = None;
         let mut iv_values: Vec<Output<Blake2bMac256>> = vec![];
         let end = self.lines.len() - JLAP_FOOTER_OFFSET;
 
         for line in &self.lines[self.offset..end] {
-            match iv {
-                Some(value) => {
-                    iv = Some(blake2b_256_hash_with_key(line.as_bytes(), &value));
-                }
-                None => {
-                    iv = Some(blake2b_256_hash_with_key(
-                        line.as_bytes(),
-                        &self.initialization_vector,
-                    ));
-                }
-            }
-            iv_values.push(iv.unwrap());
+            initialization_vector = Some(blake2b_256_hash_with_key(
+                line.as_bytes(),
+                initialization_vector
+                    .as_deref()
+                    .unwrap_or(&self.initialization_vector),
+            ));
+            iv_values.push(initialization_vector.unwrap());
         }
 
-        if !iv_values.is_empty() {
-            let new_iv = iv_values[iv_values.len() - 1];
+        if let Some(new_iv) = iv_values.pop() {
             if new_iv != self.checksum {
                 return Err(JLAPError::ChecksumMismatch);
             }
-
             Ok(new_iv)
         } else {
             Err(JLAPError::NoPatchesFound)
@@ -357,7 +354,7 @@ fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
 /// At the end, we compare the new `blake2b` hash with what was listed in the JLAP metadata to
 /// ensure the file is correct.
 ///
-/// The return value is the updated `JLAPState`
+/// The return value is the updated [`JLAPState`]
 pub async fn patch_repo_data(
     client: &Client,
     subdir_url: Url,
@@ -373,7 +370,7 @@ pub async fn patch_repo_data(
     let (response, position) = fetch_jlap_with_retry(jlap_url.as_str(), client, position).await?;
     let response_text = response.text().await.unwrap();
 
-    let jlap = JLAP::new(&response_text, &initialization_vector)?;
+    let jlap = JLAPResponse::new(&response_text, &initialization_vector)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
     let latest_hash = jlap.footer.latest;
 
@@ -493,11 +490,11 @@ fn get_position_and_initialization_vector(
 ) -> Result<(u64, Vec<u8>), JLAPError> {
     match state {
         Some(state) => {
-            let initialization_vector = match hex::decode(state.iv) {
+            let initialization_vector = match hex::decode(state.initialization_vector) {
                 Ok(value) => value,
                 Err(_) => return Err(JLAPError::HexParse),
             };
-            Ok((state.pos, initialization_vector))
+            Ok((state.position, initialization_vector))
         }
         None => Ok((
             JLAP_START_POSITION,
@@ -817,9 +814,9 @@ mod test {
         assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_ONE);
 
         // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.pos, 738);
+        assert_eq!(updated_jlap_state.position, 738);
         assert_eq!(
-            updated_jlap_state.iv,
+            updated_jlap_state.initialization_vector,
             "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
         );
         assert_eq!(
@@ -860,9 +857,9 @@ mod test {
         assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
 
         // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.pos, 1341);
+        assert_eq!(updated_jlap_state.position, 1341);
         assert_eq!(
-            updated_jlap_state.iv,
+            updated_jlap_state.initialization_vector,
             "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
         );
         assert_eq!(

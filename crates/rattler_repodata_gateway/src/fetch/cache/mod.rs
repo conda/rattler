@@ -85,10 +85,12 @@ impl FromStr for RepoDataState {
 pub struct JLAPState {
     /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
     /// JLAP file.
-    pub iv: String,
+    #[serde(rename = "iv")]
+    pub initialization_vector: String,
 
     /// Current position to use for the bytes offset in the range request for JLAP
-    pub pos: u64,
+    #[serde(rename = "pos")]
+    pub position: u64,
 
     /// Footer contains metadata about the JLAP file such as which url it is for
     pub footer: JLAPFooter,
@@ -98,7 +100,8 @@ pub struct JLAPState {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JLAPFooter {
-    /// URL of the `repodata.json` file
+    /// This is not actually a full URL, just the last part of it (i.e. the filename
+    /// `repodata.json`). That's why we store it as a [`String`]
     pub url: String,
 
     /// blake2b hash of the latest `repodata.json` file
@@ -148,7 +151,7 @@ fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S:
         .serialize(s)
 }
 
-pub fn deserialize_blake2_hash<'de, D>(
+fn deserialize_blake2_hash<'de, D>(
     deserializer: D,
 ) -> Result<Option<blake2::digest::Output<Blake2b256>>, D::Error>
 where
@@ -164,7 +167,7 @@ where
     }
 }
 
-pub fn serialize_blake2_hash<S: Serializer>(
+fn serialize_blake2_hash<S: Serializer>(
     time: &Option<blake2::digest::Output<Blake2b256>>,
     s: S,
 ) -> Result<S::Ok, S::Error> {
