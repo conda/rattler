@@ -22,8 +22,7 @@
 //! use reqwest::Client;
 //! use url::Url;
 //!
-//! use rattler_digest::{compute_bytes_digest, Blake2b256};
-//! use rattler_repodata_gateway::fetch::jlap::{patch_repo_data, JLAPState, RepoDataState};
+//! use rattler_repodata_gateway::fetch::jlap::{patch_repo_data, RepoDataState};
 //!
 //! #[tokio::main]
 //! pub async fn main() {
@@ -74,19 +73,10 @@
 //! }
 //! ```
 //!
-//! ## TODO
-//!
-//! The following items still need to be implemented before this module should be considered
-//! complete:
-//!  - Our tests do not exhaustively cover our error states. Some of these are pretty easy to
-//!    trigger (e.g. invalid JLAP file or invalid JSON within), so we should definitely make
-//!    tests for them.
 
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
-use rattler_digest::{
-    compute_bytes_digest, parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2bMac256,
-};
+use rattler_digest::{parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2bMac256};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -95,7 +85,6 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::path::Path;
 use std::str;
-use tokio::io::AsyncWriteExt;
 use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
@@ -143,12 +132,6 @@ pub enum JLAPError {
     /// This also means we need to reset the `position` in our JLAPState to zero so we can
     /// begin our search from the beginning next time.
     NoHashFound,
-
-    #[error("Hash from the JLAP metadata and hash from updated repodata file do not match")]
-    /// Error when we have mismatched hash values after updating our `repodata.json` file
-    /// At this point, we should consider the `repodata.json` file corrupted and fetch a new
-    /// version from the server.
-    HashesNotMatching,
 
     #[error("A mismatch occurred when validating the checksum on the JLAP response")]
     /// Error returned when we are unable to validate the checksum on the JLAP response.
@@ -282,14 +265,7 @@ impl<'a> JLAP<'a> {
         return if let Some(idx) = current_idx {
             let applicable_patches: Vec<&Patch> =
                 self.patches[idx..self.patches.len()].iter().collect();
-            let new_hash = apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
-
-            // TODO: This check might be a little redundant considering we have validated our
-            //       checksums by now, but it could be nice to keep here for extra validation.
-            //       We could remove it if performance would benefit.
-            if new_hash != self.footer.latest {
-                return Err(JLAPError::HashesNotMatching);
-            }
+            apply_jlap_patches(&applicable_patches, repo_data_json_path).await?;
 
             Ok(())
         } else {
@@ -470,13 +446,10 @@ pub async fn fetch_jlap_with_retry(
 /// 1. Opening and parsing the current repodata file
 /// 2. Applying patches to this repodata file
 /// 3. Saving this repodata file to disk
-/// 4. Generating a new `blake2b` hash
-///
-/// The return value is the `blake2b` hash we used to verify the updated file's contents.
 pub async fn apply_jlap_patches(
     patches: &Vec<&Patch>,
     repo_data_path: &Path,
-) -> Result<Output<Blake2b256>, JLAPError> {
+) -> Result<(), JLAPError> {
     // Open and read the current repodata into a JSON doc
     let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
         Ok(contents) => contents,
@@ -495,23 +468,17 @@ pub async fn apply_jlap_patches(
         }
     }
 
-    // Save the updated repodata JSON doc
-    let mut updated_file = match tokio::fs::File::create(repo_data_path).await {
-        Ok(file) => file,
-        Err(error) => return Err(JLAPError::FileSystem(error)),
-    };
-
     let mut updated_json = match serde_json::to_string_pretty(&doc) {
         Ok(value) => value,
         Err(error) => return Err(JLAPError::JSONParse(error)),
     };
 
-    // We need to add an extra newline character to the end of our string so the hashes match 🤷‍
+    // We need to add an extra newline character to the end of our string so the hashes match
     updated_json.insert(updated_json.len(), '\n');
     let content = updated_json.into_bytes();
 
-    match updated_file.write_all(&content).await {
-        Ok(_) => Ok(compute_bytes_digest::<Blake2b256>(content)),
+    match tokio::fs::write(repo_data_path, &content).await {
+        Ok(_) => Ok(()),
         Err(error) => Err(JLAPError::FileSystem(error)),
     }
 }
