@@ -1,6 +1,5 @@
 //! This module provides functionality to download and cache `repodata.json` from a remote location.
 
-use crate::fetch::jlap::JLAPState;
 use crate::utils::{AsyncEncoding, Encoding, LockedFile};
 use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
@@ -356,9 +355,6 @@ pub async fn fetch_repo_data(
     let has_bz2 = variant_availability.has_bz2();
     let has_jlap = variant_availability.has_jlap();
 
-    // TODO: We still need to somehow inspect this state and then decide what to do next.
-    //       If everything was successful, we're ready to return at this point and update
-    //       our .state.json file.
     let jlap_state = if has_jlap {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
@@ -369,14 +365,14 @@ pub async fn fetch_repo_data(
         )
         .await
         {
-            Ok(state) => state,
+            Ok(state) => Some(state),
             // TODO: There are a variety of errors that could be thrown. We might want to behave
             //       differently depending on what they instead of always returning a default
             //       JLAPState object.
-            Err(_) => JLAPState::default(),
+            Err(_) => None,
         }
     } else {
-        JLAPState::default()
+        None
     };
 
     // Determine which variant to download
@@ -433,7 +429,7 @@ pub async fn fetch_repo_data(
             has_zst: variant_availability.has_zst,
             has_bz2: variant_availability.has_bz2,
             has_jlap: variant_availability.has_jlap,
-            jlap: Some(jlap_state),
+            jlap: jlap_state,
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
@@ -498,7 +494,7 @@ pub async fn fetch_repo_data(
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         has_jlap: variant_availability.has_jlap,
-        jlap: Some(jlap_state),
+        jlap: jlap_state,
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {

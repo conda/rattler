@@ -80,7 +80,7 @@ impl FromStr for RepoDataState {
 }
 
 /// Used inside of the `RepoDataState` to store information related to our JLAP state
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JLAPState {
     /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
     /// JLAP file.
@@ -94,10 +94,10 @@ pub struct JLAPState {
 }
 
 /// Represents the metadata for a JLAP file, which is typically found at the very end
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JLAPFooter {
     /// URL of the `repodata.json` file
-    pub url: Option<String>,
+    pub url: String,
 
     /// blake2b hash of the latest `repodata.json` file
     #[serde(

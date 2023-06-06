@@ -78,7 +78,6 @@
 //!
 //! The following items still need to be implemented before this module should be considered
 //! complete:
-//!  - Use the checksum to validate our JLAP file after we update it
 //!  - Our tests do not exhaustively cover our error states. Some of these are pretty easy to
 //!    trigger (e.g. invalid JLAP file or invalid JSON within), so we should definitely make
 //!    tests for them.
@@ -107,6 +106,12 @@ pub const JLAP_FILE_NAME: &str = "repodata.jlap";
 
 /// File suffix for JLAP files
 pub const JLAP_FOOTER_OFFSET: usize = 2;
+
+/// Default position for JLAP requests
+pub const JLAP_START_POSITION: u64 = 0;
+
+/// Default initialization vector for JLAP requests
+pub const JLAP_START_INITIALIZATION_VECTOR: &[u8] = &[0; 32];
 
 /// Represents the variety of errors that we come across while processing JLAP files
 #[derive(Debug, thiserror::Error)]
@@ -186,7 +191,7 @@ pub struct Patch {
 #[derive(Debug)]
 pub struct JLAP<'a> {
     /// First line of the JLAP response
-    initialization_vector: String,
+    initialization_vector: Vec<u8>,
 
     /// List of patches parsed from the JLAP Response
     patches: Vec<Patch>,
@@ -217,7 +222,7 @@ impl<'a> JLAP<'a> {
     /// On top of the response string, we also pass in a value for `initialization_vector`.
     /// If the response is not partial (i.e. it does not begin with an initialization vector,
     /// then this is the value we use. This is an important value for validating the checksum.
-    pub fn parse(response: &'a str, initialization_vector: &str) -> Result<Self, JLAPError> {
+    pub fn new(response: &'a str, initialization_vector: &[u8]) -> Result<Self, JLAPError> {
         let lines: Vec<&str> = response.split('\n').collect();
         let length = lines.len();
 
@@ -229,9 +234,9 @@ impl<'a> JLAP<'a> {
             let initialization_vector = match hex::decode(lines[0]) {
                 Ok(value) => {
                     offset = 1;
-                    hex::encode(value)
+                    value
                 }
-                Err(_) => initialization_vector.to_string(),
+                Err(_) => initialization_vector.to_vec(),
             };
 
             let footer = lines[length - 2];
@@ -309,7 +314,7 @@ impl<'a> JLAP<'a> {
     pub fn get_state(&self, position: u64, iv: Option<Output<Blake2b256>>) -> JLAPState {
         let iv = match iv {
             Some(value) => format!("{:x}", value),
-            None => self.initialization_vector.clone(),
+            None => hex::encode(&self.initialization_vector),
         };
         JLAPState {
             pos: position + self.bytes_offset,
@@ -320,10 +325,6 @@ impl<'a> JLAP<'a> {
 
     /// Validates the checksum present on a JLAP object
     pub fn validate_checksum(&self) -> Result<Output<Blake2b256>, JLAPError> {
-        let start_iv = match hex::decode(self.initialization_vector.clone()) {
-            Ok(value) => value,
-            Err(_) => return Err(JLAPError::HexParse),
-        };
         let mut iv: Option<Output<Blake2b256>> = None;
         let mut iv_values: Vec<Output<Blake2bMac256>> = vec![];
         let end = self.lines.len() - JLAP_FOOTER_OFFSET;
@@ -334,7 +335,10 @@ impl<'a> JLAP<'a> {
                     iv = Some(blake2b_256_hash_with_key(line.as_bytes(), &value));
                 }
                 None => {
-                    iv = Some(blake2b_256_hash_with_key(line.as_bytes(), &start_iv));
+                    iv = Some(blake2b_256_hash_with_key(
+                        line.as_bytes(),
+                        &self.initialization_vector,
+                    ));
                 }
             }
             iv_values.push(iv.unwrap());
@@ -368,13 +372,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 
 /// Finds the index of the of the most applicable patch to use
 fn find_current_patch_index(patches: &[Patch], hash: Output<Blake2b256>) -> Option<usize> {
-    for (idx, patch) in patches.iter().enumerate() {
-        if hash == patch.from.unwrap_or_default() {
-            return Some(idx);
-        }
-    }
-
-    None
+    patches.iter().position(|patch| patch.from == Some(hash))
 }
 
 fn parse_patch_json(line: &&str) -> Result<Patch, JLAPError> {
@@ -397,14 +395,16 @@ pub async fn patch_repo_data(
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
 ) -> Result<JLAPState, JLAPError> {
-    let jlap_state = repo_data_state.jlap.unwrap_or_default();
+    // Determine the starting `position` and `initialization_vector`
+    let (position, initialization_vector) =
+        get_position_and_initialization_vector(repo_data_state.jlap)?;
+
     let jlap_url = subdir_url.join(JLAP_FILE_NAME).unwrap();
 
-    let (response, position) =
-        fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.pos).await?;
+    let (response, position) = fetch_jlap_with_retry(jlap_url.as_str(), client, position).await?;
     let response_text = response.text().await.unwrap();
 
-    let jlap = JLAP::parse(&response_text, &jlap_state.iv)?;
+    let jlap = JLAP::new(&response_text, &initialization_vector)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
     let latest_hash = jlap.footer.latest.unwrap_or_default();
 
@@ -520,6 +520,29 @@ pub async fn apply_jlap_patches(
     match updated_file.write_all(&content).await {
         Ok(_) => Ok(compute_bytes_digest::<Blake2b256>(content)),
         Err(error) => Err(JLAPError::FileSystem(error)),
+    }
+}
+
+/// Retrieves the correct values for `position` and `initialization_vector` from a JLAPState object
+///
+/// If we cannot find the correct values, we provide defaults from this module.
+/// When we can correctly parse a hex string (the `initialization_vector` should always be a
+/// hex string), we return an error.
+fn get_position_and_initialization_vector(
+    state: Option<JLAPState>,
+) -> Result<(u64, Vec<u8>), JLAPError> {
+    match state {
+        Some(state) => {
+            let initialization_vector = match hex::decode(state.iv) {
+                Ok(value) => value,
+                Err(_) => return Err(JLAPError::HexParse),
+            };
+            Ok((state.pos, initialization_vector))
+        }
+        None => Ok((
+            JLAP_START_POSITION,
+            JLAP_START_INITIALIZATION_VECTOR.to_vec(),
+        )),
     }
 }
 
