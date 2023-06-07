@@ -11,33 +11,33 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-chrono = "0.4.24"
+chrono = "0.4.26"
 fxhash = "0.2.1"
 hex = "0.4.3"
-itertools = "0.10.3"
-lazy-regex = "2.3.1"
-nom = "7.1.0"
-regex = "1.7.0"
-serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.91"
+itertools = "0.10.5"
+lazy-regex = "2.5.0"
+nom = "7.1.3"
+regex = "1.8.4"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = "1.0.96"
 serde-json-python-formatter = "0.1.0"
-serde_yaml = "0.9.17"
-serde_with = "2.0.0"
+serde_yaml = "0.9.21"
+serde_with = "3.0.0"
 serde_repr = "0.1"
 smallvec = { version = "1.10.0", features = ["serde", "const_new", "const_generics", "union"] }
 strum = { version = "0.24.1", features = ["derive"] }
-thiserror = "1.0.37"
-tracing = "0.1.29"
-url = { version = "2.2.2", features = ["serde"] }
+thiserror = "1.0.40"
+tracing = "0.1.37"
+url = { version = "2.4.0", features = ["serde"] }
 rattler_digest = { version = "0.2.0", path = "../rattler_digest", features = ["serde"] }
 rattler_macros = { version = "0.2.0", path = "../rattler_macros" }
 glob = "0.3.1"
 
 [dev-dependencies]
-rand = "0.8.4"
-insta = { version = "1.16.0", features = ["yaml", "redactions"] }
+rand = "0.8.5"
+insta = { version = "1.29.0", features = ["yaml", "redactions"] }
 rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features=["rustls-tls"] }
-tempfile = "3.3.0"
+tempfile = "3.6.0"
 rstest = "0.17.0"
 assert_matches = "1.5.0"
-hex-literal = "0.4.0"
+hex-literal = "0.4.1"
