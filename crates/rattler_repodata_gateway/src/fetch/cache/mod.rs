@@ -85,8 +85,8 @@ impl FromStr for RepoDataState {
 pub struct JLAPState {
     /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
     /// JLAP file.
-    #[serde(rename = "iv")]
-    pub initialization_vector: String,
+    #[serde(rename = "iv", with = "hex")]
+    pub initialization_vector: Vec<u8>,
 
     /// Current position to use for the bytes offset in the range request for JLAP
     #[serde(rename = "pos")]

@@ -39,7 +39,7 @@ serde_with = "2.0.0"
 superslice = { version = "1.0.0", optional = true }
 itertools = { version = "0.10.5", optional = true }
 json-patch = "1.0.0"
-hex = "0.4.3"
+hex = { version = "0.4.3", features = ["serde"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

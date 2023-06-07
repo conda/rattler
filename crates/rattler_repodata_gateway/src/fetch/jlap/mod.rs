@@ -139,10 +139,6 @@ pub enum JLAPError {
     /// Error returned when we are unable to validate the checksum on the JLAP response.
     /// The checksum is the last line of the response.
     ChecksumMismatch,
-
-    #[error("Unable to parse hex values in hash; cache is corrupted")]
-    /// Error that occurs when we are unable to parse a hex values in the cache file.
-    HexParse,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -287,7 +283,7 @@ impl<'a> JLAPResponse<'a> {
     ///
     /// We accept `position` as an argument because it is not derived from the JLAP response.
     ///
-    /// The `iv` (initialization vector) value is optionally passed in because we may wish
+    /// The `initialization_vector` value is optionally passed in because we may wish
     /// to override what was initially stored there, which would be the value calculated
     /// with `validate_checksum`.
     pub fn get_state(
@@ -296,8 +292,8 @@ impl<'a> JLAPResponse<'a> {
         initialization_vector: Option<Output<Blake2b256>>,
     ) -> JLAPState {
         let initialization_vector = match initialization_vector {
-            Some(value) => format!("{:x}", value),
-            None => hex::encode(&self.initialization_vector),
+            Some(value) => value.to_vec(),
+            None => self.initialization_vector.clone(),
         };
         JLAPState {
             position: position + self.bytes_offset,
@@ -491,13 +487,7 @@ fn get_position_and_initialization_vector(
     state: Option<JLAPState>,
 ) -> Result<(u64, Vec<u8>), JLAPError> {
     match state {
-        Some(state) => {
-            let initialization_vector = match hex::decode(state.initialization_vector) {
-                Ok(value) => value,
-                Err(_) => return Err(JLAPError::HexParse),
-            };
-            Ok((state.position, initialization_vector))
-        }
+        Some(state) => Ok((state.position, state.initialization_vector)),
         None => Ok((
             JLAP_START_POSITION,
             JLAP_START_INITIALIZATION_VECTOR.to_vec(),
@@ -818,7 +808,7 @@ mod test {
         // Ensure the the updated JLAP state matches what it should
         assert_eq!(updated_jlap_state.position, 738);
         assert_eq!(
-            updated_jlap_state.initialization_vector,
+            hex::encode(updated_jlap_state.initialization_vector),
             "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
         );
         assert_eq!(
@@ -861,7 +851,7 @@ mod test {
         // Ensure the the updated JLAP state matches what it should
         assert_eq!(updated_jlap_state.position, 1341);
         assert_eq!(
-            updated_jlap_state.initialization_vector,
+            hex::encode(updated_jlap_state.initialization_vector),
             "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
         );
         assert_eq!(
