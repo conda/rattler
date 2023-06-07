@@ -355,6 +355,8 @@ pub async fn fetch_repo_data(
     let has_bz2 = variant_availability.has_bz2();
     let has_jlap = variant_availability.has_jlap();
 
+    // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
+    // a normal request.
     let jlap_state = if has_jlap {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
@@ -365,10 +367,23 @@ pub async fn fetch_repo_data(
         )
         .await
         {
-            Ok(state) => Some(state),
-            // TODO: There are a variety of errors that could be thrown. We might want to behave
-            //       differently depending on what they instead of always setting jlap_state to
-            //       None.
+            Ok(state) => {
+                tracing::debug!("fetched JLAP patches successfully");
+                let cache_state = RepoDataState {
+                    has_zst: variant_availability.has_zst,
+                    has_bz2: variant_availability.has_bz2,
+                    has_jlap: variant_availability.has_jlap,
+                    jlap: Some(state),
+                    .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+                };
+
+                return Ok(CachedRepoData {
+                    lock_file,
+                    repo_data_json_path,
+                    cache_state,
+                    cache_result: CacheResult::CacheOutdated,
+                });
+            }
             Err(_) => None,
         }
     } else {
