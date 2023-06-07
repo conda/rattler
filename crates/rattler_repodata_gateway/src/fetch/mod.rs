@@ -862,7 +862,7 @@ fn validate_cached_state(
     //
     // Check the blake hash of the repodata.json file if we have a similar hash in the state.
     if let Some(cached_hash) = cache_state.blake2_hash.as_ref() {
-        match compute_file_digest::<blake2::Blake2s256>(&repo_data_json_path) {
+        match compute_file_digest::<Blake2b256>(&repo_data_json_path) {
             Err(e) => {
                 tracing::warn!(
                     "could not compute BLAKE2 hash of repodata.json file: {e}. Ignoring cached files..."
@@ -872,8 +872,8 @@ fn validate_cached_state(
             Ok(hash) => {
                 if &hash != cached_hash {
                     tracing::warn!(
-                    "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
-                );
+                        "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
+                    );
                     return ValidatedCacheState::Mismatched(cache_state);
                 }
             }
