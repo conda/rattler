@@ -286,18 +286,10 @@ impl<'a> JLAPResponse<'a> {
     /// The `initialization_vector` value is optionally passed in because we may wish
     /// to override what was initially stored there, which would be the value calculated
     /// with `validate_checksum`.
-    pub fn get_state(
-        &self,
-        position: u64,
-        initialization_vector: Option<Output<Blake2b256>>,
-    ) -> JLAPState {
-        let initialization_vector = match initialization_vector {
-            Some(value) => value.to_vec(),
-            None => self.initialization_vector.clone(),
-        };
+    pub fn get_state(&self, position: u64, initialization_vector: Output<Blake2b256>) -> JLAPState {
         JLAPState {
             position: position + self.bytes_offset,
-            initialization_vector,
+            initialization_vector: initialization_vector.to_vec(),
             footer: self.footer.clone(),
         }
     }
@@ -375,18 +367,17 @@ pub async fn patch_repo_data(
     let jlap = JLAPResponse::new(&response_text, &initialization_vector)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
     let latest_hash = jlap.footer.latest;
+    let new_iv = jlap.validate_checksum()?;
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
-        return Ok(jlap.get_state(position, None));
+        return Ok(jlap.get_state(position, new_iv));
     }
-
-    let new_iv = jlap.validate_checksum()?;
 
     // Applies patches and returns early if an error is encountered
     jlap.apply(repo_data_json_path, hash).await?;
 
-    Ok(jlap.get_state(position, Some(new_iv)))
+    Ok(jlap.get_state(position, new_iv))
 }
 
 /// Fetches a JLAP response from server
