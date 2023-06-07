@@ -12,13 +12,13 @@ readme.workspace = true
 
 [dependencies]
 enum_dispatch = "0.3.11"
-indexmap = "1.9.2"
+indexmap = "1.9.3"
 itertools = "0.10.5"
 rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
-serde_json = { version = "1.0.93", features = ["preserve_order"]}
-thiserror = "1.0.30"
-tracing = "0.1.29"
+serde_json = { version = "1.0.96", features = ["preserve_order"]}
+thiserror = "1.0.40"
+tracing = "0.1.37"
 
 [dev-dependencies]
 tempdir = "0.3.7"
-insta = "1.28.0"
+insta = "1.29.0"
