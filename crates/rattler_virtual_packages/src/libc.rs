@@ -2,7 +2,6 @@
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
-use std::process::Command;
 
 /// Returns the LibC version and family of the current platform.
 ///
@@ -36,7 +35,7 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
     // Run `ldd --version` to detect the libc version and family on the system. `ldd` is shipped
     // with libc so if an error occured during its execution we can assume no libc is available on
     // the system.
-    let output = match Command::new("ldd").arg("--version").output() {
+    let output = match std::process::Command::new("ldd").arg("--version").output() {
         Err(e) => {
             tracing::info!(
                 "failed to execute `ldd --version`: {e}. Assuming libc is not available."
