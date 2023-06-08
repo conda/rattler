@@ -357,7 +357,7 @@ pub async fn fetch_repo_data(
 
     // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
     // a normal request.
-    let jlap_state = if has_jlap {
+    let jlap_state = if has_jlap && cache_state.is_some() {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
             &client,
@@ -370,12 +370,21 @@ pub async fn fetch_repo_data(
             Ok(state) => {
                 tracing::debug!("fetched JLAP patches successfully");
                 let cache_state = RepoDataState {
+                    blake2_hash: Some(state.footer.latest),
                     has_zst: variant_availability.has_zst,
                     has_bz2: variant_availability.has_bz2,
                     has_jlap: variant_availability.has_jlap,
                     jlap: Some(state),
                     .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
                 };
+
+                let cache_state = tokio::task::spawn_blocking(move || {
+                    cache_state
+                        .to_path(&cache_state_path)
+                        .map(|_| cache_state)
+                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
+                })
+                .await??;
 
                 return Ok(CachedRepoData {
                     lock_file,
@@ -384,7 +393,10 @@ pub async fn fetch_repo_data(
                     cache_result: CacheResult::CacheOutdated,
                 });
             }
-            Err(_) => None,
+            Err(error) => {
+                tracing::warn!("Error during JLAP request {:?}", error);
+                None
+            }
         }
     } else {
         None

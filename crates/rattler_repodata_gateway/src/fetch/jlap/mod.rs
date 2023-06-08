@@ -222,6 +222,7 @@ impl<'a> JLAPResponse<'a> {
             };
 
             let footer = lines[length - 2];
+            // TODO: this needs to error if we're unable to parse this line
             let checksum =
                 parse_digest_from_hex::<Blake2b256>(lines[length - 1]).unwrap_or_default();
             let bytes_offset = get_bytes_offset(&lines);
@@ -298,7 +299,7 @@ impl<'a> JLAPResponse<'a> {
     pub fn validate_checksum(&self) -> Result<Output<Blake2b256>, JLAPError> {
         let mut initialization_vector: Option<Output<Blake2b256>> = None;
         let mut iv_values: Vec<Output<Blake2bMac256>> = vec![];
-        let end = self.lines.len() - JLAP_FOOTER_OFFSET;
+        let end = self.lines.len() - 1;
 
         for line in &self.lines[self.offset..end] {
             initialization_vector = Some(blake2b_256_hash_with_key(
@@ -312,6 +313,7 @@ impl<'a> JLAPResponse<'a> {
 
         if let Some(new_iv) = iv_values.pop() {
             if new_iv != self.checksum {
+                tracing::debug!("Checksum mismatch: {:x} != {:x}", new_iv, self.checksum);
                 return Err(JLAPError::ChecksumMismatch);
             }
             Ok(new_iv)
@@ -708,13 +710,13 @@ mod test {
     const FAKE_JLAP_DATA_INITIAL: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
 {"url": "repodata.json", "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"}
-5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"#;
+5cf5bb373f361fe30d41891399d148f9c9dd0cc5f381e64f8fa3e7febd7269f0"#;
 
     const FAKE_JLAP_DATA_UPDATE_ONE: &str = r#"0000000000000000000000000000000000000000000000000000000000000000
 {"to": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "from": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6", "patch": [{"op": "add", "path": "/packages.conda/zstd-1.5.5-hc035e20_0.conda", "value": {"build": "hc035e20_0","build_number": 0,"depends": ["libcxx >=14.0.6","lz4-c >=1.9.4,<1.10.0a0","xz >=5.2.10,<6.0a0","zlib >=1.2.13,<1.3.0a0"],"license": "BSD-3-Clause AND GPL-2.0-or-later","license_family": "BSD","md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c","name": "zstd","sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038","size": 622467,"subdir": "osx-64","timestamp": 1681304595869, "version": "1.5.5"}}]}
 {"to": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9", "from": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9", "patch": [{"op": "add", "path": "/packages.conda/zstd-static-1.4.5-hb1e8313_0.conda", "value": {"build": "hb1e8313_0", "build_number": 0, "depends": ["libcxx >=10.0.0", "zstd 1.4.5 h41d2c2f_0"], "license": "BSD 3-Clause", "md5": "5447986040e0b73d6c681a4d8f615d6c", "name": "zstd-static", "sha256": "3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658", "size": 13930, "subdir": "osx-64", "timestamp": 1595965109852, "version": "1.4.5"}}]}
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
-7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"#;
+5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d"#;
 
     /// Writes the desired files to the "server" environment
     async fn setup_server_environment(
@@ -800,7 +802,7 @@ mod test {
         assert_eq!(updated_jlap_state.position, 738);
         assert_eq!(
             hex::encode(updated_jlap_state.initialization_vector),
-            "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
+            "5cf5bb373f361fe30d41891399d148f9c9dd0cc5f381e64f8fa3e7febd7269f0"
         );
         assert_eq!(
             updated_jlap_state.footer.latest,
@@ -843,7 +845,7 @@ mod test {
         assert_eq!(updated_jlap_state.position, 1341);
         assert_eq!(
             hex::encode(updated_jlap_state.initialization_vector),
-            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
+            "5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d"
         );
         assert_eq!(
             updated_jlap_state.footer.latest,
