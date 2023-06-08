@@ -11,11 +11,12 @@
 //!
 //! ## Example
 //!
-//! The recommended way to use this module is by using the JLAPManager struct. This struct is meant
-//! to act as a kind of "facade" object which orchestrates the underlying operations necessary
-//! to fetch JLAP data used to update our current `repodata.json` file.
+//! The recommended way to use this module is by using the [`patch_repo_data`] function. This
+//! function first makes a request to fetch any new JLAP patches, validates the request to make
+//! sure we are applying the correct patches and then actually applies the patches to the provided
+//! `repodata.json` cache file.
 //!
-//! Below is an example of how to initialize the struct and patch an existing `repodata.json` file:
+//! Below is an example of how to call this function:
 //!
 //! ```no_run
 //! use std::{path::Path};
@@ -52,8 +53,8 @@
 //!          "last_checked": "2023-05-21T12:14:21.903512Z"
 //!        },
 //!        "jlap": {
-//!          "iv": "0000000000000000000000000000000000000000000000000000000000000000",
-//!          "pos": 0,
+//!          "iv": "5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d",
+//!          "pos": 922035,
 //!          "footer": {
 //!            "url": "repodata.json",
 //!            "latest": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6"
@@ -139,6 +140,11 @@ pub enum JLAPError {
     /// Error returned when we are unable to validate the checksum on the JLAP response.
     /// The checksum is the last line of the response.
     ChecksumMismatch,
+
+    #[error("An error occurred while parsing the checksum on the JLAP response")]
+    /// Error returned when parsing the checksum at the very end of the JLAP response occurs
+    /// This should be seldom and might indicate an error on the server.
+    ChecksumParse,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -222,9 +228,13 @@ impl<'a> JLAPResponse<'a> {
             };
 
             let footer = lines[length - 2];
-            // TODO: this needs to error if we're unable to parse this line
-            let checksum =
-                parse_digest_from_hex::<Blake2b256>(lines[length - 1]).unwrap_or_default();
+
+            // If we can't properly parse the checksum, we can't continue
+            let checksum = match parse_digest_from_hex::<Blake2b256>(lines[length - 1]) {
+                Some(value) => value,
+                None => return Err(JLAPError::ChecksumParse),
+            };
+
             let bytes_offset = get_bytes_offset(&lines);
 
             let footer: JLAPFooter = match serde_json::from_str(footer) {
