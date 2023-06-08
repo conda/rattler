@@ -74,8 +74,8 @@ impl SolverBackend for LibsolvBackend {
         let pool = Pool::default();
 
         // Setup proper logging for the pool
-        pool.set_debug_callback(|msg, flags| {
-            tracing::event!(tracing::Level::DEBUG, flags, "{}", msg);
+        pool.set_debug_callback(|msg, _flags| {
+            tracing::event!(tracing::Level::DEBUG, "{}", msg.trim_end());
         });
         pool.set_debug_level(Verbosity::Low);
 
