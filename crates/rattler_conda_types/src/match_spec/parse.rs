@@ -42,8 +42,8 @@ pub enum ParseMatchSpecError {
     #[error("multiple bracket sections not allowed")]
     MultipleBracketSectionsNotAllowed,
 
-    #[error("invalid version and build")]
-    InvalidVersionAndBuild,
+    #[error("Unable to parse version spec: {0}")]
+    InvalidVersionAndBuild(String),
 
     #[error("invalid version spec: {0}")]
     InvalidVersionSpec(#[from] ParseVersionSpecError),
@@ -252,7 +252,9 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
                 },
             ))
         }
-        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild),
+        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+            input.to_string(),
+        )),
     }
 }
 
