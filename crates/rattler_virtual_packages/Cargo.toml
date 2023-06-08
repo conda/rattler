@@ -22,3 +22,6 @@ serde = { version = "1.0.163", features = ["derive"] }
 
 [target.'cfg(target_os="macos")'.dependencies]
 plist = "1"
+
+[target.'cfg(unix)'.dependencies]
+regex = "1.8.2"
