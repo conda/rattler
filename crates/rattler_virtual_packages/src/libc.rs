@@ -2,7 +2,7 @@
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
-use std::ffi::{FromVecWithNulError, IntoStringError};
+use std::process::Command;
 
 /// Returns the LibC version and family of the current platform.
 ///
@@ -15,19 +15,6 @@ pub fn libc_family_and_version() -> Result<Option<(String, Version)>, DetectLibC
         .cloned()
 }
 
-#[cfg(unix)]
-mod ffi {
-    use std::os::raw::{c_char, c_int};
-
-    pub const CS_GNU_LIBC_VERSION: c_int = 2;
-    pub const CS_GNU_LIBPTHREAD_VERSION: c_int = 3;
-
-    extern "C" {
-        /// Get configuration dependent string variables
-        pub fn confstr(name: c_int, buf: *mut c_char, length: usize) -> usize;
-    }
-}
-
 /// An error that could occur when trying to detect to libc version
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
 #[allow(missing_docs)]
@@ -36,73 +23,50 @@ pub enum DetectLibCError {
     ParseLibCVersion(#[from] ParseVersionError),
 }
 
-/// Returns the detected libc version used by the system.
+/// Tries to detected the libc family and version that is available on the system.
+///
+/// Note that this may differ from the libc version against which this binary was build. For
+/// instance when compiling against musl libc the resulting binary can still run on a glibc based
+/// system. For environments we are interested in the libc family that is available on the *system*.
+///
+/// Currently this code is only able to detect glibc properly. We can add more detection methods in
+/// the future.
 #[cfg(unix)]
 fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCError> {
-    use std::str::FromStr;
+    // Run `ldd --version` to detect the libc version and family on the system. `ldd` is shipped
+    // with libc so if an error occured during its execution we can assume no libc is available on
+    // the system.
+    let output = match Command::new("ldd").arg("--version").output() {
+        Err(e) => {
+            tracing::info!(
+                "failed to execute `ldd --version`: {e}. Assuming libc is not available."
+            );
+            return Ok(None);
+        }
+        Ok(output) => output,
+    };
 
-    // Use confstr to determine the LibC family and version
-    let version = match [ffi::CS_GNU_LIBC_VERSION, ffi::CS_GNU_LIBPTHREAD_VERSION]
-        .into_iter()
-        .find_map(|name| confstr(name).unwrap_or(None))
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // GNU libc writes to stdout
+    static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new("(?mi)(?:glibc|gnu libc).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
+    });
+    if let Some(version_match) = GNU_LIBC_RE
+        .captures(&stdout)
+        .and_then(|captures| captures.get(1))
+        .map(|version_match| version_match.as_str())
     {
-        Some(version) => version,
-        None => return Ok(None),
-    };
-
-    // Split into family and version
-    let (family, version) = match version.split_once(' ') {
-        Some(split) => split,
-        None => return Ok(None),
-    };
-
-    // Parse the version string
-    let version = Version::from_str(version)?;
-
-    // The family might be NPTL but thats just the name of the threading library, even though the
-    // version refers to that of uClibc.
-    if family == "NPTL" {
-        let family = String::from("uClibc");
-        tracing::warn!(
-            "failed to detect non-glibc family, assuming {} ({})",
-            &family,
-            &version
-        );
-        Ok(Some((family, version)))
-    } else {
-        Ok(Some((family.to_owned(), version)))
+        let version = std::str::FromStr::from_str(version_match)?;
+        return Ok(Some((String::from("glibc"), version)));
     }
+
+    Ok(None)
 }
 
 #[cfg(not(unix))]
 const fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCError> {
     Ok(None)
-}
-
-/// A possible error returned by `confstr`.
-#[derive(Debug, thiserror::Error)]
-enum ConfStrError {
-    #[error("invalid string returned: {0}")]
-    FromVecWithNulError(#[from] FromVecWithNulError),
-
-    #[error("invalid utf8 string: {0}")]
-    InvalidUtf8String(#[from] IntoStringError),
-}
-
-/// Safe wrapper around `confstr`
-#[cfg(unix)]
-fn confstr(name: std::os::raw::c_int) -> Result<Option<String>, ConfStrError> {
-    let len = match unsafe { ffi::confstr(name, std::ptr::null_mut(), 0) } {
-        0 => return Ok(None),
-        len => len,
-    };
-    let mut bytes = vec![0u8; len];
-    if unsafe { ffi::confstr(name, bytes.as_mut_ptr() as *mut _, bytes.len()) } == 0 {
-        return Ok(None);
-    }
-    Ok(Some(
-        std::ffi::CString::from_vec_with_nul(bytes)?.into_string()?,
-    ))
 }
 
 #[cfg(test)]
