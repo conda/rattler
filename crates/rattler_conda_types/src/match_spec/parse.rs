@@ -252,7 +252,9 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
                 },
             ))
         }
-        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(input.to_string())),
+        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+            input.to_string(),
+        )),
     }
 }
 
