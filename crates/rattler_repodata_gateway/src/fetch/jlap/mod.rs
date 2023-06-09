@@ -126,14 +126,10 @@ pub enum JLAPError {
     /// Pass-thru for file system errors encountered while requesting JLAP
     FileSystem(tokio::io::Error),
 
-    #[error("No patches found in the JLAP file")]
-    /// Error returned when JLAP file has no patches in it
-    NoPatchesFound,
-
     #[error("No matching hashes can be found in the JLAP file")]
     /// Error returned when none of the patches match the hash of our current `repodata.json`
-    /// This also means we need to reset the `position` in our JLAPState to zero so we can
-    /// begin our search from the beginning next time.
+    /// This can also happen when the list of generated hashes for checksums is too short and
+    /// and we are unable to find any hashes in the vector.
     NoHashFound,
 
     #[error("A mismatch occurred when validating the checksum on the JLAP response")]
@@ -145,6 +141,11 @@ pub enum JLAPError {
     /// Error returned when parsing the checksum at the very end of the JLAP response occurs
     /// This should be seldom and might indicate an error on the server.
     ChecksumParse,
+
+    #[error("The JLAP response was empty and we unable to parse it")]
+    /// Error return if we cannot find anything inside the actual JLAP response.
+    /// This indicates that we need to reset the values for JLAP in our cache.
+    InvalidResponse,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -210,64 +211,66 @@ impl<'a> JLAPResponse<'a> {
     /// On top of the response string, we also pass in a value for `initialization_vector`.
     /// If the response is not partial (i.e. it does not begin with an initialization vector,
     /// then this is the value we use. This is an important value for validating the checksum.
-    pub fn new(response: &'a str, initialization_vector: &[u8]) -> Result<Self, JLAPError> {
+    pub fn new(response: &'a str, state: &JLAPState) -> Result<Self, JLAPError> {
         let lines: Vec<&str> = response.split('\n').collect();
         let length = lines.len();
+        let mut patches: Vec<Patch> = vec![];
+        let mut bytes_offset = state.position;
 
+        // Exit early because we do not have information to parse
+        if length < 2 {
+            return Err(JLAPError::InvalidResponse);
+        }
+
+        // The first line can either be a valid hex string or JSON. We determine the `offset`
+        // value to use and the value of the initialization vector here.
+        let mut offset = 0;
+        let initialization_vector = match hex::decode(lines[0]) {
+            Ok(value) => {
+                offset = 1;
+                value
+            }
+            Err(_) => state.initialization_vector.clone(),
+        };
+
+        // Parse the footer and checksum; these should always be present on JLAP responses
+        let footer = lines[length - 2];
+        let footer: JLAPFooter = match serde_json::from_str(footer) {
+            Ok(value) => value,
+            Err(err) => return Err(JLAPError::JSONParse(err)),
+        };
+
+        // If we can't properly parse the checksum, we can't continue
+        let checksum = match parse_digest_from_hex::<Blake2b256>(lines[length - 1]) {
+            Some(value) => value,
+            None => return Err(JLAPError::ChecksumParse),
+        };
+
+        // This indicates we have patch lines to parse; patch lines for JLAP responses are optional
+        // (i.e. no new data means no new patches)
         if lines.len() > JLAP_FOOTER_OFFSET {
-            let mut offset = 0;
-
-            // The first line can either be a valid hex string or JSON. We determine the `offset`
-            // value to use and the value of the initialization vector here.
-            let initialization_vector = match hex::decode(lines[0]) {
-                Ok(value) => {
-                    offset = 1;
-                    value
-                }
-                Err(_) => initialization_vector.to_vec(),
-            };
-
-            let footer = lines[length - 2];
-
-            // If we can't properly parse the checksum, we can't continue
-            let checksum = match parse_digest_from_hex::<Blake2b256>(lines[length - 1]) {
-                Some(value) => value,
-                None => return Err(JLAPError::ChecksumParse),
-            };
-
-            let bytes_offset = get_bytes_offset(&lines);
-
-            let footer: JLAPFooter = match serde_json::from_str(footer) {
-                Ok(value) => value,
-                Err(err) => return Err(JLAPError::JSONParse(err)),
-            };
+            bytes_offset = get_bytes_offset(&lines);
 
             let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
-            let patches: Result<Vec<Patch>, JLAPError> = patch_lines
+            let patches_result: Result<Vec<Patch>, JLAPError> = patch_lines
                 .map(|x| Patch::from_str(x).map_err(JLAPError::JSONParse))
                 .collect();
 
-            match patches {
-                Ok(patches) => {
-                    if !patches.is_empty() {
-                        Ok(JLAPResponse {
-                            initialization_vector,
-                            patches,
-                            footer,
-                            checksum,
-                            bytes_offset,
-                            lines,
-                            offset,
-                        })
-                    } else {
-                        Err(JLAPError::NoPatchesFound)
-                    }
-                }
-                Err(error) => Err(error),
-            }
-        } else {
-            Err(JLAPError::NoPatchesFound)
+            patches = match patches_result {
+                Ok(patches) => patches,
+                Err(error) => return Err(error),
+            };
         }
+
+        Ok(JLAPResponse {
+            initialization_vector,
+            patches,
+            footer,
+            checksum,
+            bytes_offset,
+            lines,
+            offset,
+        })
     }
 
     /// Applies patches to a `repo_data_json_path` file provided using the `hash` value to
@@ -296,17 +299,17 @@ impl<'a> JLAPResponse<'a> {
     ///
     /// The `initialization_vector` value is optionally passed in because we may wish
     /// to override what was initially stored there, which would be the value calculated
-    /// with `validate_checksum`.
-    pub fn get_state(&self, position: u64, initialization_vector: Output<Blake2b256>) -> JLAPState {
+    /// with [`validate_checksum`].
+    pub fn get_state(&self, position: u64, initialization_vector: Vec<u8>) -> JLAPState {
         JLAPState {
-            position: position + self.bytes_offset,
-            initialization_vector: initialization_vector.to_vec(),
+            position,
+            initialization_vector,
             footer: self.footer.clone(),
         }
     }
 
     /// Validates the checksum present on a [`JLAPResponse`] struct
-    pub fn validate_checksum(&self) -> Result<Output<Blake2b256>, JLAPError> {
+    pub fn validate_checksum(&self) -> Result<Option<Vec<u8>>, JLAPError> {
         let mut initialization_vector: Option<Output<Blake2b256>> = None;
         let mut iv_values: Vec<Output<Blake2bMac256>> = vec![];
         let end = self.lines.len() - 1;
@@ -321,14 +324,26 @@ impl<'a> JLAPResponse<'a> {
             iv_values.push(initialization_vector.unwrap());
         }
 
-        if let Some(new_iv) = iv_values.pop() {
-            if new_iv != self.checksum {
-                tracing::debug!("Checksum mismatch: {:x} != {:x}", new_iv, self.checksum);
+        if let Some(validation_iv) = iv_values.pop() {
+            if validation_iv != self.checksum {
+                tracing::debug!(
+                    "Checksum mismatch: {:x} != {:x}",
+                    validation_iv,
+                    self.checksum
+                );
                 return Err(JLAPError::ChecksumMismatch);
             }
-            Ok(new_iv)
+            // The new initialization vector for the next JLAP request is the second to last
+            // hash value in `iv_values` (i.e. the last "patch" line). When a request has no
+            // new patches, we return None to indicate that the cache should not change its
+            // initialization vector.
+            if let Some(new_iv) = iv_values.pop() {
+                Ok(Some(new_iv.to_vec()))
+            } else {
+                Ok(None)
+            }
         } else {
-            Err(JLAPError::NoPatchesFound)
+            Err(JLAPError::NoHashFound)
         }
     }
 }
@@ -362,24 +377,29 @@ pub async fn patch_repo_data(
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
 ) -> Result<JLAPState, JLAPError> {
-    // Determine the starting `position` and `initialization_vector`
-    let (position, initialization_vector) =
-        get_position_and_initialization_vector(repo_data_state.jlap)?;
+    // Determine what we should use as our starting state
+    let mut jlap_state = get_jlap_state(repo_data_state.jlap);
 
     let jlap_url = subdir_url
         .join(JLAP_FILE_NAME)
         .expect("Valid URLs should always be join-able with this constant value");
 
-    let (response, position) = fetch_jlap_with_retry(jlap_url.as_str(), client, position).await?;
+    let (response, position) =
+        fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.position).await?;
     let response_text = match response.text().await {
         Ok(value) => value,
         Err(error) => return Err(JLAPError::HTTP(error)),
     };
 
-    let jlap = JLAPResponse::new(&response_text, &initialization_vector)?;
+    // Update position as it may have changed
+    jlap_state.position = position;
+
+    let jlap = JLAPResponse::new(&response_text, &jlap_state)?;
     let hash = repo_data_state.blake2_hash.unwrap_or_default();
     let latest_hash = jlap.footer.latest;
-    let new_iv = jlap.validate_checksum()?;
+    let new_iv = jlap
+        .validate_checksum()?
+        .unwrap_or(jlap_state.initialization_vector);
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
@@ -389,6 +409,8 @@ pub async fn patch_repo_data(
     // Applies patches and returns early if an error is encountered
     jlap.apply(repo_data_json_path, hash).await?;
 
+    // Patches were applied successfully, so we need to update the position
+    let position = position + jlap.bytes_offset;
     Ok(jlap.get_state(position, new_iv))
 }
 
@@ -486,15 +508,18 @@ where
 /// If we cannot find the correct values, we provide defaults from this module.
 /// When we can correctly parse a hex string (the `initialization_vector` should always be a
 /// hex string), we return an error.
-fn get_position_and_initialization_vector(
-    state: Option<JLAPState>,
-) -> Result<(u64, Vec<u8>), JLAPError> {
+fn get_jlap_state(state: Option<JLAPState>) -> JLAPState {
     match state {
-        Some(state) => Ok((state.position, state.initialization_vector)),
-        None => Ok((
-            JLAP_START_POSITION,
-            JLAP_START_INITIALIZATION_VECTOR.to_vec(),
-        )),
+        Some(state) => JLAPState {
+            position: state.position,
+            initialization_vector: state.initialization_vector,
+            footer: state.footer,
+        },
+        None => JLAPState {
+            position: JLAP_START_POSITION,
+            initialization_vector: JLAP_START_INITIALIZATION_VECTOR.to_vec(),
+            footer: JLAPFooter::default(),
+        },
     }
 }
 
@@ -812,7 +837,7 @@ mod test {
         assert_eq!(updated_jlap_state.position, 738);
         assert_eq!(
             hex::encode(updated_jlap_state.initialization_vector),
-            "5cf5bb373f361fe30d41891399d148f9c9dd0cc5f381e64f8fa3e7febd7269f0"
+            "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
         );
         assert_eq!(
             updated_jlap_state.footer.latest,
@@ -855,7 +880,7 @@ mod test {
         assert_eq!(updated_jlap_state.position, 1341);
         assert_eq!(
             hex::encode(updated_jlap_state.initialization_vector),
-            "5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d"
+            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
         );
         assert_eq!(
             updated_jlap_state.footer.latest,

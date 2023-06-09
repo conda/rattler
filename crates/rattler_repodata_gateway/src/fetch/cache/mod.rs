@@ -98,7 +98,7 @@ pub struct JLAPState {
 
 /// Represents the metadata for a JLAP file, which is typically found at the very end
 #[serde_as]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct JLAPFooter {
     /// This is not actually a full URL, just the last part of it (i.e. the filename
     /// `repodata.json`). That's why we store it as a [`String`]
