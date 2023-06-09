@@ -299,7 +299,7 @@ impl<'a> JLAPResponse<'a> {
     ///
     /// The `initialization_vector` value is optionally passed in because we may wish
     /// to override what was initially stored there, which would be the value calculated
-    /// with [`validate_checksum`].
+    /// with `validate_checksum`.
     pub fn get_state(&self, position: u64, initialization_vector: Vec<u8>) -> JLAPState {
         JLAPState {
             position,
