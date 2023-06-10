@@ -565,7 +565,7 @@ mod test {
   }
 }"#;
 
-    const FAKE_STATE_DATA_PARTIAL: &str = r#"{
+    const FAKE_STATE_DATA_UPDATE_ONE: &str = r#"{
   "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
   "etag": "W/\"49aa6d9ea6f3285efe657780a7c8cd58\"",
   "mod": "Tue, 30 May 2023 20:03:48 GMT",
@@ -591,6 +591,36 @@ mod test {
     "footer": {
       "url": "repodata.json",
       "latest": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9"
+    }
+  }
+}"#;
+
+    const FAKE_STATE_DATA_UPDATE_TWO: &str = r#"{
+  "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
+  "etag": "W/\"49aa6d9ea6f3285efe657780a7c8cd58\"",
+  "mod": "Tue, 30 May 2023 20:03:48 GMT",
+  "cache_control": "public, max-age=30",
+  "mtime_ns": 1685509481332236078,
+  "size": 38317593,
+  "blake2_hash": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
+  "has_zst": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_bz2": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_jlap": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.903512Z"
+  },
+  "jlap": {
+    "iv": "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8",
+    "pos": 1341,
+    "footer": {
+      "url": "repodata.json",
+      "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"
     }
   }
 }"#;
@@ -859,7 +889,52 @@ mod test {
 
         let client = Client::default();
 
-        let repo_data_state: RepoDataState = serde_json::from_str(FAKE_STATE_DATA_PARTIAL).unwrap();
+        let repo_data_state: RepoDataState =
+            serde_json::from_str(FAKE_STATE_DATA_UPDATE_ONE).unwrap();
+        // End setup
+
+        // Run the code under test
+        let updated_jlap_state =
+            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
+                .await
+                .unwrap();
+
+        // Make assertions
+        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+            .await
+            .unwrap();
+
+        // Ensure the repo data was updated appropriately
+        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
+
+        // Ensure the the updated JLAP state matches what it should
+        assert_eq!(updated_jlap_state.position, 1341);
+        assert_eq!(
+            hex::encode(updated_jlap_state.initialization_vector),
+            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
+        );
+        assert_eq!(
+            updated_jlap_state.footer.latest,
+            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    /// Performs a test to make sure that everything works when we get a response with no patches
+    /// indicating there are no new patches to apply.
+    pub async fn test_patch_repo_data_no_new_patches() {
+        // Begin setup
+        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
+        let server = SimpleChannelServer::new(subdir_path.path());
+        let server_url = server.url();
+
+        let (_cache_dir, cache_repo_data_path) =
+            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_UPDATE_TWO)).await;
+
+        let client = Client::default();
+
+        let repo_data_state: RepoDataState =
+            serde_json::from_str(FAKE_STATE_DATA_UPDATE_TWO).unwrap();
         // End setup
 
         // Run the code under test
