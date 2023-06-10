@@ -191,8 +191,8 @@ pub struct JLAPResponse<'a> {
     /// Checksum located at the end of the request
     checksum: Output<Blake2b256>,
 
-    /// Bytes offset to use for next JLAP request
-    bytes_offset: u64,
+    /// Position to use for the next JLAP request
+    new_position: u64,
 
     /// All the lines of the JLAP request (raw response, minus '\n' characters
     lines: Vec<&'a str>,
@@ -215,10 +215,10 @@ impl<'a> JLAPResponse<'a> {
         let lines: Vec<&str> = response.split('\n').collect();
         let length = lines.len();
         let mut patches: Vec<Patch> = vec![];
-        let mut bytes_offset = state.position;
+        let mut new_position = state.position;
 
         // Exit early because we do not have information to parse
-        if length < 2 {
+        if length < JLAP_FOOTER_OFFSET {
             return Err(JLAPError::InvalidResponse);
         }
 
@@ -249,7 +249,7 @@ impl<'a> JLAPResponse<'a> {
         // This indicates we have patch lines to parse; patch lines for JLAP responses are optional
         // (i.e. no new data means no new patches)
         if lines.len() > JLAP_FOOTER_OFFSET {
-            bytes_offset = get_bytes_offset(&lines);
+            new_position += get_bytes_offset(&lines);
 
             let patch_lines = lines[offset..length - JLAP_FOOTER_OFFSET].iter();
             let patches_result: Result<Vec<Patch>, JLAPError> = patch_lines
@@ -267,7 +267,7 @@ impl<'a> JLAPResponse<'a> {
             patches,
             footer,
             checksum,
-            bytes_offset,
+            new_position,
             lines,
             offset,
         })
@@ -403,15 +403,14 @@ pub async fn patch_repo_data(
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
-        return Ok(jlap.get_state(position, new_iv));
+        return Ok(jlap.get_state(jlap.new_position, new_iv));
     }
 
     // Applies patches and returns early if an error is encountered
     jlap.apply(repo_data_json_path, hash).await?;
 
     // Patches were applied successfully, so we need to update the position
-    let position = position + jlap.bytes_offset;
-    Ok(jlap.get_state(position, new_iv))
+    Ok(jlap.get_state(jlap.new_position, new_iv))
 }
 
 /// Fetches a JLAP response from server
@@ -443,19 +442,17 @@ async fn fetch_jlap_with_retry(
     let range = format!("bytes={}-", position);
 
     match fetch_jlap(url, client, &range).await {
-        Ok(response) => Ok((response, position)),
-        Err(error) => {
-            if error.status().unwrap_or_default() == StatusCode::RANGE_NOT_SATISFIABLE
-                && position != 0
-            {
+        Ok(response) => {
+            if response.status() == StatusCode::RANGE_NOT_SATISFIABLE && position != 0 {
                 let range = "bytes=0-";
                 return match fetch_jlap(url, client, range).await {
                     Ok(response) => Ok((response, 0)),
                     Err(error) => Err(JLAPError::HTTP(error)),
                 };
             }
-            Err(JLAPError::HTTP(error))
+            Ok((response, position))
         }
+        Err(error) => Err(JLAPError::HTTP(error)),
     }
 }
 
@@ -935,6 +932,56 @@ mod test {
 
         let repo_data_state: RepoDataState =
             serde_json::from_str(FAKE_STATE_DATA_UPDATE_TWO).unwrap();
+        // End setup
+
+        // Run the code under test
+        let updated_jlap_state =
+            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
+                .await
+                .unwrap();
+
+        // Make assertions
+        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+            .await
+            .unwrap();
+
+        // Ensure the repo data was updated appropriately
+        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
+
+        // Ensure the the updated JLAP state matches what it should
+        assert_eq!(updated_jlap_state.position, 1341);
+        assert_eq!(
+            hex::encode(updated_jlap_state.initialization_vector),
+            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
+        );
+        assert_eq!(
+            updated_jlap_state.footer.latest,
+            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    /// Performs a test to make sure that the RANGE_NOT_SATISFIABLE error handling works as
+    /// expected. The proper behavior is to make the initial request where the error is triggered
+    /// and then revert the position back to zero. The second request should succeed while
+    /// returning the appropriate state to use for the next request.
+    pub async fn test_patch_repo_data_range_not_satisfiable() {
+        // Begin setup
+        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
+        let server = SimpleChannelServer::new(subdir_path.path());
+        let server_url = server.url();
+
+        let (_cache_dir, cache_repo_data_path) =
+            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_UPDATE_TWO)).await;
+
+        let client = Client::default();
+
+        let mut repo_data_state: RepoDataState =
+            serde_json::from_str(FAKE_STATE_DATA_UPDATE_TWO).unwrap();
+
+        let mut new_jlap = repo_data_state.jlap.unwrap();
+        new_jlap.position = 99999;
+        repo_data_state.jlap = Some(new_jlap);
         // End setup
 
         // Run the code under test
