@@ -84,6 +84,7 @@ use reqwest::{
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
+use std::collections::{BTreeMap, HashMap};
 use std::iter::Iterator;
 use std::path::Path;
 use std::str;
@@ -453,13 +454,48 @@ async fn fetch_jlap_with_retry(
     }
 }
 
+#[derive(Serialize, Deserialize, Default)]
+struct OrderedRepoData {
+    info: Option<HashMap<String, String>>,
+
+    #[serde(serialize_with = "ordered_map")]
+    packages: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
+
+    #[serde(serialize_with = "ordered_map", rename = "packages.conda")]
+    packages_conda: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
+
+    removed: Option<Vec<String>>,
+
+    repodata_version: Option<u64>,
+}
+
+fn ordered_map<S>(
+    value: &Option<HashMap<String, HashMap<String, serde_json::Value>>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match value {
+        Some(value) => {
+            let ordered: BTreeMap<_, _> = value
+                .iter()
+                .map(|(key, packages)| (key, packages.iter().collect::<BTreeMap<_, _>>()))
+                .collect();
+            ordered.serialize(serializer)
+        }
+        None => serializer.serialize_none(),
+    }
+}
+
 /// Applies JLAP patches to a `repodata.json` file
 ///
 /// This is a multi-step process that involves:
 ///
 /// 1. Opening and parsing the current repodata file
 /// 2. Applying patches to this repodata file
-/// 3. Saving this repodata file to disk
+/// 3. Re-ordering the repo data
+/// 4. Saving this repodata file to disk
 async fn apply_jlap_patches<'a, I>(patches: I, repo_data_path: &Path) -> Result<(), JLAPError>
 where
     I: Iterator<Item = &'a Patch>,
@@ -482,7 +518,12 @@ where
         }
     }
 
-    let mut updated_json = match serde_json::to_string_pretty(&doc) {
+    let ordered_doc: OrderedRepoData = match serde_json::from_value(doc) {
+        Ok(value) => value,
+        Err(error) => return Err(JLAPError::JSONParse(error)),
+    };
+
+    let mut updated_json = match serde_json::to_string_pretty(&ordered_doc) {
         Ok(value) => value,
         Err(error) => return Err(JLAPError::JSONParse(error)),
     };
@@ -534,6 +575,7 @@ mod test {
 
     use rattler_digest::{parse_digest_from_hex, Blake2b256};
     use reqwest::Client;
+    use rstest::rstest;
     use tempfile::TempDir;
     use url::Url;
 
@@ -619,10 +661,41 @@ mod test {
   }
 }"#;
 
+    const FAKE_STATE_DATA_OUT_OF_BOUNDS_POSITION: &str = r#"{
+  "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
+  "etag": "W/\"49aa6d9ea6f3285efe657780a7c8cd58\"",
+  "mod": "Tue, 30 May 2023 20:03:48 GMT",
+  "cache_control": "public, max-age=30",
+  "mtime_ns": 1685509481332236078,
+  "size": 38317593,
+  "blake2_hash": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
+  "has_zst": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_bz2": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.904003Z"
+  },
+  "has_jlap": {
+    "value": true,
+    "last_checked": "2023-05-21T12:14:21.903512Z"
+  },
+  "jlap": {
+    "iv": "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8",
+    "pos": 9999,
+    "footer": {
+      "url": "repodata.json",
+      "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"
+    }
+  }
+}"#;
+
     const FAKE_REPO_DATA_INITIAL: &str = r#"{
   "info": {
     "subdir": "osx-64"
   },
+  "packages": {},
   "packages.conda": {
     "zstd-1.5.4-hc035e20_0.conda": {
       "build": "hc035e20_0",
@@ -644,6 +717,7 @@ mod test {
       "version": "1.5.4"
     }
   },
+  "removed": [],
   "repodata_version": 1
 }
 "#;
@@ -652,6 +726,7 @@ mod test {
   "info": {
     "subdir": "osx-64"
   },
+  "packages": {},
   "packages.conda": {
     "zstd-1.5.4-hc035e20_0.conda": {
       "build": "hc035e20_0",
@@ -692,6 +767,7 @@ mod test {
       "version": "1.5.5"
     }
   },
+  "removed": [],
   "repodata_version": 1
 }
 "#;
@@ -700,6 +776,7 @@ mod test {
   "info": {
     "subdir": "osx-64"
   },
+  "packages": {},
   "packages.conda": {
     "zstd-1.5.4-hc035e20_0.conda": {
       "build": "hc035e20_0",
@@ -756,6 +833,7 @@ mod test {
       "version": "1.4.5"
     }
   },
+  "removed": [],
   "repodata_version": 1
 }
 "#;
@@ -777,8 +855,8 @@ mod test {
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
 5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d"#;
 
-    /// Provides all the necessary data for a test
-    struct TestData {
+    /// Provides all the necessary environment setup for a test
+    struct TestEnvironment {
         /// These fields are never read but must stay in scope for tests succeed
         _server: SimpleChannelServer,
         _subdir_path: TempDir,
@@ -793,7 +871,7 @@ mod test {
         pub repo_data_state: RepoDataState,
     }
 
-    impl TestData {
+    impl TestEnvironment {
         pub async fn new(repo_data: &str, jlap_data: &str, repo_data_state: &str) -> Self {
             let subdir_path = setup_server_environment(None, Some(jlap_data)).await;
             let server = SimpleChannelServer::new(subdir_path.path());
@@ -868,173 +946,84 @@ mod test {
         (cache_dir, cache_repo_data_path)
     }
 
+    #[rstest]
+    #[case::patch_repo_data_with_no_previous_jlap_cache_state(
+        FAKE_REPO_DATA_INITIAL,
+        FAKE_REPO_DATA_UPDATE_ONE,
+        FAKE_JLAP_DATA_INITIAL,
+        FAKE_STATE_DATA_INITIAL,
+        738,
+        "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff",
+        FAKE_REPO_DATA_UPDATE_ONE_HASH
+    )]
+    #[case::patch_repo_data_with_a_partial_jlap_response_and_a_previous_jlap_cache_state(
+        FAKE_REPO_DATA_UPDATE_ONE,
+        FAKE_REPO_DATA_UPDATE_TWO,
+        FAKE_JLAP_DATA_UPDATE_ONE,
+        FAKE_STATE_DATA_UPDATE_ONE,
+        1341,
+        "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8",
+        FAKE_REPO_DATA_UPDATE_TWO_HASH
+    )]
+    #[case::patch_repo_data_with_no_new_patches_to_apply(
+        FAKE_REPO_DATA_UPDATE_TWO,
+        FAKE_REPO_DATA_UPDATE_TWO,
+        FAKE_JLAP_DATA_UPDATE_ONE,
+        FAKE_STATE_DATA_UPDATE_TWO,
+        1341,
+        "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8",
+        FAKE_REPO_DATA_UPDATE_TWO_HASH
+    )]
+    #[case::patch_repo_data_trigger_range_not_satisfiable_recovery_workflow(
+        FAKE_REPO_DATA_UPDATE_TWO,
+        FAKE_REPO_DATA_UPDATE_TWO,
+        FAKE_JLAP_DATA_UPDATE_ONE,
+        FAKE_STATE_DATA_OUT_OF_BOUNDS_POSITION,
+        1341,
+        "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8",
+        FAKE_REPO_DATA_UPDATE_TWO_HASH
+    )]
     #[tokio::test]
-    /// Performs a test to make sure that patches can be applied when we retrieve
-    /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
-    pub async fn test_patch_repo_data() {
-        let test_data = TestData::new(
-            FAKE_REPO_DATA_INITIAL,
-            FAKE_JLAP_DATA_INITIAL,
-            FAKE_STATE_DATA_INITIAL,
-        )
-        .await;
+    /// This is the primary test for this module. Using the parameters above, it covers a variety
+    /// of use cases. Check out the parameter descriptions from more information about what the
+    /// test is trying to do.
+    pub async fn test_patch_repo_data(
+        #[case] repo_data: &str,
+        #[case] expected_repo_data: &str,
+        #[case] jlap_data: &str,
+        #[case] repo_data_state: &str,
+        #[case] expected_position: u64,
+        #[case] expected_initialization_vector: &str,
+        #[case] expected_hash: &str,
+    ) {
+        let test_env = TestEnvironment::new(repo_data, jlap_data, repo_data_state).await;
 
         let updated_jlap_state = patch_repo_data(
-            &test_data.client,
-            test_data.server_url,
-            test_data.repo_data_state,
-            &test_data.cache_repo_data,
+            &test_env.client,
+            test_env.server_url,
+            test_env.repo_data_state,
+            &test_env.cache_repo_data,
         )
         .await
         .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
+        let repo_data = tokio::fs::read_to_string(test_env.cache_repo_data)
             .await
             .unwrap();
 
         // Ensure the repo data was updated appropriately
-        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_ONE);
+        assert_eq!(repo_data, expected_repo_data);
 
         // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.position, 738);
+        assert_eq!(updated_jlap_state.position, expected_position);
         assert_eq!(
             hex::encode(updated_jlap_state.initialization_vector),
-            "5ec4a4fc3afd07b398ed78ffbd30ce3ef7c1f935f0e0caffc61455352ceedeff"
+            expected_initialization_vector
         );
         assert_eq!(
             updated_jlap_state.footer.latest,
-            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_ONE_HASH).unwrap()
-        );
-    }
-
-    #[tokio::test]
-    /// Performs a test to make sure that patches can be applied when we retrieve
-    /// a "partial" (i.e. one with a byte offset) version of the JLAP file.
-    pub async fn test_patch_repo_data_partial() {
-        let test_data = TestData::new(
-            FAKE_REPO_DATA_UPDATE_ONE,
-            FAKE_JLAP_DATA_UPDATE_ONE,
-            FAKE_STATE_DATA_UPDATE_ONE,
-        )
-        .await;
-
-        // Run the code under test
-        let updated_jlap_state = patch_repo_data(
-            &test_data.client,
-            test_data.server_url,
-            test_data.repo_data_state,
-            &test_data.cache_repo_data,
-        )
-        .await
-        .unwrap();
-
-        // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
-            .await
-            .unwrap();
-
-        // Ensure the repo data was updated appropriately
-        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
-
-        // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.position, 1341);
-        assert_eq!(
-            hex::encode(updated_jlap_state.initialization_vector),
-            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
-        );
-        assert_eq!(
-            updated_jlap_state.footer.latest,
-            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
-        );
-    }
-
-    #[tokio::test]
-    /// Performs a test to make sure that everything works when we get a response with no patches
-    /// indicating there are no new patches to apply.
-    pub async fn test_patch_repo_data_no_new_patches() {
-        let test_data = TestData::new(
-            FAKE_REPO_DATA_UPDATE_TWO,
-            FAKE_JLAP_DATA_UPDATE_ONE,
-            FAKE_STATE_DATA_UPDATE_TWO,
-        )
-        .await;
-
-        // Run the code under test
-        let updated_jlap_state = patch_repo_data(
-            &test_data.client,
-            test_data.server_url,
-            test_data.repo_data_state,
-            &test_data.cache_repo_data,
-        )
-        .await
-        .unwrap();
-
-        // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
-            .await
-            .unwrap();
-
-        // Ensure the repo data was updated appropriately
-        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
-
-        // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.position, 1341);
-        assert_eq!(
-            hex::encode(updated_jlap_state.initialization_vector),
-            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
-        );
-        assert_eq!(
-            updated_jlap_state.footer.latest,
-            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
-        );
-    }
-
-    #[tokio::test]
-    /// Performs a test to make sure that the RANGE_NOT_SATISFIABLE error handling works as
-    /// expected. The proper behavior is to make the initial request where the error is triggered
-    /// and then revert the position back to zero. The second request should succeed while
-    /// returning the appropriate state to use for the next request.
-    pub async fn test_patch_repo_data_range_not_satisfiable() {
-        let mut test_data = TestData::new(
-            FAKE_REPO_DATA_UPDATE_TWO,
-            FAKE_JLAP_DATA_UPDATE_ONE,
-            FAKE_STATE_DATA_UPDATE_TWO,
-        )
-        .await;
-
-        // Set the position to an out of range value
-        let mut new_jlap = test_data.repo_data_state.jlap.unwrap();
-        new_jlap.position = 99999;
-        test_data.repo_data_state.jlap = Some(new_jlap);
-
-        // Run the code under test
-        let updated_jlap_state = patch_repo_data(
-            &test_data.client,
-            test_data.server_url,
-            test_data.repo_data_state,
-            &test_data.cache_repo_data,
-        )
-        .await
-        .unwrap();
-
-        // Make assertions
-        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
-            .await
-            .unwrap();
-
-        // Ensure the repo data was updated appropriately
-        assert_eq!(repo_data, FAKE_REPO_DATA_UPDATE_TWO);
-
-        // Ensure the the updated JLAP state matches what it should
-        assert_eq!(updated_jlap_state.position, 1341);
-        assert_eq!(
-            hex::encode(updated_jlap_state.initialization_vector),
-            "7d6e2b5185cf5e14f852355dc79eeba1233550d974f274f1eaf7db21c7b2c4e8"
-        );
-        assert_eq!(
-            updated_jlap_state.footer.latest,
-            parse_digest_from_hex::<Blake2b256>(FAKE_REPO_DATA_UPDATE_TWO_HASH).unwrap()
+            parse_digest_from_hex::<Blake2b256>(expected_hash).unwrap()
         );
     }
 }
