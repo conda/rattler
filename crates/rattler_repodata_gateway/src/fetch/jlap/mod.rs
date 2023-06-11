@@ -212,12 +212,11 @@ impl<'a> JLAPResponse<'a> {
     /// If the response is not partial (i.e. it does not begin with an initialization vector,
     /// then this is the value we use. This is an important value for validating the checksum.
     pub fn new(response: &'a str, state: &JLAPState) -> Result<Self, JLAPError> {
-        let lines: Vec<&str> = response.split('\n').collect();
+        let lines: Vec<&str> = response.lines().collect();
         let length = lines.len();
         let mut patches: Vec<Patch> = vec![];
         let mut new_position = state.position;
 
-        // Exit early because we do not have information to parse
         if length < JLAP_FOOTER_OFFSET {
             return Err(JLAPError::InvalidResponse);
         }
@@ -233,14 +232,12 @@ impl<'a> JLAPResponse<'a> {
             Err(_) => state.initialization_vector.clone(),
         };
 
-        // Parse the footer and checksum; these should always be present on JLAP responses
         let footer = lines[length - 2];
         let footer: JLAPFooter = match serde_json::from_str(footer) {
             Ok(value) => value,
             Err(err) => return Err(JLAPError::JSONParse(err)),
         };
 
-        // If we can't properly parse the checksum, we can't continue
         let checksum = match parse_digest_from_hex::<Blake2b256>(lines[length - 1]) {
             Some(value) => value,
             None => return Err(JLAPError::ChecksumParse),
@@ -780,6 +777,47 @@ mod test {
 {"url": "repodata.json", "latest": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9"}
 5a4c42192a69299198bd8cfc85146d725d0dcc24a4e50f6eab383bc37cab2d2d"#;
 
+    /// Provides all the necessary data for a test
+    struct TestData {
+        /// These fields are never read but must stay in scope for tests succeed
+        _server: SimpleChannelServer,
+        _subdir_path: TempDir,
+        _cache_dir: TempDir,
+
+        pub server_url: Url,
+
+        pub cache_repo_data: PathBuf,
+
+        pub client: Client,
+
+        pub repo_data_state: RepoDataState,
+    }
+
+    impl TestData {
+        pub async fn new(repo_data: &str, jlap_data: &str, repo_data_state: &str) -> Self {
+            let subdir_path = setup_server_environment(None, Some(jlap_data)).await;
+            let server = SimpleChannelServer::new(subdir_path.path());
+            let server_url = server.url();
+
+            let (cache_dir, cache_repo_data) =
+                setup_client_environment(&server_url, Some(repo_data)).await;
+
+            let client = Client::default();
+
+            let repo_data_state: RepoDataState = serde_json::from_str(repo_data_state).unwrap();
+
+            Self {
+                _server: server,
+                _subdir_path: subdir_path,
+                _cache_dir: cache_dir,
+                server_url,
+                cache_repo_data,
+                client,
+                repo_data_state,
+            }
+        }
+    }
+
     /// Writes the desired files to the "server" environment
     async fn setup_server_environment(
         server_repo_data: Option<&str>,
@@ -834,26 +872,24 @@ mod test {
     /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "fresh" (i.e. no bytes offset) version of the JLAP file.
     pub async fn test_patch_repo_data() {
-        // Begin setup
-        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_INITIAL)).await;
-        let server = SimpleChannelServer::new(subdir_path.path());
-        let server_url = server.url();
+        let test_data = TestData::new(
+            FAKE_REPO_DATA_INITIAL,
+            FAKE_JLAP_DATA_INITIAL,
+            FAKE_STATE_DATA_INITIAL,
+        )
+        .await;
 
-        let (_cache_dir, cache_repo_data_path) =
-            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_INITIAL)).await;
-
-        let client = Client::default();
-
-        let repo_data_state: RepoDataState = serde_json::from_str(FAKE_STATE_DATA_INITIAL).unwrap();
-        // End setup
-
-        let updated_jlap_state =
-            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
-                .await
-                .unwrap();
+        let updated_jlap_state = patch_repo_data(
+            &test_data.client,
+            test_data.server_url,
+            test_data.repo_data_state,
+            &test_data.cache_repo_data,
+        )
+        .await
+        .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
             .await
             .unwrap();
 
@@ -876,28 +912,25 @@ mod test {
     /// Performs a test to make sure that patches can be applied when we retrieve
     /// a "partial" (i.e. one with a byte offset) version of the JLAP file.
     pub async fn test_patch_repo_data_partial() {
-        // Begin setup
-        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
-        let server = SimpleChannelServer::new(subdir_path.path());
-        let server_url = server.url();
-
-        let (_cache_dir, cache_repo_data_path) =
-            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_UPDATE_ONE)).await;
-
-        let client = Client::default();
-
-        let repo_data_state: RepoDataState =
-            serde_json::from_str(FAKE_STATE_DATA_UPDATE_ONE).unwrap();
-        // End setup
+        let test_data = TestData::new(
+            FAKE_REPO_DATA_UPDATE_ONE,
+            FAKE_JLAP_DATA_UPDATE_ONE,
+            FAKE_STATE_DATA_UPDATE_ONE,
+        )
+        .await;
 
         // Run the code under test
-        let updated_jlap_state =
-            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
-                .await
-                .unwrap();
+        let updated_jlap_state = patch_repo_data(
+            &test_data.client,
+            test_data.server_url,
+            test_data.repo_data_state,
+            &test_data.cache_repo_data,
+        )
+        .await
+        .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
             .await
             .unwrap();
 
@@ -920,28 +953,25 @@ mod test {
     /// Performs a test to make sure that everything works when we get a response with no patches
     /// indicating there are no new patches to apply.
     pub async fn test_patch_repo_data_no_new_patches() {
-        // Begin setup
-        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
-        let server = SimpleChannelServer::new(subdir_path.path());
-        let server_url = server.url();
-
-        let (_cache_dir, cache_repo_data_path) =
-            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_UPDATE_TWO)).await;
-
-        let client = Client::default();
-
-        let repo_data_state: RepoDataState =
-            serde_json::from_str(FAKE_STATE_DATA_UPDATE_TWO).unwrap();
-        // End setup
+        let test_data = TestData::new(
+            FAKE_REPO_DATA_UPDATE_TWO,
+            FAKE_JLAP_DATA_UPDATE_ONE,
+            FAKE_STATE_DATA_UPDATE_TWO,
+        )
+        .await;
 
         // Run the code under test
-        let updated_jlap_state =
-            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
-                .await
-                .unwrap();
+        let updated_jlap_state = patch_repo_data(
+            &test_data.client,
+            test_data.server_url,
+            test_data.repo_data_state,
+            &test_data.cache_repo_data,
+        )
+        .await
+        .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
             .await
             .unwrap();
 
@@ -966,32 +996,30 @@ mod test {
     /// and then revert the position back to zero. The second request should succeed while
     /// returning the appropriate state to use for the next request.
     pub async fn test_patch_repo_data_range_not_satisfiable() {
-        // Begin setup
-        let subdir_path = setup_server_environment(None, Some(FAKE_JLAP_DATA_UPDATE_ONE)).await;
-        let server = SimpleChannelServer::new(subdir_path.path());
-        let server_url = server.url();
+        let mut test_data = TestData::new(
+            FAKE_REPO_DATA_UPDATE_TWO,
+            FAKE_JLAP_DATA_UPDATE_ONE,
+            FAKE_STATE_DATA_UPDATE_TWO,
+        )
+        .await;
 
-        let (_cache_dir, cache_repo_data_path) =
-            setup_client_environment(&server_url, Some(FAKE_REPO_DATA_UPDATE_TWO)).await;
-
-        let client = Client::default();
-
-        let mut repo_data_state: RepoDataState =
-            serde_json::from_str(FAKE_STATE_DATA_UPDATE_TWO).unwrap();
-
-        let mut new_jlap = repo_data_state.jlap.unwrap();
+        // Set the position to an out of range value
+        let mut new_jlap = test_data.repo_data_state.jlap.unwrap();
         new_jlap.position = 99999;
-        repo_data_state.jlap = Some(new_jlap);
-        // End setup
+        test_data.repo_data_state.jlap = Some(new_jlap);
 
         // Run the code under test
-        let updated_jlap_state =
-            patch_repo_data(&client, server_url, repo_data_state, &cache_repo_data_path)
-                .await
-                .unwrap();
+        let updated_jlap_state = patch_repo_data(
+            &test_data.client,
+            test_data.server_url,
+            test_data.repo_data_state,
+            &test_data.cache_repo_data,
+        )
+        .await
+        .unwrap();
 
         // Make assertions
-        let repo_data = tokio::fs::read_to_string(cache_repo_data_path)
+        let repo_data = tokio::fs::read_to_string(test_data.cache_repo_data)
             .await
             .unwrap();
 
