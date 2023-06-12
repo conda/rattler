@@ -25,7 +25,7 @@
 //! Below is a basic example that shows how to retrieve and cache the repodata for a conda channel
 //! using the [`fetch::fetch_repo_data`] function:
 //!
-//! ```rust
+//! ```no_run
 //! use std::{path::Path, default::Default};
 //! use reqwest::Client;
 //! use url::Url;

@@ -5,7 +5,7 @@ use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
-use rattler_digest::{compute_file_digest, HashingWriter};
+use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Client, Response, StatusCode,
@@ -21,6 +21,7 @@ use tracing::instrument;
 use url::Url;
 
 mod cache;
+pub mod jlap;
 
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
@@ -204,6 +205,7 @@ async fn repodata_from_file(
         has_zst: None,
         has_bz2: None,
         has_jlap: None,
+        jlap: None,
     };
 
     // write the cache state
@@ -313,12 +315,12 @@ pub async fn fetch_repo_data(
                 ValidatedCacheState::Mismatched(_),
                 CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly,
             ) => {
-                // The cache doesnt match the repodata.json that is on disk. This means the cache is
+                // The cache doesn't match the repodata.json that is on disk. This means the cache is
                 // not usable.
                 return Err(FetchRepoDataError::NoCacheAvailable);
             }
             (ValidatedCacheState::Mismatched(cache_state), _) => {
-                // The cache doesnt match the data that is on disk. but it might contain some other
+                // The cache doesn't match the data that is on disk. but it might contain some other
                 // interesting cached data as well...
                 Some(cache_state)
             }
@@ -348,9 +350,57 @@ pub async fn fetch_repo_data(
     .await;
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
-    // variants. We dont check the expiration here since we just refreshed it.
+    // variants. We don't check the expiration here since we just refreshed it.
     let has_zst = variant_availability.has_zst();
     let has_bz2 = variant_availability.has_bz2();
+    let has_jlap = variant_availability.has_jlap();
+
+    // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
+    // a normal request.
+    let jlap_state = if has_jlap && cache_state.is_some() {
+        let repo_data_state = cache_state.as_ref().unwrap();
+        match jlap::patch_repo_data(
+            &client,
+            subdir_url.clone(),
+            repo_data_state.clone(),
+            &repo_data_json_path,
+        )
+        .await
+        {
+            Ok(state) => {
+                tracing::debug!("fetched JLAP patches successfully");
+                let cache_state = RepoDataState {
+                    blake2_hash: Some(state.footer.latest),
+                    has_zst: variant_availability.has_zst,
+                    has_bz2: variant_availability.has_bz2,
+                    has_jlap: variant_availability.has_jlap,
+                    jlap: Some(state),
+                    .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+                };
+
+                let cache_state = tokio::task::spawn_blocking(move || {
+                    cache_state
+                        .to_path(&cache_state_path)
+                        .map(|_| cache_state)
+                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
+                })
+                .await??;
+
+                return Ok(CachedRepoData {
+                    lock_file,
+                    repo_data_json_path,
+                    cache_state,
+                    cache_result: CacheResult::CacheOutdated,
+                });
+            }
+            Err(error) => {
+                tracing::warn!("Error during JLAP request {:?}", error);
+                None
+            }
+        }
+    } else {
+        None
+    };
 
     // Determine which variant to download
     let repo_data_url = if has_zst {
@@ -405,6 +455,8 @@ pub async fn fetch_repo_data(
             url: repo_data_url,
             has_zst: variant_availability.has_zst,
             has_bz2: variant_availability.has_bz2,
+            has_jlap: variant_availability.has_jlap,
+            jlap: jlap_state,
             .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
@@ -468,8 +520,8 @@ pub async fn fetch_repo_data(
         blake2_hash: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
-        // We dont do anything with JLAP so just copy over the value.
-        has_jlap: cache_state.and_then(|state| state.has_jlap),
+        has_jlap: variant_availability.has_jlap,
+        jlap: jlap_state,
     };
 
     let new_cache_state = tokio::task::spawn_blocking(move || {
@@ -500,7 +552,7 @@ async fn stream_and_decode_to_file(
     content_encoding: Encoding,
     temp_dir: &Path,
     mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
-) -> Result<(NamedTempFile, blake2::digest::Output<cache::Blake2b256>), FetchRepoDataError> {
+) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
@@ -556,7 +608,7 @@ async fn stream_and_decode_to_file(
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
     let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
-    let mut hashing_file_writer = HashingWriter::<_, cache::Blake2b256>::new(file);
+    let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
@@ -581,6 +633,7 @@ async fn stream_and_decode_to_file(
 pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
     has_bz2: Option<Expiring<bool>>,
+    has_jlap: Option<Expiring<bool>>,
 }
 
 impl VariantAvailability {
@@ -595,6 +648,14 @@ impl VariantAvailability {
     /// Returns true if there is a Bz2 variant available, regardless of when it was checked
     pub fn has_bz2(&self) -> bool {
         self.has_bz2
+            .as_ref()
+            .map(|state| state.value)
+            .unwrap_or(false)
+    }
+
+    /// Returns true if there is a JLAP variant available, regardless of when it was checked
+    pub fn has_jlap(&self) -> bool {
+        self.has_jlap
             .as_ref()
             .map(|state| state.value)
             .unwrap_or(false)
@@ -620,13 +681,19 @@ pub async fn check_variant_availability(
         .and_then(|state| state.has_bz2.as_ref())
         .and_then(|value| value.value(expiration_duration))
         .copied();
+    let has_jlap = cache_state
+        .and_then(|state| state.has_jlap.as_ref())
+        .and_then(|value| value.value(expiration_duration))
+        .copied();
 
     // Create a future to possibly refresh the zst state.
     let zst_repodata_url = subdir_url.join(&format!("{filename}.zst")).unwrap();
     let bz2_repodata_url = subdir_url.join(&format!("{filename}.bz2")).unwrap();
+    let jlap_repodata_url = subdir_url.join(jlap::JLAP_FILE_NAME).unwrap();
+
     let zst_future = match has_zst {
         Some(_) => {
-            // The last cached value was value so we simply copy that
+            // The last cached value was valid, so we simply copy that
             ready(cache_state.and_then(|state| state.has_zst.clone())).left_future()
         }
         None => async {
@@ -639,7 +706,7 @@ pub async fn check_variant_availability(
     };
 
     // Create a future to determine if bz2 is available. We only check this if we dont already know that
-    // zst is available because if thats available we're going to use that anyway.
+    // zst is available because if that's available we're going to use that anyway.
     let bz2_future = if has_zst != Some(true) {
         // If the zst variant might not be available we need to check whether bz2 is available.
         async {
@@ -661,13 +728,29 @@ pub async fn check_variant_availability(
         ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
     };
 
-    // TODO: Implement JLAP
+    let jlap_future = match has_jlap {
+        Some(_) => {
+            // The last cached value is valid, so we simply copy that
+            ready(cache_state.and_then(|state| state.has_jlap.clone())).left_future()
+        }
+        None => async {
+            Some(Expiring {
+                value: check_valid_download_target(&jlap_repodata_url, client).await,
+                last_checked: chrono::Utc::now(),
+            })
+        }
+        .right_future(),
+    };
 
-    // Await both futures so they happen concurrently. Note that a request might not actually happen if
+    // Await all futures so they happen concurrently. Note that a request might not actually happen if
     // the cache is still valid.
-    let (has_zst, has_bz2) = futures::join!(zst_future, bz2_future);
+    let (has_zst, has_bz2, has_jlap) = futures::join!(zst_future, bz2_future, jlap_future);
 
-    VariantAvailability { has_zst, has_bz2 }
+    VariantAvailability {
+        has_zst,
+        has_bz2,
+        has_jlap,
+    }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
@@ -806,7 +889,7 @@ fn validate_cached_state(
     //
     // Check the blake hash of the repodata.json file if we have a similar hash in the state.
     if let Some(cached_hash) = cache_state.blake2_hash.as_ref() {
-        match compute_file_digest::<blake2::Blake2s256>(&repo_data_json_path) {
+        match compute_file_digest::<Blake2b256>(&repo_data_json_path) {
             Err(e) => {
                 tracing::warn!(
                     "could not compute BLAKE2 hash of repodata.json file: {e}. Ignoring cached files..."
@@ -816,8 +899,8 @@ fn validate_cached_state(
             Ok(hash) => {
                 if &hash != cached_hash {
                     tracing::warn!(
-                    "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
-                );
+                        "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
+                    );
                     return ValidatedCacheState::Mismatched(cache_state);
                 }
             }

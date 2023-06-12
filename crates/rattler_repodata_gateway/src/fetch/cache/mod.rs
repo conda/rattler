@@ -1,14 +1,11 @@
 mod cache_headers;
 
-use blake2::digest::consts::U32;
-use blake2::Blake2b;
 pub use cache_headers::CacheHeaders;
+use rattler_digest::{serde::SerializableHash, Blake2b256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::serde_as;
 use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
 use url::Url;
-
-/// Custom blake2b type
-pub type Blake2b256 = Blake2b<U32>;
 
 /// Representation of the `.state.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +48,9 @@ pub struct RepoDataState {
 
     /// Whether or not JLAP is available for the subdirectory
     pub has_jlap: Option<Expiring<bool>>,
+
+    /// State information related to JLAP
+    pub jlap: Option<JLAPState>,
 }
 
 impl RepoDataState {
@@ -78,6 +78,35 @@ impl FromStr for RepoDataState {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
     }
+}
+
+/// Used inside of the `RepoDataState` to store information related to our JLAP state
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JLAPState {
+    /// Initialization Vector (IV) for of the JLAP file; this is found on the first line of the
+    /// JLAP file.
+    #[serde(rename = "iv", with = "hex")]
+    pub initialization_vector: Vec<u8>,
+
+    /// Current position to use for the bytes offset in the range request for JLAP
+    #[serde(rename = "pos")]
+    pub position: u64,
+
+    /// Footer contains metadata about the JLAP file such as which url it is for
+    pub footer: JLAPFooter,
+}
+
+/// Represents the metadata for a JLAP file, which is typically found at the very end
+#[serde_as]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct JLAPFooter {
+    /// This is not actually a full URL, just the last part of it (i.e. the filename
+    /// `repodata.json`). That's why we store it as a [`String`]
+    pub url: String,
+
+    /// blake2b hash of the latest `repodata.json` file
+    #[serde_as(as = "SerializableHash::<rattler_digest::Blake2b256>")]
+    pub latest: blake2::digest::Output<Blake2b256>,
 }
 
 /// Represents a value and when the value was last checked.

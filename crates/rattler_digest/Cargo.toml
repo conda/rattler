@@ -17,6 +17,7 @@ hex = "0.4.3"
 serde = { version = "1.0.163", features = ["derive"], optional = true }
 sha2 = "0.10.6"
 md-5 = "0.10.5"
+blake2 = "0.10.6"
 serde_with = "3.0.0"
 
 [features]
