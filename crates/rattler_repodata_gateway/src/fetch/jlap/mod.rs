@@ -78,9 +78,10 @@
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2bMac256};
+use rattler_networking::AuthenticatedClient;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
-    Client, Response, StatusCode,
+    Response, StatusCode,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
@@ -370,7 +371,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 ///
 /// The return value is the updated [`JLAPState`]
 pub async fn patch_repo_data(
-    client: &Client,
+    client: &AuthenticatedClient,
     subdir_url: Url,
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
@@ -412,7 +413,11 @@ pub async fn patch_repo_data(
 }
 
 /// Fetches a JLAP response from server
-async fn fetch_jlap(url: &str, client: &Client, range: &str) -> Result<Response, reqwest::Error> {
+async fn fetch_jlap(
+    url: &str,
+    client: &AuthenticatedClient,
+    range: &str,
+) -> Result<Response, reqwest::Error> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
 
@@ -434,7 +439,7 @@ async fn fetch_jlap(url: &str, client: &Client, range: &str) -> Result<Response,
 /// JLAPState accordingly.
 async fn fetch_jlap_with_retry(
     url: &str,
-    client: &Client,
+    client: &AuthenticatedClient,
     position: u64,
 ) -> Result<(Response, u64), JLAPError> {
     let range = format!("bytes={}-", position);
@@ -574,7 +579,7 @@ mod test {
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
     use rattler_digest::{parse_digest_from_hex, Blake2b256};
-    use reqwest::Client;
+    use rattler_networking::AuthenticatedClient;
     use rstest::rstest;
     use tempfile::TempDir;
     use url::Url;
@@ -866,7 +871,7 @@ mod test {
 
         pub cache_repo_data: PathBuf,
 
-        pub client: Client,
+        pub client: AuthenticatedClient,
 
         pub repo_data_state: RepoDataState,
     }
@@ -880,7 +885,7 @@ mod test {
             let (cache_dir, cache_repo_data) =
                 setup_client_environment(&server_url, Some(repo_data)).await;
 
-            let client = Client::default();
+            let client = AuthenticatedClient::default();
 
             let repo_data_state: RepoDataState = serde_json::from_str(repo_data_state).unwrap();
 
