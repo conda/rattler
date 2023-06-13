@@ -1,4 +1,5 @@
 use serde::{Deserializer, Serializer};
+use std::cmp::Ordering;
 use std::{fmt, fmt::Formatter, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
@@ -28,6 +29,18 @@ pub enum Platform {
     WinArm64,
 
     Emscripten32,
+}
+
+impl PartialOrd for Platform {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.as_str().partial_cmp(other.as_str())
+    }
+}
+
+impl Ord for Platform {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_str().cmp(other.as_str())
+    }
 }
 
 /// Known architectures supported by Conda.
