@@ -20,7 +20,7 @@
 //!
 //! ```no_run
 //! use std::{path::Path};
-//! use reqwest::Client;
+//! use rattler_networking::AuthenticatedClient;
 //! use url::Url;
 //!
 //! use rattler_repodata_gateway::fetch::jlap::{patch_repo_data, RepoDataState};
@@ -28,7 +28,7 @@
 //! #[tokio::main]
 //! pub async fn main() {
 //!     let subdir_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
-//!     let client = Client::new();
+//!     let client = AuthenticatedClient::default();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");
 //!
