@@ -6,7 +6,7 @@ use crate::conda_lock::{
     TimeMeta, VersionConstraint,
 };
 use crate::{MatchSpec, Platform};
-use std::collections::{HashMap, HashSet};
+use fxhash::{FxHashMap, FxHashSet};
 use url::Url;
 
 /// Struct used to build a conda-lock file
@@ -15,7 +15,7 @@ pub struct LockFileBuilder {
     /// Channels used to resolve dependencies
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
-    pub platforms: HashSet<Platform>,
+    pub platforms: FxHashSet<Platform>,
     /// Paths to source files, relative to the parent directory of the lockfile
     pub sources: Option<Vec<String>>,
     /// Metadata dealing with the time lockfile was created
@@ -24,7 +24,7 @@ pub struct LockFileBuilder {
     pub git_metadata: Option<GitMeta>,
 
     /// Keep track of locked packages per platform
-    pub locked_packages: HashMap<Platform, LockedPackages>,
+    pub locked_packages: FxHashMap<Platform, LockedPackages>,
 
     /// MatchSpecs input
     /// This is only used to calculate the content_hash
@@ -74,7 +74,7 @@ impl LockFileBuilder {
                     content_hash::calculate_content_hash(plat, &self.input_specs, &self.channels)?,
                 ))
             })
-            .collect::<Result<HashMap<_, _>, CalculateContentHashError>>()?;
+            .collect::<Result<FxHashMap<_, _>, CalculateContentHashError>>()?;
 
         let lock = CondaLock {
             metadata: LockMeta {
@@ -158,7 +158,7 @@ pub struct LockedPackage {
     /// Collection of package hash fields
     pub package_hashes: PackageHashes,
     /// List of dependencies for this package
-    pub dependency_list: HashMap<String, VersionConstraint>,
+    pub dependency_list: FxHashMap<String, VersionConstraint>,
     /// Check if package is optional
     pub optional: Option<bool>,
 }

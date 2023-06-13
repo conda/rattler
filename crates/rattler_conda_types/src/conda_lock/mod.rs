@@ -2,18 +2,19 @@
 //! It is modeled on the definitions found at: [conda-lock models](https://github.com/conda/conda-lock/blob/main/conda_lock/lockfile/models.py)
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
-use crate::conda_lock::PackageHashes::{Md5, Md5Sha256, Sha256};
-use crate::{NamelessMatchSpec, ParsePlatformError, Platform};
-use rattler_digest::serde::SerializableHash;
-use rattler_digest::{Md5Hash, Sha256Hash};
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-use std::str::FromStr;
+use self::PackageHashes::{Md5, Md5Sha256, Sha256};
+use crate::{utils::serde::Ordered, NamelessMatchSpec, ParsePlatformError, Platform};
+use fxhash::FxHashMap;
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::serde_as;
+use std::{
+    fmt::{Display, Formatter},
+    fs::File,
+    io::Read,
+    path::Path,
+    str::FromStr,
+};
 use url::Url;
 
 pub mod builder;
@@ -27,7 +28,7 @@ const fn default_version() -> u32 {
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
 /// also the locked packages
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CondaLock {
     /// Metadata for the lock file
     pub metadata: LockMeta,
@@ -93,14 +94,16 @@ impl CondaLock {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[serde_as]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 /// Metadata for the [`CondaLock`] file
 pub struct LockMeta {
     /// Hash of dependencies for each target platform
-    pub content_hash: HashMap<Platform, String>,
+    pub content_hash: FxHashMap<Platform, String>,
     /// Channels used to resolve dependencies
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
+    #[serde_as(as = "Ordered<_>")]
     pub platforms: Vec<Platform>,
     /// Paths to source files, relative to the parent directory of the lockfile
     pub sources: Vec<String>,
@@ -109,13 +112,13 @@ pub struct LockMeta {
     /// Metadata dealing with the git repo the lockfile was created in and the user that created it
     pub git_metadata: Option<GitMeta>,
     /// Metadata dealing with the input files used to create the lockfile
-    pub inputs_metadata: Option<HashMap<String, PackageHashes>>,
+    pub inputs_metadata: Option<FxHashMap<String, PackageHashes>>,
     /// Custom metadata provided by the user to be added to the lockfile
-    pub custom_metadata: Option<HashMap<String, String>>,
+    pub custom_metadata: Option<FxHashMap<String, String>>,
 }
 
 /// Stores information about when the lockfile was generated
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TimeMeta {
     /// Time stamp of lock-file creation format
     // TODO: I think this is UTC time, change this later, conda-lock is not really using this now
@@ -124,7 +127,7 @@ pub struct TimeMeta {
 
 /// Stores information about the git repo the lockfile is being generated in (if applicable) and
 /// the git user generating the file.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GitMeta {
     /// Git user.name field of global config
     pub git_user_name: String,
@@ -135,7 +138,7 @@ pub struct GitMeta {
 }
 
 /// Represents whether this is a dependency managed by pip or conda
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, Hash)]
 #[serde(rename_all = "lowercase")]
 pub enum Manager {
     /// The "conda" manager
@@ -144,7 +147,7 @@ pub enum Manager {
     Pip,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Debug)]
 /// This is basically a MatchSpec but will never contain the package name
 /// TODO: Should this just wrap [`NamelessMatchSpec`]?
 pub struct VersionConstraint(String);
@@ -168,6 +171,7 @@ impl From<NamelessMatchSpec> for VersionConstraint {
 /// If only the `md5` field is present, it constructs a `Md5` instance with its value.
 /// If only the `sha256` field is present, it constructs a `Sha256` instance with its value.
 /// If neither field is present it returns an error
+#[derive(Eq, PartialEq, Hash, Clone, Debug)]
 pub enum PackageHashes {
     /// Contains an MD5 hash
     Md5(Md5Hash),
@@ -234,7 +238,7 @@ fn default_category() -> String {
 }
 
 /// A locked single dependency / package
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct LockedDependency {
     /// Package name of dependency
     pub name: String,
@@ -245,7 +249,7 @@ pub struct LockedDependency {
     /// What platform is this package for
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
-    pub dependencies: HashMap<String, VersionConstraint>,
+    pub dependencies: FxHashMap<String, VersionConstraint>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
@@ -262,7 +266,7 @@ pub struct LockedDependency {
 }
 
 /// The URL for the dependency (currently only used for pip packages)
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct DependencySource {
     // According to:
     // https://github.com/conda/conda-lock/blob/854fca9923faae95dc2ddd1633d26fd6b8c2a82d/conda_lock/lockfile/models.py#L27
@@ -273,11 +277,13 @@ pub struct DependencySource {
 }
 
 /// The conda channel that was used for the dependency
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde_as]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct Channel {
     /// Called `url` but can also be the name of the channel e.g. `conda-forge`
     pub url: String,
     /// Used env vars for the channel (e.g. hints for passwords or other secrets)
+    #[serde_as(as = "Ordered<_>")]
     pub used_env_vars: Vec<String>,
 }
 
