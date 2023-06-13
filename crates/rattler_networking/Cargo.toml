@@ -1,0 +1,32 @@
+[package]
+name = "rattler_networking"
+version.workspace = true
+edition.workspace = true
+authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
+description = "Authenticated requests in the conda ecosystem"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[features]
+native-tls = ['reqwest/native-tls']
+rustls-tls = ['reqwest/rustls-tls']
+
+[dependencies]
+anyhow = "1.0.71"
+dirs = "5.0.1"
+keyring = "2.0.2"
+lazy_static = "1.4.0"
+libc = "0.2.144"
+reqwest = { version = "0.11.17", features = ["blocking"], default-features = false}
+serde = "1.0.163"
+serde_json = "1.0.96"
+thiserror = "1.0.40"
+tracing = "0.1.37"
+
+[dev-dependencies]
+anyhow = "1.0.71"
+insta = { version = "1.29.0", features = ["json"] }
+tempfile = "3.5.0"

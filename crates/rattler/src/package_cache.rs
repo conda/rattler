@@ -5,7 +5,7 @@ use fxhash::FxHashMap;
 use itertools::Itertools;
 use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
-use reqwest::Client;
+use rattler_networking::AuthenticatedClient;
 use std::error::Error;
 use std::{
     fmt::{Display, Formatter},
@@ -180,7 +180,7 @@ impl PackageCache {
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
-        client: Client,
+        client: AuthenticatedClient,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
             tracing::debug!("downloading {} to {}", &url, destination.display());

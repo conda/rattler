@@ -6,9 +6,10 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
+use rattler_networking::AuthenticatedClient;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
-    Client, Response, StatusCode,
+    Response, StatusCode,
 };
 use std::{
     io::ErrorKind,
@@ -247,7 +248,7 @@ async fn repodata_from_file(
 #[instrument(err, skip_all, fields(subdir_url, cache_path = %cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: Client,
+    client: AuthenticatedClient,
     cache_path: &Path,
     options: FetchRepoDataOptions,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
@@ -438,7 +439,6 @@ pub async fn fetch_repo_data(
     if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
         cache_headers.add_to_request(&mut headers)
     }
-
     // Send the request and wait for a reply
     let response = request_builder
         .headers(headers)
@@ -665,7 +665,7 @@ impl VariantAvailability {
 /// Determine the availability of `repodata.json` variants (like a `.zst` or `.bz2`) by checking
 /// a cache or the internet.
 pub async fn check_variant_availability(
-    client: &Client,
+    client: &AuthenticatedClient,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
@@ -754,7 +754,7 @@ pub async fn check_variant_availability(
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
-async fn check_valid_download_target(url: &Url, client: &Client) -> bool {
+async fn check_valid_download_target(url: &Url, client: &AuthenticatedClient) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
     if url.scheme() == "file" {
@@ -975,6 +975,7 @@ mod test {
     use crate::utils::Encoding;
     use assert_matches::assert_matches;
     use hex_literal::hex;
+    use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
     use reqwest::Client;
     use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -1070,7 +1071,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1099,7 +1100,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1111,7 +1112,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1134,7 +1135,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1162,7 +1163,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1203,7 +1204,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1251,7 +1252,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
         )
@@ -1280,6 +1281,7 @@ mod test {
     pub async fn test_gzip_transfer_encoding() {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
+        let tempdir = TempDir::new().unwrap();
         write_encoded(
             FAKE_REPO_DATA.as_ref(),
             &subdir_path.path().join("repodata.json.gz"),
@@ -1295,9 +1297,14 @@ mod test {
 
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
+        let client = Client::builder().no_gzip().build().unwrap();
+        let authenticated_client = AuthenticatedClient::from_client(
+            client,
+            AuthenticationStorage::new("rattler", tempdir.path()),
+        );
         let result = fetch_repo_data(
             server.url(),
-            Client::builder().no_gzip().build().unwrap(),
+            authenticated_client,
             cache_dir.path(),
             Default::default(),
         )
@@ -1329,7 +1336,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let _result = fetch_repo_data(
             server.url(),
-            Client::default(),
+            AuthenticatedClient::default(),
             cache_dir.path(),
             FetchRepoDataOptions {
                 download_progress: Some(Box::new(download_progress)),

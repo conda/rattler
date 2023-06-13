@@ -5,7 +5,8 @@ pub mod tokio;
 
 use crate::{ExtractError, ExtractResult};
 use rattler_conda_types::package::ArchiveType;
-use reqwest::blocking::{Client, Response};
+use rattler_networking::AuthenticatedClientBlocking;
+use reqwest::blocking::Response;
 use reqwest::IntoUrl;
 use std::path::Path;
 
@@ -14,15 +15,16 @@ use std::path::Path;
 /// ```rust,no_run
 /// # use std::path::Path;
 /// use rattler_package_streaming::reqwest::extract_tar_bz2;
+/// use rattler_networking::AuthenticatedClientBlocking;
 /// # use reqwest::blocking::Client;
 /// let _ = extract_tar_bz2(
-///     Client::default(),
+///     AuthenticatedClientBlocking::default(),
 ///     "https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2",
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
 pub fn extract_tar_bz2(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
@@ -42,15 +44,16 @@ pub fn extract_tar_bz2(
 /// ```rust,no_run
 /// # use std::path::Path;
 /// use rattler_package_streaming::reqwest::extract_conda;
+/// use rattler_networking::AuthenticatedClientBlocking;
 /// # use reqwest::blocking::Client;
 /// let _ = extract_conda(
-///     Client::default(),
+///     AuthenticatedClientBlocking::default(),
 ///     "https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda",
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
 pub fn extract_conda(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
@@ -71,15 +74,16 @@ pub fn extract_conda(
 /// ```rust,no_run
 /// # use std::path::Path;
 /// use rattler_package_streaming::reqwest::extract;
+/// use rattler_networking::AuthenticatedClientBlocking;
 /// # use reqwest::blocking::Client;
 /// let _ = extract(
-///     Client::default(),
+///     AuthenticatedClientBlocking::default(),
 ///     "https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda",
 ///     Path::new("/tmp"))
 ///     .unwrap();
 /// ```
 pub fn extract(
-    client: Client,
+    client: AuthenticatedClientBlocking,
     url: impl IntoUrl,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {

@@ -1,0 +1,7 @@
+---
+source: crates/rattler_networking/src/lib.rs
+expression: authentication
+---
+{
+  "CondaToken": "testtoken"
+}

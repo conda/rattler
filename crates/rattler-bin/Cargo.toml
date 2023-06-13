@@ -16,8 +16,8 @@ path = "src/main.rs"
 
 [features]
 default = ["native-tls"]
-native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls"]
-rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
+native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gateway/native-tls", "rattler_networking/native-tls"]
+rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls"]
 
 [dependencies]
 anyhow = "1.0.71"
@@ -29,6 +29,7 @@ indicatif = "0.17.5"
 itertools = "0.10.5"
 once_cell = "1.18.0"
 rattler = { version = "0.2.0", path = "../rattler", default-features = false }
+rattler_networking = { version = "0.2.0", path = "../rattler_networking", default-features = false }
 rattler_conda_types = { version = "0.2.0", path = "../rattler_conda_types" }
 rattler_repodata_gateway = { version = "0.2.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
 rattler_solve = { version = "0.2.0", path = "../rattler_solve" }

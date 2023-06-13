@@ -10,6 +10,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
     RepoDataRecord,
 };
+use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
@@ -93,6 +94,14 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .no_gzip()
         .build()
         .expect("failed to create client");
+
+    let auth_dir = dirs::config_local_dir()
+        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
+        .join("rattler/auth");
+
+    let authentication_storage = AuthenticationStorage::new("rattler_credentials", &auth_dir);
+
+    let download_client = AuthenticatedClient::from_client(download_client, authentication_storage);
     let multi_progress = global_multi_progress();
 
     let repodata_cache_path = cache_dir.join("repodata");
@@ -197,7 +206,7 @@ async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
     cache_dir: PathBuf,
-    download_client: Client,
+    download_client: AuthenticatedClient,
 ) -> anyhow::Result<()> {
     // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
@@ -277,7 +286,7 @@ async fn execute_transaction(
 #[allow(clippy::too_many_arguments)]
 async fn execute_operation(
     target_prefix: &Path,
-    download_client: Client,
+    download_client: AuthenticatedClient,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     download_pb: Option<&ProgressBar>,
@@ -463,7 +472,7 @@ async fn fetch_repo_data_records_with_progress(
     channel: Channel,
     platform: Platform,
     repodata_cache: &Path,
-    client: Client,
+    client: AuthenticatedClient,
     multi_progress: indicatif::MultiProgress,
 ) -> Result<Option<SparseRepoData>, anyhow::Error> {
     // Create a progress bar
