@@ -72,7 +72,7 @@ use matcher::StringMatcher;
 ///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
 /// assert_eq!(spec.name, Some("foo".to_string()));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();

@@ -380,7 +380,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
             // If the version starts with `==` and the build string is none we strip the `==` part.
             Cow::Borrowed(version_str)
         } else if let Some(version_str_part) = version_str.strip_prefix('=') {
-            let not_a_group = !version_str_part.contains(&['=', ',', '|']);
+            let not_a_group = !version_str_part.contains(['=', ',', '|']);
             if not_a_group {
                 // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a *
                 // if it doesnt have one already.
