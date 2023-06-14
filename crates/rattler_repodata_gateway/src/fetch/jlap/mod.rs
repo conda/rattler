@@ -90,6 +90,7 @@ use std::iter::Iterator;
 use std::path::Path;
 use std::str;
 use std::str::FromStr;
+use std::sync::Arc;
 use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
@@ -185,7 +186,7 @@ pub struct JLAPResponse<'a> {
     initialization_vector: Vec<u8>,
 
     /// List of patches parsed from the JLAP Response
-    patches: Vec<Patch>,
+    patches: Arc<[Patch]>,
 
     /// Footer of the request which contains data like the latest hash
     footer: JLAPFooter,
@@ -263,7 +264,7 @@ impl<'a> JLAPResponse<'a> {
 
         Ok(JLAPResponse {
             initialization_vector,
-            patches,
+            patches: patches.into(),
             footer,
             checksum,
             new_position,
@@ -282,14 +283,11 @@ impl<'a> JLAPResponse<'a> {
         // We use the current hash to find which patches we need to apply
         let current_idx = self.patches.iter().position(|patch| patch.from == hash);
 
-        return if let Some(idx) = current_idx {
-            let applicable_patches = self.patches[idx..self.patches.len()].iter();
-            apply_jlap_patches(applicable_patches, repo_data_json_path).await?;
-
-            Ok(())
+        if let Some(idx) = current_idx {
+            apply_jlap_patches(self.patches.clone(), idx, repo_data_json_path).await
         } else {
             Err(JLAPError::NoHashFound)
-        };
+        }
     }
 
     /// Returns a new [`JLAPState`] based on values in [`JLAPResponse`] struct
@@ -501,41 +499,58 @@ where
 /// 2. Applying patches to this repodata file
 /// 3. Re-ordering the repo data
 /// 4. Saving this repodata file to disk
-async fn apply_jlap_patches<'a, I>(patches: I, repo_data_path: &Path) -> Result<(), JLAPError>
-where
-    I: Iterator<Item = &'a Patch>,
-{
+async fn apply_jlap_patches(
+    patches: Arc<[Patch]>,
+    start_index: usize,
+    repo_data_path: &Path,
+) -> Result<(), JLAPError> {
     // Open and read the current repodata into a JSON doc
     let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
         Ok(contents) => contents,
         Err(error) => return Err(JLAPError::FileSystem(error)),
     };
 
-    let mut doc = match serde_json::from_str(&repo_data_contents) {
-        Ok(doc) => doc,
-        Err(error) => return Err(JLAPError::JSONParse(error)),
-    };
+    // All these JSON operations are pretty CPU intensive therefor we move them to a blocking task
+    // to ensure any other async operations will continue to purr along.
+    let content = match tokio::task::spawn_blocking(move || {
+        let mut doc = match serde_json::from_str(&repo_data_contents) {
+            Ok(doc) => doc,
+            Err(error) => return Err(JLAPError::JSONParse(error)),
+        };
 
-    // Apply the patches we current have to it
-    for patch in patches {
-        if let Err(error) = json_patch::patch(&mut doc, &patch.patch) {
-            return Err(JLAPError::JSONPatch(error));
+        // Apply the patches we current have to it
+        for patch in &patches[start_index..] {
+            if let Err(error) = json_patch::patch(&mut doc, &patch.patch) {
+                return Err(JLAPError::JSONPatch(error));
+            }
         }
-    }
 
-    let ordered_doc: OrderedRepoData = match serde_json::from_value(doc) {
-        Ok(value) => value,
-        Err(error) => return Err(JLAPError::JSONParse(error)),
+        let ordered_doc: OrderedRepoData = match serde_json::from_value(doc) {
+            Ok(value) => value,
+            Err(error) => return Err(JLAPError::JSONParse(error)),
+        };
+
+        let mut updated_json = match serde_json::to_string_pretty(&ordered_doc) {
+            Ok(value) => value,
+            Err(error) => return Err(JLAPError::JSONParse(error)),
+        };
+
+        // We need to add an extra newline character to the end of our string so the hashes match
+        updated_json.insert(updated_json.len(), '\n');
+        Ok(updated_json.into_bytes())
+    })
+    .await
+    {
+        Ok(content) => content?,
+        Err(err) => {
+            if let Ok(reason) = err.try_into_panic() {
+                std::panic::resume_unwind(reason);
+            }
+
+            // Cancelled, do nothing..
+            return Ok(());
+        }
     };
-
-    let mut updated_json = match serde_json::to_string_pretty(&ordered_doc) {
-        Ok(value) => value,
-        Err(error) => return Err(JLAPError::JSONParse(error)),
-    };
-
-    // We need to add an extra newline character to the end of our string so the hashes match
-    updated_json.insert(updated_json.len(), '\n');
-    let content = updated_json.into_bytes();
 
     match tokio::fs::write(repo_data_path, &content).await {
         Ok(_) => Ok(()),
