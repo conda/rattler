@@ -88,8 +88,8 @@ fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, &'a str), nom::Err<E>> {
     alt((
-        // Any
-        tag("*"),
+        // Any (* or *.*)
+        terminated(tag("*"), cut(opt(tag(".*")))),
         // Regex
         recognize(delimited(tag("^"), not(tag("$")), tag("$"))),
         // Version with optional operator followed by optional glob.

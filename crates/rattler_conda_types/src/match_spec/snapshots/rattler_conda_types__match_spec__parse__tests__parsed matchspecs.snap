@@ -1,0 +1,25 @@
+---
+source: crates/rattler_conda_types/src/match_spec/parse.rs
+expression: evaluated
+---
+blas *.* mkl:
+  name: blas
+  version: "*"
+  build: mkl
+foo=1.0=py27_0:
+  name: foo
+  version: "==1.0"
+  build: py27_0
+foo==1.0=py27_0:
+  name: foo
+  version: "==1.0"
+  build: py27_0
+python 3.8.* *_cpython:
+  name: python
+  version: 3.8.*
+  build: "*_cpython"
+pytorch=*=cuda*:
+  name: pytorch
+  version: "*"
+  build: cuda*
+

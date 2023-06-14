@@ -373,6 +373,30 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
             Cow::Borrowed(version_str)
         };
 
+        // Special case handling for version strings that start with `=`.
+        let version_str = if let (Some(version_str), true) =
+            (version_str.strip_prefix("=="), build_str.is_none())
+        {
+            // If the version starts with `==` and the build string is none we strip the `==` part.
+            Cow::Borrowed(version_str)
+        } else if let Some(version_str_part) = version_str.strip_prefix('=') {
+            let not_a_group = !version_str_part.contains(&['=', ',', '|']);
+            if not_a_group {
+                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a *
+                // if it doesnt have one already.
+                if build_str.is_none() && !version_str_part.ends_with('*') {
+                    Cow::Owned(format!("{version_str_part}*"))
+                } else {
+                    Cow::Borrowed(version_str_part)
+                }
+            } else {
+                // Version string is part of a group, return the non-stripped version string
+                version_str
+            }
+        } else {
+            version_str
+        };
+
         // Parse the version spec
         match_spec.version = Some(
             VersionSpec::from_str(version_str.as_ref())
@@ -389,6 +413,8 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
 #[cfg(test)]
 mod tests {
+    use serde::Serialize;
+    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use super::{
@@ -460,27 +486,6 @@ mod tests {
             Ok(("*", Some("openblas_0")))
         );
         assert_eq!(split_version_and_build("* *"), Ok(("*", Some("*"))));
-    }
-
-    #[test]
-    fn test_match_spec() {
-        insta::assert_yaml_snapshot!([
-            MatchSpec::from_str("python 3.8.* *_cpython").unwrap(),
-            MatchSpec::from_str("foo=1.0=py27_0").unwrap(),
-            MatchSpec::from_str("foo==1.0=py27_0").unwrap(),
-        ],
-        @r###"
-        ---
-        - name: python
-          version: 3.8.*
-          build: "*_cpython"
-        - name: foo
-          version: 1.0.*
-          build: py27_0
-        - name: foo
-          version: "==1.0"
-          build: py27_0
-        "###);
     }
 
     #[test]
@@ -565,5 +570,40 @@ mod tests {
                 .as_ref(),
             &[("version", "1.3,2.0")]
         );
+    }
+
+    #[test]
+    fn test_from_str() {
+        // A list of matchspecs to parse.
+        // Please keep this list sorted.
+        let specs = [
+            "blas *.* mkl",
+            "foo=1.0=py27_0",
+            "foo==1.0=py27_0",
+            "python 3.8.* *_cpython",
+            "pytorch=*=cuda*",
+        ];
+
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum MatchSpecOrError {
+            Error { error: String },
+            MatchSpec(MatchSpec),
+        }
+
+        let evaluated: BTreeMap<_, _> = specs
+            .iter()
+            .map(|spec| {
+                (
+                    spec,
+                    MatchSpec::from_str(spec)
+                        .map(MatchSpecOrError::MatchSpec)
+                        .unwrap_or_else(|err| MatchSpecOrError::Error {
+                            error: err.to_string(),
+                        }),
+                )
+            })
+            .collect();
+        insta::assert_yaml_snapshot!("parsed matchspecs", evaluated);
     }
 }
