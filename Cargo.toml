@@ -9,7 +9,7 @@ opt-level = 3
 opt-level = 3
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 categories = ["conda"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
