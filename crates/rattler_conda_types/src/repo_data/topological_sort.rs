@@ -4,7 +4,9 @@ use fxhash::{FxHashMap, FxHashSet};
 /// Sorts the packages topologically
 ///
 /// This function is deterministic, meaning that it will return the same result regardless of the
-/// order of `packages` and of the `depends` vector inside the records
+/// order of `packages` and of the `depends` vector inside the records.
+///
+/// Note that this function only works for packages with unique names.
 pub fn sort_topologically<T: AsRef<PackageRecord>>(packages: Vec<T>) -> Vec<T> {
     let roots = get_graph_roots(&packages);
 

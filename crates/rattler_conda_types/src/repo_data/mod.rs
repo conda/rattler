@@ -186,6 +186,8 @@ impl PackageRecord {
     ///
     /// This function is deterministic, meaning that it will return the same result regardless of
     /// the order of `records` and of the `depends` vector inside the records.
+    ///
+    /// Note that this function only works for packages with unique names.
     pub fn sort_topologically<T: AsRef<PackageRecord>>(records: Vec<T>) -> Vec<T> {
         topological_sort::sort_topologically(records)
     }
