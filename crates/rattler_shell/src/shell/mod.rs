@@ -7,7 +7,6 @@ use std::{
     fmt::Write,
     path::{Path, PathBuf},
 };
-use sysinfo::{get_current_pid, ProcessExt, SystemExt};
 
 /// A trait for generating shell scripts.
 /// The trait is implemented for each shell individually.
@@ -329,8 +328,10 @@ impl ShellEnum {
     }
 
     /// Guesses the current shell by checking the name of the parent process.
-    #[cfg(feature="sysinfo")]
+    #[cfg(feature = "sysinfo")]
     pub fn from_parent_process() -> Option<Self> {
+        use sysinfo::{get_current_pid, ProcessExt, SystemExt};
+
         let mut system_info = sysinfo::System::new();
 
         // Get current process information
@@ -447,9 +448,16 @@ mod tests {
         insta::assert_snapshot!(script.contents);
     }
 
+    #[cfg(feature = "sysinfo")]
     #[test]
     fn test_from_parent_process_doenst_crash() {
         let shell = ShellEnum::from_parent_process();
-        println!("{:?}", shell);
+        println!("Detected shell: {:?}", shell);
+    }
+
+    #[test]
+    fn test_from_env() {
+        let shell = ShellEnum::from_env();
+        println!("Detected shell: {:?}", shell);
     }
 }

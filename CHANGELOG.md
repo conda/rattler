@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Refactored shell detection code using `$SHELL` or parent process name ([#219](https://github.com/mamba-org/rattler/pull/219))
+
 ## [0.3.0] - 2023-06-15
 
 ### Highlights
