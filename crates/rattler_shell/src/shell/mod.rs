@@ -283,7 +283,7 @@ impl Shell for Fish {
 /// A generic [`Shell`] implementation for concrete shell types.
 #[enum_dispatch]
 #[allow(missing_docs)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ShellEnum {
     Bash,
     Zsh,
@@ -293,15 +293,94 @@ pub enum ShellEnum {
     Fish,
 }
 
-impl ShellEnum {
-    /// Returns the shell for the current system.
-    pub fn detect_from_environment() -> Option<Self> {
-        // TODO: Make this a bit better
+// The default shell is determined by the current OS.
+impl Default for ShellEnum {
+    fn default() -> Self {
         if cfg!(windows) {
+            CmdExe.into()
+        } else {
+            Bash.into()
+        }
+    }
+}
+
+impl ShellEnum {
+    /// Parse a shell from a path to the executable for the shell.
+    pub fn from_shell_path<P: AsRef<Path>>(path: P) -> Option<Self> {
+        parse_shell_from_path(path.as_ref())
+    }
+
+    /// Determine the user's current shell from the environment
+    ///
+    /// This will read the SHELL environment variable and try to determine which shell is in use
+    /// from that.
+    ///
+    /// If SHELL is set, but contains a value that doesn't correspond to one of the supported shell
+    /// types, then return `None`.
+    pub fn from_env() -> Option<Self> {
+        if let Some(env_shell) = std::env::var_os("SHELL") {
+            Self::from_shell_path(env_shell)
+        } else if cfg!(windows) {
+            Some(PowerShell.into())
+        } else {
+            None
+        }
+    }
+
+    /// Guesses the current shell by checking the name of the parent process.
+    #[cfg(feature = "sysinfo")]
+    pub fn from_parent_process() -> Option<Self> {
+        use sysinfo::{get_current_pid, ProcessExt, SystemExt};
+
+        let mut system_info = sysinfo::System::new();
+
+        // Get current process information
+        let current_pid = get_current_pid().ok()?;
+        system_info.refresh_process(current_pid);
+        let parent_process_id = system_info
+            .process(current_pid)
+            .and_then(|process| process.parent())?;
+
+        // Get the name of the parent process
+        system_info.refresh_process(parent_process_id);
+        let parent_process = system_info.process(parent_process_id)?;
+        let parent_process_name = parent_process.name().to_lowercase();
+
+        tracing::debug!(
+            "guessing ShellEnum. Parent process name: {}",
+            &parent_process_name
+        );
+
+        if parent_process_name.contains("bash") {
+            Some(Bash.into())
+        } else if parent_process_name.contains("zsh") {
+            Some(Zsh.into())
+        } else if parent_process_name.contains("xonsh") {
+            Some(Xonsh.into())
+        } else if parent_process_name.contains("fish") {
+            Some(Fish.into())
+        } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
+        {
+            Some(PowerShell.into())
+        } else if parent_process_name.contains("cmd.exe") {
             Some(CmdExe.into())
         } else {
-            Some(Bash.into())
+            None
         }
+    }
+}
+
+/// Determine the shell from a path to a shell.
+fn parse_shell_from_path(path: &Path) -> Option<ShellEnum> {
+    let name = path.file_stem()?.to_str()?;
+    match name {
+        "bash" => Some(Bash.into()),
+        "zsh" => Some(Zsh.into()),
+        "xonsh" => Some(Xonsh.into()),
+        "fish" => Some(Fish.into()),
+        "cmd" => Some(CmdExe.into()),
+        "powershell" | "powershell_ise" => Some(PowerShell.into()),
+        _ => None,
     }
 }
 
@@ -367,5 +446,18 @@ mod tests {
             .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
 
         insta::assert_snapshot!(script.contents);
+    }
+
+    #[cfg(feature = "sysinfo")]
+    #[test]
+    fn test_from_parent_process_doenst_crash() {
+        let shell = ShellEnum::from_parent_process();
+        println!("Detected shell: {:?}", shell);
+    }
+
+    #[test]
+    fn test_from_env() {
+        let shell = ShellEnum::from_env();
+        println!("Detected shell: {:?}", shell);
     }
 }
