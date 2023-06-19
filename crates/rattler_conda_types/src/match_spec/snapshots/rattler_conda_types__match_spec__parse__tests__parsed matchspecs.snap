@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
+assertion_line: 629
 expression: evaluated
 ---
 blas *.* mkl:
@@ -22,4 +23,7 @@ pytorch=*=cuda*:
   name: pytorch
   version: "*"
   build: cuda*
+"x264 >=1!164.3095,<1!165":
+  name: x264
+  version: ">=1!164.3095,<1!165"
 
