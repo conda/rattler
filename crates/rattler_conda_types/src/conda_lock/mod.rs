@@ -3,7 +3,7 @@
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
 use self::PackageHashes::{Md5, Md5Sha256, Sha256};
-use crate::{utils::serde::Ordered, NamelessMatchSpec, ParsePlatformError, Platform};
+use crate::{utils::serde::Ordered, NamelessMatchSpec, NoArchType, ParsePlatformError, Platform};
 use fxhash::FxHashMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
@@ -238,6 +238,7 @@ fn default_category() -> String {
 }
 
 /// A locked single dependency / package
+#[serde_as]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct LockedDependency {
     /// Package name of dependency
@@ -263,6 +264,52 @@ pub struct LockedDependency {
     pub source: Option<Url>,
     /// Build string
     pub build: Option<String>,
+
+    /// Experimental: architecture field
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arch: Option<String>,
+
+    /// Experimental: the subdir where the package can be found
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subdir: Option<String>,
+
+    /// Experimental: conda build number of the package
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_number: Option<u64>,
+
+    /// Experimental: see: [Constrains](rattler_conda_types::repo_data::PackageRecord::constrains)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub constrains: Option<Vec<String>>,
+
+    /// Experimental: see: [Features](rattler_conda_types::repo_data::PackageRecord::features)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub features: Option<String>,
+
+    /// Experimental: see: [Track features](rattler_conda_types::repo_data::PackageRecord::track_features)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub track_features: Option<Vec<String>>,
+
+    /// Experimental: the specific license of the package
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+
+    /// Experimental: the license family of the package
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license_family: Option<String>,
+
+    /// Experimental: If this package is independent of architecture this field specifies in what way. See
+    /// [`NoArchType`] for more information.
+    #[serde(skip_serializing_if = "NoArchType::is_none")]
+    pub noarch: NoArchType,
+
+    /// Experimental: The size of the package archive in bytes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+
+    /// Experimental: The date this entry was created.
+    #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// The URL for the dependency (currently only used for pip packages)

@@ -5,7 +5,7 @@ use crate::conda_lock::{
     content_hash, Channel, CondaLock, GitMeta, LockMeta, LockedDependency, Manager, PackageHashes,
     TimeMeta, VersionConstraint,
 };
-use crate::{MatchSpec, Platform};
+use crate::{MatchSpec, NoArchType, Platform};
 use fxhash::{FxHashMap, FxHashSet};
 use url::Url;
 
@@ -139,6 +139,25 @@ impl LockedPackages {
                     category: super::default_category(),
                     source: None,
                     build: Some(locked_package.build_string),
+                    arch: locked_package.arch,
+                    subdir: locked_package.subdir,
+                    build_number: locked_package.build_number,
+                    constrains: if locked_package.constrains.is_empty() {
+                        None
+                    } else {
+                        Some(locked_package.constrains)
+                    },
+                    features: locked_package.features,
+                    track_features: if locked_package.track_features.is_empty() {
+                        None
+                    } else {
+                        Some(locked_package.track_features)
+                    },
+                    license: locked_package.license,
+                    license_family: locked_package.license_family,
+                    noarch: locked_package.noarch,
+                    size: locked_package.size,
+                    timestamp: locked_package.timestamp,
                 }
             })
             .collect()
@@ -161,6 +180,40 @@ pub struct LockedPackage {
     pub dependency_list: FxHashMap<String, VersionConstraint>,
     /// Check if package is optional
     pub optional: Option<bool>,
+
+    /// Experimental: architecture field
+    pub arch: Option<String>,
+
+    /// Experimental: the subdir where the package can be found
+    pub subdir: Option<String>,
+
+    /// Experimental: conda build number of the package
+    pub build_number: Option<u64>,
+
+    /// Experimental: see: [Constrains](rattler_conda_types::repo_data::PackageRecord::constrains)
+    pub constrains: Vec<String>,
+
+    /// Experimental: see: [Features](rattler_conda_types::repo_data::PackageRecord::features)
+    pub features: Option<String>,
+
+    /// Experimental: see: [Track features](rattler_conda_types::repo_data::PackageRecord::track_features)
+    pub track_features: Vec<String>,
+
+    /// Experimental: the specific license of the package
+    pub license: Option<String>,
+
+    /// Experimental: the license family of the package
+    pub license_family: Option<String>,
+
+    /// Experimental: If this package is independent of architecture this field specifies in what way. See
+    /// [`NoArchType`] for more information.
+    pub noarch: NoArchType,
+
+    /// Experimental: The size of the package archive in bytes
+    pub size: Option<u64>,
+
+    /// Experimental: The date this entry was created.
+    pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl LockedPackage {
@@ -187,6 +240,84 @@ impl LockedPackage {
         value: impl IntoIterator<Item = (String, VersionConstraint)>,
     ) -> Self {
         self.dependency_list.extend(value);
+        self
+    }
+
+    /// Set the subdir for for the package
+    pub fn set_arch<S: AsRef<str>>(mut self, arch: String) -> Self {
+        self.subdir = Some(arch);
+        self
+    }
+
+    /// Set the subdir for for the package
+    pub fn set_subdir<S: AsRef<str>>(mut self, subdir: String) -> Self {
+        self.subdir = Some(subdir);
+        self
+    }
+
+    /// Set the subdir for for the package
+    pub fn set_build_number<S: AsRef<str>>(mut self, build_number: u64) -> Self {
+        self.build_number = Some(build_number);
+        self
+    }
+
+    /// Add the constrains for this package
+    pub fn add_constrain<S: AsRef<str>>(mut self, constrain: S) -> Self {
+        self.constrains.push(constrain.as_ref().to_string());
+        self
+    }
+
+    /// Add the constrains for this package
+    pub fn add_constrains<S: AsRef<str>>(mut self, constrain: impl IntoIterator<Item = String>) -> Self {
+        self.constrains.extend(constrain);
+        self
+    }
+
+    /// Set the features for for the package
+    pub fn set_features<S: AsRef<str>>(mut self, features: S) -> Self {
+        self.features = Some(features.as_ref().to_string());
+        self
+    }
+
+    /// Add a track feature for the package
+    pub fn add_track_feature<S: AsRef<str>>(mut self, track_feature: S) -> Self {
+        self.track_features.push(track_feature.as_ref().to_string());
+        self
+    }
+
+    /// Add multiple track features for for the package
+    pub fn add_track_features(mut self, value: impl IntoIterator<Item = String>) -> Self {
+        self.track_features.extend(value);
+        self
+    }
+
+    /// Set the licence for for the package
+    pub fn add_license<S: AsRef<str>>(mut self, license: S) -> Self {
+        self.license = Some(license.as_ref().to_string());
+        self
+    }
+
+    /// Set the license family for for the package
+    pub fn add_license_family<S: AsRef<str>>(mut self, license_family: S) -> Self {
+        self.license_family = Some(license_family.as_ref().to_string());
+        self
+    }
+
+    /// Set the noarch type for for the package
+    pub fn add_noarch(mut self, noarch_type: NoArchType) -> Self {
+        self.noarch = noarch_type;
+        self
+    }
+
+    /// Set the size of the package
+    pub fn set_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    /// Set the timestamp of the package
+    pub fn set_timestamp(mut self, timestamp: chrono::DateTime<chrono::Utc>) -> Self {
+        self.timestamp = Some(timestamp);
         self
     }
 }
@@ -218,6 +349,17 @@ mod tests {
                                                                parse_digest_from_hex::<rattler_digest::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
                     dependency_list: Default::default(),
                     optional: None,
+                    arch: None,
+                    subdir: None,
+                    build_number: None,
+                    constrains: vec![],
+                    features: None,
+                    track_features: vec![],
+                    license: None,
+                    license_family: None,
+                    noarch: Default::default(),
+                    size: None,
+                    timestamp: None,
                 }))
             .build().unwrap();
 
