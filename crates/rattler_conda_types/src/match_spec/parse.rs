@@ -1,16 +1,16 @@
 use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
 use crate::package::ArchiveType;
-use crate::version_spec::version_tree::recognize_constraint;
+use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{NamelessMatchSpec, ParseChannelError, VersionSpec};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
 use nom::combinator::{opt, recognize};
-use nom::error::{context, ParseError};
+use nom::error::{context, ContextError, ParseError};
 use nom::multi::{separated_list0, separated_list1};
-use nom::sequence::{delimited, separated_pair, terminated};
+use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Finish, IResult};
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -95,13 +95,17 @@ fn is_package_file(input: &str) -> bool {
 type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 
 /// A parse combinator to filter whitespace if front and after another parser.
-fn whitespace_enclosed<'a, F: 'a, O, E: ParseError<&'a str>>(
-    inner: F,
+fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
+    mut inner: F,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
 where
     F: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
-    delimited(multispace0, inner, multispace0)
+    move |input: &'a str| {
+        let (input, _) = multispace0(input)?;
+        let (input, o2) = inner(input)?;
+        multispace0(input).map(|(i, _)| (i, o2))
+    }
 }
 
 /// Parses the contents of a bracket list `[version="1,2,3", bla=3]`
@@ -199,22 +203,50 @@ fn strip_package_name(input: &str) -> Result<(&str, &str), ParseMatchSpecError> 
 
 /// Splits a string into version and build constraints.
 fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
-    fn parse_version_constraint_or_group(input: &str) -> IResult<&str, &str> {
+    fn parse_version_constraint_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, &'a str, E> {
         alt((
             delimited(tag("("), parse_version_group, tag(")")),
             recognize_constraint,
         ))(input)
     }
 
-    fn parse_version_group(input: &str) -> IResult<&str, &str> {
+    fn parse_version_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, &'a str, E> {
         recognize(separated_list1(
             whitespace_enclosed(one_of(",|")),
             parse_version_constraint_or_group,
         ))(input)
     }
 
-    fn parse_version_and_build_seperator(input: &str) -> IResult<&str, &str> {
-        terminated(parse_version_group, opt(one_of(" =")))(input)
+    // Special case handling of `=*`, `=1.2.3`, or `=1*`
+    fn parse_special_equality<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, &'a str, E> {
+        // Matches ".*" or "*" but not "."
+        let version_glob = terminated(opt(tag(".")), tag("*"));
+
+        // Matches a version followed by an optional version glob
+        let version_followed_by_glob = terminated(recognize_version, opt(version_glob));
+
+        // Just matches the glob operator ("*")
+        let just_star = tag("*");
+
+        recognize(preceded(
+            tag("="),
+            alt((version_followed_by_glob, just_star)),
+        ))(input)
+    }
+
+    fn parse_version_and_build_seperator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        input: &'a str,
+    ) -> IResult<&'a str, &'a str, E> {
+        terminated(
+            alt((parse_special_equality, parse_version_group)),
+            opt(one_of(" =")),
+        )(input)
     }
 
     match parse_version_and_build_seperator(input).finish() {
@@ -229,9 +261,12 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
                 },
             ))
         }
-        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
-            input.to_string(),
-        )),
+        Err(e @ nom::error::VerboseError { .. }) => {
+            eprintln!("{}", nom::error::convert_error(input, e));
+            Err(ParseMatchSpecError::InvalidVersionAndBuild(
+                input.to_string(),
+            ))
+        }
     }
 }
 
@@ -441,6 +476,11 @@ mod tests {
     #[test]
     fn test_split_version_and_build() {
         assert_eq!(
+            split_version_and_build("==1.0=py27_0"),
+            Ok(("==1.0", Some("py27_0")))
+        );
+        assert_eq!(split_version_and_build("=*=cuda"), Ok(("=*", Some("cuda"))));
+        assert_eq!(
             split_version_and_build("=1.2.3 0"),
             Ok(("=1.2.3", Some("0")))
         );
@@ -563,6 +603,7 @@ mod tests {
             "foo==1.0=py27_0",
             "python 3.8.* *_cpython",
             "pytorch=*=cuda*",
+            "x264 >=1!164.3095,<1!165",
         ];
 
         #[derive(Serialize)]

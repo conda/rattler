@@ -41,18 +41,18 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
 }
 
 /// Recognizes the version epoch
-fn parse_version_epoch<'a, E: ParseError<&'a str>>(
+fn parse_version_epoch<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, u32), nom::Err<E>> {
     terminated(u32, tag("!"))(input)
 }
 
 /// A parser that recognizes a version
-fn recognize_version<'a, E: ParseError<&'a str>>(
+pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, &'a str), nom::Err<E>> {
     /// Recognizes a single version component (`1`, `a`, `alpha`, `grub`)
-    fn recognize_version_component<'a, E: ParseError<&'a str>>(
+    fn recognize_version_component<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> Result<(&'a str, &'a str), nom::Err<E>> {
         let ident = alpha1;
@@ -61,7 +61,7 @@ fn recognize_version<'a, E: ParseError<&'a str>>(
     }
 
     /// Recognize one or more version components (`1.2.3`)
-    fn recognize_version_components<'a, E: ParseError<&'a str>>(
+    fn recognize_version_components<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> Result<(&'a str, &'a str), nom::Err<E>> {
         recognize(tuple((
@@ -75,11 +75,14 @@ fn recognize_version<'a, E: ParseError<&'a str>>(
 
     recognize(tuple((
         // Optional version epoch
-        opt(parse_version_epoch),
+        opt(context("epoch", parse_version_epoch)),
         // Version components
-        cut(recognize_version_components),
+        context("components", recognize_version_components),
         // Local version
-        opt(preceded(tag("+"), cut(recognize_version_components))),
+        opt(preceded(
+            tag("+"),
+            cut(context("local", recognize_version_components)),
+        )),
     )))(input)
 }
 
@@ -169,6 +172,9 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         match all_consuming(parse_or_group)(input) {
             Ok((_, tree)) => Ok(tree),
             Err(nom::Err::Error(e)) => {
+                Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
+            }
+            Err(nom::Err::Failure(e)) => {
                 Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
             }
             _ => unreachable!("with all_consuming the only error can be Error"),
