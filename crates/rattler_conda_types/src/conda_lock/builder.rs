@@ -268,7 +268,10 @@ impl LockedPackage {
     }
 
     /// Add the constrains for this package
-    pub fn add_constrains<S: AsRef<str>>(mut self, constrain: impl IntoIterator<Item = String>) -> Self {
+    pub fn add_constrains<S: AsRef<str>>(
+        mut self,
+        constrain: impl IntoIterator<Item = String>,
+    ) -> Self {
         self.constrains.extend(constrain);
         self
     }
