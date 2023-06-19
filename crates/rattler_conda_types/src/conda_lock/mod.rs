@@ -277,15 +277,15 @@ pub struct LockedDependency {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub build_number: Option<u64>,
 
-    /// Experimental: see: [Constrains](rattler_conda_types::repo_data::PackageRecord::constrains)
+    /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constrains: Option<Vec<String>>,
 
-    /// Experimental: see: [Features](rattler_conda_types::repo_data::PackageRecord::features)
+    /// Experimental: see: [Features](crate::repo_data::PackageRecord::features)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub features: Option<String>,
 
-    /// Experimental: see: [Track features](rattler_conda_types::repo_data::PackageRecord::track_features)
+    /// Experimental: see: [Track features](crate::repo_data::PackageRecord::track_features)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub track_features: Option<Vec<String>>,
 
