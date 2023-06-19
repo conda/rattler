@@ -84,7 +84,7 @@ fn recognize_version<'a, E: ParseError<&'a str>>(
 }
 
 /// A parser that recognized a constraint but does not actually parse it.
-fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
 ) -> Result<(&'a str, &'a str), nom::Err<E>> {
     alt((
@@ -95,7 +95,11 @@ fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         // Version with optional operator followed by optional glob.
         recognize(terminated(
             preceded(
-                opt(parse_operator),
+                opt(delimited(
+                    opt(multispace0),
+                    parse_operator,
+                    opt(multispace0),
+                )),
                 cut(context("version", recognize_version)),
             ),
             opt(alt((tag(".*"), tag("*")))),

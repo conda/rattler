@@ -1,6 +1,7 @@
 use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
 use crate::package::ArchiveType;
+use crate::version_spec::version_tree::recognize_constraint;
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{NamelessMatchSpec, ParseChannelError, VersionSpec};
 use nom::branch::alt;
@@ -9,7 +10,7 @@ use nom::character::complete::{char, multispace0, one_of};
 use nom::combinator::{opt, recognize};
 use nom::error::{context, ParseError};
 use nom::multi::{separated_list0, separated_list1};
-use nom::sequence::{delimited, pair, separated_pair, terminated};
+use nom::sequence::{delimited, separated_pair, terminated};
 use nom::{Finish, IResult};
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -198,34 +199,10 @@ fn strip_package_name(input: &str) -> Result<(&str, &str), ParseMatchSpecError> 
 
 /// Splits a string into version and build constraints.
 fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
-    fn parse_operator(input: &str) -> IResult<&str, &str> {
-        alt((
-            tag(">="),
-            tag("<="),
-            tag("~="),
-            tag("=="),
-            tag("!="),
-            tag("="),
-            tag("<"),
-            tag(">"),
-        ))(input)
-    }
-
-    fn parse_constraint(input: &str) -> IResult<&str, &str> {
-        recognize(pair(
-            whitespace_enclosed(opt(parse_operator)),
-            take_till1(|c: char| {
-                is_start_of_version_constraint(c)
-                    || c.is_whitespace()
-                    || matches!(c, ',' | '|' | ')' | '(')
-            }),
-        ))(input)
-    }
-
     fn parse_version_constraint_or_group(input: &str) -> IResult<&str, &str> {
         alt((
             delimited(tag("("), parse_version_group, tag(")")),
-            parse_constraint,
+            recognize_constraint,
         ))(input)
     }
 
@@ -486,6 +463,10 @@ mod tests {
             Ok(("*", Some("openblas_0")))
         );
         assert_eq!(split_version_and_build("* *"), Ok(("*", Some("*"))));
+        assert_eq!(
+            split_version_and_build(">=1!164.3095,<1!165"),
+            Ok((">=1!164.3095,<1!165", None))
+        );
     }
 
     #[test]

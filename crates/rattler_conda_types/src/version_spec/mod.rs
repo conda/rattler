@@ -2,7 +2,7 @@
 //! [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
 
 mod constraint;
-mod version_tree;
+pub(crate) mod version_tree;
 
 use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;
