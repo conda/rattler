@@ -324,26 +324,38 @@ fn filename_from_url(url: &Url) -> Option<String> {
 /// So for example: https://conda.anaconda.org/conda-forge/ is a channel name
 /// that we parse from something like: https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda
 fn channel_from_url(url: &Url) -> Option<String> {
-    /// Get http or https from the url
+    // Get http or https from the url
     let scheme = url.scheme();
-    let path = url.path();
-    let filename: Vec<_> = path.split('/').collect();
-    if filename.len() < 3 {
+    // Retrieve the host from the url
+    let host = url.host()?;
+    let path: Vec<_> = url.path_segments()?.collect();
+    // We expect it to be in the format <channel>/<subdir>/<filename>
+    if path.len() < 3 {
         return None;
     }
-    let url = filename[..filename.len() - 2].join("/");
-    Some(format!("{}//{}", scheme, url))
+    let url = path.first()?;
+    // Reconstruct the url
+    Some(format!("{}://{}/{}", scheme, host, url))
 }
+
 
 impl TryFrom<&LockedDependency> for RepoDataRecord {
     type Error = ConversionError;
 
     fn try_from(value: &LockedDependency) -> Result<Self, Self::Error> {
+        Self::try_from(value.clone())
+    }
+}
+
+impl TryFrom<LockedDependency> for RepoDataRecord {
+    type Error = ConversionError;
+
+    fn try_from(value: LockedDependency) -> Result<Self, Self::Error> {
         let matchspecs = value
             .dependencies
-            .iter()
+            .into_iter()
             .map(|(name, matchspec)| {
-                MatchSpec::from_nameless(matchspec.clone(), Some(name.clone())).to_string()
+                MatchSpec::from_nameless(matchspec, Some(name)).to_string()
             })
             .collect::<Vec<_>>();
 
@@ -364,33 +376,32 @@ impl TryFrom<&LockedDependency> for RepoDataRecord {
             .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?;
         let build = value
             .build
-            .clone()
             .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
         Ok(Self {
             package_record: PackageRecord {
-                arch: value.arch.clone(),
+                arch: value.arch,
                 build,
                 build_number: value.build_number.unwrap_or(0),
-                constrains: value.constrains.clone().unwrap_or_default(),
+                constrains: value.constrains.unwrap_or_default(),
                 depends: matchspecs,
-                features: value.features.clone(),
+                features: value.features,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,
-                license: value.license.clone(),
-                license_family: value.license_family.clone(),
+                license: value.license,
+                license_family: value.license_family,
                 md5,
-                name: value.name.clone(),
+                name: value.name,
                 noarch: value.noarch,
                 platform: Some(value.platform.to_string()),
                 sha256,
                 size: value.size,
-                subdir: value.subdir.clone().unwrap_or("noarch".to_string()),
+                subdir: value.subdir.unwrap_or("noarch".to_string()),
                 timestamp: value.timestamp,
-                track_features: value.track_features.clone().unwrap_or_default(),
+                track_features: value.track_features.unwrap_or_default(),
                 version,
             },
             file_name,
-            url: value.url.clone(),
+            url: value.url,
             channel,
         })
     }

@@ -218,6 +218,15 @@ pub struct LockedPackage {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+
+impl TryFrom<&RepoDataRecord> for LockedPackage {
+    type Error = ConversionError;
+
+    fn try_from(value: &RepoDataRecord) -> Result<Self, Self::Error> {
+        Self::try_from(value.clone())
+    }
+}
+
 impl TryFrom<RepoDataRecord> for LockedPackage {
     type Error = ConversionError;
 
@@ -388,7 +397,7 @@ mod tests {
     use rattler_digest::parse_digest_from_hex;
 
     #[test]
-    fn builder_and_conversions() {
+    fn conda_lock_builder_and_conversions() {
         let _channel_config = ChannelConfig::default();
         let lock = LockFileBuilder::new(
             ["conda_forge"],
@@ -424,6 +433,8 @@ mod tests {
         let record = RepoDataRecord::try_from(locked_dep).unwrap();
 
         assert_eq!(record.package_record.name, locked_dep.name);
+        assert_eq!(record.channel, "https://conda.anaconda.org/conda-forge".to_string());
+        assert_eq!(record.file_name, "python-3.11.0-h4150a38_1_cpython.conda".to_string());
         assert_eq!(record.package_record.version.to_string(), locked_dep.version);
         assert_eq!(
             record.package_record.build,
