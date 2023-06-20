@@ -8,7 +8,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
-    RepoDataRecord,
+    RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
@@ -36,6 +36,15 @@ pub struct Opt {
 
     #[clap(required = true)]
     specs: Vec<String>,
+
+    #[clap(long)]
+    dry_run: bool,
+
+    #[clap(long)]
+    platform: Option<String>,
+
+    #[clap(long)]
+    virtual_package: Option<Vec<String>>,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -43,7 +52,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let target_prefix = env::current_dir()?.join(".prefix");
 
     // Determine the platform we're going to install for
-    let install_platform = Platform::current();
+    let install_platform = if let Some(platform) = opt.platform {
+        Platform::from_str(&platform)?
+    } else {
+        Platform::current()
+    };
+
+    println!("installing for platform: {:?}", install_platform);
 
     // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
     // with this because we need to parse the `channel_config` when parsing matchspecs.
@@ -75,10 +90,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_urls = channels
         .iter()
         .flat_map(|channel| {
-            channel
-                .platforms_or_default()
-                .iter()
-                .map(move |platform| (channel.clone(), *platform))
+            vec![
+                (channel.clone(), install_platform.clone()),
+                (channel.clone(), Platform::NoArch),
+            ]
         })
         .collect::<Vec<_>>();
 
@@ -147,13 +162,33 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // system. Some packages depend on these virtual packages to indiciate compability with the
     // hardware of the system.
     let virtual_packages = wrap_in_progress("determining virtual packages", move || {
-        rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
-            vpkgs
+        if let Some(virtual_packages) = opt.virtual_package {
+            Ok(virtual_packages
                 .iter()
-                .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                .collect::<Vec<_>>()
-        })
+                .map(|virt_pkg| {
+                    let elems = virt_pkg.split("=").collect::<Vec<&str>>();
+                    GenericVirtualPackage {
+                        name: elems[0].to_string(),
+                        version: elems
+                            .get(1)
+                            .map(|s| Version::from_str(s))
+                            .unwrap_or(Version::from_str("0"))
+                            .expect("Could not parse virtual package version"),
+                        build_string: elems.get(2).unwrap_or(&"").to_string(),
+                    }
+                })
+                .collect::<Vec<_>>())
+        } else {
+            rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
+                vpkgs
+                    .iter()
+                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
+                    .collect::<Vec<_>>()
+            })
+        }
     })?;
+
+    println!("virtual packages: {:?}", virtual_packages);
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
