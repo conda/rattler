@@ -102,7 +102,7 @@ fn test_extract_conda(#[case] input: &str, #[case] sha256: &str, #[case] md5: &s
     let file_path = Path::new(input);
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
     let result = extract_conda(
-        File::open(&test_data_dir().join(file_path)).unwrap(),
+        File::open(test_data_dir().join(file_path)).unwrap(),
         &target_dir,
     )
     .unwrap();
@@ -119,7 +119,7 @@ fn test_stream_info(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &s
     let file_path = Path::new(input);
 
     let mut info_stream = rattler_package_streaming::seek::stream_conda_info(
-        File::open(&test_data_dir().join(file_path)).unwrap(),
+        File::open(test_data_dir().join(file_path)).unwrap(),
     )
     .unwrap();
 
@@ -140,7 +140,7 @@ fn test_extract_tar_bz2(#[case] input: &str, #[case] sha256: &str, #[case] md5: 
 
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
     let result = extract_tar_bz2(
-        File::open(&test_data_dir().join(file_path)).unwrap(),
+        File::open(test_data_dir().join(file_path)).unwrap(),
         &target_dir,
     )
     .unwrap();

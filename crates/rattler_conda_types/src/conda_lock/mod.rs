@@ -3,18 +3,17 @@
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
 use self::PackageHashes::{Md5, Md5Sha256, Sha256};
-use crate::{utils::serde::Ordered, NamelessMatchSpec, NoArchType, ParsePlatformError, Platform};
+use crate::match_spec::parse::ParseMatchSpecError;
+use crate::MatchSpec;
+use crate::{
+    utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
+    ParseVersionError, Platform, RepoDataRecord, Version,
+};
 use fxhash::FxHashMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
-use serde_with::serde_as;
-use std::{
-    fmt::{Display, Formatter},
-    fs::File,
-    io::Read,
-    path::Path,
-    str::FromStr,
-};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
+use std::{fs::File, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 pub mod builder;
@@ -147,23 +146,6 @@ pub enum Manager {
     Pip,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Hash, Clone, Debug)]
-/// This is basically a MatchSpec but will never contain the package name
-/// TODO: Should this just wrap [`NamelessMatchSpec`]?
-pub struct VersionConstraint(String);
-
-impl Display for VersionConstraint {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl From<NamelessMatchSpec> for VersionConstraint {
-    fn from(spec: NamelessMatchSpec) -> Self {
-        Self(spec.to_string())
-    }
-}
-
 /// This implementation of the `Deserialize` trait for the `PackageHashes` struct
 ///
 /// It expects the input to have either a `md5` field, a `sha256` field, or both.
@@ -179,6 +161,18 @@ pub enum PackageHashes {
     Sha256(Sha256Hash),
     /// Contains both hashes
     Md5Sha256(Md5Hash, Sha256Hash),
+}
+
+impl PackageHashes {
+    /// Create correct enum from hashes
+    pub fn from_hashes(md5: Option<Md5Hash>, sha256: Option<Sha256Hash>) -> Option<PackageHashes> {
+        match (md5, sha256) {
+            (Some(md5), None) => Some(Md5(md5)),
+            (None, Some(sha256)) => Some(Sha256(sha256)),
+            (Some(md5), Some(sha256)) => Some(Md5Sha256(md5, sha256)),
+            (None, None) => None,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -239,6 +233,7 @@ fn default_category() -> String {
 
 /// A locked single dependency / package
 #[serde_as]
+#[skip_serializing_none]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct LockedDependency {
     /// Package name of dependency
@@ -250,7 +245,9 @@ pub struct LockedDependency {
     /// What platform is this package for
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
-    pub dependencies: FxHashMap<String, VersionConstraint>,
+
+    #[serde_as(as = "FxHashMap<_, DisplayFromStr>")]
+    pub dependencies: FxHashMap<String, NamelessMatchSpec>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
@@ -266,35 +263,27 @@ pub struct LockedDependency {
     pub build: Option<String>,
 
     /// Experimental: architecture field
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub arch: Option<String>,
 
     /// Experimental: the subdir where the package can be found
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub subdir: Option<String>,
 
     /// Experimental: conda build number of the package
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub build_number: Option<u64>,
 
     /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub constrains: Option<Vec<String>>,
 
     /// Experimental: see: [Features](crate::repo_data::PackageRecord::features)
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub features: Option<String>,
 
     /// Experimental: see: [Track features](crate::repo_data::PackageRecord::track_features)
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub track_features: Option<Vec<String>>,
 
     /// Experimental: the specific license of the package
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
 
     /// Experimental: the license family of the package
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub license_family: Option<String>,
 
     /// Experimental: If this package is independent of architecture this field specifies in what way. See
@@ -303,13 +292,108 @@ pub struct LockedDependency {
     pub noarch: NoArchType,
 
     /// Experimental: The size of the package archive in bytes
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub size: Option<u64>,
 
     /// Experimental: The date this entry was created.
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// Error used when converting from repo_data module to conda lock module
+#[derive(thiserror::Error, Debug)]
+pub enum ConversionError {
+    /// This field was found missing during the conversion
+    #[error("missing field/fields '{0}'")]
+    Missing(String),
+    /// Parse error when converting [`MatchSpec`]
+    #[error(transparent)]
+    MatchSpecConversion(#[from] ParseMatchSpecError),
+    /// Error when version parsing fails
+    #[error(transparent)]
+    VersionConversion(#[from] ParseVersionError),
+}
+
+/// Package filename from the url
+fn filename_from_url(url: &Url) -> Option<String> {
+    let path = url.path();
+    let filename = path.split('/').last()?;
+    Some(filename.to_string())
+}
+
+/// Channel from url, this is everything before the filename and the subdir
+/// So for example: https://conda.anaconda.org/conda-forge/ is a channel name
+/// that we parse from something like: https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda
+fn channel_from_url(url: &Url) -> Option<String> {
+    /// Get http or https from the url
+    let scheme = url.scheme();
+    let path = url.path();
+    let filename: Vec<_> = path.split('/').collect();
+    if filename.len() < 3 {
+        return None;
+    }
+    let url = filename[..filename.len() - 2].join("/");
+    Some(format!("{}//{}", scheme, url))
+}
+
+impl TryFrom<&LockedDependency> for RepoDataRecord {
+    type Error = ConversionError;
+
+    fn try_from(value: &LockedDependency) -> Result<Self, Self::Error> {
+        let matchspecs = value
+            .dependencies
+            .iter()
+            .map(|(name, matchspec)| {
+                MatchSpec::from_nameless(matchspec.clone(), Some(name.clone())).to_string()
+            })
+            .collect::<Vec<_>>();
+
+        let version = value.version.parse::<Version>()?;
+        let md5 = match value.hash {
+            Md5(md5) => Some(md5),
+            Md5Sha256(md5, _) => Some(md5),
+            _ => None,
+        };
+        let sha256 = match value.hash {
+            Sha256(sha256) => Some(sha256),
+            Md5Sha256(_, sha256) => Some(sha256),
+            _ => None,
+        };
+        let channel = channel_from_url(&value.url)
+            .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?;
+        let file_name = filename_from_url(&value.url)
+            .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?;
+        let build = value
+            .build
+            .clone()
+            .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
+        Ok(Self {
+            package_record: PackageRecord {
+                arch: value.arch.clone(),
+                build,
+                build_number: value.build_number.unwrap_or(0),
+                constrains: value.constrains.clone().unwrap_or_default(),
+                depends: matchspecs,
+                features: value.features.clone(),
+                legacy_bz2_md5: None,
+                legacy_bz2_size: None,
+                license: value.license.clone(),
+                license_family: value.license_family.clone(),
+                md5,
+                name: value.name.clone(),
+                noarch: value.noarch,
+                platform: Some(value.platform.to_string()),
+                sha256,
+                size: value.size,
+                subdir: value.subdir.clone().unwrap_or("noarch".to_string()),
+                timestamp: value.timestamp,
+                track_features: value.track_features.clone().unwrap_or_default(),
+                version,
+            },
+            file_name,
+            url: value.url.clone(),
+            channel,
+        })
+    }
 }
 
 /// The URL for the dependency (currently only used for pip packages)
