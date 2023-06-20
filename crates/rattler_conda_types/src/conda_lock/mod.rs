@@ -338,7 +338,6 @@ fn channel_from_url(url: &Url) -> Option<String> {
     Some(format!("{}://{}/{}", scheme, host, url))
 }
 
-
 impl TryFrom<&LockedDependency> for RepoDataRecord {
     type Error = ConversionError;
 
@@ -354,9 +353,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
         let matchspecs = value
             .dependencies
             .into_iter()
-            .map(|(name, matchspec)| {
-                MatchSpec::from_nameless(matchspec, Some(name)).to_string()
-            })
+            .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).to_string())
             .collect::<Vec<_>>();
 
         let version = value.version.parse::<Version>()?;

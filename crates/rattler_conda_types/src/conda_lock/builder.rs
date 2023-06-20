@@ -218,7 +218,6 @@ pub struct LockedPackage {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-
 impl TryFrom<&RepoDataRecord> for LockedPackage {
     type Error = ConversionError;
 
@@ -433,9 +432,18 @@ mod tests {
         let record = RepoDataRecord::try_from(locked_dep).unwrap();
 
         assert_eq!(record.package_record.name, locked_dep.name);
-        assert_eq!(record.channel, "https://conda.anaconda.org/conda-forge".to_string());
-        assert_eq!(record.file_name, "python-3.11.0-h4150a38_1_cpython.conda".to_string());
-        assert_eq!(record.package_record.version.to_string(), locked_dep.version);
+        assert_eq!(
+            record.channel,
+            "https://conda.anaconda.org/conda-forge".to_string()
+        );
+        assert_eq!(
+            record.file_name,
+            "python-3.11.0-h4150a38_1_cpython.conda".to_string()
+        );
+        assert_eq!(
+            record.package_record.version.to_string(),
+            locked_dep.version
+        );
         assert_eq!(
             record.package_record.build,
             locked_dep.build.clone().unwrap_or_default()
@@ -458,8 +466,14 @@ mod tests {
             locked_dep.constrains.clone().unwrap_or_default()
         );
         assert_eq!(record.package_record.features, locked_dep.features);
-        assert_eq!(record.package_record.track_features, locked_dep.track_features.clone().unwrap_or_default());
-        assert_eq!(record.package_record.license_family, locked_dep.license_family);
+        assert_eq!(
+            record.package_record.track_features,
+            locked_dep.track_features.clone().unwrap_or_default()
+        );
+        assert_eq!(
+            record.package_record.license_family,
+            locked_dep.license_family
+        );
         assert_eq!(record.package_record.noarch, locked_dep.noarch);
         assert_eq!(record.package_record.size, locked_dep.size);
         assert_eq!(record.package_record.timestamp, locked_dep.timestamp);
@@ -467,7 +481,10 @@ mod tests {
         // Convert to LockedDependency
         let locked_package = LockedPackage::try_from(record.clone()).unwrap();
         assert_eq!(record.package_record.name, locked_package.name);
-        assert_eq!(record.package_record.version.to_string(), locked_package.version);
+        assert_eq!(
+            record.package_record.version.to_string(),
+            locked_package.version
+        );
         assert_eq!(
             record.package_record.build,
             locked_package.build_string.clone()
@@ -481,12 +498,12 @@ mod tests {
             record.package_record.build_number,
             locked_package.build_number.unwrap_or_default()
         );
-        assert_eq!(
-            record.package_record.constrains,
-            locked_package.constrains
-        );
+        assert_eq!(record.package_record.constrains, locked_package.constrains);
         assert_eq!(record.package_record.features, locked_package.features);
-        assert_eq!(record.package_record.license_family, locked_package.license_family);
+        assert_eq!(
+            record.package_record.license_family,
+            locked_package.license_family
+        );
         assert_eq!(record.package_record.noarch, locked_package.noarch);
         assert_eq!(record.package_record.size, locked_package.size);
         assert_eq!(record.package_record.timestamp, locked_package.timestamp);
