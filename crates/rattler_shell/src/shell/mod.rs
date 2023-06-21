@@ -150,7 +150,7 @@ impl Shell for Zsh {
     }
 
     fn extension(&self) -> &str {
-        "zsh"
+        "sh"
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {
