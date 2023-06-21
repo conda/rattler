@@ -1,5 +1,7 @@
+use itertools::Itertools;
 use serde::{Deserializer, Serializer};
 use std::cmp::Ordering;
+use std::fmt::Display;
 use std::{fmt, fmt::Formatter, str::FromStr};
 use strum::{EnumIter, IntoEnumIterator};
 use thiserror::Error;
@@ -192,10 +194,20 @@ impl Platform {
 
 /// An error that can occur when parsing a platform from a string.
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
-#[error("'{string}' is not a known platform")]
 pub struct ParsePlatformError {
     /// The platform string that could not be parsed.
     pub string: String,
+}
+
+impl Display for ParsePlatformError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "'{}' is not a known platform. Valid platforms are {}",
+            self.string,
+            Platform::all().map(|p| format!("'{p}'")).join(", ")
+        )
+    }
 }
 
 impl FromStr for Platform {
@@ -418,7 +430,8 @@ mod tests {
 
     #[test]
     fn test_parse_platform_error() {
-        assert!("foo".parse::<Platform>().is_err());
+        let err = "foo".parse::<Platform>().unwrap_err();
+        println!("{err}");
     }
 
     #[test]
