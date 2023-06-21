@@ -120,7 +120,7 @@ impl FromStr for Version {
 
         // Find epoch
         let (epoch, rest) = if let Some((epoch, rest)) = lowered.split_once('!') {
-            let epoch: u32 = epoch.parse().map_err(|e| {
+            let epoch: u64 = epoch.parse().map_err(|e| {
                 ParseVersionError::new(s, ParseVersionErrorKind::EpochMustBeInteger(e))
             })?;
             (Some(epoch), rest)
@@ -186,7 +186,7 @@ impl FromStr for Version {
 
         fn split_component<'a>(
             segments_iter: impl Iterator<Item = &'a str>,
-            segments: &mut SmallVec<[u16; 1]>,
+            segments: &mut SmallVec<[u16; 4]>,
             components: &mut SmallVec<[Component; 3]>,
         ) -> Result<(), ParseVersionErrorKind> {
             for component in segments_iter {
@@ -199,7 +199,7 @@ impl FromStr for Version {
                 let mut atoms = numeral_or_alpha_split
                     .map(|mtch| match mtch.as_str() {
                         num if num.chars().all(|c| c.is_ascii_digit()) => num
-                            .parse::<u32>()
+                            .parse()
                             .map_err(ParseVersionErrorKind::InvalidNumeral)
                             .map(Component::Numeral),
                         "post" => Ok(Component::Post),
@@ -257,7 +257,7 @@ impl FromStr for Version {
         };
 
         Ok(Self {
-            norm: lowered,
+            norm: lowered.into_boxed_str(),
             flags,
             segments,
             components,

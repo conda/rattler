@@ -121,7 +121,7 @@ pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
     /// any underscores.
-    norm: String,
+    norm: Box<str>,
 
     /// Individual components of the version.
     ///
@@ -129,7 +129,7 @@ pub struct Version {
     components: SmallVec<[Component; 3]>,
 
     /// The length of each individual segment.
-    segments: SmallVec<[u16; 1]>,
+    segments: SmallVec<[u16; 4]>,
 
     /// Flags to indicate edge cases
     /// The first bit indicates whether or not this version has an epoch.
@@ -162,12 +162,12 @@ impl Version {
 
     /// Returns the epoch part of the version. If the version did not specify an epoch `0` is
     /// returned.
-    pub fn epoch(&self) -> u32 {
+    pub fn epoch(&self) -> u64 {
         self.epoch_opt().unwrap_or(0)
     }
 
     /// Returns the epoch part of the version or `None` if the version did not specify an epoch.
-    pub fn epoch_opt(&self) -> Option<u32> {
+    pub fn epoch_opt(&self) -> Option<u64> {
         if self.has_epoch() {
             Some(
                 self.components[0]
@@ -225,12 +225,16 @@ impl Version {
 
     /// Tries to extract the major and minor versions from the version. Returns None if this instance
     /// doesnt appear to contain a major and minor version.
-    pub fn as_major_minor(&self) -> Option<(u32, u32)> {
-        let mut first_segment_iter = self.segments().next()?.iter();
-        Some((
-            first_segment_iter.next()?.as_number()?,
-            first_segment_iter.next()?.as_number()?,
-        ))
+    pub fn as_major_minor(&self) -> Option<(u64, u64)> {
+        let mut segments = self.segments();
+        let major_segment = segments.next()?;
+        let minor_segment = segments.next()?;
+
+        if major_segment.len() == 1 && minor_segment.len() == 1 {
+            Some((major_segment[0].as_number()?, minor_segment[0].as_number()?))
+        } else {
+            None
+        }
     }
 
     /// Returns true if this is considered a dev version.
@@ -372,7 +376,7 @@ impl Debug for Version {
 /// Either a number, literal or the infinity.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 enum Component {
-    Numeral(u32),
+    Numeral(u64),
 
     // Post should always be ordered greater than anything else.
     Post,
@@ -386,7 +390,7 @@ enum Component {
 }
 
 impl Component {
-    pub fn as_number(&self) -> Option<u32> {
+    pub fn as_number(&self) -> Option<u64> {
         match self {
             Component::Numeral(value) => Some(*value),
             _ => None,
@@ -412,8 +416,8 @@ impl Component {
     }
 }
 
-impl From<u32> for Component {
-    fn from(num: u32) -> Self {
+impl From<u64> for Component {
+    fn from(num: u64) -> Self {
         Component::Numeral(num)
     }
 }
@@ -508,7 +512,7 @@ impl PartialOrd for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.norm.as_str())
+        f.write_str(self.norm.as_ref())
     }
 }
 
@@ -766,6 +770,33 @@ mod test {
 
     #[test]
     fn size_of_version() {
-        assert_eq!(std::mem::size_of::<Version>(), 136);
+        assert_eq!(std::mem::size_of::<Version>(), 128);
+    }
+
+    #[test]
+    fn as_major_minor() {
+        assert_eq!(
+            Version::from_str("1.2.3").unwrap().as_major_minor(),
+            Some((1, 2))
+        );
+        assert_eq!(
+            Version::from_str("5!1.2.3").unwrap().as_major_minor(),
+            Some((1, 2))
+        );
+        assert_eq!(
+            Version::from_str("1.2.3.5").unwrap().as_major_minor(),
+            Some((1, 2))
+        );
+        assert_eq!(
+            Version::from_str("1.2").unwrap().as_major_minor(),
+            Some((1, 2))
+        );
+        assert_eq!(Version::from_str("1").unwrap().as_major_minor(), None);
+        assert_eq!(Version::from_str("1a.2").unwrap().as_major_minor(), None);
+        assert_eq!(Version::from_str("1.2a").unwrap().as_major_minor(), None);
+        assert_eq!(
+            Version::from_str("1.2.3a").unwrap().as_major_minor(),
+            Some((1, 2))
+        );
     }
 }
