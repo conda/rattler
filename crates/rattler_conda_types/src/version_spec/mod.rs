@@ -214,8 +214,12 @@ impl VersionSpec {
             VersionSpec::Operator(VersionOperator::NotStartsWith, limit) => {
                 !version.starts_with(limit)
             }
-            VersionSpec::Operator(VersionOperator::Compatible, limit) => version >= limit,
-            VersionSpec::Operator(VersionOperator::NotCompatible, limit) => version < limit,
+            VersionSpec::Operator(VersionOperator::Compatible, limit) => {
+                version.compatible_with(limit)
+            }
+            VersionSpec::Operator(VersionOperator::NotCompatible, limit) => {
+                !version.compatible_with(limit)
+            }
             VersionSpec::Group(LogicalOperator::And, group) => {
                 group.iter().all(|spec| spec.matches(version))
             }
@@ -328,5 +332,14 @@ mod tests {
     #[test]
     fn issue_204() {
         assert!(VersionSpec::from_str(">=3.8<3.9").is_err());
+    }
+
+    #[test]
+    fn issue_225() {
+        let spec = VersionSpec::from_str("~=2.4").unwrap();
+        assert!(!spec.matches(&Version::from_str("3.1").unwrap()));
+        assert!(spec.matches(&Version::from_str("2.4").unwrap()));
+        assert!(spec.matches(&Version::from_str("2.5").unwrap()));
+        assert!(!spec.matches(&Version::from_str("2.1").unwrap()));
     }
 }

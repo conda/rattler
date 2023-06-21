@@ -1,11 +1,12 @@
 use std::hash::{Hash, Hasher};
 use std::{
     cmp::Ordering,
+    fmt,
     fmt::{Debug, Display, Formatter},
-    ops::Range,
+    iter,
 };
 
-use itertools::{EitherOrBoth, Itertools};
+use itertools::{Either, EitherOrBoth, Itertools};
 use serde::{Deserialize, Serialize, Serializer};
 use smallvec::SmallVec;
 
@@ -14,7 +15,7 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 mod parse;
 
 /// This class implements an order relation between version strings. Version strings can contain the
-/// usual alphanumeric characters (A-Za-z0-9), separated into components by dots and underscores.
+/// usual alphanumeric characters (A-Za-z0-9), separated into segments by dots and underscores.
 /// Empty segments (i.e. two consecutive dots, a leading/trailing underscore) are not permitted. An
 /// optional epoch number - an integer followed by '!' - can precede the actual version string (this
 /// is useful to indicate a change in the versioning scheme itself). Version comparison is
@@ -115,86 +116,279 @@ mod parse;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Debug, Eq, Deserialize)]
+#[derive(Clone, Eq, Deserialize)]
 pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
     /// any underscores.
     norm: String,
-    /// The version of this version. This is the actual version string, including the epoch.
-    version: VersionComponent,
-    /// The local version of this version (everything following a `+`).
-    /// This is an optional string that can be used to indicate a local version of a package.
-    local: VersionComponent,
+
+    /// Individual components of the version.
+    ///
+    /// We store a maximum of 3 components on the stack. If a version consists of more components
+    components: SmallVec<[Component; 3]>,
+
+    /// The length of each individual segment.
+    segments: SmallVec<[u16; 1]>,
+
+    /// Flags to indicate edge cases
+    /// The first bit indicates whether or not this version has an epoch.
+    /// The rest of the bits indicate from which segment the local version starts or 0 if there is
+    /// no local version.
+    flags: u8,
 }
 
 impl Version {
-    /// Tries to extract the major and minor versions from the version. Returns None if this instance
-    /// doesnt appear to contain a major and minor version.
-    pub fn as_major_minor(&self) -> Option<(usize, usize)> {
-        self.version.as_major_minor()
+    /// Returns true if this version has an epoch.
+    pub fn has_epoch(&self) -> bool {
+        (self.flags & 0x1) != 0
     }
 
-    /// Bumps this version to a version that is considered just higher than this version.
-    pub fn bump(&self) -> Self {
-        let mut result = self.clone();
+    /// Returns true if this version has a local version defined
+    pub fn has_local(&self) -> bool {
+        (self.flags >> 1) > 0
+    }
 
-        let last_component = result
-            .version
-            .components
-            .iter_mut()
-            .rev()
-            .find_map(|component| match component {
-                NumeralOrOther::Numeral(v) => Some(v),
-                _ => None,
-            });
-        match last_component {
-            Some(component) => *component += 1,
-            None => unreachable!(),
+    /// Returns the index of the first segment that belongs to the local version or `None` if there
+    /// is not local version
+    fn local_segment_index(&self) -> Option<usize> {
+        let index = (self.flags >> 1) as usize;
+        if index > 0 {
+            Some(index)
+        } else {
+            None
         }
+    }
 
-        result
+    /// Returns the epoch part of the version. If the version did not specify an epoch `0` is
+    /// returned.
+    pub fn epoch(&self) -> u32 {
+        self.epoch_opt().unwrap_or(0)
+    }
+
+    /// Returns the epoch part of the version or `None` if the version did not specify an epoch.
+    pub fn epoch_opt(&self) -> Option<u32> {
+        if self.has_epoch() {
+            Some(
+                self.components[0]
+                    .as_number()
+                    .expect("if there is an epoch it must be the first component"),
+            )
+        } else {
+            None
+        }
+    }
+
+    /// Returns the individual segments of the version.
+    fn segments(
+        &self,
+    ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
+        let mut idx = if self.has_epoch() { 1 } else { 0 };
+        let version_segments = if let Some(local_index) = self.local_segment_index() {
+            &self.segments[..local_index]
+        } else {
+            &self.segments[..]
+        };
+        version_segments.iter().map(move |&count| {
+            let start = idx;
+            let end = idx + count as usize;
+            idx += count as usize;
+            &self.components[start..end]
+        })
+    }
+
+    /// Returns the segments that belong the local part of the version.
+    ///
+    /// The local part of a a version is the part behind the (optional) `+`. E.g.:
+    ///
+    /// ```text
+    /// 1.2+3.2.1-alpha0
+    ///     ^^^^^^^^^^^^ This is the local part of the version
+    /// ```
+    fn local_segments(
+        &self,
+    ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
+        if let Some(start) = self.local_segment_index() {
+            let mut idx = if self.has_epoch() { 1 } else { 0 };
+            idx += self.segments[..start].iter().sum::<u16>() as usize;
+            let version_segments = &self.segments[start..];
+            Either::Left(version_segments.iter().map(move |&count| {
+                let start = idx;
+                let end = idx + count as usize;
+                idx += count as usize;
+                &self.components[start..end]
+            }))
+        } else {
+            Either::Right(iter::empty())
+        }
+    }
+
+    /// Tries to extract the major and minor versions from the version. Returns None if this instance
+    /// doesnt appear to contain a major and minor version.
+    pub fn as_major_minor(&self) -> Option<(u32, u32)> {
+        let mut first_segment_iter = self.segments().next()?.iter();
+        Some((
+            first_segment_iter.next()?.as_number()?,
+            first_segment_iter.next()?.as_number()?,
+        ))
     }
 
     /// Returns true if this is considered a dev version.
+    ///
+    /// If a version has a single component named "dev" it is considered to be a dev version.
     pub fn is_dev(&self) -> bool {
-        self.version.components.iter().any(|c| match c {
-            NumeralOrOther::Other(name) => name == "DEV",
-            _ => false,
-        })
+        self.segments()
+            .flatten()
+            .any(|component| component.as_string() == Some("dev"))
     }
 
     /// Check if this version version and local strings start with the same as other.
     pub fn starts_with(&self, other: &Self) -> bool {
-        self.version.starts_with(&other.version) && self.local.starts_with(&other.local)
+        self.epoch() == other.epoch()
+            && segments_starts_with(self.segments(), other.segments())
+            && segments_starts_with(self.local_segments(), other.local_segments())
     }
+
+    /// Returns true if this version is compatible with the given `other`.
+    pub fn compatible_with(&self, other: &Self) -> bool {
+        self.ge(other)
+            && self.epoch() == other.epoch()
+            // Remove the last segment from the limit.
+            && segments_starts_with(self.segments(), other.segments().rev().skip(1).rev())
+            // Local version comparison remains the same
+            && segments_starts_with(self.local_segments(), other.local_segments())
+    }
+}
+
+/// Returns true if the specified segments are considered to start with the other segments.
+fn segments_starts_with<
+    'a,
+    'b,
+    A: Iterator<Item = &'a [Component]> + 'a,
+    B: Iterator<Item = &'b [Component]> + 'a,
+>(
+    a: A,
+    b: B,
+) -> bool {
+    for ranges in a.zip_longest(b) {
+        let (left, right) = match ranges {
+            EitherOrBoth::Both(left, right) => (left, right),
+            EitherOrBoth::Left(_) => return true,
+            EitherOrBoth::Right(_) => return false,
+        };
+        for values in left.iter().zip_longest(right.iter()) {
+            if !match values {
+                EitherOrBoth::Both(a, b) => a == b,
+                EitherOrBoth::Left(_) => return true,
+                EitherOrBoth::Right(_) => return false,
+            } {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 impl PartialEq<Self> for Version {
     fn eq(&self, other: &Self) -> bool {
-        self.version == other.version && self.local == other.local
+        fn segments_equal<'i, I: Iterator<Item = &'i [Component]>>(a: I, b: I) -> bool {
+            for ranges in a.zip_longest(b) {
+                let (a_range, b_range) = ranges.or_default();
+                let default = Component::default();
+                for components in a_range.iter().zip_longest(b_range.iter()) {
+                    let (a_component, b_component) = match components {
+                        EitherOrBoth::Left(l) => (l, &default),
+                        EitherOrBoth::Right(r) => (&default, r),
+                        EitherOrBoth::Both(l, r) => (l, r),
+                    };
+                    if a_component != b_component {
+                        return false;
+                    }
+                }
+            }
+            true
+        }
+
+        self.epoch() == other.epoch()
+            && segments_equal(self.segments(), other.segments())
+            && segments_equal(self.local_segments(), other.local_segments())
     }
 }
 
 impl Hash for Version {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.version.hash(state);
-        self.local.hash(state);
+        fn hash_segments<'i, I: Iterator<Item = &'i [Component]>, H: Hasher>(
+            state: &mut H,
+            segments: I,
+        ) {
+            let default = Component::default();
+            for segment in segments {
+                // The versions `1.0` and `1` are considered equal because a version has an infinite
+                // number of default components in each segment. The get an equivalent hash we skip
+                // trailing default components when computing the hash
+                segment
+                    .iter()
+                    .rev()
+                    .skip_while(|c| **c == default)
+                    .for_each(|c| c.hash(state));
+            }
+        }
+
+        self.epoch().hash(state);
+        hash_segments(state, self.segments());
+        hash_segments(state, self.local_segments());
+    }
+}
+
+/// A helper function to display the segments of a [`Version`]
+fn format_segments<'i, I: Iterator<Item = &'i [Component]>>(
+    segments: I,
+) -> impl fmt::Display + fmt::Debug {
+    format!(
+        "[{}]",
+        segments.format_with(", ", |components, f| f(&format_args!(
+            "[{}]",
+            components.iter().format(", ")
+        )))
+    )
+}
+
+impl Debug for Version {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Version")
+            .field("norm", &self.norm)
+            .field(
+                "version",
+                &format_segments(
+                    iter::once([Component::Numeral(self.epoch())].as_slice())
+                        .chain(self.segments()),
+                ),
+            )
+            .field("local", &format_segments(self.local_segments()))
+            .finish()
     }
 }
 
 /// Either a number, literal or the infinity.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-enum NumeralOrOther {
-    Numeral(usize),
-    Other(String),
-    Infinity,
+enum Component {
+    Numeral(u32),
+
+    // Post should always be ordered greater than anything else.
+    Post,
+
+    // Dev should always be ordered less than anything else.
+    Dev,
+
+    // A generic string identifier. Identifiers are compared lexicographically. They are always
+    // ordered less than numbers.
+    Iden(Box<str>),
 }
 
-impl NumeralOrOther {
-    pub fn as_number(&self) -> Option<usize> {
+impl Component {
+    pub fn as_number(&self) -> Option<u32> {
         match self {
-            NumeralOrOther::Numeral(value) => Some(*value),
+            Component::Numeral(value) => Some(*value),
             _ => None,
         }
     }
@@ -202,219 +396,107 @@ impl NumeralOrOther {
     #[allow(dead_code)]
     pub fn as_string(&self) -> Option<&str> {
         match self {
-            NumeralOrOther::Other(value) => Some(value.as_str()),
+            Component::Iden(value) => Some(value.as_ref()),
             _ => None,
         }
     }
 
     #[allow(dead_code)]
-    pub fn is_infinity(&self) -> bool {
-        matches!(self, NumeralOrOther::Infinity)
+    pub fn is_post(&self) -> bool {
+        matches!(self, Component::Post)
+    }
+
+    #[allow(dead_code)]
+    pub fn is_dev(&self) -> bool {
+        matches!(self, Component::Dev)
     }
 }
 
-impl From<usize> for NumeralOrOther {
-    fn from(num: usize) -> Self {
-        NumeralOrOther::Numeral(num)
+impl From<u32> for Component {
+    fn from(num: u32) -> Self {
+        Component::Numeral(num)
     }
 }
 
-impl From<String> for NumeralOrOther {
+impl From<String> for Component {
     fn from(other: String) -> Self {
-        NumeralOrOther::Other(other)
+        Component::Iden(other.into_boxed_str())
     }
 }
 
-impl Default for NumeralOrOther {
+impl Default for Component {
     fn default() -> Self {
-        NumeralOrOther::Numeral(0)
+        Component::Numeral(0)
     }
 }
 
-impl Ord for NumeralOrOther {
+impl Ord for Component {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (NumeralOrOther::Other(_), NumeralOrOther::Numeral(_)) => Ordering::Less,
-            (NumeralOrOther::Numeral(_), NumeralOrOther::Other(_)) => Ordering::Greater,
-            (NumeralOrOther::Numeral(a), NumeralOrOther::Numeral(b)) => a.cmp(b),
-            (NumeralOrOther::Other(a), NumeralOrOther::Other(b)) => a.cmp(b),
-            (NumeralOrOther::Infinity, NumeralOrOther::Infinity) => Ordering::Equal,
-            (NumeralOrOther::Infinity, _) => Ordering::Greater,
-            (_, NumeralOrOther::Infinity) => Ordering::Less,
+            // Numbers are always ordered higher than strings
+            (Component::Numeral(_), Component::Iden(_)) => Ordering::Greater,
+            (Component::Iden(_), Component::Numeral(_)) => Ordering::Less,
+
+            // Compare numbers and identifiers normally amongst themselves.
+            (Component::Numeral(a), Component::Numeral(b)) => a.cmp(b),
+            (Component::Iden(a), Component::Iden(b)) => a.cmp(b),
+            (Component::Post, Component::Post) => Ordering::Equal,
+            (Component::Dev, Component::Dev) => Ordering::Equal,
+
+            // Post is always compared greater than anything else.
+            (Component::Post, _) => Ordering::Greater,
+            (_, Component::Post) => Ordering::Less,
+
+            // Dev is always compared less than anything else.
+            (Component::Dev, _) => Ordering::Less,
+            (_, Component::Dev) => Ordering::Greater,
         }
     }
 }
 
-impl PartialOrd for NumeralOrOther {
+impl PartialOrd for Component {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Display for NumeralOrOther {
+impl Display for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NumeralOrOther::Numeral(n) => write!(f, "{}", n),
-            NumeralOrOther::Other(s) => write!(f, "{}", s),
-            NumeralOrOther::Infinity => write!(f, "∞"),
+            Component::Numeral(n) => write!(f, "{}", n),
+            Component::Iden(s) => write!(f, "{}", s),
+            Component::Post => write!(f, "post"),
+            Component::Dev => write!(f, "dev"),
         }
-    }
-}
-
-#[derive(Default, Clone, Eq, Serialize, Deserialize)]
-struct VersionComponent {
-    components: SmallVec<[NumeralOrOther; 4]>,
-    ranges: SmallVec<[Range<usize>; 4]>,
-}
-
-impl VersionComponent {
-    /// Tries to extract the major and minor versions from the version. Returns None if this instance
-    /// doesnt appear to contain a major and minor version.
-    pub fn as_major_minor(&self) -> Option<(usize, usize)> {
-        match (self.range_as_number(1), self.range_as_number(2)) {
-            (Some(major), Some(minor)) => Some((major, minor)),
-            _ => None,
-        }
-    }
-
-    /// Tries to convert the specified range to a number. Returns the number if possible; None otherwise.
-    fn range_as_number(&self, range_idx: usize) -> Option<usize> {
-        let range = self.ranges.get(range_idx)?;
-        if range.end != range.start + 1 {
-            return None;
-        }
-        let component = self.components.get(range.start)?;
-        component.as_number()
-    }
-
-    pub(crate) fn starts_with(&self, other: &Self) -> bool {
-        for ranges in self.ranges.iter().zip_longest(other.ranges.iter()) {
-            let (left, right) = match ranges {
-                EitherOrBoth::Both(left, right) => (left, right),
-                EitherOrBoth::Left(_) => return true,
-                EitherOrBoth::Right(_) => return false,
-            };
-            for values in left
-                .clone()
-                .map(|i| &self.components[i])
-                .zip_longest(right.clone().map(|i| &other.components[i]))
-            {
-                if !match values {
-                    EitherOrBoth::Both(a, b) => a == b,
-                    EitherOrBoth::Left(_) => return true,
-                    EitherOrBoth::Right(_) => return false,
-                } {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-}
-
-impl Hash for VersionComponent {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let default = NumeralOrOther::default();
-        for range in self.ranges.iter().cloned() {
-            // skip trailing default components
-            self.components[range]
-                .iter()
-                .rev()
-                .skip_while(|c| **c == default)
-                .for_each(|c| c.hash(state));
-        }
-    }
-}
-
-impl Debug for VersionComponent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[")?;
-        for (idx, range) in self.ranges.iter().cloned().enumerate() {
-            if idx > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "[")?;
-            for elems in itertools::Itertools::intersperse(
-                self.components[range].iter().map(|c| format!("{}", c)),
-                String::from(", "),
-            ) {
-                write!(f, "{}", elems)?;
-            }
-            write!(f, "]")?;
-        }
-        write!(f, "]")
-    }
-}
-
-impl PartialEq for VersionComponent {
-    fn eq(&self, other: &Self) -> bool {
-        for ranges in self
-            .ranges
-            .iter()
-            .cloned()
-            .zip_longest(other.ranges.iter().cloned())
-        {
-            let (a_range, b_range) = ranges.or_default();
-            let default = NumeralOrOther::default();
-            for components in self.components[a_range]
-                .iter()
-                .zip_longest(other.components[b_range].iter())
-            {
-                let (a_component, b_component) = match components {
-                    EitherOrBoth::Left(l) => (l, &default),
-                    EitherOrBoth::Right(r) => (&default, r),
-                    EitherOrBoth::Both(l, r) => (l, r),
-                };
-                if a_component != b_component {
-                    return false;
-                }
-            }
-        }
-        true
-    }
-}
-
-impl Ord for VersionComponent {
-    fn cmp(&self, other: &Self) -> Ordering {
-        for ranges in self
-            .ranges
-            .iter()
-            .cloned()
-            .zip_longest(other.ranges.iter().cloned())
-        {
-            let (a_range, b_range) = ranges.or_default();
-            for components in self.components[a_range]
-                .iter()
-                .zip_longest(other.components[b_range].iter())
-            {
-                let default = NumeralOrOther::default();
-                let (a_component, b_component) = match components {
-                    EitherOrBoth::Left(l) => (l, &default),
-                    EitherOrBoth::Right(r) => (&default, r),
-                    EitherOrBoth::Both(l, r) => (l, r),
-                };
-                match a_component.cmp(b_component) {
-                    Ordering::Less => return Ordering::Less,
-                    Ordering::Equal => {}
-                    Ordering::Greater => return Ordering::Greater,
-                }
-            }
-        }
-        Ordering::Equal
-    }
-}
-
-impl PartialOrd for VersionComponent {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
     }
 }
 
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.version
-            .cmp(&other.version)
-            .then_with(|| self.local.cmp(&other.local))
+        fn cmp_segments<'i, I: Iterator<Item = &'i [Component]>>(a: I, b: I) -> Ordering {
+            for ranges in a.zip_longest(b) {
+                let (a_range, b_range) = ranges.or_default();
+                for components in a_range.iter().zip_longest(b_range.iter()) {
+                    let default = Component::default();
+                    let (a_component, b_component) = match components {
+                        EitherOrBoth::Left(l) => (l, &default),
+                        EitherOrBoth::Right(r) => (&default, r),
+                        EitherOrBoth::Both(l, r) => (l, r),
+                    };
+                    match a_component.cmp(b_component) {
+                        Ordering::Less => return Ordering::Less,
+                        Ordering::Equal => {}
+                        Ordering::Greater => return Ordering::Greater,
+                    }
+                }
+            }
+            Ordering::Equal
+        }
+
+        self.epoch()
+            .cmp(&other.epoch())
+            .then_with(|| cmp_segments(self.segments(), other.segments()))
+            .then_with(|| cmp_segments(self.local_segments(), other.local_segments()))
     }
 }
 
@@ -634,17 +716,17 @@ mod test {
         assert_eq!(random_versions, parsed_versions);
     }
 
-    #[test]
-    fn bump() {
-        assert_eq!(
-            Version::from_str("1.1").unwrap().bump(),
-            Version::from_str("1.2").unwrap()
-        );
-        assert_eq!(
-            Version::from_str("1.1l").unwrap().bump(),
-            Version::from_str("1.2l").unwrap()
-        )
-    }
+    // #[test]
+    // fn bump() {
+    //     assert_eq!(
+    //         Version::from_str("1.1").unwrap().bump(),
+    //         Version::from_str("1.2").unwrap()
+    //     );
+    //     assert_eq!(
+    //         Version::from_str("1.1l").unwrap().bump(),
+    //         Version::from_str("1.2l").unwrap()
+    //     )
+    // }
 
     #[test]
     fn starts_with() {
@@ -662,6 +744,8 @@ mod test {
     #[test]
     fn hash() {
         let v1 = Version::from_str("1.2.0").unwrap();
+
+        println!("{:?}", v1);
 
         let vx2 = Version::from_str("1.2.0").unwrap();
         assert_eq!(get_hash(&v1), get_hash(&vx2));

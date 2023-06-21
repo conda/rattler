@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone)]
 pub struct PythonInfo {
     /// The major and minor version
-    pub short_version: (usize, usize),
+    pub short_version: (u32, u32),
 
     /// The relative path to the python executable
     pub path: PathBuf,
