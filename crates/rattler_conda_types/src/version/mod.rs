@@ -156,6 +156,16 @@ impl Version {
         result
     }
 
+    /// Remove last element from version, e.g. 1.2.3 -> 1.2
+    pub fn remove_last_element(&self) -> Self {
+        let mut result = self.clone();
+
+        result.version.components.pop();
+        result.version.ranges.pop();
+
+        result
+    }
+
     /// Returns true if this is considered a dev version.
     pub fn is_dev(&self) -> bool {
         self.version.components.iter().any(|c| match c {

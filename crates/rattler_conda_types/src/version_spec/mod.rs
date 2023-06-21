@@ -214,8 +214,8 @@ impl VersionSpec {
             VersionSpec::Operator(VersionOperator::NotStartsWith, limit) => {
                 !version.starts_with(limit)
             }
-            VersionSpec::Operator(VersionOperator::Compatible, limit) => version >= limit,
-            VersionSpec::Operator(VersionOperator::NotCompatible, limit) => version < limit,
+            VersionSpec::Operator(VersionOperator::Compatible, limit) => version >= limit && version.starts_with(&limit.remove_last_element()),
+            VersionSpec::Operator(VersionOperator::NotCompatible, limit) => version < limit || !version.starts_with(&limit.remove_last_element()),
             VersionSpec::Group(LogicalOperator::And, group) => {
                 group.iter().all(|spec| spec.matches(version))
             }
@@ -323,6 +323,26 @@ mod tests {
 
         let vs3 = VersionSpec::from_str(">=1!1.2,<1!2").unwrap();
         assert!(vs3.matches(&v3));
+    }
+
+    #[test]
+    fn test_compatible_matches() {
+        let v1 = Version::from_str("2.2.0").unwrap();
+        let v1x = Version::from_str("2.2.1").unwrap();
+        let v1y = Version::from_str("2.3.0").unwrap();
+        let v1z = Version::from_str("2.20.32213").unwrap();
+        let v2 = Version::from_str("3.2.0").unwrap();
+
+        let vs1 = VersionSpec::from_str("~=2.2").unwrap();
+        assert!(vs1.matches(&v1));
+        assert!(vs1.matches(&v1x));
+        assert!(vs1.matches(&v1y));
+        assert!(vs1.matches(&v1z));
+        assert!(!vs1.matches(&v2));
+
+        let vs2 = VersionSpec::from_str("~=2.2,<4").unwrap();
+        assert!(vs2.matches(&v1));
+        assert!(!vs2.matches(&v2));
     }
 
     #[test]
