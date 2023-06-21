@@ -763,4 +763,9 @@ mod test {
         let v2 = Version::from_str("1.2.3").unwrap();
         assert_ne!(get_hash(&v1), get_hash(&v2));
     }
+
+    #[test]
+    fn size_of_version() {
+        assert_eq!(std::mem::size_of::<Version>(), 136);
+    }
 }
