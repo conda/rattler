@@ -2,7 +2,7 @@ use crate::pool::{MatchSpecId, RepoId, StringId};
 use rattler_conda_types::{PackageRecord, Version};
 use std::fmt::{Display, Formatter};
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
 pub struct SolvableId(u32);
 
 impl SolvableId {
@@ -12,6 +12,10 @@ impl SolvableId {
 
     pub(crate) fn root() -> Self {
         Self(0)
+    }
+
+    pub(crate) fn is_root(self) -> bool {
+        self.0 == 0
     }
 
     pub(crate) fn null() -> Self {

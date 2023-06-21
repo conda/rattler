@@ -1,16 +1,16 @@
+use crate::decision_tracker::DecisionTracker;
 use crate::pool::{MatchSpecId, Pool, StringId};
+use crate::problem::Problem;
 use crate::rules::{Literal, Rule, RuleKind};
 use crate::solvable::SolvableId;
 use crate::solve_jobs::SolveJobs;
-
 use crate::watch_map::WatchMap;
 
-use crate::decision_tracker::DecisionTracker;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 
-#[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug, Hash)]
 pub(crate) struct RuleId(u32);
 
 impl RuleId {
@@ -18,11 +18,11 @@ impl RuleId {
         Self(index as u32)
     }
 
-    fn install_root() -> Self {
+    pub(crate) fn install_root() -> Self {
         Self(0)
     }
 
-    fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
 
@@ -70,11 +70,12 @@ impl Display for TransactionKind {
 pub struct Solver {
     pool: Pool,
 
-    rules: Vec<Rule>,
+    pub(crate) rules: Vec<Rule>,
     watches: WatchMap,
 
     learnt_rules: Vec<Vec<Literal>>,
     learnt_rules_start: RuleId,
+    learnt_why: Vec<Vec<RuleId>>,
 
     decision_tracker: DecisionTracker,
 }
@@ -87,6 +88,7 @@ impl Solver {
             watches: WatchMap::new(),
             learnt_rules: Vec::new(),
             learnt_rules_start: RuleId(0),
+            learnt_why: Vec::new(),
             decision_tracker: DecisionTracker::new(pool.nsolvables()),
             pool,
         }
@@ -96,23 +98,19 @@ impl Solver {
         &self.pool
     }
 
-    /// Creates a string for each 'problem' that the solver still has which it encountered while
-    /// solving the matchspecs. Use this function to print the existing problems to string.
-    fn solver_problems(&self) -> Vec<String> {
-        Vec::new()
-    }
-
-    /// Solves the provided `jobs` and returns a transaction from the found solution.
+    /// Solves the provided `jobs` and returns a transaction from the found solution
     ///
-    /// Returns an error if problems remain unsolved.
-    pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Vec<String>> {
-        // TODO: sanity check that solvables inside jobs.lock and jobs.favor are unique
+    /// Returns a [`Problem`] if problems remain unsolved, which provides ways to inspect the causes
+    /// and report them to the user.
+    pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Problem> {
+        // TODO: sanity check that solvables inside jobs.favor are unique?
 
         // Clear state
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
         self.rules = vec![Rule::new(RuleKind::InstallRoot, &[], &self.pool)];
         self.learnt_rules.clear();
+        self.learnt_why.clear();
 
         // Favored map
         let mut favored_map = HashMap::new();
@@ -138,10 +136,27 @@ impl Solver {
             for (i, &candidate) in candidates.iter().enumerate() {
                 for &other_candidate in &candidates[i + 1..] {
                     self.rules.push(Rule::new(
-                        RuleKind::Forbids(candidate, other_candidate),
+                        RuleKind::ForbidMultipleInstances(candidate, other_candidate),
                         &self.learnt_rules,
                         &self.pool,
                     ));
+                }
+            }
+        }
+
+        // Initialize rules for the locked solvable
+        for &locked_solvable_id in &jobs.lock {
+            // For each locked solvable, forbid other solvables with the same name
+            let name = self.pool.resolve_solvable(locked_solvable_id).name;
+            if let Some(other_candidates) = self.pool.packages_by_name.get(&name) {
+                for &other_candidate in other_candidates {
+                    if other_candidate != locked_solvable_id {
+                        self.rules.push(Rule::new(
+                            RuleKind::ForbidMultipleInstances(SolvableId::root(), other_candidate),
+                            &self.learnt_rules,
+                            &self.pool,
+                        ));
+                    }
                 }
             }
         }
@@ -153,27 +168,22 @@ impl Solver {
         self.make_watches();
 
         // Run SAT
-        self.run_sat(&jobs.install, &jobs.lock);
+        self.run_sat(&jobs.install, &jobs.lock)?;
 
-        let remaining_problems = self.solver_problems();
-        if remaining_problems.is_empty() {
-            let steps = self
-                .decision_tracker
-                .stack()
-                .iter()
-                .flat_map(|d| {
-                    if d.value && d.solvable_id != SolvableId::root() {
-                        Some((d.solvable_id, TransactionKind::Install))
-                    } else {
-                        // Ignore things that are set to false
-                        None
-                    }
-                })
-                .collect();
-            Ok(Transaction { steps })
-        } else {
-            Err(remaining_problems)
-        }
+        let steps = self
+            .decision_tracker
+            .stack()
+            .iter()
+            .flat_map(|d| {
+                if d.value && d.solvable_id != SolvableId::root() {
+                    Some((d.solvable_id, TransactionKind::Install))
+                } else {
+                    // Ignore things that are set to false
+                    None
+                }
+            })
+            .collect();
+        Ok(Transaction { steps })
     }
 
     fn add_rules_for_root_dep(
@@ -263,65 +273,44 @@ impl Solver {
         ));
     }
 
-    fn run_sat(&mut self, top_level_requirements: &[MatchSpec], locked_solvables: &[SolvableId]) {
-        let level = match self.install_root_solvable() {
-            Ok(new_level) => new_level,
-            Err(_) => panic!("install root solvable failed"),
-        };
+    fn run_sat(
+        &mut self,
+        top_level_requirements: &[MatchSpec],
+        locked_solvables: &[SolvableId],
+    ) -> Result<(), Problem> {
+        let level = self.install_root_solvable();
 
-        if self.decide_top_level_assertions(level, locked_solvables).is_err() {
-            panic!("propagate assertions failed");
-        };
+        self.decide_top_level_assertions(level, locked_solvables, top_level_requirements)
+            .map_err(|cause| self.analyze_unsolvable(cause))?;
 
-        if self.decide_top_level_exclusions(top_level_requirements).is_err() {
-            panic!("decide top level exclusions failed");
-        }
+        self.propagate(level)
+            .map_err(|(_, _, cause)| self.analyze_unsolvable(cause))?;
 
-        if let Err((_, _, cause)) = self.propagate(level) {
-            self.analyze_unsolvable(cause, false);
-            panic!("Propagate after installing root failed");
-        }
+        self.resolve_dependencies(level)?;
 
-        if self.resolve_dependencies(level).is_err() {
-            panic!("Resolve dependencies failed");
-        }
+        Ok(())
     }
 
-    fn install_root_solvable(&mut self) -> Result<u32, ()> {
+    fn install_root_solvable(&mut self) -> u32 {
         assert!(self.decision_tracker.is_empty());
         self.decision_tracker
-            .try_add_decision(Decision::new(SolvableId::root(), true, RuleId::install_root()), 1)
+            .try_add_decision(
+                Decision::new(SolvableId::root(), true, RuleId::install_root()),
+                1,
+            )
             .expect("bug: solvable was already decided!");
-        Ok(1)
+
+        // The root solvable is installed at level 1
+        1
     }
 
     fn decide_top_level_assertions(
         &mut self,
         level: u32,
-        locked_solvables: &[SolvableId],
-    ) -> Result<(), ()> {
+        _locked_solvables: &[SolvableId],
+        _top_level_requirements: &[MatchSpec],
+    ) -> Result<(), RuleId> {
         println!("=== Deciding assertions");
-
-        // Assertions derived from locked dependencies
-        for &locked_solvable_id in locked_solvables {
-            // For each locked solvable, decide that other solvables with the same name are
-            // forbidden
-            let name = self
-                .pool
-                .resolve_solvable_inner(locked_solvable_id)
-                .package()
-                .name;
-            if let Some(other_candidates) = self.pool.packages_by_name.get(&name) {
-                for &other_candidate in other_candidates {
-                    if other_candidate != locked_solvable_id {
-                        self.decision_tracker.try_add_decision(
-                            Decision::new(other_candidate, false, RuleId::install_root()),
-                            level,
-                        )?;
-                    }
-                }
-            }
-        }
 
         // Assertions derived from requirements that cannot be fulfilled
         for (i, rule) in self.rules.iter().enumerate() {
@@ -329,10 +318,11 @@ impl Solver {
                 if !rule.has_watches() {
                     // A requires rule without watches means it has a single literal (i.e.
                     // there are no candidates)
-                    let decided = self.decision_tracker.try_add_decision(
-                        Decision::new(solvable_id, false, RuleId::new(i)),
-                        level,
-                    )?;
+                    let rule_id = RuleId::new(i);
+                    let decided = self
+                        .decision_tracker
+                        .try_add_decision(Decision::new(solvable_id, false, rule_id), level)
+                        .map_err(|_| rule_id)?;
 
                     if decided {
                         println!(
@@ -347,40 +337,8 @@ impl Solver {
         Ok(())
     }
 
-    fn decide_top_level_exclusions(
-        &mut self,
-        top_level_requirements: &[MatchSpec],
-    ) -> Result<(), ()> {
-        println!("=== Deciding exclusions");
-        for req in top_level_requirements {
-            let name = req.name.as_deref().unwrap();
-
-            let Some(candidates) = self.pool.strings_to_ids.get(name).and_then(|name_id| self.pool.packages_by_name.get(name_id)) else {
-                return Ok(());
-            };
-            let non_matching = candidates.iter().filter(|solvable_id| {
-                let solvable = &self.pool.solvables[solvable_id.index()];
-                !req.matches(solvable.package().record)
-            });
-
-            for &solvable_id in non_matching {
-                let decided = self
-                    .decision_tracker
-                    .try_add_decision(Decision::new(solvable_id, false, RuleId::new(0)), 1)?;
-                if decided {
-                    println!(
-                        "{} = false",
-                        self.pool.resolve_solvable_inner(solvable_id).display()
-                    );
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     /// Resolves all dependencies
-    fn resolve_dependencies(&mut self, mut level: u32) -> Result<u32, ()> {
+    fn resolve_dependencies(&mut self, mut level: u32) -> Result<u32, Problem> {
         let mut i = 0;
         loop {
             if i >= self.rules.len() {
@@ -426,15 +384,7 @@ impl Solver {
                 )
             };
 
-            // Assumption: there are multiple candidates, otherwise this would have already been handled
-            // by unit propagation
-            self.create_branch();
-            level =
-                self.set_propagate_learn(level, candidate, required_by, true, RuleId::new(i))?;
-
-            // if level < orig_level {
-            //     return Err(level);
-            // }
+            level = self.set_propagate_learn(level, candidate, required_by, RuleId::new(i))?;
 
             // We have made progress, and should look at all rules in the next iteration
             i = 0;
@@ -449,9 +399,8 @@ impl Solver {
         mut level: u32,
         solvable: SolvableId,
         required_by: SolvableId,
-        disable_rules: bool,
         rule_id: RuleId,
-    ) -> Result<u32, ()> {
+    ) -> Result<u32, Problem> {
         level += 1;
 
         println!(
@@ -480,45 +429,46 @@ impl Solver {
                 println!(
                     "=== Propagation conflicted: could not set {solvable} to {attempted_value}"
                 );
-                print!("During unit propagation for rule: ");
-                self.rules[conflicting_rule.index()].debug(&self.pool);
+                println!(
+                    "During unit propagation for rule: {:?}",
+                    self.rules[conflicting_rule.index()].debug(&self.pool)
+                );
+
                 let decision = self
                     .decision_tracker
                     .stack()
                     .iter()
                     .find(|d| d.solvable_id == conflicting_solvable)
                     .unwrap();
-                print!(
-                    "Previously decided value: {}. Derived from: ",
-                    !attempted_value
+                println!(
+                    "Previously decided value: {}. Derived from: {:?}",
+                    !attempted_value,
+                    self.rules[decision.derived_from.index()].debug(&self.pool),
                 );
-                self.rules[decision.derived_from.index()].debug(&self.pool);
             }
 
             if level == 1 {
-                // Is it really unsolvable if we are back to level 1?
                 println!("=== UNSOLVABLE");
                 for decision in self.decision_tracker.stack() {
                     let rule = &self.rules[decision.derived_from.index()];
                     let level = self.decision_tracker.level(decision.solvable_id);
                     let action = if decision.value { "install" } else { "forbid" };
 
-                    if let RuleKind::Forbids(_, _) = rule.kind {
+                    if let RuleKind::ForbidMultipleInstances(..) = rule.kind {
                         // Skip forbids rules, to reduce noise
                         continue;
                     }
 
-                    print!(
-                        "* ({level}) {action} {}",
+                    println!(
+                        "* ({level}) {action} {}. Reason: {:?}",
                         self.pool
                             .resolve_solvable_inner(decision.solvable_id)
-                            .display()
+                            .display(),
+                        rule.debug(&self.pool),
                     );
-                    print!(". Reason: ");
-                    rule.debug(&self.pool);
                 }
-                self.analyze_unsolvable(conflicting_rule, disable_rules);
-                return Err(());
+
+                return Err(self.analyze_unsolvable(conflicting_rule));
             }
 
             let (new_level, learned_rule_id, literal) =
@@ -544,10 +494,6 @@ impl Solver {
         }
 
         Ok(level)
-    }
-
-    fn create_branch(&mut self) {
-        // TODO: we should probably keep info here for backtracking
     }
 
     fn propagate(&mut self, level: u32) -> Result<(), (SolvableId, bool, RuleId)> {
@@ -667,17 +613,17 @@ impl Solver {
                                 | RuleKind::Requires(_, _)
                                 | RuleKind::Constrains(_, _)
                                 | RuleKind::Learnt(_) => {
-                                    print!(
-                                        "Propagate {} = {}. ",
+                                    println!(
+                                        "Propagate {} = {}. {:?}",
                                         self.pool
                                             .resolve_solvable_inner(remaining_watch.solvable_id)
                                             .display(),
-                                        remaining_watch.satisfying_value()
+                                        remaining_watch.satisfying_value(),
+                                        rule.debug(&self.pool),
                                     );
-                                    rule.debug(&self.pool);
                                 }
                                 // Skip logging for forbids, which is so noisy
-                                RuleKind::Forbids(_, _) => {}
+                                RuleKind::ForbidMultipleInstances(..) => {}
                             }
                         }
                     }
@@ -688,8 +634,96 @@ impl Solver {
         Ok(())
     }
 
-    fn analyze_unsolvable(&mut self, _rule: RuleId, _disable_rules: bool) {
-        // todo!()
+    fn analyze_unsolvable_rule(
+        rules: &[Rule],
+        learnt_why: &[Vec<RuleId>],
+        learnt_rules_start: RuleId,
+        rule_id: RuleId,
+        problem: &mut Problem,
+        seen: &mut HashSet<RuleId>,
+    ) {
+        let rule = &rules[rule_id.index()];
+        match rule.kind {
+            RuleKind::Learnt(..) => {
+                if !seen.insert(rule_id) {
+                    return;
+                }
+
+                for &cause in &learnt_why[rule_id.index() - learnt_rules_start.index()] {
+                    Self::analyze_unsolvable_rule(
+                        rules,
+                        learnt_why,
+                        learnt_rules_start,
+                        cause,
+                        problem,
+                        seen,
+                    );
+                }
+            }
+            _ => problem.add_rule(rule_id),
+        }
+    }
+
+    fn analyze_unsolvable(&mut self, rule_id: RuleId) -> Problem {
+        let last_decision = self.decision_tracker.stack().last().unwrap();
+        let highest_level = self.decision_tracker.level(last_decision.solvable_id);
+        debug_assert_eq!(highest_level, 1);
+
+        let mut problem = Problem::default();
+
+        println!("=== ANALYZE UNSOLVABLE");
+
+        let mut involved = HashSet::new();
+        involved.extend(
+            self.rules[rule_id.index()]
+                .literals(&self.learnt_rules, &self.pool)
+                .iter()
+                .map(|l| l.solvable_id),
+        );
+
+        let mut seen = HashSet::new();
+        Self::analyze_unsolvable_rule(
+            &self.rules,
+            &self.learnt_why,
+            self.learnt_rules_start,
+            rule_id,
+            &mut problem,
+            &mut seen,
+        );
+
+        for decision in self.decision_tracker.stack()[1..].iter().rev() {
+            if decision.solvable_id == SolvableId::root() {
+                panic!("unexpected root solvable")
+            }
+
+            let why = decision.derived_from;
+
+            if !involved.contains(&decision.solvable_id) {
+                continue;
+            }
+
+            assert_ne!(why, RuleId::install_root());
+
+            Self::analyze_unsolvable_rule(
+                &self.rules,
+                &self.learnt_why,
+                self.learnt_rules_start,
+                why,
+                &mut problem,
+                &mut seen,
+            );
+
+            for literal in self.rules[why.index()].literals(&self.learnt_rules, &self.pool) {
+                if literal.eval(self.decision_tracker.map()) == Some(true) {
+                    assert_eq!(literal.solvable_id, decision.solvable_id);
+                    continue;
+                }
+
+                involved.insert(literal.solvable_id);
+            }
+        }
+
+        problem
     }
 
     fn analyze(
@@ -707,7 +741,11 @@ impl Solver {
 
         let mut first_iteration = true;
         let mut s_value;
+
+        let mut learnt_why = Vec::new();
         loop {
+            learnt_why.push(rule_id);
+
             // TODO: we should be able to get rid of the branching, always retrieving the whole list
             // of literals, since the hash set will ensure we aren't considering the conflicting
             // solvable after the first iteration
@@ -791,6 +829,7 @@ impl Solver {
         let rule_id = RuleId::new(self.rules.len());
         let learnt_index = self.learnt_rules.len();
         self.learnt_rules.push(learnt.clone());
+        self.learnt_why.push(learnt_why);
 
         let mut rule = Rule::new(
             RuleKind::Learnt(learnt_index),
@@ -911,6 +950,14 @@ mod test {
         }
 
         buf
+    }
+
+    fn solve_unsat(pool: Pool, jobs: SolveJobs) -> String {
+        let mut solver = Solver::new(pool);
+        match solver.solve(jobs) {
+            Ok(_) => panic!("expected unsat, but a solution was found"),
+            Err(problem) => problem.display_user_friendly(&solver).to_string(),
+        }
     }
 
     #[test]
@@ -1181,5 +1228,157 @@ mod test {
         C 2
         A 2
         "###);
+    }
+
+    #[test]
+    fn test_resolve_cyclic() {
+        let pool = pool(&[("A", "2", vec!["B<=10"]), ("B", "5", vec!["A>=2,<=4"])]);
+        let jobs = install(&["A<100"]);
+        let mut solver = Solver::new(pool);
+        let solved = solver.solve(jobs).unwrap();
+
+        let result = transaction_to_string(&solver.pool, &solved);
+        insta::assert_snapshot!(result, @r###"
+        A 2
+        B 5
+        "###);
+    }
+
+    #[test]
+    fn test_unsat_locked_and_excluded() {
+        let pool = pool(&[
+            ("asdf", "1.2.3", vec!["C>1"]),
+            ("C", "2.0.0", vec![]),
+            ("C", "1.0.0", vec![]),
+        ]);
+        let mut job = install(&["asdf"]);
+        job.lock(SolvableId::new(3)); // C 1.0.0
+
+        let error = solve_unsat(pool, job);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_no_candidates_for_child_1() {
+        let pool = pool(&[("asdf", "1.2.3", vec!["C>1"]), ("C", "1.0.0", vec![])]);
+        let error = solve_unsat(pool, install(&["asdf"]));
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_no_candidates_for_child_2() {
+        let pool = pool(&[("A", "41", vec!["B<20"])]);
+        let jobs = install(&["A<1000"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_missing_top_level_dep_1() {
+        let pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let error = solve_unsat(pool, install(&["fghj"]));
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_missing_top_level_dep_2() {
+        let pool = pool(&[("A", "41", vec!["B=15"]), ("B", "15", vec![])]);
+        let jobs = install(&["A=41", "B=14"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_after_backtracking() {
+        let pool = pool(&[
+            ("B", "4.5.7", vec!["D=1"]),
+            ("B", "4.5.6", vec!["D=1"]),
+            ("C", "1.0.1", vec!["D=2"]),
+            ("C", "1.0.0", vec!["D=2"]),
+            ("D", "2.0.0", vec![]),
+            ("D", "1.0.0", vec![]),
+            ("E", "1.0.0", vec![]),
+            ("E", "1.0.1", vec![]),
+        ]);
+
+        let error = solve_unsat(pool, install(&["B", "C", "E"]));
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_incompatible_root_requirements() {
+        let pool = pool(&[("A", "2", vec![]), ("A", "5", vec![])]);
+        let jobs = install(&["A<4", "A>=5,<10"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_bluesky_conflict() {
+        let pool = pool(&[
+            ("suitcase-utils", "54", vec![]),
+            ("suitcase-utils", "53", vec![]),
+            (
+                "bluesky-widgets",
+                "42",
+                vec![
+                    "bluesky-live<10",
+                    "numpy<10",
+                    "python<10",
+                    "suitcase-utils<54",
+                ],
+            ),
+            ("bluesky-live", "1", vec![]),
+            ("numpy", "1", vec![]),
+            ("python", "1", vec![]),
+        ]);
+
+        let jobs = install(&["bluesky-widgets<100", "suitcase-utils>=54,<100"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_pubgrub_article() {
+        // Taken from the pubgrub article: https://nex3.medium.com/pubgrub-2fb6470504f
+        let pool = pool(&[
+            ("menu", "1.5.0", vec!["dropdown>=2.0.0,<=2.3.0"]),
+            ("menu", "1.0.0", vec!["dropdown>=1.8.0,<2.0.0"]),
+            ("dropdown", "2.3.0", vec!["icons=2.0.0"]),
+            ("dropdown", "1.8.0", vec!["intl=3.0.0"]),
+            ("icons", "2.0.0", vec![]),
+            ("icons", "1.0.0", vec![]),
+            ("intl", "5.0.0", vec![]),
+            ("intl", "3.0.0", vec![]),
+        ]);
+
+        let jobs = install(&["menu", "icons=1.0.0", "intl=5.0.0"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    // TODO: this isn't testing for compression yet!
+    #[test]
+    fn test_unsat_applies_graph_compression() {
+        let pool = pool(&[
+            ("A", "10", vec!["B"]),
+            ("A", "9", vec!["B"]),
+            ("B", "100", vec!["C<100"]),
+            ("B", "42", vec!["C<100"]),
+            ("C", "103", vec![]),
+            ("C", "101", vec![]),
+            ("C", "100", vec![]),
+            ("C", "99", vec![]),
+        ]);
+
+        let jobs = install(&["A", "C>100"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
     }
 }

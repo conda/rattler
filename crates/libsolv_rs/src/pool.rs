@@ -31,8 +31,8 @@ impl StringId {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct MatchSpecId(u32);
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct MatchSpecId(u32);
 
 impl MatchSpecId {
     fn new(index: usize) -> Self {

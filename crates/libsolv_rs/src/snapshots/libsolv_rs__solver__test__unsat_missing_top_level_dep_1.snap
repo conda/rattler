@@ -1,0 +1,7 @@
+---
+source: crates/libsolv_rs/src/solver.rs
+expression: error
+---
+The following packages are incompatible
+|-- No candidates where found for fghj.
+

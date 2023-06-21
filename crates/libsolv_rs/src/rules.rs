@@ -2,6 +2,47 @@ use crate::decision_map::DecisionMap;
 use crate::pool::{MatchSpecId, Pool};
 use crate::solvable::SolvableId;
 use crate::solver::RuleId;
+use std::fmt::{Debug, Formatter};
+
+pub(crate) struct RuleDebug<'a> {
+    kind: RuleKind,
+    pool: &'a Pool,
+}
+
+impl Debug for RuleDebug<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.kind {
+            RuleKind::InstallRoot => write!(f, "install root"),
+            RuleKind::Learnt(index) => write!(f, "learnt rule {index}"),
+            RuleKind::Requires(solvable_id, match_spec_id) => {
+                let match_spec = self.pool.resolve_match_spec(match_spec_id).to_string();
+                write!(
+                    f,
+                    "{} requires {match_spec}",
+                    self.pool.resolve_solvable_inner(solvable_id).display()
+                )
+            }
+            RuleKind::Constrains(s1, s2) => {
+                write!(
+                    f,
+                    "{} excludes {}",
+                    self.pool.resolve_solvable_inner(s1).display(),
+                    self.pool.resolve_solvable_inner(s2).display()
+                )
+            }
+            RuleKind::ForbidMultipleInstances(s1, _) => {
+                let name = self
+                    .pool
+                    .resolve_solvable_inner(s1)
+                    .package()
+                    .record
+                    .name
+                    .as_str();
+                write!(f, "only one {name} allowed")
+            }
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct Rule {
@@ -27,33 +68,10 @@ impl Rule {
         rule
     }
 
-    pub fn debug(&self, pool: &Pool) {
-        match self.kind {
-            RuleKind::InstallRoot => println!("install root"),
-            RuleKind::Learnt(index) => println!("learnt rule {index}"),
-            RuleKind::Requires(solvable_id, match_spec_id) => {
-                let match_spec = pool.resolve_match_spec(match_spec_id).to_string();
-                println!(
-                    "{} requires {match_spec}",
-                    pool.resolve_solvable_inner(solvable_id).display()
-                )
-            }
-            RuleKind::Constrains(s1, s2) => {
-                println!(
-                    "{} excludes {}",
-                    pool.resolve_solvable_inner(s1).display(),
-                    pool.resolve_solvable_inner(s2).display()
-                )
-            }
-            RuleKind::Forbids(s1, _) => {
-                let name = pool
-                    .resolve_solvable_inner(s1)
-                    .package()
-                    .record
-                    .name
-                    .as_str();
-                println!("only one {name} allowed")
-            }
+    pub fn debug<'a>(&self, pool: &'a Pool) -> RuleDebug<'a> {
+        RuleDebug {
+            kind: self.kind,
+            pool,
         }
     }
 
@@ -141,7 +159,7 @@ impl Rule {
                     .unwrap();
                 [w1, w2]
             }
-            RuleKind::Forbids(_, _) => literals(false, false),
+            RuleKind::ForbidMultipleInstances(_, _) => literals(false, false),
             RuleKind::Constrains(_, _) => literals(false, false),
             RuleKind::Requires(solvable_id, _) => {
                 if self.watched_literals[0] == solvable_id {
@@ -176,7 +194,7 @@ impl Rule {
                 .cloned()
                 .find(|&l| can_watch(l))
                 .map(|l| l.solvable_id),
-            RuleKind::Forbids(_, _) => None,
+            RuleKind::ForbidMultipleInstances(_, _) => None,
             RuleKind::Constrains(_, _) => None,
             RuleKind::Requires(solvable_id, match_spec_id) => {
                 // The solvable that added this rule
@@ -232,7 +250,7 @@ impl Rule {
                 )
                 .collect()
             }
-            RuleKind::Forbids(s1, s2) => {
+            RuleKind::ForbidMultipleInstances(s1, s2) => {
                 vec![
                     Literal {
                         solvable_id: s1,
@@ -293,7 +311,7 @@ impl Rule {
                 .filter(|&l| variable != l.solvable_id)
                 .collect()
             }
-            RuleKind::Forbids(s1, s2) => {
+            RuleKind::ForbidMultipleInstances(s1, s2) => {
                 let cause = if variable == s1 { s2 } else { s1 };
 
                 vec![Literal {
@@ -353,7 +371,7 @@ pub(crate) enum RuleKind {
     /// Used to ensure only a single version of a package is installed
     ///
     /// In SAT terms: (¬A ∨ ¬B)
-    Forbids(SolvableId, SolvableId),
+    ForbidMultipleInstances(SolvableId, SolvableId),
     /// Similar to forbid, but created due to a constrains relationship
     Constrains(SolvableId, SolvableId),
     /// Learnt rule
@@ -369,7 +387,7 @@ impl RuleKind {
         match self {
             RuleKind::InstallRoot => None,
             RuleKind::Constrains(s1, s2) => Some([*s1, *s2]),
-            RuleKind::Forbids(s1, s2) => Some([*s1, *s2]),
+            RuleKind::ForbidMultipleInstances(s1, s2) => Some([*s1, *s2]),
             RuleKind::Learnt(index) => {
                 let literals = &learnt_rules[*index];
                 debug_assert!(!literals.is_empty());

@@ -81,9 +81,9 @@ mod test_libsolv {
         Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
         RepoData, RepoDataRecord, Version,
     };
+    use rattler_repodata_gateway::sparse::SparseRepoData;
     use std::str::FromStr;
     use url::Url;
-    use rattler_repodata_gateway::sparse::SparseRepoData;
 
     fn conda_json_path() -> String {
         format!(
@@ -132,7 +132,12 @@ mod test_libsolv {
     }
 
     fn read_sparse_repodata(path: &str) -> SparseRepoData {
-        SparseRepoData::new(Channel::from_str("dummy", &ChannelConfig::default()).unwrap(), "dummy".to_string(), path).unwrap()
+        SparseRepoData::new(
+            Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
+            "dummy".to_string(),
+            path,
+        )
+        .unwrap()
     }
 
     fn installed_package(
@@ -173,18 +178,22 @@ mod test_libsolv {
     }
 
     fn solve_real_world(specs: Vec<&str>) -> Vec<String> {
-        let specs = specs.iter().map(|s| MatchSpec::from_str(s).unwrap()).collect::<Vec<_>>();
+        let specs = specs
+            .iter()
+            .map(|s| MatchSpec::from_str(s).unwrap())
+            .collect::<Vec<_>>();
 
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
 
         let sparse_repo_datas = vec![
             read_sparse_repodata(&json_file),
-            read_sparse_repodata(&json_file_noarch)
+            read_sparse_repodata(&json_file_noarch),
         ];
 
         let names = specs.iter().map(|s| s.name.clone().unwrap());
-        let available_packages = SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
+        let available_packages =
+            SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
 
         let solver_task = SolverTask {
             available_packages: available_packages

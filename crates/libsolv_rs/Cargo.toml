@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+itertools = "0.11.0"
+petgraph = "0.6.3"
 rattler_conda_types = { version = "0.4.0", path = "../rattler_conda_types" }
 
 [dev-dependencies]

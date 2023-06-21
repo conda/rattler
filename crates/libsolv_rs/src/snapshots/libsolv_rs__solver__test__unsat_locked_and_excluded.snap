@@ -1,0 +1,11 @@
+---
+source: crates/libsolv_rs/src/solver.rs
+expression: error
+---
+The following packages are incompatible
+|-- asdf can be installed with any of the following options:
+    |-- asdf 1.2.3 would require
+        |-- C >1, which can be installed with any of the following options:
+            |-- C 2.0.0
+|-- C 2.0.0 is locked, but another version is required as reported above
+

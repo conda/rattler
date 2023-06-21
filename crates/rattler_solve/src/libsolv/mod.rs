@@ -95,7 +95,9 @@ impl SolverBackend for LibsolvBackend {
 
         // Construct a solver and solve the problems in the queue
         let mut solver = Solver::new(pool);
-        let transaction = solver.solve(goal).map_err(SolveError::Unsolvable)?;
+        let transaction = solver.solve(goal).map_err(|problem| {
+            SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
+        })?;
 
         let required_records = get_required_packages(
             solver.pool(),

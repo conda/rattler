@@ -1,0 +1,9 @@
+---
+source: crates/libsolv_rs/src/solver.rs
+expression: error
+---
+The following packages are incompatible
+|-- asdf cannot be installed because there are no viable options:
+    |-- asdf 1.2.3 would require
+        |-- C >1, for which no candidates where found.
+
