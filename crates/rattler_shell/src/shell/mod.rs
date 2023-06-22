@@ -390,7 +390,12 @@ impl ShellEnum {
             Some(Fish.into())
         } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
         {
-            Some(PowerShell{executable_path: Some(parent_process_name)}.into())
+            Some(
+                PowerShell {
+                    executable_path: Some(parent_process_name),
+                }
+                .into(),
+            )
         } else if parent_process_name.contains("cmd.exe") {
             Some(CmdExe.into())
         } else {
