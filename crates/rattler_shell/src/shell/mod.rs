@@ -263,8 +263,9 @@ impl Shell for PowerShell {
     fn extension(&self) -> &str {
         "ps1"
     }
+
     fn executable(&self) -> &str {
-        "powershell"
+        "pwsh"
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {
