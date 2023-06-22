@@ -14,6 +14,15 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 
 mod parse;
 
+/// Bitmask that should be applied to `Version::flags` to determine if the version contains an epoch.
+const EPOCH_MASK: u8 = 0b00000001;
+
+/// The bitmask to apply to `Version::flags` to get only the local version index.
+const LOCAL_VERSION_MASK: u8 = !EPOCH_MASK;
+
+/// The offset in bits where the the bits of the local version index start.
+const LOCAL_VERSION_OFFSET: u8 = 1;
+
 /// This class implements an order relation between version strings. Version strings can contain the
 /// usual alphanumeric characters (A-Za-z0-9), separated into segments by dots and underscores.
 /// Empty segments (i.e. two consecutive dots, a leading/trailing underscore) are not permitted. An
@@ -126,10 +135,26 @@ pub struct Version {
     /// Individual components of the version.
     ///
     /// We store a maximum of 3 components on the stack. If a version consists of more components
+    /// they are stored on the heap instead. We choose 3 here because most versions only consist of
+    /// 3 components.
+    ///
+    /// So for the version `1.2g.beta15.rc` this stores:
+    ///
+    /// [1, 2, 'g', 0, 'beta', 15, 0, 'rc']
     components: SmallVec<[Component; 3]>,
 
-    /// The length of each individual segment.
-    segments: SmallVec<[u16; 4]>,
+    /// The length of each individual segment. Segments group different components together.
+    ///
+    /// So for the version `1.2g.beta15.rc` this stores:
+    ///
+    /// [1,2,3,2]
+    ///
+    /// e.g. `1` consists of 1 component
+    ///      `2g` consists of 2 components (`2` and `g`)
+    ///      `beta15` consists of 3 components (`0`, `beta` and `15`). Segments must always start
+    ///             with a number.
+    ///      `rc` consists of 2 components (`0`, `rc`). Segments must always start with a number.
+    segment_lengths: SmallVec<[u16; 4]>,
 
     /// Flags to indicate edge cases
     /// The first bit indicates whether or not this version has an epoch.
@@ -141,18 +166,18 @@ pub struct Version {
 impl Version {
     /// Returns true if this version has an epoch.
     pub fn has_epoch(&self) -> bool {
-        (self.flags & 0x1) != 0
+        (self.flags & EPOCH_MASK) != 0
     }
 
     /// Returns true if this version has a local version defined
     pub fn has_local(&self) -> bool {
-        (self.flags >> 1) > 0
+        ((self.flags & LOCAL_VERSION_MASK) >> LOCAL_VERSION_OFFSET) > 0
     }
 
     /// Returns the index of the first segment that belongs to the local version or `None` if there
-    /// is not local version
+    /// is no local version
     fn local_segment_index(&self) -> Option<usize> {
-        let index = (self.flags >> 1) as usize;
+        let index = ((self.flags & LOCAL_VERSION_MASK) >> LOCAL_VERSION_OFFSET) as usize;
         if index > 0 {
             Some(index)
         } else {
@@ -185,9 +210,9 @@ impl Version {
     ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
         let mut idx = if self.has_epoch() { 1 } else { 0 };
         let version_segments = if let Some(local_index) = self.local_segment_index() {
-            &self.segments[..local_index]
+            &self.segment_lengths[..local_index]
         } else {
-            &self.segments[..]
+            &self.segment_lengths[..]
         };
         version_segments.iter().map(move |&count| {
             let start = idx;
@@ -210,8 +235,8 @@ impl Version {
     ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
             let mut idx = if self.has_epoch() { 1 } else { 0 };
-            idx += self.segments[..start].iter().sum::<u16>() as usize;
-            let version_segments = &self.segments[start..];
+            idx += self.segment_lengths[..start].iter().sum::<u16>() as usize;
+            let version_segments = &self.segment_lengths[start..];
             Either::Left(version_segments.iter().map(move |&count| {
                 let start = idx;
                 let end = idx + count as usize;

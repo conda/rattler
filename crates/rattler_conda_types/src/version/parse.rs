@@ -1,4 +1,5 @@
 use super::{Component, Version};
+use crate::version::{LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -236,7 +237,7 @@ impl FromStr for Version {
             .map_err(|e| ParseVersionError::new(s, e))?;
 
         if !local.is_empty() {
-            if segments.len() >= (1 << 7) {
+            if segments.len() > (LOCAL_VERSION_MASK >> LOCAL_VERSION_OFFSET) as usize {
                 // There are too many segments to be able to encode the local segment parts into the
                 // special `flag` we store. The flags is 8 bits and the first bit is used to
                 // indicate if there is an epoch or not. The remaining 7 bits are used to indicate
@@ -250,7 +251,7 @@ impl FromStr for Version {
             }
 
             // Encode that the local version segment starts at the given index.
-            flags |= (u8::try_from(segments.len()).unwrap()) << 1u8;
+            flags |= (u8::try_from(segments.len()).unwrap()) << LOCAL_VERSION_OFFSET;
 
             split_component(local_split, &mut segments, &mut components)
                 .map_err(|e| ParseVersionError::new(s, e))?
@@ -259,7 +260,7 @@ impl FromStr for Version {
         Ok(Self {
             norm: lowered.into_boxed_str(),
             flags,
-            segments,
+            segment_lengths: segments,
             components,
         })
     }
