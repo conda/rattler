@@ -157,7 +157,7 @@ impl Shell for Zsh {
     }
 
     fn extension(&self) -> &str {
-        "zsh"
+        "sh"
     }
 
     fn executable(&self) -> &str {
