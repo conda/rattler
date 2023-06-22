@@ -481,7 +481,7 @@ mod tests {
 
         let script1 = path.join("script1.sh");
 
-        fs::write(&script1, "").unwrap();
+        fs::write(script1, "").unwrap();
 
         tempdir
     }

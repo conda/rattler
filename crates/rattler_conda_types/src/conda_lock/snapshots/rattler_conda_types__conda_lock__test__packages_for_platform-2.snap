@@ -13,8 +13,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 60ba4c64f5d0afca0d283c7addba577d3e2efc0db86002808dadb0498661b2f2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ca-certificates
   version: 2022.12.7
   manager: conda
@@ -26,8 +24,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 898276d86de89fb034ecfae05103045d0a0d6a356ced1b6d1832cdbd07a8fc18
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: jpeg
   version: 9e
   manager: conda
@@ -39,8 +35,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 1ef5f9b4d9817820224c92b016da210b1356250d7272e16901c547e156b3e615
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libbrotlicommon
   version: 1.0.9
   manager: conda
@@ -52,8 +46,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c983101653f5bffea605c4423d84fd5ca28ee36b290cdb6207ec246e293f7d94
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libcxx
   version: 14.0.6
   manager: conda
@@ -65,8 +57,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: ebb75dd9f854b1f184a98d0b9128a3faed6cd2f05f83677e1f399c253580afe7
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libdeflate
   version: "1.17"
   manager: conda
@@ -78,8 +68,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b322e190fd6fe631e1f4836ef99cbfb8352c03c30b51cb5baa216f7c9124d82e
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libffi
   version: 3.4.2
   manager: conda
@@ -91,8 +79,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 7a2d27a936ceee6942ea4d397f9c7d136f12549d86f7617e8b6bad51e01a941f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libgfortran-devel_osx-64
   version: 11.3.0
   manager: conda
@@ -104,8 +90,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: d93b662d07aeb99417be9b62ca511520865e691d1fc224a63e383727791ac3b7
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libiconv
   version: "1.17"
   manager: conda
@@ -117,8 +101,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4a3294037d595754f7da7c11a41f3922f995aaa333f3cb66f02d8afa032a7bc2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libwebp-base
   version: 1.2.4
   manager: conda
@@ -130,8 +112,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: ca3eb817054ac2942802b6b51dc671ab2af6564da329bebcb2538cdb31b59fa1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libzlib
   version: 1.2.13
   manager: conda
@@ -143,8 +123,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0d954350222cc12666a1f4852dbc9bcf4904d8e467d29505f2b04ded6518f890
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: llvm-openmp
   version: 15.0.7
   manager: conda
@@ -156,8 +134,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: cc1586b43b757890b7d1cd24e1582345a36c40acd6cb6f9d9affb91de3c62015
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ncurses
   version: "6.3"
   manager: conda
@@ -169,8 +145,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9794a23d03586c99cac49d4ae3d5337faaa6bfc256b31d2662ff4ad5972be143
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: nomkl
   version: "1.0"
   manager: conda
@@ -182,8 +156,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pthread-stubs
   version: "0.4"
   manager: conda
@@ -195,8 +167,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6e3900bb241bcdec513d4e7180fe9a19186c1a38f0b4080ed619d26014222c53
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: python_abi
   version: "3.9"
   manager: conda
@@ -208,8 +178,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b02e179f015b042510da8ba256c86f5cfb34058a96ec1c548f33f9f8bcdbb78c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: tzdata
   version: 2022g
   manager: conda
@@ -221,8 +189,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: xorg-libxau
   version: 1.0.9
   manager: conda
@@ -234,8 +200,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6dcdbfcdb87c21cb615cd1a0a7fab7e657a443c771e80c771524f7d9b8443304
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: xorg-libxdmcp
   version: 1.1.3
   manager: conda
@@ -247,8 +211,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 485421c16f03a01b8ed09984e0b2ababdbb3527e1abf354ff7646f8329be905f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: xz
   version: 5.2.6
   manager: conda
@@ -260,8 +222,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: eb09823f34cc2dd663c0ec4ab13f246f45dcd52e5b8c47b9864361de5204a1c8
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: doxygen
   version: 1.9.5
   manager: conda
@@ -275,8 +235,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6900910a349b4a54fd42aa67c940c53efe137e0fe4160ec05aafb15dc9c6903e
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gmp
   version: 6.2.1
   manager: conda
@@ -289,8 +247,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: d6386708f6b7bcf790c57e985a5ca5636ec6ccaed0493b8ddea231aaeb8bfb00
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: isl
   version: "0.25"
   manager: conda
@@ -303,8 +259,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f0a10b2be179809d4444bee0a60d5aa286b306520d55897b29d22b9848ab71fb
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: lerc
   version: 4.0.0
   manager: conda
@@ -317,36 +271,30 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: e41790fc0f4089726369b3c7f813117bbc14b533e0ed8b94cf75aba252e82497
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libbrotlidec
   version: 1.0.9
   manager: conda
   platform: osx-64
   dependencies:
-    libbrotlicommon: 1.0.9 hb7f2c08_8
+    libbrotlicommon: "==1.0.9 hb7f2c08_8"
   url: "https://conda.anaconda.org/conda-forge/osx-64/libbrotlidec-1.0.9-hb7f2c08_8.tar.bz2"
   hash:
     md5: 7f952a036d9014b4dab96c6ea0f8c2a7
     sha256: 52d8e8929b2476cf13fd397d88cefd911f805de00e77090fdc50b8fb11c372ca
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libbrotlienc
   version: 1.0.9
   manager: conda
   platform: osx-64
   dependencies:
-    libbrotlicommon: 1.0.9 hb7f2c08_8
+    libbrotlicommon: "==1.0.9 hb7f2c08_8"
   url: "https://conda.anaconda.org/conda-forge/osx-64/libbrotlienc-1.0.9-hb7f2c08_8.tar.bz2"
   hash:
     md5: b36a3bfe866d9127f25f286506982166
     sha256: be7e794c6208e7e12982872922df13fbf020ab594d516b7bc306a384ac7d3ac6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libgfortran5
   version: 11.3.0
   manager: conda
@@ -359,8 +307,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 78173905004e7d13501db619391b113f3b96f2c78ba3ed0273152d1340d6a818
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libllvm14
   version: 14.0.6
   manager: conda
@@ -374,8 +320,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 8e72bb60d707dfecca0cfb7378cbabe43de4537513a938fb0ab75ce58c5c7d91
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libpng
   version: 1.6.39
   manager: conda
@@ -388,8 +332,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 5ad9f5e96e6770bfc8b0a826f48835e7f337c2d2e9512d76027a62f9c120b2a3
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libsqlite
   version: 3.40.0
   manager: conda
@@ -402,24 +344,20 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: ae19f866188cc0c514fed754468460ae9e8dd763ebbd7b7afc4e818d71844297
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libxcb
   version: "1.13"
   manager: conda
   platform: osx-64
   dependencies:
-    pthread-stubs: ""
-    xorg-libxau: ""
-    xorg-libxdmcp: ""
+    pthread-stubs: "*"
+    xorg-libxau: "*"
+    xorg-libxdmcp: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/libxcb-1.13-h0d85af4_1004.tar.bz2"
   hash:
     md5: eb7860935e14aec936065cbc21a1a962
     sha256: 00e962ea91deae3dbed221c960c3bffab4172d87bc883b615298333fe336a5c6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ninja
   version: 1.11.0
   manager: conda
@@ -432,22 +370,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c7c7de719893c28b3e35fd3afa2ca7f6bf03022df5cf2398e1806c881ce41775
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: openssl
   version: 3.0.8
   manager: conda
   platform: osx-64
   dependencies:
-    ca-certificates: ""
+    ca-certificates: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.0.8-hfd90126_0.conda"
   hash:
     md5: 4239d01834a13512079046ea216b6657
     sha256: 750ebd464414b7c4ea5aaa704788f7238a356c0a54ce76b018af246cdb65bf08
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pkg-config
   version: 0.29.2
   manager: conda
@@ -460,8 +394,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f60d1c03c7d10e8926e767981872fdd6002d2094925df598a53c58261524c151
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: readline
   version: 8.1.2
   manager: conda
@@ -474,8 +406,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c65dc1200a252832db49bdd6836c512a0eaafe97aa914b9f8358b15eebb1d94b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: tapi
   version: 1100.0.11
   manager: conda
@@ -488,8 +418,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 34b18ce8d1518b67e333ca1d3af733c3976ecbdf3a36b727f9b4dedddcc588fa
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: tk
   version: 8.6.12
   manager: conda
@@ -502,22 +430,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 331aa1137a264fd9cc905f04f09a161c801fe504b93da08b4e6697bd7c9ae6a6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: zlib
   version: 1.2.13
   manager: conda
   platform: osx-64
   dependencies:
-    libzlib: 1.2.13 hfd90126_4
+    libzlib: "==1.2.13 hfd90126_4"
   url: "https://conda.anaconda.org/conda-forge/osx-64/zlib-1.2.13-hfd90126_4.tar.bz2"
   hash:
     md5: be90e6223c74ea253080abae19b3bdb1
     sha256: 9db69bb5fc3e19093b550e25d1158cdf82f4f8eddc1f80f8d7d9de33eb8535a4
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: zstd
   version: 1.5.2
   manager: conda
@@ -531,23 +455,19 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f845dafb0b488703ce81e25b6f27ed909ee9061b730c172e6b084fcf7156231f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: brotli-bin
   version: 1.0.9
   manager: conda
   platform: osx-64
   dependencies:
-    libbrotlidec: 1.0.9 hb7f2c08_8
-    libbrotlienc: 1.0.9 hb7f2c08_8
+    libbrotlidec: "==1.0.9 hb7f2c08_8"
+    libbrotlienc: "==1.0.9 hb7f2c08_8"
   url: "https://conda.anaconda.org/conda-forge/osx-64/brotli-bin-1.0.9-hb7f2c08_8.tar.bz2"
   hash:
     md5: aac5ad0d8f747ef7f871508146df75d9
     sha256: 36f79eb26da032c5d1ddc11e0bcac5526f249bf60d332e4743c8d48bb7334db0
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: freetype
   version: 2.12.1
   manager: conda
@@ -561,8 +481,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0aea2b93d0da8bf022501857de93f2fc0e362fabcd83c4579be8d8f5bc3e17cb
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libclang-cpp14
   version: 14.0.6
   manager: conda
@@ -576,22 +494,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 01f7c50ef3414ea00026e5845e6ac8f0395af8ea7d585e4977fd6d7aa3e215d0
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libgfortran
   version: 5.0.0
   manager: conda
   platform: osx-64
   dependencies:
-    libgfortran5: ""
+    libgfortran5: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/libgfortran-5.0.0-11_3_0_h97931a8_27.conda"
   hash:
     md5: 7d25335e67256924aa04de681e68e807
     sha256: 834f1547a41fe53a23563b7702eb83b7156129a88460b5de701e8e019f7933a1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libtiff
   version: 4.5.0
   manager: conda
@@ -611,14 +525,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 03d00d6a3b1e569e9a8da66a9ad75a29c9c676dc7de6c16771abbb961abded2c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: llvm-tools
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    libllvm14: 14.0.6 h5b596cc_1
+    libllvm14: "==14.0.6 h5b596cc_1"
     libzlib: ">=1.2.13,<1.3.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/llvm-tools-14.0.6-h5b596cc_1.tar.bz2"
   hash:
@@ -626,8 +538,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 70be9ae375316ed616dae92c614763bd930d64765cf256d0f1aa50e3dcdafc58
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: mpfr
   version: 4.1.0
   manager: conda
@@ -640,8 +550,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 68e2d7c06f438f7179b9b0c6f826a33a29c6580233a1e60fa71d4da260d70b8f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: python
   version: 3.9.16
   manager: conda
@@ -653,10 +561,10 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     libzlib: ">=1.2.13,<1.3.0a0"
     ncurses: ">=6.3,<7.0a0"
     openssl: ">=3.0.7,<4.0a0"
-    pip: ""
+    pip: "*"
     readline: ">=8.1.2,<9.0a0"
     tk: ">=8.6.12,<8.7.0a0"
-    tzdata: ""
+    tzdata: "*"
     xz: ">=5.2.6,<6.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.9.16-h709bd14_0_cpython.conda"
   hash:
@@ -664,8 +572,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: ffff69cde5bce4fadaf1b6fb551d3ffa1f0f8a6dfdc95ec114f9aac02758a71a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sigtool
   version: 0.1.3
   manager: conda
@@ -678,8 +584,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 46fdeadf8f8d725819c4306838cdfd1099cd8fe3e17bd78862a5dfdcd6de61cf
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: alabaster
   version: 0.7.13
   manager: conda
@@ -692,22 +596,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b2d160a050996950434c6e87a174fc01c4a937cbeffbdd20d1b46126b4478a95
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: appdirs
   version: 1.4.4
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/appdirs-1.4.4-pyh9f0ad1d_0.tar.bz2"
   hash:
     md5: 5f095bc6454094e96f146491fd03633b
     sha256: ae9fb8f68281f84482f2c234379aa12405a9e365151d43af20b3ae1f17312111
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: appnope
   version: 0.1.3
   manager: conda
@@ -720,8 +620,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b209a68ac55eb9ecad7042f0d4eedef5da924699f6cdf54ac1826869cfdae742
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: attrs
   version: 22.2.0
   manager: conda
@@ -734,22 +632,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 3a58d4a4933fa8735471c782d35326ab78e0bcfce84756408515f82a94e4dec4
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: backcall
   version: 0.2.0
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/backcall-0.2.0-pyh9f0ad1d_0.tar.bz2"
   hash:
     md5: 6006a6d08a3fa99268a2681c7fb55213
     sha256: ee62d6434090c1327a48551734e06bd10e65a64ef7f3b6e68719500dab0e42b9
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: backports
   version: "1.0"
   manager: conda
@@ -762,8 +656,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 711602276ae39276cb0faaca6fd0ac851fff0ca17151917569174841ef830bbd
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: backports.zoneinfo
   version: 0.2.1
   manager: conda
@@ -777,24 +669,20 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4dda0fc050802b0ad30eda1a4b13ad82172627f1601fae9e36344e41de8be5e2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: brotli
   version: 1.0.9
   manager: conda
   platform: osx-64
   dependencies:
-    brotli-bin: 1.0.9 hb7f2c08_8
-    libbrotlidec: 1.0.9 hb7f2c08_8
-    libbrotlienc: 1.0.9 hb7f2c08_8
+    brotli-bin: "==1.0.9 hb7f2c08_8"
+    libbrotlidec: "==1.0.9 hb7f2c08_8"
+    libbrotlienc: "==1.0.9 hb7f2c08_8"
   url: "https://conda.anaconda.org/conda-forge/osx-64/brotli-1.0.9-hb7f2c08_8.tar.bz2"
   hash:
     md5: 55f612fe4a9b5f6ac76348b6de94aaeb
     sha256: 1272426370f1e8db1a8b245a7b522afe27413b09eab169990512a7676b802e3b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: certifi
   version: 2022.12.7
   manager: conda
@@ -807,8 +695,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 5e22af4776700200fab2c1df41a2188ab9cfe90a50c4f388592bb978562c88ec
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: charset-normalizer
   version: 2.1.1
   manager: conda
@@ -821,14 +707,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9e6170fa7b65b5546377eddb602d5ff871110f84bebf101b7b8177ff64aab1cb
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: clang-14
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    libclang-cpp14: 14.0.6 default_h55ffa42_0
+    libclang-cpp14: "==14.0.6 default_h55ffa42_0"
     libcxx: ">=13.0.1"
     libllvm14: ">=14.0.6,<14.1.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/clang-14-14.0.6-default_h55ffa42_0.tar.bz2"
@@ -837,14 +721,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 8c421568bce373e71ade9768f0f7e3563eaec84cb2cd51a7f2e03c6c3bb7be94
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: click
   version: 8.1.3
   manager: conda
   platform: osx-64
   dependencies:
-    __unix: ""
+    __unix: "*"
     python: ">=3.8"
   url: "https://conda.anaconda.org/conda-forge/noarch/click-8.1.3-unix_pyhd8ed1ab_2.tar.bz2"
   hash:
@@ -852,8 +734,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 23676470b591b100393bb0f6c46fe10624dcbefc696a6a9f42932ed8816ef0ea
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: colorama
   version: 0.4.6
   manager: conda
@@ -866,8 +746,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2c1b2e9755ce3102bca8d69e8f26e4f087ece73f50418186aee7c74bef8e1698
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cycler
   version: 0.11.0
   manager: conda
@@ -880,8 +758,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 3b594bc8aa0b9a51269d54c7a4ef6af777d7fad4bee16b05695e1124de6563f6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cython
   version: 0.29.33
   manager: conda
@@ -896,8 +772,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 3ee611cc2d9793089ef54e20d7521655b2ef8017b4c56003f872ffdb16eafee2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: decorator
   version: 5.1.1
   manager: conda
@@ -910,8 +784,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 328a6a379f9bdfd0230e51de291ce858e6479411ea4b0545fb377c71662ef3e2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: docutils
   version: "0.19"
   manager: conda
@@ -925,8 +797,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 232f045f5935309bd3c7901027a728c1dcfdab385e8ad104f54b6a70c315a219
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: exceptiongroup
   version: 1.1.0
   manager: conda
@@ -939,22 +809,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: cf668360331552b2903e440cda1b4e47062c3f3775342e4a278ef4d141c28d1d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: execnet
   version: 1.9.0
   manager: conda
   platform: osx-64
   dependencies:
-    python: 2.7|>=3.5
+    python: "==2.7|>=3.5"
   url: "https://conda.anaconda.org/conda-forge/noarch/execnet-1.9.0-pyhd8ed1ab_0.tar.bz2"
   hash:
     md5: 0e521f7a5e60d508b121d38b04874fb2
     sha256: 1900bbc1764d01405e55be2e369d1b830fb435eb0f27c57033372c60f34c675c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: executing
   version: 1.2.0
   manager: conda
@@ -967,8 +833,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9c03425cd58c474af20e179c9ba121a82984d6c4bfc896bbc992f5ed75dd7539
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: idna
   version: "3.4"
   manager: conda
@@ -981,8 +845,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9887c35c374ec1847f167292d3fde023cb4c994a4ceeec283072b95440131f09
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: imagesize
   version: 1.4.1
   manager: conda
@@ -995,8 +857,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c2bfd7043e0c4c12d8b5593de666c1e81d67b83c474a0a79282cc5c4ef845460
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: iniconfig
   version: 2.0.0
   manager: conda
@@ -1009,8 +869,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 38740c939b668b36a50ef455b077e8015b8c9cf89860d421b3fff86048f49666
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: kiwisolver
   version: 1.4.4
   manager: conda
@@ -1025,8 +883,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c397173c92ca77678d645bf8ef8064e81b821169db056217963f020acc09d42c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: lcms2
   version: "2.14"
   manager: conda
@@ -1040,16 +896,14 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 64efad232b892c2511ba56bbd821e0b1e2e80a7a8ccf3524c20b5f964793ce43
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ld64_osx-64
   version: "609"
   manager: conda
   platform: osx-64
   dependencies:
-    libcxx: ""
+    libcxx: "*"
     libllvm14: ">=14.0.6,<14.1.0a0"
-    sigtool: ""
+    sigtool: "*"
     tapi: ">=1100.0.11,<1101.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/ld64_osx-64-609-hfd63004_11.conda"
   hash:
@@ -1057,8 +911,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0c658f698bc12e0c7dc2def81c0b2a45aab810f5a11136dc99a5e944b47a3b97
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libopenblas
   version: 0.3.21
   manager: conda
@@ -1073,8 +925,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a5a0b6ccef165ffb38e6a53e7b8808e33c77e081174315d2333ae93b593ae957
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: markupsafe
   version: 2.1.2
   manager: conda
@@ -1088,8 +938,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: d5aa88cdd75728fe101f83d0c4a7ab36634044f890e9e41aceb7454500e8af2b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: mpc
   version: 1.3.1
   manager: conda
@@ -1103,22 +951,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2ae945a15c8a984d581dcfb974ad3b5d877a6527de2c95a3363e6b4490b2f312
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: munkres
   version: 1.1.4
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/munkres-1.1.4-pyh9f0ad1d_0.tar.bz2"
   hash:
     md5: 2ba8498c1018c1e9c61eb99b973dfe19
     sha256: f86fb22b58e93d04b6f25e0d811b56797689d598788b59dcb47f59045b568306
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: mypy_extensions
   version: 1.0.0
   manager: conda
@@ -1131,8 +975,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f240217476e148e825420c6bc3a0c0efb08c0718b7042fae960400c02af858a3
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: openjpeg
   version: 2.5.0
   manager: conda
@@ -1148,8 +990,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2375eafbd5241d8249fb467e2a8e190646e8798c33059c72efa60f197cdf4944
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: packaging
   version: "23.0"
   manager: conda
@@ -1162,8 +1002,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 00288f5e5e841711e8b8fef1f1242c858d8ef99ccbe5d7e0df4789d5d8d40645
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: parso
   version: 0.8.3
   manager: conda
@@ -1176,8 +1014,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4e26d5daf5de0e31aa5e74ac56386a361b202433b83f024fdadbf07d4a244da4
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pickleshare
   version: 0.7.5
   manager: conda
@@ -1190,8 +1026,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a1ed1a094dd0d1b94a09ed85c283a0eb28943f2e6f22161fb45e128d35229738
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pluggy
   version: 1.0.0
   manager: conda
@@ -1204,8 +1038,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c25e1757e4e90638bb1e778aba3ee5f3c01fae9752e3c3929f9be7d367f6c7f3
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: psutil
   version: 5.9.4
   manager: conda
@@ -1219,22 +1051,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4e81064087ca1938c04d8e9dd1e8be92f686a56f7ebf0da5371beea9fc5f2a24
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ptyprocess
   version: 0.7.0
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/ptyprocess-0.7.0-pyhd3deb0d_0.tar.bz2"
   hash:
     md5: 359eeb6536da0e687af562ed265ec263
     sha256: fb31e006a25eb2e18f3440eb8d17be44c8ccfae559499199f73584566d0a444a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pure_eval
   version: 0.2.2
   manager: conda
@@ -1247,8 +1075,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 72792f9fc2b1820e37cc57f84a27bc819c71088c3002ca6db05a2e56404f9d44
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pycodestyle
   version: 2.7.0
   manager: conda
@@ -1261,8 +1087,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 5c6aa7a724551d7768930b30bd77e531580f6ddd68a391094e799a21a82b9492
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pycparser
   version: "2.21"
   manager: conda
@@ -1275,8 +1099,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 74c63fd03f1f1ea2b54e8bc529fd1a600aaafb24027b738d0db87909ee3a33dc
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pyparsing
   version: 3.0.9
   manager: conda
@@ -1289,14 +1111,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4acc7151cef5920d130f2e0a7615559cce8bfb037aeecb14d4d359ae3d9bc51b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pysocks
   version: 1.7.1
   manager: conda
   platform: osx-64
   dependencies:
-    __unix: ""
+    __unix: "*"
     python: ">=3.8"
   url: "https://conda.anaconda.org/conda-forge/noarch/pysocks-1.7.1-pyha2e5f31_6.tar.bz2"
   hash:
@@ -1304,8 +1124,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a42f826e958a8d22e65b3394f437af7332610e43ee313393d1cf143f0a2d274b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pytz
   version: 2022.7.1
   manager: conda
@@ -1318,8 +1136,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 93cfc7a92099e26b0575a343da4a667b52371cc38e4dee4ee264dc041ef77bac
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: setuptools
   version: 59.2.0
   manager: conda
@@ -1333,36 +1149,30 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 5f0850fae9a651bc448bc50af4550d93f8d966f168ef85a918e51eca6490d8ab
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: six
   version: 1.16.0
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/six-1.16.0-pyh6c4a22f_0.tar.bz2"
   hash:
     md5: e5f25f8dbc060e9a8d912e432202afc2
     sha256: a85c38227b446f42c5b90d9b642f2c0567880c15d72492d8da074a59c8f91dd6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: smmap
   version: 3.0.5
   manager: conda
   platform: osx-64
   dependencies:
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/smmap-3.0.5-pyh44b312d_0.tar.bz2"
   hash:
     md5: 3a8dc70789709aa315325d5df06fb7e4
     sha256: 091de70ee6bfe063e0c0f77336975d124fd1e3f49b9c58d97c0c7b3d287c0002
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: snowballstemmer
   version: 2.2.0
   manager: conda
@@ -1375,8 +1185,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a0fd916633252d99efb6223b1050202841fa8d2d53dacca564b0ed77249d3228
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sortedcontainers
   version: 2.4.0
   manager: conda
@@ -1389,8 +1197,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0cea408397d50c2afb2d25e987ebac4546ae11e549d65b1403d80dc368dfaaa6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: soupsieve
   version: 2.3.2.post1
   manager: conda
@@ -1403,8 +1209,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 72d80dda41c3902c2619e8ab49d4f5b2a894d13375e1f9ed16fc00074ddd2307
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-applehelp
   version: 1.0.4
   manager: conda
@@ -1417,8 +1221,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 802810d8321d55e5666806d565e72949eabf77ad510fe2758ce1da2441675ef1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-devhelp
   version: 1.0.2
   manager: conda
@@ -1431,8 +1233,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 66cca7eccb7f92eee53f9f5a552e3e1d643daa3a1ebd03c185e2819e5c491576
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-htmlhelp
   version: 2.0.1
   manager: conda
@@ -1445,8 +1245,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: aeff20be994e6f9520a91fc177a33cb3e4d0911cdf8d27e575d001f00afa33fd
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-jsmath
   version: 1.0.1
   manager: conda
@@ -1459,8 +1257,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a42415fc789e9f6ae2e18f07ac143d2e9ce73a35a55ecf1dd1b3d055dd1e6dbe
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-qthelp
   version: 1.0.3
   manager: conda
@@ -1473,8 +1269,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 35d8f01fc798d38b72ae003c040d2dee650d315f904268a1f793d4d59460d1e2
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinxcontrib-serializinghtml
   version: 1.1.5
   manager: conda
@@ -1487,8 +1281,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 890bbf815cff114ddbb618b9876d492fce07d02956c1d7b3d46cb7f835f563f6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: toml
   version: 0.10.2
   manager: conda
@@ -1501,8 +1293,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f0f3d697349d6580e4c2f35ba9ce05c65dc34f9f049e85e45da03800b46139c1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: tomli
   version: 2.0.1
   manager: conda
@@ -1515,8 +1305,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4cd48aba7cd026d17e86886af48d0d2ebc67ed36f87f6534f4b67138f5a5a58f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: tornado
   version: "6.2"
   manager: conda
@@ -1530,8 +1318,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 1536759eb5feb9fdf9e7974e9fce18a709f0e110a75caff72dd9d83c7192cd86
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: traitlets
   version: 5.9.0
   manager: conda
@@ -1544,8 +1330,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 343610bce6dbe8a5090500dd2e9d1706057960b3f3120ebfe0abb4a8ecbada4d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: typing_extensions
   version: 4.4.0
   manager: conda
@@ -1558,8 +1342,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 70c57b5ac94cd32e78f1a2fa2c38572bfac85b901a6a99aa254a9e8e126c132d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: unicodedata2
   version: 15.0.0
   manager: conda
@@ -1573,8 +1355,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 06ff21e0a28f5acee3719fd8c788c4dffbed408f463c933f7f892399039962fc
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: wheel
   version: 0.38.4
   manager: conda
@@ -1587,8 +1367,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: zipp
   version: 3.13.0
   manager: conda
@@ -1601,54 +1379,46 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0a9a545b8dc46c847658ebfa636257ea5993a355419c1d3b2f14810730ee0a82
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: asttokens
   version: 2.2.1
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.5"
-    six: ""
+    six: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/asttokens-2.2.1-pyhd8ed1ab_0.conda"
   hash:
     md5: bf7f54dd0f25c3f06ecb82a07341841a
     sha256: 7ed530efddd47a96c11197906b4008405b90e3bc2f4e0df722a36e0e6103fd9c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: babel
   version: 2.11.0
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.6"
-    pytz: ""
+    pytz: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/babel-2.11.0-pyhd8ed1ab_0.tar.bz2"
   hash:
     md5: 2ea70fde8d581ba9425a761609eed6ba
     sha256: 21a8403d886136c0a80f965ae5387fa1693b19ddd69023bcd0e844f2510d7e2f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: backports.functools_lru_cache
   version: 1.6.4
   manager: conda
   platform: osx-64
   dependencies:
-    backports: ""
+    backports: "*"
     python: ">=3.6"
-    setuptools: ""
+    setuptools: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/backports.functools_lru_cache-1.6.4-pyhd8ed1ab_0.tar.bz2"
   hash:
     md5: c5b3edc62d6309088f4970b3eaaa65a6
     sha256: fdea00d4b79990f3fe938e2716bc32bd895eb5c44b6c75b8261db095a1b33c16
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: beautifulsoup4
   version: 4.11.2
   manager: conda
@@ -1662,33 +1432,29 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: deb43944425b3ec7fdfd5e6620cf97a4ed888a279237f90cd67a338d123efd15
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cctools_osx-64
   version: 973.0.1
   manager: conda
   platform: osx-64
   dependencies:
     ld64_osx-64: ">=609,<610.0a0"
-    libcxx: ""
+    libcxx: "*"
     libllvm14: ">=14.0.6,<14.1.0a0"
     libzlib: ">=1.2.13,<1.3.0a0"
-    sigtool: ""
+    sigtool: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/cctools_osx-64-973.0.1-hcc6d90d_11.conda"
   hash:
     md5: f1af817221bc31e7c770e1ea15374355
     sha256: 35c805738300e15a77977849b540b2ba54d8cbc915cb531cf88240a8968fc00d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cffi
   version: 1.15.1
   manager: conda
   platform: osx-64
   dependencies:
     libffi: ">=3.4,<4.0a0"
-    pycparser: ""
+    pycparser: "*"
     python: ">=3.9,<3.10.0a0"
     python_abi: 3.9.* *_cp39
   url: "https://conda.anaconda.org/conda-forge/osx-64/cffi-1.15.1-py39h131948b_3.conda"
@@ -1697,22 +1463,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: e099e8ce3f35906071035fef85cbca94bbbb90d18f231ba8cd1a88577c7d84b3
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: clang
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    clang-14: 14.0.6 default_h55ffa42_0
+    clang-14: "==14.0.6 default_h55ffa42_0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/clang-14.0.6-h694c41f_0.tar.bz2"
   hash:
     md5: 77667c3c75b88f12782f628d171ffeda
     sha256: dc38927cc81c81c64ab632f3aaa4bb17ed776794b2bfd3fa3375b38ad768ace7
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: coverage
   version: 7.1.0
   manager: conda
@@ -1720,22 +1482,20 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
   dependencies:
     python: ">=3.9,<3.10.0a0"
     python_abi: 3.9.* *_cp39
-    tomli: ""
+    tomli: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/coverage-7.1.0-py39ha30fb19_0.conda"
   hash:
     md5: be24d2d5a14dd95d77376ca68df86e94
     sha256: 7c3ee64099be5aa022f0126b5c5ace87cfb616a19fdcc7d88731ed432595fbc3
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: fonttools
   version: 4.38.0
   manager: conda
   platform: osx-64
   dependencies:
-    brotli: ""
-    munkres: ""
+    brotli: "*"
+    munkres: "*"
     python: ">=3.9,<3.10.0a0"
     python_abi: 3.9.* *_cp39
     unicodedata2: ">=14.0.0"
@@ -1745,8 +1505,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6875cb8e44e09332b59f276c3b32be05906206f8a19e773d8c765feeae6dac4b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gfortran_impl_osx-64
   version: 11.3.0
   manager: conda
@@ -1761,15 +1519,13 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     libzlib: ">=1.2.13,<1.3.0a0"
     mpc: ">=1.2.1,<2.0a0"
     mpfr: ">=4.1.0,<5.0a0"
-    zlib: ""
+    zlib: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/gfortran_impl_osx-64-11.3.0-h1f927f5_27.conda"
   hash:
     md5: 0bb7f54e22a2136588b33e7b0bf24148
     sha256: e8be46ff4aa486a808e3494cf6b44758cce199d2888d91553261f65bd02cf7f0
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gitdb
   version: 4.0.10
   manager: conda
@@ -1783,8 +1539,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0003ab2b971913380633c711bf49a54dcf06e179986c725b0925854b58878377
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: hypothesis
   version: 6.68.1
   manager: conda
@@ -1795,7 +1549,7 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     click: ">=7.0"
     exceptiongroup: ">=1.0.0rc8"
     python: ">=3.8"
-    setuptools: ""
+    setuptools: "*"
     sortedcontainers: ">=2.1.0,<3.0.0"
   url: "https://conda.anaconda.org/conda-forge/noarch/hypothesis-6.68.1-pyha770c72_0.conda"
   hash:
@@ -1803,8 +1557,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: e3a29c1303b563e450e0f706e4d78a281d1aa519d3e1094fc642305bceff72e1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: importlib-metadata
   version: 6.0.0
   manager: conda
@@ -1818,8 +1570,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0062e6ae1719395c25f0b60a21215470b4ea67514fed8a9330869da8604acfca
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: jedi
   version: 0.18.2
   manager: conda
@@ -1833,8 +1583,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: abe63ae6e1b13f83500608d94004cb8d485b264083511d77f79253e775cd546c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: jinja2
   version: 3.1.2
   manager: conda
@@ -1848,14 +1596,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b045faba7130ab263db6a8fdc96b1a3de5fcf85c4a607c5f11a49e76851500b5
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ld64
   version: "609"
   manager: conda
   platform: osx-64
   dependencies:
-    ld64_osx-64: 609 hfd63004_11
+    ld64_osx-64: "==609 hfd63004_11"
     libllvm14: ">=14.0.6,<14.1.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/ld64-609-hc6ad406_11.conda"
   hash:
@@ -1863,8 +1609,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: fd1d2aa9a08c52599fb03dbd65fe32e788f34bcd6d509f22eac7897233282d60
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libblas
   version: 3.9.0
   manager: conda
@@ -1877,23 +1621,19 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 7678dab49b552957ddfa1fc5ddf3a09963c788bca81adb0cd9626f6385e205c5
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: matplotlib-inline
   version: 0.1.6
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.6"
-    traitlets: ""
+    traitlets: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/matplotlib-inline-0.1.6-pyhd8ed1ab_0.tar.bz2"
   hash:
     md5: b21613793fcc81d944c76c9f2864a7de
     sha256: aa091b88aec55bfa2d9207028d8cdc689b9efb090ae27b99557e93c675be2f3c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: meson
   version: 1.0.0
   manager: conda
@@ -1901,15 +1641,13 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
   dependencies:
     ninja: ">=1.8.2"
     python: ">=3.5.2"
-    setuptools: ""
+    setuptools: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/meson-1.0.0-pyhd8ed1ab_0.conda"
   hash:
     md5: 4de573313958b8da6c526fdd354fffc8
     sha256: 57dc7634aa05f3944314e6b56b2f37e6fb1a52b33de9ca153aee5d9adf83a5d7
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: mypy
   version: "0.981"
   manager: conda
@@ -1927,8 +1665,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: df7bdee4a6f7376bccfede1570bd3338011137d4ba63520b90b56e642ee5f782
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: openblas
   version: 0.3.21
   manager: conda
@@ -1936,7 +1672,7 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
   dependencies:
     libgfortran: 5.*
     libgfortran5: ">=11.3.0"
-    libopenblas: 0.3.21 openmp_h429af6e_3
+    libopenblas: "==0.3.21 openmp_h429af6e_3"
     llvm-openmp: ">=14.0.4"
   url: "https://conda.anaconda.org/conda-forge/osx-64/openblas-0.3.21-openmp_hbefa662_3.tar.bz2"
   hash:
@@ -1944,23 +1680,19 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 8aaf3165d6b443c48f3a1b2b34330c361801d04ac668d43be5475472c6a4e25f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pexpect
   version: 4.8.0
   manager: conda
   platform: osx-64
   dependencies:
     ptyprocess: ">=0.5"
-    python: ""
+    python: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/pexpect-4.8.0-pyh1a96a4e_2.tar.bz2"
   hash:
     md5: 330448ce4403cc74990ac07c555942a1
     sha256: 07706c0417ead94f359ca7278f65452d3c396448777aba1da6a11fc351bdca9a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pillow
   version: 9.4.0
   manager: conda
@@ -1983,39 +1715,33 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: b7a6d9e50a212215f76666789b0e9c155756d90e27678b4a8720fc6825621648
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pip
   version: "23.0"
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.7"
-    setuptools: ""
-    wheel: ""
+    setuptools: "*"
+    wheel: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0-pyhd8ed1ab_0.conda"
   hash:
     md5: 85b35999162ec95f9f999bac15279c02
     sha256: bbffec284bd0e154363e845121f43007e7e64c80412ff13be21909be907b697d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pygments
   version: 2.14.0
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.6"
-    setuptools: ""
+    setuptools: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/pygments-2.14.0-pyhd8ed1ab_0.conda"
   hash:
     md5: c78cd16b11cd6a295484bd6c8f24bea1
     sha256: e8710e24f60b6a97289468f47914e53610101755088bc237621cc1980edbfcd9
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pyproject-metadata
   version: 0.7.1
   manager: conda
@@ -2029,18 +1755,16 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9ec35cffa163f587aeb52d1603df8374659e3be30dbc6db0e980ecb797f21fee
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pytest
   version: 7.2.1
   manager: conda
   platform: osx-64
   dependencies:
     attrs: ">=19.2.0"
-    colorama: ""
-    exceptiongroup: ""
-    iniconfig: ""
-    packaging: ""
+    colorama: "*"
+    exceptiongroup: "*"
+    iniconfig: "*"
+    packaging: "*"
     pluggy: ">=0.12,<2.0"
     python: ">=3.8"
     tomli: ">=1.0.0"
@@ -2050,8 +1774,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: d298dfe6c53555c9fb5662f5f936e621cddd3b0a7031789375b82a1ee3b3a96b
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: python-dateutil
   version: 2.8.2
   manager: conda
@@ -2065,22 +1787,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 54d7785c7678166aa45adeaccfc1d2b8c3c799ca2dc05d4a82bb39b1968bd7da
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: typing-extensions
   version: 4.4.0
   manager: conda
   platform: osx-64
   dependencies:
-    typing_extensions: 4.4.0 pyha770c72_0
+    typing_extensions: "==4.4.0 pyha770c72_0"
   url: "https://conda.anaconda.org/conda-forge/noarch/typing-extensions-4.4.0-hd8ed1ab_0.tar.bz2"
   hash:
     md5: be969210b61b897775a0de63cd9e9026
     sha256: 6f129b1bc18d111dcf3abaec6fcf6cbee00f1b77bb42d0f0bc8d85f8faa65cf0
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: brotlipy
   version: 0.7.0
   manager: conda
@@ -2095,15 +1813,13 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 0204c1d5ab773e956233c0a6941f87faf7e9dc3fe30dec0d34f04091309859d8
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cctools
   version: 973.0.1
   manager: conda
   platform: osx-64
   dependencies:
-    cctools_osx-64: 973.0.1 hcc6d90d_11
-    ld64: 609 hc6ad406_11
+    cctools_osx-64: "==973.0.1 hcc6d90d_11"
+    ld64: "==609 hc6ad406_11"
     libllvm14: ">=14.0.6,<14.1.0a0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/cctools-973.0.1-h76f1dac_11.conda"
   hash:
@@ -2111,22 +1827,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: afe5a8d93ae1ecc09d98a15f6edea6b14e0f99fb3f64d4d04501461afb56ccd9
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: clangxx
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    clang: 14.0.6 h694c41f_0
+    clang: "==14.0.6 h694c41f_0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/clangxx-14.0.6-default_h55ffa42_0.tar.bz2"
   hash:
     md5: 6a46064b0506895d090302433e70397b
     sha256: 11b6d9f11aae45ac36a4d87d0f5367d00eda6f53c43bac38594024e25a366b04
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cryptography
   version: 39.0.1
   manager: conda
@@ -2142,8 +1854,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 3b98fbb4a457fb3136e832079b5cf112063bd3c91b655f640db0b455328b3767
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gitpython
   version: 3.1.30
   manager: conda
@@ -2158,44 +1868,38 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2ccd8aa401701947398a087b1aa11042b1b088e7331fed574b7ec9909bee09d6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: libcblas
   version: 3.9.0
   manager: conda
   platform: osx-64
   dependencies:
-    libblas: 3.9.0 16_osx64_openblas
+    libblas: "==3.9.0 16_osx64_openblas"
   url: "https://conda.anaconda.org/conda-forge/osx-64/libcblas-3.9.0-16_osx64_openblas.tar.bz2"
   hash:
     md5: 28592eab0f05bcf9969789e87f754e11
     sha256: 072a214ab1d596b99b985773bdb6f6e5f38774c7f73d70962700e0fc0d77d91f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: liblapack
   version: 3.9.0
   manager: conda
   platform: osx-64
   dependencies:
-    libblas: 3.9.0 16_osx64_openblas
+    libblas: "==3.9.0 16_osx64_openblas"
   url: "https://conda.anaconda.org/conda-forge/osx-64/liblapack-3.9.0-16_osx64_openblas.tar.bz2"
   hash:
     md5: 406ad426aade5578b90544cc2ed4a79b
     sha256: 456a6e8bfc2e97846d9e157b5f51c23e0c4e9c922ccf7b2321be5362c835d35f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: meson-python
   version: 0.12.0
   manager: conda
   platform: osx-64
   dependencies:
-    colorama: ""
+    colorama: "*"
     meson: ">=0.63.3"
-    ninja: ""
+    ninja: "*"
     pyproject-metadata: ">=0.6.1"
     python: ">=3.7"
     tomli: ">=1.0.0"
@@ -2207,8 +1911,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2ea6e9b843e7d93283f2bd442f20bc973cf8141ef1876c9fe4353e473265a4da
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pytest-cov
   version: 4.0.0
   manager: conda
@@ -2217,15 +1919,13 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     coverage: ">=5.2.1"
     pytest: ">=4.6"
     python: ">=3.6"
-    toml: ""
+    toml: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/pytest-cov-4.0.0-pyhd8ed1ab_0.tar.bz2"
   hash:
     md5: c9e3f8bfdb9bfc34aa1836a6ed4b25d7
     sha256: 2e00bbdb00b2514faba50ddcb6ecf1d6e4f2d5af346f9cd1240aacb1b61dccb6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pytest-xdist
   version: 3.2.0
   manager: conda
@@ -2240,16 +1940,14 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: aa81f80bf0a2f53423ab80137ca4fc201473884725a2983a0d79b2e420c2a671
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: stack_data
   version: 0.6.2
   manager: conda
   platform: osx-64
   dependencies:
-    asttokens: ""
-    executing: ""
-    pure_eval: ""
+    asttokens: "*"
+    executing: "*"
+    pure_eval: "*"
     python: ">=3.5"
   url: "https://conda.anaconda.org/conda-forge/noarch/stack_data-0.6.2-pyhd8ed1ab_0.conda"
   hash:
@@ -2257,14 +1955,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a58433e75229bec39f3be50c02efbe9b7083e53a1f31d8ee247564f370191eec
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: wcwidth
   version: 0.2.6
   manager: conda
   platform: osx-64
   dependencies:
-    backports.functools_lru_cache: ""
+    backports.functools_lru_cache: "*"
     python: ">=3.6"
   url: "https://conda.anaconda.org/conda-forge/noarch/wcwidth-0.2.6-pyhd8ed1ab_0.conda"
   hash:
@@ -2272,8 +1968,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c1bd0ad7d854cae56977b7915ac2b78b652fa5f7ec1e9fc21e7fdb30cf4519b1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: compiler-rt_osx-64
   version: 14.0.6
   manager: conda
@@ -2287,8 +1981,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: a8351d6a47a8a2cd8267862d36ad5a06f16955c68111140b8b147ee126433712
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: numpy
   version: 1.24.2
   manager: conda
@@ -2306,23 +1998,19 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6c4acf04c482a33b7c4a1661ed50c6927f683418b9b61b29f16711f77480485e
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: prompt-toolkit
   version: 3.0.36
   manager: conda
   platform: osx-64
   dependencies:
     python: ">=3.6"
-    wcwidth: ""
+    wcwidth: "*"
   url: "https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.36-pyha770c72_0.conda"
   hash:
     md5: 4d79ec192e0bfd530a254006d123b9a6
     sha256: 6bd3626799c9467d7aa8ed5f95043e4cea614a1329580980ddcf40cfed3ee860
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pyopenssl
   version: 23.0.0
   manager: conda
@@ -2336,8 +2024,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: adbf8951f22bfa950b9e24394df1ef1d2b2d7dfb194d91c7f42bc11900695785
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: compiler-rt
   version: 14.0.6
   manager: conda
@@ -2352,8 +2038,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2dea3b5efea587329320c70a335fa5666c3a814e70e76464734b90a40b70e8a8
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: contourpy
   version: 1.0.7
   manager: conda
@@ -2369,25 +2053,23 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: e62b248506d690eaea2de499555288665ca0508d54efe63690638f1b39e6e775
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: ipython
   version: 8.10.0
   manager: conda
   platform: osx-64
   dependencies:
-    __osx: ""
-    appnope: ""
-    backcall: ""
-    decorator: ""
+    __osx: "*"
+    appnope: "*"
+    backcall: "*"
+    decorator: "*"
     jedi: ">=0.16"
-    matplotlib-inline: ""
+    matplotlib-inline: "*"
     pexpect: ">4.3"
-    pickleshare: ""
+    pickleshare: "*"
     prompt-toolkit: ">=3.0.30,<3.1.0"
     pygments: ">=2.4.0"
     python: ">=3.8"
-    stack_data: ""
+    stack_data: "*"
     traitlets: ">=5"
   url: "https://conda.anaconda.org/conda-forge/noarch/ipython-8.10.0-pyhd1c38e8_0.conda"
   hash:
@@ -2395,8 +2077,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 5951fbddbd8be803c38b75d7d34ff78d366e57e55a7afa2604be6fd0abacb882
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pandas
   version: 1.5.3
   manager: conda
@@ -2414,15 +2094,13 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 2fcd5f5ad098fe73089c3d5970f155df75c329cffbdf08c3ad52b2515224fe6a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: urllib3
   version: 1.26.14
   manager: conda
   platform: osx-64
   dependencies:
     brotlipy: ">=0.6.0"
-    certifi: ""
+    certifi: "*"
     cryptography: ">=1.3.4"
     idna: ">=2.0.0"
     pyopenssl: ">=0.14"
@@ -2434,17 +2112,15 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f2f09c44e47946ce631dbc9a8a79bb463ac0f4122aaafdbcc51f200a1e420ca6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: clang_osx-64
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    cctools_osx-64: ""
+    cctools_osx-64: "*"
     clang: 14.0.6.*
     compiler-rt: 14.0.6.*
-    ld64_osx-64: ""
+    ld64_osx-64: "*"
     llvm-tools: 14.0.6.*
   url: "https://conda.anaconda.org/conda-forge/osx-64/clang_osx-64-14.0.6-h3113cd8_4.conda"
   hash:
@@ -2452,8 +2128,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 4cdce8a6e1b1ea671e6f10839548983f93f9c4ab86cb89acf439d414283162b5
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: matplotlib-base
   version: 3.6.3
   manager: conda
@@ -2480,8 +2154,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: cbf4ca345fbce7bdebbdfc9175f9969af4bb6afb97f73450bf81b90d63389dda
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: requests
   version: 2.28.2
   manager: conda
@@ -2498,8 +2170,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 22c081b4cdd023a514400413f50efdf2c378f56f2a5ea9d65666aacf4696490a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: c-compiler
   version: 1.5.2
   manager: conda
@@ -2508,21 +2178,19 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     cctools: ">=949.0.1"
     clang_osx-64: 14.*
     ld64: ">=530"
-    llvm-openmp: ""
+    llvm-openmp: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/c-compiler-1.5.2-hbf74d83_0.conda"
   hash:
     md5: c1413ef5a20d658923e12dd3b566d8f3
     sha256: 0f97b6cc2215f0789ffa2781eb8a6304efaf5c4592c4c619d6e0a63c23f2b877
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: clangxx_osx-64
   version: 14.0.6
   manager: conda
   platform: osx-64
   dependencies:
-    clang_osx-64: 14.0.6 h3113cd8_4
+    clang_osx-64: "==14.0.6 h3113cd8_4"
     clangxx: 14.0.6.*
     libcxx: ">=14.0.6"
     libllvm14: ">=14.0.6,<14.1.0a0"
@@ -2532,20 +2200,18 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 9da6a17e9ae0b51ecc2ab2f25f850a38902f696de1d05cf2ad9374146cfc1d3a
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gfortran_osx-64
   version: 11.3.0
   manager: conda
   platform: osx-64
   dependencies:
-    cctools_osx-64: ""
-    clang: ""
-    clang_osx-64: ""
-    gfortran_impl_osx-64: 11.3.0
-    ld64_osx-64: ""
+    cctools_osx-64: "*"
+    clang: "*"
+    clang_osx-64: "*"
+    gfortran_impl_osx-64: "==11.3.0"
+    ld64_osx-64: "*"
     libgfortran: 5.*
-    libgfortran-devel_osx-64: 11.3.0
+    libgfortran-devel_osx-64: "==11.3.0"
     libgfortran5: ">=11.3.0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/gfortran_osx-64-11.3.0-h18f7dce_0.tar.bz2"
   hash:
@@ -2553,8 +2219,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 7abe5dd161c8e4cdb67ceefecf27906d208e46bdb86b71e444b71409fc0857a1
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: matplotlib
   version: 3.6.3
   manager: conda
@@ -2570,8 +2234,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: bb324a483b9cb30a09bfefe18cb4e42199201940be0ed82f3c0fbdb26ef2950d
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pooch
   version: 1.6.0
   manager: conda
@@ -2587,8 +2249,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 1f0548105de86fb2eb6fbb8d3d6cc2004079b8442d232258108687d6cc91eb73
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinx
   version: 5.3.0
   manager: conda
@@ -2606,11 +2266,11 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     python: ">=3.7"
     requests: ">=2.5.0"
     snowballstemmer: ">=2.0"
-    sphinxcontrib-applehelp: ""
-    sphinxcontrib-devhelp: ""
+    sphinxcontrib-applehelp: "*"
+    sphinxcontrib-devhelp: "*"
     sphinxcontrib-htmlhelp: ">=2.0.0"
-    sphinxcontrib-jsmath: ""
-    sphinxcontrib-qthelp: ""
+    sphinxcontrib-jsmath: "*"
+    sphinxcontrib-qthelp: "*"
     sphinxcontrib-serializinghtml: ">=1.1.5"
   url: "https://conda.anaconda.org/conda-forge/noarch/sphinx-5.3.0-pyhd8ed1ab_0.tar.bz2"
   hash:
@@ -2618,8 +2278,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: f11fd5fb4ae2c65f41ae86e7408e3ab44844898d928264aa9e89929fffc685c8
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: breathe
   version: 4.34.0
   manager: conda
@@ -2637,14 +2295,12 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 40f86cd741a443363e8928d5d36ba3a49071aaffc26c5a7b24a8167c5bcbba81
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: cxx-compiler
   version: 1.5.2
   manager: conda
   platform: osx-64
   dependencies:
-    c-compiler: 1.5.2 hbf74d83_0
+    c-compiler: "==1.5.2 hbf74d83_0"
     clangxx_osx-64: 14.*
   url: "https://conda.anaconda.org/conda-forge/osx-64/cxx-compiler-1.5.2-hb8565cd_0.conda"
   hash:
@@ -2652,24 +2308,20 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 91193c9029594d102217457ce8b4fe1cfd4a1e13e652451e94f851e91b45a147
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: gfortran
   version: 11.3.0
   manager: conda
   platform: osx-64
   dependencies:
-    cctools: ""
-    gfortran_osx-64: ""
-    ld64: ""
+    cctools: "*"
+    gfortran_osx-64: "*"
+    ld64: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/gfortran-11.3.0-h2c809b3_0.tar.bz2"
   hash:
     md5: db5338d1fb1ad08498bdc1b42277a0d5
     sha256: 4f5c1dc5323e888d4fa372eba6f4540b60f557963209502cfad569fdc3d47495
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: numpydoc
   version: 1.4.0
   manager: conda
@@ -2684,16 +2336,14 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 11a892cc1678a23d169909e553447fb7e312d6baaa314fdcd719f6abff1c7da6
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: pydata-sphinx-theme
   version: 0.9.0
   manager: conda
   platform: osx-64
   dependencies:
-    beautifulsoup4: ""
+    beautifulsoup4: "*"
     docutils: "!=0.17.0"
-    packaging: ""
+    packaging: "*"
     python: ">=3.7"
     sphinx: ">=4.0.2"
   url: "https://conda.anaconda.org/conda-forge/noarch/pydata-sphinx-theme-0.9.0-pyhd8ed1ab_1.tar.bz2"
@@ -2702,8 +2352,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 11d56e0953a8f880d265d18eb3b3adc2f0ba182a33409088141dc84e22dba50c
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: scipy
   version: 1.10.0
   manager: conda
@@ -2716,7 +2364,7 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     libgfortran5: ">=11.3.0"
     liblapack: ">=3.9.0,<4.0a0"
     numpy: ">=1.20.3,<2.0a0"
-    pooch: ""
+    pooch: "*"
     python: ">=3.9,<3.10.0a0"
     python_abi: 3.9.* *_cp39
   url: "https://conda.anaconda.org/conda-forge/osx-64/scipy-1.10.0-py39h8a15683_2.conda"
@@ -2725,8 +2373,6 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: c44076aade55c5252c46c588692ceea2a98be6d2e44bc0bdafb00f3d7d56d622
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: sphinx-design
   version: 0.3.0
   manager: conda
@@ -2740,40 +2386,34 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
     sha256: 6b193a483a02bbc7a785dcd28614b4c082d1795fec0a1c48690d8d7a0a876e20
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: fortran-compiler
   version: 1.5.2
   manager: conda
   platform: osx-64
   dependencies:
     cctools: ">=949.0.1"
-    gfortran: ""
+    gfortran: "*"
     gfortran_osx-64: 11.*
     ld64: ">=530"
-    llvm-openmp: ""
+    llvm-openmp: "*"
   url: "https://conda.anaconda.org/conda-forge/osx-64/fortran-compiler-1.5.2-haad3a49_0.conda"
   hash:
     md5: 649a324b13eb77c6d5e98d36ea0c59f4
     sha256: db482cbd1f8046a6d51c0af47d98f97e0c157bf9029bbc95b71c72972f3fa01f
   optional: false
   category: main
-  source: ~
-  build: ~
 - name: compilers
   version: 1.5.2
   manager: conda
   platform: osx-64
   dependencies:
-    c-compiler: 1.5.2 hbf74d83_0
-    cxx-compiler: 1.5.2 hb8565cd_0
-    fortran-compiler: 1.5.2 haad3a49_0
+    c-compiler: "==1.5.2 hbf74d83_0"
+    cxx-compiler: "==1.5.2 hb8565cd_0"
+    fortran-compiler: "==1.5.2 haad3a49_0"
   url: "https://conda.anaconda.org/conda-forge/osx-64/compilers-1.5.2-h694c41f_0.conda"
   hash:
     md5: 1fdd3bc173dad6e7a0439962c7764ab8
     sha256: fe35c96a228d9e245e9cc05fdff5078e8f31a9ae44bd320f5cb48e6ab0fca139
   optional: false
   category: main
-  source: ~
-  build: ~
 
