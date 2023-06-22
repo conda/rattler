@@ -54,6 +54,9 @@ pub trait Shell {
     /// The extension that shell scripts for this interpreter usually use.
     fn extension(&self) -> &str;
 
+    /// The executable that can be called to start this shell.
+    fn executable(&self) -> &str;
+
     /// Constructs a [`Command`] that will execute the specified script by this shell.
     fn create_run_script_command(&self, path: &Path) -> Command;
 }
@@ -61,7 +64,7 @@ pub trait Shell {
 /// Convert a native PATH on Windows to a Unix style path usign cygpath.
 fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
     // call cygpath on Windows to convert paths to Unix style
-    let output = std::process::Command::new("cygpath")
+    let output = Command::new("cygpath")
         .arg("--unix")
         .arg("--path")
         .arg(path)
@@ -102,10 +105,6 @@ impl Shell for Bash {
         writeln!(f, ". \"{}\"", path.to_string_lossy())
     }
 
-    fn extension(&self) -> &str {
-        "sh"
-    }
-
     fn set_path(&self, f: &mut impl Write, paths: &[PathBuf]) -> std::fmt::Result {
         let path = std::env::join_paths(paths).unwrap();
 
@@ -118,8 +117,16 @@ impl Shell for Bash {
         self.set_env_var(f, "PATH", path.to_str().unwrap())
     }
 
+    fn extension(&self) -> &str {
+        "sh"
+    }
+
+    fn executable(&self) -> &str {
+        "bash"
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("bash");
+        let mut cmd = Command::new(self.executable());
 
         // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
         if cfg!(windows) {
@@ -153,8 +160,12 @@ impl Shell for Zsh {
         "sh"
     }
 
+    fn executable(&self) -> &str {
+        "zsh"
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("zsh");
+        let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
     }
@@ -181,8 +192,12 @@ impl Shell for Xonsh {
         "sh"
     }
 
+    fn executable(&self) -> &str {
+        "xonsh"
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("xonsh");
+        let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
     }
@@ -217,16 +232,22 @@ impl Shell for CmdExe {
         "bat"
     }
 
+    fn executable(&self) -> &str {
+        "cmd.exe"
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("cmd.exe");
+        let mut cmd = Command::new(self.executable());
         cmd.arg("/D").arg("/C").arg(path);
         cmd
     }
 }
 
 /// A [`Shell`] implementation for PowerShell.
-#[derive(Debug, Clone, Copy)]
-pub struct PowerShell;
+#[derive(Debug, Clone, Default)]
+pub struct PowerShell {
+    executable_path: Option<String>,
+}
 
 impl Shell for PowerShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
@@ -245,8 +266,12 @@ impl Shell for PowerShell {
         "ps1"
     }
 
+    fn executable(&self) -> &str {
+        self.executable_path.as_deref().unwrap_or("pwsh")
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("powershell");
+        let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
     }
@@ -273,8 +298,12 @@ impl Shell for Fish {
         "fish"
     }
 
+    fn executable(&self) -> &str {
+        "fish"
+    }
+
     fn create_run_script_command(&self, path: &Path) -> Command {
-        let mut cmd = Command::new("fish");
+        let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
     }
@@ -321,7 +350,7 @@ impl ShellEnum {
         if let Some(env_shell) = std::env::var_os("SHELL") {
             Self::from_shell_path(env_shell)
         } else if cfg!(windows) {
-            Some(PowerShell.into())
+            Some(PowerShell::default().into())
         } else {
             None
         }
@@ -361,7 +390,12 @@ impl ShellEnum {
             Some(Fish.into())
         } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
         {
-            Some(PowerShell.into())
+            Some(
+                PowerShell {
+                    executable_path: Some(parent_process_name),
+                }
+                .into(),
+            )
         } else if parent_process_name.contains("cmd.exe") {
             Some(CmdExe.into())
         } else {
@@ -379,7 +413,7 @@ fn parse_shell_from_path(path: &Path) -> Option<ShellEnum> {
         "xonsh" => Some(Xonsh.into()),
         "fish" => Some(Fish.into()),
         "cmd" => Some(CmdExe.into()),
-        "powershell" | "powershell_ise" => Some(PowerShell.into()),
+        "powershell" | "powershell_ise" => Some(PowerShell::default().into()),
         _ => None,
     }
 }

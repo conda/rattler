@@ -536,7 +536,7 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_activation_script_powershell() {
-        let script = get_script(shell::PowerShell);
+        let script = get_script(shell::PowerShell::default());
         insta::assert_snapshot!(script);
     }
 
