@@ -343,17 +343,14 @@ impl Version {
         }
 
         let epoch = self.epoch();
-        let epoch_display = if epoch != 0 {
-            format!("{}!", epoch)
-        } else {
-            String::new()
-        };
+        let epoch_display = (epoch != 0)
+            .then(|| format!("{}!", epoch))
+            .unwrap_or_default();
         let segments_display = format_segments(self.segments());
-        let local_display = if self.has_local() {
-            format!("+{}", format_segments(self.local_segments()))
-        } else {
-            String::new()
-        };
+        let local_display = self
+            .has_local()
+            .then(|| format!("+{}", format_segments(self.local_segments())))
+            .unwrap_or_default();
 
         format!("{}{}{}", epoch_display, segments_display, local_display)
     }
