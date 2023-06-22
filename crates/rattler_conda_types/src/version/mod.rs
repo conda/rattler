@@ -222,6 +222,39 @@ impl Version {
         })
     }
 
+    /// Returns a new version where the last numerical segment of this version has been bumped.
+    pub fn bump(&self) -> Self {
+        let mut bumped_version = self.clone();
+
+        // Bump the last numeric components.
+        let last_numeral = bumped_version
+            .components
+            .iter_mut()
+            .rev()
+            .find_map(|c| match c {
+                Component::Numeral(num) => Some(num),
+                _ => None,
+            });
+
+        match last_numeral {
+            Some(last_numeral) => {
+                *last_numeral += 1;
+            }
+            None => {
+                // The only case when there is no numeral is when there is no epoch. So we just add
+                // a 1 epoch.
+                debug_assert!(!bumped_version.has_epoch());
+                bumped_version.components.insert(0, Component::Numeral(1));
+                bumped_version.flags |= EPOCH_MASK;
+            }
+        }
+
+        // Update the normalized version string to reflect the changes
+        bumped_version.norm = bumped_version.canonical().into_boxed_str();
+
+        bumped_version
+    }
+
     /// Returns the segments that belong the local part of the version.
     ///
     /// The local part of a a version is the part behind the (optional) `+`. E.g.:
@@ -286,6 +319,43 @@ impl Version {
             && segments_starts_with(self.segments(), other.segments().rev().skip(1).rev())
             // Local version comparison remains the same
             && segments_starts_with(self.local_segments(), other.local_segments())
+    }
+
+    /// Returns the canonical string representation of the version. This is all segments joined by dots.
+    pub fn canonical(&self) -> String {
+        fn format_components(components: &[Component]) -> impl Display {
+            // Skip first component if its default and followed by a non-numeral
+            let components = if components.len() > 1
+                && components[0] == Component::default()
+                && components[1].as_number().is_none()
+            {
+                &components[1..]
+            } else {
+                &components[..]
+            };
+            components.iter().join("")
+        }
+
+        fn format_segments<'i, I: Iterator<Item = &'i [Component]> + 'i>(
+            segments: I,
+        ) -> impl Display + 'i {
+            segments.format_with(".", |components, f| f(&format_components(components)))
+        }
+
+        let epoch = self.epoch();
+        let epoch_display = if epoch != 0 {
+            format!("{}!", epoch)
+        } else {
+            format!("")
+        };
+        let segments_display = format_segments(self.segments());
+        let local_display = if self.has_local() {
+            format!("+{}", format_segments(self.local_segments()))
+        } else {
+            format!("")
+        };
+
+        format!("{}{}{}", epoch_display, segments_display, local_display)
     }
 }
 
@@ -745,17 +815,17 @@ mod test {
         assert_eq!(random_versions, parsed_versions);
     }
 
-    // #[test]
-    // fn bump() {
-    //     assert_eq!(
-    //         Version::from_str("1.1").unwrap().bump(),
-    //         Version::from_str("1.2").unwrap()
-    //     );
-    //     assert_eq!(
-    //         Version::from_str("1.1l").unwrap().bump(),
-    //         Version::from_str("1.2l").unwrap()
-    //     )
-    // }
+    #[test]
+    fn bump() {
+        assert_eq!(
+            Version::from_str("1.1").unwrap().bump(),
+            Version::from_str("1.2").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1l").unwrap().bump(),
+            Version::from_str("1.2l").unwrap()
+        )
+    }
 
     #[test]
     fn starts_with() {
@@ -822,6 +892,22 @@ mod test {
         assert_eq!(
             Version::from_str("1.2.3a").unwrap().as_major_minor(),
             Some((1, 2))
+        );
+    }
+
+    #[test]
+    fn canonical() {
+        assert_eq!(Version::from_str("1.2.3").unwrap().canonical(), "1.2.3");
+        assert_eq!(Version::from_str("1!1.2.3").unwrap().canonical(), "1!1.2.3");
+        assert_eq!(
+            Version::from_str("1.2.3-alpha.2").unwrap().canonical(),
+            "1.2.3.alpha.2"
+        );
+        assert_eq!(
+            Version::from_str("1!1.2.3-alpha.2+3beta5rc")
+                .unwrap()
+                .canonical(),
+            "1!1.2.3.alpha.2+3beta5rc"
         );
     }
 }
