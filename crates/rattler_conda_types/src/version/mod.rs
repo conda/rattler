@@ -331,7 +331,7 @@ impl Version {
             {
                 &components[1..]
             } else {
-                &components[..]
+                components
             };
             components.iter().join("")
         }
@@ -346,13 +346,13 @@ impl Version {
         let epoch_display = if epoch != 0 {
             format!("{}!", epoch)
         } else {
-            format!("")
+            String::new()
         };
         let segments_display = format_segments(self.segments());
         let local_display = if self.has_local() {
             format!("+{}", format_segments(self.local_segments()))
         } else {
-            format!("")
+            String::new()
         };
 
         format!("{}{}{}", epoch_display, segments_display, local_display)
