@@ -38,8 +38,6 @@ package:
       sha256: fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -51,8 +49,6 @@ package:
       sha256: 8f6c81b0637771ae0ea73dc03a6d30bec3326ba3927f2a7b91931aa2d59b1789
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ld_impl_linux-64
     version: "2.40"
     manager: conda
@@ -64,8 +60,6 @@ package:
       sha256: f6cc89d887555912d6c61b295d398cff9ec982a3417d38025c45d5dd9b9e79cd
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -77,28 +71,24 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgomp
     version: 12.2.0
     manager: conda
     platform: linux-64
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
     url: "https://conda.anaconda.org/conda-forge/linux-64/libgomp-12.2.0-h65d4601_19.tar.bz2"
     hash:
       md5: cedcee7c064c01c403f962c9e8d3c373
       sha256: 81a76d20cfdee9fe0728b93ef057ba93494fd1450d42bc3717af4e468235661e
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: _openmp_mutex
     version: "4.5"
     manager: conda
     platform: linux-64
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
       libgomp: ">=7.5.0"
     url: "https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-2_gnu.tar.bz2"
     hash:
@@ -106,14 +96,12 @@ package:
       sha256: fbe2c5e56a653bebb982eda4876a9178aedfc2b545f25d0ce9c4c0b508253d22
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgcc-ng
     version: 12.2.0
     manager: conda
     platform: linux-64
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
       _openmp_mutex: ">=4.5"
     url: "https://conda.anaconda.org/conda-forge/linux-64/libgcc-ng-12.2.0-h65d4601_19.tar.bz2"
     hash:
@@ -121,8 +109,6 @@ package:
       sha256: f3899c26824cee023f1e360bd0859b0e149e2b3e8b1668bc6dd04bfc70dcd659
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -135,8 +121,6 @@ package:
       sha256: cb521319804640ff2ad6a9f118d972ed76d86bea44e5626c09a13d38f562e1fa
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -149,8 +133,6 @@ package:
       sha256: ab6e9856c21709b7b517e940ae7028ae0737546122f83c2aa5d692860c3b149e
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libnsl
     version: 2.0.0
     manager: conda
@@ -163,8 +145,6 @@ package:
       sha256: 32f4fb94d99946b0dabfbbfd442b25852baf909637f2eed1ffe3baea15d02aad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libuuid
     version: 2.32.1
     manager: conda
@@ -177,8 +157,6 @@ package:
       sha256: 54f118845498353c936826f8da79b5377d23032bcac8c4a02de2019e26c3f6b3
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -191,8 +169,6 @@ package:
       sha256: 22f3663bcf294d349327e60e464a51cd59664a71b8ed70c28a9f512d10bc77dd
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ncurses
     version: "6.3"
     manager: conda
@@ -205,14 +181,12 @@ package:
       sha256: b801e8cf4b2c9a30bce5616746c6c2a4e36427f045b46d9fc08a4ed40a9f7065
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: linux-64
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
       libgcc-ng: ">=12"
     url: "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.8-h0b41bf4_0.conda"
     hash:
@@ -220,8 +194,6 @@ package:
       sha256: cd981c5c18463bc7a164fcf45c5cf697d58852b780b4dfa5e83c18c1fda6d7cd
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -234,8 +206,6 @@ package:
       sha256: 03a6d28ded42af8a347345f82f3eebdd6807a08526d47899a42d62d319609162
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.40.0
     manager: conda
@@ -249,8 +219,6 @@ package:
       sha256: 6008a0b914bd1a3510a3dba38eada93aa0349ebca3a21e5fa276833c8205bf49
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: readline
     version: 8.1.2
     manager: conda
@@ -264,8 +232,6 @@ package:
       sha256: f5f383193bdbe01c41cb0d6f99fec68e820875e842e6e8b392dbe1a9b6c43ed8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -279,8 +245,6 @@ package:
       sha256: 032fd769aad9d4cad40ba261ab222675acb7ec951a8832455fce18ef33fa8df0
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -296,10 +260,10 @@ package:
       libzlib: ">=1.2.13,<1.3.0a0"
       ncurses: ">=6.3,<7.0a0"
       openssl: ">=3.0.7,<4.0a0"
-      pip: ""
+      pip: "*"
       readline: ">=8.1.2,<9.0a0"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       xz: ">=5.2.6,<6.0a0"
     url: "https://conda.anaconda.org/conda-forge/linux-64/python-3.11.0-he550d4f_1_cpython.conda"
     hash:
@@ -307,8 +271,6 @@ package:
       sha256: 464f998e406b645ba34771bb53a0a7c2734e855ee78dd021aa4dedfdb65659b7
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -321,8 +283,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -335,24 +295,20 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: linux-64
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -364,8 +320,6 @@ package:
       sha256: bb4e6340d55775738a5867a16071658c294d46cceff7f652f65d8dc6a495a578
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ld_impl_linux-aarch64
     version: "2.40"
     manager: conda
@@ -377,8 +331,6 @@ package:
       sha256: 1ba06e8645094b340b4aee23603a6abb1b0383788180e65f3de34e655c5f577c
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgomp
     version: 12.2.0
     manager: conda
@@ -390,8 +342,6 @@ package:
       sha256: d802eaceaf6f77fb8cb2e990aacf9b3eaa83361b16369a760fc1585841d7885c
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -403,8 +353,6 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: _openmp_mutex
     version: "4.5"
     manager: conda
@@ -417,8 +365,6 @@ package:
       sha256: 3702bef2f0a4d38bd8288bbe54aace623602a1343c2cfbefd3fa188e015bebf0
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgcc-ng
     version: 12.2.0
     manager: conda
@@ -431,8 +377,6 @@ package:
       sha256: 0dd30553f6f38b011c9c81471a50f85e98a79e4dd672fdc1fc97904b54b5419b
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -445,8 +389,6 @@ package:
       sha256: 3aeb6ab92aa0351722497b2d2a735dc20921cf6c60d9196c04b7a2b9ece198d2
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -459,8 +401,6 @@ package:
       sha256: 7e9258a102480757fe3faeb225a3ca04dffd10fecd2a958c65cdb4cdf75f2c3c
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libnsl
     version: 2.0.0
     manager: conda
@@ -473,8 +413,6 @@ package:
       sha256: 182dbc318b7ab3ab10bc5a9d3ca161b143ae8db6df8aa11b65140009e322e642
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libuuid
     version: 2.32.1
     manager: conda
@@ -487,8 +425,6 @@ package:
       sha256: 8f7eead3723c32631b252aea336bb39fbbde433b8d0c5a75745f03eaa980447d
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -501,8 +437,6 @@ package:
       sha256: 9803ac96dbdbc27df9c149e06d4436b778c468bd0e6e023fbcb49a6fe9c404b4
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ncurses
     version: "6.3"
     manager: conda
@@ -515,14 +449,12 @@ package:
       sha256: d410d840cb39175d7edc388690b93b2e3d7613c2e2f5c64b96582dc8b55b2319
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: linux-aarch64
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
       libgcc-ng: ">=12"
     url: "https://conda.anaconda.org/conda-forge/linux-aarch64/openssl-3.0.8-hb4cce97_0.conda"
     hash:
@@ -530,8 +462,6 @@ package:
       sha256: 19d10fdaee08ab2b5506cdce4399922c5c7d012be7ca7ca93c521748bade3e90
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -544,8 +474,6 @@ package:
       sha256: 93f58a7b393adf41fa007ac8c55978765e957e90cd31877ece1e5a343cb98220
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.40.0
     manager: conda
@@ -559,8 +487,6 @@ package:
       sha256: 15e4a4bef065f73c2aae630c0408fd6108f5915d4640c7d97578f2e07b3f5d11
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: readline
     version: 8.1.2
     manager: conda
@@ -574,8 +500,6 @@ package:
       sha256: a33bb6e4c93599fb97eb19db0dcca602a90475f2da3c01c14add19b908178fcd
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -589,8 +513,6 @@ package:
       sha256: d659316c9e502fb0e1b9a284fb0f0c00e273bff787e9385ab14be9af13dcd0d2
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -606,10 +528,10 @@ package:
       libzlib: ">=1.2.13,<1.3.0a0"
       ncurses: ">=6.3,<7.0a0"
       openssl: ">=3.0.7,<4.0a0"
-      pip: ""
+      pip: "*"
       readline: ">=8.1.2,<9.0a0"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       xz: ">=5.2.6,<6.0a0"
     url: "https://conda.anaconda.org/conda-forge/linux-aarch64/python-3.11.0-ha43d526_1_cpython.conda"
     hash:
@@ -617,8 +539,6 @@ package:
       sha256: 88a786ac9fbf6d5b1e35036f0cb1e7dad694b3be9fa79dd6a71afa954bf02ae3
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -631,8 +551,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -645,24 +563,20 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: linux-aarch64
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: _libgcc_mutex
     version: "0.1"
     manager: conda
@@ -674,8 +588,6 @@ package:
       sha256: 5dd34b412e6274c0614d01a2f616844376ae873dfb8782c2c67d055779de6df6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -687,8 +599,6 @@ package:
       sha256: 82b77cb085c961b085fbbb5ea3920c1933bda08c2e1dd53685f6f21b16a336ac
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ld_impl_linux-ppc64le
     version: "2.39"
     manager: conda
@@ -700,8 +610,6 @@ package:
       sha256: 20d6db1053ae4af65677fc4b4cf9b2d5884ce26ea6b38f7088a5ebad1de62746
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -713,28 +621,24 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgomp
     version: 12.2.0
     manager: conda
     platform: linux-ppc64le
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
     url: "https://conda.anaconda.org/conda-forge/linux-ppc64le/libgomp-12.2.0-hbc1322c_19.tar.bz2"
     hash:
       md5: 25647ac31b4d467fce690c6a561a58aa
       sha256: 56a43985f648c358c6b3eb949863e393dbdb48d8f017315e03ff703031b8a951
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: _openmp_mutex
     version: "4.5"
     manager: conda
     platform: linux-ppc64le
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
       libgomp: ">=7.5.0"
     url: "https://conda.anaconda.org/conda-forge/linux-ppc64le/_openmp_mutex-4.5-2_gnu.tar.bz2"
     hash:
@@ -742,14 +646,12 @@ package:
       sha256: 4c89c2067cf5e7b0fbbdc3200c3f7affa5896e14812acf10f51575be87ae0c05
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libgcc-ng
     version: 12.2.0
     manager: conda
     platform: linux-ppc64le
     dependencies:
-      _libgcc_mutex: 0.1 conda_forge
+      _libgcc_mutex: "==0.1 conda_forge"
       _openmp_mutex: ">=4.5"
     url: "https://conda.anaconda.org/conda-forge/linux-ppc64le/libgcc-ng-12.2.0-hbc1322c_19.tar.bz2"
     hash:
@@ -757,8 +659,6 @@ package:
       sha256: 335a2b7415cb5fbbf05459f6cfcca4dd8bafd43bcbe5bf6aa56bf66b7ed6bf42
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -771,8 +671,6 @@ package:
       sha256: e0edf3c1804547239de9f678f9b650684d0f215e4c277e1d92c281f4d61559b8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -785,8 +683,6 @@ package:
       sha256: 178ca9f82e2144a8834dd01f9af3b4b9b5d482892675931edccff06aee524953
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libnsl
     version: 2.0.0
     manager: conda
@@ -799,8 +695,6 @@ package:
       sha256: 2aa6cd044633586588c7105a3702788ee65b679801ab5d00b48d64265ae2f13c
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libuuid
     version: 2.32.1
     manager: conda
@@ -813,8 +707,6 @@ package:
       sha256: 58b4f6e27b921ff9171e64b3e382cc644d7da70d5da4e3815b7ceae4b4b452e0
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -827,8 +719,6 @@ package:
       sha256: 62073ba865b49db36dc14ffeaa2985711bce65d720b853e3aa4cce0a9e5439d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ncurses
     version: "6.3"
     manager: conda
@@ -841,14 +731,12 @@ package:
       sha256: 37761927f381de5741d7f176dddc1c3b60876f44db10f7d636ad1133381d1a94
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: linux-ppc64le
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
       libgcc-ng: ">=12"
     url: "https://conda.anaconda.org/conda-forge/linux-ppc64le/openssl-3.0.8-h4194056_0.conda"
     hash:
@@ -856,8 +744,6 @@ package:
       sha256: 62200f7fa9acb5d9cee24b373695e78ef1d7373bdfd77a50b80e57864b536436
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -870,8 +756,6 @@ package:
       sha256: d03eb2b53dc61ac97c88b3ca023cf19c2b83b97520725b3c2ec0bff2c47f4a98
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.39.4
     manager: conda
@@ -885,8 +769,6 @@ package:
       sha256: 93cdea9743cf1f86fdf9e9516061d5c68b9b5c43b99b7db1dd81d5b3452c4759
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: readline
     version: 8.1.2
     manager: conda
@@ -900,8 +782,6 @@ package:
       sha256: 37e57caeeb181929648aa898487909b8badad20aa9fb49ab603446cccdb743db
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -915,8 +795,6 @@ package:
       sha256: 61ef67fe390109aa3423d30b96faddb97b054dfbcc0e6c8a3192331b13d14d92
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -932,10 +810,10 @@ package:
       libzlib: ">=1.2.13,<1.3.0a0"
       ncurses: ">=6.3,<7.0a0"
       openssl: ">=3.0.7,<4.0a0"
-      pip: ""
+      pip: "*"
       readline: ">=8.1.2,<9.0a0"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       xz: ">=5.2.6,<6.0a0"
     url: "https://conda.anaconda.org/conda-forge/linux-ppc64le/python-3.11.0-h062392f_1_cpython.conda"
     hash:
@@ -943,8 +821,6 @@ package:
       sha256: de4f1f739b1c2f32fa5fe760fa224faeaa576d9fca166d24412b7332b7c0f62a
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -957,8 +833,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -971,24 +845,20 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: linux-ppc64le
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -1000,8 +870,6 @@ package:
       sha256: 60ba4c64f5d0afca0d283c7addba577d3e2efc0db86002808dadb0498661b2f2
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -1013,8 +881,6 @@ package:
       sha256: 898276d86de89fb034ecfae05103045d0a0d6a356ced1b6d1832cdbd07a8fc18
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -1026,8 +892,6 @@ package:
       sha256: 7a2d27a936ceee6942ea4d397f9c7d136f12549d86f7617e8b6bad51e01a941f
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -1039,8 +903,6 @@ package:
       sha256: 0d954350222cc12666a1f4852dbc9bcf4904d8e467d29505f2b04ded6518f890
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ncurses
     version: "6.3"
     manager: conda
@@ -1052,8 +914,6 @@ package:
       sha256: 9794a23d03586c99cac49d4ae3d5337faaa6bfc256b31d2662ff4ad5972be143
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -1065,8 +925,6 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -1078,8 +936,6 @@ package:
       sha256: eb09823f34cc2dd663c0ec4ab13f246f45dcd52e5b8c47b9864361de5204a1c8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.40.0
     manager: conda
@@ -1092,22 +948,18 @@ package:
       sha256: ae19f866188cc0c514fed754468460ae9e8dd763ebbd7b7afc4e818d71844297
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: osx-64
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
     url: "https://conda.anaconda.org/conda-forge/osx-64/openssl-3.0.8-hfd90126_0.conda"
     hash:
       md5: 4239d01834a13512079046ea216b6657
       sha256: 750ebd464414b7c4ea5aaa704788f7238a356c0a54ce76b018af246cdb65bf08
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: readline
     version: 8.1.2
     manager: conda
@@ -1120,8 +972,6 @@ package:
       sha256: c65dc1200a252832db49bdd6836c512a0eaafe97aa914b9f8358b15eebb1d94b
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -1134,8 +984,6 @@ package:
       sha256: 331aa1137a264fd9cc905f04f09a161c801fe504b93da08b4e6697bd7c9ae6a6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -1147,10 +995,10 @@ package:
       libzlib: ">=1.2.13,<1.3.0a0"
       ncurses: ">=6.3,<7.0a0"
       openssl: ">=3.0.7,<4.0a0"
-      pip: ""
+      pip: "*"
       readline: ">=8.1.2,<9.0a0"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       xz: ">=5.2.6,<6.0a0"
     url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-he7542f4_1_cpython.conda"
     hash:
@@ -1158,8 +1006,6 @@ package:
       sha256: 5c069c9908e48a4490a56d3752c0bc93c2fc93ab8d8328efc869fdc707618e9f
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -1172,8 +1018,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -1186,24 +1030,20 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: osx-64
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -1215,8 +1055,6 @@ package:
       sha256: a3efbd06ad1432edb0163c48225421f34c2660f5cc002283a8d27e791320b549
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -1228,8 +1066,6 @@ package:
       sha256: a9634dc719fc9cd4c91cf8ad3167532e59051cace3e90ef2ba305a41c316784a
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -1241,8 +1077,6 @@ package:
       sha256: 41b3d13efb775e340e4dba549ab5c029611ea6918703096b2eaa9c015c0750ca
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -1254,8 +1088,6 @@ package:
       sha256: a1bf4a1c107838fea4570a7f1750306d65d84fcf2913d4e0d30b4db785e8f223
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ncurses
     version: "6.3"
     manager: conda
@@ -1267,8 +1099,6 @@ package:
       sha256: 50ba7c13dd7d05569e7caa98a13a3684450f8547b4965a1e86b54e2f1240debe
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -1280,8 +1110,6 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -1293,8 +1121,6 @@ package:
       sha256: 59d78af0c3e071021cfe82dc40134c19dab8cdf804324b62940f5c8cd71803ec
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.40.0
     manager: conda
@@ -1307,22 +1133,18 @@ package:
       sha256: 5e8992b2099bb4767996e1bed70945ba39f61399ab912ba2a2770d12c165acb5
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: osx-arm64
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
     url: "https://conda.anaconda.org/conda-forge/osx-arm64/openssl-3.0.8-h03a7124_0.conda"
     hash:
       md5: accdc6784b8ae5dd618a9e76f4c3af36
       sha256: 6d58b0412c4c27669da02368a303f4c4abc1b0edda5f27b2f8155299ab2b45a5
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: readline
     version: 8.1.2
     manager: conda
@@ -1335,8 +1157,6 @@ package:
       sha256: 2d2a65fcdd91361ea7e40c03eeec18ff7a453c32f6589a1fce64717f6cd7c7b6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -1349,8 +1169,6 @@ package:
       sha256: 9e43ec80045892e28233e4ca4d974e09d5837392127702fb952f3935b5e985a4
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -1362,10 +1180,10 @@ package:
       libzlib: ">=1.2.13,<1.3.0a0"
       ncurses: ">=6.3,<7.0a0"
       openssl: ">=3.0.7,<4.0a0"
-      pip: ""
+      pip: "*"
       readline: ">=8.1.2,<9.0a0"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       xz: ">=5.2.6,<6.0a0"
     url: "https://conda.anaconda.org/conda-forge/osx-arm64/python-3.11.0-h3ba56d0_1_cpython.conda"
     hash:
@@ -1373,8 +1191,6 @@ package:
       sha256: 28a54d78cd2624a12bd2ceb0f1816b0cba9b4fd97df846b5843b3c1d51642ab2
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -1387,8 +1203,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -1401,24 +1215,20 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: osx-arm64
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ca-certificates
     version: 2022.12.7
     manager: conda
@@ -1430,8 +1240,6 @@ package:
       sha256: 405f3634e055e2e6b0502b1999bc9b7e7bb6b549b229a9a371b19d660f0b14f0
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tzdata
     version: 2022g
     manager: conda
@@ -1443,8 +1251,6 @@ package:
       sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: ucrt
     version: 10.0.22621.0
     manager: conda
@@ -1456,8 +1262,6 @@ package:
       sha256: f29cdaf8712008f6b419b8b1a403923b00ab2504bfe0fb2ba8eb60e72d4f14c6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: vs2015_runtime
     version: 14.34.31931
     manager: conda
@@ -1470,8 +1274,6 @@ package:
       sha256: 3a23d4c98bdb87b06bd8af9e42eea34c39a9da52c3dd96ace706234c55422f2d
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: vc
     version: "14.3"
     manager: conda
@@ -1484,8 +1286,6 @@ package:
       sha256: 05d5ae5859e8d097559f5445ffbaeac638c9875e4d2a0c5fd8c4bb1c010d35c1
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: bzip2
     version: 1.0.8
     manager: conda
@@ -1499,8 +1299,6 @@ package:
       sha256: 5389dad4e73e4865bb485f460fc60b120bae74404003d457ecb1a62eb7abf0c1
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libffi
     version: 3.4.2
     manager: conda
@@ -1514,8 +1312,6 @@ package:
       sha256: 1951ab740f80660e9bc07d2ed3aefb874d78c107264fd810f24a1a6211d4b1a5
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libsqlite
     version: 3.40.0
     manager: conda
@@ -1530,8 +1326,6 @@ package:
       sha256: 4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: libzlib
     version: 1.2.13
     manager: conda
@@ -1546,14 +1340,12 @@ package:
       sha256: 184da12b4296088a47086f4e69e65eb5f8537a824ee3131d8076775e1d1ea767
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: openssl
     version: 3.0.8
     manager: conda
     platform: win-64
     dependencies:
-      ca-certificates: ""
+      ca-certificates: "*"
       ucrt: ">=10.0.20348.0"
       vc: ">=14.2,<15"
       vs2015_runtime: ">=14.29.30139"
@@ -1563,8 +1355,6 @@ package:
       sha256: 35bf9375b379ab0818a6c58a60b15a4ad85b00ea7f460dd77860da3f3eccfd5d
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: tk
     version: 8.6.12
     manager: conda
@@ -1578,8 +1368,6 @@ package:
       sha256: 087795090a99a1d397ef1ed80b4a01fabfb0122efb141562c168e3c0a76edba6
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: xz
     version: 5.2.6
     manager: conda
@@ -1593,8 +1381,6 @@ package:
       sha256: 54d9778f75a02723784dc63aff4126ff6e6749ba21d11a6d03c1f4775f269fe0
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: python
     version: 3.11.0
     manager: conda
@@ -1605,9 +1391,9 @@ package:
       libsqlite: ">=3.39.4,<4.0a0"
       libzlib: ">=1.2.13,<1.3.0a0"
       openssl: ">=3.0.5,<4.0a0"
-      pip: ""
+      pip: "*"
       tk: ">=8.6.12,<8.7.0a0"
-      tzdata: ""
+      tzdata: "*"
       vc: ">=14.1,<15"
       vs2015_runtime: ">=14.16.27033"
       xz: ">=5.2.6,<5.3.0a0"
@@ -1617,8 +1403,6 @@ package:
       sha256: 20d1f1b5dc620b745c325844545fd5c0cdbfdb2385a0e27ef1507399844c8c6d
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: setuptools
     version: 67.4.0
     manager: conda
@@ -1631,8 +1415,6 @@ package:
       sha256: 7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: wheel
     version: 0.38.4
     manager: conda
@@ -1645,23 +1427,19 @@ package:
       sha256: bd4f11ff075ff251ade9f57686f31473e25be46ab282d9603f551401250f9f44
     optional: false
     category: main
-    source: ~
-    build: ~
   - name: pip
     version: 23.0.1
     manager: conda
     platform: win-64
     dependencies:
       python: ">=3.7"
-      setuptools: ""
-      wheel: ""
+      setuptools: "*"
+      wheel: "*"
     url: "https://conda.anaconda.org/conda-forge/noarch/pip-23.0.1-pyhd8ed1ab_0.conda"
     hash:
       md5: 8025ca83b8ba5430b640b83917c2a6f7
       sha256: e1698cbf4964cd60a2885c0edbc654133cd0db5ac4cb568412250e577dbc42ad
     optional: false
     category: main
-    source: ~
-    build: ~
 version: 1
 
