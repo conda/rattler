@@ -244,8 +244,10 @@ impl Shell for CmdExe {
 }
 
 /// A [`Shell`] implementation for PowerShell.
-#[derive(Debug, Clone, Copy)]
-pub struct PowerShell;
+#[derive(Debug, Clone, Default)]
+pub struct PowerShell {
+    executable_path: Option<String>,
+}
 
 impl Shell for PowerShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
@@ -265,7 +267,7 @@ impl Shell for PowerShell {
     }
 
     fn executable(&self) -> &str {
-        "pwsh"
+        self.executable_path.as_deref().unwrap_or("pwsh")
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {
@@ -348,7 +350,7 @@ impl ShellEnum {
         if let Some(env_shell) = std::env::var_os("SHELL") {
             Self::from_shell_path(env_shell)
         } else if cfg!(windows) {
-            Some(PowerShell.into())
+            Some(PowerShell::default().into())
         } else {
             None
         }
@@ -388,7 +390,7 @@ impl ShellEnum {
             Some(Fish.into())
         } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
         {
-            Some(PowerShell.into())
+            Some(PowerShell{executable_path: Some(parent_process_name)}.into())
         } else if parent_process_name.contains("cmd.exe") {
             Some(CmdExe.into())
         } else {
@@ -406,7 +408,7 @@ fn parse_shell_from_path(path: &Path) -> Option<ShellEnum> {
         "xonsh" => Some(Xonsh.into()),
         "fish" => Some(Fish.into()),
         "cmd" => Some(CmdExe.into()),
-        "powershell" | "powershell_ise" => Some(PowerShell.into()),
+        "powershell" | "powershell_ise" => Some(PowerShell::default().into()),
         _ => None,
     }
 }
