@@ -1,4 +1,7 @@
+use std::borrow::Cow;
+use std::collections::Bound;
 use std::hash::{Hash, Hasher};
+use std::ops::RangeBounds;
 use std::{
     cmp::Ordering,
     fmt,
@@ -130,7 +133,7 @@ pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
     /// any underscores.
-    norm: Box<str>,
+    norm: Option<Box<str>>,
 
     /// Individual components of the version.
     ///
@@ -249,8 +252,8 @@ impl Version {
             }
         }
 
-        // Update the normalized version string to reflect the changes
-        bumped_version.norm = bumped_version.canonical().into_boxed_str();
+        // Remove the normalized version because its no longer valid.
+        bumped_version.norm = None;
 
         bumped_version
     }
@@ -353,6 +356,126 @@ impl Version {
             .unwrap_or_default();
 
         format!("{}{}{}", epoch_display, segments_display, local_display)
+    }
+
+    /// Returns a new version with only the given segments.
+    ///
+    /// Calling this function on a version that looks like `1.3a.4-alpha3` with the range `[1..3]`
+    /// will return the version: `3a.4`.
+    pub fn with_segments(&self, segments: impl RangeBounds<usize>) -> Option<Version> {
+        // Determine the actual bounds to use
+        let segment_count = self.segment_count();
+        let start_segment_idx = match segments.start_bound() {
+            Bound::Included(idx) => *idx,
+            Bound::Excluded(idx) => *idx + 1,
+            Bound::Unbounded => 0,
+        };
+        let end_segment_idx = match segments.end_bound() {
+            Bound::Included(idx) => *idx + 1,
+            Bound::Excluded(idx) => *idx,
+            Bound::Unbounded => segment_count,
+        };
+        if start_segment_idx >= segment_count
+            || end_segment_idx > segment_count
+            || start_segment_idx >= end_segment_idx
+        {
+            return None;
+        }
+
+        let mut components = SmallVec::<[Component; 3]>::default();
+        let mut segment_lengths = SmallVec::<[u16; 4]>::default();
+
+        // Copy the epoch
+        if self.has_epoch() {
+            components.push(self.epoch().into());
+        }
+
+        // Copy the segments and components of the common version
+        for segment_components in self
+            .segments()
+            .skip(start_segment_idx)
+            .take(end_segment_idx - start_segment_idx)
+        {
+            segment_lengths.push(segment_components.len() as _);
+            for component in segment_components {
+                components.push(component.clone());
+            }
+        }
+
+        // Copy the segments and components of the local version
+        let local_start_idx = segment_lengths.len();
+        for segment_components in self.local_segments() {
+            segment_lengths.push(segment_components.len() as _);
+            for component in segment_components {
+                components.push(component.clone());
+            }
+        }
+
+        let mut flags = if self.has_epoch() { EPOCH_MASK } else { 0 };
+        if self.has_local() {
+            flags |= (local_start_idx as u8) << LOCAL_VERSION_OFFSET;
+        }
+
+        Some(Version {
+            norm: None,
+            components,
+            segment_lengths,
+            flags,
+        })
+    }
+
+    /// Pops the specified number of segments from the version. Returns `None` if the resulting
+    /// version would become invalid because it no longer contains any segments.
+    pub fn pop_segments(&self, n: usize) -> Option<Version> {
+        let segment_count = self.segment_count();
+        if segment_count < n {
+            None
+        } else {
+            self.with_segments(..segment_count - n)
+        }
+    }
+
+    /// Returns the number of segments in the version. Segments are the part of the version
+    /// seperated by dots or dashes.
+    pub fn segment_count(&self) -> usize {
+        if let Some(local_index) = self.local_segment_index() {
+            local_index
+        } else {
+            self.segment_lengths.len()
+        }
+    }
+
+    /// Returns either this [`Version`] or a new [`Version`] where the local version part has been
+    /// removed.
+    pub fn strip_local(&self) -> Cow<'_, Version> {
+        if self.has_local() {
+            let mut components = SmallVec::<[Component; 3]>::default();
+            let mut segment_lengths = SmallVec::<[u16; 4]>::default();
+            let mut flags = 0;
+
+            // Add the epoch
+            if let Some(epoch) = self.epoch_opt() {
+                components.push(epoch.into());
+                flags |= EPOCH_MASK;
+            }
+
+            // Copy the segments
+            for segment in self.segments() {
+                segment_lengths.push(segment.len() as _);
+                for component in segment.iter() {
+                    components.push(component.clone());
+                }
+            }
+
+            Cow::Owned(Version {
+                norm: None,
+                components,
+                segment_lengths,
+                flags,
+            })
+        } else {
+            Cow::Borrowed(self)
+        }
     }
 }
 
@@ -604,7 +727,10 @@ impl PartialOrd for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.norm.as_ref())
+        match &self.norm {
+            None => write!(f, "{}", self.canonical()),
+            Some(norm) => write!(f, "{}", norm.as_ref()),
+        }
     }
 }
 
@@ -613,7 +739,7 @@ impl Serialize for Version {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&self.norm)
+        serializer.serialize_str(&self.to_string())
     }
 }
 
@@ -905,6 +1031,53 @@ mod test {
                 .unwrap()
                 .canonical(),
             "1!1.2.3.alpha.2+3beta5rc"
+        );
+    }
+
+    #[test]
+    fn with_segments() {
+        assert_eq!(
+            Version::from_str("3!4.5a.6b+7.8")
+                .unwrap()
+                .with_segments(1..3)
+                .unwrap(),
+            Version::from_str("3!5a.6b+7.8").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("3!4.5a.6b+7.8")
+                .unwrap()
+                .with_segments(1..)
+                .unwrap(),
+            Version::from_str("3!5a.6b+7.8").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("3!4.5a.6b+7.8")
+                .unwrap()
+                .with_segments(..)
+                .unwrap(),
+            Version::from_str("3!4.5a.6b+7.8").unwrap()
+        );
+    }
+
+    #[test]
+    fn pop_segments() {
+        assert_eq!(
+            Version::from_str("3!4.5a.6b+7.8")
+                .unwrap()
+                .pop_segments(1)
+                .unwrap(),
+            Version::from_str("3!4.5a+7.8").unwrap()
+        );
+    }
+
+    #[test]
+    fn strip_local() {
+        assert_eq!(
+            Version::from_str("3!4.5a.6b+7.8")
+                .unwrap()
+                .strip_local()
+                .into_owned(),
+            Version::from_str("3!4.5a.6b").unwrap()
         );
     }
 }

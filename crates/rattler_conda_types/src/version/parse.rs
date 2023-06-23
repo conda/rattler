@@ -258,7 +258,7 @@ impl FromStr for Version {
         };
 
         Ok(Self {
-            norm: lowered.into_boxed_str(),
+            norm: Some(lowered.into_boxed_str()),
             flags,
             segment_lengths: segments,
             components,
