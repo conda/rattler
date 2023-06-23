@@ -3,6 +3,7 @@
 
 pub mod patches;
 mod topological_sort;
+pub use topological_sort::sort_topologically;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
