@@ -1,4 +1,5 @@
-use super::{NumeralOrOther, Version, VersionComponent};
+use super::{Component, Version};
+use crate::version::{LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -37,6 +38,8 @@ impl Display for ParseVersionError {
             }
             ParseVersionErrorKind::EmptyVersionComponent => write!(f, "empty version component"),
             ParseVersionErrorKind::InvalidNumeral(e) => write!(f, "invalid numeral: {}", e),
+            ParseVersionErrorKind::TooManySegments => write!(f, "too many segments"),
+            ParseVersionErrorKind::TooManyComponentsInASegment => write!(f, "too many version components, a single version segment can at most contain {} components", (1<<16)-1),
         }
     }
 }
@@ -70,6 +73,10 @@ pub enum ParseVersionErrorKind {
     DuplicateLocalVersionSeparator,
     /// The string contained an empty version component
     EmptyVersionComponent,
+    /// Too many segments.
+    TooManySegments,
+    /// Too many segments.
+    TooManyComponentsInASegment,
 }
 
 /// Returns true if the specified char is a valid char for a version string.
@@ -114,12 +121,12 @@ impl FromStr for Version {
 
         // Find epoch
         let (epoch, rest) = if let Some((epoch, rest)) = lowered.split_once('!') {
-            let _: usize = epoch.parse().map_err(|e| {
+            let epoch: u64 = epoch.parse().map_err(|e| {
                 ParseVersionError::new(s, ParseVersionErrorKind::EpochMustBeInteger(e))
             })?;
-            ([epoch], rest)
+            (Some(epoch), rest)
         } else {
-            (["0"], lowered.as_str())
+            (None, lowered.as_str())
         };
 
         // Ensure the rest of the string no longer contains an epoch
@@ -167,60 +174,94 @@ impl FromStr for Version {
                 .map(ToOwned::to_owned)
                 .collect()
         };
-        let version_split = epoch
-            .iter()
-            .copied()
-            .chain(version.iter().map(|s| s.as_str()));
+        let version_split = version.iter().map(|s| s.as_str());
+
+        let mut components = SmallVec::default();
+        let mut segments = SmallVec::default();
+        let mut flags = 0u8;
+
+        if let Some(epoch) = epoch {
+            components.push(epoch.into());
+            flags |= 0x1; // Mark that the version contains an epoch
+        }
 
         fn split_component<'a>(
-            split_iter: impl Iterator<Item = &'a str>,
-        ) -> Result<VersionComponent, ParseVersionErrorKind> {
-            let mut result = VersionComponent::default();
-            for component in split_iter {
+            segments_iter: impl Iterator<Item = &'a str>,
+            segments: &mut SmallVec<[u16; 4]>,
+            components: &mut SmallVec<[Component; 3]>,
+        ) -> Result<(), ParseVersionErrorKind> {
+            for component in segments_iter {
                 let version_split_re = lazy_regex::regex!(r#"([0-9]+|[^0-9]+)"#);
                 let mut numeral_or_alpha_split = version_split_re.find_iter(component).peekable();
                 if numeral_or_alpha_split.peek().is_none() {
                     return Err(ParseVersionErrorKind::EmptyVersionComponent);
                 }
-                let range_start = result.components.len();
-                for numeral_or_alpha in numeral_or_alpha_split {
-                    let numeral_or_alpha = numeral_or_alpha.as_str();
-                    let parsed: NumeralOrOther = match numeral_or_alpha {
+
+                let mut atoms = numeral_or_alpha_split
+                    .map(|mtch| match mtch.as_str() {
                         num if num.chars().all(|c| c.is_ascii_digit()) => num
-                            .parse::<usize>()
-                            .map_err(ParseVersionErrorKind::InvalidNumeral)?
-                            .into(),
-                        "post" => NumeralOrOther::Infinity,
-                        "dev" => NumeralOrOther::Other(String::from("DEV")),
-                        ident => NumeralOrOther::Other(ident.to_owned()),
-                    };
-                    result.components.push(parsed);
-                }
-                if range_start < result.components.len()
-                    && !matches!(&result.components[range_start], NumeralOrOther::Numeral(_))
-                {
-                    result
-                        .components
-                        .insert(range_start, NumeralOrOther::Numeral(0))
+                            .parse()
+                            .map_err(ParseVersionErrorKind::InvalidNumeral)
+                            .map(Component::Numeral),
+                        "post" => Ok(Component::Post),
+                        "dev" => Ok(Component::Dev),
+                        ident => Ok(Component::Iden(ident.to_owned().into_boxed_str())),
+                    })
+                    .peekable();
+
+                // A segment must always starts with a numeral
+                let mut component_count = 0u16;
+                if !matches!(atoms.peek(), Some(&Ok(Component::Numeral(_)))) {
+                    components.push(Component::Numeral(0));
+                    component_count = component_count
+                        .checked_add(1)
+                        .ok_or(ParseVersionErrorKind::TooManyComponentsInASegment)?;
                 }
 
-                let range_end = result.components.len();
-                result.ranges.push(range_start..range_end);
+                // Add the components
+                for component in atoms {
+                    components.push(component?);
+                    component_count = component_count
+                        .checked_add(1)
+                        .ok_or(ParseVersionErrorKind::TooManyComponentsInASegment)?;
+                }
+
+                // Add the segment information
+                segments.push(component_count);
             }
-            Ok(result)
+
+            Ok(())
         }
 
-        let version = split_component(version_split).map_err(|e| ParseVersionError::new(s, e))?;
-        let local = if local.is_empty() {
-            Default::default()
-        } else {
-            split_component(local_split).map_err(|e| ParseVersionError::new(s, e))?
+        split_component(version_split, &mut segments, &mut components)
+            .map_err(|e| ParseVersionError::new(s, e))?;
+
+        if !local.is_empty() {
+            if segments.len() > (LOCAL_VERSION_MASK >> LOCAL_VERSION_OFFSET) as usize {
+                // There are too many segments to be able to encode the local segment parts into the
+                // special `flag` we store. The flags is 8 bits and the first bit is used to
+                // indicate if there is an epoch or not. The remaining 7 bits are used to indicate
+                // which segment is the first that belongs to the local version part. We can encode
+                // at most 127 positions so if there are more segments in the common version part,
+                // we cannot represent this version.
+                return Err(ParseVersionError::new(
+                    s,
+                    ParseVersionErrorKind::TooManySegments,
+                ));
+            }
+
+            // Encode that the local version segment starts at the given index.
+            flags |= (u8::try_from(segments.len()).unwrap()) << LOCAL_VERSION_OFFSET;
+
+            split_component(local_split, &mut segments, &mut components)
+                .map_err(|e| ParseVersionError::new(s, e))?
         };
 
         Ok(Self {
-            norm: lowered,
-            version,
-            local,
+            norm: lowered.into_boxed_str(),
+            flags,
+            segment_lengths: segments,
+            components,
         })
     }
 }
