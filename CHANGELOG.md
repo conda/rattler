@@ -5,11 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2023-06-23
 
-### Changed
+### Highlights
+
+A new algorithm was introduced to sort `PackageRecord`s in a topological order based on their dependencies.
+Sorting in this way provides a deterministic way of sorting packages in the order in which they should be installed to avoid clobbering.
+The original algorithm was extracted from [rattler-server](https://github.com/mamba-org/rattler-server).
+
+Experimental extensions to the conda lock file format have also been introduced to make it possible to completely reproduce the original `RepoDataRecord`s from a lock file.
+
+Fixes were made to the `MatchSpec` and `Version` implementation to catch some corner cases and detecting the current shell has become more robust.
+
+### Details
+
+#### Added
+
+- `PackageRecord::sort_topologically` to perform a topological sort of `PackageRecord`s ([#218](https://github.com/mamba-org/rattler/pull/218))
+- Experimental fields to be able to reconstruct `RepoDataRecord` from conda lock files. ([#221](https://github.com/mamba-org/rattler/pull/221))
+- Methods to manipulate `Version`s ([#229](https://github.com/mamba-org/rattler/pull/229))
+
+#### Changed
 
 - Refactored shell detection code using `$SHELL` or parent process name ([#219](https://github.com/mamba-org/rattler/pull/219))
+- The error message that is thrown when parsing a `Platform` now includes possible options ([#222](https://github.com/mamba-org/rattler/pull/222))
+- Completely refactored `Version` implementation to reduce memory footprint and increase readability ([#227](https://github.com/mamba-org/rattler/pull/227))
+
+#### Fixed
+
+- Issue with parsing matchspecs that contain epochs ([#220](https://github.com/mamba-org/rattler/pull/220))
+- Zsh activation scripts invoke .sh scripts ([#223](https://github.com/mamba-org/rattler/pull/223))
+- Detect the proper powershell parent process ([#224](https://github.com/mamba-org/rattler/pull/224))
 
 ## [0.3.0] - 2023-06-15
 
