@@ -352,7 +352,11 @@ impl<T: Shell + Clone> Activator<T> {
         let path = [self.paths.clone(), path].concat();
 
         self.shell_type
-            .set_path(&mut script, path.as_slice(), PathModificationBehaviour::Prepend)
+            .set_path(
+                &mut script,
+                path.as_slice(),
+                PathModificationBehaviour::Prepend,
+            )
             .map_err(ActivationError::FailedToWriteActivationScript)?;
 
         // deliberately not taking care of `CONDA_SHLVL` or any other complications at this point

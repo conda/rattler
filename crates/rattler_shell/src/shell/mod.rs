@@ -145,8 +145,7 @@ impl Shell for Bash {
             .map(|path| {
                 // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
                 if cfg!(windows) {
-                    native_path_to_unix(path.to_string_lossy().as_ref())
-                        .unwrap()
+                    native_path_to_unix(path.to_string_lossy().as_ref()).unwrap()
                 } else {
                     path.to_string_lossy().into_owned()
                 }
