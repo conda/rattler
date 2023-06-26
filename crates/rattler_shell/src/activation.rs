@@ -12,6 +12,16 @@ use crate::shell::Shell;
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
+/// Type of modification done to the `PATH` variable
+pub enum PathModificationBehaviour {
+    /// Replaces the complete path variable with specified paths.
+    Replace,
+    /// Appends the new path variables to the path. E.g. '$PATH:/new/path'
+    Append,
+    /// Prepends the new path variables to the path. E.g. '/new/path:$PATH'
+    Prepend,
+}
+
 /// A struct that contains the values of the environment variables that are relevant for the activation process.
 /// The values are stored as strings. Currently, only the `PATH` and `CONDA_PREFIX` environment variables are used.
 pub struct ActivationVariables {
@@ -20,6 +30,9 @@ pub struct ActivationVariables {
 
     /// The value of the `PATH` environment variable that contains the paths to the executables
     pub path: Option<Vec<PathBuf>>,
+
+    /// The type of behaviour of what should happen with the defined paths.
+    pub path_modification_behaviour: PathModificationBehaviour,
 }
 
 impl ActivationVariables {
@@ -27,9 +40,8 @@ impl ActivationVariables {
     pub fn from_env() -> Result<Self, std::env::VarError> {
         Ok(Self {
             conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
-            path: std::env::var("PATH")
-                .ok()
-                .map(|p| std::env::split_paths(&p).collect::<Vec<_>>()),
+            path: None,
+            path_modification_behaviour: PathModificationBehaviour::Prepend,
         })
     }
 }
@@ -340,7 +352,7 @@ impl<T: Shell + Clone> Activator<T> {
         let path = [self.paths.clone(), path].concat();
 
         self.shell_type
-            .set_path(&mut script, path.as_slice())
+            .set_path(&mut script, path.as_slice(), PathModificationBehaviour::Prepend)
             .map_err(ActivationError::FailedToWriteActivationScript)?;
 
         // deliberately not taking care of `CONDA_SHLVL` or any other complications at this point
@@ -505,6 +517,7 @@ mod tests {
                     PathBuf::from("/sbin"),
                     PathBuf::from("/usr/local/bin"),
                 ]),
+                path_modification_behaviour: PathModificationBehaviour::Append,
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();
