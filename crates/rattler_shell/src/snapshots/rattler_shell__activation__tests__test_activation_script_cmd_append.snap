@@ -1,0 +1,7 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script
+---
+@SET "PATH=%PATH%;__PREFIX__/bin;/usr/bin;/bin;/usr/sbin;/sbin;/usr/local/bin"
+@SET "CONDA_PREFIX=__PREFIX__"
+

@@ -355,7 +355,7 @@ impl<T: Shell + Clone> Activator<T> {
             .set_path(
                 &mut script,
                 path.as_slice(),
-                PathModificationBehaviour::Prepend,
+                variables.path_modification_behaviour,
             )
             .map_err(ActivationError::FailedToWriteActivationScript)?;
 
@@ -386,10 +386,11 @@ impl<T: Shell + Clone> Activator<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shell;
+    use crate::{activation, shell};
     use std::str::FromStr;
 
     use super::*;
+    use activation::PathModificationBehaviour;
     use tempdir::TempDir;
 
     #[test]
@@ -503,7 +504,10 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn get_script<T: Shell>(shell_type: T) -> String
+    fn get_script<T: Shell>(
+        shell_type: T,
+        path_modification_behaviour: PathModificationBehaviour,
+    ) -> String
     where
         T: Clone,
     {
@@ -521,7 +525,7 @@ mod tests {
                     PathBuf::from("/sbin"),
                     PathBuf::from("/usr/local/bin"),
                 ]),
-                path_modification_behaviour: PathModificationBehaviour::Append,
+                path_modification_behaviour,
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();
@@ -532,42 +536,53 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_activation_script_bash() {
-        let script = get_script(shell::Bash);
-        insta::assert_snapshot!(script);
+        let script = get_script(shell::Bash, PathModificationBehaviour::Append);
+        insta::assert_snapshot!("test_activation_script_bash_append", script);
+        let script = get_script(shell::Bash, PathModificationBehaviour::Replace);
+        insta::assert_snapshot!("test_activation_script_bash_replace", script);
+        let script = get_script(shell::Bash, PathModificationBehaviour::Prepend);
+        insta::assert_snapshot!("test_activation_script_bash_prepend", script);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_activation_script_zsh() {
-        let script = get_script(shell::Zsh);
+        let script = get_script(shell::Zsh, PathModificationBehaviour::Append);
         insta::assert_snapshot!(script);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_activation_script_fish() {
-        let script = get_script(shell::Fish);
+        let script = get_script(shell::Fish, PathModificationBehaviour::Append);
         insta::assert_snapshot!(script);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_activation_script_powershell() {
-        let script = get_script(shell::PowerShell::default());
+        let script = get_script(
+            shell::PowerShell::default(),
+            PathModificationBehaviour::Append,
+        );
         insta::assert_snapshot!(script);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_activation_script_cmd() {
-        let script = get_script(shell::CmdExe);
-        insta::assert_snapshot!(script);
+        let script = get_script(shell::CmdExe, PathModificationBehaviour::Append);
+        insta::assert_snapshot!("test_activation_script_cmd_append", script);
+        let script = get_script(shell::CmdExe, PathModificationBehaviour::Replace);
+        insta::assert_snapshot!("test_activation_script_cmd_replace", script);
+        let script = get_script(shell::CmdExe, PathModificationBehaviour::Prepend);
+        insta::assert_snapshot!("test_activation_script_cmd_prepend", script);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_activation_script_xonsh() {
-        let script = get_script(shell::Xonsh);
+        let script = get_script(shell::Xonsh, PathModificationBehaviour::Append);
         insta::assert_snapshot!(script);
     }
 }

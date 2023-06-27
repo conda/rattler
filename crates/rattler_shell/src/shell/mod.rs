@@ -54,14 +54,14 @@ pub trait Shell {
         modification_behaviour: PathModificationBehaviour,
     ) -> std::fmt::Result {
         let mut paths_vec = paths
-            .into_iter()
+            .iter()
             .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
             PathModificationBehaviour::Replace => (),
-            PathModificationBehaviour::Append => paths_vec.push(self.format_env_var("PATH")),
-            PathModificationBehaviour::Prepend => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
         }
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_seperator());
@@ -141,7 +141,7 @@ impl Shell for Bash {
     ) -> std::fmt::Result {
         // Put paths in a vector of the correct format.
         let mut paths_vec = paths
-            .into_iter()
+            .iter()
             .map(|path| {
                 // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
                 if cfg!(windows) {

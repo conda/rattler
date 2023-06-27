@@ -1,0 +1,8 @@
+---
+source: crates/rattler_shell/src/activation.rs
+expression: script
+---
+export PATH="__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
+export CONDA_PREFIX="__PREFIX__"
+. "__PREFIX__/etc/conda/activate.d/script1.sh"
+
