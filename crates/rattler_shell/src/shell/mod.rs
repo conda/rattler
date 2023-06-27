@@ -3,12 +3,12 @@
 use crate::activation::PathModificationBehaviour;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
+use rattler_conda_types::Platform;
 use std::process::Command;
 use std::{
     fmt::Write,
     path::{Path, PathBuf},
 };
-use rattler_conda_types::Platform;
 
 /// A trait for generating shell scripts.
 /// The trait is implemented for each shell individually.
@@ -82,7 +82,11 @@ pub trait Shell {
 
     /// Path seperator
     fn path_seperator(&self, platform: &Platform) -> &str {
-        if platform.is_unix() { ":" } else { ";" }
+        if platform.is_unix() {
+            ":"
+        } else {
+            ";"
+        }
     }
 
     /// Format the environment variable for the shell.
@@ -492,7 +496,7 @@ impl<T: Shell> ShellScript<T> {
         Self {
             shell,
             contents: String::new(),
-            platform
+            platform,
         }
     }
 
@@ -515,7 +519,12 @@ impl<T: Shell> ShellScript<T> {
     /// Set the PATH environment variable to the given paths.
     pub fn set_path(&mut self, paths: &[PathBuf]) -> &mut Self {
         self.shell
-            .set_path(&mut self.contents, paths, PathModificationBehaviour::Prepend, &self.platform)
+            .set_path(
+                &mut self.contents,
+                paths,
+                PathModificationBehaviour::Prepend,
+                &self.platform,
+            )
             .unwrap();
         self
     }

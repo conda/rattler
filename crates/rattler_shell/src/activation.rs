@@ -3,11 +3,11 @@
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
 use std::ffi::OsStr;
+use std::fmt::Write;
 use std::{
     fs,
     path::{Path, PathBuf},
 };
-use std::fmt::Write;
 
 use crate::shell::Shell;
 use indexmap::IndexMap;
@@ -328,7 +328,8 @@ impl<T: Shell + Clone> Activator<T> {
 
         // Add shebang on unix systems to activation script.
         if self.platform.is_unix() {
-            writeln!(script, "#!/bin/sh").map_err(ActivationError::FailedToWriteActivationScript)?;
+            writeln!(script, "#!/bin/sh")
+                .map_err(ActivationError::FailedToWriteActivationScript)?;
         }
 
         let mut path = variables.path.clone().unwrap_or_default();
