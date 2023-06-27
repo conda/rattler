@@ -314,28 +314,22 @@ pub enum ConversionError {
 }
 
 /// Package filename from the url
-fn filename_from_url(url: &Url) -> Option<String> {
-    let path = url.path();
-    let filename = path.split('/').last()?;
-    Some(filename.to_string())
+fn file_name_from_url(url: &Url) -> Option<&str> {
+    let path = url.path_segments()?;
+    path.last()
 }
 
 /// Channel from url, this is everything before the filename and the subdir
 /// So for example: https://conda.anaconda.org/conda-forge/ is a channel name
 /// that we parse from something like: https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda
-fn channel_from_url(url: &Url) -> Option<String> {
-    // Get http or https from the url
-    let scheme = url.scheme();
-    // Retrieve the host from the url
-    let host = url.host()?;
-    let path: Vec<_> = url.path_segments()?.collect();
-    // We expect it to be in the format <channel>/<subdir>/<filename>
-    if path.len() < 3 {
-        return None;
-    }
-    let url = path.first()?;
-    // Reconstruct the url
-    Some(format!("{}://{}/{}", scheme, host, url))
+fn channel_from_url(url: &Url) -> Option<Url> {
+    let mut result = url.clone();
+
+    // Strip the last two path segments. We assume the first one contains the file_name, and the
+    // other the subdirectory.
+    result.path_segments_mut().ok()?.pop().pop();
+
+    Some(result)
 }
 
 impl TryFrom<&LockedDependency> for RepoDataRecord {
@@ -368,9 +362,11 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
             _ => None,
         };
         let channel = channel_from_url(&value.url)
-            .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?;
-        let file_name = filename_from_url(&value.url)
-            .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?;
+            .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?
+            .to_string();
+        let file_name = file_name_from_url(&value.url)
+            .ok_or_else(|| ConversionError::Missing("filename in url".to_string()))?
+            .to_owned();
         let build = value
             .build
             .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
@@ -446,12 +442,12 @@ impl From<&str> for Channel {
 
 #[cfg(test)]
 mod test {
-    use super::PackageHashes;
-    use crate::conda_lock::CondaLock;
+    use super::{channel_from_url, file_name_from_url, CondaLock, PackageHashes};
     use crate::Platform;
     use insta::assert_yaml_snapshot;
     use serde_yaml::from_str;
     use std::path::Path;
+    use url::Url;
 
     #[test]
     fn test_package_hashes() {
@@ -537,5 +533,33 @@ mod test {
                 .collect::<Vec<_>>()
         );
             })
+    }
+
+    #[test]
+    fn test_channel_from_url() {
+        assert_eq!(channel_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some(Url::parse("https://conda.anaconda.org/conda-forge").unwrap()));
+        assert_eq!(
+            channel_from_url(
+                &Url::parse(
+                    "file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b/noarch/foo-1-0.conda"
+                )
+                .unwrap()
+            ),
+            Some(Url::parse("file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_file_name_from_url() {
+        assert_eq!(file_name_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some("python-3.11.0-h4150a38_1_cpython.conda"));
+        assert_eq!(
+            file_name_from_url(
+                &Url::parse(
+                    "file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b/noarch/foo-1-0.conda"
+                )
+                .unwrap()
+            ),
+            Some("foo-1-0.conda")
+        );
     }
 }
