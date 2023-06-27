@@ -1,76 +1,30 @@
-use crate::decision_tracker::DecisionTracker;
-use crate::pool::{MatchSpecId, Pool, StringId};
+use crate::id::NameId;
+use crate::id::{RuleId, SolvableId};
+use crate::pool::Pool;
 use crate::problem::Problem;
-use crate::rules::{Literal, Rule, RuleKind};
-use crate::solvable::SolvableId;
+use crate::solvable::SolvableInner;
 use crate::solve_jobs::SolveJobs;
-use crate::watch_map::WatchMap;
+use crate::transaction::{Transaction, TransactionKind};
 
 use rattler_conda_types::MatchSpec;
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Display, Formatter};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-#[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug, Hash)]
-pub(crate) struct RuleId(u32);
+use decision::Decision;
+use decision_tracker::DecisionTracker;
+use rule::{Literal, Rule, RuleState};
+use watch_map::WatchMap;
 
-impl RuleId {
-    pub(crate) fn new(index: usize) -> Self {
-        Self(index as u32)
-    }
+// TODO: remove pub from this
+mod decision;
+pub(crate) mod decision_map;
+mod decision_tracker;
+pub(crate) mod rule;
+mod watch_map;
 
-    pub(crate) fn install_root() -> Self {
-        Self(0)
-    }
+pub struct Solver<'a> {
+    pool: Pool<'a>,
 
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
-    }
-
-    fn is_null(self) -> bool {
-        self.0 == u32::MAX
-    }
-
-    pub(crate) fn null() -> RuleId {
-        RuleId(u32::MAX)
-    }
-}
-
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub(crate) struct Decision {
-    pub(crate) solvable_id: SolvableId,
-    pub(crate) value: bool,
-    pub(crate) derived_from: RuleId,
-}
-
-impl Decision {
-    pub(crate) fn new(solvable: SolvableId, value: bool, derived_from: RuleId) -> Self {
-        Self {
-            solvable_id: solvable,
-            value,
-            derived_from,
-        }
-    }
-}
-
-pub struct Transaction {
-    pub steps: Vec<(SolvableId, TransactionKind)>,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum TransactionKind {
-    Install,
-}
-
-impl Display for TransactionKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-pub struct Solver {
-    pool: Pool,
-
-    pub(crate) rules: Vec<Rule>,
+    pub(crate) rules: Vec<RuleState>,
     watches: WatchMap,
 
     learnt_rules: Vec<Vec<Literal>>,
@@ -80,16 +34,16 @@ pub struct Solver {
     decision_tracker: DecisionTracker,
 }
 
-impl Solver {
+impl<'a> Solver<'a> {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool) -> Self {
+    pub fn new(pool: Pool<'a>) -> Self {
         Self {
             rules: Vec::new(),
             watches: WatchMap::new(),
             learnt_rules: Vec::new(),
-            learnt_rules_start: RuleId(0),
+            learnt_rules_start: RuleId::null(),
             learnt_why: Vec::new(),
-            decision_tracker: DecisionTracker::new(pool.nsolvables()),
+            decision_tracker: DecisionTracker::new(pool.solvables.len() as u32),
             pool,
         }
     }
@@ -108,7 +62,7 @@ impl Solver {
         // Clear state
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
-        self.rules = vec![Rule::new(RuleKind::InstallRoot, &[], &self.pool)];
+        self.rules = vec![RuleState::new(Rule::InstallRoot, &[], &self.pool)];
         self.learnt_rules.clear();
         self.learnt_why.clear();
 
@@ -119,24 +73,22 @@ impl Solver {
             favored_map.insert(name_id, favored_id);
         }
 
-        // Initialize the root solvable with the requested packages as dependencies
-        let mut visited_solvables = HashSet::default();
+        // Populate the root solvable with the requested packages
         for match_spec in &jobs.install {
             let match_spec_id = self.pool.intern_matchspec(match_spec.to_string());
-            let root_solvable = self.pool.root_solvable_mut();
-            root_solvable.push(match_spec_id);
-
-            // Recursively add rules for the current dep
-            self.add_rules_for_root_dep(&mut visited_solvables, &favored_map, match_spec_id);
+            self.pool.root_solvable_mut().push(match_spec_id);
         }
 
+        // Create rules for root's dependencies, and their dependencies, and so forth
+        self.add_rules_for_root_dep(&favored_map);
+
         // Initialize rules ensuring only a single candidate per package name is installed
-        for candidates in self.pool.packages_by_name.values() {
+        for candidates in &self.pool.packages_by_name {
             // Each candidate gets a rule with each other candidate
             for (i, &candidate) in candidates.iter().enumerate() {
                 for &other_candidate in &candidates[i + 1..] {
-                    self.rules.push(Rule::new(
-                        RuleKind::ForbidMultipleInstances(candidate, other_candidate),
+                    self.rules.push(RuleState::new(
+                        Rule::ForbidMultipleInstances(candidate, other_candidate),
                         &self.learnt_rules,
                         &self.pool,
                     ));
@@ -148,15 +100,13 @@ impl Solver {
         for &locked_solvable_id in &jobs.lock {
             // For each locked solvable, forbid other solvables with the same name
             let name = self.pool.resolve_solvable(locked_solvable_id).name;
-            if let Some(other_candidates) = self.pool.packages_by_name.get(&name) {
-                for &other_candidate in other_candidates {
-                    if other_candidate != locked_solvable_id {
-                        self.rules.push(Rule::new(
-                            RuleKind::ForbidMultipleInstances(SolvableId::root(), other_candidate),
-                            &self.learnt_rules,
-                            &self.pool,
-                        ));
-                    }
+            for &other_candidate in &self.pool.packages_by_name[name.index()] {
+                if other_candidate != locked_solvable_id {
+                    self.rules.push(RuleState::new(
+                        Rule::Lock(locked_solvable_id, other_candidate),
+                        &self.learnt_rules,
+                        &self.pool,
+                    ));
                 }
             }
         }
@@ -186,42 +136,23 @@ impl Solver {
         Ok(Transaction { steps })
     }
 
-    fn add_rules_for_root_dep(
-        &mut self,
-        visited: &mut HashSet<SolvableId>,
-        favored_map: &HashMap<StringId, SolvableId>,
-        dep: MatchSpecId,
-    ) {
-        let mut candidate_stack = Vec::new();
+    fn add_rules_for_root_dep(&mut self, favored_map: &HashMap<NameId, SolvableId>) {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
 
-        // Gather direct candidates for the dependency
-        {
-            let candidates = Pool::get_candidates(
-                &self.pool.match_specs,
-                &self.pool.strings_to_ids,
-                &self.pool.solvables,
-                &self.pool.packages_by_name,
-                &mut self.pool.match_spec_to_candidates,
-                favored_map,
-                dep,
-            );
-            for &candidate in candidates {
-                if visited.insert(candidate) {
-                    candidate_stack.push(candidate);
-                }
-            }
-        }
+        queue.push_back(SolvableId::root());
 
-        // Process candidates, adding their dependencies recursively
-        while let Some(candidate) = candidate_stack.pop() {
-            let solvable = self.pool.solvables[candidate.index()].package();
+        while let Some(solvable_id) = queue.pop_front() {
+            let (deps, constrains) = match &self.pool.solvables[solvable_id.index()].inner {
+                SolvableInner::Root(deps) => (deps, &[] as &[_]),
+                SolvableInner::Package(pkg) => (&pkg.dependencies, pkg.constrains.as_slice()),
+            };
 
-            // Requires
-            for &dep in &solvable.dependencies {
-                // Ensure the candidates have their rules added
-                let dep_candidates = Pool::get_candidates(
+            // Enqueue the candidates of the dependencies
+            for &dep in deps {
+                let candidates = Pool::get_candidates(
                     &self.pool.match_specs,
-                    &self.pool.strings_to_ids,
+                    &self.pool.names_to_ids,
                     &self.pool.solvables,
                     &self.pool.packages_by_name,
                     &mut self.pool.match_spec_to_candidates,
@@ -229,25 +160,28 @@ impl Solver {
                     dep,
                 );
 
-                for &dep_candidate in dep_candidates {
-                    if visited.insert(dep_candidate) {
-                        candidate_stack.push(dep_candidate);
+                for &candidate in candidates {
+                    // Note: we skip candidates we have already seen
+                    if visited.insert(candidate) {
+                        queue.push_back(candidate);
                     }
                 }
+            }
 
-                // Create requires rule
-                self.rules.push(Rule::new(
-                    RuleKind::Requires(candidate, dep),
+            // Requires
+            for &dep in deps {
+                self.rules.push(RuleState::new(
+                    Rule::Requires(solvable_id, dep),
                     &self.learnt_rules,
                     &self.pool,
                 ));
             }
 
             // Constrains
-            for &dep in &solvable.constrains {
+            for &dep in constrains {
                 let dep_forbidden = Pool::get_forbidden(
                     &self.pool.match_specs,
-                    &self.pool.strings_to_ids,
+                    &self.pool.names_to_ids,
                     &self.pool.solvables,
                     &self.pool.packages_by_name,
                     &mut self.pool.match_spec_to_forbidden,
@@ -256,21 +190,14 @@ impl Solver {
                 .to_vec();
 
                 for dep in dep_forbidden {
-                    self.rules.push(Rule::new(
-                        RuleKind::Constrains(candidate, dep),
+                    self.rules.push(RuleState::new(
+                        Rule::Constrains(solvable_id, dep),
                         &self.learnt_rules,
                         &self.pool,
                     ));
                 }
             }
         }
-
-        // Root has a requirement on this match spec
-        self.rules.push(Rule::new(
-            RuleKind::Requires(SolvableId::root(), dep),
-            &self.learnt_rules,
-            &self.pool,
-        ));
     }
 
     fn run_sat(
@@ -314,7 +241,7 @@ impl Solver {
 
         // Assertions derived from requirements that cannot be fulfilled
         for (i, rule) in self.rules.iter().enumerate() {
-            if let RuleKind::Requires(solvable_id, _) = rule.kind {
+            if let Rule::Requires(solvable_id, _) = rule.kind {
                 if !rule.has_watches() {
                     // A requires rule without watches means it has a single literal (i.e.
                     // there are no candidates)
@@ -350,7 +277,7 @@ impl Solver {
                 i += 1;
 
                 // We are only interested in requires rules
-                let RuleKind::Requires(solvable_id, deps) = rule.kind else {
+                let Rule::Requires(solvable_id, deps) = rule.kind else {
                     continue;
                 };
 
@@ -454,7 +381,7 @@ impl Solver {
                     let level = self.decision_tracker.level(decision.solvable_id);
                     let action = if decision.value { "install" } else { "forbid" };
 
-                    if let RuleKind::ForbidMultipleInstances(..) = rule.kind {
+                    if let Rule::ForbidMultipleInstances(..) = rule.kind {
                         // Skip forbids rules, to reduce noise
                         continue;
                     }
@@ -500,7 +427,7 @@ impl Solver {
         // Learnt assertions
         let learnt_rules_start = self.learnt_rules_start.index();
         for (i, rule) in self.rules[learnt_rules_start..].iter().enumerate() {
-            let RuleKind::Learnt(learnt_index) = rule.kind else {
+            let Rule::Learnt(learnt_index) = rule.kind else {
                 unreachable!();
             };
 
@@ -609,10 +536,9 @@ impl Solver {
 
                         if decided {
                             match rule.kind {
-                                RuleKind::InstallRoot
-                                | RuleKind::Requires(_, _)
-                                | RuleKind::Constrains(_, _)
-                                | RuleKind::Learnt(_) => {
+                                // Skip logging for ForbidMultipleInstances, which is so noisy
+                                Rule::ForbidMultipleInstances(..) => {}
+                                _ => {
                                     println!(
                                         "Propagate {} = {}. {:?}",
                                         self.pool
@@ -622,8 +548,6 @@ impl Solver {
                                         rule.debug(&self.pool),
                                     );
                                 }
-                                // Skip logging for forbids, which is so noisy
-                                RuleKind::ForbidMultipleInstances(..) => {}
                             }
                         }
                     }
@@ -635,7 +559,7 @@ impl Solver {
     }
 
     fn analyze_unsolvable_rule(
-        rules: &[Rule],
+        rules: &[RuleState],
         learnt_why: &[Vec<RuleId>],
         learnt_rules_start: RuleId,
         rule_id: RuleId,
@@ -644,7 +568,7 @@ impl Solver {
     ) {
         let rule = &rules[rule_id.index()];
         match rule.kind {
-            RuleKind::Learnt(..) => {
+            Rule::Learnt(..) => {
                 if !seen.insert(rule_id) {
                     return;
                 }
@@ -674,11 +598,13 @@ impl Solver {
         println!("=== ANALYZE UNSOLVABLE");
 
         let mut involved = HashSet::new();
-        involved.extend(
-            self.rules[rule_id.index()]
-                .literals(&self.learnt_rules, &self.pool)
-                .iter()
-                .map(|l| l.solvable_id),
+        self.rules[rule_id.index()].kind.visit_literals(
+            &self.learnt_rules,
+            &self.pool,
+            |literal| {
+                involved.insert(literal.solvable_id);
+                true
+            },
         );
 
         let mut seen = HashSet::new();
@@ -713,14 +639,19 @@ impl Solver {
                 &mut seen,
             );
 
-            for literal in self.rules[why.index()].literals(&self.learnt_rules, &self.pool) {
-                if literal.eval(self.decision_tracker.map()) == Some(true) {
-                    assert_eq!(literal.solvable_id, decision.solvable_id);
-                    continue;
-                }
+            self.rules[why.index()].kind.visit_literals(
+                &self.learnt_rules,
+                &self.pool,
+                |literal| {
+                    if literal.eval(self.decision_tracker.map()) == Some(true) {
+                        assert_eq!(literal.solvable_id, decision.solvable_id);
+                    } else {
+                        involved.insert(literal.solvable_id);
+                    }
 
-                involved.insert(literal.solvable_id);
-            }
+                    true
+                },
+            );
         }
 
         problem
@@ -739,62 +670,49 @@ impl Solver {
 
         // println!("=== ANALYZE");
 
-        let mut first_iteration = true;
         let mut s_value;
-
         let mut learnt_why = Vec::new();
+        let mut first_iteration = true;
         loop {
             learnt_why.push(rule_id);
 
-            // TODO: we should be able to get rid of the branching, always retrieving the whole list
-            // of literals, since the hash set will ensure we aren't considering the conflicting
-            // solvable after the first iteration
-            let causes = if first_iteration {
-                first_iteration = false;
-                self.rules[rule_id.index()].literals(&self.learnt_rules, &self.pool)
-            } else {
-                self.rules[rule_id.index()].conflict_causes(s, &self.learnt_rules, &self.pool)
-            };
+            self.rules[rule_id.index()].kind.visit_literals(
+                &self.learnt_rules,
+                &self.pool,
+                |literal| {
+                    if !first_iteration && literal.solvable_id == s {
+                        // We are only interested in the causes of the conflict, so we ignore the
+                        // solvable whose value was propagated
+                        return true;
+                    }
 
-            debug_assert!(!causes.is_empty());
+                    if !seen.insert(literal.solvable_id) {
+                        // Skip literals we have already seen
+                        return true;
+                    }
 
-            // print!("level = {current_level}; rule: ");
-            // self.rules[rule_id.index()].debug(&self.pool);
-
-            // Collect literals that imply that `s` should be assigned a given value (triggering a conflict)
-            for cause in causes {
-                if seen.insert(cause.solvable_id) {
-                    let decision_level = self.decision_tracker.level(cause.solvable_id);
-                    // let decision = self
-                    //     .decision_tracker
-                    //     .assigned_value(cause.solvable_id)
-                    //     .unwrap();
-                    // println!(
-                    //     "- {} = {} (level {decision_level})",
-                    //     self.pool.solvables[cause.solvable_id.index()].display(),
-                    //     decision
-                    // );
+                    let decision_level = self.decision_tracker.level(literal.solvable_id);
                     if decision_level == current_level {
                         causes_at_current_level += 1;
                     } else if current_level > 1 {
                         let learnt_literal = Literal {
-                            solvable_id: cause.solvable_id,
+                            solvable_id: literal.solvable_id,
                             negate: self
                                 .decision_tracker
-                                .assigned_value(cause.solvable_id)
+                                .assigned_value(literal.solvable_id)
                                 .unwrap(),
                         };
                         learnt.push(learnt_literal);
                         btlevel = btlevel.max(decision_level);
                     } else {
-                        // A conflict with a decision at level 1 means the problem is unsatisfiable
-                        // (otherwise we would "learn" that the decision at level 1 was wrong, but
-                        // those decisions are either directly provided by [or derived from] the
-                        // user's input)
-                        panic!("unsolvable");
+                        unreachable!();
                     }
-                }
-            }
+
+                    true
+                },
+            );
+
+            first_iteration = false;
 
             // Select next literal to look at
             loop {
@@ -808,7 +726,7 @@ impl Solver {
 
                 // We are interested in the first literal we come across that caused the conflicting
                 // assignment
-                if seen.contains(&s) {
+                if seen.contains(&last_decision.solvable_id) {
                     break;
                 }
             }
@@ -831,11 +749,7 @@ impl Solver {
         self.learnt_rules.push(learnt.clone());
         self.learnt_why.push(learnt_why);
 
-        let mut rule = Rule::new(
-            RuleKind::Learnt(learnt_index),
-            &self.learnt_rules,
-            &self.pool,
-        );
+        let mut rule = RuleState::new(Rule::Learnt(learnt_index), &self.learnt_rules, &self.pool);
 
         if rule.has_watches() {
             self.watches.start_watching(&mut rule, rule_id);
@@ -886,44 +800,55 @@ impl Solver {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::id::RepoId;
     use rattler_conda_types::{PackageRecord, Version};
     use std::str::FromStr;
 
-    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool {
-        let mut pool = Pool::new();
-        let repo_id = pool.new_repo("");
+    fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
+        PackageRecord {
+            arch: None,
+            build: "".to_string(),
+            build_number: 0,
+            constrains: constrains.iter().map(|s| s.to_string()).collect(),
+            depends: deps.iter().map(|s| s.to_string()).collect(),
+            features: None,
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: None,
+            license_family: None,
+            md5: None,
+            name: name.to_string(),
+            noarch: Default::default(),
+            platform: None,
+            sha256: None,
+            size: None,
+            subdir: "".to_string(),
+            timestamp: None,
+            track_features: vec![],
+            version: version.parse().unwrap(),
+        }
+    }
 
+    fn add_package(pool: &mut Pool, record: PackageRecord) {
+        let record = Box::leak(Box::new(record));
+        let solvable_id = pool.add_package(RepoId::new(0), record);
+
+        for dep in &record.depends {
+            pool.add_dependency(solvable_id, dep.to_string());
+        }
+
+        for constrain in &record.constrains {
+            pool.add_constrains(solvable_id, constrain.to_string());
+        }
+    }
+
+    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<'static> {
+        let mut pool = Pool::new();
         for (pkg_name, version, deps) in packages {
             let pkg_name = *pkg_name;
             let version = *version;
-            let record = Box::new(PackageRecord {
-                arch: None,
-                build: "".to_string(),
-                build_number: 0,
-                constrains: vec![],
-                depends: deps.iter().map(|s| s.to_string()).collect(),
-                features: None,
-                legacy_bz2_md5: None,
-                legacy_bz2_size: None,
-                license: None,
-                license_family: None,
-                md5: None,
-                name: pkg_name.to_string(),
-                noarch: Default::default(),
-                platform: None,
-                sha256: None,
-                size: None,
-                subdir: "".to_string(),
-                timestamp: None,
-                track_features: vec![],
-                version: version.parse().unwrap(),
-            });
-
-            let solvable_id = pool.add_package(repo_id, Box::leak(record));
-
-            for &dep in deps {
-                pool.add_dependency(solvable_id, dep.to_string());
-            }
+            let record = package(pkg_name, version, deps, &[]);
+            add_package(&mut pool, record);
         }
 
         pool
@@ -1044,33 +969,14 @@ mod test {
         let mut solver = Solver::new(pool);
         let solved = solver.solve(install(&["asdf", "efgh"])).unwrap();
 
+        use std::fmt::Write;
+        let mut display_result = String::new();
         for &(solvable_id, _) in &solved.steps {
             let solvable = solver.pool().resolve_solvable_inner(solvable_id).display();
-            println!("Install {solvable}");
+            writeln!(display_result, "{solvable}").unwrap();
         }
 
-        assert_eq!(solved.steps.len(), 3);
-
-        let solvable = solver
-            .pool
-            .resolve_solvable_inner(solved.steps[0].0)
-            .package();
-        assert_eq!(solvable.record.name, "conflicting");
-        assert_eq!(solvable.record.version.to_string(), "1.0.0");
-
-        let solvable = solver
-            .pool
-            .resolve_solvable_inner(solved.steps[1].0)
-            .package();
-        assert_eq!(solvable.record.name, "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
-
-        let solvable = solver
-            .pool
-            .resolve_solvable_inner(solved.steps[2].0)
-            .package();
-        assert_eq!(solvable.record.name, "efgh");
-        assert_eq!(solvable.record.version.to_string(), "4.5.7");
+        insta::assert_snapshot!(display_result);
     }
 
     #[test]
@@ -1362,7 +1268,6 @@ mod test {
         insta::assert_snapshot!(error);
     }
 
-    // TODO: this isn't testing for compression yet!
     #[test]
     fn test_unsat_applies_graph_compression() {
         let pool = pool(&[
@@ -1377,6 +1282,24 @@ mod test {
         ]);
 
         let jobs = install(&["A", "C>100"]);
+
+        let error = solve_unsat(pool, jobs);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_unsat_constrains() {
+        let mut pool = pool(&[
+            ("A", "10", vec!["B>=50"]),
+            ("A", "9", vec!["B>=50"]),
+            ("B", "50", vec![]),
+            ("B", "42", vec![]),
+        ]);
+
+        add_package(&mut pool, package("C", "10", &[], &["B<50"]));
+        add_package(&mut pool, package("C", "8", &[], &["B<50"]));
+
+        let jobs = install(&["A", "C"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);

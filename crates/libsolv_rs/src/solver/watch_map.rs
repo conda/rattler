@@ -1,6 +1,6 @@
-use crate::rules::Rule;
-use crate::solvable::SolvableId;
-use crate::solver::RuleId;
+use crate::id::RuleId;
+use crate::id::SolvableId;
+use crate::solver::rule::RuleState;
 
 /// A map from solvables to the rules that are watching them
 pub(crate) struct WatchMap {
@@ -18,7 +18,7 @@ impl WatchMap {
         self.map = vec![RuleId::null(); nsolvables];
     }
 
-    pub(crate) fn start_watching(&mut self, rule: &mut Rule, rule_id: RuleId) {
+    pub(crate) fn start_watching(&mut self, rule: &mut RuleState, rule_id: RuleId) {
         for (watch_index, watched_solvable) in rule.watched_literals.into_iter().enumerate() {
             let already_watching = self.first_rule_watching_solvable(watched_solvable);
             rule.link_to_rule(watch_index, already_watching);
@@ -28,8 +28,8 @@ impl WatchMap {
 
     pub(crate) fn update_watched(
         &mut self,
-        predecessor_rule: Option<&mut Rule>,
-        rule: &mut Rule,
+        predecessor_rule: Option<&mut RuleState>,
+        rule: &mut RuleState,
         rule_id: RuleId,
         watch_index: usize,
         previous_watch: SolvableId,

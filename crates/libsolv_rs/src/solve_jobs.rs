@@ -1,4 +1,4 @@
-use crate::solvable::SolvableId;
+use crate::id::SolvableId;
 use rattler_conda_types::MatchSpec;
 
 #[derive(Default)]

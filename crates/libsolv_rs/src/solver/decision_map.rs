@@ -1,11 +1,11 @@
-use crate::solvable::SolvableId;
+use crate::id::SolvableId;
 use std::cmp::Ordering;
 
-/// Map of all available solvables
+/// A map of the assignments to all solvables
 pub(crate) struct DecisionMap {
     /// = 0: undecided
-    /// > 0: level of decision when installed
-    /// < 0: level of decision when conflict
+    /// > 0: level of decision when the solvable is set to true
+    /// < 0: level of decision when the solvable is set to false
     map: Vec<i64>,
 }
 

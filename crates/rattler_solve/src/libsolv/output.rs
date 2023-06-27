@@ -1,11 +1,13 @@
 //! Contains business logic to retrieve the results from libsolv after attempting to resolve a conda
 //! environment
 
-use libsolv_rs::pool::{Pool, RepoId};
-use libsolv_rs::solvable::SolvableId;
-use libsolv_rs::solver::{Transaction, TransactionKind};
+use libsolv_rs::id::RepoId;
+use libsolv_rs::id::SolvableId;
+use libsolv_rs::pool::Pool;
+use libsolv_rs::transaction::TransactionKind;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
+use libsolv_rs::transaction::Transaction;
 
 /// Returns which packages should be installed in the environment
 ///

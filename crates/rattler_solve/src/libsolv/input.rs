@@ -1,8 +1,9 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use libsolv_rs::pool::{Pool, RepoId};
-use libsolv_rs::solvable::SolvableId;
+use libsolv_rs::id::RepoId;
+use libsolv_rs::id::SolvableId;
+use libsolv_rs::pool::Pool;
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, PackageRecord, RepoDataRecord};
 use std::cmp::Ordering;
@@ -11,10 +12,10 @@ use std::collections::HashMap;
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
-pub fn add_repodata_records(
-    pool: &mut Pool,
+pub fn add_repodata_records<'a>(
+    pool: &mut Pool<'a>,
     repo_id: RepoId,
-    repo_datas: &[RepoDataRecord],
+    repo_datas: &'a [RepoDataRecord],
 ) -> Vec<SolvableId> {
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
@@ -58,15 +59,13 @@ pub fn add_repodata_records(
 /// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool,
+    pool: &mut Pool<'a>,
     repo_id: RepoId,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
     // Sometimes we can reuse an existing solvable
     if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
-        let record_ptr = &repo_data.package_record as *const _;
-
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
             match archive_type.cmp(&other_package_type) {
                 Ordering::Less => {
@@ -82,7 +81,7 @@ fn add_or_reuse_solvable<'a>(
                     package_to_type.insert(filename, (archive_type, old_solvable_id));
 
                     // Reset and reuse the old solvable
-                    pool.reset_package(repo_id, old_solvable_id, unsafe { &*record_ptr });
+                    pool.reset_package(repo_id, old_solvable_id, &repo_data.package_record);
                     return Some(old_solvable_id);
                 }
                 Ordering::Equal => {
@@ -90,7 +89,7 @@ fn add_or_reuse_solvable<'a>(
                 }
             }
         } else {
-            let solvable_id = pool.add_package(repo_id, unsafe { &*record_ptr });
+            let solvable_id = pool.add_package(repo_id, &repo_data.package_record);
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
         }
@@ -98,8 +97,7 @@ fn add_or_reuse_solvable<'a>(
         tracing::warn!("unknown package extension: {}", &repo_data.file_name);
     }
 
-    let record_ptr = &repo_data.package_record as *const _;
-    let solvable_id = pool.add_package(repo_id, unsafe { &*record_ptr });
+    let solvable_id = pool.add_package(repo_id, &repo_data.package_record);
     Some(solvable_id)
 }
 

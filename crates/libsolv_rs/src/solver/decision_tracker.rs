@@ -1,7 +1,9 @@
-use crate::decision_map::DecisionMap;
-use crate::solvable::SolvableId;
-use crate::solver::Decision;
+use crate::id::SolvableId;
+use crate::solver::decision::Decision;
+use crate::solver::decision_map::DecisionMap;
 
+/// Tracks the assignments to solvables, keeping a log that can be used to backtrack, and a map that
+/// can be used to query the current value assigned
 pub(crate) struct DecisionTracker {
     map: DecisionMap,
     stack: Vec<Decision>,
@@ -78,6 +80,9 @@ impl DecisionTracker {
         (decision, self.map.level(top_decision.solvable_id))
     }
 
+    /// Returns the next decision in the log for which unit propagation still needs to run
+    ///
+    /// Side-effect: the decision will be marked as propagated
     pub(crate) fn next_unpropagated(&mut self) -> Option<Decision> {
         let &decision = self.stack[self.propagate_index..].iter().next()?;
         self.propagate_index += 1;

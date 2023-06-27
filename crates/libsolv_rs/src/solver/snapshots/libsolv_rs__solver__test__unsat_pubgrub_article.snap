@@ -1,5 +1,5 @@
 ---
-source: crates/libsolv_rs/src/solver.rs
+source: crates/libsolv_rs/src/solver/mod.rs
 expression: error
 ---
 The following packages are incompatible

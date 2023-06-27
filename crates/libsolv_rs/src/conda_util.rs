@@ -1,5 +1,5 @@
-use crate::pool::StringId;
-use crate::solvable::{Solvable, SolvableId};
+use crate::id::{NameId, SolvableId};
+use crate::solvable::Solvable;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -8,8 +8,8 @@ use std::str::FromStr;
 /// Returns the order of two candidates based on rules used by conda.
 pub(crate) fn compare_candidates(
     solvables: &[Solvable],
-    interned_strings: &HashMap<String, StringId>,
-    packages_by_name: &HashMap<StringId, Vec<SolvableId>>,
+    interned_strings: &HashMap<String, NameId>,
+    packages_by_name: &[Vec<SolvableId>],
     a: &PackageRecord,
     b: &PackageRecord,
 ) -> Ordering {
@@ -116,15 +116,15 @@ pub(crate) fn compare_candidates(
 
 pub(crate) fn find_highest_version(
     solvables: &[Solvable],
-    interned_strings: &HashMap<String, StringId>,
-    packages_by_name: &HashMap<StringId, Vec<SolvableId>>,
+    interned_strings: &HashMap<String, NameId>,
+    packages_by_name: &[Vec<SolvableId>],
     match_spec: &MatchSpec,
 ) -> Option<(Version, bool)> {
     let name = match_spec.name.as_deref().unwrap();
     let name_id = interned_strings[name];
 
     // For each record that matches the spec
-    let candidates = packages_by_name[&name_id]
+    let candidates = packages_by_name[name_id.index()]
         .iter()
         .map(|s| solvables[s.index()].package().record)
         .filter(|s| match_spec.matches(s));

@@ -4,67 +4,19 @@ use std::fmt::Formatter;
 use std::rc::Rc;
 
 use itertools::Itertools;
-use petgraph::graph::{DiGraph, EdgeIndex, NodeIndex};
-use petgraph::visit::{Bfs, EdgeRef};
+use petgraph::graph::{DiGraph, EdgeIndex, EdgeReference, NodeIndex};
+use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
-use crate::pool::{MatchSpecId, Pool};
-use crate::rules::RuleKind;
-use crate::solvable::SolvableId;
-use crate::solver::{RuleId, Solver};
+use crate::id::{MatchSpecId, RuleId, SolvableId};
+use crate::pool::Pool;
+use crate::solver::rule::Rule;
+use crate::solver::Solver;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum ProblemNode {
-    Solvable(SolvableId),
-    UnresolvedDependency,
-}
-
-impl ProblemNode {
-    fn solvable_id(self) -> SolvableId {
-        match self {
-            ProblemNode::Solvable(solvable_id) => solvable_id,
-            ProblemNode::UnresolvedDependency => {
-                panic!("expected solvable node, found unresolved dependency")
-            }
-        }
-    }
-}
-
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub enum ProblemEdge {
-    Requires(MatchSpecId),
-    Conflict(Conflict),
-}
-
-impl ProblemEdge {
-    fn try_requires(self) -> Option<MatchSpecId> {
-        match self {
-            ProblemEdge::Requires(match_spec_id) => Some(match_spec_id),
-            ProblemEdge::Conflict(_) => None,
-        }
-    }
-
-    fn requires(self) -> MatchSpecId {
-        match self {
-            ProblemEdge::Requires(match_spec_id) => match_spec_id,
-            ProblemEdge::Conflict(_) => panic!("expected requires edge, found conflict"),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub enum Conflict {
-    Locked(SolvableId),
-    Constrains(MatchSpecId),
-    ForbidMultipleInstances,
-}
-
-pub struct MergedProblemNode {
-    pub ids: Vec<SolvableId>,
-}
-
+/// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
 pub struct Problem {
+    /// The rules involved in an unsatisfiable conflict
     rules: Vec<RuleId>,
 }
 
@@ -79,8 +31,8 @@ impl Problem {
         }
     }
 
+    /// Generates a graph representation of the problem (see [`ProblemGraph`] for details)
     pub fn graph(&self, solver: &Solver) -> ProblemGraph {
-        println!("=== Build graph");
         let mut graph = DiGraph::<ProblemNode, ProblemEdge>::default();
         let mut nodes: HashMap<SolvableId, NodeIndex> = HashMap::default();
 
@@ -90,9 +42,9 @@ impl Problem {
         for rule_id in &self.rules {
             let rule = &solver.rules[rule_id.index()];
             match rule.kind {
-                RuleKind::InstallRoot => (),
-                RuleKind::Learnt(..) => unreachable!(),
-                RuleKind::Requires(package_id, match_spec_id) => {
+                Rule::InstallRoot => (),
+                Rule::Learnt(..) => unreachable!(),
+                Rule::Requires(package_id, match_spec_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
                     let candidates = solver.pool().match_spec_to_candidates[match_spec_id.index()]
@@ -121,18 +73,19 @@ impl Problem {
                         }
                     }
                 }
-                RuleKind::ForbidMultipleInstances(instance1_id, instance2_id) => {
+                Rule::Lock(locked, forbidden) => {
+                    let node2_id = Self::add_node(&mut graph, &mut nodes, forbidden);
+                    let conflict = Conflict::Locked(locked);
+                    graph.add_edge(root_node, node2_id, ProblemEdge::Conflict(conflict));
+                }
+                Rule::ForbidMultipleInstances(instance1_id, instance2_id) => {
                     let node1_id = Self::add_node(&mut graph, &mut nodes, instance1_id);
                     let node2_id = Self::add_node(&mut graph, &mut nodes, instance2_id);
 
-                    let conflict = if instance1_id.is_root() {
-                        Conflict::Locked(instance2_id)
-                    } else {
-                        Conflict::ForbidMultipleInstances
-                    };
+                    let conflict = Conflict::ForbidMultipleInstances;
                     graph.add_edge(node1_id, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                RuleKind::Constrains(package_id, dep_id) => {
+                Rule::Constrains(package_id, dep_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
                     let dep_node = Self::add_node(&mut graph, &mut nodes, dep_id);
 
@@ -179,7 +132,7 @@ impl Problem {
         ProblemGraph {
             graph,
             root_node,
-            unresolved_dependency_node: unresolved_node,
+            unresolved_node,
         }
     }
 
@@ -193,71 +146,155 @@ impl Problem {
             .or_insert_with(|| graph.add_node(ProblemNode::Solvable(solvable_id)))
     }
 
+    /// Display a user-friendly error explaining the problem
     pub fn display_user_friendly<'a>(&self, solver: &'a Solver) -> DisplayUnsat<'a> {
         let graph = self.graph(solver);
-
-        // TODO: remove
-        graph.graphviz(solver.pool());
-
         DisplayUnsat::new(graph, solver.pool())
     }
 }
 
+/// A node in the graph representation of a [`Problem`]
+#[derive(Copy, Clone, Eq, PartialEq)]
+pub enum ProblemNode {
+    Solvable(SolvableId),
+    UnresolvedDependency,
+}
+
+impl ProblemNode {
+    fn solvable_id(self) -> SolvableId {
+        match self {
+            ProblemNode::Solvable(solvable_id) => solvable_id,
+            ProblemNode::UnresolvedDependency => {
+                panic!("expected solvable node, found unresolved dependency")
+            }
+        }
+    }
+}
+
+/// An edge in the graph representation of a [`Problem`]
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum ProblemEdge {
+    Requires(MatchSpecId),
+    Conflict(Conflict),
+}
+
+impl ProblemEdge {
+    fn try_requires(self) -> Option<MatchSpecId> {
+        match self {
+            ProblemEdge::Requires(match_spec_id) => Some(match_spec_id),
+            ProblemEdge::Conflict(_) => None,
+        }
+    }
+
+    fn requires(self) -> MatchSpecId {
+        match self {
+            ProblemEdge::Requires(match_spec_id) => match_spec_id,
+            ProblemEdge::Conflict(_) => panic!("expected requires edge, found conflict"),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub enum Conflict {
+    Locked(SolvableId),
+    Constrains(MatchSpecId),
+    ForbidMultipleInstances,
+}
+
+/// Represents a node that has been merged with others
+///
+/// Merging is done to simplify error messages, and happens when a group of nodes satisfies the
+/// following criteria:
+///
+/// - They all have the same name
+/// - They all have the same predecessor nodes
+/// - They all have the same successor nodes
+/// - None of them have incoming conflicting edges
+pub struct MergedProblemNode {
+    pub ids: Vec<SolvableId>,
+}
+
+/// Graph representation of [`Problem`]
+///
+/// The root of the graph is the "root solvable". Note that not all the solvable's requirements are
+/// included in the graph, only those that are directly or indirectly involved in the conflict. See
+/// [`ProblemNode`] and [`ProblemEdge`] for the kinds of nodes and edges that make up the graph.
 pub struct ProblemGraph {
     graph: DiGraph<ProblemNode, ProblemEdge>,
     root_node: NodeIndex,
-    unresolved_dependency_node: Option<NodeIndex>,
+    unresolved_node: Option<NodeIndex>,
 }
 
 impl ProblemGraph {
-    fn graphviz(&self, pool: &Pool) {
+    /// Returns a graph in its graphviz representation
+    pub fn graphviz(&self, pool: &Pool, simplify: bool) {
         let graph = &self.graph;
 
+        let merged_nodes = if simplify {
+            self.simplify(pool)
+        } else {
+            HashMap::new()
+        };
+
         println!("digraph {{");
-        let mut bfs = Bfs::new(&graph, self.root_node);
-        while let Some(nx) = bfs.next(&graph) {
-            match graph.node_weight(nx).as_ref().unwrap() {
-                ProblemNode::Solvable(id) => {
-                    let solvable = pool.resolve_solvable_inner(*id);
-                    for edge in graph.edges_directed(nx, Direction::Outgoing) {
-                        let target = *graph.node_weight(edge.target()).unwrap();
+        for nx in graph.node_indices() {
+            let id = match graph.node_weight(nx).as_ref().unwrap() {
+                ProblemNode::Solvable(id) => *id,
+                _ => continue,
+            };
 
-                        let color = match edge.weight() {
-                            ProblemEdge::Requires(_)
-                                if target != ProblemNode::UnresolvedDependency =>
-                            {
-                                "black"
-                            }
-                            _ => "red",
-                        };
-
-                        let label = match edge.weight() {
-                            ProblemEdge::Requires(match_spec_id)
-                            | ProblemEdge::Conflict(Conflict::Constrains(match_spec_id)) => {
-                                pool.resolve_match_spec(*match_spec_id).to_string()
-                            }
-                            ProblemEdge::Conflict(Conflict::ForbidMultipleInstances)
-                            | ProblemEdge::Conflict(Conflict::Locked(_)) => {
-                                "already installed".to_string()
-                            }
-                        };
-
-                        let target = match target {
-                            ProblemNode::Solvable(solvable_2) => pool
-                                .resolve_solvable_inner(solvable_2)
-                                .display()
-                                .to_string(),
-                            ProblemNode::UnresolvedDependency => "unresolved".to_string(),
-                        };
-
-                        println!(
-                            "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
-                            solvable.display(),
-                            target
-                        );
-                    }
+            // If this is a merged node, skip it unless it is the first one in the group
+            if let Some(merged) = merged_nodes.get(&id) {
+                if id != merged.ids[0] {
+                    continue;
                 }
-                ProblemNode::UnresolvedDependency => {}
+            }
+
+            let solvable = pool.resolve_solvable_inner(id);
+            let mut added_edges = HashSet::new();
+            for edge in graph.edges_directed(nx, Direction::Outgoing) {
+                let target = *graph.node_weight(edge.target()).unwrap();
+
+                let color = match edge.weight() {
+                    ProblemEdge::Requires(_) if target != ProblemNode::UnresolvedDependency => {
+                        "black"
+                    }
+                    _ => "red",
+                };
+
+                let label = match edge.weight() {
+                    ProblemEdge::Requires(match_spec_id)
+                    | ProblemEdge::Conflict(Conflict::Constrains(match_spec_id)) => {
+                        pool.resolve_match_spec(*match_spec_id).to_string()
+                    }
+                    ProblemEdge::Conflict(Conflict::ForbidMultipleInstances)
+                    | ProblemEdge::Conflict(Conflict::Locked(_)) => "already installed".to_string(),
+                };
+
+                let target = match target {
+                    ProblemNode::Solvable(mut solvable_2) => {
+                        // If the target node has been merged, replace it by the first id in the group
+                        if let Some(merged) = merged_nodes.get(&solvable_2) {
+                            solvable_2 = merged.ids[0];
+
+                            // Skip the edge if we would be adding a duplicate
+                            if !added_edges.insert(solvable_2) {
+                                continue;
+                            }
+                        }
+
+                        pool.resolve_solvable_inner(solvable_2)
+                            .display()
+                            .to_string()
+                    }
+                    ProblemNode::UnresolvedDependency => "unresolved".to_string(),
+                };
+
+                println!(
+                    "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
+                    solvable.display(),
+                    target
+                );
             }
         }
         println!("}}");
@@ -295,7 +332,7 @@ impl ProblemGraph {
                 .collect();
             let successors: Vec<_> = graph
                 .edges(node_id)
-                .map(|e| (e.target(), *e.weight()))
+                .map(|e| e.target())
                 .sorted_unstable()
                 .collect();
 
@@ -325,84 +362,153 @@ impl ProblemGraph {
     }
 
     fn get_installable_set(&self) -> HashSet<NodeIndex> {
-        let mut non_installable: HashSet<NodeIndex> = HashSet::new();
+        let mut installable = HashSet::new();
 
-        // Definition: a package is installable if all paths from it to the graph's leaves pass
-        // through non-conflicting edges (i.e. each dependency, and each dependency's dependencies,
-        // etc, can be installed)
+        // Definition: a package is installable if it does not have any outgoing conflicting edges
+        // and if each of its dependencies has at least one installable option.
 
-        // Gather the starting set of conflicting edges:
-        // * Edges into the unresolved dependency node
-        // * Edges equal to `ProblemEdge::Conflict`
-        let mut conflicting_edges = Vec::new();
+        // Algorithm: propagate installability bottom-up
+        let mut dfs = DfsPostOrder::new(&self.graph, self.root_node);
+        'outer_loop: while let Some(nx) = dfs.next(&self.graph) {
+            if self.unresolved_node == Some(nx) {
+                // The unresolved node isn't installable
+                continue;
+            }
 
-        if let Some(unresolved_nx) = self.unresolved_dependency_node {
-            conflicting_edges.extend(
-                self.graph
-                    .edges_directed(unresolved_nx, Direction::Incoming),
-            );
+            let outgoing_conflicts = self
+                .graph
+                .edges_directed(nx, Direction::Outgoing)
+                .any(|e| matches!(e.weight(), ProblemEdge::Conflict(_)));
+            if outgoing_conflicts {
+                // Nodes with outgoing conflicts aren't installable
+                continue;
+            }
+
+            // Edges grouped by dependency
+            let dependencies = self
+                .graph
+                .edges_directed(nx, Direction::Outgoing)
+                .map(|e| match e.weight() {
+                    ProblemEdge::Requires(match_spec_id) => (match_spec_id, e.target()),
+                    ProblemEdge::Conflict(_) => unreachable!(),
+                })
+                .group_by(|(&match_spec_id, _)| match_spec_id);
+
+            for (_, mut deps) in &dependencies {
+                if deps.all(|(_, target)| !installable.contains(&target)) {
+                    // No installable options for this dep
+                    continue 'outer_loop;
+                }
+            }
+
+            // The package is installable!
+            installable.insert(nx);
         }
 
-        conflicting_edges.extend(
-            self.graph
-                .edge_references()
-                .filter(|e| matches!(e.weight(), ProblemEdge::Conflict(..))),
-        );
+        installable
+    }
 
-        // Propagate conflicts up the graph
-        while let Some(edge) = conflicting_edges.pop() {
-            let source = edge.source();
-            if non_installable.insert(source) {
-                // Visited for the first time, so make sure the predecessors are also marked as non-installable
-                conflicting_edges.extend(self.graph.edges_directed(source, Direction::Incoming));
+    fn get_missing_set(&self) -> HashSet<NodeIndex> {
+        // Definition: a package is missing if it is not involved in any conflicts, yet it is not
+        // installable
+
+        let mut missing = HashSet::new();
+        match self.unresolved_node {
+            None => return missing,
+            Some(nx) => missing.insert(nx),
+        };
+
+        // Algorithm: propagate missing bottom-up
+        let mut dfs = DfsPostOrder::new(&self.graph, self.root_node);
+        while let Some(nx) = dfs.next(&self.graph) {
+            let outgoing_conflicts = self
+                .graph
+                .edges_directed(nx, Direction::Outgoing)
+                .any(|e| matches!(e.weight(), ProblemEdge::Conflict(_)));
+            if outgoing_conflicts {
+                // Nodes with outgoing conflicts aren't missing
+                continue;
+            }
+
+            // Edges grouped by dependency
+            let dependencies = self
+                .graph
+                .edges_directed(nx, Direction::Outgoing)
+                .map(|e| match e.weight() {
+                    ProblemEdge::Requires(match_spec_id) => (match_spec_id, e.target()),
+                    ProblemEdge::Conflict(_) => unreachable!(),
+                })
+                .group_by(|(&match_spec_id, _)| match_spec_id);
+
+            // Missing if at least one dependency is missing
+            if dependencies
+                .into_iter()
+                .any(|(_, mut deps)| deps.all(|(_, target)| missing.contains(&target)))
+            {
+                missing.insert(nx);
             }
         }
 
-        // Installable packages are all nodes that were not marked as non-installable
-        self.graph
-            .node_indices()
-            .filter(|nx| !non_installable.contains(nx))
-            .collect()
+        missing
     }
 }
 
+/// A struct implementing [`fmt::Display`] that generates a user-friendly representation of a
+/// problem graph
 pub struct DisplayUnsat<'a> {
     graph: ProblemGraph,
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
-    pool: &'a Pool,
+    missing_set: HashSet<NodeIndex>,
+    pool: &'a Pool<'a>,
 }
 
 impl<'a> DisplayUnsat<'a> {
     pub fn new(graph: ProblemGraph, pool: &'a Pool) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
+        let missing_set = graph.get_missing_set();
 
         Self {
             graph,
             merged_candidates,
             installable_set,
+            missing_set,
             pool,
         }
     }
-}
 
-impl fmt::Display for DisplayUnsat<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let graph = &self.graph.graph;
-        let installable_nodes = &self.installable_set;
-        let mut reported: HashSet<SolvableId> = HashSet::new();
+    fn get_indent(depth: usize, top_level_indent: bool) -> String {
+        let depth_correction = if depth > 0 && !top_level_indent { 1 } else { 0 };
 
+        let mut indent = " ".repeat((depth - depth_correction) * 4);
+
+        let display_tree_char = depth != 0 || top_level_indent;
+        if display_tree_char {
+            indent.push_str("|-- ");
+        }
+
+        indent
+    }
+
+    fn fmt_graph(
+        &self,
+        f: &mut Formatter<'_>,
+        top_level_edges: &[EdgeReference<ProblemEdge>],
+        top_level_indent: bool,
+    ) -> fmt::Result {
         pub enum DisplayOp {
             Requirement(MatchSpecId, Vec<EdgeIndex>),
             Candidate(NodeIndex),
         }
 
-        writeln!(f, "The following packages are incompatible")?;
+        let graph = &self.graph.graph;
+        let installable_nodes = &self.installable_set;
+        let mut reported: HashSet<SolvableId> = HashSet::new();
 
         // Note: we are only interested in requires edges here
-        let mut stack = graph
-            .edges(self.graph.root_node)
+        let mut stack = top_level_edges
+            .iter()
             .filter(|e| e.weight().try_requires().is_some())
             .group_by(|e| e.weight().requires())
             .into_iter()
@@ -418,7 +524,7 @@ impl fmt::Display for DisplayUnsat<'_> {
             .map(|(match_spec_id, edges)| (DisplayOp::Requirement(match_spec_id, edges), 0))
             .collect::<Vec<_>>();
         while let Some((node, depth)) = stack.pop() {
-            let indent = " ".repeat(depth * 4);
+            let indent = Self::get_indent(depth, top_level_indent);
 
             match node {
                 DisplayOp::Requirement(match_spec_id, edges) => {
@@ -436,19 +542,19 @@ impl fmt::Display for DisplayUnsat<'_> {
                     if missing {
                         // No candidates for requirement
                         if depth == 0 {
-                            writeln!(f, "{indent}|-- No candidates where found for {req}.")?;
+                            writeln!(f, "{indent}No candidates where found for {req}.")?;
                         } else {
-                            writeln!(f, "{indent}|-- {req}, for which no candidates where found.",)?;
+                            writeln!(f, "{indent}{req}, for which no candidates where found.",)?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
                         if depth == 0 {
                             writeln!(
                                 f,
-                                "|-- {req} can be installed with any of the following options:"
+                                "{indent}{req} can be installed with any of the following options:"
                             )?;
                         } else {
-                            writeln!(f, "{indent}|-- {req}, which can be installed with any of the following options:")?;
+                            writeln!(f, "{indent}{req}, which can be installed with any of the following options:")?;
                         }
 
                         stack.extend(
@@ -467,9 +573,9 @@ impl fmt::Display for DisplayUnsat<'_> {
                     } else {
                         // Package cannot be installed (the conflicting requirement is further down the tree)
                         if depth == 0 {
-                            writeln!(f, "|-- {req} cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{req} cannot be installed because there are no viable options:")?;
                         } else {
-                            writeln!(f, "{indent}|-- {req}, which cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{req}, which cannot be installed because there are no viable options:")?;
                         }
 
                         stack.extend(edges.iter().map(|&e| {
@@ -499,22 +605,48 @@ impl fmt::Display for DisplayUnsat<'_> {
                         solvable.record.version.to_string()
                     };
 
-                    let is_conflict_source = graph
-                        .edges(candidate)
-                        .any(|e| e.weight().try_requires().is_none());
-                    let is_leaf = graph
-                        .edges(candidate)
-                        .next()
-                        .is_none();
+                    let already_installed = graph.edges(candidate).any(|e| {
+                        e.weight() == &ProblemEdge::Conflict(Conflict::ForbidMultipleInstances)
+                    });
+                    let constrains_conflict = graph.edges(candidate).any(|e| {
+                        matches!(e.weight(), ProblemEdge::Conflict(Conflict::Constrains(_)))
+                    });
+                    let is_leaf = graph.edges(candidate).next().is_none();
 
-                    if is_conflict_source {
-                        writeln!(f, "{indent}|-- {} {version}, which conflicts with the versions reported above.", solvable.record.name)?;
-                    } else if is_leaf {
-                        writeln!(f, "{indent}|-- {} {version}", solvable.record.name)?;
+                    if is_leaf {
+                        writeln!(f, "{indent}{} {version}", solvable.record.name)?;
+                    } else if already_installed {
+                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name)?;
+                    } else if constrains_conflict {
+                        let match_specs = graph
+                            .edges(candidate)
+                            .flat_map(|e| match e.weight() {
+                                ProblemEdge::Conflict(Conflict::Constrains(match_spec_id)) => {
+                                    Some(match_spec_id)
+                                }
+                                _ => None,
+                            })
+                            .dedup();
+
+                        writeln!(
+                            f,
+                            "{indent}{} {version} would constrain",
+                            solvable.record.name
+                        )?;
+
+                        let indent = Self::get_indent(depth + 1, top_level_indent);
+                        for &match_spec_id in match_specs {
+                            let match_spec = self.pool.resolve_match_spec(match_spec_id);
+                            writeln!(
+                                f,
+                                "{indent}{} , which conflicts with any installable versions previously reported",
+                                match_spec
+                            )?;
+                        }
                     } else {
                         writeln!(
                             f,
-                            "{indent}|-- {} {version} would require",
+                            "{indent}{} {version} would require",
                             solvable.record.name
                         )?;
                         let requirements = graph
@@ -541,25 +673,47 @@ impl fmt::Display for DisplayUnsat<'_> {
             }
         }
 
-        // Report conflicts caused by locked dependencies
-        for e in graph.edges(self.graph.root_node) {
-            let conflict = match e.weight() {
-                ProblemEdge::Requires(_) => continue,
-                ProblemEdge::Conflict(conflict) => conflict,
-            };
+        Ok(())
+    }
+}
 
-            // The only possible conflict at the root level is a Locked conflict
-            let locked_id = match conflict {
-                Conflict::Constrains(_) | Conflict::ForbidMultipleInstances => unreachable!(),
-                &Conflict::Locked(solvable_id) => solvable_id,
-            };
+impl fmt::Display for DisplayUnsat<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let (top_level_missing, top_level_conflicts): (Vec<_>, _) = self
+            .graph
+            .graph
+            .edges(self.graph.root_node)
+            .partition(|e| self.missing_set.contains(&e.target()));
 
-            let locked = self.pool.resolve_solvable(locked_id);
-            writeln!(
-                f,
-                "|-- {} {} is locked, but another version is required as reported above",
-                locked.record.name, locked.record.version
-            )?;
+        if !top_level_missing.is_empty() {
+            self.fmt_graph(f, &top_level_missing, false)?;
+        }
+
+        if !top_level_conflicts.is_empty() {
+            writeln!(f, "The following packages are incompatible")?;
+            self.fmt_graph(f, &top_level_conflicts, true)?;
+
+            // Conflicts caused by locked dependencies
+            let indent = Self::get_indent(0, true);
+            for e in self.graph.graph.edges(self.graph.root_node) {
+                let conflict = match e.weight() {
+                    ProblemEdge::Requires(_) => continue,
+                    ProblemEdge::Conflict(conflict) => conflict,
+                };
+
+                // The only possible conflict at the root level is a Locked conflict
+                let locked_id = match conflict {
+                    Conflict::Constrains(_) | Conflict::ForbidMultipleInstances => unreachable!(),
+                    &Conflict::Locked(solvable_id) => solvable_id,
+                };
+
+                let locked = self.pool.resolve_solvable(locked_id);
+                writeln!(
+                    f,
+                    "{indent}{} {} is locked, but another version is required as reported above",
+                    locked.record.name, locked.record.version
+                )?;
+            }
         }
 
         Ok(())
