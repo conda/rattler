@@ -390,8 +390,10 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use activation::PathModificationBehaviour;
     use tempdir::TempDir;
+
+    #[cfg(unix)]
+    use activation::PathModificationBehaviour;
 
     #[test]
     fn test_collect_scripts() {
