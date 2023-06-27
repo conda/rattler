@@ -629,6 +629,10 @@ impl Component {
     pub fn is_dev(&self) -> bool {
         matches!(self, Component::Dev)
     }
+
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Component::Numeral(_))
+    }
 }
 
 impl From<u64> for Component {

@@ -1,5 +1,13 @@
 use super::{Component, Version};
-use crate::version::{LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
+use crate::version::{EPOCH_MASK, LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
+use nom::branch::alt;
+use nom::bytes::complete::{tag_no_case, take_while1};
+use nom::character::complete::{alpha1, char, one_of, u64 as parse_u64};
+use nom::character::is_alphanumeric;
+use nom::combinator::{cut, eof, map, opt, peek, value};
+use nom::error::{context, ContextError, ParseError};
+use nom::sequence::{pair, preceded, terminated};
+use nom::{IResult, Parser};
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -77,6 +85,148 @@ pub enum ParseVersionErrorKind {
     TooManySegments,
     /// Too many segments.
     TooManyComponentsInASegment,
+}
+
+/// Parses the epoch part of a version. This is a number followed by `'!'` at the start of the
+/// version string.
+pub fn epoch_parser<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, u64, E> {
+    terminated(parse_u64, char('!'))(input)
+}
+
+/// Parses a single version [`Component`].
+fn component_parser<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Component, E> {
+    alt((
+        // Parse a numeral
+        map(parse_u64, Component::Numeral),
+        // Parse special case components
+        value(Component::Post, tag_no_case("post")),
+        value(Component::Dev, tag_no_case("dev")),
+        // Parse an identifier
+        map(alpha1, |alpha: &'i str| {
+            Component::Iden(alpha.to_lowercase().into_boxed_str())
+        }),
+        // Parse a `_` at the end of the string.
+        map(terminated(char('_'), eof), |_| {
+            Component::Iden(String::from("_").into_boxed_str())
+        }),
+    ))(input)
+}
+
+/// Parses a version segment from a list of components.
+fn segment_parser<'i, 'c, E: ParseError<&'i str> + ContextError<&'i str>>(
+    components: &'c mut SmallVec<[Component; 3]>,
+) -> impl Parser<&'i str, u16, E> + 'c {
+    move |input| {
+        // Parse the first component of the segment
+        let (input, first_component) = context("version component", component_parser)(input)?;
+
+        // If the first component is not numeric we add a default component since each segment must
+        // always start with a number.
+        let mut segment_length = 0;
+        if !first_component.is_numeric() {
+            components.push(Component::default());
+            segment_length += 1;
+        }
+
+        // Add the first component
+        components.push(first_component);
+        segment_length += 1;
+
+        // Loop until we can't find any more components
+        loop {
+            let (input, component) = match opt(component_parser)(input) {
+                Ok((i, o)) => (i, o),
+                Err(e) => {
+                    // Remove any components that we may have added.
+                    components.drain(components.len() - segment_length..);
+                    return Err(e);
+                }
+            };
+            match component {
+                Some(component) => {
+                    components.push(component);
+                    segment_length += 1;
+                }
+                None => {
+                    break Ok((input, segment_length.try_into().unwrap()));
+                }
+            }
+        }
+    }
+}
+
+pub fn version_parser<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+    input: &'i str,
+) -> IResult<&'i str, Version, E> {
+    let mut components = SmallVec::default();
+    let mut segment_lengths = SmallVec::default();
+    let mut flags = 0u8;
+
+    // Parse an optional epoch.
+    let (input, epoch) = context("epoch", opt(epoch_parser))(input)?;
+    if let Some(epoch) = epoch {
+        components.push(epoch.into());
+        flags |= EPOCH_MASK;
+    }
+
+    // Scan the input to find the version segments.
+    let (input, common_part) = recognize_segments(input)?;
+    let (rest, local_part) = opt(preceded(
+        char('+'),
+        context("local", cut(recognize_segments)),
+    ))(input)?;
+
+    // Parse the first segment of the version. It must exists.
+    let (input, first_segment_length) =
+        context("segment", segment_parser(&mut components))(common_part)?;
+    segment_lengths.push(first_segment_length);
+
+    // Parse the rest of the segments
+    let mut dash_or_underscore = None;
+    let input = loop {
+        // Determine the seperator that is allowed between segments. Initially any separator is
+        // allowed but if a `-` is encountered then `_` cannot be used anymore.
+        let allowed_seperators = match dash_or_underscore {
+            Some(char) => ['.', char, char],
+            None => ['.', '_', '-'],
+        };
+
+        // Parse a separator and another segment
+        let (rest, opt_segment) = opt(pair(
+            one_of(allowed_seperators.as_slice()),
+            cut(segment_parser(&mut components)),
+        ))(input)?;
+        let (separator, segment_length) = match opt_segment {
+            Some(next_segment) => next_segment,
+            None => break rest,
+        };
+
+        // Update allowed separator
+        match separator {
+            '-' => dash_or_underscore = Some('-'),
+            '_' => dash_or_underscore = Some('_'),
+            _ => {}
+        }
+
+        segment_lengths.push(segment_length);
+    };
+
+    return Ok((
+        rest,
+        Version {
+            norm: None,
+            flags,
+            components,
+            segment_lengths,
+        },
+    ));
+
+    /// A helper function to crudely recognize version segments.
+    fn recognize_segments<'i, E: ParseError<&'i str>>(
+        input: &'i str,
+    ) -> IResult<&'i str, &'i str, E> {
+        take_while1(|c: char| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')(input)
+    }
 }
 
 /// Returns true if the specified char is a valid char for a version string.
@@ -263,5 +413,39 @@ impl FromStr for Version {
             segment_lengths: segments,
             components,
         })
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::version::{parse::version_parser, Version};
+    use nom::combinator::all_consuming;
+    use serde::Serialize;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn test_parse() {
+        let versions = ["1!1.2a.3-rc1"];
+
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum VersionOrError {
+            Version(Version),
+            Error(String),
+        }
+
+        let mut index_map: BTreeMap<String, VersionOrError> = BTreeMap::default();
+        for version in versions {
+            let version_or_error = match all_consuming(version_parser)(version) {
+                Ok((_, version)) => VersionOrError::Version(version),
+                Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+                    VersionOrError::Error(nom::error::convert_error(version, e))
+                }
+                _ => unreachable!(),
+            };
+            index_map.insert(version.to_owned(), version_or_error);
+        }
+
+        insta::assert_yaml_snapshot!(index_map);
     }
 }
