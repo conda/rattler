@@ -1,0 +1,31 @@
+---
+source: crates/rattler_conda_types/src/version/parse.rs
+assertion_line: 470
+expression: index_map
+---
+{
+    "1!1.2a.3-rc1": Version(
+        Version {
+            norm: None,
+            version: "[[1], [1], [2, a], [3], [0, rc, 1]]",
+            local: "[]",
+        },
+    ),
+    "1_": Version(
+        Version {
+            norm: None,
+            version: "[[0], [1, _]]",
+            local: "[]",
+        },
+    ),
+    "1__": Version(
+        Version {
+            norm: None,
+            version: "[[0], [1], [0, _]]",
+            local: "[]",
+        },
+    ),
+    "1___": Error(
+        "0: at line 1, in Fail:\n1___\n  ^\n\n",
+    ),
+}

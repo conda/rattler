@@ -5,7 +5,7 @@ use nom::bytes::complete::{tag_no_case, take_while1};
 use nom::character::complete::{alpha1, char, one_of, u64 as parse_u64};
 use nom::character::is_alphanumeric;
 use nom::combinator::{cut, eof, map, opt, peek, value};
-use nom::error::{context, ContextError, ParseError};
+use nom::error::{context, ContextError, ErrorKind, FromExternalError, ParseError};
 use nom::sequence::{pair, preceded, terminated};
 use nom::{IResult, Parser};
 use smallvec::SmallVec;
@@ -94,7 +94,12 @@ pub fn epoch_parser<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i s
 }
 
 /// Parses a single version [`Component`].
-fn component_parser<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i str, Component, E> {
+fn component_parser<
+    'i,
+    E: ParseError<&'i str> + FromExternalError<&'i str, ParseVersionErrorKind>,
+>(
+    input: &'i str,
+) -> IResult<&'i str, Component, E> {
     alt((
         // Parse a numeral
         map(parse_u64, Component::Numeral),
@@ -113,12 +118,26 @@ fn component_parser<'i, E: ParseError<&'i str>>(input: &'i str) -> IResult<&'i s
 }
 
 /// Parses a version segment from a list of components.
-fn segment_parser<'i, 'c, E: ParseError<&'i str> + ContextError<&'i str>>(
+fn segment_parser<
+    'i,
+    'c,
+    E: ParseError<&'i str> + FromExternalError<&'i str, ParseVersionErrorKind>,
+>(
     components: &'c mut SmallVec<[Component; 3]>,
 ) -> impl Parser<&'i str, u16, E> + 'c {
     move |input| {
         // Parse the first component of the segment
-        let (input, first_component) = context("version component", component_parser)(input)?;
+        let (mut rest, first_component) = opt(component_parser)(input)?;
+        let first_component = match first_component {
+            Some(first_component) => first_component,
+            None => {
+                return Err(nom::Err::Error(E::from_external_error(
+                    input,
+                    ErrorKind::Fail,
+                    ParseVersionErrorKind::EmptyVersionComponent,
+                )))
+            }
+        };
 
         // If the first component is not numeric we add a default component since each segment must
         // always start with a number.
@@ -134,7 +153,7 @@ fn segment_parser<'i, 'c, E: ParseError<&'i str> + ContextError<&'i str>>(
 
         // Loop until we can't find any more components
         loop {
-            let (input, component) = match opt(component_parser)(input) {
+            let (remaining, component) = match opt(component_parser)(rest) {
                 Ok((i, o)) => (i, o),
                 Err(e) => {
                     // Remove any components that we may have added.
@@ -148,14 +167,18 @@ fn segment_parser<'i, 'c, E: ParseError<&'i str> + ContextError<&'i str>>(
                     segment_length += 1;
                 }
                 None => {
-                    break Ok((input, segment_length.try_into().unwrap()));
+                    break Ok((remaining, segment_length.try_into().unwrap()));
                 }
             }
+            rest = remaining;
         }
     }
 }
 
-pub fn version_parser<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
+pub fn version_parser<
+    'i,
+    E: ParseError<&'i str> + ContextError<&'i str> + FromExternalError<&'i str, ParseVersionErrorKind>,
+>(
     input: &'i str,
 ) -> IResult<&'i str, Version, E> {
     let mut components = SmallVec::default();
@@ -170,45 +193,44 @@ pub fn version_parser<'i, E: ParseError<&'i str> + ContextError<&'i str>>(
     }
 
     // Scan the input to find the version segments.
-    let (input, common_part) = recognize_segments(input)?;
+    let (rest, mut common_part) = recognize_segments(input)?;
     let (rest, local_part) = opt(preceded(
         char('+'),
         context("local", cut(recognize_segments)),
-    ))(input)?;
+    ))(rest)?;
 
     // Parse the first segment of the version. It must exists.
-    let (input, first_segment_length) =
+    let (mut common_part, first_segment_length) =
         context("segment", segment_parser(&mut components))(common_part)?;
     segment_lengths.push(first_segment_length);
 
     // Parse the rest of the segments
     let mut dash_or_underscore = None;
-    let input = loop {
-        // Determine the seperator that is allowed between segments. Initially any separator is
-        // allowed but if a `-` is encountered then `_` cannot be used anymore.
-        let allowed_seperators = match dash_or_underscore {
-            Some(char) => ['.', char, char],
-            None => ['.', '_', '-'],
-        };
-
+    let common_part_remaining = loop {
         // Parse a separator and another segment
-        let (rest, opt_segment) = opt(pair(
-            one_of(allowed_seperators.as_slice()),
-            cut(segment_parser(&mut components)),
-        ))(input)?;
+        let (rest, opt_segment) =
+            opt(pair(one_of(".-_"), cut(segment_parser(&mut components))))(common_part)?;
         let (separator, segment_length) = match opt_segment {
             Some(next_segment) => next_segment,
             None => break rest,
         };
 
-        // Update allowed separator
-        match separator {
-            '-' => dash_or_underscore = Some('-'),
-            '_' => dash_or_underscore = Some('_'),
+        // Make sure dashes and underscores are not mixed.
+        match (dash_or_underscore, separator) {
+            (None, '-') => dash_or_underscore = Some('-'),
+            (None, '_') => dash_or_underscore = Some('_'),
+            (Some('-'), '_') | (Some('-'), '-') => {
+                return Err(nom::Err::Error(E::from_external_error(
+                    &common_part[..1],
+                    ErrorKind::Fail,
+                    ParseVersionErrorKind::InvalidCharacters,
+                )))
+            }
             _ => {}
         }
 
         segment_lengths.push(segment_length);
+        common_part = rest;
     };
 
     return Ok((
@@ -425,10 +447,9 @@ mod test {
 
     #[test]
     fn test_parse() {
-        let versions = ["1!1.2a.3-rc1"];
+        let versions = ["1!1.2a.3-rc1", "1_", "1__", "1___"];
 
-        #[derive(Serialize)]
-        #[serde(untagged)]
+        #[derive(Debug)]
         enum VersionOrError {
             Version(Version),
             Error(String),
@@ -446,6 +467,6 @@ mod test {
             index_map.insert(version.to_owned(), version_or_error);
         }
 
-        insta::assert_yaml_snapshot!(index_map);
+        insta::assert_debug_snapshot!(index_map);
     }
 }
