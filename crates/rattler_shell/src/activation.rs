@@ -3,7 +3,6 @@
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
 use std::ffi::OsStr;
-use std::fmt::Write;
 use std::{
     fs,
     path::{Path, PathBuf},
