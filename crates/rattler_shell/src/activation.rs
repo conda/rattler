@@ -386,14 +386,15 @@ impl<T: Shell + Clone> Activator<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{activation, shell};
+    use crate::shell;
     use std::str::FromStr;
 
     use super::*;
     use tempdir::TempDir;
 
     #[cfg(unix)]
-    use activation::PathModificationBehaviour;
+    use crate::activation::PathModificationBehaviour;
+
 
     #[test]
     fn test_collect_scripts() {
