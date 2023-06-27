@@ -567,7 +567,17 @@ mod tests {
             shell::PowerShell::default(),
             PathModificationBehaviour::Append,
         );
-        insta::assert_snapshot!(script);
+        insta::assert_snapshot!("test_activation_script_powershell_append", script);
+        let script = get_script(
+            shell::PowerShell::default(),
+            PathModificationBehaviour::Prepend,
+        );
+        insta::assert_snapshot!("test_activation_script_powershell_prepend", script);
+        let script = get_script(
+            shell::PowerShell::default(),
+            PathModificationBehaviour::Replace,
+        );
+        insta::assert_snapshot!("test_activation_script_powershell_replace", script);
     }
 
     #[test]
