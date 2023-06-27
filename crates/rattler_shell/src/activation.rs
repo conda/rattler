@@ -395,7 +395,6 @@ mod tests {
     #[cfg(unix)]
     use crate::activation::PathModificationBehaviour;
 
-
     #[test]
     fn test_collect_scripts() {
         let tdir = TempDir::new("test").unwrap();
