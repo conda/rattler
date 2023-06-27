@@ -362,6 +362,7 @@ impl<T: Shell + Clone> Activator<T> {
                 &mut script,
                 path.as_slice(),
                 variables.path_modification_behaviour,
+                &self.platform,
             )
             .map_err(ActivationError::FailedToWriteActivationScript)?;
 
