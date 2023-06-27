@@ -326,12 +326,6 @@ impl<T: Shell + Clone> Activator<T> {
     ) -> Result<ActivationResult, ActivationError> {
         let mut script = String::new();
 
-        // Add shebang on unix systems to activation script.
-        if self.platform.is_unix() {
-            writeln!(script, "#!/bin/sh")
-                .map_err(ActivationError::FailedToWriteActivationScript)?;
-        }
-
         let mut path = variables.path.clone().unwrap_or_default();
         if let Some(conda_prefix) = variables.conda_prefix {
             let deactivate = Activator::from_path(
