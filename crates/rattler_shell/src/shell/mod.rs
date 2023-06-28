@@ -3,6 +3,7 @@
 use crate::activation::PathModificationBehaviour;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
+use rattler_conda_types::Platform;
 use std::process::Command;
 use std::{
     fmt::Write,
@@ -52,6 +53,7 @@ pub trait Shell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behaviour: PathModificationBehaviour,
+        platform: &Platform,
     ) -> std::fmt::Result {
         let mut paths_vec = paths
             .iter()
@@ -64,7 +66,7 @@ pub trait Shell {
             PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator());
+        let paths_string = paths_vec.join(self.path_seperator(platform));
 
         self.set_env_var(f, "PATH", paths_string.as_str())
     }
@@ -79,8 +81,12 @@ pub trait Shell {
     fn create_run_script_command(&self, path: &Path) -> Command;
 
     /// Path seperator
-    fn path_seperator(&self) -> &str {
-        ":"
+    fn path_seperator(&self, platform: &Platform) -> &str {
+        if platform.is_unix() {
+            ":"
+        } else {
+            ";"
+        }
     }
 
     /// Format the environment variable for the shell.
@@ -138,6 +144,7 @@ impl Shell for Bash {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behaviour: PathModificationBehaviour,
+        platform: &Platform,
     ) -> std::fmt::Result {
         // Put paths in a vector of the correct format.
         let mut paths_vec = paths
@@ -159,7 +166,7 @@ impl Shell for Bash {
             PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator());
+        let paths_string = paths_vec.join(self.path_seperator(platform));
 
         self.set_env_var(f, "PATH", paths_string.as_str())
     }
@@ -289,10 +296,6 @@ impl Shell for CmdExe {
         cmd
     }
 
-    fn path_seperator(&self) -> &str {
-        ";"
-    }
-
     fn format_env_var(&self, var_name: &str) -> String {
         format!("%{var_name}%")
     }
@@ -329,10 +332,6 @@ impl Shell for PowerShell {
         let mut cmd = Command::new(self.executable());
         cmd.arg(path);
         cmd
-    }
-
-    fn path_seperator(&self) -> &str {
-        ";"
     }
 
     fn format_env_var(&self, var_name: &str) -> String {
@@ -487,14 +486,17 @@ pub struct ShellScript<T: Shell> {
     shell: T,
     /// The contents of the script.
     pub contents: String,
+    /// The platform for which the script will be generated
+    platform: Platform,
 }
 
 impl<T: Shell> ShellScript<T> {
     /// Create a new [`ShellScript`] for the given shell.
-    pub fn new(shell: T) -> Self {
+    pub fn new(shell: T, platform: Platform) -> Self {
         Self {
             shell,
             contents: String::new(),
+            platform,
         }
     }
 
@@ -517,7 +519,12 @@ impl<T: Shell> ShellScript<T> {
     /// Set the PATH environment variable to the given paths.
     pub fn set_path(&mut self, paths: &[PathBuf]) -> &mut Self {
         self.shell
-            .set_path(&mut self.contents, paths, PathModificationBehaviour::Append)
+            .set_path(
+                &mut self.contents,
+                paths,
+                PathModificationBehaviour::Prepend,
+                &self.platform,
+            )
             .unwrap();
         self
     }
@@ -537,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash);
+        let mut script = ShellScript::new(Bash, Platform::Linux64);
 
         script
             .set_env_var("FOO", "bar")
@@ -558,5 +565,16 @@ mod tests {
     fn test_from_env() {
         let shell = ShellEnum::from_env();
         println!("Detected shell: {:?}", shell);
+    }
+
+    #[test]
+    fn test_path_seperator() {
+        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        assert!(script.contents.contains("/foo:/bar"));
+
+        let mut script = ShellScript::new(Bash, Platform::Win64);
+        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        assert!(script.contents.contains("/foo;/bar"));
     }
 }
