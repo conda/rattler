@@ -39,7 +39,7 @@ impl SolverBackend for LibsolvBackend {
         let mut pool = Pool::new();
 
         // Add virtual packages
-        let repo_id = pool.new_repo("virtual_packages");
+        let repo_id = pool.new_repo();
         add_virtual_packages(&mut pool, repo_id, &task.virtual_packages);
 
         // Create repos for all channel + platform combinations
@@ -50,8 +50,7 @@ impl SolverBackend for LibsolvBackend {
                 continue;
             }
 
-            let channel_name = &repodata.records[0].channel;
-            let repo_id = pool.new_repo(channel_name);
+            let repo_id = pool.new_repo();
             add_repodata_records(&mut pool, repo_id, repodata.records);
 
             // Keep our own info about repodata_records
@@ -60,7 +59,7 @@ impl SolverBackend for LibsolvBackend {
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo_id = pool.new_repo("locked");
+        let repo_id = pool.new_repo();
         let installed_solvables = add_repodata_records(&mut pool, repo_id, &task.locked_packages);
 
         // Also add the installed records to the repodata
@@ -68,7 +67,7 @@ impl SolverBackend for LibsolvBackend {
         all_repodata_records.push(&task.locked_packages);
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo_id = pool.new_repo("pinned");
+        let repo_id = pool.new_repo();
         let pinned_solvables = add_repodata_records(&mut pool, repo_id, &task.pinned_packages);
 
         // Also add the installed records to the repodata

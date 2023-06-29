@@ -6,7 +6,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::str::FromStr;
 
-/// A pool for interning data related to the available packages
+/// A pool that stores data related to the available packages
 pub struct Pool<'a> {
     /// All the solvables that have been registered
     pub(crate) solvables: Vec<Solvable<'a>>,
@@ -67,7 +67,7 @@ impl<'a> Pool<'a> {
         id
     }
 
-    /// Adds a new solvable to a repo and returns it's [`SolvableId`]
+    /// Adds a package to a repo and returns it's [`SolvableId`]
     pub fn add_package(&mut self, repo_id: RepoId, record: &'a PackageRecord) -> SolvableId {
         assert!(self.solvables.len() <= u32::MAX as usize);
 
@@ -82,14 +82,21 @@ impl<'a> Pool<'a> {
         solvable_id
     }
 
-    /// Resets the solvable associated to the id, and assigns the provided package to it
+    /// Resets the package associated to the id, as though it had just been created using
+    /// [`Pool::add_package`]
+    ///
+    /// Panics if the new package has a different name than the existing package
     pub fn reset_package(
         &mut self,
         repo_id: RepoId,
         solvable_id: SolvableId,
         record: &'a PackageRecord,
     ) {
+        assert!(!solvable_id.is_root());
+
         let name = self.intern_package_name(&record.name);
+        assert_ne!(self.solvables[solvable_id.index()].package().name, name);
+
         self.solvables[solvable_id.index()] = Solvable::new_package(repo_id, name, record);
     }
 
@@ -105,26 +112,6 @@ impl<'a> Pool<'a> {
         let match_spec_id = self.intern_matchspec(match_spec);
         let solvable = self.solvables[solvable_id.index()].package_mut();
         solvable.constrains.push(match_spec_id);
-    }
-
-    pub(crate) fn intern_matchspec(&mut self, match_spec: String) -> MatchSpecId {
-        let next_index = self.match_specs.len();
-        match self.match_specs_to_ids.entry(match_spec) {
-            Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => {
-                // println!("Interning match_spec: {}", entry.key());
-                self.match_specs
-                    .push(MatchSpec::from_str(entry.key()).unwrap());
-                self.match_spec_to_candidates.push(None);
-                self.match_spec_to_forbidden.push(None);
-
-                // Update the entry
-                let id = MatchSpecId::new(next_index);
-                entry.insert(id);
-
-                id
-            }
-        }
     }
 
     // This function does not take `self`, because otherwise we run into problems with borrowing
@@ -211,7 +198,35 @@ impl<'a> Pool<'a> {
         candidates.as_slice()
     }
 
-    /// Interns package names into a `Pool` returning a `NameId`
+    /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
+    pub(crate) fn intern_matchspec(&mut self, match_spec: String) -> MatchSpecId {
+        let next_index = self.match_specs.len();
+        match self.match_specs_to_ids.entry(match_spec) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
+                // println!("Interning match_spec: {}", entry.key());
+                self.match_specs
+                    .push(MatchSpec::from_str(entry.key()).unwrap());
+                self.match_spec_to_candidates.push(None);
+                self.match_spec_to_forbidden.push(None);
+
+                // Update the entry
+                let id = MatchSpecId::new(next_index);
+                entry.insert(id);
+
+                id
+            }
+        }
+    }
+
+    /// Resolves the id to a match spec
+    ///
+    /// Panics if the match spec is not found in the pool
+    pub fn resolve_match_spec(&self, id: MatchSpecId) -> &MatchSpec {
+        &self.match_specs[id.index()]
+    }
+
+    /// Interns a package name into the `Pool`, returning its `NameId`
     fn intern_package_name<T: Into<String>>(&mut self, str: T) -> NameId {
         let next_id = NameId::new(self.names_to_ids.len());
         match self.names_to_ids.entry(str.into()) {
@@ -225,7 +240,7 @@ impl<'a> Pool<'a> {
         }
     }
 
-    /// Returns the package name corresponding to the provided id
+    /// Resolves the id to a package name
     ///
     /// Panics if the package name is not found in the pool
     pub fn resolve_package_name(&self, name_id: NameId) -> &str {
@@ -268,10 +283,7 @@ impl<'a> Pool<'a> {
         }
     }
 
-    pub fn resolve_match_spec(&self, id: MatchSpecId) -> &MatchSpec {
-        &self.match_specs[id.index()]
-    }
-
+    /// Returns the dependencies associated to the root solvable
     pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<MatchSpecId> {
         self.solvables[0].root_mut()
     }
