@@ -150,7 +150,7 @@ impl<'a> Solver<'a> {
         let empty_vec = Vec::new();
 
         while let Some(solvable_id) = stack.pop() {
-            let (deps, constrains) = match &self.pool.solvables[solvable_id.index()].inner {
+            let (deps, constrains) = match &self.pool.solvables[solvable_id].inner {
                 SolvableInner::Root(deps) => (deps, &[] as &[_]),
                 SolvableInner::Package(pkg) => (&pkg.dependencies, pkg.constrains.as_slice()),
             };
@@ -1013,6 +1013,7 @@ mod test {
 
         let locked = pool
             .solvables
+            .as_slice()
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
@@ -1046,6 +1047,7 @@ mod test {
 
         let locked = pool
             .solvables
+            .as_slice()
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
@@ -1087,6 +1089,7 @@ mod test {
         // Already installed: A=1; B=1
         let already_installed = pool
             .solvables
+            .as_slice()
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
@@ -1123,6 +1126,7 @@ mod test {
         // Already installed: A=1; B=1; C=1
         let already_installed = pool
             .solvables
+            .as_slice()
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable

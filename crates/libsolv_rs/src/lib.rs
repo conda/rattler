@@ -1,3 +1,4 @@
+mod arena;
 mod conda_util;
 pub mod id;
 pub mod pool;

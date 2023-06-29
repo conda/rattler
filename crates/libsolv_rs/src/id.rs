@@ -1,3 +1,5 @@
+use crate::arena::ArenaId;
+
 #[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct RepoId(u32);
@@ -42,9 +44,7 @@ pub struct SolvableId(u32);
 
 impl SolvableId {
     pub(crate) fn new(index: usize) -> Self {
-        debug_assert_ne!(index, 0);
         debug_assert_ne!(index, u32::MAX as usize);
-
         Self(index as u32)
     }
 
@@ -66,6 +66,16 @@ impl SolvableId {
 
     pub(crate) fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl ArenaId for SolvableId {
+    fn from_usize(x: usize) -> Self {
+        SolvableId::new(x)
+    }
+
+    fn to_usize(self) -> usize {
+        self.index()
     }
 }
 

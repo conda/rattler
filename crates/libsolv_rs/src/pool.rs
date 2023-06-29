@@ -1,3 +1,4 @@
+use crate::arena::Arena;
 use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::solvable::{PackageSolvable, Solvable};
@@ -12,7 +13,7 @@ use std::str::FromStr;
 /// from the original `PackageRecord`s)
 pub struct Pool<'a> {
     /// All the solvables that have been registered
-    pub(crate) solvables: Vec<Solvable<'a>>,
+    pub(crate) solvables: Arena<SolvableId, Solvable<'a>>,
 
     /// The total amount of registered repos
     total_repos: u32,
@@ -41,8 +42,11 @@ pub struct Pool<'a> {
 
 impl<'a> Default for Pool<'a> {
     fn default() -> Self {
+        let mut solvables = Arena::new();
+        solvables.alloc(Solvable::new_root());
+
         Self {
-            solvables: vec![Solvable::new_root()],
+            solvables,
             total_repos: 0,
 
             names_to_ids: HashMap::new(),
@@ -76,9 +80,9 @@ impl<'a> Pool<'a> {
 
         let name = self.intern_package_name(&record.name);
 
-        let solvable_id = SolvableId::new(self.solvables.len());
-        self.solvables
-            .push(Solvable::new_package(repo_id, name, record));
+        let solvable_id = self
+            .solvables
+            .alloc(Solvable::new_package(repo_id, name, record));
 
         self.packages_by_name[name.index()].push(solvable_id);
 
@@ -98,22 +102,22 @@ impl<'a> Pool<'a> {
         assert!(!solvable_id.is_root());
 
         let name = self.intern_package_name(&record.name);
-        assert_eq!(self.solvables[solvable_id.index()].package().name, name);
+        assert_eq!(self.solvables[solvable_id].package().name, name);
 
-        self.solvables[solvable_id.index()] = Solvable::new_package(repo_id, name, record);
+        self.solvables[solvable_id] = Solvable::new_package(repo_id, name, record);
     }
 
     /// Registers a dependency for the provided solvable
     pub fn add_dependency(&mut self, solvable_id: SolvableId, match_spec: String) {
         let match_spec_id = self.intern_matchspec(match_spec);
-        let solvable = self.solvables[solvable_id.index()].package_mut();
+        let solvable = self.solvables[solvable_id].package_mut();
         solvable.dependencies.push(match_spec_id);
     }
 
     /// Registers a constrains for the provided solvable
     pub fn add_constrains(&mut self, solvable_id: SolvableId, match_spec: String) {
         let match_spec_id = self.intern_matchspec(match_spec);
-        let solvable = self.solvables[solvable_id.index()].package_mut();
+        let solvable = self.solvables[solvable_id].package_mut();
         solvable.constrains.push(match_spec_id);
     }
 
@@ -137,18 +141,16 @@ impl<'a> Pool<'a> {
         let mut pkgs: Vec<_> = self.packages_by_name[name_id.index()]
             .iter()
             .cloned()
-            .filter(|solvable| {
-                match_spec.matches(self.solvables[solvable.index()].package().record)
-            })
+            .filter(|&solvable| match_spec.matches(self.solvables[solvable].package().record))
             .collect();
 
-        pkgs.sort_by(|p1, p2| {
+        pkgs.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
                 &self.solvables,
                 &self.names_to_ids,
                 &self.packages_by_name,
-                self.solvables[p1.index()].package().record,
-                self.solvables[p2.index()].package().record,
+                self.solvables[p1].package().record,
+                self.solvables[p2].package().record,
             )
         });
 
@@ -181,9 +183,7 @@ impl<'a> Pool<'a> {
         match_spec_to_forbidden[match_spec_id.index()] = self.packages_by_name[name_id.index()]
             .iter()
             .cloned()
-            .filter(|solvable| {
-                !match_spec.matches(self.solvables[solvable.index()].package().record)
-            })
+            .filter(|&solvable| !match_spec.matches(self.solvables[solvable].package().record))
             .collect();
     }
 
@@ -251,26 +251,18 @@ impl<'a> Pool<'a> {
     ///
     /// Panics if the solvable is not found in the pool
     pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable {
-        if id.index() < self.solvables.len() {
-            &self.solvables[id.index()]
-        } else {
-            panic!("invalid solvable id!")
-        }
+        &self.solvables[id]
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub(crate) fn resolve_solvable_inner_mut(&mut self, id: SolvableId) -> &mut Solvable<'a> {
-        if id.index() < self.solvables.len() {
-            &mut self.solvables[id.index()]
-        } else {
-            panic!("invalid solvable id!")
-        }
+        &mut self.solvables[id]
     }
 
     /// Returns the dependencies associated to the root solvable
     pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<MatchSpecId> {
-        self.solvables[0].root_mut()
+        self.solvables[SolvableId::root()].root_mut()
     }
 }

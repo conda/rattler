@@ -1,3 +1,4 @@
+use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
 use crate::solvable::Solvable;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
@@ -7,7 +8,7 @@ use std::str::FromStr;
 
 /// Returns the order of two candidates based on rules used by conda.
 pub(crate) fn compare_candidates(
-    solvables: &[Solvable],
+    solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &[Vec<SolvableId>],
     a: &PackageRecord,
@@ -115,7 +116,7 @@ pub(crate) fn compare_candidates(
 }
 
 pub(crate) fn find_highest_version(
-    solvables: &[Solvable],
+    solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &[Vec<SolvableId>],
     match_spec: &MatchSpec,
@@ -126,7 +127,7 @@ pub(crate) fn find_highest_version(
     // For each record that matches the spec
     let candidates = packages_by_name[name_id.index()]
         .iter()
-        .map(|s| solvables[s.index()].package().record)
+        .map(|&s| solvables[s].package().record)
         .filter(|s| match_spec.matches(s));
 
     candidates.fold(None, |init, record| {
