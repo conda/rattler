@@ -4,10 +4,10 @@
 use libsolv_rs::id::RepoId;
 use libsolv_rs::id::SolvableId;
 use libsolv_rs::pool::Pool;
+use libsolv_rs::transaction::Transaction;
 use libsolv_rs::transaction::TransactionKind;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
-use libsolv_rs::transaction::Transaction;
 
 /// Returns which packages should be installed in the environment
 ///

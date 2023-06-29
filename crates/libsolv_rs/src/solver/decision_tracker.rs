@@ -11,16 +11,16 @@ pub(crate) struct DecisionTracker {
 }
 
 impl DecisionTracker {
-    pub(crate) fn new(nsolvables: u32) -> Self {
+    pub(crate) fn new(solvable_count: u32) -> Self {
         Self {
-            map: DecisionMap::new(nsolvables),
+            map: DecisionMap::new(solvable_count),
             stack: Vec::new(),
             propagate_index: 0,
         }
     }
 
     pub(crate) fn clear(&mut self) {
-        *self = Self::new(self.map.nsolvables());
+        *self = Self::new(self.map.solvable_count());
     }
 
     pub(crate) fn is_empty(&self) -> bool {

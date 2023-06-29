@@ -130,6 +130,6 @@ pub fn add_virtual_packages(pool: &mut Pool, repo_id: RepoId, packages: &[Generi
         .leak();
 
     for package in packages {
-        pool.add_package(repo_id, &package);
+        pool.add_package(repo_id, package);
     }
 }
