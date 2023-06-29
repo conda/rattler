@@ -1,21 +1,24 @@
 use crate::id::RuleId;
 use crate::id::SolvableId;
+use crate::mapping::Mapping;
 use crate::solver::rule::RuleState;
 
 /// A map from solvables to the rules that are watching them
 pub(crate) struct WatchMap {
     /// Note: the map is to a single rule, but rules form a linked list, so it is possible to go
     /// from one to the next
-    map: Vec<RuleId>,
+    map: Mapping<SolvableId, RuleId>,
 }
 
 impl WatchMap {
     pub(crate) fn new() -> Self {
-        Self { map: Vec::new() }
+        Self {
+            map: Mapping::empty(),
+        }
     }
 
-    pub(crate) fn initialize(&mut self, nsolvables: usize) {
-        self.map = vec![RuleId::null(); nsolvables];
+    pub(crate) fn initialize(&mut self, solvable_count: usize) {
+        self.map = Mapping::new(vec![RuleId::null(); solvable_count]);
     }
 
     pub(crate) fn start_watching(&mut self, rule: &mut RuleState, rule_id: RuleId) {
@@ -42,20 +45,20 @@ impl WatchMap {
             predecessor_rule.unlink_rule(rule, previous_watch, watch_index);
         } else {
             // This was the first rule in the chain
-            self.map[previous_watch.index()] = rule.get_linked_rule(watch_index);
+            self.map[previous_watch] = rule.get_linked_rule(watch_index);
         }
 
         // Set the new watch
         rule.watched_literals[watch_index] = new_watch;
-        rule.link_to_rule(watch_index, self.map[new_watch.index()]);
-        self.map[new_watch.index()] = rule_id;
+        rule.link_to_rule(watch_index, self.map[new_watch]);
+        self.map[new_watch] = rule_id;
     }
 
     pub(crate) fn first_rule_watching_solvable(&mut self, watched_solvable: SolvableId) -> RuleId {
-        self.map[watched_solvable.index()]
+        self.map[watched_solvable]
     }
 
     pub(crate) fn watch_solvable(&mut self, watched_solvable: SolvableId, id: RuleId) {
-        self.map[watched_solvable.index()] = id;
+        self.map[watched_solvable] = id;
     }
 }

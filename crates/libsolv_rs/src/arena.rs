@@ -1,11 +1,9 @@
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
-pub(crate) trait ArenaId {
-    fn from_usize(x: usize) -> Self;
-    fn to_usize(self) -> usize;
-}
-
+/// An `Arena<TValue>` holds a collection of `TValue`s but allocates persistent `TId`s that are used
+/// to refer to an element in the arena. When adding an item to an `Arena` it returns a `TId` that
+/// can be used to index into the arena.
 pub(crate) struct Arena<TId: ArenaId, TValue> {
     data: Vec<TValue>,
     phantom: PhantomData<TId>,
@@ -29,7 +27,6 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
         id
     }
 
-    // TODO: all places where we are using len, are places where we should introduce mappings
     pub(crate) fn len(&self) -> usize {
         self.data.len()
     }
@@ -52,4 +49,10 @@ impl<TId: ArenaId, TValue> IndexMut<TId> for Arena<TId, TValue> {
     fn index_mut(&mut self, index: TId) -> &mut Self::Output {
         &mut self.data[index.to_usize()]
     }
+}
+
+/// A trait indicating that the type can be transformed to `usize` and back
+pub(crate) trait ArenaId {
+    fn from_usize(x: usize) -> Self;
+    fn to_usize(self) -> usize;
 }

@@ -52,12 +52,12 @@ impl<'a> Default for Pool<'a> {
 
             names_to_ids: HashMap::new(),
             package_names: Arena::new(),
-            packages_by_name: Mapping::new(Vec::new()),
+            packages_by_name: Mapping::empty(),
 
             match_specs_to_ids: HashMap::default(),
             match_specs: Arena::new(),
-            match_spec_to_candidates: Mapping::new(Vec::new()),
-            match_spec_to_forbidden: Mapping::new(Vec::new()),
+            match_spec_to_candidates: Mapping::empty(),
+            match_spec_to_forbidden: Mapping::empty(),
         }
     }
 }

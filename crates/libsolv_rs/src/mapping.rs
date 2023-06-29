@@ -2,12 +2,19 @@ use crate::arena::ArenaId;
 use std::marker::PhantomData;
 use std::ops::{Index, IndexMut};
 
+/// An `Arena<TValue>` holds a collection of `TValue`s that can be addressed by `TId`s. You can
+/// think of it as a HashMap<TId, TValue>, optimized for the case in which we know the `TId`s are
+/// contiguous.
 pub(crate) struct Mapping<TId: ArenaId, TValue> {
     data: Vec<TValue>,
     phantom: PhantomData<TId>,
 }
 
-impl<TId: ArenaId, TValue: Default> Mapping<TId, TValue> {
+impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
+    pub(crate) fn empty() -> Self {
+        Self::new(Vec::new())
+    }
+
     pub(crate) fn new(data: Vec<TValue>) -> Self {
         Self {
             data,

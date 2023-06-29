@@ -1,4 +1,4 @@
-use crate::arena::Arena;
+use crate::arena::{Arena, ArenaId};
 use crate::id::{LearntRuleId, NameId};
 use crate::id::{RuleId, SolvableId};
 use crate::mapping::Mapping;
@@ -30,7 +30,7 @@ pub struct Solver<'a> {
 
     learnt_rules: Arena<LearntRuleId, Vec<Literal>>,
     learnt_rules_start: RuleId,
-    learnt_why: Vec<Vec<RuleId>>,
+    learnt_why: Mapping<LearntRuleId, Vec<RuleId>>,
 
     decision_tracker: DecisionTracker,
 }
@@ -43,7 +43,7 @@ impl<'a> Solver<'a> {
             watches: WatchMap::new(),
             learnt_rules: Arena::new(),
             learnt_rules_start: RuleId::null(),
-            learnt_why: Vec::new(),
+            learnt_why: Mapping::empty(),
             decision_tracker: DecisionTracker::new(pool.solvables.len() as u32),
             pool,
         }
@@ -62,7 +62,7 @@ impl<'a> Solver<'a> {
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
         self.learnt_rules.clear();
-        self.learnt_why.clear();
+        self.learnt_why = Mapping::empty();
         self.rules = vec![RuleState::new(
             Rule::InstallRoot,
             &self.learnt_rules,
@@ -562,7 +562,7 @@ impl<'a> Solver<'a> {
 
     fn analyze_unsolvable_rule(
         rules: &[RuleState],
-        learnt_why: &[Vec<RuleId>],
+        learnt_why: &Mapping<LearntRuleId, Vec<RuleId>>,
         learnt_rules_start: RuleId,
         rule_id: RuleId,
         problem: &mut Problem,
@@ -575,7 +575,9 @@ impl<'a> Solver<'a> {
                     return;
                 }
 
-                for &cause in &learnt_why[rule_id.index() - learnt_rules_start.index()] {
+                let rule_id =
+                    LearntRuleId::from_usize(rule_id.index() - learnt_rules_start.index());
+                for &cause in &learnt_why[rule_id] {
                     Self::analyze_unsolvable_rule(
                         rules,
                         learnt_why,
@@ -748,7 +750,7 @@ impl<'a> Solver<'a> {
         // Add the rule
         let rule_id = RuleId::new(self.rules.len());
         let learnt_id = self.learnt_rules.alloc(learnt.clone());
-        self.learnt_why.push(learnt_why);
+        self.learnt_why.extend(learnt_why);
 
         let mut rule = RuleState::new(
             Rule::Learnt(learnt_id),
