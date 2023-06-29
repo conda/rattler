@@ -463,6 +463,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::bool_assert_comparison)]
     fn test_literal_satisfying_value() {
         let lit = Literal {
             solvable_id: SolvableId::root(),
@@ -532,7 +533,7 @@ mod test {
 
         // Unlink 1
         {
-            let mut rule1 = rule1.clone();
+            let mut rule1 = rule1;
             rule1.unlink_rule(&rule3, SolvableId::new(1211), 0);
             assert_eq!(
                 rule1.watched_literals,
@@ -566,7 +567,7 @@ mod test {
 
         // Unlink 1
         {
-            let mut rule1 = rule1.clone();
+            let mut rule1 = rule1;
             rule1.unlink_rule(&rule2, SolvableId::new(1211), 1);
             assert_eq!(
                 rule1.watched_literals,
