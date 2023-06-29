@@ -7,16 +7,15 @@ use crate::solve_jobs::SolveJobs;
 use crate::transaction::{Transaction, TransactionKind};
 
 use rattler_conda_types::MatchSpec;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 use decision::Decision;
 use decision_tracker::DecisionTracker;
 use rule::{Literal, Rule, RuleState};
 use watch_map::WatchMap;
 
-// TODO: remove pub from this
 mod decision;
-pub(crate) mod decision_map;
+mod decision_map;
 mod decision_tracker;
 pub(crate) mod rule;
 mod watch_map;
@@ -57,8 +56,6 @@ impl<'a> Solver<'a> {
     /// Returns a [`Problem`] if problems remain unsolved, which provides ways to inspect the causes
     /// and report them to the user.
     pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Problem> {
-        // TODO: sanity check that solvables inside jobs.favor are unique?
-
         // Clear state
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
@@ -138,11 +135,11 @@ impl<'a> Solver<'a> {
 
     fn add_rules_for_root_dep(&mut self, favored_map: &HashMap<NameId, SolvableId>) {
         let mut visited = HashSet::new();
-        let mut queue = VecDeque::new();
+        let mut stack = Vec::new();
 
-        queue.push_back(SolvableId::root());
+        stack.push(SolvableId::root());
 
-        while let Some(solvable_id) = queue.pop_front() {
+        while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id.index()].inner {
                 SolvableInner::Root(deps) => (deps, &[] as &[_]),
                 SolvableInner::Package(pkg) => (&pkg.dependencies, pkg.constrains.as_slice()),
@@ -163,7 +160,7 @@ impl<'a> Solver<'a> {
                 for &candidate in candidates {
                     // Note: we skip candidates we have already seen
                     if visited.insert(candidate) {
-                        queue.push_back(candidate);
+                        stack.push(candidate);
                     }
                 }
             }
