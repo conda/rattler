@@ -127,3 +127,16 @@ impl RuleId {
         RuleId(u32::MAX)
     }
 }
+
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct LearntRuleId(u32);
+
+impl ArenaId for LearntRuleId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}

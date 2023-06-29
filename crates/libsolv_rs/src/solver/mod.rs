@@ -1,5 +1,7 @@
-use crate::id::NameId;
+use crate::arena::Arena;
+use crate::id::{LearntRuleId, NameId};
 use crate::id::{RuleId, SolvableId};
+use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::problem::Problem;
 use crate::solvable::SolvableInner;
@@ -9,7 +11,6 @@ use crate::transaction::{Transaction, TransactionKind};
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
-use crate::mapping::Mapping;
 use decision::Decision;
 use decision_tracker::DecisionTracker;
 use rule::{Literal, Rule, RuleState};
@@ -27,7 +28,7 @@ pub struct Solver<'a> {
     pub(crate) rules: Vec<RuleState>,
     watches: WatchMap,
 
-    learnt_rules: Vec<Vec<Literal>>,
+    learnt_rules: Arena<LearntRuleId, Vec<Literal>>,
     learnt_rules_start: RuleId,
     learnt_why: Vec<Vec<RuleId>>,
 
@@ -40,7 +41,7 @@ impl<'a> Solver<'a> {
         Self {
             rules: Vec::new(),
             watches: WatchMap::new(),
-            learnt_rules: Vec::new(),
+            learnt_rules: Arena::new(),
             learnt_rules_start: RuleId::null(),
             learnt_why: Vec::new(),
             decision_tracker: DecisionTracker::new(pool.solvables.len() as u32),
@@ -60,13 +61,13 @@ impl<'a> Solver<'a> {
         // Clear state
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
-        self.rules = vec![RuleState::new(
-            Rule::InstallRoot,
-            &[],
-            &self.pool.match_spec_to_candidates,
-        )];
         self.learnt_rules.clear();
         self.learnt_why.clear();
+        self.rules = vec![RuleState::new(
+            Rule::InstallRoot,
+            &self.learnt_rules,
+            &self.pool.match_spec_to_candidates,
+        )];
 
         // Favored map
         let mut favored_map = HashMap::new();
@@ -746,12 +747,11 @@ impl<'a> Solver<'a> {
 
         // Add the rule
         let rule_id = RuleId::new(self.rules.len());
-        let learnt_index = self.learnt_rules.len();
-        self.learnt_rules.push(learnt.clone());
+        let learnt_id = self.learnt_rules.alloc(learnt.clone());
         self.learnt_why.push(learnt_why);
 
         let mut rule = RuleState::new(
-            Rule::Learnt(learnt_index),
+            Rule::Learnt(learnt_id),
             &self.learnt_rules,
             &self.pool.match_spec_to_candidates,
         );

@@ -19,6 +19,10 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
         }
     }
 
+    pub(crate) fn clear(&mut self) {
+        self.data.clear();
+    }
+
     pub(crate) fn alloc(&mut self, value: TValue) -> TId {
         let id = TId::from_usize(self.data.len());
         self.data.push(value);

@@ -1,6 +1,7 @@
-use crate::id::MatchSpecId;
+use crate::arena::Arena;
 use crate::id::RuleId;
 use crate::id::SolvableId;
+use crate::id::{LearntRuleId, MatchSpecId};
 use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
@@ -67,24 +68,24 @@ pub(crate) enum Rule {
     Lock(SolvableId, SolvableId),
     /// A rule learnt during solving
     ///
-    /// The `usize` is an index that can be used to retrieve the rule's literals, which are stored
+    /// The learnt rule id can be used to retrieve the rule's literals, which are stored
     /// elsewhere to prevent the size of [`Rule`] from blowing up
-    Learnt(usize),
+    Learnt(LearntRuleId),
 }
 
 impl Rule {
     /// Returns the ids of the solvables that will be watched right after the rule is created
     fn initial_watches(
         &self,
-        learnt_rules: &[Vec<Literal>],
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
     ) -> Option<[SolvableId; 2]> {
         match self {
             Rule::InstallRoot => None,
             Rule::Constrains(s1, s2) | Rule::ForbidMultipleInstances(s1, s2) => Some([*s1, *s2]),
             Rule::Lock(_, s) => Some([SolvableId::root(), *s]),
-            &Rule::Learnt(index) => {
-                let literals = &learnt_rules[index];
+            &Rule::Learnt(learnt_id) => {
+                let literals = &learnt_rules[learnt_id];
                 debug_assert!(!literals.is_empty());
                 if literals.len() == 1 {
                     // No need for watches, since we learned an assertion
@@ -110,14 +111,14 @@ impl Rule {
     /// Visits each literal in the rule
     pub fn visit_literals(
         &self,
-        learnt_rules: &[Vec<Literal>],
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
         pool: &Pool,
         mut visit: impl FnMut(Literal) -> bool,
     ) {
         match *self {
             Rule::InstallRoot => unreachable!(),
-            Rule::Learnt(index) => {
-                for &literal in &learnt_rules[index] {
+            Rule::Learnt(learnt_id) => {
+                for &literal in &learnt_rules[learnt_id] {
                     if !visit(literal) {
                         return;
                     }
@@ -190,7 +191,7 @@ pub(crate) struct RuleState {
 impl RuleState {
     pub fn new(
         kind: Rule,
-        learnt_rules: &[Vec<Literal>],
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
     ) -> Self {
         let watched_literals = kind
@@ -251,7 +252,7 @@ impl RuleState {
         &self,
         solvable_id: SolvableId,
         decision_map: &DecisionMap,
-        learnt_rules: &[Vec<Literal>],
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
     ) -> Option<([Literal; 2], usize)> {
         debug_assert!(self.watched_literals.contains(&solvable_id));
 
@@ -271,7 +272,10 @@ impl RuleState {
         !self.watched_literals[0].is_null()
     }
 
-    pub fn watched_literals(&self, learnt_rules: &[Vec<Literal>]) -> [Literal; 2] {
+    pub fn watched_literals(
+        &self,
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
+    ) -> [Literal; 2] {
         let literals = |op1: bool, op2: bool| {
             [
                 Literal {
@@ -287,15 +291,15 @@ impl RuleState {
 
         match self.kind {
             Rule::InstallRoot => unreachable!(),
-            Rule::Learnt(index) => {
+            Rule::Learnt(learnt_id) => {
                 // TODO: we might want to do something else for performance, like keeping the whole
                 // literal in `self.watched_literals`, to avoid lookups... But first we should
                 // benchmark!
-                let &w1 = learnt_rules[index]
+                let &w1 = learnt_rules[learnt_id]
                     .iter()
                     .find(|l| l.solvable_id == self.watched_literals[0])
                     .unwrap();
-                let &w2 = learnt_rules[index]
+                let &w2 = learnt_rules[learnt_id]
                     .iter()
                     .find(|l| l.solvable_id == self.watched_literals[1])
                     .unwrap();
@@ -319,7 +323,7 @@ impl RuleState {
     pub fn next_unwatched_variable(
         &self,
         pool: &Pool,
-        learnt_rules: &[Vec<Literal>],
+        learnt_rules: &Arena<LearntRuleId, Vec<Literal>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
         // The next unwatched variable (if available), is a variable that is:
@@ -332,7 +336,7 @@ impl RuleState {
 
         match self.kind {
             Rule::InstallRoot => unreachable!(),
-            Rule::Learnt(index) => learnt_rules[index]
+            Rule::Learnt(learnt_id) => learnt_rules[learnt_id]
                 .iter()
                 .cloned()
                 .find(|&l| can_watch(l))
@@ -405,7 +409,7 @@ impl Debug for RuleDebug<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             Rule::InstallRoot => write!(f, "install root"),
-            Rule::Learnt(index) => write!(f, "learnt rule {index}"),
+            Rule::Learnt(learnt_id) => write!(f, "learnt rule {learnt_id:?}"),
             Rule::Requires(solvable_id, match_spec_id) => {
                 let match_spec = self.pool.resolve_match_spec(match_spec_id).to_string();
                 write!(
@@ -577,6 +581,6 @@ mod test {
         // This test is here to ensure we don't increase the size of `Rule` by accident, as we are
         // creating thousands of instances. Note: libsolv manages to bring down the size to 24, so
         // there is probably room for improvement.
-        assert_eq!(std::mem::size_of::<RuleState>(), 32);
+        assert_eq!(std::mem::size_of::<RuleState>(), 28);
     }
 }
