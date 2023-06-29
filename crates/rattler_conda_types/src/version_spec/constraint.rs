@@ -76,7 +76,10 @@ impl FromStr for Constraint {
             if version_str.starts_with(char::is_whitespace) {
                 return Err(ParseConstraintError::OperatorFollowedByWhitespace);
             }
-            let (version_str, op) = if let Some(version_str) = version_str.strip_suffix(".*") {
+            let (version_str, op) = if let Some(version_str) = version_str
+                .strip_suffix(".*")
+                .or(version_str.strip_suffix('*'))
+            {
                 match op {
                     VersionOperator::StartsWith | VersionOperator::GreaterEquals => {
                         (version_str, op)
