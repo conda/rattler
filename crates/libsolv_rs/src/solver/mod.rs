@@ -59,7 +59,11 @@ impl<'a> Solver<'a> {
         // Clear state
         self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
-        self.rules = vec![RuleState::new(Rule::InstallRoot, &[], &self.pool)];
+        self.rules = vec![RuleState::new(
+            Rule::InstallRoot,
+            &[],
+            &self.pool.match_spec_to_candidates,
+        )];
         self.learnt_rules.clear();
         self.learnt_why.clear();
 
@@ -87,7 +91,7 @@ impl<'a> Solver<'a> {
                     self.rules.push(RuleState::new(
                         Rule::ForbidMultipleInstances(candidate, other_candidate),
                         &self.learnt_rules,
-                        &self.pool,
+                        &self.pool.match_spec_to_candidates,
                     ));
                 }
             }
@@ -102,7 +106,7 @@ impl<'a> Solver<'a> {
                     self.rules.push(RuleState::new(
                         Rule::Lock(locked_solvable_id, other_candidate),
                         &self.learnt_rules,
-                        &self.pool,
+                        &self.pool.match_spec_to_candidates,
                     ));
                 }
             }
@@ -139,6 +143,12 @@ impl<'a> Solver<'a> {
 
         stack.push(SolvableId::root());
 
+        let mut match_spec_to_candidates = vec![Vec::new(); self.pool.match_specs.len()];
+        let mut match_spec_to_forbidden = vec![Vec::new(); self.pool.match_specs.len()];
+        let mut seen_requires = HashSet::new();
+        let mut seen_forbidden = HashSet::new();
+        let empty_vec = Vec::new();
+
         while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id.index()].inner {
                 SolvableInner::Root(deps) => (deps, &[] as &[_]),
@@ -147,17 +157,15 @@ impl<'a> Solver<'a> {
 
             // Enqueue the candidates of the dependencies
             for &dep in deps {
-                let candidates = Pool::get_candidates(
-                    &self.pool.match_specs,
-                    &self.pool.names_to_ids,
-                    &self.pool.solvables,
-                    &self.pool.packages_by_name,
-                    &mut self.pool.match_spec_to_candidates,
-                    favored_map,
-                    dep,
-                );
+                if seen_requires.insert(dep) {
+                    self.pool
+                        .populate_candidates(dep, favored_map, &mut match_spec_to_candidates);
+                }
 
-                for &candidate in candidates {
+                for &candidate in match_spec_to_candidates
+                    .get(dep.index())
+                    .unwrap_or(&empty_vec)
+                {
                     // Note: we skip candidates we have already seen
                     if visited.insert(candidate) {
                         stack.push(candidate);
@@ -170,31 +178,32 @@ impl<'a> Solver<'a> {
                 self.rules.push(RuleState::new(
                     Rule::Requires(solvable_id, dep),
                     &self.learnt_rules,
-                    &self.pool,
+                    &match_spec_to_candidates,
                 ));
             }
 
             // Constrains
             for &dep in constrains {
-                let dep_forbidden = Pool::get_forbidden(
-                    &self.pool.match_specs,
-                    &self.pool.names_to_ids,
-                    &self.pool.solvables,
-                    &self.pool.packages_by_name,
-                    &mut self.pool.match_spec_to_forbidden,
-                    dep,
-                )
-                .to_vec();
+                if seen_forbidden.insert(dep) {
+                    self.pool
+                        .populate_forbidden(dep, &mut match_spec_to_forbidden);
+                }
 
-                for dep in dep_forbidden {
+                for &dep in match_spec_to_forbidden
+                    .get(dep.index())
+                    .unwrap_or(&empty_vec)
+                {
                     self.rules.push(RuleState::new(
                         Rule::Constrains(solvable_id, dep),
                         &self.learnt_rules,
-                        &self.pool,
+                        &match_spec_to_candidates,
                     ));
                 }
             }
         }
+
+        self.pool.match_spec_to_candidates = match_spec_to_candidates;
+        self.pool.match_spec_to_forbidden = match_spec_to_forbidden;
     }
 
     fn run_sat(
@@ -284,9 +293,7 @@ impl<'a> Solver<'a> {
                 }
 
                 // Consider only rules in which no candidates have been installed
-                let candidates = self.pool.match_spec_to_candidates[deps.index()]
-                    .as_deref()
-                    .unwrap();
+                let candidates = &self.pool.match_spec_to_candidates[deps.index()];
                 if candidates
                     .iter()
                     .any(|&c| self.decision_tracker.assigned_value(c) == Some(true))
@@ -746,7 +753,11 @@ impl<'a> Solver<'a> {
         self.learnt_rules.push(learnt.clone());
         self.learnt_why.push(learnt_why);
 
-        let mut rule = RuleState::new(Rule::Learnt(learnt_index), &self.learnt_rules, &self.pool);
+        let mut rule = RuleState::new(
+            Rule::Learnt(learnt_index),
+            &self.learnt_rules,
+            &self.pool.match_spec_to_candidates,
+        );
 
         if rule.has_watches() {
             self.watches.start_watching(&mut rule, rule_id);

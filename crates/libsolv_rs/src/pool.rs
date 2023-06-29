@@ -33,10 +33,10 @@ pub struct Pool<'a> {
     match_specs_to_ids: HashMap<String, MatchSpecId>,
 
     /// Cached candidates for each match spec, indexed by their MatchSpecId
-    pub(crate) match_spec_to_candidates: Vec<Option<Vec<SolvableId>>>,
+    pub(crate) match_spec_to_candidates: Vec<Vec<SolvableId>>,
 
     /// Cached forbidden solvables for each match spec, indexed by their MatchSpecId
-    pub(crate) match_spec_to_forbidden: Vec<Option<Vec<SolvableId>>>,
+    pub(crate) match_spec_to_forbidden: Vec<Vec<SolvableId>>,
 }
 
 impl<'a> Default for Pool<'a> {
@@ -98,7 +98,7 @@ impl<'a> Pool<'a> {
         assert!(!solvable_id.is_root());
 
         let name = self.intern_package_name(&record.name);
-        assert_ne!(self.solvables[solvable_id.index()].package().name, name);
+        assert_eq!(self.solvables[solvable_id.index()].package().name, name);
 
         self.solvables[solvable_id.index()] = Solvable::new_package(repo_id, name, record);
     }
@@ -117,88 +117,74 @@ impl<'a> Pool<'a> {
         solvable.constrains.push(match_spec_id);
     }
 
-    // This function does not take `self`, because otherwise we run into problems with borrowing
-    // when we want to use it together with other pool functions
-    pub(crate) fn get_candidates<'b>(
-        match_specs: &[MatchSpec],
-        strings_to_ids: &HashMap<String, NameId>,
-        solvables: &[Solvable],
-        packages_by_name: &[Vec<SolvableId>],
-        match_spec_to_candidates: &'b mut [Option<Vec<SolvableId>>],
-        favored_map: &HashMap<NameId, SolvableId>,
+    /// Populates the list of candidates for the provided match spec
+    pub(crate) fn populate_candidates(
+        &self,
         match_spec_id: MatchSpecId,
-    ) -> &'b [SolvableId] {
-        let candidates = match_spec_to_candidates[match_spec_id.index()].get_or_insert_with(|| {
-            let match_spec = &match_specs[match_spec_id.index()];
-            let match_spec_name = match_spec
-                .name
-                .as_deref()
-                .expect("match spec without name!");
-            let name_id = match strings_to_ids.get(match_spec_name) {
-                None => return Vec::new(),
-                Some(name_id) => name_id,
-            };
+        favored_map: &HashMap<NameId, SolvableId>,
+        match_spec_to_candidates: &mut [Vec<SolvableId>],
+    ) {
+        let match_spec = &self.match_specs[match_spec_id.index()];
+        let match_spec_name = match_spec
+            .name
+            .as_deref()
+            .expect("match spec without name!");
+        let name_id = match self.names_to_ids.get(match_spec_name) {
+            None => return,
+            Some(name_id) => name_id,
+        };
 
-            let mut pkgs: Vec<_> = packages_by_name[name_id.index()]
-                .iter()
-                .cloned()
-                .filter(|solvable| match_spec.matches(solvables[solvable.index()].package().record))
-                .collect();
+        let mut pkgs: Vec<_> = self.packages_by_name[name_id.index()]
+            .iter()
+            .cloned()
+            .filter(|solvable| {
+                match_spec.matches(self.solvables[solvable.index()].package().record)
+            })
+            .collect();
 
-            pkgs.sort_by(|p1, p2| {
-                conda_util::compare_candidates(
-                    solvables,
-                    strings_to_ids,
-                    packages_by_name,
-                    solvables[p1.index()].package().record,
-                    solvables[p2.index()].package().record,
-                )
-            });
-
-            if let Some(&favored_id) = favored_map.get(name_id) {
-                if let Some(pos) = pkgs.iter().position(|&s| s == favored_id) {
-                    let removed = pkgs.remove(pos);
-                    pkgs.insert(0, removed);
-                }
-            }
-
-            pkgs
+        pkgs.sort_by(|p1, p2| {
+            conda_util::compare_candidates(
+                &self.solvables,
+                &self.names_to_ids,
+                &self.packages_by_name,
+                self.solvables[p1.index()].package().record,
+                self.solvables[p2.index()].package().record,
+            )
         });
 
-        candidates.as_slice()
+        if let Some(&favored_id) = favored_map.get(name_id) {
+            if let Some(pos) = pkgs.iter().position(|&s| s == favored_id) {
+                let removed = pkgs.remove(pos);
+                pkgs.insert(0, removed);
+            }
+        }
+
+        match_spec_to_candidates[match_spec_id.index()] = pkgs;
     }
 
-    // This function does not take `self`, because otherwise we run into problems with borrowing
-    // when we want to use it together with other pool functions
-    pub(crate) fn get_forbidden<'b>(
-        match_specs: &[MatchSpec],
-        strings_to_ids: &HashMap<String, NameId>,
-        solvables: &[Solvable],
-        packages_by_name: &[Vec<SolvableId>],
-        match_spec_to_forbidden: &'b mut [Option<Vec<SolvableId>>],
+    /// Populates the list of forbidden packages for the provided match spec
+    pub(crate) fn populate_forbidden(
+        &self,
         match_spec_id: MatchSpecId,
-    ) -> &'b [SolvableId] {
-        let candidates = match_spec_to_forbidden[match_spec_id.index()].get_or_insert_with(|| {
-            let match_spec = &match_specs[match_spec_id.index()];
-            let match_spec_name = match_spec
-                .name
-                .as_deref()
-                .expect("match spec without name!");
-            let name_id = match strings_to_ids.get(match_spec_name) {
-                None => return Vec::new(),
-                Some(name_id) => name_id,
-            };
+        match_spec_to_forbidden: &mut [Vec<SolvableId>],
+    ) {
+        let match_spec = &self.match_specs[match_spec_id.index()];
+        let match_spec_name = match_spec
+            .name
+            .as_deref()
+            .expect("match spec without name!");
+        let name_id = match self.names_to_ids.get(match_spec_name) {
+            None => return,
+            Some(name_id) => name_id,
+        };
 
-            packages_by_name[name_id.index()]
-                .iter()
-                .cloned()
-                .filter(|solvable| {
-                    !match_spec.matches(solvables[solvable.index()].package().record)
-                })
-                .collect()
-        });
-
-        candidates.as_slice()
+        match_spec_to_forbidden[match_spec_id.index()] = self.packages_by_name[name_id.index()]
+            .iter()
+            .cloned()
+            .filter(|solvable| {
+                !match_spec.matches(self.solvables[solvable.index()].package().record)
+            })
+            .collect();
     }
 
     /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
@@ -207,11 +193,8 @@ impl<'a> Pool<'a> {
         match self.match_specs_to_ids.entry(match_spec) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
-                // println!("Interning match_spec: {}", entry.key());
                 self.match_specs
                     .push(MatchSpec::from_str(entry.key()).unwrap());
-                self.match_spec_to_candidates.push(None);
-                self.match_spec_to_forbidden.push(None);
 
                 // Update the entry
                 let id = MatchSpecId::new(next_index);

@@ -76,7 +76,7 @@ impl Rule {
     fn initial_watches(
         &self,
         learnt_rules: &[Vec<Literal>],
-        pool: &Pool,
+        match_spec_to_candidates: &[Vec<SolvableId>],
     ) -> Option<[SolvableId; 2]> {
         match self {
             Rule::InstallRoot => None,
@@ -96,10 +96,7 @@ impl Rule {
                 }
             }
             Rule::Requires(id, match_spec) => {
-                let candidates = pool.match_spec_to_candidates[match_spec.index()]
-                    .as_ref()
-                    .unwrap();
-
+                let candidates = &match_spec_to_candidates[match_spec.index()];
                 if candidates.is_empty() {
                     None
                 } else {
@@ -133,10 +130,7 @@ impl Rule {
                     return;
                 }
 
-                for &solvable_id in pool.match_spec_to_candidates[match_spec_id.index()]
-                    .as_deref()
-                    .unwrap()
-                {
+                for &solvable_id in &pool.match_spec_to_candidates[match_spec_id.index()] {
                     if !visit(Literal {
                         solvable_id,
                         negate: false,
@@ -193,9 +187,13 @@ pub(crate) struct RuleState {
 }
 
 impl RuleState {
-    pub fn new(kind: Rule, learnt_rules: &[Vec<Literal>], pool: &Pool) -> Self {
+    pub fn new(
+        kind: Rule,
+        learnt_rules: &[Vec<Literal>],
+        match_spec_to_candidates: &[Vec<SolvableId>],
+    ) -> Self {
         let watched_literals = kind
-            .initial_watches(learnt_rules, pool)
+            .initial_watches(learnt_rules, match_spec_to_candidates)
             .unwrap_or([SolvableId::null(), SolvableId::null()]);
 
         let rule = Self {
@@ -350,10 +348,7 @@ impl RuleState {
                 }
 
                 // The available candidates
-                for &candidate in pool.match_spec_to_candidates[match_spec_id.index()]
-                    .as_deref()
-                    .unwrap()
-                {
+                for &candidate in &pool.match_spec_to_candidates[match_spec_id.index()] {
                     let lit = Literal {
                         solvable_id: candidate,
                         negate: false,

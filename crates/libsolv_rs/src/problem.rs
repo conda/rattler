@@ -47,9 +47,7 @@ impl Problem {
                 Rule::Requires(package_id, match_spec_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
-                    let candidates = solver.pool().match_spec_to_candidates[match_spec_id.index()]
-                        .as_deref()
-                        .unwrap();
+                    let candidates = &solver.pool().match_spec_to_candidates[match_spec_id.index()];
                     if candidates.is_empty() {
                         println!(
                             "{package_id:?} requires {match_spec_id:?}, which has no candidates"
