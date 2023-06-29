@@ -1,0 +1,22 @@
+---
+source: crates/rattler_conda_types/src/version/parse.rs
+expression: index_map
+---
+"$" = 'expected a version component e.g. `2` or `rc`'
+"." = 'expected a version component e.g. `2` or `rc`'
+"1!1.2a.3-rc1" = '1!1.2a.3.rc1'
+"1+" = 'expected a version component e.g. `2` or `rc`'
+"1+$" = 'expected a version component e.g. `2` or `rc`'
+"1+." = 'expected a version component e.g. `2` or `rc`'
+"1+2" = '1+2'
+1-2-3 = '1.2.3'
+1-2-3_ = '1.2.3_'
+1-2_3 = 'cannot use both underscores and dashes as version segment seperators'
+"1.0.1_" = '1.0.1_'
+"1.0.1post.za" = '1.0.1post.za'
+"1@2" = "expected a '.', '-', or '_'"
+1_ = '1_'
+1_2_3 = '1.2.3'
+1_2_3_ = '1.2.3_'
+1__ = '1._'
+1___ = 'expected a version component e.g. `2` or `rc`'
