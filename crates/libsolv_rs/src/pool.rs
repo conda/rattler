@@ -34,10 +34,10 @@ pub struct Pool<'a> {
     /// Map from match spec strings to the id of their interned counterpart
     match_specs_to_ids: HashMap<String, MatchSpecId>,
 
-    /// Cached candidates for each match spec, indexed by their MatchSpecId
+    /// Cached candidates for each match spec
     pub(crate) match_spec_to_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
 
-    /// Cached forbidden solvables for each match spec, indexed by their MatchSpecId
+    /// Cached forbidden solvables for each match spec
     pub(crate) match_spec_to_forbidden: Mapping<MatchSpecId, Vec<SolvableId>>,
 }
 

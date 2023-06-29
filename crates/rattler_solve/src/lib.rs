@@ -250,7 +250,7 @@ mod test_libsolv {
         let err = result.err().unwrap();
         match err {
             SolveError::Unsolvable(errors) => {
-                assert_eq!(errors, vec!["nothing provides requested asdfasdf"])
+                assert_eq!(errors, vec!["No candidates where found for asdfasdf.\n"])
             }
             _ => panic!("Unexpected error: {err:?}"),
         }
