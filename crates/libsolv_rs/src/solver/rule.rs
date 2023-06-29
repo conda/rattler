@@ -1,6 +1,7 @@
 use crate::id::MatchSpecId;
 use crate::id::RuleId;
 use crate::id::SolvableId;
+use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
 use std::fmt::{Debug, Formatter};
@@ -76,14 +77,14 @@ impl Rule {
     fn initial_watches(
         &self,
         learnt_rules: &[Vec<Literal>],
-        match_spec_to_candidates: &[Vec<SolvableId>],
+        match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
     ) -> Option<[SolvableId; 2]> {
         match self {
             Rule::InstallRoot => None,
             Rule::Constrains(s1, s2) | Rule::ForbidMultipleInstances(s1, s2) => Some([*s1, *s2]),
             Rule::Lock(_, s) => Some([SolvableId::root(), *s]),
-            Rule::Learnt(index) => {
-                let literals = &learnt_rules[*index];
+            &Rule::Learnt(index) => {
+                let literals = &learnt_rules[index];
                 debug_assert!(!literals.is_empty());
                 if literals.len() == 1 {
                     // No need for watches, since we learned an assertion
@@ -95,12 +96,12 @@ impl Rule {
                     ])
                 }
             }
-            Rule::Requires(id, match_spec) => {
-                let candidates = &match_spec_to_candidates[match_spec.index()];
+            &Rule::Requires(id, match_spec) => {
+                let candidates = &match_spec_to_candidates[match_spec];
                 if candidates.is_empty() {
                     None
                 } else {
-                    Some([*id, candidates[0]])
+                    Some([id, candidates[0]])
                 }
             }
         }
@@ -130,7 +131,7 @@ impl Rule {
                     return;
                 }
 
-                for &solvable_id in &pool.match_spec_to_candidates[match_spec_id.index()] {
+                for &solvable_id in &pool.match_spec_to_candidates[match_spec_id] {
                     if !visit(Literal {
                         solvable_id,
                         negate: false,
@@ -190,7 +191,7 @@ impl RuleState {
     pub fn new(
         kind: Rule,
         learnt_rules: &[Vec<Literal>],
-        match_spec_to_candidates: &[Vec<SolvableId>],
+        match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
     ) -> Self {
         let watched_literals = kind
             .initial_watches(learnt_rules, match_spec_to_candidates)
@@ -348,7 +349,7 @@ impl RuleState {
                 }
 
                 // The available candidates
-                for &candidate in &pool.match_spec_to_candidates[match_spec_id.index()] {
+                for &candidate in &pool.match_spec_to_candidates[match_spec_id] {
                     let lit = Literal {
                         solvable_id: candidate,
                         negate: false,

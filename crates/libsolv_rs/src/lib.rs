@@ -1,6 +1,7 @@
 mod arena;
 mod conda_util;
 pub mod id;
+mod mapping;
 pub mod pool;
 pub mod problem;
 pub mod solvable;

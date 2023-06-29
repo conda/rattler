@@ -9,6 +9,7 @@ use crate::transaction::{Transaction, TransactionKind};
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
+use crate::mapping::Mapping;
 use decision::Decision;
 use decision_tracker::DecisionTracker;
 use rule::{Literal, Rule, RuleState};
@@ -84,7 +85,7 @@ impl<'a> Solver<'a> {
         self.add_rules_for_root_dep(&favored_map);
 
         // Initialize rules ensuring only a single candidate per package name is installed
-        for candidates in &self.pool.packages_by_name {
+        for candidates in self.pool.packages_by_name.values() {
             // Each candidate gets a rule with each other candidate
             for (i, &candidate) in candidates.iter().enumerate() {
                 for &other_candidate in &candidates[i + 1..] {
@@ -101,7 +102,7 @@ impl<'a> Solver<'a> {
         for &locked_solvable_id in &jobs.lock {
             // For each locked solvable, forbid other solvables with the same name
             let name = self.pool.resolve_solvable(locked_solvable_id).name;
-            for &other_candidate in &self.pool.packages_by_name[name.index()] {
+            for &other_candidate in &self.pool.packages_by_name[name] {
                 if other_candidate != locked_solvable_id {
                     self.rules.push(RuleState::new(
                         Rule::Lock(locked_solvable_id, other_candidate),
@@ -143,8 +144,10 @@ impl<'a> Solver<'a> {
 
         stack.push(SolvableId::root());
 
-        let mut match_spec_to_candidates = vec![Vec::new(); self.pool.match_specs.len()];
-        let mut match_spec_to_forbidden = vec![Vec::new(); self.pool.match_specs.len()];
+        let mut match_spec_to_candidates =
+            Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
+        let mut match_spec_to_forbidden =
+            Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
@@ -162,10 +165,7 @@ impl<'a> Solver<'a> {
                         .populate_candidates(dep, favored_map, &mut match_spec_to_candidates);
                 }
 
-                for &candidate in match_spec_to_candidates
-                    .get(dep.index())
-                    .unwrap_or(&empty_vec)
-                {
+                for &candidate in match_spec_to_candidates.get(dep).unwrap_or(&empty_vec) {
                     // Note: we skip candidates we have already seen
                     if visited.insert(candidate) {
                         stack.push(candidate);
@@ -189,10 +189,7 @@ impl<'a> Solver<'a> {
                         .populate_forbidden(dep, &mut match_spec_to_forbidden);
                 }
 
-                for &dep in match_spec_to_forbidden
-                    .get(dep.index())
-                    .unwrap_or(&empty_vec)
-                {
+                for &dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
                     self.rules.push(RuleState::new(
                         Rule::Constrains(solvable_id, dep),
                         &self.learnt_rules,
@@ -293,7 +290,7 @@ impl<'a> Solver<'a> {
                 }
 
                 // Consider only rules in which no candidates have been installed
-                let candidates = &self.pool.match_spec_to_candidates[deps.index()];
+                let candidates = &self.pool.match_spec_to_candidates[deps];
                 if candidates
                     .iter()
                     .any(|&c| self.decision_tracker.assigned_value(c) == Some(true))

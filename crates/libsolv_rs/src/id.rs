@@ -24,6 +24,16 @@ impl NameId {
     }
 }
 
+impl ArenaId for NameId {
+    fn from_usize(x: usize) -> Self {
+        NameId::new(x)
+    }
+
+    fn to_usize(self) -> usize {
+        self.index()
+    }
+}
+
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MatchSpecId(u32);
@@ -35,6 +45,16 @@ impl MatchSpecId {
 
     pub(crate) fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+impl ArenaId for MatchSpecId {
+    fn from_usize(x: usize) -> Self {
+        MatchSpecId::new(x)
+    }
+
+    fn to_usize(self) -> usize {
+        self.index()
     }
 }
 

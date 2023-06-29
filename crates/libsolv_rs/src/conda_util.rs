@@ -1,5 +1,6 @@
 use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
+use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cmp::Ordering;
@@ -10,7 +11,7 @@ use std::str::FromStr;
 pub(crate) fn compare_candidates(
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
-    packages_by_name: &[Vec<SolvableId>],
+    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     a: &PackageRecord,
     b: &PackageRecord,
 ) -> Ordering {
@@ -118,14 +119,14 @@ pub(crate) fn compare_candidates(
 pub(crate) fn find_highest_version(
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
-    packages_by_name: &[Vec<SolvableId>],
+    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_spec: &MatchSpec,
 ) -> Option<(Version, bool)> {
     let name = match_spec.name.as_deref().unwrap();
     let name_id = interned_strings[name];
 
     // For each record that matches the spec
-    let candidates = packages_by_name[name_id.index()]
+    let candidates = packages_by_name[name_id]
         .iter()
         .map(|&s| solvables[s].package().record)
         .filter(|s| match_spec.matches(s));
