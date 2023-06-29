@@ -18,6 +18,7 @@ use std::{
     str::FromStr,
 };
 use thiserror::Error;
+use crate::version::segment::Segment;
 
 /// An error that occurred during parsing of a string to a version.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -280,7 +281,7 @@ fn final_version_part_parser<'i>(
 
 pub fn version_parser<'i>(input: &'i str) -> IResult<&'i str, Version, ParseVersionErrorKind> {
     let mut components = SmallVec::default();
-    let mut segment_lengths = SmallVec::default();
+    let mut segments = SmallVec::default();
     let mut flags = 0u8;
 
     // String must not be empty
@@ -337,7 +338,7 @@ pub fn version_parser<'i>(input: &'i str) -> IResult<&'i str, Version, ParseVers
             norm: None,
             flags,
             components,
-            segment_lengths,
+            segments,
         },
     ));
 
@@ -508,7 +509,7 @@ impl FromStr for Version {
                 }
 
                 // Add the segment information
-                segments.push(component_count);
+                segments.push(Segment::new(component_count));
             }
 
             Ok(())
@@ -541,7 +542,7 @@ impl FromStr for Version {
         Ok(Self {
             norm: Some(lowered.into_boxed_str()),
             flags,
-            segment_lengths: segments,
+            segments,
             components,
         })
     }

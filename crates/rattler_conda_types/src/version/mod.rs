@@ -10,12 +10,16 @@ use std::{
 };
 
 use itertools::{Either, EitherOrBoth, Itertools};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::SmallVec;
 
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
 
 mod parse;
+mod segment;
+
+use segment::Segment;
 
 /// Bitmask that should be applied to `Version::flags` to determine if the version contains an epoch.
 const EPOCH_MASK: u8 = 0b00000001;
@@ -128,7 +132,7 @@ const LOCAL_VERSION_OFFSET: u8 = 1;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Eq, Deserialize)]
+#[derive(Clone, Eq)]
 pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
@@ -146,7 +150,7 @@ pub struct Version {
     /// [1, 2, 'g', 0, 'beta', 15, 0, 'rc']
     components: SmallVec<[Component; 3]>,
 
-    /// The length of each individual segment. Segments group different components together.
+    /// Information on each individual segment. Segments group different components together.
     ///
     /// So for the version `1.2g.beta15.rc` this stores:
     ///
@@ -157,7 +161,7 @@ pub struct Version {
     ///      `beta15` consists of 3 components (`0`, `beta` and `15`). Segments must always start
     ///             with a number.
     ///      `rc` consists of 2 components (`0`, `rc`). Segments must always start with a number.
-    segment_lengths: SmallVec<[u16; 4]>,
+    segments: SmallVec<[Segment; 4]>,
 
     /// Flags to indicate edge cases
     /// The first bit indicates whether or not this version has an epoch.
@@ -213,14 +217,15 @@ impl Version {
     ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
         let mut idx = if self.has_epoch() { 1 } else { 0 };
         let version_segments = if let Some(local_index) = self.local_segment_index() {
-            &self.segment_lengths[..local_index]
+            &self.segments[..local_index]
         } else {
-            &self.segment_lengths[..]
+            &self.segments[..]
         };
-        version_segments.iter().map(move |&count| {
+        version_segments.iter().map(move |&segment| {
             let start = idx;
-            let end = idx + count as usize;
-            idx += count as usize;
+            let len = segment.len() as usize;
+            let end = idx + len;
+            idx += len;
             &self.components[start..end]
         })
     }
@@ -271,12 +276,16 @@ impl Version {
     ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
             let mut idx = if self.has_epoch() { 1 } else { 0 };
-            idx += self.segment_lengths[..start].iter().sum::<u16>() as usize;
-            let version_segments = &self.segment_lengths[start..];
-            Either::Left(version_segments.iter().map(move |&count| {
+            idx += self.segments[..start]
+                .iter()
+                .map(|segment| segment.len())
+                .sum::<u16>() as usize;
+            let version_segments = &self.segments[start..];
+            Either::Left(version_segments.iter().map(move |segment| {
                 let start = idx;
-                let end = idx + count as usize;
-                idx += count as usize;
+                let len = segment.len() as usize;
+                let end = idx + len;
+                idx += len;
                 &self.components[start..end]
             }))
         } else {
@@ -383,7 +392,7 @@ impl Version {
         }
 
         let mut components = SmallVec::<[Component; 3]>::default();
-        let mut segment_lengths = SmallVec::<[u16; 4]>::default();
+        let mut segments = SmallVec::<[u16; 4]>::default();
 
         // Copy the epoch
         if self.has_epoch() {
@@ -396,16 +405,16 @@ impl Version {
             .skip(start_segment_idx)
             .take(end_segment_idx - start_segment_idx)
         {
-            segment_lengths.push(segment_components.len() as _);
+            segments.push(segment_components.len() as _);
             for component in segment_components {
                 components.push(component.clone());
             }
         }
 
         // Copy the segments and components of the local version
-        let local_start_idx = segment_lengths.len();
+        let local_start_idx = segments.len();
         for segment_components in self.local_segments() {
-            segment_lengths.push(segment_components.len() as _);
+            segments.push(segment_components.len() as _);
             for component in segment_components {
                 components.push(component.clone());
             }
@@ -419,7 +428,7 @@ impl Version {
         Some(Version {
             norm: None,
             components,
-            segment_lengths,
+            segments,
             flags,
         })
     }
@@ -747,6 +756,18 @@ impl Serialize for Version {
     }
 }
 
+impl<'de> Deserialize<'de> for Version {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Cow::<'de, str>::deserialize()?
+            .as_ref()
+            .parse()
+            .map_err(|err| D::Error::custom(err))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::cmp::Ordering;
@@ -755,6 +776,7 @@ mod test {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
+    use crate::version::Segment;
     use rand::seq::SliceRandom;
 
     use super::Version;
