@@ -260,7 +260,7 @@ mod test {
         assert_eq!(
             Constraint::from_str(">1.2.*"),
             Ok(Constraint::Comparison(
-                VersionOperator::Greater,
+                VersionOperator::GreaterEquals,
                 Version::from_str("1.2").unwrap()
             ))
         );
