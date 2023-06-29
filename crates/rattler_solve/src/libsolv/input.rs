@@ -80,8 +80,8 @@ fn add_or_reuse_solvable<'a>(
                     // Update the package to the new type mapping
                     package_to_type.insert(filename, (archive_type, old_solvable_id));
 
-                    // Reset and reuse the old solvable
-                    pool.reset_package(repo_id, old_solvable_id, &repo_data.package_record);
+                    // Reuse the old solvable
+                    pool.overwrite_package(repo_id, old_solvable_id, &repo_data.package_record);
                     return Some(old_solvable_id);
                 }
                 Ordering::Equal => {

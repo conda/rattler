@@ -82,11 +82,11 @@ impl<'a> Pool<'a> {
         solvable_id
     }
 
-    /// Resets the package associated to the id, as though it had just been created using
+    /// Overwrites the package associated to the id, as though it had just been created using
     /// [`Pool::add_package`]
     ///
     /// Panics if the new package has a different name than the existing package
-    pub fn reset_package(
+    pub fn overwrite_package(
         &mut self,
         repo_id: RepoId,
         solvable_id: SolvableId,
