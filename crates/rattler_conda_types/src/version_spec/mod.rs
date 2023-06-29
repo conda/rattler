@@ -234,7 +234,6 @@ impl VersionSpec {
 mod tests {
     use crate::version_spec::{LogicalOperator, VersionOperator};
     use crate::{Version, VersionSpec};
-    use assert_matches::assert_matches;
     use std::str::FromStr;
 
     #[test]
@@ -346,6 +345,9 @@ mod tests {
 
     #[test]
     fn issue_235() {
-        assert_matches!(VersionSpec::from_str(">2.10*"), Ok(_));
+        assert_eq!(
+            VersionSpec::from_str(">2.10*").unwrap(),
+            VersionSpec::from_str(">2.10").unwrap()
+        );
     }
 }
