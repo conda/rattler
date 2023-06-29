@@ -15,9 +15,9 @@ pub(crate) fn compare_candidates(
 ) -> Ordering {
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
-    let a_has_tracked_features = a.track_features.is_empty();
-    let b_has_tracked_features = b.track_features.is_empty();
-    match b_has_tracked_features.cmp(&a_has_tracked_features) {
+    let a_has_tracked_features = !a.track_features.is_empty();
+    let b_has_tracked_features = !b.track_features.is_empty();
+    match a_has_tracked_features.cmp(&b_has_tracked_features) {
         Ordering::Less => return Ordering::Less,
         Ordering::Greater => return Ordering::Greater,
         Ordering::Equal => {}

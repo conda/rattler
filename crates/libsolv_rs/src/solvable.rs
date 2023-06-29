@@ -4,6 +4,9 @@ use rattler_conda_types::{PackageRecord, Version};
 use std::fmt::{Display, Formatter};
 
 /// A solvable that was derived from a Conda package
+///
+/// Contains a reference to the `PackageRecord` that corresponds to the solvable (the `'a` lifetime
+/// comes from the original `PackageRecord`)
 pub struct PackageSolvable<'a> {
     pub(crate) repo_id: RepoId,
     pub(crate) dependencies: Vec<MatchSpecId>,
@@ -21,6 +24,10 @@ impl PackageSolvable<'_> {
 
 #[derive(Default)]
 pub struct SolvableMetadata {
+    /// The original index of the package in the repository that loaded it
+    ///
+    /// Note: this is highly rattler-specific, and is used to retrieve the original `RepoDataRecord`
+    /// of the solvables after a solution is found
     pub original_index: Option<usize>,
 }
 

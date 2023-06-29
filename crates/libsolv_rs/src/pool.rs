@@ -7,6 +7,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 /// A pool that stores data related to the available packages
+///
+/// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
+/// from the original `PackageRecord`s)
 pub struct Pool<'a> {
     /// All the solvables that have been registered
     pub(crate) solvables: Vec<Solvable<'a>>,
@@ -219,7 +222,7 @@ impl<'a> Pool<'a> {
         }
     }
 
-    /// Resolves the id to a match spec
+    /// Returns the match spec associated to the provided id
     ///
     /// Panics if the match spec is not found in the pool
     pub fn resolve_match_spec(&self, id: MatchSpecId) -> &MatchSpec {
@@ -240,28 +243,28 @@ impl<'a> Pool<'a> {
         }
     }
 
-    /// Resolves the id to a package name
+    /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
     pub fn resolve_package_name(&self, name_id: NameId) -> &str {
         &self.package_names[name_id.index()]
     }
 
-    /// Resolves the id to a solvable
+    /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub fn resolve_solvable(&self, id: SolvableId) -> &PackageSolvable {
         self.resolve_solvable_inner(id).package()
     }
 
-    /// Resolves the id to a solvable
+    /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub fn resolve_solvable_mut(&mut self, id: SolvableId) -> &mut PackageSolvable<'a> {
         self.resolve_solvable_inner_mut(id).package_mut()
     }
 
-    /// Resolves the id to a solvable
+    /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable {
@@ -272,7 +275,7 @@ impl<'a> Pool<'a> {
         }
     }
 
-    /// Resolves the id to a solvable
+    /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub(crate) fn resolve_solvable_inner_mut(&mut self, id: SolvableId) -> &mut Solvable<'a> {

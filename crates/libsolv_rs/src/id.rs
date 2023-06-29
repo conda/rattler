@@ -1,3 +1,4 @@
+#[repr(transparent)]
 #[derive(Clone, Copy, Eq, PartialEq, Hash)]
 pub struct RepoId(u32);
 
@@ -7,23 +8,21 @@ impl RepoId {
     }
 }
 
+#[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct NameId {
-    value: u32,
-}
+pub struct NameId(u32);
 
 impl NameId {
     pub(crate) fn new(index: usize) -> Self {
-        Self {
-            value: index as u32,
-        }
+        Self(index as u32)
     }
 
     pub(crate) fn index(self) -> usize {
-        self.value as usize
+        self.0 as usize
     }
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct MatchSpecId(u32);
 
@@ -37,11 +36,15 @@ impl MatchSpecId {
     }
 }
 
+#[repr(transparent)]
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Ord, PartialOrd)]
 pub struct SolvableId(u32);
 
 impl SolvableId {
     pub(crate) fn new(index: usize) -> Self {
+        debug_assert_ne!(index, 0);
+        debug_assert_ne!(index, u32::MAX as usize);
+
         Self(index as u32)
     }
 
@@ -66,11 +69,15 @@ impl SolvableId {
     }
 }
 
+#[repr(transparent)]
 #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug, Hash)]
 pub(crate) struct RuleId(u32);
 
 impl RuleId {
     pub(crate) fn new(index: usize) -> Self {
+        debug_assert_ne!(index, 0);
+        debug_assert_ne!(index, u32::MAX as usize);
+
         Self(index as u32)
     }
 
