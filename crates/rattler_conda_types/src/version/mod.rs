@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::Bound;
 use std::hash::{Hash, Hasher};
 use std::ops::RangeBounds;
@@ -214,7 +215,7 @@ impl Version {
     /// Returns the individual segments of the version.
     fn segments(
         &self,
-    ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
+    ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         let mut idx = if self.has_epoch() { 1 } else { 0 };
         let version_segments = if let Some(local_index) = self.local_segment_index() {
             &self.segments[..local_index]
@@ -223,10 +224,12 @@ impl Version {
         };
         version_segments.iter().map(move |&segment| {
             let start = idx;
-            let len = segment.len() as usize;
-            let end = idx + len;
-            idx += len;
-            &self.components[start..end]
+            idx += segment.len() as usize;
+            SegmentIter {
+                offset: start,
+                version: self,
+                segment,
+            }
         })
     }
 
@@ -273,20 +276,22 @@ impl Version {
     /// ```
     fn local_segments(
         &self,
-    ) -> impl Iterator<Item = &'_ [Component]> + DoubleEndedIterator + ExactSizeIterator + '_ {
+    ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
             let mut idx = if self.has_epoch() { 1 } else { 0 };
             idx += self.segments[..start]
                 .iter()
                 .map(|segment| segment.len())
-                .sum::<u16>() as usize;
+                .sum::<usize>();
             let version_segments = &self.segments[start..];
-            Either::Left(version_segments.iter().map(move |segment| {
+            Either::Left(version_segments.iter().map(move |&segment| {
                 let start = idx;
-                let len = segment.len() as usize;
-                let end = idx + len;
-                idx += len;
-                &self.components[start..end]
+                idx += segment.len();
+                SegmentIter {
+                    offset: start,
+                    version: self,
+                    segment,
+                }
             }))
         } else {
             Either::Right(iter::empty())
@@ -300,8 +305,17 @@ impl Version {
         let major_segment = segments.next()?;
         let minor_segment = segments.next()?;
 
-        if major_segment.len() == 1 && minor_segment.len() == 1 {
-            Some((major_segment[0].as_number()?, minor_segment[0].as_number()?))
+        if major_segment.component_count() == 1 && minor_segment.component_count() == 1 {
+            Some((
+                major_segment
+                    .components()
+                    .next()
+                    .and_then(|c| c.as_number())?,
+                minor_segment
+                    .components()
+                    .next()
+                    .and_then(|c| c.as_number())?,
+            ))
         } else {
             None
         }
@@ -312,7 +326,7 @@ impl Version {
     /// If a version has a single component named "dev" it is considered to be a dev version.
     pub fn is_dev(&self) -> bool {
         self.segments()
-            .flatten()
+            .flat_map(|segment| segment.components())
             .any(|component| component.as_string() == Some("dev"))
     }
 
@@ -331,40 +345,6 @@ impl Version {
             && segments_starts_with(self.segments(), other.segments().rev().skip(1).rev())
             // Local version comparison remains the same
             && segments_starts_with(self.local_segments(), other.local_segments())
-    }
-
-    /// Returns the canonical string representation of the version. This is all segments joined by dots.
-    pub fn canonical(&self) -> String {
-        fn format_components(components: &[Component]) -> impl Display {
-            // Skip first component if its default and followed by a non-numeral
-            let components = if components.len() > 1
-                && components[0] == Component::default()
-                && components[1].as_number().is_none()
-            {
-                &components[1..]
-            } else {
-                components
-            };
-            components.iter().join("")
-        }
-
-        fn format_segments<'i, I: Iterator<Item = &'i [Component]> + 'i>(
-            segments: I,
-        ) -> impl Display + 'i {
-            segments.format_with(".", |components, f| f(&format_components(components)))
-        }
-
-        let epoch = self.epoch();
-        let epoch_display = (epoch != 0)
-            .then(|| format!("{}!", epoch))
-            .unwrap_or_default();
-        let segments_display = format_segments(self.segments());
-        let local_display = self
-            .has_local()
-            .then(|| format!("+{}", format_segments(self.local_segments())))
-            .unwrap_or_default();
-
-        format!("{}{}{}", epoch_display, segments_display, local_display)
     }
 
     /// Returns a new version with only the given segments.
@@ -392,7 +372,7 @@ impl Version {
         }
 
         let mut components = SmallVec::<[Component; 3]>::default();
-        let mut segments = SmallVec::<[u16; 4]>::default();
+        let mut segments = SmallVec::<[Segment; 4]>::default();
 
         // Copy the epoch
         if self.has_epoch() {
@@ -400,22 +380,29 @@ impl Version {
         }
 
         // Copy the segments and components of the common version
-        for segment_components in self
+        for (segment_idx, segment_iter) in self
             .segments()
             .skip(start_segment_idx)
             .take(end_segment_idx - start_segment_idx)
+            .enumerate()
         {
-            segments.push(segment_components.len() as _);
-            for component in segment_components {
+            let segment = if segment_idx == 0 {
+                segment_iter.segment.without_separator()
+            } else {
+                segment_iter.segment
+            };
+            segments.push(segment);
+
+            for component in segment_iter.components() {
                 components.push(component.clone());
             }
         }
 
         // Copy the segments and components of the local version
         let local_start_idx = segments.len();
-        for segment_components in self.local_segments() {
-            segments.push(segment_components.len() as _);
-            for component in segment_components {
+        for segment_iter in self.local_segments() {
+            segments.push(segment_iter.segment);
+            for component in segment_iter.components() {
                 components.push(component.clone());
             }
         }
@@ -450,7 +437,7 @@ impl Version {
         if let Some(local_index) = self.local_segment_index() {
             local_index
         } else {
-            self.segment_lengths.len()
+            self.segments.len()
         }
     }
 
@@ -459,7 +446,7 @@ impl Version {
     pub fn strip_local(&self) -> Cow<'_, Version> {
         if self.has_local() {
             let mut components = SmallVec::<[Component; 3]>::default();
-            let mut segment_lengths = SmallVec::<[u16; 4]>::default();
+            let mut segments = SmallVec::<[Segment; 4]>::default();
             let mut flags = 0;
 
             // Add the epoch
@@ -469,9 +456,9 @@ impl Version {
             }
 
             // Copy the segments
-            for segment in self.segments() {
-                segment_lengths.push(segment.len() as _);
-                for component in segment.iter() {
+            for segment_iter in self.segments() {
+                segments.push(segment_iter.segment);
+                for component in segment_iter.components() {
                     components.push(component.clone());
                 }
             }
@@ -479,7 +466,7 @@ impl Version {
             Cow::Owned(Version {
                 norm: None,
                 components,
-                segment_lengths,
+                segments,
                 flags,
             })
         } else {
@@ -492,8 +479,8 @@ impl Version {
 fn segments_starts_with<
     'a,
     'b,
-    A: Iterator<Item = &'a [Component]> + 'a,
-    B: Iterator<Item = &'b [Component]> + 'a,
+    A: Iterator<Item = SegmentIter<'a>> + 'a,
+    B: Iterator<Item = SegmentIter<'b>> + 'b,
 >(
     a: A,
     b: B,
@@ -504,7 +491,7 @@ fn segments_starts_with<
             EitherOrBoth::Left(_) => return true,
             EitherOrBoth::Right(_) => return false,
         };
-        for values in left.iter().zip_longest(right.iter()) {
+        for values in left.components().zip_longest(right.components()) {
             if !match values {
                 EitherOrBoth::Both(a, b) => a == b,
                 EitherOrBoth::Left(_) => return true,
@@ -519,11 +506,15 @@ fn segments_starts_with<
 
 impl PartialEq<Self> for Version {
     fn eq(&self, other: &Self) -> bool {
-        fn segments_equal<'i, I: Iterator<Item = &'i [Component]>>(a: I, b: I) -> bool {
+        fn segments_equal<'i, I: Iterator<Item = SegmentIter<'i>>>(a: I, b: I) -> bool {
             for ranges in a.zip_longest(b) {
-                let (a_range, b_range) = ranges.or_default();
+                let (a_range, b_range) = ranges.map_any(Some, Some).or_default();
                 let default = Component::default();
-                for components in a_range.iter().zip_longest(b_range.iter()) {
+                for components in a_range
+                    .iter()
+                    .flat_map(SegmentIter::components)
+                    .zip_longest(b_range.iter().flat_map(SegmentIter::components))
+                {
                     let (a_component, b_component) = match components {
                         EitherOrBoth::Left(l) => (l, &default),
                         EitherOrBoth::Right(r) => (&default, r),
@@ -545,7 +536,7 @@ impl PartialEq<Self> for Version {
 
 impl Hash for Version {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        fn hash_segments<'i, I: Iterator<Item = &'i [Component]>, H: Hasher>(
+        fn hash_segments<'i, I: Iterator<Item = SegmentIter<'i>>, H: Hasher>(
             state: &mut H,
             segments: I,
         ) {
@@ -555,7 +546,7 @@ impl Hash for Version {
                 // number of default components in each segment. The get an equivalent hash we skip
                 // trailing default components when computing the hash
                 segment
-                    .iter()
+                    .components()
                     .rev()
                     .skip_while(|c| **c == default)
                     .for_each(|c| c.hash(state));
@@ -568,32 +559,72 @@ impl Hash for Version {
     }
 }
 
-/// A helper function to display the segments of a [`Version`]
-fn format_segments<'i, I: Iterator<Item = &'i [Component]>>(
-    segments: I,
-) -> impl fmt::Display + fmt::Debug {
-    format!(
-        "[{}]",
-        segments.format_with(", ", |components, f| f(&format_args!(
-            "[{}]",
-            components.iter().format(", ")
-        )))
-    )
-}
-
 impl Debug for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Version")
             .field("norm", &self.norm)
-            .field(
-                "version",
-                &format_segments(
-                    iter::once([Component::Numeral(self.epoch())].as_slice())
-                        .chain(self.segments()),
-                ),
-            )
-            .field("local", &format_segments(self.local_segments()))
+            .field("epoch", &self.epoch_opt())
+            .field("version", &SegmentFormatter::from(self.segments()))
+            .field("local", &SegmentFormatter::from(self.local_segments()))
             .finish()
+    }
+}
+
+/// A helper struct to format an iterator of [`SegmentIter`]. Implements both [`std::fmt::Debug`]
+/// where segments are displayed as an array of arrays (e.g. `[[1], [2,3,4]]`) and
+/// [`std::fmt::Display`] where segments are display in their canonical form (e.g. `1.2-rc2`).
+struct SegmentFormatter<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> {
+    inner: RefCell<Option<I>>,
+}
+
+impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> From<I> for SegmentFormatter<'v, I> {
+    fn from(value: I) -> Self {
+        Self {
+            inner: RefCell::new(Some(value)),
+        }
+    }
+}
+
+impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatter<'v, I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let iter = match self.inner.borrow_mut().take() {
+            Some(iter) => iter,
+            None => panic!("was already formatted once"),
+        };
+
+        write!(f, "[")?;
+        for (idx, segment) in iter.enumerate() {
+            if idx > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "[{}]", segment.components().format(", "))?;
+        }
+        write!(f, "]")?;
+
+        Ok(())
+    }
+}
+
+impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentFormatter<'v, I> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let iter = match self.inner.borrow_mut().take() {
+            Some(iter) => iter,
+            None => panic!("was already formatted once"),
+        };
+
+        for segment in iter {
+            if let Some(separator) = segment.separator() {
+                write!(f, "{separator}")?;
+            }
+            let mut components = segment.components();
+            if segment.has_implicit_default() {
+                let _ = components.next();
+            }
+            for component in components {
+                write!(f, "{component}")?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -705,10 +736,14 @@ impl Display for Component {
 
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
-        fn cmp_segments<'i, I: Iterator<Item = &'i [Component]>>(a: I, b: I) -> Ordering {
+        fn cmp_segments<'i, I: Iterator<Item = SegmentIter<'i>>>(a: I, b: I) -> Ordering {
             for ranges in a.zip_longest(b) {
-                let (a_range, b_range) = ranges.or_default();
-                for components in a_range.iter().zip_longest(b_range.iter()) {
+                let (a_range, b_range) = ranges.map_any(Some, Some).or_default();
+                for components in a_range
+                    .iter()
+                    .flat_map(SegmentIter::components)
+                    .zip_longest(b_range.iter().flat_map(SegmentIter::components))
+                {
                     let default = Component::default();
                     let (a_component, b_component) = match components {
                         EitherOrBoth::Left(l) => (l, &default),
@@ -740,10 +775,16 @@ impl PartialOrd for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.norm {
-            None => write!(f, "{}", self.canonical()),
-            Some(norm) => write!(f, "{}", norm.as_ref()),
+        if let Some(epoch) = self.epoch_opt() {
+            write!(f, "{epoch}!")?;
         }
+
+        write!(f, "{}", SegmentFormatter::from(self.segments()))?;
+        if self.has_local() {
+            write!(f, "+{}", SegmentFormatter::from(self.local_segments()))?;
+        }
+
+        return Ok(());
     }
 }
 
@@ -761,10 +802,63 @@ impl<'de> Deserialize<'de> for Version {
     where
         D: Deserializer<'de>,
     {
-        Cow::<'de, str>::deserialize()?
+        Cow::<'de, str>::deserialize(deserializer)?
             .as_ref()
             .parse()
             .map_err(|err| D::Error::custom(err))
+    }
+}
+
+struct SegmentIter<'v> {
+    /// Information about the segment we are iterating.
+    segment: Segment,
+
+    /// Offset in the components of the version.
+    offset: usize,
+
+    /// The version to which the segment belongs
+    version: &'v Version,
+}
+
+impl<'v> SegmentIter<'v> {
+    /// Returns true if the first component is an implicit default added while parsing the version.
+    /// E.g. `2.a` is represented as `2.0a`. The `0` is added implicitly.
+    pub fn has_implicit_default(&self) -> bool {
+        self.segment.has_implicit_default()
+    }
+
+    /// Returns the separator that is found in from of this segment or `None` if this segment was
+    /// not preceded by a separator.
+    pub fn separator(&self) -> Option<char> {
+        self.segment.separator()
+    }
+
+    /// Returns the number of components stored in the version. Note that the number of components
+    /// returned by [`Self::components`] might differ because it might include an implicit default.
+    pub fn component_count(&self) -> usize {
+        self.segment.len()
+    }
+
+    /// Returns an iterator over the components of this segment.
+    pub fn components(&self) -> impl Iterator<Item = &'v Component> + DoubleEndedIterator {
+        static IMPLICIT_DEFAULT: Component = Component::Numeral(0);
+
+        let version = self.version;
+
+        // Create an iterator over all component
+        let segment_components = (self.offset..self.offset + self.segment.len())
+            .map(move |idx| &version.components[idx]);
+
+        // Add an implicit default if this segment has one
+        let implicit_default_component = self
+            .segment
+            .has_implicit_default()
+            .then_some(&IMPLICIT_DEFAULT);
+
+        // Join the two iterators together to get all the components of this segment.
+        implicit_default_component
+            .into_iter()
+            .chain(segment_components)
     }
 }
 
@@ -776,7 +870,6 @@ mod test {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    use crate::version::Segment;
     use rand::seq::SliceRandom;
 
     use super::Version;
@@ -973,7 +1066,11 @@ mod test {
         assert_eq!(
             Version::from_str("1.1l").unwrap().bump(),
             Version::from_str("1.2l").unwrap()
-        )
+        );
+        assert_eq!(
+            Version::from_str("1.alpha").unwrap().bump(),
+            Version::from_str("1.2alpha").unwrap()
+        );
     }
 
     #[test]
@@ -1046,17 +1143,17 @@ mod test {
 
     #[test]
     fn canonical() {
-        assert_eq!(Version::from_str("1.2.3").unwrap().canonical(), "1.2.3");
-        assert_eq!(Version::from_str("1!1.2.3").unwrap().canonical(), "1!1.2.3");
+        assert_eq!(Version::from_str("1.2.3").unwrap().to_string(), "1.2.3");
+        assert_eq!(Version::from_str("1!1.2.3").unwrap().to_string(), "1!1.2.3");
         assert_eq!(
-            Version::from_str("1.2.3-alpha.2").unwrap().canonical(),
-            "1.2.3.alpha.2"
+            Version::from_str("1.2.3-alpha.2").unwrap().to_string(),
+            "1.2.3-alpha.2"
         );
         assert_eq!(
             Version::from_str("1!1.2.3-alpha.2+3beta5rc")
                 .unwrap()
-                .canonical(),
-            "1!1.2.3.alpha.2+3beta5rc"
+                .to_string(),
+            "1!1.2.3-alpha.2+3beta5rc"
         );
     }
 

@@ -1,4 +1,5 @@
 use super::{Component, Version};
+use crate::version::segment::Segment;
 use crate::version::{EPOCH_MASK, LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
 use nom::branch::alt;
 use nom::bytes::complete::{tag_no_case, take_while};
@@ -18,7 +19,6 @@ use std::{
     str::FromStr,
 };
 use thiserror::Error;
-use crate::version::segment::Segment;
 
 /// An error that occurred during parsing of a string to a version.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -171,7 +171,7 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
 /// Parses a version segment from a list of components.
 fn segment_parser<'i, 'c>(
     components: &'c mut SmallVec<[Component; 3]>,
-) -> impl Parser<&'i str, u16, ParseVersionErrorKind> + 'c {
+) -> impl Parser<&'i str, Segment, ParseVersionErrorKind> + 'c {
     move |input| {
         // Parse the first component of the segment
         let (mut rest, first_component) = match component_parser(input) {
@@ -184,15 +184,12 @@ fn segment_parser<'i, 'c>(
 
         // If the first component is not numeric we add a default component since each segment must
         // always start with a number.
-        let mut segment_length = 0;
-        if !first_component.is_numeric() {
-            components.push(Component::default());
-            segment_length += 1;
-        }
+        let mut component_count = 0u16;
+        let has_implicit_default = !first_component.is_numeric();
 
         // Add the first component
         components.push(first_component);
-        segment_length += 1;
+        component_count += 1;
 
         // Loop until we can't find any more components
         loop {
@@ -200,14 +197,14 @@ fn segment_parser<'i, 'c>(
                 Ok((i, o)) => (i, o),
                 Err(e) => {
                     // Remove any components that we may have added.
-                    components.drain(components.len() - segment_length..);
+                    components.drain(components.len() - (component_count as usize)..);
                     return Err(e);
                 }
             };
             match component {
                 Some(component) => {
                     components.push(component);
-                    segment_length = match segment_length.checked_add(1) {
+                    component_count = match component_count.checked_add(1) {
                         Some(length) => length,
                         None => {
                             return Err(nom::Err::Error(
@@ -217,7 +214,13 @@ fn segment_parser<'i, 'c>(
                     }
                 }
                 None => {
-                    break Ok((remaining, segment_length.try_into().unwrap()));
+                    let segment = Segment::new(component_count)
+                        .ok_or_else(|| {
+                            nom::Err::Error(ParseVersionErrorKind::TooManyComponentsInASegment)
+                        })?
+                        .with_implicit_default(has_implicit_default);
+
+                    break Ok((remaining, segment));
                 }
             }
             rest = remaining;
@@ -227,16 +230,16 @@ fn segment_parser<'i, 'c>(
 
 fn final_version_part_parser<'i>(
     components: &mut SmallVec<[Component; 3]>,
-    segment_lengths: &mut SmallVec<[u16; 4]>,
+    segments: &mut SmallVec<[Segment; 4]>,
     input: &'i str,
     dash_or_underscore: Option<char>,
 ) -> Result<Option<char>, nom::Err<ParseVersionErrorKind>> {
     let mut dash_or_underscore = dash_or_underscore;
-    let first_segment_idx = segment_lengths.len();
+    let first_segment_idx = segments.len();
 
     // Parse the first segment of the version. It must exists.
     let (mut input, first_segment_length) = segment_parser(components).parse(input)?;
-    segment_lengths.push(first_segment_length);
+    segments.push(first_segment_length);
     let result = loop {
         // Parse either eof or a version segment separator.
         let (rest, separator) = match alt((map(one_of("-._"), Some), value(None, eof)))(input) {
@@ -262,18 +265,22 @@ fn final_version_part_parser<'i>(
         }
 
         // Parse the next segment.
-        let (rest, segment_length) = match segment_parser(components).parse(rest) {
+        let (rest, segment) = match segment_parser(components).parse(rest) {
             Ok(result) => result,
             Err(e) => break Err(e),
         };
-        segment_lengths.push(segment_length);
+        segments.push(
+            segment
+                .with_separator(Some(separator))
+                .expect("unrecognized separator"),
+        );
 
         input = rest;
     };
 
     // If there was an error, revert the `segment_lengths` array.
     if result.is_err() {
-        segment_lengths.drain(first_segment_idx..);
+        segments.drain(first_segment_idx..);
     }
 
     result
@@ -302,11 +309,11 @@ pub fn version_parser<'i>(input: &'i str) -> IResult<&'i str, Version, ParseVers
 
     // Parse the common version part
     let dash_or_underscore =
-        final_version_part_parser(&mut components, &mut segment_lengths, common_part, None)?;
+        final_version_part_parser(&mut components, &mut segments, common_part, None)?;
 
     // Parse the local version part
     if let Some(local_part) = local_part {
-        let first_local_segment_idx = segment_lengths.len();
+        let first_local_segment_idx = segments.len();
 
         // Check if there are not too many segments.
         if first_local_segment_idx > (LOCAL_VERSION_MASK >> LOCAL_VERSION_OFFSET) as usize {
@@ -326,7 +333,7 @@ pub fn version_parser<'i>(input: &'i str) -> IResult<&'i str, Version, ParseVers
         // Parse the segments
         final_version_part_parser(
             &mut components,
-            &mut segment_lengths,
+            &mut segments,
             local_part,
             dash_or_underscore,
         )?;
@@ -469,7 +476,7 @@ impl FromStr for Version {
 
         fn split_component<'a>(
             segments_iter: impl Iterator<Item = &'a str>,
-            segments: &mut SmallVec<[u16; 4]>,
+            segments: &mut SmallVec<[Segment; 4]>,
             components: &mut SmallVec<[Component; 3]>,
         ) -> Result<(), ParseVersionErrorKind> {
             for component in segments_iter {
@@ -492,15 +499,11 @@ impl FromStr for Version {
                     .peekable();
 
                 // A segment must always starts with a numeral
-                let mut component_count = 0u16;
-                if !matches!(atoms.peek(), Some(&Ok(Component::Numeral(_)))) {
-                    components.push(Component::Numeral(0));
-                    component_count = component_count
-                        .checked_add(1)
-                        .ok_or(ParseVersionErrorKind::TooManyComponentsInASegment)?;
-                }
+                let has_implicit_default =
+                    !matches!(atoms.peek(), Some(&Ok(Component::Numeral(_))));
 
                 // Add the components
+                let mut component_count = 0u16;
                 for component in atoms {
                     components.push(component?);
                     component_count = component_count
@@ -509,7 +512,11 @@ impl FromStr for Version {
                 }
 
                 // Add the segment information
-                segments.push(Segment::new(component_count));
+                segments.push(
+                    Segment::new(component_count)
+                        .ok_or(ParseVersionErrorKind::TooManyComponentsInASegment)?
+                        .with_implicit_default(has_implicit_default),
+                );
             }
 
             Ok(())
@@ -550,9 +557,10 @@ impl FromStr for Version {
 
 #[cfg(test)]
 mod test {
-    use crate::version::{parse::final_version_parser, Version};
+    use super::{final_version_parser, Version};
     use serde::Serialize;
     use std::collections::BTreeMap;
+    use std::fmt::{Display, Formatter};
 
     #[test]
     fn test_parse() {
@@ -577,7 +585,7 @@ mod test {
             "1___",
         ];
 
-        #[derive(Serialize)]
+        #[derive(Debug, Serialize)]
         #[serde(untagged)]
         enum VersionOrError {
             Version(Version),
@@ -585,14 +593,28 @@ mod test {
         }
 
         let mut index_map: BTreeMap<String, VersionOrError> = BTreeMap::default();
-        for version in versions {
-            let version_or_error = match final_version_parser(version) {
-                Ok(version) => VersionOrError::Version(version),
+        for version_str in versions {
+            let version_or_error = match final_version_parser(version_str) {
+                Ok(version) => {
+                    assert_eq!(version_str, version.to_string().as_str());
+                    VersionOrError::Version(version)
+                }
                 Err(e) => VersionOrError::Error(e.to_string()),
             };
-            index_map.insert(version.to_owned(), version_or_error);
+            index_map.insert(version_str.to_owned(), version_or_error);
         }
 
-        insta::assert_toml_snapshot!(index_map);
+        insta::assert_debug_snapshot!(index_map);
+    }
+
+    struct DisplayAsDebug<T>(T);
+
+    impl<T> Display for DisplayAsDebug<T>
+    where
+        for<'i> &'i T: std::fmt::Debug,
+    {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", &self.0)
+        }
     }
 }

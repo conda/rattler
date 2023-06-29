@@ -36,8 +36,8 @@ impl Segment {
     }
 
     /// Returns the number of components in this segment
-    pub fn len(self) -> u16 {
-        (self.0 >> COMPONENT_COUNT_OFFSET) & COMPONENT_COUNT_MASK
+    pub fn len(self) -> usize {
+        ((self.0 >> COMPONENT_COUNT_OFFSET) & COMPONENT_COUNT_MASK) as usize
     }
 
     /// Sets whether the segment starts with an implicit default `Component`. This is the case when
@@ -69,6 +69,11 @@ impl Segment {
                     _ => return None,
                 } << SEGMENT_SEPARATOR_OFFSET),
         ))
+    }
+
+    /// Removes the separator from this segment
+    pub fn without_separator(self) -> Self {
+        Self(self.0 & !(SEGMENT_SEPARATOR_MASK << SEGMENT_SEPARATOR_OFFSET))
     }
 
     /// Returns the separator that precedes this segment or `None` if there is no separator.
@@ -104,10 +109,7 @@ mod test {
         assert_eq!(Segment::new(8191).unwrap().len(), 8191);
         assert_eq!(Segment::new(8192), None);
 
-        assert_eq!(
-            Segment::new(4096).unwrap().has_implicit_default(),
-            false
-        );
+        assert_eq!(Segment::new(4096).unwrap().has_implicit_default(), false);
         assert_eq!(
             Segment::new(4096)
                 .unwrap()

@@ -1,22 +1,113 @@
 ---
 source: crates/rattler_conda_types/src/version/parse.rs
+assertion_line: 607
 expression: index_map
 ---
-"$" = 'expected a version component e.g. `2` or `rc`'
-"." = 'expected a version component e.g. `2` or `rc`'
-"1!1.2a.3-rc1" = '1!1.2a.3.rc1'
-"1+" = 'expected a version component e.g. `2` or `rc`'
-"1+$" = 'expected a version component e.g. `2` or `rc`'
-"1+." = 'expected a version component e.g. `2` or `rc`'
-"1+2" = '1+2'
-1-2-3 = '1.2.3'
-1-2-3_ = '1.2.3_'
-1-2_3 = 'cannot use both underscores and dashes as version segment seperators'
-"1.0.1_" = '1.0.1_'
-"1.0.1post.za" = '1.0.1post.za'
-"1@2" = "expected a '.', '-', or '_'"
-1_ = '1_'
-1_2_3 = '1.2.3'
-1_2_3_ = '1.2.3_'
-1__ = '1._'
-1___ = 'expected a version component e.g. `2` or `rc`'
+{
+    "$": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    ".": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1!1.2a.3-rc1": Version(
+        Version {
+            norm: None,
+            epoch: Some(
+                1,
+            ),
+            version: [[1], [2, a], [3], [0, rc, 1]],
+            local: [],
+        },
+    ),
+    "1+": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+$": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+.": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+2": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1]],
+            local: [[2]],
+        },
+    ),
+    "1-2-3": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [2], [3]],
+            local: [],
+        },
+    ),
+    "1-2-3_": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [2], [3, _]],
+            local: [],
+        },
+    ),
+    "1-2_3": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1.0.1_": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [0], [1, _]],
+            local: [],
+        },
+    ),
+    "1.0.1post.za": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [0], [1, post], [0, za]],
+            local: [],
+        },
+    ),
+    "1@2": Error(
+        "expected a '.', '-', or '_'",
+    ),
+    "1_": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1, _]],
+            local: [],
+        },
+    ),
+    "1_2_3": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [2], [3]],
+            local: [],
+        },
+    ),
+    "1_2_3_": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [2], [3, _]],
+            local: [],
+        },
+    ),
+    "1__": Version(
+        Version {
+            norm: None,
+            epoch: None,
+            version: [[1], [0, _]],
+            local: [],
+        },
+    ),
+    "1___": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+}
