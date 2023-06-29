@@ -347,7 +347,7 @@ mod tests {
     fn issue_235() {
         assert_eq!(
             VersionSpec::from_str(">2.10*").unwrap(),
-            VersionSpec::from_str(">2.10").unwrap()
+            VersionSpec::from_str(">=2.10").unwrap()
         );
     }
 }

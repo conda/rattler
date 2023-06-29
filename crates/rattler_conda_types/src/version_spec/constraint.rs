@@ -84,6 +84,7 @@ impl FromStr for Constraint {
                     VersionOperator::StartsWith | VersionOperator::GreaterEquals => {
                         (version_str, op)
                     }
+                    VersionOperator::Greater => (version_str, VersionOperator::GreaterEquals),
                     VersionOperator::NotEquals => (version_str, VersionOperator::NotStartsWith),
                     op => {
                         // return Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
