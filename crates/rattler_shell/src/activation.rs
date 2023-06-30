@@ -462,13 +462,6 @@ impl<T: Shell + Clone> Activator<T> {
         let before_env = self.shell_type.parse_env(before_env);
         let after_env = self.shell_type.parse_env(after_env);
 
-        println!(
-            "=== SCRIPT:\n{}\n=== STDOUT:\n{}=== STDERR:\n{}",
-            activation_detection_script,
-            stdout,
-            String::from_utf8_lossy(&activation_result.stderr)
-        );
-
         // Find and return the differences
         Ok(after_env
             .into_iter()
