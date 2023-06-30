@@ -8,7 +8,7 @@ use rattler::{
 };
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
-    RepoDataRecord, Version,
+    RepoDataRecord, Version, PackageRecord,
 };
 use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
@@ -158,7 +158,15 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Get the package names from the matchspecs so we can only load the package records that we need.
     let package_names = specs.iter().filter_map(|spec| spec.name.as_ref());
     let repodatas = wrap_in_progress("parsing repodata", move || {
-        SparseRepoData::load_records_recursive(&sparse_repo_datas, package_names)
+        SparseRepoData::load_records_recursive(
+            &sparse_repo_datas,
+            package_names,
+            Some(|record| {
+                if record.name == "python" {
+                    record.depends.push("pip".to_string());
+                }
+            }),
+        )
     })?;
 
     // Determine virtual packages of the system. These packages define the capabilities of the
@@ -604,7 +612,16 @@ async fn fetch_repo_data_records_with_progress(
     // task.
     let repo_data_json_path = result.repo_data_json_path.clone();
     match tokio::task::spawn_blocking(move || {
-        SparseRepoData::new(channel, platform.to_string(), repo_data_json_path)
+        SparseRepoData::new(
+            channel,
+            platform.to_string(),
+            repo_data_json_path,
+            Some(|record: &mut PackageRecord| {
+                if record.name == "python" {
+                    record.depends.push("pip".to_string());
+                }
+            }),
+        )
     })
     .await
     {
