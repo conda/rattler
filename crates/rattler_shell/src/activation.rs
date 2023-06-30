@@ -151,9 +151,16 @@ pub enum ActivationError {
     /// Failed to run the activation script
     #[error("Failed to run activation script (status: {status})")]
     FailedToRunActivationScript {
+        /// The contents of the activation script that was run
         script: String,
+
+        /// The stdout output of executing the script
         stdout: Vec<u8>,
+
+        /// The stderr output of executing the script
         stderr: Vec<u8>,
+
+        /// The error code of running the script
         status: ExitStatus,
     },
 }
