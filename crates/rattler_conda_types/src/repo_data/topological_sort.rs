@@ -7,19 +7,48 @@ use fxhash::{FxHashMap, FxHashSet};
 /// order of `packages` and of the `depends` vector inside the records.
 ///
 /// Note that this function only works for packages with unique names.
-pub fn sort_topologically<T: AsRef<PackageRecord>>(packages: Vec<T>) -> Vec<T> {
-    let roots = get_graph_roots(&packages);
+pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
+    let roots = get_graph_roots(&packages, None);
 
     let mut all_packages = packages
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|p| (p.as_ref().name.clone(), p))
         .collect();
 
-    get_topological_order(roots, &mut all_packages)
+    // Detect cycles
+    let mut visited = FxHashSet::default();
+    let mut stack = Vec::new();
+    let mut cycles = Vec::new();
+
+    for root in &roots {
+        if !visited.contains(root) {
+            if let Some(cycle) = find_cycles(root, &all_packages, &mut visited, &mut stack) {
+                cycles.push(cycle);
+            }
+        }
+    }
+
+    // print all cycles
+    for cycle in &cycles {
+        tracing::debug!("Found cycle: {:?}", cycle);
+    }
+
+    // Break cycles
+    let cycle_breaks = break_cycles(cycles, &all_packages);
+
+    // obtain the new roots (packages that are not dependencies of any other package)
+    // this is needed because breaking cycles can create new roots
+    let roots = get_graph_roots(&packages, Some(&cycle_breaks));
+
+    get_topological_order(roots, &mut all_packages, &cycle_breaks)
 }
 
 /// Retrieves the names of the packages that form the roots of the graph
-fn get_graph_roots<T: AsRef<PackageRecord>>(records: &[T]) -> Vec<String> {
+fn get_graph_roots<T: AsRef<PackageRecord>>(
+    records: &[T],
+    cycle_breaks: Option<&FxHashSet<(String, String)>>,
+) -> Vec<String> {
     let all_packages: FxHashSet<_> = records.iter().map(|r| r.as_ref().name.as_str()).collect();
 
     let dependencies: FxHashSet<_> = records
@@ -29,6 +58,14 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(records: &[T]) -> Vec<String> {
                 .depends
                 .iter()
                 .map(|d| package_name_from_match_spec(d))
+                .filter(|d| {
+                    // filter out circular dependencies
+                    if let Some(cycle_breaks) = cycle_breaks {
+                        !cycle_breaks.contains(&(r.as_ref().name.clone(), d.to_string()))
+                    } else {
+                        true
+                    }
+                })
         })
         .collect();
 
@@ -45,11 +82,75 @@ enum Action {
     Install(String),
 }
 
+/// Find cycles with DFS
+fn find_cycles<T: AsRef<PackageRecord>>(
+    node: &str,
+    packages: &FxHashMap<String, T>,
+    visited: &mut FxHashSet<String>,
+    stack: &mut Vec<String>,
+) -> Option<Vec<String>> {
+    visited.insert(node.to_string());
+    stack.push(node.to_string());
+
+    if let Some(package) = packages.get(node) {
+        for dependency in &package.as_ref().depends {
+            let dep_name = package_name_from_match_spec(dependency);
+
+            if !visited.contains(dep_name) {
+                if let Some(cycle) = find_cycles(dep_name, packages, visited, stack) {
+                    return Some(cycle);
+                }
+            } else if stack.contains(&dep_name.to_string()) {
+                // Cycle detected. We clone the part of the stack that forms the cycle.
+                if let Some(pos) = stack.iter().position(|x| *x == dep_name) {
+                    return Some(stack[pos..].to_vec());
+                }
+            }
+        }
+    }
+
+    stack.pop();
+    None
+}
+
+fn break_cycles<T: AsRef<PackageRecord>>(
+    cycles: Vec<Vec<String>>,
+    packages: &FxHashMap<String, T>,
+) -> FxHashSet<(String, String)> {
+    // we record the edges that we want to remove
+    let mut cycle_breaks = FxHashSet::default();
+
+    for cycle in cycles {
+        for i in 0..cycle.len() {
+            let pi1 = &cycle[i];
+            // Next package in cycle, wraps around
+            let pi2 = &cycle[(i + 1) % cycle.len()];
+
+            let p1 = &packages[pi1];
+            let p2 = &packages[pi2];
+
+            // prefer arch packages over noarch packages
+            let p1_noarch = p1.as_ref().noarch.is_none();
+            let p2_noarch = p2.as_ref().noarch.is_none();
+            if p1_noarch && !p2_noarch {
+                cycle_breaks.insert((pi1.clone(), pi2.clone()));
+                break;
+            } else if !p1_noarch && p2_noarch {
+                cycle_breaks.insert((pi2.clone(), pi1.clone()));
+                break;
+            }
+        }
+    }
+    tracing::debug!("Breaking cycle: {:?}", cycle_breaks);
+    cycle_breaks
+}
+
 /// Returns a vector containing the topological ordering of the packages, based on the provided
 /// roots
 fn get_topological_order<T: AsRef<PackageRecord>>(
     mut roots: Vec<String>,
     packages: &mut FxHashMap<String, T>,
+    cycle_breaks: &FxHashSet<(String, String)>,
 ) -> Vec<T> {
     // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
     // original order of the input)
@@ -82,6 +183,9 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
                         continue;
                     }
                 };
+
+                // Remove the edges that form cycles
+                deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
 
                 // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
                 // original order of the input)
