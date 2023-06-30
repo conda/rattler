@@ -733,7 +733,8 @@ mod tests {
 
         // Create an activator for the environment
         let activator =
-            Activator::from_path(environment_dir.path(), shell, Platform::current()).unwrap();
+            Activator::from_path(environment_dir.path(), shell.clone(), Platform::current())
+                .unwrap();
         let activation_env = activator
             .run_activation(ActivationVariables::default())
             .unwrap();
@@ -748,8 +749,9 @@ mod tests {
         // Remove system specific environment variables.
         env_diff.remove("CONDA_PREFIX");
         env_diff.remove("Path");
+        env_diff.remove("PATH");
 
-        insta::assert_yaml_snapshot!(env_diff);
+        insta::assert_yaml_snapshot!(shell.executable(), env_diff);
     }
 
     #[test]
