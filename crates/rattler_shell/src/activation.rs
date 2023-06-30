@@ -408,7 +408,7 @@ impl<T: Shell + Clone> Activator<T> {
         Ok(ActivationResult { script, path })
     }
 
-    /// Runs the activation script and returns the environment variables present in the environment
+    /// Runs the activation script and returns the environment variables changed in the environment
     /// after running the script.
     /// TODO: This only handles UTF-8 formatted strings..
     pub fn run_activation(
