@@ -1,7 +1,10 @@
 //! This module contains the [`Shell`] trait and implementations for various shells.
 
+use crate::activation::PathModificationBehaviour;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
+use rattler_conda_types::Platform;
+use std::collections::HashMap;
 use std::process::Command;
 use std::{
     fmt::Write,
@@ -46,9 +49,27 @@ pub trait Shell {
     }
 
     /// Set the PATH variable to the given paths.
-    fn set_path(&self, f: &mut impl Write, paths: &[PathBuf]) -> std::fmt::Result {
-        let path = std::env::join_paths(paths).unwrap();
-        self.set_env_var(f, "PATH", path.to_str().unwrap())
+    fn set_path(
+        &self,
+        f: &mut impl Write,
+        paths: &[PathBuf],
+        modification_behaviour: PathModificationBehaviour,
+        platform: &Platform,
+    ) -> std::fmt::Result {
+        let mut paths_vec = paths
+            .iter()
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect_vec();
+        // Replace, Append, or Prepend the path variable to the paths.
+        match modification_behaviour {
+            PathModificationBehaviour::Replace => (),
+            PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
+        }
+        // Create the shell specific list of paths.
+        let paths_string = paths_vec.join(self.path_seperator(platform));
+
+        self.set_env_var(f, "PATH", paths_string.as_str())
     }
 
     /// The extension that shell scripts for this interpreter usually use.
@@ -59,6 +80,37 @@ pub trait Shell {
 
     /// Constructs a [`Command`] that will execute the specified script by this shell.
     fn create_run_script_command(&self, path: &Path) -> Command;
+
+    /// Path seperator
+    fn path_seperator(&self, platform: &Platform) -> &str {
+        if platform.is_unix() {
+            ":"
+        } else {
+            ";"
+        }
+    }
+
+    /// Format the environment variable for the shell.
+    fn format_env_var(&self, var_name: &str) -> String {
+        format!("${{{var_name}}}")
+    }
+
+    /// Emits echoing certain text to stdout.
+    fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
+        writeln!(f, "echo {}", shlex::quote(text))
+    }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, "/usr/bin/env")
+    }
+
+    /// Parses environment variables emitted by the `Shell::env` command.
+    fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
+        env.lines()
+            .filter_map(|line| line.split_once('='))
+            .collect()
+    }
 }
 
 /// Convert a native PATH on Windows to a Unix style path usign cygpath.
@@ -89,7 +141,7 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
 }
 
 /// A [`Shell`] implementation for the Bash shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Bash;
 
 impl Shell for Bash {
@@ -105,16 +157,36 @@ impl Shell for Bash {
         writeln!(f, ". \"{}\"", path.to_string_lossy())
     }
 
-    fn set_path(&self, f: &mut impl Write, paths: &[PathBuf]) -> std::fmt::Result {
-        let path = std::env::join_paths(paths).unwrap();
+    fn set_path(
+        &self,
+        f: &mut impl Write,
+        paths: &[PathBuf],
+        modification_behaviour: PathModificationBehaviour,
+        platform: &Platform,
+    ) -> std::fmt::Result {
+        // Put paths in a vector of the correct format.
+        let mut paths_vec = paths
+            .iter()
+            .map(|path| {
+                // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+                if cfg!(windows) {
+                    native_path_to_unix(path.to_string_lossy().as_ref()).unwrap()
+                } else {
+                    path.to_string_lossy().into_owned()
+                }
+            })
+            .collect_vec();
 
-        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
-        if cfg!(windows) {
-            let path = native_path_to_unix(path.to_str().unwrap()).unwrap();
-            return self.set_env_var(f, "PATH", &path);
+        // Replace, Append, or Prepend the path variable to the paths.
+        match modification_behaviour {
+            PathModificationBehaviour::Replace => (),
+            PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
+            PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
         }
+        // Create the shell specific list of paths.
+        let paths_string = paths_vec.join(self.path_seperator(platform));
 
-        self.set_env_var(f, "PATH", path.to_str().unwrap())
+        self.set_env_var(f, "PATH", paths_string.as_str())
     }
 
     fn extension(&self) -> &str {
@@ -140,7 +212,7 @@ impl Shell for Bash {
 }
 
 /// A [`Shell`] implementation for the Zsh shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Zsh;
 
 impl Shell for Zsh {
@@ -172,7 +244,7 @@ impl Shell for Zsh {
 }
 
 /// A [`Shell`] implementation for the Xonsh shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Xonsh;
 
 impl Shell for Xonsh {
@@ -204,7 +276,7 @@ impl Shell for Xonsh {
 }
 
 /// A [`Shell`] implementation for the cmd.exe shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct CmdExe;
 
 impl Shell for CmdExe {
@@ -241,6 +313,19 @@ impl Shell for CmdExe {
         cmd.arg("/D").arg("/C").arg(path);
         cmd
     }
+
+    fn format_env_var(&self, var_name: &str) -> String {
+        format!("%{var_name}%")
+    }
+
+    fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
+        writeln!(f, "@ECHO {}", shlex::quote(text))
+    }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, "@SET")
+    }
 }
 
 /// A [`Shell`] implementation for PowerShell.
@@ -275,10 +360,19 @@ impl Shell for PowerShell {
         cmd.arg(path);
         cmd
     }
+
+    fn format_env_var(&self, var_name: &str) -> String {
+        format!("$Env:{var_name}")
+    }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
+    }
 }
 
 /// A [`Shell`] implementation for the Fish shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Fish;
 
 impl Shell for Fish {
@@ -424,14 +518,17 @@ pub struct ShellScript<T: Shell> {
     shell: T,
     /// The contents of the script.
     pub contents: String,
+    /// The platform for which the script will be generated
+    platform: Platform,
 }
 
 impl<T: Shell> ShellScript<T> {
     /// Create a new [`ShellScript`] for the given shell.
-    pub fn new(shell: T) -> Self {
+    pub fn new(shell: T, platform: Platform) -> Self {
         Self {
             shell,
             contents: String::new(),
+            platform,
         }
     }
 
@@ -453,7 +550,14 @@ impl<T: Shell> ShellScript<T> {
 
     /// Set the PATH environment variable to the given paths.
     pub fn set_path(&mut self, paths: &[PathBuf]) -> &mut Self {
-        self.shell.set_path(&mut self.contents, paths).unwrap();
+        self.shell
+            .set_path(
+                &mut self.contents,
+                paths,
+                PathModificationBehaviour::Prepend,
+                &self.platform,
+            )
+            .unwrap();
         self
     }
 
@@ -472,7 +576,7 @@ mod tests {
 
     #[test]
     fn test_bash() {
-        let mut script = ShellScript::new(Bash);
+        let mut script = ShellScript::new(Bash, Platform::Linux64);
 
         script
             .set_env_var("FOO", "bar")
@@ -493,5 +597,16 @@ mod tests {
     fn test_from_env() {
         let shell = ShellEnum::from_env();
         println!("Detected shell: {:?}", shell);
+    }
+
+    #[test]
+    fn test_path_seperator() {
+        let mut script = ShellScript::new(Bash, Platform::Linux64);
+        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        assert!(script.contents.contains("/foo:/bar"));
+
+        let mut script = ShellScript::new(Bash, Platform::Win64);
+        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        assert!(script.contents.contains("/foo;/bar"));
     }
 }
