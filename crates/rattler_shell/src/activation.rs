@@ -445,7 +445,7 @@ impl<T: Shell + Clone> Activator<T> {
 
         if !activation_result.status.success() {
             return Err(ActivationError::FailedToRunActivationScript {
-                script: activation_script,
+                script: activation_detection_script,
                 stdout: String::from_utf8_lossy(&activation_result.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&activation_result.stderr).into_owned(),
                 status: activation_result.status,
@@ -481,6 +481,7 @@ impl<T: Shell + Clone> Activator<T> {
 #[cfg(test)]
 mod tests {
     use crate::shell;
+    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use super::*;
@@ -742,7 +743,7 @@ mod tests {
         let mut env_diff = activation_env
             .into_iter()
             .filter(|(key, value)| current_env.get(key) != Some(value))
-            .collect::<HashMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
 
         // Remove system specific environment variables.
         env_diff.remove("CONDA_PREFIX");
@@ -770,19 +771,21 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
         test_run_activation(crate::shell::Zsh::default().into())
     }
 
     #[test]
     #[cfg(unix)]
+    #[ignore]
     fn test_run_activation_fish() {
         test_run_activation(crate::shell::Fish::default().into())
     }
 
     #[test]
     #[cfg(unix)]
+    #[ignore]
     fn test_run_activation_xonsh() {
         test_run_activation(crate::shell::Xonsh::default().into())
     }

@@ -102,7 +102,7 @@ pub trait Shell {
 
     /// Emits writing all current environment variables to stdout.
     fn env(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "env")
+        writeln!(f, "/usr/bin/env")
     }
 
     /// Parses environment variables emitted by the `Shell::env` command.
