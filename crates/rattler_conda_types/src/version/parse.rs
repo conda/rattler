@@ -33,28 +33,11 @@ pub struct ParseVersionError {
 
 impl Display for ParseVersionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "malformed version string '{}': ", &self.version)?;
-        match &self.kind {
-            ParseVersionErrorKind::Empty => write!(f, "empty string"),
-            ParseVersionErrorKind::InvalidCharacters => write!(f, "invalid character(s)"),
-            ParseVersionErrorKind::EpochMustBeInteger(e) => {
-                write!(f, "epoch must be an integer: {}", e)
-            }
-            ParseVersionErrorKind::DuplicateEpochSeparator => {
-                write!(f, "duplicated epoch separator '!'")
-            }
-            ParseVersionErrorKind::DuplicateLocalVersionSeparator => {
-                write!(f, "duplicated local version separator '+'")
-            }
-            ParseVersionErrorKind::EmptyVersionComponent => write!(f, "empty version component"),
-            ParseVersionErrorKind::InvalidNumeral(e) => write!(f, "invalid numeral: {}", e),
-            ParseVersionErrorKind::TooManySegments => write!(f, "too many segments"),
-            ParseVersionErrorKind::TooManyComponentsInASegment => write!(f, "too many version components, a single version segment can at most contain {} components", (1<<16)-1),
-            ParseVersionErrorKind::ExpectedComponent => write!(f, "expected a version component"),
-            ParseVersionErrorKind::ExpectedSegmentSeparator => write!(f, "expected '.', '-', or '_'"),
-            ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores => write!(f, "cannot mix and match underscores and dashes"),
-            ParseVersionErrorKind::Nom(_) => write!(f, "parse error"),
-        }
+        write!(
+            f,
+            "malformed version string '{}': {}",
+            &self.version, &self.kind
+        )
     }
 }
 
@@ -76,21 +59,12 @@ pub enum ParseVersionErrorKind {
     /// The string was empty
     #[error("empty string")]
     Empty,
-    /// The string contained invalid characters
-    #[error("invalid characters")]
-    InvalidCharacters,
     /// The epoch was not an integer value
     #[error("epoch is not a number")]
     EpochMustBeInteger(ParseIntError),
     /// The string contained an invalid numeral
     #[error("invalid number")]
     InvalidNumeral(ParseIntError),
-    /// The string contained multiple epoch separators
-    #[error("string contains multiple epoch seperators ('!')")]
-    DuplicateEpochSeparator,
-    /// The string contained multiple local version separators
-    #[error("string contains multiple version seperators ('+')")]
-    DuplicateLocalVersionSeparator,
     /// The string contained an empty version component
     #[error("expected a version component e.g. `2` or `rc`")]
     EmptyVersionComponent,
