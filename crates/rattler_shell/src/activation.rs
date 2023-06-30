@@ -2,7 +2,9 @@
 
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::process::ExitStatus;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -12,9 +14,13 @@ use crate::shell::Shell;
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
+const ENV_START_SEPERATOR: &str = "<=== RATTLER ENV START ===>";
+
 /// Type of modification done to the `PATH` variable
+#[derive(Default, Clone)]
 pub enum PathModificationBehaviour {
     /// Replaces the complete path variable with specified paths.
+    #[default]
     Replace,
     /// Appends the new path variables to the path. E.g. '$PATH:/new/path'
     Append,
@@ -24,6 +30,7 @@ pub enum PathModificationBehaviour {
 
 /// A struct that contains the values of the environment variables that are relevant for the activation process.
 /// The values are stored as strings. Currently, only the `PATH` and `CONDA_PREFIX` environment variables are used.
+#[derive(Default, Clone)]
 pub struct ActivationVariables {
     /// The value of the `CONDA_PREFIX` environment variable that contains the activated conda prefix path
     pub conda_prefix: Option<PathBuf>,
@@ -48,6 +55,7 @@ impl ActivationVariables {
 
 /// A struct that holds values for the activation and deactivation
 /// process of an environment, e.g. activation scripts to execute or environment variables to set.
+#[derive(Debug)]
 pub struct Activator<T: Shell> {
     /// The path to the root of the conda environment
     pub target_prefix: PathBuf,
@@ -138,7 +146,23 @@ pub enum ActivationError {
 
     /// An error that occurs when writing the activation script to a file fails
     #[error("Failed to write activation script to file {0}")]
-    FailedToWriteActivationScript(#[source] std::fmt::Error),
+    FailedToWriteActivationScript(#[from] std::fmt::Error),
+
+    /// Failed to run the activation script
+    #[error("Failed to run activation script (status: {status})")]
+    FailedToRunActivationScript {
+        /// The contents of the activation script that was run
+        script: String,
+
+        /// The stdout output of executing the script
+        stdout: String,
+
+        /// The stderr output of executing the script
+        stderr: String,
+
+        /// The error code of running the script
+        status: ExitStatus,
+    },
 }
 
 /// Collect all environment variables that are set in a conda environment.
@@ -383,11 +407,74 @@ impl<T: Shell + Clone> Activator<T> {
 
         Ok(ActivationResult { script, path })
     }
+
+    /// Runs the activation script and returns the environment variables changed in the environment
+    /// after running the script.
+    /// TODO: This only handles UTF-8 formatted strings..
+    pub fn run_activation(
+        &self,
+        variables: ActivationVariables,
+    ) -> Result<HashMap<String, String>, ActivationError> {
+        let activation_script = self.activation(variables)?.script;
+
+        // Create a script that starts by emitting all environment variables, then runs the
+        // activation script followed by again emitting all environment variables. Any changes
+        // should then become visible.
+        let mut activation_detection_script = String::new();
+        self.shell_type.env(&mut activation_detection_script)?;
+        self.shell_type
+            .echo(&mut activation_detection_script, ENV_START_SEPERATOR)?;
+        activation_detection_script =
+            format!("{}{}", &activation_detection_script, &activation_script);
+        self.shell_type
+            .echo(&mut activation_detection_script, ENV_START_SEPERATOR)?;
+        self.shell_type.env(&mut activation_detection_script)?;
+
+        // Create a temporary file that we can execute with our shell.
+        let activation_script_dir = tempfile::TempDir::new()?;
+        let activation_script_path = activation_script_dir
+            .path()
+            .join(format!("activation.{}", self.shell_type.extension()));
+        fs::write(&activation_script_path, &activation_detection_script)?;
+
+        // Get only the path to the temporary file
+        let activation_result = self
+            .shell_type
+            .create_run_script_command(&activation_script_path)
+            .output()?;
+
+        if !activation_result.status.success() {
+            return Err(ActivationError::FailedToRunActivationScript {
+                script: activation_detection_script,
+                stdout: String::from_utf8_lossy(&activation_result.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&activation_result.stderr).into_owned(),
+                status: activation_result.status,
+            });
+        }
+
+        let stdout = String::from_utf8_lossy(&activation_result.stdout);
+        let (before_env, rest) = stdout
+            .split_once(ENV_START_SEPERATOR)
+            .unwrap_or(("", stdout.as_ref()));
+        let (_, after_env) = rest.rsplit_once(ENV_START_SEPERATOR).unwrap_or(("", ""));
+
+        // Parse both environments and find the difference
+        let before_env = self.shell_type.parse_env(before_env);
+        let after_env = self.shell_type.parse_env(after_env);
+
+        // Find and return the differences
+        Ok(after_env
+            .into_iter()
+            .filter(|(key, value)| before_env.get(key) != Some(value))
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+            .collect())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::shell;
+    use std::collections::BTreeMap;
     use std::str::FromStr;
 
     use super::*;
@@ -395,6 +482,7 @@ mod tests {
 
     #[cfg(unix)]
     use crate::activation::PathModificationBehaviour;
+    use crate::shell::ShellEnum;
 
     #[test]
     fn test_collect_scripts() {
@@ -597,5 +685,103 @@ mod tests {
     fn test_activation_script_xonsh() {
         let script = get_script(shell::Xonsh, PathModificationBehaviour::Append);
         insta::assert_snapshot!(script);
+    }
+
+    fn test_run_activation(shell: ShellEnum) {
+        let environment_dir = tempfile::TempDir::new().unwrap();
+
+        // Write some environment variables to the `conda-meta/state` folder.
+        let state_path = environment_dir.path().join("conda-meta/state");
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let quotes = r#"{"env_vars": {"STATE": "Hello, world!"}}"#;
+        fs::write(&state_path, quotes).unwrap();
+
+        // Write package specific environment variables
+        let content_pkg_1 = r#"{"PKG1": "Hello, world!"}"#;
+        let content_pkg_2 = r#"{"PKG2": "Hello, world!"}"#;
+
+        let env_var_d = environment_dir.path().join("etc/conda/env_vars.d");
+        fs::create_dir_all(&env_var_d).expect("Could not create env vars directory");
+
+        let pkg1 = env_var_d.join("pkg1.json");
+        let pkg2 = env_var_d.join("pkg2.json");
+
+        fs::write(&pkg1, content_pkg_1).expect("could not write file");
+        fs::write(&pkg2, content_pkg_2).expect("could not write file");
+
+        // Write a script that emits a random environment variable via a shell
+        let mut activation_script = String::new();
+        shell
+            .set_env_var(&mut activation_script, "SCRIPT_ENV", "Hello, world!")
+            .unwrap();
+
+        let activation_script_dir = environment_dir.path().join("etc/conda/activate.d");
+        fs::create_dir_all(&activation_script_dir).unwrap();
+
+        fs::write(
+            activation_script_dir.join(format!("pkg1.{}", shell.extension())),
+            activation_script,
+        )
+        .unwrap();
+
+        // Create an activator for the environment
+        let activator =
+            Activator::from_path(environment_dir.path(), shell.clone(), Platform::current())
+                .unwrap();
+        let activation_env = activator
+            .run_activation(ActivationVariables::default())
+            .unwrap();
+
+        // Diff with the current environment
+        let current_env = std::env::vars().collect::<HashMap<_, _>>();
+        let mut env_diff = activation_env
+            .into_iter()
+            .filter(|(key, value)| current_env.get(key) != Some(value))
+            .collect::<BTreeMap<_, _>>();
+
+        // Remove system specific environment variables.
+        env_diff.remove("CONDA_PREFIX");
+        env_diff.remove("Path");
+        env_diff.remove("PATH");
+
+        insta::assert_yaml_snapshot!(shell.executable(), env_diff);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_run_activation_powershell() {
+        test_run_activation(crate::shell::PowerShell::default().into())
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_run_activation_cmd() {
+        test_run_activation(crate::shell::CmdExe::default().into())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_run_activation_bash() {
+        test_run_activation(crate::shell::Bash::default().into())
+    }
+
+    #[test]
+    #[cfg(target_os = "macos")]
+    fn test_run_activation_zsh() {
+        test_run_activation(crate::shell::Zsh::default().into())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[ignore]
+    fn test_run_activation_fish() {
+        test_run_activation(crate::shell::Fish::default().into())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    #[ignore]
+    fn test_run_activation_xonsh() {
+        test_run_activation(crate::shell::Xonsh::default().into())
     }
 }

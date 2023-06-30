@@ -4,6 +4,7 @@ use crate::activation::PathModificationBehaviour;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
+use std::collections::HashMap;
 use std::process::Command;
 use std::{
     fmt::Write,
@@ -93,6 +94,23 @@ pub trait Shell {
     fn format_env_var(&self, var_name: &str) -> String {
         format!("${{{var_name}}}")
     }
+
+    /// Emits echoing certain text to stdout.
+    fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
+        writeln!(f, "echo {}", shlex::quote(text))
+    }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, "/usr/bin/env")
+    }
+
+    /// Parses environment variables emitted by the `Shell::env` command.
+    fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
+        env.lines()
+            .filter_map(|line| line.split_once('='))
+            .collect()
+    }
 }
 
 /// Convert a native PATH on Windows to a Unix style path usign cygpath.
@@ -123,7 +141,7 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
 }
 
 /// A [`Shell`] implementation for the Bash shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Bash;
 
 impl Shell for Bash {
@@ -194,7 +212,7 @@ impl Shell for Bash {
 }
 
 /// A [`Shell`] implementation for the Zsh shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Zsh;
 
 impl Shell for Zsh {
@@ -226,7 +244,7 @@ impl Shell for Zsh {
 }
 
 /// A [`Shell`] implementation for the Xonsh shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Xonsh;
 
 impl Shell for Xonsh {
@@ -258,7 +276,7 @@ impl Shell for Xonsh {
 }
 
 /// A [`Shell`] implementation for the cmd.exe shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct CmdExe;
 
 impl Shell for CmdExe {
@@ -299,6 +317,15 @@ impl Shell for CmdExe {
     fn format_env_var(&self, var_name: &str) -> String {
         format!("%{var_name}%")
     }
+
+    fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
+        writeln!(f, "@ECHO {}", shlex::quote(text))
+    }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, "@SET")
+    }
 }
 
 /// A [`Shell`] implementation for PowerShell.
@@ -337,10 +364,15 @@ impl Shell for PowerShell {
     fn format_env_var(&self, var_name: &str) -> String {
         format!("$Env:{var_name}")
     }
+
+    /// Emits writing all current environment variables to stdout.
+    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
+    }
 }
 
 /// A [`Shell`] implementation for the Fish shell.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Fish;
 
 impl Shell for Fish {
