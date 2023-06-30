@@ -227,7 +227,7 @@ impl Version {
         };
         version_segments.iter().map(move |&segment| {
             let start = idx;
-            idx += segment.len() as usize;
+            idx += segment.len();
             SegmentIter {
                 offset: start,
                 version: self,
@@ -830,7 +830,7 @@ impl Display for Version {
             write!(f, "+{}", SegmentFormatter::from(self.local_segments()))?;
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
@@ -851,7 +851,7 @@ impl<'de> Deserialize<'de> for Version {
         Cow::<'de, str>::deserialize(deserializer)?
             .as_ref()
             .parse()
-            .map_err(|err| D::Error::custom(err))
+            .map_err(D::Error::custom)
     }
 }
 
