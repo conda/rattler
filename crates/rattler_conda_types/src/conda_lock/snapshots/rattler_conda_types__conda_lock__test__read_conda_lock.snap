@@ -3129,7 +3129,7 @@ package:
     manager: conda
     platform: linux-64
     dependencies:
-      certifi: ">=2020.06.20"
+      certifi: ">=2020.6.20"
       contourpy: ">=1.0.1"
       cycler: ">=0.10"
       fonttools: ">=4.22.0"
@@ -5632,7 +5632,7 @@ package:
     manager: conda
     platform: linux-aarch64
     dependencies:
-      certifi: ">=2020.06.20"
+      certifi: ">=2020.6.20"
       contourpy: ">=1.0.1"
       cycler: ">=0.10"
       fonttools: ">=4.22.0"
@@ -8040,7 +8040,7 @@ package:
     manager: conda
     platform: linux-ppc64le
     dependencies:
-      certifi: ">=2020.06.20"
+      certifi: ">=2020.6.20"
       contourpy: ">=1.0.1"
       cycler: ">=0.10"
       fonttools: ">=4.22.0"
@@ -10512,7 +10512,7 @@ package:
     platform: osx-64
     dependencies:
       __osx: ">=10.12"
-      certifi: ">=2020.06.20"
+      certifi: ">=2020.6.20"
       contourpy: ">=1.0.1"
       cycler: ">=0.10"
       fonttools: ">=4.22.0"
@@ -12968,7 +12968,7 @@ package:
     manager: conda
     platform: osx-arm64
     dependencies:
-      certifi: ">=2020.06.20"
+      certifi: ">=2020.6.20"
       contourpy: ">=1.0.1"
       cycler: ">=0.10"
       fonttools: ">=4.22.0"

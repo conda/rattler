@@ -1,6 +1,5 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rattler_conda_types::Version;
-use std::str::FromStr;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("parse simple version", |b| {

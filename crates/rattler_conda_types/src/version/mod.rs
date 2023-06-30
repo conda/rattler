@@ -17,19 +17,12 @@ use smallvec::SmallVec;
 
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
 
+mod flags;
 mod parse;
 mod segment;
 
+use flags::Flags;
 use segment::Segment;
-
-/// Bitmask that should be applied to `Version::flags` to determine if the version contains an epoch.
-const EPOCH_MASK: u8 = 0b00000001;
-
-/// The bitmask to apply to `Version::flags` to get only the local version index.
-const LOCAL_VERSION_MASK: u8 = !EPOCH_MASK;
-
-/// The offset in bits where the the bits of the local version index start.
-const LOCAL_VERSION_OFFSET: u8 = 1;
 
 /// This class implements an order relation between version strings. Version strings can contain the
 /// usual alphanumeric characters (A-Za-z0-9), separated into segments by dots and underscores.
@@ -135,11 +128,6 @@ const LOCAL_VERSION_OFFSET: u8 = 1;
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
 #[derive(Clone, Eq)]
 pub struct Version {
-    /// A normed copy of the original version string trimmed and converted to lower case.
-    /// Also dashes are replaced with underscores if the version string does not contain
-    /// any underscores.
-    norm: Option<Box<str>>,
-
     /// Individual components of the version.
     ///
     /// We store a maximum of 3 components on the stack. If a version consists of more components
@@ -168,7 +156,7 @@ pub struct Version {
     /// The first bit indicates whether or not this version has an epoch.
     /// The rest of the bits indicate from which segment the local version starts or 0 if there is
     /// no local version.
-    flags: u8,
+    flags: Flags,
 }
 
 type ComponentVec = SmallVec<[Component; 3]>;
@@ -177,20 +165,20 @@ type SegmentVec = SmallVec<[Segment; 4]>;
 impl Version {
     /// Returns true if this version has an epoch.
     pub fn has_epoch(&self) -> bool {
-        (self.flags & EPOCH_MASK) != 0
+        self.flags.has_epoch()
     }
 
     /// Returns true if this version has a local version defined
     pub fn has_local(&self) -> bool {
-        ((self.flags & LOCAL_VERSION_MASK) >> LOCAL_VERSION_OFFSET) > 0
+        self.flags.local_segment_index() > 0
     }
 
     /// Returns the index of the first segment that belongs to the local version or `None` if there
     /// is no local version
     fn local_segment_index(&self) -> Option<usize> {
-        let index = ((self.flags & LOCAL_VERSION_MASK) >> LOCAL_VERSION_OFFSET) as usize;
+        let index = self.flags.local_segment_index();
         if index > 0 {
-            Some(index)
+            Some(index as usize)
         } else {
             None
         }
@@ -240,12 +228,12 @@ impl Version {
     pub fn bump(&self) -> Self {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
-        let mut flags = 0;
+        let mut flags = Flags::default();
 
         // Copy the optional epoch.
         if let Some(epoch) = self.epoch_opt() {
             components.push(Component::Numeral(epoch));
-            flags |= EPOCH_MASK;
+            flags = flags.with_has_epoch(true);
         }
 
         // Copy over all the segments and bump the last segment.
@@ -294,11 +282,12 @@ impl Version {
                 }
                 segments.push(segment_iter.segment);
             }
-            flags |= (segment_idx << LOCAL_VERSION_OFFSET) & LOCAL_VERSION_MASK;
+            flags = flags
+                .with_local_segment_index(segment_idx)
+                .expect("this should never fail because no new segments are added")
         }
 
         Self {
-            norm: None,
             components,
             segments,
             flags,
@@ -412,10 +401,12 @@ impl Version {
 
         let mut components = SmallVec::<[Component; 3]>::default();
         let mut segments = SmallVec::<[Segment; 4]>::default();
+        let mut flags = Flags::default();
 
         // Copy the epoch
         if self.has_epoch() {
             components.push(self.epoch().into());
+            flags = flags.with_has_epoch(true);
         }
 
         // Copy the segments and components of the common version
@@ -446,13 +437,14 @@ impl Version {
             }
         }
 
-        let mut flags = if self.has_epoch() { EPOCH_MASK } else { 0 };
         if self.has_local() {
-            flags |= (local_start_idx as u8) << LOCAL_VERSION_OFFSET;
+            flags = u8::try_from(local_start_idx)
+                .ok()
+                .and_then(|idx| flags.with_local_segment_index(idx))
+                .expect("the number of segments must always be smaller so this should never fail");
         }
 
         Some(Version {
-            norm: None,
             components,
             segments,
             flags,
@@ -486,12 +478,12 @@ impl Version {
         if self.has_local() {
             let mut components = SmallVec::<[Component; 3]>::default();
             let mut segments = SmallVec::<[Segment; 4]>::default();
-            let mut flags = 0;
+            let mut flags = Flags::default();
 
             // Add the epoch
             if let Some(epoch) = self.epoch_opt() {
                 components.push(epoch.into());
-                flags |= EPOCH_MASK;
+                flags = flags.with_has_epoch(true);
             }
 
             // Copy the segments
@@ -503,7 +495,6 @@ impl Version {
             }
 
             Cow::Owned(Version {
-                norm: None,
                 components,
                 segments,
                 flags,
@@ -601,7 +592,6 @@ impl Hash for Version {
 impl Debug for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Version")
-            .field("norm", &self.norm)
             .field("epoch", &self.epoch_opt())
             .field("version", &SegmentFormatter::from(self.segments()))
             .field("local", &SegmentFormatter::from(self.local_segments()))
@@ -962,9 +952,9 @@ mod test {
 
         let ops = versions.iter().map(|&v| {
             let (op, version) = if let Some((op, version)) = v.trim().split_once(' ') {
-                (op, version)
+                (op, version.trim())
             } else {
-                ("", v)
+                ("", v.trim())
             };
             let version: Version = version.parse().unwrap();
             let op = match op {
@@ -1157,7 +1147,7 @@ mod test {
 
     #[test]
     fn size_of_version() {
-        assert_eq!(std::mem::size_of::<Version>(), 128);
+        assert_eq!(std::mem::size_of::<Version>(), 112);
     }
 
     #[test]
