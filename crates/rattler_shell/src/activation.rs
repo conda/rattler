@@ -155,10 +155,10 @@ pub enum ActivationError {
         script: String,
 
         /// The stdout output of executing the script
-        stdout: Vec<u8>,
+        stdout: String,
 
         /// The stderr output of executing the script
-        stderr: Vec<u8>,
+        stderr: String,
 
         /// The error code of running the script
         status: ExitStatus,
@@ -446,8 +446,8 @@ impl<T: Shell + Clone> Activator<T> {
         if !activation_result.status.success() {
             return Err(ActivationError::FailedToRunActivationScript {
                 script: activation_script,
-                stdout: activation_result.stdout,
-                stderr: activation_result.stderr,
+                stdout: String::from_utf8_lossy(&activation_result.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&activation_result.stderr).into_owned(),
                 status: activation_result.status,
             });
         }
