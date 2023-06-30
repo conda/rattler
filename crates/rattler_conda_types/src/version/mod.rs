@@ -149,7 +149,7 @@ pub struct Version {
     /// So for the version `1.2g.beta15.rc` this stores:
     ///
     /// [1, 2, 'g', 0, 'beta', 15, 0, 'rc']
-    components: SmallVec<[Component; 3]>,
+    components: ComponentVec,
 
     /// Information on each individual segment. Segments group different components together.
     ///
@@ -162,7 +162,7 @@ pub struct Version {
     ///      `beta15` consists of 3 components (`0`, `beta` and `15`). Segments must always start
     ///             with a number.
     ///      `rc` consists of 2 components (`0`, `rc`). Segments must always start with a number.
-    segments: SmallVec<[Segment; 4]>,
+    segments: SegmentVec,
 
     /// Flags to indicate edge cases
     /// The first bit indicates whether or not this version has an epoch.
@@ -170,6 +170,9 @@ pub struct Version {
     /// no local version.
     flags: u8,
 }
+
+type ComponentVec = SmallVec<[Component; 3]>;
+type SegmentVec = SmallVec<[Segment; 4]>;
 
 impl Version {
     /// Returns true if this version has an epoch.
@@ -235,35 +238,71 @@ impl Version {
 
     /// Returns a new version where the last numerical segment of this version has been bumped.
     pub fn bump(&self) -> Self {
-        let mut bumped_version = self.clone();
+        let mut components = ComponentVec::new();
+        let mut segments = SegmentVec::new();
+        let mut flags = 0;
 
-        // Bump the last numeric components.
-        let last_numeral = bumped_version
-            .components
-            .iter_mut()
-            .rev()
-            .find_map(|c| match c {
-                Component::Numeral(num) => Some(num),
-                _ => None,
-            });
-
-        match last_numeral {
-            Some(last_numeral) => {
-                *last_numeral += 1;
-            }
-            None => {
-                // The only case when there is no numeral is when there is no epoch. So we just add
-                // a 1 epoch.
-                debug_assert!(!bumped_version.has_epoch());
-                bumped_version.components.insert(0, Component::Numeral(1));
-                bumped_version.flags |= EPOCH_MASK;
-            }
+        // Copy the optional epoch.
+        if let Some(epoch) = self.epoch_opt() {
+            components.push(Component::Numeral(epoch));
+            flags |= EPOCH_MASK;
         }
 
-        // Remove the normalized version because its no longer valid.
-        bumped_version.norm = None;
+        // Copy over all the segments and bump the last segment.
+        let segment_count = self.segment_count();
+        for (idx, segment_iter) in self.segments().enumerate() {
+            let segment = segment_iter.segment;
 
-        bumped_version
+            let mut segment_components =
+                segment_iter.components().cloned().collect::<ComponentVec>();
+
+            // If this is the last segment of the version bump the last number. Each segment must at
+            // least start with a number so this should always work.
+            if idx == (segment_count - 1) {
+                let last_numeral_component = segment_components
+                    .iter_mut()
+                    .filter_map(Component::as_number_mut)
+                    .rev()
+                    .next()
+                    .expect("every segment must at least contain a single numeric component");
+                *last_numeral_component += 1;
+            }
+
+            let has_implicit_default =
+                segment.has_implicit_default() && segment_components[0] == Component::default();
+            let start_idx = if has_implicit_default { 1 } else { 0 };
+
+            let component_count = segment_components.len();
+            for component in segment_components.into_iter().skip(start_idx) {
+                components.push(component);
+            }
+
+            let segment = Segment::new((component_count - start_idx) as _)
+                .expect("there will be no more components than in the previous segment")
+                .with_implicit_default(has_implicit_default)
+                .with_separator(segment.separator())
+                .expect("copying the segment should just work");
+
+            segments.push(segment);
+        }
+
+        if self.has_local() {
+            let segment_idx = segments.len() as u8;
+            for segment_iter in self.local_segments() {
+                for component in segment_iter.components().cloned() {
+                    components.push(component);
+                }
+                segments.push(segment_iter.segment);
+            }
+            flags |= (segment_idx << LOCAL_VERSION_OFFSET) & LOCAL_VERSION_MASK;
+        }
+
+        Self {
+            norm: None,
+            components,
+            segments,
+            flags,
+        }
     }
 
     /// Returns the segments that belong the local part of the version.
@@ -648,6 +687,13 @@ impl Component {
     pub fn as_number(&self) -> Option<u64> {
         match self {
             Component::Numeral(value) => Some(*value),
+            _ => None,
+        }
+    }
+
+    pub fn as_number_mut(&mut self) -> Option<&mut u64> {
+        match self {
+            Component::Numeral(value) => Some(value),
             _ => None,
         }
     }
@@ -1068,8 +1114,8 @@ mod test {
             Version::from_str("1.2l").unwrap()
         );
         assert_eq!(
-            Version::from_str("1.alpha").unwrap().bump(),
-            Version::from_str("1.2alpha").unwrap()
+            Version::from_str("5!1.alpha+3.4").unwrap().bump(),
+            Version::from_str("5!1.1alpha+3.4").unwrap()
         );
     }
 

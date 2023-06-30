@@ -3,7 +3,7 @@ use std::fmt::{Debug, Formatter};
 
 /// Represents information about a segment in a version. E.g. the part between `.`, `-` or `_`.
 ///
-/// `SegmentInfo` encodes the number of components, the separator that exists before it and whether
+/// [`Segment`] encodes the number of components, the separator that exists before it and whether
 /// or not the segment starts with an implicit default component.
 #[derive(Copy, Clone, Eq, PartialEq)]
 #[repr(transparent)]

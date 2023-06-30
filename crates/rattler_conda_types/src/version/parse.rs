@@ -1,6 +1,6 @@
 use super::{Component, Version};
 use crate::version::segment::Segment;
-use crate::version::{EPOCH_MASK, LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET};
+use crate::version::{ComponentVec, EPOCH_MASK, LOCAL_VERSION_MASK, LOCAL_VERSION_OFFSET, SegmentVec};
 use nom::branch::alt;
 use nom::bytes::complete::{tag_no_case, take_while};
 use nom::character::complete::{alpha1, char, digit1, one_of};
@@ -170,7 +170,7 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
 
 /// Parses a version segment from a list of components.
 fn segment_parser<'i, 'c>(
-    components: &'c mut SmallVec<[Component; 3]>,
+    components: &'c mut ComponentVec,
 ) -> impl Parser<&'i str, Segment, ParseVersionErrorKind> + 'c {
     move |input| {
         // Parse the first component of the segment
@@ -229,8 +229,8 @@ fn segment_parser<'i, 'c>(
 }
 
 fn final_version_part_parser<'i>(
-    components: &mut SmallVec<[Component; 3]>,
-    segments: &mut SmallVec<[Segment; 4]>,
+    components: &mut ComponentVec,
+    segments: &mut SegmentVec,
     input: &'i str,
     dash_or_underscore: Option<char>,
 ) -> Result<Option<char>, nom::Err<ParseVersionErrorKind>> {
@@ -476,8 +476,8 @@ impl FromStr for Version {
 
         fn split_component<'a>(
             segments_iter: impl Iterator<Item = &'a str>,
-            segments: &mut SmallVec<[Segment; 4]>,
-            components: &mut SmallVec<[Component; 3]>,
+            segments: &mut SegmentVec,
+            components: &mut ComponentVec,
         ) -> Result<(), ParseVersionErrorKind> {
             for component in segments_iter {
                 let version_split_re = lazy_regex::regex!(r#"([0-9]+|[^0-9]+)"#);
