@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.5.0] - 2023-06-30
+
+### Highlights
+
+A bug fix release
+
+### Details
+
+#### Added
+
+- More control over how the PATH is altered during activation ([#232](https://github.com/mamba-org/rattler/pull/232))
+
+#### Fixed
+
+- Reconstructing of RepoData from conda lock files for local channels ([#231](https://github.com/mamba-org/rattler/pull/231))
+- Powershell on Linux ([#234](https://github.com/mamba-org/rattler/pull/234))
+- Proper parsing of `>2.10*` as `>=2.10` ([#237](https://github.com/mamba-org/rattler/pull/237))
+
 ## [0.4.0] - 2023-06-23
 
 ### Highlights
@@ -51,7 +71,7 @@ This can save a huge amount of bandwidth for large repodatas that change often (
 If you have a previously cached `repodata.json` on your system only small JSON patches are downloaded to bring your cache up to date.
 The format was initially proposed through a [CEP](https://github.com/conda-incubator/ceps/pull/20) and has been available in conda as an experimental feature since `23.3.0`.
 
-When using rattler you get JLAP support out of the box. 
+When using rattler you get JLAP support out of the box.
 No changes are needed.
 
 #### Support for local `file://`
@@ -82,12 +102,12 @@ A new crate has been added to facilitate authentication when downloading repodat
 - Enable deserializing virtual packages ([#198](https://github.com/mamba-org/rattler/pull/198))
 - Refactored CI to add macOS arm64 ([#201](https://github.com/mamba-org/rattler/pull/201))
 - Support for JLAP when downloading repodata ([#197](https://github.com/mamba-org/rattler/pull/197) & [#214](https://github.com/mamba-org/rattler/pull/214))
-- `Clone`, `Debug`, `PartialEq`, `Eq` implementations for conda lock types ([#213](https://github.com/mamba-org/rattler/pull/213)) 
+- `Clone`, `Debug`, `PartialEq`, `Eq` implementations for conda lock types ([#213](https://github.com/mamba-org/rattler/pull/213))
 - `rattler_networking` to enable accessing `repodata.json` and packages that require authentication ([#191](https://github.com/mamba-org/rattler/pull/191))
 
 #### Changed
 
-- `FileMode` is now included with `prefix_placeholder` is set ([#136](https://github.com/mamba-org/rattler/pull/135))  
+- `FileMode` is now included with `prefix_placeholder` is set ([#136](https://github.com/mamba-org/rattler/pull/135))
 - `rattler_digest` now re-exports commonly used hash types and typed hashes are now used in more placed (instead of strings) [[#137](https://github.com/mamba-org/rattler/pull/137) & [#153](https://github.com/mamba-org/rattler/pull/153)]
 - Use `Platform` in to detect running operating system ([#144](https://github.com/mamba-org/rattler/pull/144))
 - `paths.json` is now serialized in a deterministic fashion ([#147](https://github.com/mamba-org/rattler/pull/147))
