@@ -355,9 +355,12 @@ impl FromStr for Version {
 #[cfg(test)]
 mod test {
     use super::{final_version_parser, Version};
+    use crate::version::SegmentFormatter;
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::fmt::{Display, Formatter};
+    use std::path::Path;
+    use std::str::FromStr;
 
     #[test]
     fn test_parse() {
@@ -412,6 +415,31 @@ mod test {
     {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
             write!(f, "{:?}", &self.0)
+        }
+    }
+
+    /// Parse a large number of versions and see if parsing succeeded.
+    /// TODO: This doesnt really verify that the parsing is correct. Maybe we can parse the version
+    /// with Conda too and verify that the results match?
+    #[test]
+    fn test_parse_all() {
+        let versions = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/parsed_versions.txt"),
+        )
+        .unwrap();
+        for line in versions.lines() {
+            // Skip comments and empty lines
+            if line.trim_start().starts_with("#") || line.trim().is_empty() {
+                continue;
+            }
+
+            let (version, debug_parsed) = line.split_once('=').unwrap();
+            let parsed_version = Version::from_str(version).unwrap();
+            let parsed_version_debug_string = format!(
+                "{:?}",
+                SegmentFormatter::new(parsed_version.epoch_opt(), parsed_version.segments())
+            );
+            assert_eq!(parsed_version_debug_string, debug_parsed);
         }
     }
 }

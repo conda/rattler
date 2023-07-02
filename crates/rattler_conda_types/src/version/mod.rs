@@ -592,9 +592,11 @@ impl Hash for Version {
 impl Debug for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Version")
-            .field("epoch", &self.epoch_opt())
-            .field("version", &SegmentFormatter::from(self.segments()))
-            .field("local", &SegmentFormatter::from(self.local_segments()))
+            .field(
+                "version",
+                &SegmentFormatter::new(self.epoch_opt(), self.segments()),
+            )
+            .field("local", &SegmentFormatter::new(None, self.local_segments()))
             .finish()
     }
 }
@@ -603,29 +605,28 @@ impl Debug for Version {
 /// where segments are displayed as an array of arrays (e.g. `[[1], [2,3,4]]`) and
 /// [`std::fmt::Display`] where segments are display in their canonical form (e.g. `1.2-rc2`).
 struct SegmentFormatter<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> {
-    inner: RefCell<Option<I>>,
+    inner: RefCell<Option<(Option<u64>, I)>>,
 }
 
-impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> From<I> for SegmentFormatter<'v, I> {
-    fn from(value: I) -> Self {
+impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> SegmentFormatter<'v, I> {
+    pub fn new(epoch: Option<u64>, iter: I) -> Self {
         Self {
-            inner: RefCell::new(Some(value)),
+            inner: RefCell::new(Some((epoch, iter))),
         }
     }
 }
 
 impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatter<'v, I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let iter = match self.inner.borrow_mut().take() {
+        let (epoch, iter) = match self.inner.borrow_mut().take() {
             Some(iter) => iter,
             None => panic!("was already formatted once"),
         };
 
         write!(f, "[")?;
-        for (idx, segment) in iter.enumerate() {
-            if idx > 0 {
-                write!(f, ", ")?;
-            }
+        write!(f, "[{}]", epoch.unwrap_or(0))?;
+        for segment in iter {
+            write!(f, ", ")?;
             write!(f, "[{}]", segment.components().format(", "))?;
         }
         write!(f, "]")?;
@@ -636,7 +637,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
 
 impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentFormatter<'v, I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let iter = match self.inner.borrow_mut().take() {
+        let (_epoch, iter) = match self.inner.borrow_mut().take() {
             Some(iter) => iter,
             None => panic!("was already formatted once"),
         };
@@ -763,9 +764,9 @@ impl Display for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Component::Numeral(n) => write!(f, "{}", n),
-            Component::Iden(s) => write!(f, "{}", s),
-            Component::Post => write!(f, "post"),
-            Component::Dev => write!(f, "dev"),
+            Component::Iden(s) => write!(f, "'{}'", s),
+            Component::Post => write!(f, "inf"),
+            Component::Dev => write!(f, "'DEV'"),
         }
     }
 }
@@ -815,9 +816,9 @@ impl Display for Version {
             write!(f, "{epoch}!")?;
         }
 
-        write!(f, "{}", SegmentFormatter::from(self.segments()))?;
+        write!(f, "{}", SegmentFormatter::new(None, self.segments()))?;
         if self.has_local() {
-            write!(f, "+{}", SegmentFormatter::from(self.local_segments()))?;
+            write!(f, "+{}", SegmentFormatter::new(None, self.local_segments()))?;
         }
 
         Ok(())
