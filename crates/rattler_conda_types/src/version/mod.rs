@@ -126,7 +126,7 @@ use segment::Segment;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Eq)]
+#[derive(Clone, Eq, Deserialize, Default)]
 pub struct Version {
     /// Individual components of the version.
     ///

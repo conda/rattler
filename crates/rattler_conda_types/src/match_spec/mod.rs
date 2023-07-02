@@ -1,6 +1,7 @@
 use crate::{PackageRecord, VersionSpec};
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
-use serde_with::skip_serializing_none;
+use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod matcher;
@@ -109,6 +110,7 @@ use matcher::StringMatcher;
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
     /// The name of the package
@@ -127,6 +129,12 @@ pub struct MatchSpec {
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
+    /// The md5 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub md5: Option<Md5Hash>,
+    /// The sha256 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub sha256: Option<Sha256Hash>,
 }
 
 impl Display for MatchSpec {
@@ -140,25 +148,37 @@ impl Display for MatchSpec {
             write!(f, "/{}", subdir)?;
         }
 
+        match &self.name {
+            Some(name) => write!(f, "{name}")?,
+            None => write!(f, "*")?,
+        }
+
         if let Some(namespace) = &self.namespace {
             write!(f, ":{}:", namespace)?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
         }
 
-        match &self.name {
-            Some(name) => write!(f, "{name}")?,
-            None => write!(f, "*")?,
+        if let Some(version) = &self.version {
+            write!(f, " {}", version)?;
         }
 
-        match &self.version {
-            Some(version) => write!(f, " {version}")?,
-            None => (),
+        if let Some(build) = &self.build {
+            write!(f, " {}", build)?;
         }
 
-        match &self.build {
-            Some(build) => write!(f, " {build}")?,
-            None => (),
+        let mut keys = Vec::new();
+
+        if let Some(md5) = &self.md5 {
+            keys.push(format!("md5={md5:x}"));
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            keys.push(format!("sha256={sha256:x}"));
+        }
+
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
         }
 
         Ok(())
@@ -186,12 +206,25 @@ impl MatchSpec {
             }
         }
 
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if Some(md5_spec) != record.md5.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if Some(sha256_spec) != record.sha256.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
+#[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct NamelessMatchSpec {
@@ -209,6 +242,12 @@ pub struct NamelessMatchSpec {
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
+    /// The md5 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub md5: Option<Md5Hash>,
+    /// The sha256 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub sha256: Option<Sha256Hash>,
 }
 
 impl NamelessMatchSpec {
@@ -226,6 +265,18 @@ impl NamelessMatchSpec {
             }
         }
 
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if Some(md5_spec) != record.md5.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if Some(sha256_spec) != record.sha256.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
@@ -237,12 +288,23 @@ impl Display for NamelessMatchSpec {
             None => write!(f, "*")?,
         }
 
-        match &self.build {
-            Some(build) => write!(f, " {build}")?,
-            None => (),
+        if let Some(build) = &self.build {
+            write!(f, " {}", build)?;
         }
 
-        // TODO: Add any additional properties as bracket arguments (e.g. `[channel=..]`)
+        let mut keys = Vec::new();
+
+        if let Some(md5) = &self.md5 {
+            keys.push(format!("md5={md5:x}"));
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            keys.push(format!("sha256={sha256:x}"));
+        }
+
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
+        }
 
         Ok(())
     }
@@ -258,6 +320,8 @@ impl From<MatchSpec> for NamelessMatchSpec {
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
+            md5: spec.md5,
+            sha256: spec.sha256,
         }
     }
 }
@@ -274,6 +338,68 @@ impl MatchSpec {
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
+            md5: spec.md5,
+            sha256: spec.sha256,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+
+    use crate::{MatchSpec, NamelessMatchSpec, PackageRecord, Version};
+
+    #[test]
+    fn test_matchspec_format_eq() {
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec_as_string = spec.to_string();
+        let rebuild_spec = MatchSpec::from_str(&spec_as_string).unwrap();
+
+        assert_eq!(spec, rebuild_spec)
+    }
+
+    #[test]
+    fn test_nameless_matchspec_format_eq() {
+        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec_as_string = spec.to_string();
+        let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
+
+        assert_eq!(spec, rebuild_spec)
+    }
+
+    #[test]
+    fn test_digest_match() {
+        let record = PackageRecord {
+            name: "mamba".to_string(),
+            version: Version::from_str("1.0").unwrap(),
+            sha256: parse_digest_from_hex::<Sha256>(
+                "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
+            ),
+            md5: parse_digest_from_hex::<Md5>("dede6252c964db3f3e41c7d30d07f6bf"),
+            ..PackageRecord::default()
+        };
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=aaaa6252c964db3f3e41c7d30d07f6bf]")
+            .unwrap();
+        assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf]")
+            .unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(!spec.matches(&record));
     }
 }
