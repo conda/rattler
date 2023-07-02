@@ -207,21 +207,13 @@ impl MatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if !record
-                .md5
-                .as_ref()
-                .map_or(false, |md5_record| md5_spec == md5_record)
-            {
+            if Some(md5_spec) != record.md5.as_ref() {
                 return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if !record
-                .sha256
-                .as_ref()
-                .map_or(false, |sha256_record| sha256_spec == sha256_record)
-            {
+            if Some(sha256_spec) != record.sha256.as_ref() {
                 return false;
             }
         }
@@ -274,21 +266,13 @@ impl NamelessMatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if !record
-                .md5
-                .as_ref()
-                .map_or(false, |md5_record| md5_spec == md5_record)
-            {
+            if Some(md5_spec) != record.md5.as_ref() {
                 return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if !record
-                .sha256
-                .as_ref()
-                .map_or(false, |sha256_record| sha256_spec == sha256_record)
-            {
+            if Some(sha256_spec) != record.sha256.as_ref() {
                 return false;
             }
         }
