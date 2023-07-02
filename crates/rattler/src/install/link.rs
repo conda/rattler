@@ -1,10 +1,12 @@
 use crate::install::python::PythonInfo;
+#[cfg(target_os = "macos")]
 use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::borrow::Cow;
+#[cfg(target_os = "macos")]
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -29,6 +31,7 @@ pub enum LinkFileError {
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
+    #[cfg(target_os = "macos")]
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
 
@@ -167,6 +170,7 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
 
         // (re)sign the binary if the file is executable
+        #[cfg(target_os = "macos")]
         if has_executable_permissions(&metadata.permissions())
             && target_platform == Platform::OsxArm64
             && *file_mode == FileMode::Binary
@@ -388,6 +392,7 @@ fn symlink(source_path: &Path, destination_path: &Path) -> std::io::Result<()> {
     return std::os::unix::fs::symlink(source_path, destination_path);
 }
 
+#[cfg(target_os = "macos")]
 #[allow(unused_variables)]
 fn has_executable_permissions(permissions: &Permissions) -> bool {
     #[cfg(windows)]

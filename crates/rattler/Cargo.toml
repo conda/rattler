@@ -15,9 +15,11 @@ default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
 
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-codesign = "0.22.0"
+
 [dependencies]
 anyhow = "1.0.71"
-apple-codesign = "0.22.0"
 async-compression = { version = "0.4.0", features = ["gzip", "tokio", "bzip2", "zstd"] }
 bytes = "1.4.0"
 chrono = { version = "0.4.26", default-features = false, features = ["std", "serde", "alloc"] }

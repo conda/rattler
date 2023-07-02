@@ -25,7 +25,7 @@ jobs:
         with:
           submodules: recursive
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Run clippy
+      - name: Run check
         run: cargo check
 
   check-rustdoc-links:
@@ -148,17 +148,17 @@ jobs:
         run: |
           unset CARGO_BUILD_OPTIONS
           case ${{ matrix.job.target }} in
-            *-musl*) CARGO_BUILD_OPTIONS="--no-default-features --features rustls-tls"  ;;
+            *-musl*) CARGO_BUILD_OPTIONS=" --no-default-features --features rustls-tls"  ;;
             *) CARGO_BUILD_OPTIONS=""  ;;
           esac
-          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS}" >> $GITHUB_OUTPUT
+          echo "CARGO_BUILD_OPTIONS= ${CARGO_BUILD_OPTIONS}" >> $GITHUB_OUTPUT
 
       - name: Build
         uses: actions-rs/cargo@v1
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} --features ${{ env.DEFAULT_FEATURES }}
+          args: --target=${{ matrix.job.target }}${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS }} --features ${{ env.DEFAULT_FEATURES }}
 
       - name: Set test options
         id: test-options
