@@ -148,16 +148,15 @@ impl Display for MatchSpec {
             write!(f, "/{}", subdir)?;
         }
 
+        match &self.name {
+            Some(name) => write!(f, "{name}")?,
+            None => write!(f, "*")?,
+        }
+
         if let Some(namespace) = &self.namespace {
             write!(f, ":{}:", namespace)?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
-        }
-
-        if let Some(name) = &self.name {
-            write!(f, "{}", name)?;
-        } else {
-            write!(f, "*")?;
         }
 
         if let Some(version) = &self.version {
