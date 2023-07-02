@@ -343,3 +343,52 @@ impl MatchSpec {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use crate::{
+        package::{IndexJson, PackageFile},
+        MatchSpec, PackageRecord,
+    };
+
+    #[test]
+    fn test_digest_match() {
+        let package_dir = tempfile::tempdir().unwrap();
+        let extract_result = rattler_package_streaming::fs::extract(
+            &crate::get_test_data_dir().join("mamba-1.0.0-py38hecfeebb_2.tar.bz2"),
+            package_dir.path(),
+        )
+        .unwrap();
+
+        let index = IndexJson::from_package_directory(package_dir.path()).unwrap();
+        let package_record = PackageRecord::from_index_json(
+            index,
+            None,
+            Some(extract_result.sha256),
+            Some(extract_result.md5),
+        )
+        .unwrap();
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(!spec.matches(&package_record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(spec.matches(&package_record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=aaaa6252c964db3f3e41c7d30d07f6bf]")
+            .unwrap();
+        assert!(!spec.matches(&package_record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf]")
+            .unwrap();
+        assert!(spec.matches(&package_record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(spec.matches(&package_record));
+
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        assert!(!spec.matches(&package_record));
+    }
+}
