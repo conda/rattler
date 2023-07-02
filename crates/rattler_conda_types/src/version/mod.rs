@@ -594,7 +594,7 @@ impl Debug for Version {
         f.debug_struct("Version")
             .field(
                 "version",
-                &SegmentFormatter::new(self.epoch_opt(), self.segments()),
+                &SegmentFormatter::new(Some(self.epoch_opt().unwrap_or(0)), self.segments()),
             )
             .field("local", &SegmentFormatter::new(None, self.local_segments()))
             .finish()
@@ -624,9 +624,13 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
         };
 
         write!(f, "[")?;
-        write!(f, "[{}]", epoch.unwrap_or(0))?;
-        for segment in iter {
-            write!(f, ", ")?;
+        if let Some(epoch) = epoch {
+            write!(f, "[{}], ", epoch)?;
+        }
+        for (idx, segment) in iter.enumerate() {
+            if idx > 0 {
+                write!(f, ", ")?;
+            }
             write!(f, "[{:?}]", segment.components().format(", "))?;
         }
         write!(f, "]")?;
@@ -637,10 +641,14 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
 
 impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentFormatter<'v, I> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let (_epoch, iter) = match self.inner.borrow_mut().take() {
+        let (epoch, iter) = match self.inner.borrow_mut().take() {
             Some(iter) => iter,
             None => panic!("was already formatted once"),
         };
+
+        if let Some(epoch) = epoch {
+            write!(f, "{epoch}!")?
+        }
 
         for segment in iter {
             if let Some(separator) = segment.separator() {
@@ -756,8 +764,8 @@ impl Ord for Component {
             }
 
             // Underscores are sorted before identifiers
-            (Component::UnderscoreOrDash { .. }, Component::Iden(_)) => Ordering::Greater,
-            (Component::Iden(_), Component::UnderscoreOrDash { .. }) => Ordering::Less,
+            (Component::UnderscoreOrDash { .. }, Component::Iden(_)) => Ordering::Less,
+            (Component::Iden(_), Component::UnderscoreOrDash { .. }) => Ordering::Greater,
 
             // Post is always compared greater than anything else.
             (Component::Post, _) => Ordering::Greater,
@@ -842,11 +850,11 @@ impl PartialOrd for Version {
 
 impl Display for Version {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(epoch) = self.epoch_opt() {
-            write!(f, "{epoch}!")?;
-        }
-
-        write!(f, "{}", SegmentFormatter::new(None, self.segments()))?;
+        write!(
+            f,
+            "{}",
+            SegmentFormatter::new(self.epoch_opt(), self.segments())
+        )?;
         if self.has_local() {
             write!(f, "+{}", SegmentFormatter::new(None, self.local_segments()))?;
         }

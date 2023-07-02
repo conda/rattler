@@ -454,7 +454,10 @@ mod test {
             let parsed_version = Version::from_str(version).unwrap();
             let parsed_version_debug_string = format!(
                 "{:?}",
-                SegmentFormatter::new(parsed_version.epoch_opt(), parsed_version.segments())
+                SegmentFormatter::new(
+                    Some(parsed_version.epoch_opt().unwrap_or(0)),
+                    parsed_version.segments()
+                )
             );
             assert_eq!(parsed_version_debug_string, debug_parsed);
         }

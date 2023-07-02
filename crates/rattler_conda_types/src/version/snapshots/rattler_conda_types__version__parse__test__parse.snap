@@ -12,7 +12,7 @@ expression: index_map
     "1!1.2a.3-rc1": Version(
         Version {
             version: [[1], [1], [2, 'a'], [3], [0, 'rc', 1]],
-            local: [[0]],
+            local: [],
         },
     ),
     "1+": Error(
@@ -27,19 +27,19 @@ expression: index_map
     "1+2": Version(
         Version {
             version: [[0], [1]],
-            local: [[0], [2]],
+            local: [[2]],
         },
     ),
     "1--": Version(
         Version {
             version: [[0], [1], [0, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1-2-3": Version(
         Version {
             version: [[0], [1], [2], [3]],
-            local: [[0]],
+            local: [],
         },
     ),
     "1-2-3_": Error(
@@ -54,19 +54,19 @@ expression: index_map
     "1.0.1-": Version(
         Version {
             version: [[0], [1], [0], [1, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1.0.1_": Version(
         Version {
             version: [[0], [1], [0], [1, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1.0.1post.za": Version(
         Version {
             version: [[0], [1], [0], [1, inf], [0, 'za']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1@2": Error(
@@ -75,7 +75,7 @@ expression: index_map
     "1_": Version(
         Version {
             version: [[0], [1, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1_-": Error(
@@ -84,19 +84,19 @@ expression: index_map
     "1_2_3": Version(
         Version {
             version: [[0], [1], [2], [3]],
-            local: [[0]],
+            local: [],
         },
     ),
     "1_2_3_": Version(
         Version {
             version: [[0], [1], [2], [3, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1__": Version(
         Version {
             version: [[0], [1], [0, '_']],
-            local: [[0]],
+            local: [],
         },
     ),
     "1___": Error(
