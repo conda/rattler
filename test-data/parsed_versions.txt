@@ -14,9 +14,13 @@
 # 
 #    ```python
 #    from conda.models.version import VersionOrder
-#    lines = open('versions.txt', 'r').readlines()
-#    parsed_lines = [  f"{line.strip()}={VersionOrder(line).version}\n" for line in lines ]
-#    open("parsed_versions.txt", "w").writelines(parsed_lines)
+#
+#    open("parsed_versions.txt", "w").writelines(
+#        [
+#            f"{line.strip()}={VersionOrder(line).version}\n"
+#            for line in open("versions.txt", "r").readlines()
+#        ]
+#    )
 #    ```
 #
 #    This generates the parsed versions found below.
