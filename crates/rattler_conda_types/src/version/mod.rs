@@ -627,7 +627,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
         write!(f, "[{}]", epoch.unwrap_or(0))?;
         for segment in iter {
             write!(f, ", ")?;
-            write!(f, "[{}]", segment.components().format(", "))?;
+            write!(f, "[{:?}]", segment.components().format(", "))?;
         }
         write!(f, "]")?;
 
@@ -659,7 +659,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 }
 
 /// Either a number, literal or the infinity.
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 enum Component {
     Numeral(u64),
 
@@ -761,6 +761,17 @@ impl PartialOrd for Component {
 }
 
 impl Display for Component {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Component::Numeral(n) => write!(f, "{}", n),
+            Component::Iden(s) => write!(f, "{}", s),
+            Component::Post => write!(f, "post"),
+            Component::Dev => write!(f, "dev"),
+        }
+    }
+}
+
+impl Debug for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Component::Numeral(n) => write!(f, "{}", n),

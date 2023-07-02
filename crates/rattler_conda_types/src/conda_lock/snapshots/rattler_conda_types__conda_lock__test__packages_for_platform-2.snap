@@ -2134,7 +2134,7 @@ expression: "conda_lock.packages_for_platform(Platform::Osx64).collect::<Vec<_>>
   platform: osx-64
   dependencies:
     __osx: ">=10.12"
-    certifi: ">=2020.06.20"
+    certifi: ">=2020.6.20"
     contourpy: ">=1.0.1"
     cycler: ">=0.10"
     fonttools: ">=4.22.0"
