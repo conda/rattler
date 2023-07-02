@@ -167,12 +167,18 @@ impl Display for MatchSpec {
             write!(f, " {}", build)?;
         }
 
+        let mut keys = Vec::new();
+
         if let Some(md5) = &self.md5 {
-            write!(f, " md5={md5:x}")?;
+            keys.push(format!("md5={md5:x}"));
         }
 
         if let Some(sha256) = &self.sha256 {
-            write!(f, " sha256={sha256:x}")?;
+            keys.push(format!("sha256={sha256:x}"));
+        }
+
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
         }
 
         Ok(())
@@ -201,18 +207,14 @@ impl MatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if let Some(md5_record) = record.md5.as_ref() {
-                if md5_spec != md5_record {
-                    return false;
-                }
+            if !record.md5.as_ref().map_or(false, |md5_record| md5_spec == md5_record) {
+                return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if let Some(sha256_record) = record.sha256.as_ref() {
-                if sha256_spec != sha256_record {
-                    return false;
-                }
+            if !record.sha256.as_ref().map_or(false, |sha256_record| sha256_spec == sha256_record) {
+                return false;
             }
         }
 
@@ -264,18 +266,14 @@ impl NamelessMatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if let Some(md5_record) = record.md5.as_ref() {
-                if md5_spec != md5_record {
-                    return false;
-                }
+            if !record.md5.as_ref().map_or(false, |md5_record| md5_spec == md5_record) {
+                return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if let Some(sha256_record) = record.sha256.as_ref() {
-                if sha256_spec != sha256_record {
-                    return false;
-                }
+            if !record.sha256.as_ref().map_or(false, |sha256_record| sha256_spec == sha256_record) {
+                return false;
             }
         }
 
@@ -295,15 +293,19 @@ impl Display for NamelessMatchSpec {
             write!(f, " {}", build)?;
         }
 
+        let mut keys = Vec::new();
+
         if let Some(md5) = &self.md5 {
-            write!(f, " md5={md5:x}")?;
+            keys.push(format!("md5={md5:x}"));
         }
 
         if let Some(sha256) = &self.sha256 {
-            write!(f, " sha256={sha256:x}")?;
+            keys.push(format!("sha256={sha256:x}"));
         }
 
-        // TODO: Add any additional properties as bracket arguments (e.g. `[channel=..]`)
+        if !keys.is_empty() {
+            write!(f, "[{}]", keys.join(", "))?;
+        }
 
         Ok(())
     }
