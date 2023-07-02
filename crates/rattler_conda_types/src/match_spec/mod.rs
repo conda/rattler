@@ -283,10 +283,9 @@ impl NamelessMatchSpec {
 
 impl Display for NamelessMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(version) = self.version.as_ref() {
-            write!(f, "{version}")?;
-        } else {
-            write!(f, "*")?;
+        match &self.version {
+            Some(version) => write!(f, "{version}")?,
+            None => write!(f, "*")?,
         }
 
         if let Some(build) = &self.build {
