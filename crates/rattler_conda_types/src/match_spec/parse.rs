@@ -441,7 +441,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
 #[cfg(test)]
 mod tests {
-    use rattler_digest::{parse_digest_from_hex, Sha256, Md5};
+    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::str::FromStr;
@@ -577,15 +577,11 @@ mod tests {
             )
         );
 
-        let spec = MatchSpec::from_str("conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]").unwrap();
+        let spec =
+            MatchSpec::from_str("conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]").unwrap();
         assert_eq!(
             spec.md5,
-            Some(
-                parse_digest_from_hex::<Md5>(
-                    "8b1a9953c4611296a827abf8c47804d7"
-                )
-                .unwrap()
-            )
+            Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap())
         );
     }
 

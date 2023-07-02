@@ -207,13 +207,21 @@ impl MatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if !record.md5.as_ref().map_or(false, |md5_record| md5_spec == md5_record) {
+            if !record
+                .md5
+                .as_ref()
+                .map_or(false, |md5_record| md5_spec == md5_record)
+            {
                 return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if !record.sha256.as_ref().map_or(false, |sha256_record| sha256_spec == sha256_record) {
+            if !record
+                .sha256
+                .as_ref()
+                .map_or(false, |sha256_record| sha256_spec == sha256_record)
+            {
                 return false;
             }
         }
@@ -266,13 +274,21 @@ impl NamelessMatchSpec {
         }
 
         if let Some(md5_spec) = self.md5.as_ref() {
-            if !record.md5.as_ref().map_or(false, |md5_record| md5_spec == md5_record) {
+            if !record
+                .md5
+                .as_ref()
+                .map_or(false, |md5_record| md5_spec == md5_record)
+            {
                 return false;
             }
         }
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
-            if !record.sha256.as_ref().map_or(false, |sha256_record| sha256_spec == sha256_record) {
+            if !record
+                .sha256
+                .as_ref()
+                .map_or(false, |sha256_record| sha256_spec == sha256_record)
+            {
                 return false;
             }
         }
@@ -349,47 +365,40 @@ impl MatchSpec {
 mod tests {
     use std::str::FromStr;
 
-    use crate::{
-        package::{IndexJson, PackageFile},
-        MatchSpec, PackageRecord,
-    };
+    use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+
+    use crate::{MatchSpec, PackageRecord, Version};
 
     #[test]
     fn test_digest_match() {
-        let package_dir = tempfile::tempdir().unwrap();
-        let extract_result = rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("mamba-1.0.0-py38hecfeebb_2.tar.bz2"),
-            package_dir.path(),
-        )
-        .unwrap();
-
-        let index = IndexJson::from_package_directory(package_dir.path()).unwrap();
-        let package_record = PackageRecord::from_index_json(
-            index,
-            None,
-            Some(extract_result.sha256),
-            Some(extract_result.md5),
-        )
-        .unwrap();
+        let record = PackageRecord {
+            name: "mamba".to_string(),
+            version: Version::from_str("1.0").unwrap(),
+            sha256: parse_digest_from_hex::<Sha256>(
+                "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
+            ),
+            md5: parse_digest_from_hex::<Md5>("dede6252c964db3f3e41c7d30d07f6bf"),
+            ..PackageRecord::default()
+        };
 
         let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
-        assert!(!spec.matches(&package_record));
+        assert!(!spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
-        assert!(spec.matches(&package_record));
+        assert!(spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=aaaa6252c964db3f3e41c7d30d07f6bf]")
             .unwrap();
-        assert!(!spec.matches(&package_record));
+        assert!(!spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf]")
             .unwrap();
-        assert!(spec.matches(&package_record));
+        assert!(spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
-        assert!(spec.matches(&package_record));
+        assert!(spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
-        assert!(!spec.matches(&package_record));
+        assert!(!spec.matches(&record));
     }
 }
