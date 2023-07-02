@@ -128,7 +128,7 @@ const LOCAL_VERSION_OFFSET: u8 = 1;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Eq, Deserialize)]
+#[derive(Clone, Eq, Deserialize, Default)]
 pub struct Version {
     /// A normed copy of the original version string trimmed and converted to lower case.
     /// Also dashes are replaced with underscores if the version string does not contain
