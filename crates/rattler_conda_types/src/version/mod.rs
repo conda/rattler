@@ -663,15 +663,20 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 enum Component {
     Numeral(u64),
 
-    // Post should always be ordered greater than anything else.
+    /// Post should always be ordered greater than anything else.
     Post,
 
-    // Dev should always be ordered less than anything else.
+    /// Dev should always be ordered less than anything else.
     Dev,
 
-    // A generic string identifier. Identifiers are compared lexicographically. They are always
-    // ordered less than numbers.
+    /// A generic string identifier. Identifiers are compared lexicographically. They are always
+    /// ordered less than numbers.
     Iden(Box<str>),
+
+    /// An underscore or dash.
+    UnderscoreOrDash {
+        is_dash: bool,
+    },
 }
 
 impl Component {
@@ -734,14 +739,25 @@ impl Ord for Component {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             // Numbers are always ordered higher than strings
-            (Component::Numeral(_), Component::Iden(_)) => Ordering::Greater,
-            (Component::Iden(_), Component::Numeral(_)) => Ordering::Less,
+            (Component::Numeral(_), Component::Iden(_) | Component::UnderscoreOrDash { .. }) => {
+                Ordering::Greater
+            }
+            (Component::Iden(_) | Component::UnderscoreOrDash { .. }, Component::Numeral(_)) => {
+                Ordering::Less
+            }
 
             // Compare numbers and identifiers normally amongst themselves.
             (Component::Numeral(a), Component::Numeral(b)) => a.cmp(b),
             (Component::Iden(a), Component::Iden(b)) => a.cmp(b),
             (Component::Post, Component::Post) => Ordering::Equal,
             (Component::Dev, Component::Dev) => Ordering::Equal,
+            (Component::UnderscoreOrDash { .. }, Component::UnderscoreOrDash { .. }) => {
+                Ordering::Equal
+            }
+
+            // Underscores are sorted before identifiers
+            (Component::UnderscoreOrDash { .. }, Component::Iden(_)) => Ordering::Greater,
+            (Component::Iden(_), Component::UnderscoreOrDash { .. }) => Ordering::Less,
 
             // Post is always compared greater than anything else.
             (Component::Post, _) => Ordering::Greater,
@@ -767,6 +783,8 @@ impl Display for Component {
             Component::Iden(s) => write!(f, "{}", s),
             Component::Post => write!(f, "post"),
             Component::Dev => write!(f, "dev"),
+            Component::UnderscoreOrDash { is_dash: true } => write!(f, "-"),
+            Component::UnderscoreOrDash { is_dash: false } => write!(f, "_"),
         }
     }
 }
@@ -778,6 +796,7 @@ impl Debug for Component {
             Component::Iden(s) => write!(f, "'{}'", s),
             Component::Post => write!(f, "inf"),
             Component::Dev => write!(f, "'DEV'"),
+            Component::UnderscoreOrDash { .. } => write!(f, "'_'"),
         }
     }
 }

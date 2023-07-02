@@ -30,20 +30,32 @@ expression: index_map
             local: [[0], [2]],
         },
     ),
+    "1--": Version(
+        Version {
+            version: [[0], [1], [0, '_']],
+            local: [[0]],
+        },
+    ),
     "1-2-3": Version(
         Version {
             version: [[0], [1], [2], [3]],
             local: [[0]],
         },
     ),
-    "1-2-3_": Version(
-        Version {
-            version: [[0], [1], [2], [3, '_']],
-            local: [[0]],
-        },
+    "1-2-3_": Error(
+        "cannot use both underscores and dashes as version segment seperators",
     ),
     "1-2_3": Error(
         "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1-_": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1.0.1-": Version(
+        Version {
+            version: [[0], [1], [0], [1, '_']],
+            local: [[0]],
+        },
     ),
     "1.0.1_": Version(
         Version {
@@ -65,6 +77,9 @@ expression: index_map
             version: [[0], [1, '_']],
             local: [[0]],
         },
+    ),
+    "1_-": Error(
+        "cannot use both underscores and dashes as version segment seperators",
     ),
     "1_2_3": Version(
         Version {
