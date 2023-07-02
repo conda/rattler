@@ -12,6 +12,7 @@ use nom::error::{context, ContextError, ParseError};
 use nom::multi::{separated_list0, separated_list1};
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Finish, IResult};
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::num::ParseIntError;
@@ -54,6 +55,9 @@ pub enum ParseMatchSpecError {
 
     #[error("invalid build number: {0}")]
     InvalidBuildNumber(#[from] ParseIntError),
+
+    #[error("Unable to parse hash digest from hex")]
+    InvalidHashDigest,
 }
 
 impl FromStr for MatchSpec {
@@ -183,6 +187,18 @@ fn parse_bracket_vec_into_components(
             "version" => match_spec.version = Some(VersionSpec::from_str(value)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(value.parse()?),
+            "sha256" => {
+                match_spec.sha256 = Some(
+                    parse_digest_from_hex::<Sha256>(value)
+                        .ok_or(ParseMatchSpecError::InvalidHashDigest)?,
+                )
+            }
+            "md5" => {
+                match_spec.md5 = Some(
+                    parse_digest_from_hex::<Md5>(value)
+                        .ok_or(ParseMatchSpecError::InvalidHashDigest)?,
+                )
+            }
             "fn" => match_spec.file_name = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
@@ -425,6 +441,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
 #[cfg(test)]
 mod tests {
+    use rattler_digest::{parse_digest_from_hex, Sha256, Md5};
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::str::FromStr;
@@ -539,6 +556,37 @@ mod tests {
         assert_eq!(spec.name, Some("foo".to_string()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
+    }
+
+    #[test]
+    fn test_hash_spec() {
+        let spec = MatchSpec::from_str("conda-forge::foo[md5=1234567890]");
+        assert_eq!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
+
+        let spec = MatchSpec::from_str("conda-forge::foo[sha256=1234567890]");
+        assert_eq!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
+
+        let spec = MatchSpec::from_str("conda-forge::foo[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3]").unwrap();
+        assert_eq!(
+            spec.sha256,
+            Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
+                )
+                .unwrap()
+            )
+        );
+
+        let spec = MatchSpec::from_str("conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]").unwrap();
+        assert_eq!(
+            spec.md5,
+            Some(
+                parse_digest_from_hex::<Md5>(
+                    "8b1a9953c4611296a827abf8c47804d7"
+                )
+                .unwrap()
+            )
+        );
     }
 
     #[test]

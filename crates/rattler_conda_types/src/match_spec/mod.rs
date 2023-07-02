@@ -1,6 +1,7 @@
 use crate::{PackageRecord, VersionSpec};
+use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
-use serde_with::skip_serializing_none;
+use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
 
 pub mod matcher;
@@ -109,6 +110,7 @@ use matcher::StringMatcher;
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
+#[serde_as]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
     /// The name of the package
@@ -127,6 +129,12 @@ pub struct MatchSpec {
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
+    /// The md5 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub md5: Option<Md5Hash>,
+    /// The sha256 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub sha256: Option<Sha256Hash>,
 }
 
 impl Display for MatchSpec {
@@ -146,19 +154,26 @@ impl Display for MatchSpec {
             write!(f, "::")?;
         }
 
-        match &self.name {
-            Some(name) => write!(f, "{name}")?,
-            None => write!(f, "*")?,
+        if let Some(name) = &self.name {
+            write!(f, "{}", name)?;
+        } else {
+            write!(f, "*")?;
         }
 
-        match &self.version {
-            Some(version) => write!(f, " {version}")?,
-            None => (),
+        if let Some(version) = &self.version {
+            write!(f, " {}", version)?;
         }
 
-        match &self.build {
-            Some(build) => write!(f, " {build}")?,
-            None => (),
+        if let Some(build) = &self.build {
+            write!(f, " {}", build)?;
+        }
+
+        if let Some(md5) = &self.md5 {
+            write!(f, " md5={md5:x}")?;
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            write!(f, " sha256={sha256:x}")?;
         }
 
         Ok(())
@@ -186,12 +201,29 @@ impl MatchSpec {
             }
         }
 
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if let Some(md5_record) = record.md5.as_ref() {
+                if md5_spec != md5_record {
+                    return false;
+                }
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if let Some(sha256_record) = record.sha256.as_ref() {
+                if sha256_spec != sha256_record {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 }
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
+#[serde_as]
 #[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct NamelessMatchSpec {
@@ -209,6 +241,12 @@ pub struct NamelessMatchSpec {
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
+    /// The md5 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub md5: Option<Md5Hash>,
+    /// The sha256 hash of the package
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub sha256: Option<Sha256Hash>,
 }
 
 impl NamelessMatchSpec {
@@ -226,20 +264,44 @@ impl NamelessMatchSpec {
             }
         }
 
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if let Some(md5_record) = record.md5.as_ref() {
+                if md5_spec != md5_record {
+                    return false;
+                }
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if let Some(sha256_record) = record.sha256.as_ref() {
+                if sha256_spec != sha256_record {
+                    return false;
+                }
+            }
+        }
+
         true
     }
 }
 
 impl Display for NamelessMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.version {
-            Some(version) => write!(f, "{version}")?,
-            None => write!(f, "*")?,
+        if let Some(version) = self.version.as_ref() {
+            write!(f, "{version}")?;
+        } else {
+            write!(f, "*")?;
         }
 
-        match &self.build {
-            Some(build) => write!(f, " {build}")?,
-            None => (),
+        if let Some(build) = &self.build {
+            write!(f, " {}", build)?;
+        }
+
+        if let Some(md5) = &self.md5 {
+            write!(f, " md5={md5:x}")?;
+        }
+
+        if let Some(sha256) = &self.sha256 {
+            write!(f, " sha256={sha256:x}")?;
         }
 
         // TODO: Add any additional properties as bracket arguments (e.g. `[channel=..]`)
@@ -258,6 +320,8 @@ impl From<MatchSpec> for NamelessMatchSpec {
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
+            md5: spec.md5,
+            sha256: spec.sha256,
         }
     }
 }
@@ -274,6 +338,8 @@ impl MatchSpec {
             channel: spec.channel,
             subdir: spec.subdir,
             namespace: spec.namespace,
+            md5: spec.md5,
+            sha256: spec.sha256,
         }
     }
 }
