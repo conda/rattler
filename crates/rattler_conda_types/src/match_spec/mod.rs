@@ -367,7 +367,25 @@ mod tests {
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
-    use crate::{MatchSpec, PackageRecord, Version};
+    use crate::{MatchSpec, NamelessMatchSpec, PackageRecord, Version};
+
+    #[test]
+    fn test_matchspec_format_eq() {
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec_as_string = spec.to_string();
+        let rebuild_spec = MatchSpec::from_str(&spec_as_string).unwrap();
+
+        assert_eq!(spec, rebuild_spec)
+    }
+
+    #[test]
+    fn test_nameless_matchspec_format_eq() {
+        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec_as_string = spec.to_string();
+        let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
+
+        assert_eq!(spec, rebuild_spec)
+    }
 
     #[test]
     fn test_digest_match() {
