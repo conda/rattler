@@ -8,6 +8,7 @@ use crate::solvable::SolvableInner;
 use crate::solve_jobs::SolveJobs;
 use crate::transaction::Transaction;
 
+use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
@@ -281,7 +282,7 @@ impl<'a> Solver<'a> {
         _locked_solvables: &[SolvableId],
         _top_level_requirements: &[MatchSpec],
     ) -> Result<(), ClauseId> {
-        println!("=== Deciding assertions for requires without candidates");
+        tracing::info!("=== Deciding assertions for requires without candidates");
 
         for (i, clause) in self.clauses.iter().enumerate() {
             if let Clause::Requires(solvable_id, _) = clause.kind {
@@ -295,7 +296,7 @@ impl<'a> Solver<'a> {
                         .map_err(|_| clause_id)?;
 
                     if decided {
-                        println!(
+                        tracing::info!(
                             "Set {} = false",
                             self.pool.resolve_solvable_inner(solvable_id).display()
                         );
@@ -390,7 +391,7 @@ impl<'a> Solver<'a> {
     ) -> Result<u32, Problem> {
         level += 1;
 
-        println!(
+        tracing::info!(
             "=== Install {} at level {level} (required by {})",
             self.pool.resolve_solvable_inner(solvable).display(),
             self.pool.resolve_solvable_inner(required_by).display(),
@@ -404,38 +405,40 @@ impl<'a> Solver<'a> {
             let r = self.propagate(level);
             let Err((conflicting_solvable, attempted_value, conflicting_clause)) = r else {
                 // Propagation succeeded
-                println!("=== Propagation succeeded");
+                tracing::info!("=== Propagation succeeded");
                 break;
             };
 
             {
-                let solvable = self
-                    .pool
-                    .resolve_solvable_inner(conflicting_solvable)
-                    .display();
-                println!(
-                    "=== Propagation conflicted: could not set {solvable} to {attempted_value}"
+                tracing::info!(
+                    "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
+                    solvable = self
+                        .pool
+                        .resolve_solvable_inner(conflicting_solvable)
+                        .display()
                 );
-                println!(
+                tracing::info!(
                     "During unit propagation for clause: {:?}",
                     self.clauses[conflicting_clause.index()].debug(&self.pool)
                 );
 
-                let decision = self
-                    .decision_tracker
-                    .stack()
-                    .iter()
-                    .find(|d| d.solvable_id == conflicting_solvable)
-                    .unwrap();
-                println!(
+                tracing::info!(
                     "Previously decided value: {}. Derived from: {:?}",
                     !attempted_value,
-                    self.clauses[decision.derived_from.index()].debug(&self.pool),
+                    self.clauses[self
+                        .decision_tracker
+                        .stack()
+                        .iter()
+                        .find(|d| d.solvable_id == conflicting_solvable)
+                        .unwrap()
+                        .derived_from
+                        .index()]
+                    .debug(&self.pool),
                 );
             }
 
             if level == 1 {
-                println!("=== UNSOLVABLE");
+                tracing::info!("=== UNSOLVABLE");
                 for decision in self.decision_tracker.stack() {
                     let clause = &self.clauses[decision.derived_from.index()];
                     let level = self.decision_tracker.level(decision.solvable_id);
@@ -446,7 +449,7 @@ impl<'a> Solver<'a> {
                         continue;
                     }
 
-                    println!(
+                    tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
                         self.pool
                             .resolve_solvable_inner(decision.solvable_id)
@@ -462,7 +465,7 @@ impl<'a> Solver<'a> {
                 self.analyze(level, conflicting_solvable, conflicting_clause);
             level = new_level;
 
-            println!("=== Backtracked to level {level}");
+            tracing::info!("=== Backtracked to level {level}");
 
             // Optimization: propagate right now, since we know that the clause is a unit clause
             let decision = literal.satisfying_value();
@@ -472,7 +475,7 @@ impl<'a> Solver<'a> {
                     level,
                 )
                 .expect("bug: solvable was already decided!");
-            println!(
+            tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
                 self.pool
                     .resolve_solvable_inner(literal.solvable_id)
@@ -519,8 +522,13 @@ impl<'a> Solver<'a> {
                 .map_err(|_| (literal.solvable_id, decision, clause_id))?;
 
             if decided {
-                let s = self.pool.resolve_solvable_inner(literal.solvable_id);
-                println!("Propagate assertion {} = {}", s.display(), decision);
+                tracing::info!(
+                    "Propagate assertion {} = {}",
+                    self.pool
+                        .resolve_solvable_inner(literal.solvable_id)
+                        .display(),
+                    decision
+                );
             }
         }
 
@@ -613,7 +621,7 @@ impl<'a> Solver<'a> {
                                 // Skip logging for ForbidMultipleInstances, which is so noisy
                                 Clause::ForbidMultipleInstances(..) => {}
                                 _ => {
-                                    println!(
+                                    tracing::info!(
                                         "Propagate {} = {}. {:?}",
                                         self.pool
                                             .resolve_solvable_inner(remaining_watch.solvable_id)
@@ -676,7 +684,7 @@ impl<'a> Solver<'a> {
 
         let mut problem = Problem::default();
 
-        println!("=== ANALYZE UNSOLVABLE");
+        tracing::info!("=== ANALYZE UNSOLVABLE");
 
         let mut involved = HashSet::new();
         self.clauses[clause_id.index()].kind.visit_literals(
@@ -846,14 +854,16 @@ impl<'a> Solver<'a> {
         // Store it
         self.clauses.push(clause);
 
-        println!("Learnt disjunction:");
-        for lit in learnt {
-            let yes_no = if lit.negate { "NOT " } else { "" };
-            println!(
-                "- {yes_no}{}",
-                self.pool.resolve_solvable_inner(lit.solvable_id).display()
-            );
-        }
+        tracing::info!(
+            "Learnt disjunction:\n{}",
+            learnt
+                .into_iter()
+                .format_with("\n", |lit, f| f(&format_args!(
+                    "- {}{}",
+                    if lit.negate { "NOT " } else { "" },
+                    self.pool.resolve_solvable_inner(lit.solvable_id).display()
+                )))
+        );
 
         // Should revert at most to the root level
         let target_level = back_track_to.max(1);

@@ -54,7 +54,7 @@ impl Problem {
 
                     let candidates = &solver.pool().match_spec_to_candidates[match_spec_id];
                     if candidates.is_empty() {
-                        println!(
+                        tracing::info!(
                             "{package_id:?} requires {match_spec_id:?}, which has no candidates"
                         );
                         graph.add_edge(
@@ -64,7 +64,7 @@ impl Problem {
                         );
                     } else {
                         for &candidate_id in candidates {
-                            println!("{package_id:?} requires {candidate_id:?}");
+                            tracing::info!("{package_id:?} requires {candidate_id:?}");
 
                             let candidate_node =
                                 Self::add_node(&mut graph, &mut nodes, candidate_id);
@@ -237,8 +237,13 @@ pub struct ProblemGraph {
 }
 
 impl ProblemGraph {
-    /// Returns a graph in its graphviz representation
-    pub fn graphviz(&self, pool: &Pool, simplify: bool) {
+    /// Writes a graphviz graph that represents this instance to the specified output.
+    pub fn graphviz(
+        &self,
+        f: &mut impl std::io::Write,
+        pool: &Pool,
+        simplify: bool,
+    ) -> Result<(), std::io::Error> {
         let graph = &self.graph;
 
         let merged_nodes = if simplify {
@@ -247,7 +252,7 @@ impl ProblemGraph {
             HashMap::new()
         };
 
-        println!("digraph {{");
+        write!(f, "digraph {{")?;
         for nx in graph.node_indices() {
             let id = match graph.node_weight(nx).as_ref().unwrap() {
                 ProblemNode::Solvable(id) => *id,
@@ -303,14 +308,15 @@ impl ProblemGraph {
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
 
-                println!(
+                write!(
+                    f,
                     "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
                     solvable.display(),
                     target
-                );
+                )?;
             }
         }
-        println!("}}");
+        write!(f, "}}")
     }
 
     fn simplify(&self, pool: &Pool) -> HashMap<SolvableId, Rc<MergedProblemNode>> {

@@ -14,6 +14,7 @@ readme.workspace = true
 itertools = "0.11.0"
 petgraph = "0.6.3"
 rattler_conda_types = { version = "0.5.0", path = "../rattler_conda_types" }
+tracing = "0.1.37"
 
 [dev-dependencies]
 insta = "1.29.0"
