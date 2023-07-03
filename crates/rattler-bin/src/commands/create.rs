@@ -15,7 +15,7 @@ use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{LibsolvRepoData, SolverBackend, SolverTask};
+use rattler_solve::{LibsolvRepoData, LibsolvRsRepoData, SolverBackend, SolverTask};
 use reqwest::{Client, StatusCode};
 use std::{
     borrow::Cow,
@@ -45,6 +45,9 @@ pub struct Opt {
 
     #[clap(long)]
     virtual_package: Option<Vec<String>>,
+
+    #[clap(long)]
+    use_experimental_libsolv_rs: bool,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -193,23 +196,38 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
     // information required to be able to solve the problem.
-    let solver_task = SolverTask {
-        available_packages: repodatas
-            .iter()
-            .map(|records| LibsolvRepoData::from_records(records)),
-        locked_packages: installed_packages
-            .iter()
-            .map(|record| record.repodata_record.clone())
-            .collect(),
-        virtual_packages,
-        specs,
-        pinned_packages: Vec::new(),
-    };
+    let locked_packages = installed_packages
+        .iter()
+        .map(|record| record.repodata_record.clone())
+        .collect();
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
+    let use_libsolv_rs = opt.use_experimental_libsolv_rs;
     let required_packages = wrap_in_progress("solving", move || {
-        rattler_solve::LibsolvBackend.solve(solver_task)
+        if use_libsolv_rs {
+            let solver_task = SolverTask {
+                available_packages: repodatas
+                    .iter()
+                    .map(|records| LibsolvRsRepoData::from_records(records)),
+                locked_packages,
+                virtual_packages,
+                specs,
+                pinned_packages: Vec::new(),
+            };
+            rattler_solve::LibsolvRsBackend.solve(solver_task)
+        } else {
+            let solver_task = SolverTask {
+                available_packages: repodatas
+                    .iter()
+                    .map(|records| LibsolvRepoData::from_records(records)),
+                locked_packages,
+                virtual_packages,
+                specs,
+                pinned_packages: Vec::new(),
+            };
+            rattler_solve::LibsolvBackend.solve(solver_task)
+        }
     })?;
 
     // Construct a transaction to
