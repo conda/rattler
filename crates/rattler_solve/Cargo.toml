@@ -26,6 +26,7 @@ cfg-if = "1.0.0"
 libsolv_rs = { version = "0.1.0", path = "../libsolv_rs" }
 
 [dev-dependencies]
+rattler_repodata_gateway = { version = "0.5.0", path = "../rattler_repodata_gateway", default-features = false, features = ["sparse"] }
 insta = { version = "1.29.0", features = ["yaml"] }
 rstest = "0.17.0"
 serde_json = "1.0.96"

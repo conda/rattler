@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_solve/src/lib.rs
-expression: pkgs
+expression: libsolv_rs_pkgs
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
