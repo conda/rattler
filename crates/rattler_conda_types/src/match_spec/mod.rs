@@ -373,13 +373,15 @@ mod tests {
     #[test]
     fn test_digest_match() {
         let record = PackageRecord {
-            name: "mamba".to_string(),
-            version: Version::from_str("1.0").unwrap(),
             sha256: parse_digest_from_hex::<Sha256>(
                 "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
             ),
             md5: parse_digest_from_hex::<Md5>("dede6252c964db3f3e41c7d30d07f6bf"),
-            ..PackageRecord::default()
+            ..PackageRecord::new(
+                String::from("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            )
         };
 
         let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
