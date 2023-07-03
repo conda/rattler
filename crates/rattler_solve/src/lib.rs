@@ -3,11 +3,15 @@
 //! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
 //! exposes the functionality through the [`SolverBackend::solve`] function.
 
+#[cfg(feature = "libsolv")]
 mod libsolv;
+#[cfg(feature = "libsolv-rs")]
 mod libsolv_rs;
 mod solver_backend;
 
+#[cfg(feature = "libsolv-rs")]
 pub use crate::libsolv_rs::{LibsolvRsBackend, LibsolvRsRepoData};
+#[cfg(feature = "libsolv")]
 pub use libsolv::{
     cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
 };
