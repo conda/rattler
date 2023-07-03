@@ -146,7 +146,7 @@ mod test_libsolv {
             file_name: "dummy-filename".to_string(),
             package_record: PackageRecord {
                 name: name.to_string(),
-                version: Version::from_str(version).unwrap(),
+                version: version.parse().unwrap(),
                 build: build.to_string(),
                 build_number,
                 subdir: subdir.to_string(),

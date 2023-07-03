@@ -20,9 +20,12 @@ pub use parse::{ParseVersionError, ParseVersionErrorKind};
 mod flags;
 mod parse;
 mod segment;
+mod with_source;
 
 use flags::Flags;
 use segment::Segment;
+
+pub use with_source::VersionWithSource;
 
 /// This class implements an order relation between version strings. Version strings can contain the
 /// usual alphanumeric characters (A-Za-z0-9), separated into segments by dots and underscores.

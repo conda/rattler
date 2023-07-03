@@ -36,7 +36,7 @@ pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatc
 pub use repo_data::{ChannelInfo, ConvertSubdirError, PackageRecord, RepoData};
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
-pub use version::{ParseVersionError, ParseVersionErrorKind, Version};
+pub use version::{ParseVersionError, ParseVersionErrorKind, Version, VersionWithSource};
 pub use version_spec::VersionSpec;
 
 #[cfg(test)]

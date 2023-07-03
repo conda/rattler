@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use super::PackageFile;
-use crate::{NoArchType, Version};
+use crate::{NoArchType, VersionWithSource};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
 use rattler_macros::sorted;
 
@@ -70,8 +70,7 @@ pub struct IndexJson {
     pub track_features: Vec<String>,
 
     /// The version of the package
-    #[serde_as(as = "DisplayFromStr")]
-    pub version: Version,
+    pub version: VersionWithSource,
 }
 
 impl PackageFile for IndexJson {
