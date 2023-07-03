@@ -22,14 +22,25 @@ mod decision_tracker;
 pub(crate) mod rule;
 mod watch_map;
 
+/// Drives the SAT solving process
+///
+/// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
+/// comes from the original `PackageRecord`s)
+///
+/// The implemented algorithm is CDCL (conflict-driven clause learning), which is masterly explained
+/// in [An Extensible SAT-solver](http://minisat.se/downloads/MiniSat.pdf). Regarding the data
+/// structures used, we mostly follow the approach taken by
+/// [libsolv](https://github.com/openSUSE/libsolv). The code of libsolv is, however, very low level
+/// C, so if you are looking for an introduction to CDCL, you are encouraged to look at the paper
+/// instead or to keep reading through this codebase and its comments.
 pub struct Solver<'a> {
     pool: Pool<'a>,
 
     pub(crate) rules: Vec<RuleState>,
     watches: WatchMap,
 
-    learnt_rules: Arena<LearntRuleId, Vec<Literal>>,
     learnt_rules_start: RuleId,
+    learnt_rules: Arena<LearntRuleId, Vec<Literal>>,
     learnt_why: Mapping<LearntRuleId, Vec<RuleId>>,
 
     decision_tracker: DecisionTracker,
@@ -49,13 +60,14 @@ impl<'a> Solver<'a> {
         }
     }
 
+    /// Returns a reference to the pool used by the solver
     pub fn pool(&self) -> &Pool {
         &self.pool
     }
 
     /// Solves the provided `jobs` and returns a transaction from the found solution
     ///
-    /// Returns a [`Problem`] if problems remain unsolved, which provides ways to inspect the causes
+    /// Returns a [`Problem`] if no solution was found, which provides ways to inspect the causes
     /// and report them to the user.
     pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Problem> {
         // Clear state
@@ -83,7 +95,7 @@ impl<'a> Solver<'a> {
         }
 
         // Create rules for root's dependencies, and their dependencies, and so forth
-        self.add_rules_for_root_dep(&favored_map);
+        self.add_rules_for_root_deps(&favored_map);
 
         // Initialize rules ensuring only a single candidate per package name is installed
         for candidates in self.pool.packages_by_name.values() {
@@ -139,7 +151,18 @@ impl<'a> Solver<'a> {
         Ok(Transaction { steps })
     }
 
-    fn add_rules_for_root_dep(&mut self, favored_map: &HashMap<NameId, SolvableId>) {
+    /// Adds rules for root's dependencies, their dependencies, and so forth
+    ///
+    /// This function makes sure we only generate rules for the solvables involved in the problem,
+    /// traversing the graph of requirements and ignoring unrelated packages. The graph is
+    /// traversed depth-first.
+    ///
+    /// A side effect of this function is that candidates for all involved match specs (in the
+    /// dependencies or constrains part of the package record) are fetched and cached for future
+    /// use. The `favored_map` parameter influences the order in which the candidates for a
+    /// dependency are sorted, giving preference to the favored package (i.e. placing it at the
+    /// front).
+    fn add_rules_for_root_deps(&mut self, favored_map: &HashMap<NameId, SolvableId>) {
         let mut visited = HashSet::new();
         let mut stack = Vec::new();
 
@@ -204,26 +227,36 @@ impl<'a> Solver<'a> {
         self.pool.match_spec_to_forbidden = match_spec_to_forbidden;
     }
 
+    /// Run the CDCL algorithm to solve the SAT problem
+    ///
+    /// The CDCL algorithm's job is to find a valid assignment to the variables involved in the
+    /// provided clauses. It works in the following steps:
+    ///
+    /// 1. __Set__: Assign a value to a variable that hasn't been assigned yet. An assignment in
+    ///    this step starts a new "level" (the first one being level 1). If all variables have been
+    ///    assigned, then we are done.
+    /// 2. __Propagate__: Perform [unit
+    ///    propagation](https://en.wikipedia.org/wiki/Unit_propagation). Assignments in this step
+    ///    are associated to the same "level" as the decision that triggered them. This "level"
+    ///    metadata is useful when it comes to handling conflicts. See [`Solver::propagate`] for the
+    ///    implementation of this step.
+    /// 3. __Learn__: If propagation finishes without conflicts, go back to 1. Otherwise find the
+    ///    combination of assignments that caused the conflict and add a new clause to the solver to
+    ///    forbid that combination of assignments (i.e. learn from this mistake so it is not
+    ///    repeated in the future). Then backtrack and go back to step 1 or, if the learnt clause is
+    ///    in conflict with existing clauses, declare the problem to be unsolvable. See
+    ///    [`Solver::analyze`] for the implementation of this step.
+    ///
+    /// The solver loop can be found in [`Solver::resolve_dependencies`].
     fn run_sat(
         &mut self,
         top_level_requirements: &[MatchSpec],
         locked_solvables: &[SolvableId],
     ) -> Result<(), Problem> {
-        let level = self.install_root_solvable();
-
-        self.decide_top_level_assertions(level, locked_solvables, top_level_requirements)
-            .map_err(|cause| self.analyze_unsolvable(cause))?;
-
-        self.propagate(level)
-            .map_err(|(_, _, cause)| self.analyze_unsolvable(cause))?;
-
-        self.resolve_dependencies(level)?;
-
-        Ok(())
-    }
-
-    fn install_root_solvable(&mut self) -> u32 {
         assert!(self.decision_tracker.is_empty());
+
+        // Assign `true` to the root solvable
+        let level = 1;
         self.decision_tracker
             .try_add_decision(
                 Decision::new(SolvableId::root(), true, RuleId::install_root()),
@@ -231,19 +264,32 @@ impl<'a> Solver<'a> {
             )
             .expect("bug: solvable was already decided!");
 
-        // The root solvable is installed at level 1
-        1
+        // Forbid packages that rely on dependencies without candidates
+        self.decide_requires_without_candidates(level, locked_solvables, top_level_requirements)
+            .map_err(|cause| self.analyze_unsolvable(cause))?;
+
+        // Propagate after the assignments above
+        self.propagate(level)
+            .map_err(|(_, _, cause)| self.analyze_unsolvable(cause))?;
+
+        // Enter the solver loop
+        self.resolve_dependencies(level)?;
+
+        Ok(())
     }
 
-    fn decide_top_level_assertions(
+    /// Forbid packages that rely on dependencies without candidates
+    ///
+    /// Since a requires clause is represented as (¬A ∨ candidate_1 ∨ ... ∨ candidate_n),
+    /// a dependency without candidates becomes (¬A), which means that A should always be false.
+    fn decide_requires_without_candidates(
         &mut self,
         level: u32,
         _locked_solvables: &[SolvableId],
         _top_level_requirements: &[MatchSpec],
     ) -> Result<(), RuleId> {
-        println!("=== Deciding assertions");
+        println!("=== Deciding assertions for requires without candidates");
 
-        // Assertions derived from requirements that cannot be fulfilled
         for (i, rule) in self.rules.iter().enumerate() {
             if let Rule::Requires(solvable_id, _) = rule.kind {
                 if !rule.has_watches() {
@@ -269,6 +315,14 @@ impl<'a> Solver<'a> {
     }
 
     /// Resolves all dependencies
+    ///
+    /// Repeatedly chooses the next variable to assign, and calls [`Solver::set_propagate_learn`] to
+    /// drive the solving process (as you can see from the name, the method executes the set,
+    /// propagate and learn steps described in the [`Solver::run_sat`] docs).
+    ///
+    /// The next variable to assign is obtained by finding the next dependency for which no concrete
+    /// package has been picked yet. Then we pick the highest possible version for that package, or
+    /// the favored version if it was provided by the user, and set its value to true.
     fn resolve_dependencies(&mut self, mut level: u32) -> Result<u32, Problem> {
         let mut i = 0;
         loop {
@@ -323,6 +377,17 @@ impl<'a> Solver<'a> {
         Ok(level)
     }
 
+    /// Executes one iteration of the CDCL loop
+    ///
+    /// A set-propagate-learn round is always initiated by a requirement clause (i.e.
+    /// [`Rule::Requires`]). The parameters include the variable associated to the candidate for the
+    /// dependency (`solvable`), the package that originates the dependency (`required_by`), and the
+    /// id of the requires clause (`rule_id`).
+    ///
+    /// Refer to the documentation of [`Solver::run_sat`] for details on the CDCL algorithm.
+    ///
+    /// Returns the new level after this set-propagate-learn round, or a [`Problem`] if we
+    /// discovered that the requested jobs are unsatisfiable.
     fn set_propagate_learn(
         &mut self,
         mut level: u32,
@@ -425,8 +490,16 @@ impl<'a> Solver<'a> {
         Ok(level)
     }
 
+    /// The propagate step of the CDCL algorithm
+    ///
+    /// Propagation is implemented by means of watches: each rule that has two or more literals is
+    /// "subscribed" to changes in the values of two solvables that appear in the rule. When a value
+    /// is assigned to a solvable, each of the rules tracking that solvable will be notified. That
+    /// way, the rule can check whether the literal that is using the solvable has become false, in
+    /// which case it picks a new solvable to watch (if available) or triggers an assignment.
     fn propagate(&mut self, level: u32) -> Result<(), (SolvableId, bool, RuleId)> {
-        // Learnt assertions
+        // Learnt assertions (assertions are clauses that consist of a single literal, and therefore
+        // do not have watches)
         let learnt_rules_start = self.learnt_rules_start.index();
         for (i, rule) in self.rules[learnt_rules_start..].iter().enumerate() {
             let Rule::Learnt(learnt_index) = rule.kind else {
@@ -455,7 +528,7 @@ impl<'a> Solver<'a> {
             }
         }
 
-        // Watched literals
+        // Watched solvables
         while let Some(decision) = self.decision_tracker.next_unpropagated() {
             let pkg = decision.solvable_id;
 
@@ -560,6 +633,10 @@ impl<'a> Solver<'a> {
         Ok(())
     }
 
+    /// Adds the rule with `rule_id` to the current `Problem`
+    ///
+    /// Because learnt rules are not relevant for the user, they are not added to the `Problem`.
+    /// Instead, we report the rules that caused them.
     fn analyze_unsolvable_rule(
         rules: &[RuleState],
         learnt_why: &Mapping<LearntRuleId, Vec<RuleId>>,
@@ -592,6 +669,7 @@ impl<'a> Solver<'a> {
         }
     }
 
+    /// Create a [`Problem`] based on the id of the rule that triggered an unrecoverable conflict
     fn analyze_unsolvable(&mut self, rule_id: RuleId) -> Problem {
         let last_decision = self.decision_tracker.stack().last().unwrap();
         let highest_level = self.decision_tracker.level(last_decision.solvable_id);
@@ -661,18 +739,27 @@ impl<'a> Solver<'a> {
         problem
     }
 
+    /// Analyze the causes of the conflict and learn from it
+    ///
+    /// This function finds the combination of assignments that caused the conflict and adds a new
+    /// clause to the solver to forbid that combination of assignments (i.e. learn from this mistake
+    /// so it is not repeated in the future). It corresponds to the `Solver.analyze` function from
+    /// the MiniSAT paper.
+    ///
+    /// Returns the level to which we should backtrack, the id of the learnt rule and the literal
+    /// that should be assigned (by definition, when we learn a rule, all its literals except one
+    /// evaluate to false, so the value of the remaining literal must be assigned to make the clause
+    /// become true)
     fn analyze(
         &mut self,
         mut current_level: u32,
-        mut s: SolvableId,
+        mut conflicting_solvable: SolvableId,
         mut rule_id: RuleId,
     ) -> (u32, RuleId, Literal) {
         let mut seen = HashSet::new();
         let mut causes_at_current_level = 0u32;
         let mut learnt = Vec::new();
-        let mut btlevel = 0;
-
-        // println!("=== ANALYZE");
+        let mut back_track_to = 0;
 
         let mut s_value;
         let mut learnt_why = Vec::new();
@@ -684,7 +771,7 @@ impl<'a> Solver<'a> {
                 &self.learnt_rules,
                 &self.pool,
                 |literal| {
-                    if !first_iteration && literal.solvable_id == s {
+                    if !first_iteration && literal.solvable_id == conflicting_solvable {
                         // We are only interested in the causes of the conflict, so we ignore the
                         // solvable whose value was propagated
                         return true;
@@ -707,7 +794,7 @@ impl<'a> Solver<'a> {
                                 .unwrap(),
                         };
                         learnt.push(learnt_literal);
-                        btlevel = btlevel.max(decision_level);
+                        back_track_to = back_track_to.max(decision_level);
                     } else {
                         unreachable!();
                     }
@@ -722,7 +809,7 @@ impl<'a> Solver<'a> {
             loop {
                 let (last_decision, last_decision_level) = self.decision_tracker.undo_last();
 
-                s = last_decision.solvable_id;
+                conflicting_solvable = last_decision.solvable_id;
                 s_value = last_decision.value;
                 rule_id = last_decision.derived_from;
 
@@ -742,7 +829,7 @@ impl<'a> Solver<'a> {
         }
 
         let last_literal = Literal {
-            solvable_id: s,
+            solvable_id: conflicting_solvable,
             negate: s_value,
         };
         learnt.push(last_literal);
@@ -774,15 +861,8 @@ impl<'a> Solver<'a> {
             );
         }
 
-        // println!("Backtracked from {level} to {btlevel}");
-
-        // print!("Last decision before backtracking: ");
-        // let decision = self.decision_queue.back().unwrap();
-        // self.pool.resolve_solvable(decision.solvable_id).debug();
-        // println!(" = {}", decision.value);
-
         // Should revert at most to the root level
-        let target_level = btlevel.max(1);
+        let target_level = back_track_to.max(1);
         self.decision_tracker.undo_until(target_level);
 
         (target_level, rule_id, last_literal)
