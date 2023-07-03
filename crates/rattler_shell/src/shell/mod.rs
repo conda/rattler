@@ -139,7 +139,7 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
         )),
         _ => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
-            format!("failed to convert path to Unix style: cygpath failed"),
+            "failed to convert path to Unix style: cygpath failed",
         )),
     }
 }
