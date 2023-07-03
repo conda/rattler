@@ -23,6 +23,7 @@ url = "2.4.0"
 hex = "0.4.3"
 tempfile = "3.6.0"
 cfg-if = "1.0.0"
+libsolv_rs = { version = "0.1.0", path = "../libsolv_rs" }
 
 [dev-dependencies]
 insta = { version = "1.29.0", features = ["yaml"] }

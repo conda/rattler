@@ -4,8 +4,10 @@
 //! exposes the functionality through the [`SolverBackend::solve`] function.
 
 mod libsolv;
+mod libsolv_rs;
 mod solver_backend;
 
+pub use crate::libsolv_rs::LibsolvRsBackend;
 pub use libsolv::{
     cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
 };
