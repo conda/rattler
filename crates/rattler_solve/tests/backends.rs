@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord, RepoData,
     RepoDataRecord, Version,
@@ -103,17 +104,11 @@ fn solve_real_world<T: SolverBackend + Default>(specs: Vec<&str>) -> Vec<String>
         .map(|s| MatchSpec::from_str(s).unwrap())
         .collect::<Vec<_>>();
 
-    let json_file = conda_json_path();
-    let json_file_noarch = conda_json_path_noarch();
-
-    let sparse_repo_datas = vec![
-        read_sparse_repodata(&json_file),
-        read_sparse_repodata(&json_file_noarch),
-    ];
+    let sparse_repo_datas = read_real_world_repo_data();
 
     let names = specs.iter().map(|s| s.name.clone().unwrap());
     let available_packages =
-        SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names).unwrap();
 
     let solver_task = SolverTask {
         available_packages: &available_packages,
@@ -143,6 +138,20 @@ fn solve_real_world<T: SolverBackend + Default>(specs: Vec<&str>) -> Vec<String>
     };
 
     extract_pkgs(pkgs1)
+}
+
+fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
+    static REPO_DATA: Lazy<Vec<SparseRepoData>> = Lazy::new(|| {
+        let json_file = conda_json_path();
+        let json_file_noarch = conda_json_path_noarch();
+
+        vec![
+            read_sparse_repodata(&json_file),
+            read_sparse_repodata(&json_file_noarch),
+        ]
+    });
+
+    &REPO_DATA
 }
 
 macro_rules! solver_backend_tests {
@@ -478,4 +487,95 @@ fn solve<T: SolverBackend + Default>(
     }
 
     Ok(pkgs)
+}
+
+fn compare_solve(specs: Vec<&str>) {
+    let specs = specs
+        .iter()
+        .map(|s| MatchSpec::from_str(s).unwrap())
+        .collect::<Vec<_>>();
+
+    let sparse_repo_datas = read_real_world_repo_data();
+
+    let names = specs.iter().filter_map(|s| s.name.clone());
+    let available_packages =
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names).unwrap();
+
+    let extract_pkgs = |records: Vec<RepoDataRecord>| {
+        let mut pkgs = records
+            .into_iter()
+            .map(|pkg| {
+                format!(
+                    "{} {} {}",
+                    pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // The order of packages is nondeterministic, so we sort them to ensure we can compare them
+        // to a previous run
+        pkgs.sort();
+        pkgs
+    };
+
+    let mut results = Vec::new();
+
+    #[cfg(feature = "libsolv-sys")]
+    results.push((
+        "libsolv-sys",
+        extract_pkgs(
+            rattler_solve::LibsolvBackend
+                .solve(SolverTask {
+                    available_packages: &available_packages,
+                    specs: specs.clone(),
+                    locked_packages: Default::default(),
+                    pinned_packages: Default::default(),
+                    virtual_packages: Default::default(),
+                })
+                .unwrap(),
+        ),
+    ));
+
+    #[cfg(feature = "libsolv_rs")]
+    results.push((
+        "libsolv_rs",
+        extract_pkgs(
+            rattler_solve::LibsolvRsBackend
+                .solve(SolverTask {
+                    available_packages: &available_packages,
+                    specs: specs.clone(),
+                    locked_packages: Default::default(),
+                    pinned_packages: Default::default(),
+                    virtual_packages: Default::default(),
+                })
+                .unwrap(),
+        ),
+    ));
+
+    results.into_iter().fold(None, |previous, current| {
+        let previous = match previous {
+            Some(previous) => previous,
+            None => return Some(current),
+        };
+
+        similar_asserts::assert_eq!(
+            &previous.1,
+            &current.1,
+            "The result between {} and {} differs",
+            &previous.0,
+            &current.0
+        );
+
+        Some(current)
+    });
+}
+
+#[test]
+fn compare_solve_tensorboard() {
+    compare_solve(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+}
+
+#[test]
+fn compare_solve_python() {
+    compare_solve(vec!["python=3.9"]);
 }
