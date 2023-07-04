@@ -13,11 +13,11 @@ use std::collections::HashMap;
 ///
 /// If the transaction contains libsolv operations that are not "install" an error is returned
 /// containing their ids.
-pub fn get_required_packages(
+pub fn get_required_packages<'a>(
     pool: &Pool,
     repo_mapping: &HashMap<RepoId, usize>,
     transaction: &Transaction,
-    repodata_records: &[&[RepoDataRecord]],
+    repodata_records: &[Vec<&'a RepoDataRecord>],
 ) -> Result<Vec<RepoDataRecord>, Vec<ffi::Id>> {
     let mut required_packages = Vec::new();
     let mut unsupported_operations = Vec::new();
@@ -35,7 +35,7 @@ pub fn get_required_packages(
         // Retrieve the repodata record corresponding to this solvable
         let (repo_index, solvable_index) =
             get_solvable_indexes(pool, repo_mapping, solvable_index_id, id);
-        let repodata_record = &repodata_records[repo_index][solvable_index];
+        let repodata_record = repodata_records[repo_index][solvable_index];
 
         match transaction_type as u32 {
             ffi::SOLVER_TRANSACTION_INSTALL => {

@@ -13,13 +13,13 @@ use std::collections::HashMap;
 pub fn add_repodata_records<'a>(
     pool: &mut Pool<'a>,
     repo_id: RepoId,
-    repo_datas: &'a [RepoDataRecord],
+    repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Vec<SolvableId> {
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
 
     let mut solvable_ids = Vec::new();
-    for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
+    for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
         // Create a solvable for the package
         let solvable_id =
             match add_or_reuse_solvable(pool, repo_id, &mut package_to_type, repo_data) {

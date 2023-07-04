@@ -84,9 +84,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 #[cfg(test)]
 mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
-    use crate::{
-        LibsolvRepoData, LibsolvRsBackend, LibsolvRsRepoData, SolveError, SolverBackend, SolverTask,
-    };
+    use crate::{LibsolvRepoData, LibsolvRsBackend, SolveError, SolverBackend, SolverTask};
     use rattler_conda_types::{
         Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
         RepoData, RepoDataRecord, Version,
@@ -187,7 +185,7 @@ mod test_libsolv {
         }
     }
 
-    fn solve_real_world(specs: Vec<&str>) -> (Vec<String>, Vec<String>) {
+    fn solve_real_world<T: SolverBackend>(specs: Vec<&str>) -> Vec<String> {
         let specs = specs
             .iter()
             .map(|s| MatchSpec::from_str(s).unwrap())
@@ -206,9 +204,7 @@ mod test_libsolv {
             SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
 
         let solver_task = SolverTask {
-            available_packages: available_packages
-                .iter()
-                .map(|records| LibsolvRepoData::from_records(records)),
+            available_packages: &available_packages,
             specs: specs.clone(),
             locked_packages: Default::default(),
             pinned_packages: Default::default(),
@@ -216,17 +212,6 @@ mod test_libsolv {
         };
 
         let pkgs1 = LibsolvBackend.solve(solver_task).unwrap();
-
-        let solver_task = SolverTask {
-            available_packages: available_packages
-                .iter()
-                .map(|records| LibsolvRsRepoData::from_records(records)),
-            specs,
-            locked_packages: Default::default(),
-            pinned_packages: Default::default(),
-            virtual_packages: Default::default(),
-        };
-        let pkgs2 = LibsolvRsBackend.solve(solver_task).unwrap();
 
         let extract_pkgs = |records: Vec<RepoDataRecord>| {
             let mut pkgs = records
@@ -247,21 +232,36 @@ mod test_libsolv {
             pkgs
         };
 
-        (extract_pkgs(pkgs1), extract_pkgs(pkgs2))
+        extract_pkgs(pkgs1)
     }
 
+    #[cfg(feature = "libsolv")]
     #[test]
-    fn test_solve_tensorboard() {
-        let (libsolv_pkgs, libsolv_rs_pkgs) =
-            solve_real_world(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+    fn test_solve_tensorboard_libsolv_sys() {
+        let libsolv_pkgs =
+            solve_real_world::<LibsolvBackend>(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
         insta::assert_yaml_snapshot!("solve_tensorboard_libsolv", libsolv_pkgs);
+    }
+
+    #[cfg(feature = "libsolv")]
+    #[test]
+    fn test_solve_python_libsolv_sys() {
+        let libsolv_pkgs = solve_real_world::<LibsolvBackend>(vec!["python=3.9"]);
+        insta::assert_yaml_snapshot!("solve_python_libsolv", libsolv_pkgs);
+    }
+
+    #[cfg(feature = "libsolv-rs")]
+    #[test]
+    fn test_solve_tensorboard_libsolv_rs() {
+        let libsolv_rs_pkgs =
+            solve_real_world::<LibsolvRsBackend>(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
         insta::assert_yaml_snapshot!("solve_tensorboard_libsolv_rs", libsolv_rs_pkgs);
     }
 
+    #[cfg(feature = "libsolv-rs")]
     #[test]
-    fn test_solve_python() {
-        let (libsolv_pkgs, libsolv_rs_pkgs) = solve_real_world(vec!["python=3.9"]);
-        insta::assert_yaml_snapshot!("solve_python_libsolv", libsolv_pkgs);
+    fn test_solve_python_libsolv_rs() {
+        let libsolv_rs_pkgs = solve_real_world::<LibsolvRsBackend>(vec!["python=3.9"]);
         insta::assert_yaml_snapshot!("solve_python_libsolv_rs", libsolv_rs_pkgs);
     }
 
@@ -569,7 +569,7 @@ mod test_libsolv {
                 solv_file: Some(&cached_repo_data),
             }
         } else {
-            LibsolvRepoData::from_records(&repo_data)
+            LibsolvRepoData::from_iter(&repo_data)
         };
 
         let specs: Vec<_> = match_specs
@@ -580,7 +580,7 @@ mod test_libsolv {
         let task = SolverTask {
             locked_packages: installed_packages.clone(),
             virtual_packages: virtual_packages.clone(),
-            available_packages: vec![libsolv_repodata].into_iter(),
+            available_packages: [libsolv_repodata],
             specs: specs.clone(),
             pinned_packages: Vec::new(),
         };
@@ -589,7 +589,7 @@ mod test_libsolv {
         let task = SolverTask {
             locked_packages: installed_packages,
             virtual_packages,
-            available_packages: vec![LibsolvRsRepoData::from_records(&repo_data)].into_iter(),
+            available_packages: [&repo_data],
             specs,
             pinned_packages: Vec::new(),
         };

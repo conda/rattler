@@ -38,10 +38,10 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
-pub fn add_repodata_records(
+pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo,
-    repo_datas: &[RepoDataRecord],
+    repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Vec<SolvableId> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -70,7 +70,7 @@ pub fn add_repodata_records(
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
-    for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
+    for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
         // Create a solvable for the package
         let solvable_id =
             match add_or_reuse_solvable(pool, repo, &data, &mut package_to_type, repo_data) {

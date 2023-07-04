@@ -9,11 +9,11 @@ use std::collections::HashMap;
 ///
 /// If the transaction contains libsolv operations that are not "install" an error is returned
 /// containing their ids.
-pub fn get_required_packages(
+pub fn get_required_packages<'a>(
     pool: &Pool,
     repo_mapping: &HashMap<RepoId, usize>,
     transaction: &Transaction,
-    repodata_records: &[&[RepoDataRecord]],
+    repodata_records: &[Vec<&'a RepoDataRecord>],
 ) -> Vec<RepoDataRecord> {
     let mut required_packages = Vec::new();
 
@@ -22,7 +22,7 @@ pub fn get_required_packages(
         //
         // Packages without indexes are virtual and can be ignored
         if let Some((repo_index, solvable_index)) = get_solvable_indexes(pool, repo_mapping, id) {
-            let repodata_record = &repodata_records[repo_index][solvable_index];
+            let repodata_record = repodata_records[repo_index][solvable_index];
             required_packages.push(repodata_record.clone());
         }
     }
