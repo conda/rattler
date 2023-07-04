@@ -565,7 +565,7 @@ mod test_libsolv {
 
             #[cfg(target_family = "unix")]
             LibsolvRepoData {
-                records: repo_data.as_slice(),
+                records: repo_data.iter().collect(),
                 solv_file: Some(&cached_repo_data),
             }
         } else {
