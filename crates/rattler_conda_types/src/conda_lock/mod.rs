@@ -7,7 +7,7 @@ use crate::match_spec::parse::ParseMatchSpecError;
 use crate::MatchSpec;
 use crate::{
     utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
-    ParseVersionError, Platform, RepoDataRecord, Version,
+    ParseVersionError, Platform, RepoDataRecord,
 };
 use fxhash::FxHashMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
@@ -350,7 +350,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
             .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).to_string())
             .collect::<Vec<_>>();
 
-        let version = value.version.parse::<Version>()?;
+        let version = value.version.parse()?;
         let md5 = match value.hash {
             Md5(md5) => Some(md5),
             Md5Sha256(md5, _) => Some(md5),

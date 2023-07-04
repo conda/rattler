@@ -120,24 +120,28 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
         .arg("--unix")
         .arg("--path")
         .arg(path)
-        .output()
-        .unwrap();
+        .output();
 
-    if output.status.success() {
-        return Ok(String::from_utf8(output.stdout)
+    match output {
+        Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
             .map_err(|_| {
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    "Failed to convert path to Unix style",
+                    "failed to convert path to Unix style",
                 )
             })?
             .trim()
-            .to_string());
+            .to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(e),
+        Err(e) => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("failed to convert path to Unix style: {e}"),
+        )),
+        _ => Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "failed to convert path to Unix style: cygpath failed",
+        )),
     }
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Failed to convert path to Unix style",
-    ))
 }
 
 /// A [`Shell`] implementation for the Bash shell.
@@ -170,7 +174,15 @@ impl Shell for Bash {
             .map(|path| {
                 // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
                 if cfg!(windows) {
-                    native_path_to_unix(path.to_string_lossy().as_ref()).unwrap()
+                    match native_path_to_unix(path.to_string_lossy().as_ref()) {
+                        Ok(path) => path,
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                            // This indicates that the cypath executable could not be found. In that
+                            // case we just ignore any conversion and use the windows path directly.
+                            path.to_string_lossy().to_string()
+                        }
+                        Err(e) => panic!("{e}"),
+                    }
                 } else {
                     path.to_string_lossy().into_owned()
                 }

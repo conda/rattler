@@ -12,13 +12,13 @@ use fxhash::{FxHashMap, FxHashSet};
 
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 
 use rattler_macros::sorted;
 
 use crate::package::IndexJson;
-use crate::{Channel, NoArchType, Platform, RepoDataRecord, Version};
+use crate::{Channel, NoArchType, Platform, RepoDataRecord, VersionWithSource};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
@@ -62,7 +62,7 @@ pub struct ChannelInfo {
 #[serde_as]
 #[skip_serializing_none]
 #[sorted]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Clone, Hash, Default)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
 pub struct PackageRecord {
     /// Optionally the architecture the package supports
     pub arch: Option<String>,
@@ -139,8 +139,7 @@ pub struct PackageRecord {
     pub track_features: Vec<String>,
 
     /// The version of the package
-    #[serde_as(as = "DisplayFromStr")]
-    pub version: Version,
+    pub version: VersionWithSource,
     // Looking at the `PackageRecord` class in the Conda source code a record can also include all
     // these fields. However, I have no idea if or how they are used so I left them out.
     //pub preferred_env: Option<String>,
@@ -182,6 +181,32 @@ impl RepoData {
 }
 
 impl PackageRecord {
+    /// A simple helper method that constructs a `PackageRecord` with the bare minimum values.
+    pub fn new(name: String, version: impl Into<VersionWithSource>, build: String) -> Self {
+        Self {
+            arch: None,
+            build,
+            build_number: 0,
+            constrains: vec![],
+            depends: vec![],
+            features: None,
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: None,
+            license_family: None,
+            md5: None,
+            name,
+            noarch: Default::default(),
+            platform: None,
+            sha256: None,
+            size: None,
+            subdir: Platform::current().to_string(),
+            timestamp: None,
+            track_features: vec![],
+            version: version.into(),
+        }
+    }
+
     /// Sorts the records topologically.
     ///
     /// This function is deterministic, meaning that it will return the same result regardless of

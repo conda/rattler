@@ -1,0 +1,105 @@
+---
+source: crates/rattler_conda_types/src/version/parse.rs
+expression: index_map
+---
+{
+    "$": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    ".": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1!1.2a.3-rc1": Version(
+        Version {
+            version: [[1], [1], [2, 'a'], [3], [0, 'rc', 1]],
+            local: [],
+        },
+    ),
+    "1+": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+$": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+.": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+    "1+2": Version(
+        Version {
+            version: [[0], [1]],
+            local: [[2]],
+        },
+    ),
+    "1--": Version(
+        Version {
+            version: [[0], [1], [0, '_']],
+            local: [],
+        },
+    ),
+    "1-2-3": Version(
+        Version {
+            version: [[0], [1], [2], [3]],
+            local: [],
+        },
+    ),
+    "1-2-3_": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1-2_3": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1-_": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1.0.1-": Version(
+        Version {
+            version: [[0], [1], [0], [1, '_']],
+            local: [],
+        },
+    ),
+    "1.0.1_": Version(
+        Version {
+            version: [[0], [1], [0], [1, '_']],
+            local: [],
+        },
+    ),
+    "1.0.1post.za": Version(
+        Version {
+            version: [[0], [1], [0], [1, inf], [0, 'za']],
+            local: [],
+        },
+    ),
+    "1@2": Error(
+        "expected a '.', '-', or '_'",
+    ),
+    "1_": Version(
+        Version {
+            version: [[0], [1, '_']],
+            local: [],
+        },
+    ),
+    "1_-": Error(
+        "cannot use both underscores and dashes as version segment seperators",
+    ),
+    "1_2_3": Version(
+        Version {
+            version: [[0], [1], [2], [3]],
+            local: [],
+        },
+    ),
+    "1_2_3_": Version(
+        Version {
+            version: [[0], [1], [2], [3, '_']],
+            local: [],
+        },
+    ),
+    "1__": Version(
+        Version {
+            version: [[0], [1], [0, '_']],
+            local: [],
+        },
+    ),
+    "1___": Error(
+        "expected a version component e.g. `2` or `rc`",
+    ),
+}
