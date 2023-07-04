@@ -308,6 +308,7 @@ mod tests {
 
     #[rstest]
     #[case(get_resolved_packages_for_python(), &["python"])]
+    #[case(get_resolved_packages_for_python_pip(), &["pip"])]
     #[case(get_resolved_packages_for_numpy(), &["numpy"])]
     #[case(get_resolved_packages_for_two_roots(), &["4ti2", "micromamba"])]
     fn test_get_graph_roots(
@@ -323,6 +324,7 @@ mod tests {
     #[case(get_resolved_packages_for_python(), "python", &[("libzlib", "libgcc-ng")])]
     #[case(get_resolved_packages_for_numpy(), "numpy", &[("llvm-openmp", "libzlib")])]
     #[case(get_resolved_packages_for_two_roots(), "4ti2", &[("libzlib", "libgcc-ng")])]
+    #[case(get_resolved_packages_for_python_pip(), "pip", &[("pip", "python"), ("libzlib", "libgcc-ng")])]
     fn test_topological_sort(
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_last_package: &str,
@@ -334,7 +336,7 @@ mod tests {
         sanity_check_topological_sort(&sorted_packages, &packages);
         simulate_install(&sorted_packages, &circular_deps);
 
-        // Sanity check: the last package should be python
+        // Sanity check: the last package should be python (or pip when it is present)
         let last_package = &sorted_packages[sorted_packages.len() - 1];
         assert_eq!(last_package.package_record.name, expected_last_package)
     }
@@ -1725,5 +1727,92 @@ mod tests {
           ]"#;
 
         serde_json::from_str(repodata_json).unwrap()
+    }
+
+    fn get_resolved_packages_for_python_pip() -> Vec<RepoDataRecord> {
+        let pip = r#"
+        [
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7",
+              "setuptools",
+              "wheel"
+            ],
+            "fn": "pip-23.1.2-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "license_family": "MIT",
+            "md5": "7288da0d36821349cf1126e8670292df",
+            "name": "pip",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "4fe1f47f6eac5b2635a622b6f985640bf835843c1d8d7ccbbae0f7d27cadec92",
+            "size": 1367644,
+            "subdir": "noarch",
+            "timestamp": 1682507713321,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/pip-23.1.2-pyhd8ed1ab_0.conda",
+            "version": "23.1.2"
+          },
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7"
+            ],
+            "fn": "wheel-0.40.0-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "md5": "49bb0d9e60ce1db25e151780331bb5f3",
+            "name": "wheel",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "79b4d29b0c004014a2abd5fc2c9fcd35cc6256222b960c2a317a27c4b0d8884d",
+            "size": 55729,
+            "subdir": "noarch",
+            "timestamp": 1678812153506,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/wheel-0.40.0-pyhd8ed1ab_0.conda",
+            "version": "0.40.0"
+          },
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7"
+            ],
+            "fn": "setuptools-68.0.0-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "license_family": "MIT",
+            "md5": "5a7739d0f57ee64133c9d32e6507c46d",
+            "name": "setuptools",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "083a0913f5b56644051f31ac40b4eeea762a88c00aa12437817191b85a753cec",
+            "size": 463712,
+            "subdir": "noarch",
+            "timestamp": 1687527994911,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/setuptools-68.0.0-pyhd8ed1ab_0.conda",
+            "version": "68.0.0"
+          }
+        ]"#;
+
+        let mut python = get_resolved_packages_for_python();
+        let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
+        python.extend(pip);
+        return python;
     }
 }
