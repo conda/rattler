@@ -314,7 +314,7 @@ mod tests {
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_roots: &[&str],
     ) {
-        let mut roots = get_graph_roots(&packages);
+        let mut roots = get_graph_roots(&packages, None);
         roots.sort();
         assert_eq!(roots.as_slice(), expected_roots);
     }

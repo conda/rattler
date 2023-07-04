@@ -378,6 +378,7 @@ mod test {
                 ),
             ],
             package_names,
+            None,
         )
         .await
         .unwrap()

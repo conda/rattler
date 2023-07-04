@@ -7,8 +7,8 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
-    RepoDataRecord, Version, PackageRecord,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, Platform,
+    PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
