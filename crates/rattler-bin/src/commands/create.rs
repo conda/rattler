@@ -11,7 +11,9 @@ use rattler_conda_types::{
     RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
-use rattler_repodata_gateway::fetch::{DownloadProgress, FetchRepoDataError, FetchRepoDataOptions};
+use rattler_repodata_gateway::fetch::{
+    CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
+};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverBackend, SolverTask};
 use reqwest::{Client, StatusCode};
