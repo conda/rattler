@@ -230,13 +230,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // sort topologically
     let required_packages = PackageRecord::sort_topologically(required_packages);
-    // println!("required_packages: {:#?}", required_packages);
-    for pkg in &required_packages {
-        println!(
-            "{}-{}-{}",
-            pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
-        );
-    }
 
     // Construct a transaction to
     let transaction = Transaction::from_current_and_desired(

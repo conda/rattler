@@ -6,6 +6,11 @@ use fxhash::{FxHashMap, FxHashSet};
 /// This function is deterministic, meaning that it will return the same result regardless of the
 /// order of `packages` and of the `depends` vector inside the records.
 ///
+/// If cycles are encountered, and one of the packages in the cycle is noarch, the noarch package
+/// is sorted _after_ the other packages in the cycle. This is done to ensure that the noarch
+/// package is installed last, so that it can be linked correctly (ie. compiled with Python if
+/// necessary).
+///
 /// Note that this function only works for packages with unique names.
 pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
     let roots = get_graph_roots(&packages, None);
@@ -44,7 +49,9 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
     get_topological_order(roots, &mut all_packages, &cycle_breaks)
 }
 
-/// Retrieves the names of the packages that form the roots of the graph
+/// Retrieves the names of the packages that form the roots of the graph and breaks specified
+/// cycles (e.g. if there is a cycle between A and B and there is a cycle_break (A, B), the edge
+/// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
     cycle_breaks: Option<&FxHashSet<(String, String)>>,
@@ -113,6 +120,8 @@ fn find_cycles<T: AsRef<PackageRecord>>(
     None
 }
 
+/// Breaks cycles by removing the edges that form them
+/// Edges from arch to noarch packages are removed to break the cycles.
 fn break_cycles<T: AsRef<PackageRecord>>(
     cycles: Vec<Vec<String>>,
     packages: &FxHashMap<String, T>,
