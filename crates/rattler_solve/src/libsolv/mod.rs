@@ -41,7 +41,7 @@ impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRepoData<'a> {
 
 impl<'a> LibsolvRepoData<'a> {
     /// Constructs a new `LibsolvRsRepoData`
-    #[deprecated(since = "0.7.0", note = "use From::from instead")]
+    #[deprecated(since = "0.6.0", note = "use From::from instead")]
     pub fn from_records(records: impl Into<Vec<&'a RepoDataRecord>>) -> Self {
         Self {
             records: records.into(),
