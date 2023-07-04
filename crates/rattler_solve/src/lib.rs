@@ -3,9 +3,15 @@
 //! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
 //! exposes the functionality through the [`SolverBackend::solve`] function.
 
+#[cfg(feature = "libsolv")]
 mod libsolv;
+#[cfg(feature = "libsolv-rs")]
+mod libsolv_rs;
 mod solver_backend;
 
+#[cfg(feature = "libsolv-rs")]
+pub use crate::libsolv_rs::{LibsolvRsBackend, LibsolvRsRepoData};
+#[cfg(feature = "libsolv")]
 pub use libsolv::{
     cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
 };
@@ -78,11 +84,14 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 #[cfg(test)]
 mod test_libsolv {
     use crate::libsolv::LibsolvBackend;
-    use crate::{LibsolvRepoData, SolveError, SolverBackend, SolverTask};
+    use crate::{
+        LibsolvRepoData, LibsolvRsBackend, LibsolvRsRepoData, SolveError, SolverBackend, SolverTask,
+    };
     use rattler_conda_types::{
         Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
         RepoData, RepoDataRecord, Version,
     };
+    use rattler_repodata_gateway::sparse::SparseRepoData;
     use std::str::FromStr;
     use url::Url;
 
@@ -132,6 +141,15 @@ mod test_libsolv {
         )
     }
 
+    fn read_sparse_repodata(path: &str) -> SparseRepoData {
+        SparseRepoData::new(
+            Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
+            "dummy".to_string(),
+            path,
+        )
+        .unwrap()
+    }
+
     fn installed_package(
         channel: &str,
         subdir: &str,
@@ -169,45 +187,82 @@ mod test_libsolv {
         }
     }
 
-    #[test]
-    fn test_solve_python() {
+    fn solve_real_world(specs: Vec<&str>) -> (Vec<String>, Vec<String>) {
+        let specs = specs
+            .iter()
+            .map(|s| MatchSpec::from_str(s).unwrap())
+            .collect::<Vec<_>>();
+
         let json_file = conda_json_path();
         let json_file_noarch = conda_json_path_noarch();
 
-        let repo_data = read_repodata(&json_file);
-        let repo_data_noarch = read_repodata(&json_file_noarch);
+        let sparse_repo_datas = vec![
+            read_sparse_repodata(&json_file),
+            read_sparse_repodata(&json_file_noarch),
+        ];
 
-        let available_packages = vec![repo_data, repo_data_noarch];
-
-        let specs = vec![MatchSpec::from_str("python=3.9").unwrap()];
+        let names = specs.iter().map(|s| s.name.clone().unwrap());
+        let available_packages =
+            SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
 
         let solver_task = SolverTask {
             available_packages: available_packages
                 .iter()
                 .map(|records| LibsolvRepoData::from_records(records)),
-            specs,
+            specs: specs.clone(),
             locked_packages: Default::default(),
             pinned_packages: Default::default(),
             virtual_packages: Default::default(),
         };
 
-        let mut pkgs = LibsolvBackend
-            .solve(solver_task)
-            .unwrap()
-            .into_iter()
-            .map(|pkg| {
-                format!(
-                    "{} {} {}",
-                    pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
-                )
-            })
-            .collect::<Vec<_>>();
+        let pkgs1 = LibsolvBackend.solve(solver_task).unwrap();
 
-        // The order of packages is nondeterministic, so we sort them to ensure we can compare them
-        // to a previous run
-        pkgs.sort();
+        let solver_task = SolverTask {
+            available_packages: available_packages
+                .iter()
+                .map(|records| LibsolvRsRepoData::from_records(records)),
+            specs,
+            locked_packages: Default::default(),
+            pinned_packages: Default::default(),
+            virtual_packages: Default::default(),
+        };
+        let pkgs2 = LibsolvRsBackend.solve(solver_task).unwrap();
 
-        insta::assert_yaml_snapshot!(pkgs);
+        let extract_pkgs = |records: Vec<RepoDataRecord>| {
+            let mut pkgs = records
+                .into_iter()
+                .map(|pkg| {
+                    format!(
+                        "{} {} {}",
+                        pkg.package_record.name,
+                        pkg.package_record.version,
+                        pkg.package_record.build
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            // The order of packages is nondeterministic, so we sort them to ensure we can compare them
+            // to a previous run
+            pkgs.sort();
+            pkgs
+        };
+
+        (extract_pkgs(pkgs1), extract_pkgs(pkgs2))
+    }
+
+    #[test]
+    fn test_solve_tensorboard() {
+        let (libsolv_pkgs, libsolv_rs_pkgs) =
+            solve_real_world(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+        insta::assert_yaml_snapshot!("solve_tensorboard_libsolv", libsolv_pkgs);
+        insta::assert_yaml_snapshot!("solve_tensorboard_libsolv_rs", libsolv_rs_pkgs);
+    }
+
+    #[test]
+    fn test_solve_python() {
+        let (libsolv_pkgs, libsolv_rs_pkgs) = solve_real_world(vec!["python=3.9"]);
+        insta::assert_yaml_snapshot!("solve_python_libsolv", libsolv_pkgs);
+        insta::assert_yaml_snapshot!("solve_python_libsolv_rs", libsolv_rs_pkgs);
     }
 
     #[test]
@@ -224,8 +279,12 @@ mod test_libsolv {
 
         let err = result.err().unwrap();
         match err {
-            SolveError::Unsolvable(errors) => {
-                assert_eq!(errors, vec!["nothing provides requested asdfasdf"])
+            (SolveError::Unsolvable(libsolv_errors), SolveError::Unsolvable(libsolv_rs_errors)) => {
+                assert_eq!(libsolv_errors, vec!["nothing provides requested asdfasdf"]);
+                assert_eq!(
+                    libsolv_rs_errors,
+                    vec!["No candidates where found for asdfasdf.\n"]
+                );
             }
             _ => panic!("Unexpected error: {err:?}"),
         }
@@ -233,14 +292,15 @@ mod test_libsolv {
 
     #[test]
     #[cfg(target_family = "unix")]
-    fn test_solve_with_cached_solv_file_install_new() -> anyhow::Result<()> {
+    fn test_solve_with_cached_solv_file_install_new() {
         let pkgs = solve(
             dummy_channel_json_path(),
             Vec::new(),
             Vec::new(),
             &["foo<4"],
             true,
-        )?;
+        )
+        .unwrap();
 
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
@@ -272,19 +332,18 @@ mod test_libsolv {
             .unwrap(),
             info.package_record.md5.as_ref().unwrap()
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_install_new() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_install_new() {
         let pkgs = solve(
             dummy_channel_json_path(),
             Vec::new(),
             Vec::new(),
             &["foo<4"],
             false,
-        )?;
+        )
+        .unwrap();
 
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
@@ -316,12 +375,10 @@ mod test_libsolv {
             .unwrap(),
             info.package_record.md5.as_ref().unwrap()
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_prefers_conda_package() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_prefers_conda_package() {
         // There following package is provided as .tar.bz and as .conda in repodata.json
         let match_spec = "foo=3.0.2=py36h1af98f8_1";
 
@@ -331,17 +388,16 @@ mod test_libsolv {
             Vec::new(),
             &[match_spec],
             false,
-        )?;
+        )
+        .unwrap();
 
         // The .conda entry is selected for installing
         assert_eq!(operations.len(), 1);
         assert_eq!(operations[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_install_noop() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_install_noop() {
         let already_installed = vec![installed_package(
             "conda-forge",
             "linux-64",
@@ -357,7 +413,8 @@ mod test_libsolv {
             Vec::new(),
             &["foo<4"],
             false,
-        )?;
+        )
+        .unwrap();
 
         assert_eq!(1, pkgs.len());
 
@@ -365,12 +422,10 @@ mod test_libsolv {
         let info = &pkgs[0];
         assert_eq!("foo", &info.package_record.name);
         assert_eq!("3.0.2", &info.package_record.version.to_string());
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_upgrade() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_upgrade() {
         let already_installed = vec![installed_package(
             "conda-forge",
             "linux-64",
@@ -386,18 +441,17 @@ mod test_libsolv {
             Vec::new(),
             &["foo>=4"],
             false,
-        )?;
+        )
+        .unwrap();
 
         // Install
         let info = &pkgs[0];
         assert_eq!("foo", &info.package_record.name);
         assert_eq!("4.0.2", &info.package_record.version.to_string());
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_downgrade() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_downgrade() {
         let already_installed = vec![installed_package(
             "conda-forge",
             "linux-64",
@@ -413,7 +467,8 @@ mod test_libsolv {
             Vec::new(),
             &["foo<4"],
             false,
-        )?;
+        )
+        .unwrap();
 
         assert_eq!(pkgs.len(), 1);
 
@@ -421,12 +476,10 @@ mod test_libsolv {
         let info = &pkgs[0];
         assert_eq!("foo", &info.package_record.name);
         assert_eq!("3.0.2", &info.package_record.version.to_string());
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_remove() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_remove() {
         let already_installed = vec![installed_package(
             "conda-forge",
             "linux-64",
@@ -442,16 +495,15 @@ mod test_libsolv {
             Vec::new(),
             &[],
             false,
-        )?;
+        )
+        .unwrap();
 
         // Should be no packages!
         assert_eq!(0, pkgs.len());
-
-        Ok(())
     }
 
     #[test]
-    fn test_solve_dummy_repo_with_virtual_package() -> anyhow::Result<()> {
+    fn test_solve_dummy_repo_with_virtual_package() {
         let pkgs = solve(
             dummy_channel_json_path(),
             Vec::new(),
@@ -462,15 +514,14 @@ mod test_libsolv {
             }],
             &["bar"],
             false,
-        )?;
+        )
+        .unwrap();
 
         assert_eq!(pkgs.len(), 1);
 
         let info = &pkgs[0];
         assert_eq!("bar", &info.package_record.name);
         assert_eq!("1.2.3", &info.package_record.version.to_string());
-
-        Ok(())
     }
 
     #[test]
@@ -483,7 +534,10 @@ mod test_libsolv {
             false,
         );
 
-        assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
+        assert!(matches!(
+            result.err(),
+            Some((SolveError::Unsolvable(_), SolveError::Unsolvable(_)))
+        ));
     }
 
     #[cfg(test)]
@@ -493,7 +547,7 @@ mod test_libsolv {
         virtual_packages: Vec<GenericVirtualPackage>,
         match_specs: &[&str],
         with_solv_file: bool,
-    ) -> Result<Vec<RepoDataRecord>, SolveError> {
+    ) -> Result<Vec<RepoDataRecord>, (SolveError, SolveError)> {
         let repo_data = read_repodata(&repo_path);
 
         #[cfg(target_family = "unix")]
@@ -518,32 +572,54 @@ mod test_libsolv {
             LibsolvRepoData::from_records(&repo_data)
         };
 
-        let specs = match_specs
+        let specs: Vec<_> = match_specs
             .iter()
             .map(|m| MatchSpec::from_str(m).unwrap())
             .collect();
 
         let task = SolverTask {
+            locked_packages: installed_packages.clone(),
+            virtual_packages: virtual_packages.clone(),
+            available_packages: vec![libsolv_repodata].into_iter(),
+            specs: specs.clone(),
+            pinned_packages: Vec::new(),
+        };
+        let pkgs_libsolv = LibsolvBackend.solve(task);
+
+        let task = SolverTask {
             locked_packages: installed_packages,
             virtual_packages,
-            available_packages: vec![libsolv_repodata].into_iter(),
+            available_packages: vec![LibsolvRsRepoData::from_records(&repo_data)].into_iter(),
             specs,
             pinned_packages: Vec::new(),
         };
+        let pkgs_libsolv_rs = LibsolvRsBackend.solve(task);
 
-        let pkgs = LibsolvBackend.solve(task)?;
+        if pkgs_libsolv.is_ok() != pkgs_libsolv_rs.is_ok() {
+            panic!("one of libsolv and libsolv_rs returns unsat, the other sat!");
+        }
 
-        for pkg in pkgs.iter() {
+        if let Err(pkgs_libsolv) = pkgs_libsolv {
+            return Err((pkgs_libsolv, pkgs_libsolv_rs.err().unwrap()));
+        }
+
+        let pkgs_libsolv = pkgs_libsolv.unwrap();
+        let pkgs_libsolv_rs = pkgs_libsolv_rs.unwrap();
+        if pkgs_libsolv != pkgs_libsolv_rs {
+            panic!("libsolv and libsolv_rs return different results!");
+        }
+
+        for pkg in pkgs_libsolv.iter() {
             println!(
                 "{} {} {}",
                 pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
             )
         }
 
-        if pkgs.is_empty() {
+        if pkgs_libsolv.is_empty() {
             println!("No packages in the environment!");
         }
 
-        Ok(pkgs)
+        Ok(pkgs_libsolv)
     }
 }

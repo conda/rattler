@@ -11,7 +11,6 @@
 //! a `&mut` references to the relevant data, taking special care to ensure there is no aliasing at
 //! hand.
 
-pub mod ffi;
 pub mod flags;
 pub mod keys;
 pub mod pool;
@@ -23,3 +22,5 @@ pub mod solve_goal;
 pub mod solve_problem;
 pub mod solver;
 pub mod transaction;
+
+pub use libsolv_sys as ffi;

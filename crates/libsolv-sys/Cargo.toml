@@ -1,0 +1,25 @@
+[package]
+name = "libsolv-sys"
+version = "0.1.0"
+edition = "2021"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Bindings for libsolv"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+libc = { version = "0.2" }
+libz-sys = { version = "1.1.9", default-features = false, features = ["static"] }
+cfg-if = "1.0.0"
+
+[build-dependencies]
+anyhow = "1.0.71"
+cc = "1.0.79"
+cmake = "0.1.50"
+
+[package.metadata.cargo-udeps.ignore]
+# libz-sys is required to build libsolv properly
+normal = ["libz-sys"]
