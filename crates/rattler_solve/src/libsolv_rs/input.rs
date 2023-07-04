@@ -112,7 +112,7 @@ pub fn add_virtual_packages(pool: &mut Pool, repo_id: RepoId, packages: &[Generi
             subdir: "".to_string(),
             timestamp: None,
             build_number: 0,
-            version: p.version.clone(),
+            version: p.version.clone().into(),
             build: p.build_string.clone(),
             depends: Vec::new(),
             features: None,

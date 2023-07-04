@@ -133,10 +133,15 @@ pub(crate) fn find_highest_version(
 
     candidates.fold(None, |init, record| {
         Some(init.map_or_else(
-            || (record.version.clone(), !record.track_features.is_empty()),
+            || {
+                (
+                    record.version.version().clone(),
+                    !record.track_features.is_empty(),
+                )
+            },
             |(version, has_tracked_features)| {
                 (
-                    version.max(record.version.clone()),
+                    version.max(record.version.version().clone()),
                     has_tracked_features && record.track_features.is_empty(),
                 )
             },
