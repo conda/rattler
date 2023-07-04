@@ -28,6 +28,7 @@ impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRsRepoData<'a> {
 impl<'a> SolverRepoData<'a> for LibsolvRsRepoData<'a> {}
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
+#[derive(Default)]
 pub struct LibsolvRsBackend;
 
 impl SolverBackend for LibsolvRsBackend {

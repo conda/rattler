@@ -32,6 +32,5 @@ serde_json = "1.0.96"
 url = "2.4.0"
 
 [features]
-default = ["libsolv"]
-libsolv = ["libsolv-sys", "libc"]
-libsolv-rs = ["libsolv_rs"]
+default = ["libsolv-sys"]
+libsolv-sys = ["dep:libsolv-sys", "libc"]

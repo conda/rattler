@@ -74,6 +74,7 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
 }
 
 /// A [`SolverBackend`] implemented using the `libsolv` library
+#[derive(Default)]
 pub struct LibsolvBackend;
 
 impl SolverBackend for LibsolvBackend {

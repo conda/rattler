@@ -1,6 +1,7 @@
 ---
-source: crates/rattler_solve/src/lib.rs
-expression: libsolv_rs_pkgs
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 375
+expression: "solve_real_world::<LibsolvBackend>(vec![\"python=3.9\"])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
