@@ -385,7 +385,7 @@ mod libsolv_sys {
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
-        let repo_data = read_repodata(&repo_path);
+        let repo_data = read_repodata(&dummy_channel_json_path());
 
         let cached_repo_data = rattler_solve::libsolv_sys::cache_repodata(
             Channel::from_str("conda-forge", &ChannelConfig::default())
@@ -400,18 +400,17 @@ mod libsolv_sys {
             solv_file: Some(&cached_repo_data),
         };
 
-        let specs: Vec<_> = match_specs
-            .iter()
-            .map(|m| MatchSpec::from_str(m).unwrap())
-            .collect();
+        let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
 
-        let task = SolverTask {
-            locked_packages: installed_packages.clone(),
-            virtual_packages: virtual_packages.clone(),
-            available_packages: [&repo_data],
-            specs: specs.clone(),
-            pinned_packages: Vec::new(),
-        };
+        let pkgs = rattler_solve::libsolv_sys::Solver
+            .solve(SolverTask {
+                locked_packages: Vec::new(),
+                virtual_packages: Vec::new(),
+                available_packages: [libsolv_repodata],
+                specs: specs.clone(),
+                pinned_packages: Vec::new(),
+            })
+            .unwrap();
 
         if pkgs.is_empty() {
             println!("No packages in the environment!");
