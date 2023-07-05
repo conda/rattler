@@ -96,7 +96,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 /// repodata that is most suitable for a specific backend.
 ///
 /// Some solvers may add additional functionality to their specific implementation that enables
-/// caching the repodata to disk in an efficient way (see [`crate::libsolv::LibSolvRepoData`] for
+/// caching the repodata to disk in an efficient way (see [`crate::libsolv_sys::RepoData`] for
 /// an example).
 pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
 
