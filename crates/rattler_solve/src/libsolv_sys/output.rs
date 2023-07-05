@@ -1,11 +1,13 @@
 //! Contains business logic to retrieve the results from libsolv after attempting to resolve a conda
 //! environment
 
-use crate::libsolv::wrapper::pool::{Pool, StringId};
-use crate::libsolv::wrapper::repo::RepoId;
-use crate::libsolv::wrapper::solvable::SolvableId;
-use crate::libsolv::wrapper::transaction::Transaction;
-use crate::libsolv::wrapper::{ffi, solvable};
+use super::{
+    wrapper::pool::{Pool, StringId},
+    wrapper::repo::RepoId,
+    wrapper::solvable::SolvableId,
+    wrapper::transaction::Transaction,
+    wrapper::{ffi, solvable},
+};
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 

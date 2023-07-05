@@ -4,7 +4,7 @@ use rattler_conda_types::{
     RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolveError, SolverBackend, SolverTask};
+use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use std::str::FromStr;
 use url::Url;
 
@@ -98,7 +98,7 @@ fn installed_package(
     }
 }
 
-fn solve_real_world<T: SolverBackend + Default>(specs: Vec<&str>) -> Vec<String> {
+fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     let specs = specs
         .iter()
         .map(|s| MatchSpec::from_str(s).unwrap())
@@ -155,7 +155,7 @@ fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
 }
 
 macro_rules! solver_backend_tests {
-    ($T:ident) => {
+    ($T:path) => {
         #[test]
         fn test_solve_tensorboard_libsolv_rs() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec![
@@ -379,16 +379,15 @@ macro_rules! solver_backend_tests {
 #[cfg(feature = "libsolv-sys")]
 mod libsolv_sys {
     use super::*;
-    use rattler_solve::LibsolvBackend;
 
-    solver_backend_tests!(LibsolvBackend);
+    solver_backend_tests!(rattler_solve::libsolv_sys::Solver);
 
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         let repo_data = read_repodata(&repo_path);
 
-        let cached_repo_data = super::cache_libsolv_repodata(
+        let cached_repo_data = rattler_solve::libsolv_sys::cache_repodata(
             Channel::from_str("conda-forge", &ChannelConfig::default())
                 .unwrap()
                 .platform_url(rattler_conda_types::Platform::Linux64)
@@ -396,7 +395,7 @@ mod libsolv_sys {
             &repo_data,
         );
 
-        let libsolv_repodata = LibsolvRepoData {
+        let libsolv_repodata = rattler_solve::libsolv_sys::RepoData {
             records: repo_data.iter().collect(),
             solv_file: Some(&cached_repo_data),
         };
@@ -454,12 +453,11 @@ mod libsolv_sys {
 #[cfg(feature = "libsolv_rs")]
 mod libsolv_rs {
     use super::*;
-    use rattler_solve::LibsolvRsBackend;
 
-    solver_backend_tests!(LibsolvRsBackend);
+    solver_backend_tests!(rattler_solve::libsolv_rs::Solver);
 }
 
-fn solve<T: SolverBackend + Default>(
+fn solve<T: SolverImpl + Default>(
     repo_path: String,
     installed_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
@@ -524,7 +522,7 @@ fn compare_solve(specs: Vec<&str>) {
     results.push((
         "libsolv-sys",
         extract_pkgs(
-            rattler_solve::LibsolvBackend
+            rattler_solve::libsolv_sys::Solver
                 .solve(SolverTask {
                     available_packages: &available_packages,
                     specs: specs.clone(),
@@ -540,7 +538,7 @@ fn compare_solve(specs: Vec<&str>) {
     results.push((
         "libsolv_rs",
         extract_pkgs(
-            rattler_solve::LibsolvRsBackend
+            rattler_solve::libsolv_rs::Solver
                 .solve(SolverTask {
                     available_packages: &available_packages,
                     specs: specs.clone(),

@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolverBackend, SolverTask};
+use rattler_solve::{SolverImpl, SolverTask};
 use std::str::FromStr;
 
 fn conda_json_path() -> String {
@@ -53,7 +53,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     #[cfg(feature = "libsolv-sys")]
     group.bench_function("libsolv-sys", |b| {
         b.iter(|| {
-            rattler_solve::LibsolvBackend
+            rattler_solve::libsolv_sys::Solver
                 .solve(black_box(SolverTask {
                     available_packages: &available_packages,
                     locked_packages: vec![],
@@ -68,7 +68,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     #[cfg(feature = "libsolv_rs")]
     group.bench_function("libsolv_rs", |b| {
         b.iter(|| {
-            rattler_solve::LibsolvRsBackend
+            rattler_solve::libsolv_rs::Solver
                 .solve(black_box(SolverTask {
                     available_packages: &available_packages,
                     locked_packages: vec![],

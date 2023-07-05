@@ -1,13 +1,10 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use crate::libsolv::c_string;
-use crate::libsolv::libc_byte_slice::LibcByteSlice;
-use crate::libsolv::wrapper::keys::*;
-use crate::libsolv::wrapper::pool::Pool;
-use crate::libsolv::wrapper::repo::Repo;
-use crate::libsolv::wrapper::repodata::Repodata;
-use crate::libsolv::wrapper::solvable::SolvableId;
+use super::{
+    c_string, libc_byte_slice::LibcByteSlice, wrapper::keys::*, wrapper::pool::Pool,
+    wrapper::repo::Repo, wrapper::repodata::Repodata, wrapper::solvable::SolvableId,
+};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;

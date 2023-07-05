@@ -1,16 +1,9 @@
-use std::ffi::CStr;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
+use std::{ffi::CStr, marker::PhantomData, ptr::NonNull};
 
-use crate::libsolv::wrapper::pool::Pool;
-use crate::libsolv::wrapper::solve_goal::SolveGoal;
-use crate::libsolv::wrapper::solve_problem::SolveProblem;
-
-use super::ffi;
-use super::flags::SolverFlag;
-use super::queue::Queue;
-use super::solvable::SolvableId;
-use super::transaction::Transaction;
+use super::{
+    ffi, flags::SolverFlag, pool::Pool, queue::Queue, solvable::SolvableId, solve_goal::SolveGoal,
+    solve_problem::SolveProblem, transaction::Transaction,
+};
 
 /// Wrapper for libsolv solver, which is used to drive dependency resolution
 ///

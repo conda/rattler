@@ -1,7 +1,9 @@
-use crate::solver_backend::{IntoRepoData, SolverRepoData};
-use crate::{SolveError, SolverBackend, SolverTask};
+//! Provides an solver implementation based on the [`libsolv_rs`] crate.
+
+use crate::{IntoRepoData, SolverRepoData};
+use crate::{SolveError, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use libsolv_rs::{Pool, SolveJobs, Solver};
+use libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
@@ -12,12 +14,12 @@ mod output;
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
 #[derive(Clone)]
-pub struct LibsolvRsRepoData<'a> {
+pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: Vec<&'a RepoDataRecord>,
 }
 
-impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRsRepoData<'a> {
+impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
     fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
         Self {
             records: Vec::from_iter(iter),
@@ -25,14 +27,14 @@ impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRsRepoData<'a> {
     }
 }
 
-impl<'a> SolverRepoData<'a> for LibsolvRsRepoData<'a> {}
+impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
-/// A [`SolverBackend`] implemented using the `libsolv` library
+/// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
-pub struct LibsolvRsBackend;
+pub struct Solver;
 
-impl SolverBackend for LibsolvRsBackend {
-    type RepoData<'a> = LibsolvRsRepoData<'a>;
+impl super::SolverImpl for Solver {
+    type RepoData<'a> = RepoData<'a>;
 
     fn solve<
         'a,
@@ -100,7 +102,7 @@ impl SolverBackend for LibsolvRsBackend {
         }
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = Solver::new(pool);
+        let mut solver = LibSolvRsSolver::new(pool);
         let transaction = solver.solve(goal).map_err(|problem| {
             SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
         })?;

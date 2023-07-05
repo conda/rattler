@@ -1,5 +1,7 @@
-use crate::solver_backend::{IntoRepoData, SolverRepoData};
-use crate::{SolveError, SolverBackend, SolverTask};
+//! Provides an solver implementation based on the [`libsolv-sys`] crate.
+
+use crate::{IntoRepoData, SolverRepoData};
+use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
@@ -22,7 +24,7 @@ mod wrapper;
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
 #[derive(Clone)]
-pub struct LibsolvRepoData<'a> {
+pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
     pub records: Vec<&'a RepoDataRecord>,
 
@@ -30,7 +32,7 @@ pub struct LibsolvRepoData<'a> {
     pub solv_file: Option<&'a LibcByteSlice>,
 }
 
-impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRepoData<'a> {
+impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
     fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
         Self {
             records: Vec::from_iter(iter),
@@ -39,7 +41,7 @@ impl<'a> FromIterator<&'a RepoDataRecord> for LibsolvRepoData<'a> {
     }
 }
 
-impl<'a> LibsolvRepoData<'a> {
+impl<'a> RepoData<'a> {
     /// Constructs a new `LibsolvRsRepoData`
     #[deprecated(since = "0.6.0", note = "use From::from instead")]
     pub fn from_records(records: impl Into<Vec<&'a RepoDataRecord>>) -> Self {
@@ -50,7 +52,7 @@ impl<'a> LibsolvRepoData<'a> {
     }
 }
 
-impl<'a> SolverRepoData<'a> for LibsolvRepoData<'a> {}
+impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
 /// Convenience method that converts a string reference to a CString, replacing NUL characters with
 /// whitespace (` `)
@@ -73,12 +75,12 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
-/// A [`SolverBackend`] implemented using the `libsolv` library
+/// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
-pub struct LibsolvBackend;
+pub struct Solver;
 
-impl SolverBackend for LibsolvBackend {
-    type RepoData<'a> = LibsolvRepoData<'a>;
+impl super::SolverImpl for Solver {
+    type RepoData<'a> = RepoData<'a>;
 
     fn solve<
         'a,
@@ -195,7 +197,7 @@ impl SolverBackend for LibsolvBackend {
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::c_string;
+    use super::*;
     use rstest::rstest;
 
     #[rstest]

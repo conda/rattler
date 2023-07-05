@@ -1,6 +1,4 @@
-use super::repodata::Repodata;
-use super::{ffi, pool::Pool, solvable::SolvableId};
-use crate::libsolv::c_string;
+use super::{super::c_string, ffi, pool::Pool, repodata::Repodata, solvable::SolvableId};
 use std::{marker::PhantomData, ptr::NonNull};
 
 /// Wrapper for libsolv repo, which contains package information (in our case, we are creating repos
@@ -121,10 +119,7 @@ impl<'pool> Repo<'pool> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::pool::Pool;
-    use super::Repo;
-    use crate::libsolv::c_string;
-    use crate::libsolv::wrapper::pool::StringId;
+    use super::{super::pool::StringId, *};
 
     #[test]
     fn test_repo_creation() {

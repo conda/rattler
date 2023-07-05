@@ -1,25 +1,32 @@
+//! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
+//! exposes the functionality through the [`SolverImpl::solve`] function.
+
 #![deny(missing_docs)]
 
-//! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
-//! exposes the functionality through the [`SolverBackend::solve`] function.
-
-#[cfg(feature = "libsolv-sys")]
-mod libsolv;
 #[cfg(feature = "libsolv_rs")]
-mod libsolv_rs;
-mod solver_backend;
-
-#[cfg(feature = "libsolv_rs")]
-pub use crate::libsolv_rs::{LibsolvRsBackend, LibsolvRsRepoData};
+pub mod libsolv_rs;
 #[cfg(feature = "libsolv-sys")]
-pub use libsolv::{
-    cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
-};
-pub use solver_backend::SolverBackend;
+pub mod libsolv_sys;
+
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
 
-use rattler_conda_types::GenericVirtualPackage;
-use rattler_conda_types::{MatchSpec, RepoDataRecord};
+/// Represents a solver implementation, capable of solving [`SolverTask`]s
+pub trait SolverImpl {
+    /// The repo data associated to a channel and platform combination
+    type RepoData<'a>: SolverRepoData<'a>;
+
+    /// Resolve the dependencies and return the [`RepoDataRecord`]s that should be present in the
+    /// environment.
+    fn solve<
+        'a,
+        R: IntoRepoData<'a, Self::RepoData<'a>>,
+        TAvailablePackagesIterator: IntoIterator<Item = R>,
+    >(
+        &mut self,
+        task: SolverTask<TAvailablePackagesIterator>,
+    ) -> Result<Vec<RepoDataRecord>, SolveError>;
+}
 
 /// Represents an error when solving the dependencies for a given environment
 #[derive(thiserror::Error, Debug)]
@@ -79,4 +86,41 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The specs we want to solve
     pub specs: Vec<MatchSpec>,
+}
+
+/// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
+/// implementation.
+///
+/// Some solvers might be able to cache the collection between different runs of the solver which
+/// could potentially eliminate some overhead. This trait enables creating a representation of the
+/// repodata that is most suitable for a specific backend.
+///
+/// Some solvers may add additional functionality to their specific implementation that enables
+/// caching the repodata to disk in an efficient way (see [`crate::libsolv::LibSolvRepoData`] for
+/// an example).
+pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
+
+/// Defines the ability to convert a type into [`SolverRepoData`].
+pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
+    /// Converts this instance into an instance of [`SolverRepoData`] which is consumable by a
+    /// specific [`SolverImpl`] implementation.
+    fn into(self) -> S;
+}
+
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a Vec<RepoDataRecord> {
+    fn into(self) -> S {
+        S::from_iter(self.iter())
+    }
+}
+
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a [RepoDataRecord] {
+    fn into(self) -> S {
+        S::from_iter(self.iter())
+    }
+}
+
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for S {
+    fn into(self) -> S {
+        self
+    }
 }

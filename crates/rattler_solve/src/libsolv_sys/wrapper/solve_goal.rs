@@ -1,10 +1,12 @@
-use super::ffi;
-use crate::libsolv::wrapper::ffi::{
-    SOLVER_DISFAVOR, SOLVER_ERASE, SOLVER_FAVOR, SOLVER_INSTALL, SOLVER_LOCK, SOLVER_SOLVABLE,
-    SOLVER_SOLVABLE_PROVIDES, SOLVER_UPDATE, SOLVER_WEAK,
+use super::{
+    ffi,
+    ffi::{
+        SOLVER_DISFAVOR, SOLVER_ERASE, SOLVER_FAVOR, SOLVER_INSTALL, SOLVER_LOCK, SOLVER_SOLVABLE,
+        SOLVER_SOLVABLE_PROVIDES, SOLVER_UPDATE, SOLVER_WEAK,
+    },
+    pool::MatchSpecId,
+    solvable::SolvableId,
 };
-use crate::libsolv::wrapper::pool::MatchSpecId;
-use crate::libsolv::wrapper::solvable::SolvableId;
 use std::os::raw::c_int;
 
 /// Wrapper for libsolv queue type that stores jobs for the solver. This type provides a safe

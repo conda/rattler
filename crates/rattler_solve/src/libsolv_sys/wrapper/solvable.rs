@@ -1,5 +1,7 @@
-use super::ffi;
-use super::pool::{Pool, StringId};
+use super::{
+    ffi,
+    pool::{Pool, StringId},
+};
 use std::ptr::NonNull;
 
 /// Represents a solvable in a [`Repo`] or [`Pool`]
