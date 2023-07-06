@@ -85,6 +85,9 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     bench_solve_environment(c, vec!["python=3.9"]);
+    bench_solve_environment(c, vec!["xtensor", "xsimd"]);
+    bench_solve_environment(c, vec!["tensorflow"]);
+    bench_solve_environment(c, vec!["quetz"]);
     bench_solve_environment(c, vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
 }
 
