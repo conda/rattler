@@ -2,23 +2,30 @@ use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
-use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+use crate::MatchSpecId;
+use rattler_conda_types::{MatchSpec, Version};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 /// Returns the order of two candidates based on the order used by conda.
 pub(crate) fn compare_candidates(
+    a: SolvableId,
+    b: SolvableId,
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    a: &PackageRecord,
-    b: &PackageRecord,
+    match_specs: &Arena<MatchSpecId, MatchSpec>,
 ) -> Ordering {
+    let a_solvable = solvables[a].package();
+    let b_solvable = solvables[b].package();
+
+    let a_record = a_solvable.record;
+    let b_record = b_solvable.record;
+
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
-    let a_has_tracked_features = !a.track_features.is_empty();
-    let b_has_tracked_features = !b.track_features.is_empty();
+    let a_has_tracked_features = !a_record.track_features.is_empty();
+    let b_has_tracked_features = !b_record.track_features.is_empty();
     match a_has_tracked_features.cmp(&b_has_tracked_features) {
         Ordering::Less => return Ordering::Less,
         Ordering::Greater => return Ordering::Greater,
@@ -26,14 +33,14 @@ pub(crate) fn compare_candidates(
     };
 
     // Otherwise, select the variant with the highest version
-    match a.version.cmp(&b.version) {
+    match a_record.version.cmp(&b_record.version) {
         Ordering::Less => return Ordering::Greater,
         Ordering::Greater => return Ordering::Less,
         Ordering::Equal => {}
     };
 
     // Otherwise, select the variant with the highest build number
-    match a.build_number.cmp(&b.build_number) {
+    match a_record.build_number.cmp(&b_record.build_number) {
         Ordering::Less => return Ordering::Greater,
         Ordering::Greater => return Ordering::Less,
         Ordering::Equal => {}
@@ -41,25 +48,15 @@ pub(crate) fn compare_candidates(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_match_specs: Vec<_> = a
-        .depends
-        .iter()
-        .map(|d| MatchSpec::from_str(d).unwrap())
-        .collect();
-    let b_match_specs: Vec<_> = b
-        .depends
-        .iter()
-        .map(|d| MatchSpec::from_str(d).unwrap())
-        .collect();
+    let a_match_specs = a_solvable.dependencies.iter().map(|id| &match_specs[*id]);
+    let b_match_specs = b_solvable.dependencies.iter().map(|id| &match_specs[*id]);
 
     let b_specs_by_name: HashMap<_, _> = b_match_specs
-        .iter()
         .filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)))
         .collect();
 
-    let a_specs_by_name = a_match_specs
-        .iter()
-        .filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)));
+    let a_specs_by_name =
+        a_match_specs.filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)));
 
     let mut total_score = 0;
     for (a_dep_name, a_spec) in a_specs_by_name {
@@ -113,7 +110,7 @@ pub(crate) fn compare_candidates(
     };
 
     // Otherwise, order by timestamp
-    b.timestamp.cmp(&a.timestamp)
+    b_record.timestamp.cmp(&a_record.timestamp)
 }
 
 pub(crate) fn find_highest_version(

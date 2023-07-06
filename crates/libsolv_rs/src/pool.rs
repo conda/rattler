@@ -147,11 +147,11 @@ impl<'a> Pool<'a> {
 
         pkgs.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
+                p1,p2,
                 &self.solvables,
                 &self.names_to_ids,
                 &self.packages_by_name,
-                self.solvables[p1].package().record,
-                self.solvables[p2].package().record,
+                &self.match_specs,
             )
         });
 
