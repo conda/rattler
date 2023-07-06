@@ -169,6 +169,8 @@ impl<'a> Solver<'a> {
             Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
         let match_spec_to_candidates =
             Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
+        let match_spec_to_highest_version =
+            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
@@ -187,6 +189,7 @@ impl<'a> Solver<'a> {
                         favored_map,
                         &mut match_spec_to_sorted_candidates,
                         &match_spec_to_candidates,
+                        &match_spec_to_highest_version,
                     );
                 }
 

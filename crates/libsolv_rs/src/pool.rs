@@ -3,7 +3,7 @@ use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use rattler_conda_types::{MatchSpec, PackageRecord};
+use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -130,6 +130,7 @@ impl<'a> Pool<'a> {
         favored_map: &HashMap<NameId, SolvableId>,
         match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
+        match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec
@@ -160,6 +161,7 @@ impl<'a> Pool<'a> {
                 &self.packages_by_name,
                 &self.match_specs,
                 match_spec_to_candidates,
+                match_spec_highest_version,
             )
         });
 
