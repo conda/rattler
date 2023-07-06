@@ -272,7 +272,9 @@ pub struct LockedDependency {
     pub build_number: Option<u64>,
 
     /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
-    pub constrains: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "FxHashMap::is_empty")]
+    #[serde_as(as = "FxHashMap<_, DisplayFromStr>")]
+    pub constrains: FxHashMap<String, NamelessMatchSpec>,
 
     /// Experimental: see: [Features](crate::repo_data::PackageRecord::features)
     pub features: Option<String>,
@@ -344,11 +346,17 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
     type Error = ConversionError;
 
     fn try_from(value: LockedDependency) -> Result<Self, Self::Error> {
-        let matchspecs = value
+        let dependencies = value
             .dependencies
             .into_iter()
-            .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).to_string())
-            .collect::<Vec<_>>();
+            .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).into())
+            .collect();
+
+        let constrains = value
+            .constrains
+            .into_iter()
+            .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).into())
+            .collect();
 
         let version = value.version.parse()?;
         let md5 = match value.hash {
@@ -375,8 +383,8 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
                 arch: value.arch,
                 build,
                 build_number: value.build_number.unwrap_or(0),
-                constrains: value.constrains.unwrap_or_default(),
-                depends: matchspecs,
+                constrains: constrains,
+                depends: dependencies,
                 features: value.features,
                 legacy_bz2_md5: None,
                 legacy_bz2_size: None,

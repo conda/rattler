@@ -6,7 +6,7 @@ use url::Url;
 
 /// Information about a package from repodata. It includes a [`crate::PackageRecord`] but it also stores
 /// the source of the data (like the url and the channel).
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct RepoDataRecord {
     /// The data stored in the repodata.json.
     #[serde(flatten)]

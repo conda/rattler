@@ -4,7 +4,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use std::io;
 use std::path::Path;
 
-use crate::{package::ArchiveType, PackageRecord, RepoData};
+use crate::{package::ArchiveType, MatchSpecWithSource, PackageRecord, RepoData};
 
 /// Represents a Conda repodata patch.
 ///
@@ -53,13 +53,13 @@ impl RepoDataPatch {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PackageRecordPatch {
     /// Specification of packages this package depends on
-    pub depends: Option<Vec<String>>,
+    pub depends: Option<Vec<MatchSpecWithSource>>,
 
     /// Additional constraints on packages. `constrains` are different from `depends` in that packages
     /// specified in `depends` must be installed next to this package, whereas packages specified in
     /// `constrains` are not required to be installed, but if they are installed they must follow these
     /// constraints.
-    pub constrains: Option<Vec<String>>,
+    pub constrains: Option<Vec<MatchSpecWithSource>>,
 
     /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
     /// that effect, the number of track features is counted (number of commas) and the package is downweighted

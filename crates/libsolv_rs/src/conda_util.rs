@@ -5,7 +5,6 @@ use crate::solvable::Solvable;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::str::FromStr;
 
 /// Returns the order of two candidates based on the order used by conda.
 pub(crate) fn compare_candidates(
@@ -41,23 +40,14 @@ pub(crate) fn compare_candidates(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_match_specs: Vec<_> = a
+    let b_specs_by_name: HashMap<_, _> = b
         .depends
-        .iter()
-        .map(|d| MatchSpec::from_str(d).unwrap())
-        .collect();
-    let b_match_specs: Vec<_> = b
-        .depends
-        .iter()
-        .map(|d| MatchSpec::from_str(d).unwrap())
-        .collect();
-
-    let b_specs_by_name: HashMap<_, _> = b_match_specs
         .iter()
         .filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)))
         .collect();
 
-    let a_specs_by_name = a_match_specs
+    let a_specs_by_name = a
+        .depends
         .iter()
         .filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)));
 

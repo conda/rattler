@@ -18,7 +18,9 @@ use thiserror::Error;
 use rattler_macros::sorted;
 
 use crate::package::IndexJson;
-use crate::{Channel, NoArchType, Platform, RepoDataRecord, VersionWithSource};
+use crate::{
+    Channel, MatchSpecWithSource, NoArchType, Platform, RepoDataRecord, VersionWithSource,
+};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
@@ -62,7 +64,7 @@ pub struct ChannelInfo {
 #[serde_as]
 #[skip_serializing_none]
 #[sorted]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PackageRecord {
     /// Optionally the architecture the package supports
     pub arch: Option<String>,
@@ -78,11 +80,11 @@ pub struct PackageRecord {
     /// `constrains` are not required to be installed, but if they are installed they must follow these
     /// constraints.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Vec<String>,
+    pub constrains: Vec<MatchSpecWithSource>,
 
     /// Specification of packages this package depends on
     #[serde(default)]
-    pub depends: Vec<String>,
+    pub depends: Vec<MatchSpecWithSource>,
 
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify

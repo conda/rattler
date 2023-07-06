@@ -8,7 +8,6 @@ use crate::conda_lock::{
 };
 use crate::{MatchSpec, NamelessMatchSpec, NoArchType, Platform, RepoDataRecord};
 use fxhash::{FxHashMap, FxHashSet};
-use std::str::FromStr;
 use url::Url;
 
 /// Struct used to build a conda-lock file
@@ -144,11 +143,7 @@ impl LockedPackages {
                     arch: locked_package.arch,
                     subdir: locked_package.subdir,
                     build_number: locked_package.build_number,
-                    constrains: if locked_package.constrains.is_empty() {
-                        None
-                    } else {
-                        Some(locked_package.constrains)
-                    },
+                    constrains: locked_package.constrains,
                     features: locked_package.features,
                     track_features: if locked_package.track_features.is_empty() {
                         None
@@ -193,7 +188,7 @@ pub struct LockedPackage {
     pub build_number: Option<u64>,
 
     /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
-    pub constrains: Vec<String>,
+    pub constrains: FxHashMap<String, NamelessMatchSpec>,
 
     /// Experimental: see: [Features](crate::repo_data::PackageRecord::features)
     pub features: Option<String>,
@@ -236,19 +231,20 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
         let hashes = hashes.ok_or_else(|| ConversionError::Missing("md5 or sha265".to_string()))?;
 
         // Convert dependencies
-        let mut dependencies = FxHashMap::default();
-        for match_spec_str in record.package_record.depends.iter() {
-            let matchspec = MatchSpec::from_str(match_spec_str)?;
-            let name = matchspec
-                .name
-                .as_ref()
-                .ok_or_else(|| {
-                    ConversionError::Missing(format!("dependency name for {}", match_spec_str))
-                })?
-                .to_string();
-            let version_constraint = NamelessMatchSpec::from(matchspec);
-            dependencies.insert(name, version_constraint);
-        }
+        let dependencies = record
+            .package_record
+            .depends
+            .into_iter()
+            .filter_map(|spec| spec.into_match_spec().into())
+            .collect();
+
+        // Convert constrains
+        let constrains = record
+            .package_record
+            .constrains
+            .into_iter()
+            .filter_map(|spec| spec.into_match_spec().into())
+            .collect();
 
         Ok(Self {
             name: record.package_record.name,
@@ -261,7 +257,7 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
             arch: record.package_record.arch,
             subdir: Some(record.package_record.subdir),
             build_number: Some(record.package_record.build_number),
-            constrains: record.package_record.constrains,
+            constrains,
             features: record.package_record.features,
             track_features: record.package_record.track_features,
             license: record.package_record.license,
@@ -318,18 +314,23 @@ impl LockedPackage {
         self
     }
 
-    /// Add the constrains for this package
-    pub fn add_constrain<S: AsRef<str>>(mut self, constrain: S) -> Self {
-        self.constrains.push(constrain.as_ref().to_string());
+    /// Add a single constrain
+    pub fn add_constrain<S: AsRef<str>>(
+        mut self,
+        key: S,
+        version_constraint: NamelessMatchSpec,
+    ) -> Self {
+        self.constrains
+            .insert(key.as_ref().to_string(), version_constraint);
         self
     }
 
-    /// Add the constrains for this package
-    pub fn add_constrains<S: AsRef<str>>(
+    /// Add multiple constrains
+    pub fn add_constrains(
         mut self,
-        constrain: impl IntoIterator<Item = String>,
+        value: impl IntoIterator<Item = (String, NamelessMatchSpec)>,
     ) -> Self {
-        self.constrains.extend(constrain);
+        self.constrains.extend(value);
         self
     }
 
@@ -416,7 +417,7 @@ mod tests {
                     arch: Some("x86_64".to_string()),
                     subdir: Some("noarch".to_string()),
                     build_number: Some(12),
-                    constrains: vec!["bla".to_string()],
+                    constrains: FxHashMap::from_iter([MatchSpec::from_str("bla").unwrap().into_nameless().unwrap()]),
                     features: Some("foobar".to_string()),
                     track_features: vec!["dont-track".to_string()],
                     license: Some("BSD-3-Clause".to_string()),
@@ -463,7 +464,13 @@ mod tests {
         );
         assert_eq!(
             record.package_record.constrains,
-            locked_dep.constrains.clone().unwrap_or_default()
+            Vec::from_iter(
+                locked_dep
+                    .constrains
+                    .clone()
+                    .into_iter()
+                    .map(|(name, spec)| MatchSpec::from_nameless(spec, Some(name)).into())
+            )
         );
         assert_eq!(record.package_record.features, locked_dep.features);
         assert_eq!(
@@ -498,7 +505,16 @@ mod tests {
             record.package_record.build_number,
             locked_package.build_number.unwrap_or_default()
         );
-        assert_eq!(record.package_record.constrains, locked_package.constrains);
+        assert_eq!(
+            record.package_record.constrains,
+            Vec::from_iter(
+                locked_package
+                    .constrains
+                    .clone()
+                    .into_iter()
+                    .map(|(name, spec)| MatchSpec::from_nameless(spec, Some(name)).into())
+            )
+        );
         assert_eq!(record.package_record.features, locked_package.features);
         assert_eq!(
             record.package_record.license_family,

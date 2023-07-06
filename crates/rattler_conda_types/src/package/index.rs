@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::PackageFile;
-use crate::{NoArchType, VersionWithSource};
+use crate::{MatchSpecWithSource, NoArchType, VersionWithSource};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
@@ -27,11 +27,11 @@ pub struct IndexJson {
 
     /// The package constraints of the package
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub constrains: Vec<String>,
+    pub constrains: Vec<MatchSpecWithSource>,
 
     /// The dependencies of the package
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub depends: Vec<String>,
+    pub depends: Vec<MatchSpecWithSource>,
 
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
     /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify

@@ -24,17 +24,12 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(records: &[T]) -> Vec<String> {
 
     let dependencies: FxHashSet<_> = records
         .iter()
-        .flat_map(|r| {
-            r.as_ref()
-                .depends
-                .iter()
-                .map(|d| package_name_from_match_spec(d))
-        })
+        .flat_map(|r| r.as_ref().depends.iter().flat_map(|d| d.name.as_deref()))
         .collect();
 
     all_packages
         .difference(&dependencies)
-        .map(|name| name.to_string())
+        .map(|name| (*name).to_string())
         .collect()
 }
 
@@ -75,7 +70,7 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
                         .as_ref()
                         .depends
                         .iter()
-                        .map(|d| package_name_from_match_spec(d).to_string())
+                        .filter_map(|d| d.name.clone())
                         .collect::<Vec<_>>(),
                     None => {
                         // This is a virtual package, so no real package was found for it
@@ -102,12 +97,6 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
     }
 
     output
-}
-
-/// Helper function to obtain the package name from a match spec
-fn package_name_from_match_spec(d: &str) -> &str {
-    // Unwrap is safe because split always returns at least one value
-    d.split([' ', '=']).next().unwrap()
 }
 
 #[cfg(test)]
@@ -174,7 +163,10 @@ mod tests {
 
             // All the package's dependencies must have already been installed
             for dep in deps {
-                let dep_name = package_name_from_match_spec(&dep);
+                let dep_name = match dep.name.as_deref() {
+                    Some(name) => name,
+                    None => continue,
+                };
 
                 if circular_dependencies.contains(&(name, dep_name)) {
                     // Ignore circular dependencies
@@ -190,16 +182,6 @@ mod tests {
             // Now mark this package as installed too
             installed.insert(name);
         }
-    }
-
-    #[rstest]
-    #[case("python >=3.0", "python")]
-    #[case("python", "python")]
-    #[case("python=*=*", "python")]
-    #[case("", "")]
-    fn test_package_name_from_match_spec(#[case] match_spec: &str, #[case] expected_name: &str) {
-        let name = package_name_from_match_spec(match_spec);
-        assert_eq!(name, expected_name);
     }
 
     #[rstest]

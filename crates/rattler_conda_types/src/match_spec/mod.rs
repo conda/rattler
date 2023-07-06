@@ -6,8 +6,11 @@ use std::fmt::{Debug, Display, Formatter};
 
 pub mod matcher;
 pub mod parse;
+mod with_source;
 
 use matcher::StringMatcher;
+
+pub use with_source::MatchSpecWithSource;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -109,8 +112,8 @@ use matcher::StringMatcher;
 /// In the future, the namespace field might be added to this list.
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
-#[skip_serializing_none]
 #[serde_as]
+#[skip_serializing_none]
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
     /// The name of the package
@@ -220,6 +223,12 @@ impl MatchSpec {
 
         true
     }
+
+    /// Tries to convert this instance into a [`NamelessMatchSpec`]. Returns `None` if the
+    /// [`MatchSpec`] does not refer to a named package.
+    pub fn into_nameless(mut self) -> Option<(String, NamelessMatchSpec)> {
+        self.name.take().map(|name| (name, self.into()))
+    }
 }
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
@@ -323,6 +332,12 @@ impl From<MatchSpec> for NamelessMatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
         }
+    }
+}
+
+impl From<MatchSpec> for Option<(String, NamelessMatchSpec)> {
+    fn from(spec: MatchSpec) -> Self {
+        spec.into_nameless()
     }
 }
 

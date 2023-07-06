@@ -99,7 +99,7 @@ pub fn add_repodata_records<'a>(
         // Dependencies
         for match_spec in record.depends.iter() {
             // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
+            let match_spec_id = pool.conda_matchspec(&c_string(&match_spec.as_str()));
 
             // Add it to the list of requirements of this solvable
             repo.add_requires(solvable, match_spec_id);
@@ -108,7 +108,7 @@ pub fn add_repodata_records<'a>(
         // Constraints
         for match_spec in record.constrains.iter() {
             // Create a reldep id from a matchspec
-            let match_spec_id = pool.conda_matchspec(&c_string(match_spec));
+            let match_spec_id = pool.conda_matchspec(&c_string(&match_spec.as_str()));
 
             // Add it to the list of constraints of this solvable
             data.add_idarray(solvable_id, solvable_constraints, match_spec_id);

@@ -142,8 +142,10 @@ impl SparseRepoData {
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
                     for dependency in &record.package_record.depends {
-                        let dependency_name =
-                            dependency.split_once(' ').unwrap_or((dependency, "")).0;
+                        let dependency_name = match dependency.name.as_deref() {
+                            Some(name) => name,
+                            None => continue,
+                        };
                         if !seen.contains(dependency_name) {
                             pending.push_back(dependency_name.to_string());
                             seen.insert(dependency_name.to_string());
