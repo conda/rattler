@@ -1,3 +1,4 @@
+use std::cell::{OnceCell};
 use crate::arena::Arena;
 use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
@@ -35,7 +36,7 @@ pub struct Pool<'a> {
     match_specs_to_ids: HashMap<String, MatchSpecId>,
 
     /// Cached candidates for each match spec
-    pub(crate) match_spec_to_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
+    pub(crate) match_spec_to_sorted_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
 
     /// Cached forbidden solvables for each match spec
     pub(crate) match_spec_to_forbidden: Mapping<MatchSpecId, Vec<SolvableId>>,
@@ -56,7 +57,7 @@ impl<'a> Default for Pool<'a> {
 
             match_specs_to_ids: HashMap::default(),
             match_specs: Arena::new(),
-            match_spec_to_candidates: Mapping::empty(),
+            match_spec_to_sorted_candidates: Mapping::empty(),
             match_spec_to_forbidden: Mapping::empty(),
         }
     }
@@ -127,7 +128,8 @@ impl<'a> Pool<'a> {
         &self,
         match_spec_id: MatchSpecId,
         favored_map: &HashMap<NameId, SolvableId>,
-        match_spec_to_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
+        match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
+        match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec
@@ -139,11 +141,15 @@ impl<'a> Pool<'a> {
             Some(&name_id) => name_id,
         };
 
-        let mut pkgs: Vec<_> = self.packages_by_name[name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| match_spec.matches(self.solvables[solvable].package().record))
-            .collect();
+        let mut pkgs = conda_util::find_candidates(
+            match_spec_id,
+            &self.match_specs,
+            &self.names_to_ids,
+            &self.packages_by_name,
+            &self.solvables,
+            match_spec_to_candidates,
+        )
+        .clone();
 
         pkgs.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
@@ -153,6 +159,7 @@ impl<'a> Pool<'a> {
                 &self.names_to_ids,
                 &self.packages_by_name,
                 &self.match_specs,
+                match_spec_to_candidates,
             )
         });
 
@@ -163,7 +170,7 @@ impl<'a> Pool<'a> {
             }
         }
 
-        match_spec_to_candidates[match_spec_id] = pkgs;
+        match_spec_to_sorted_candidates[match_spec_id] = pkgs;
     }
 
     /// Populates the list of forbidden packages for the provided match spec

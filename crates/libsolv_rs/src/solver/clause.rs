@@ -130,7 +130,7 @@ impl Clause {
                     negate: true,
                 });
 
-                for &solvable_id in &pool.match_spec_to_candidates[match_spec_id] {
+                for &solvable_id in &pool.match_spec_to_sorted_candidates[match_spec_id] {
                     visit(Literal {
                         solvable_id,
                         negate: false,
@@ -345,7 +345,7 @@ impl ClauseState {
                 }
 
                 // The available candidates
-                for &candidate in &pool.match_spec_to_candidates[match_spec_id] {
+                for &candidate in &pool.match_spec_to_sorted_candidates[match_spec_id] {
                     let lit = Literal {
                         solvable_id: candidate,
                         negate: false,

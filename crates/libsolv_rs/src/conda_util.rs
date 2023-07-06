@@ -4,6 +4,7 @@ use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::MatchSpecId;
 use rattler_conda_types::{MatchSpec, Version};
+use std::cell::{OnceCell};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -15,6 +16,7 @@ pub(crate) fn compare_candidates(
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
+    match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
 ) -> Ordering {
     let a_solvable = solvables[a].package();
     let b_solvable = solvables[b].package();
@@ -48,28 +50,46 @@ pub(crate) fn compare_candidates(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_match_specs = a_solvable.dependencies.iter().map(|id| &match_specs[*id]);
-    let b_match_specs = b_solvable.dependencies.iter().map(|id| &match_specs[*id]);
+    let a_match_specs = a_solvable
+        .dependencies
+        .iter()
+        .map(|id| (*id, &match_specs[*id]));
+    let b_match_specs = b_solvable
+        .dependencies
+        .iter()
+        .map(|id| (*id, &match_specs[*id]));
 
     let b_specs_by_name: HashMap<_, _> = b_match_specs
-        .filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)))
+        .filter_map(|(spec_id, spec)| spec.name.as_ref().map(|name| (name, (spec_id))))
         .collect();
 
-    let a_specs_by_name =
-        a_match_specs.filter_map(|spec| spec.name.as_ref().map(|name| (name, spec)));
+    let a_specs_by_name = a_match_specs
+        .filter_map(|(spec_id, spec)| spec.name.as_ref().map(|name| (name, (spec_id))));
 
     let mut total_score = 0;
-    for (a_dep_name, a_spec) in a_specs_by_name {
-        if let Some(b_spec) = b_specs_by_name.get(&a_dep_name) {
-            if &a_spec == b_spec {
+    for (a_dep_name, a_spec_id) in a_specs_by_name {
+        if let Some(b_spec_id) = b_specs_by_name.get(&a_dep_name) {
+            if &a_spec_id == b_spec_id {
                 continue;
             }
 
             // Find which of the two specs selects the highest version
-            let highest_a =
-                find_highest_version(solvables, interned_strings, packages_by_name, a_spec);
-            let highest_b =
-                find_highest_version(solvables, interned_strings, packages_by_name, b_spec);
+            let highest_a = find_highest_version(
+                a_spec_id,
+                solvables,
+                interned_strings,
+                packages_by_name,
+                match_specs,
+                match_spec_to_candidates,
+            );
+            let highest_b = find_highest_version(
+                *b_spec_id,
+                solvables,
+                interned_strings,
+                packages_by_name,
+                match_specs,
+                match_spec_to_candidates,
+            );
 
             // Skip version if no package is selected by either spec
             let (a_version, a_tracked_features, b_version, b_tracked_features) = if let (
@@ -114,34 +134,65 @@ pub(crate) fn compare_candidates(
 }
 
 pub(crate) fn find_highest_version(
+    match_spec_id: MatchSpecId,
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    match_spec: &MatchSpec,
+    match_specs: &Arena<MatchSpecId, MatchSpec>,
+    match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
 ) -> Option<(Version, bool)> {
-    let name = match_spec.name.as_deref().unwrap();
-    let name_id = interned_strings[name];
+    let candidates = find_candidates(
+        match_spec_id,
+        match_specs,
+        interned_strings,
+        packages_by_name,
+        solvables,
+        match_spec_to_candidates,
+    );
 
-    // For each record that matches the spec
-    let candidates = packages_by_name[name_id]
+    candidates
         .iter()
-        .map(|&s| solvables[s].package().record)
-        .filter(|s| match_spec.matches(s));
+        .map(|id| &solvables[*id].package().record)
+        .fold(None, |init, record| {
+            Some(init.map_or_else(
+                || {
+                    (
+                        record.version.version().clone(),
+                        !record.track_features.is_empty(),
+                    )
+                },
+                |(version, has_tracked_features)| {
+                    (
+                        version.max(record.version.version().clone()),
+                        has_tracked_features && record.track_features.is_empty(),
+                    )
+                },
+            ))
+        })
+}
 
-    candidates.fold(None, |init, record| {
-        Some(init.map_or_else(
-            || {
-                (
-                    record.version.version().clone(),
-                    !record.track_features.is_empty(),
-                )
-            },
-            |(version, has_tracked_features)| {
-                (
-                    version.max(record.version.version().clone()),
-                    has_tracked_features && record.track_features.is_empty(),
-                )
-            },
-        ))
+pub(crate) fn find_candidates<'a, 'b>(
+    match_spec_id: MatchSpecId,
+    match_specs: &Arena<MatchSpecId, MatchSpec>,
+    names_to_ids: &HashMap<String, NameId>,
+    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
+    solvables: &Arena<SolvableId, Solvable<'a>>,
+    match_spec_to_candidates: &'b Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
+) -> &'b Vec<SolvableId> {
+    match_spec_to_candidates[match_spec_id].get_or_init(|| {
+        let match_spec = &match_specs[match_spec_id];
+        let match_spec_name = match_spec
+            .name
+            .as_deref()
+            .expect("match spec without name!");
+        let name_id = names_to_ids
+            .get(match_spec_name)
+            .expect("cannot find name in name lookup");
+
+        packages_by_name[*name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| match_spec.matches(solvables[solvable].package().record))
+            .collect()
     })
 }
