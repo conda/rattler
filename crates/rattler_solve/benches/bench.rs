@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverImpl, SolverTask};
@@ -32,6 +32,9 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
 fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     let name = specs.join(", ");
     let mut group = c.benchmark_group(format!("solve {name}"));
+
+    group.sampling_mode(SamplingMode::Flat);
+    group.sample_size(10);
 
     let specs = specs
         .iter()
