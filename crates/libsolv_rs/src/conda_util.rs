@@ -4,7 +4,7 @@ use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::MatchSpecId;
 use rattler_conda_types::{MatchSpec, Version};
-use std::cell::{OnceCell};
+use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 

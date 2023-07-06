@@ -1,10 +1,10 @@
-use std::cell::{OnceCell};
 use crate::arena::Arena;
 use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
 use rattler_conda_types::{MatchSpec, PackageRecord};
+use std::cell::OnceCell;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::str::FromStr;

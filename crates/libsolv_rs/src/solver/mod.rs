@@ -7,7 +7,7 @@ use crate::problem::Problem;
 use crate::solvable::SolvableInner;
 use crate::solve_jobs::SolveJobs;
 use crate::transaction::Transaction;
-use std::cell::{OnceCell};
+use std::cell::OnceCell;
 
 use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
@@ -167,10 +167,8 @@ impl<'a> Solver<'a> {
             Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
         let mut match_spec_to_forbidden =
             Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
-        let match_spec_to_candidates = Mapping::new(vec![
-            OnceCell::new();
-            self.pool.match_specs.len()
-        ]);
+        let match_spec_to_candidates =
+            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
