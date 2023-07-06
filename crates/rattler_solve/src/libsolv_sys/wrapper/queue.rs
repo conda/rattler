@@ -1,5 +1,4 @@
-use super::ffi;
-use crate::libsolv::wrapper::solvable::SolvableId;
+use super::{ffi, solvable::SolvableId};
 use std::marker::PhantomData;
 
 /// Wrapper for libsolv queue type. This type is used by to gather items of a specific type. This

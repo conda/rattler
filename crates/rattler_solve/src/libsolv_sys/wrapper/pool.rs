@@ -1,6 +1,10 @@
-use super::{ffi, repo::Repo, solvable::SolvableId, solver::Solver};
-use crate::libsolv::c_string;
-use crate::libsolv::wrapper::ffi::Id;
+use super::{
+    super::{c_string, wrapper::ffi::Id},
+    ffi,
+    repo::Repo,
+    solvable::SolvableId,
+    solver::Solver,
+};
 use rattler_conda_types::MatchSpec;
 use std::ffi::c_char;
 use std::{

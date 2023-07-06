@@ -14,7 +14,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,libsolv-rs
+  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,libsolv_rs
 
 jobs:
   check:

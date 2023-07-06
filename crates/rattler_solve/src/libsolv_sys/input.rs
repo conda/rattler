@@ -1,13 +1,10 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use crate::libsolv::c_string;
-use crate::libsolv::libc_byte_slice::LibcByteSlice;
-use crate::libsolv::wrapper::keys::*;
-use crate::libsolv::wrapper::pool::Pool;
-use crate::libsolv::wrapper::repo::Repo;
-use crate::libsolv::wrapper::repodata::Repodata;
-use crate::libsolv::wrapper::solvable::SolvableId;
+use super::{
+    c_string, libc_byte_slice::LibcByteSlice, wrapper::keys::*, wrapper::pool::Pool,
+    wrapper::repo::Repo, wrapper::repodata::Repodata, wrapper::solvable::SolvableId,
+};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use std::cmp::Ordering;
@@ -38,10 +35,10 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
-pub fn add_repodata_records(
+pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo,
-    repo_datas: &[RepoDataRecord],
+    repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Vec<SolvableId> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -70,7 +67,7 @@ pub fn add_repodata_records(
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
-    for (repo_data_index, repo_data) in repo_datas.iter().enumerate() {
+    for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
         // Create a solvable for the package
         let solvable_id =
             match add_or_reuse_solvable(pool, repo, &data, &mut package_to_type, repo_data) {

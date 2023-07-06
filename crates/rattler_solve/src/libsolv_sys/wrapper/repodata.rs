@@ -1,10 +1,5 @@
-use super::ffi;
-use crate::libsolv::wrapper::pool::StringId;
-use crate::libsolv::wrapper::repo::Repo;
-use crate::libsolv::wrapper::solvable::SolvableId;
-use std::ffi::CStr;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
+use super::{ffi, pool::StringId, repo::Repo, solvable::SolvableId};
+use std::{ffi::CStr, marker::PhantomData, ptr::NonNull};
 
 /// Wrapper for libsolv repodata, which provides functions to manipulate solvables
 ///

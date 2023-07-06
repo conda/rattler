@@ -1,9 +1,5 @@
-use super::ffi;
-use super::solvable::SolvableId;
-use super::solver::Solver;
-use crate::libsolv::wrapper::queue::QueueRef;
-use std::marker::PhantomData;
-use std::ptr::NonNull;
+use super::{ffi, queue::QueueRef, solvable::SolvableId, solver::Solver};
+use std::{marker::PhantomData, ptr::NonNull};
 
 /// Wrapper for [`ffi::Transaction`], which is an abstraction over changes that need to be
 /// done to satisfy the dependency constraints

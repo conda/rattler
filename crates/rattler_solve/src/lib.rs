@@ -1,25 +1,32 @@
+//! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
+//! exposes the functionality through the [`SolverImpl::solve`] function.
+
 #![deny(missing_docs)]
 
-//! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
-//! exposes the functionality through the [`SolverBackend::solve`] function.
+#[cfg(feature = "libsolv_rs")]
+pub mod libsolv_rs;
+#[cfg(feature = "libsolv-sys")]
+pub mod libsolv_sys;
 
-#[cfg(feature = "libsolv")]
-mod libsolv;
-#[cfg(feature = "libsolv-rs")]
-mod libsolv_rs;
-mod solver_backend;
-
-#[cfg(feature = "libsolv-rs")]
-pub use crate::libsolv_rs::{LibsolvRsBackend, LibsolvRsRepoData};
-#[cfg(feature = "libsolv")]
-pub use libsolv::{
-    cache_repodata as cache_libsolv_repodata, LibcByteSlice, LibsolvBackend, LibsolvRepoData,
-};
-pub use solver_backend::SolverBackend;
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
 
-use rattler_conda_types::GenericVirtualPackage;
-use rattler_conda_types::{MatchSpec, RepoDataRecord};
+/// Represents a solver implementation, capable of solving [`SolverTask`]s
+pub trait SolverImpl {
+    /// The repo data associated to a channel and platform combination
+    type RepoData<'a>: SolverRepoData<'a>;
+
+    /// Resolve the dependencies and return the [`RepoDataRecord`]s that should be present in the
+    /// environment.
+    fn solve<
+        'a,
+        R: IntoRepoData<'a, Self::RepoData<'a>>,
+        TAvailablePackagesIterator: IntoIterator<Item = R>,
+    >(
+        &mut self,
+        task: SolverTask<TAvailablePackagesIterator>,
+    ) -> Result<Vec<RepoDataRecord>, SolveError>;
+}
 
 /// Represents an error when solving the dependencies for a given environment
 #[derive(thiserror::Error, Debug)]
@@ -81,545 +88,39 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     pub specs: Vec<MatchSpec>,
 }
 
-#[cfg(test)]
-mod test_libsolv {
-    use crate::libsolv::LibsolvBackend;
-    use crate::{
-        LibsolvRepoData, LibsolvRsBackend, LibsolvRsRepoData, SolveError, SolverBackend, SolverTask,
-    };
-    use rattler_conda_types::{
-        Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
-        RepoData, RepoDataRecord, Version,
-    };
-    use rattler_repodata_gateway::sparse::SparseRepoData;
-    use std::str::FromStr;
-    use url::Url;
+/// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
+/// implementation.
+///
+/// Some solvers might be able to cache the collection between different runs of the solver which
+/// could potentially eliminate some overhead. This trait enables creating a representation of the
+/// repodata that is most suitable for a specific backend.
+///
+/// Some solvers may add additional functionality to their specific implementation that enables
+/// caching the repodata to disk in an efficient way (see [`crate::libsolv_sys::RepoData`] for
+/// an example).
+pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
 
-    fn conda_json_path() -> String {
-        format!(
-            "{}/{}",
-            env!("CARGO_MANIFEST_DIR"),
-            "../../test-data/channels/conda-forge/linux-64/repodata.json"
-        )
+/// Defines the ability to convert a type into [`SolverRepoData`].
+pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
+    /// Converts this instance into an instance of [`SolverRepoData`] which is consumable by a
+    /// specific [`SolverImpl`] implementation.
+    fn into(self) -> S;
+}
+
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a Vec<RepoDataRecord> {
+    fn into(self) -> S {
+        S::from_iter(self.iter())
     }
+}
 
-    fn conda_json_path_noarch() -> String {
-        format!(
-            "{}/{}",
-            env!("CARGO_MANIFEST_DIR"),
-            "../../test-data/channels/conda-forge/noarch/repodata.json"
-        )
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a [RepoDataRecord] {
+    fn into(self) -> S {
+        S::from_iter(self.iter())
     }
+}
 
-    fn dummy_channel_json_path() -> String {
-        format!(
-            "{}/{}",
-            env!("CARGO_MANIFEST_DIR"),
-            "../../test-data/channels/dummy/linux-64/repodata.json"
-        )
-    }
-
-    fn dummy_md5_hash() -> rattler_digest::Md5Hash {
-        rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
-            "b3af409bb8423187c75e6c7f5b683908",
-        )
-        .unwrap()
-    }
-
-    fn dummy_sha256_hash() -> rattler_digest::Sha256Hash {
-        rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-        )
-        .unwrap()
-    }
-
-    fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
-        let repo_data: RepoData =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        repo_data.into_repo_data_records(
-            &Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
-        )
-    }
-
-    fn read_sparse_repodata(path: &str) -> SparseRepoData {
-        SparseRepoData::new(
-            Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
-            "dummy".to_string(),
-            path,
-        )
-        .unwrap()
-    }
-
-    fn installed_package(
-        channel: &str,
-        subdir: &str,
-        name: &str,
-        version: &str,
-        build: &str,
-        build_number: u64,
-    ) -> RepoDataRecord {
-        RepoDataRecord {
-            url: Url::from_str("http://example.com").unwrap(),
-            channel: channel.to_string(),
-            file_name: "dummy-filename".to_string(),
-            package_record: PackageRecord {
-                name: name.to_string(),
-                version: version.parse().unwrap(),
-                build: build.to_string(),
-                build_number,
-                subdir: subdir.to_string(),
-                md5: Some(dummy_md5_hash()),
-                sha256: Some(dummy_sha256_hash()),
-                size: None,
-                arch: None,
-                platform: None,
-                depends: Vec::new(),
-                constrains: Vec::new(),
-                track_features: Vec::new(),
-                features: None,
-                noarch: NoArchType::default(),
-                license: None,
-                license_family: None,
-                timestamp: None,
-                legacy_bz2_size: None,
-                legacy_bz2_md5: None,
-            },
-        }
-    }
-
-    fn solve_real_world(specs: Vec<&str>) -> (Vec<String>, Vec<String>) {
-        let specs = specs
-            .iter()
-            .map(|s| MatchSpec::from_str(s).unwrap())
-            .collect::<Vec<_>>();
-
-        let json_file = conda_json_path();
-        let json_file_noarch = conda_json_path_noarch();
-
-        let sparse_repo_datas = vec![
-            read_sparse_repodata(&json_file),
-            read_sparse_repodata(&json_file_noarch),
-        ];
-
-        let names = specs.iter().map(|s| s.name.clone().unwrap());
-        let available_packages =
-            SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
-
-        let solver_task = SolverTask {
-            available_packages: available_packages
-                .iter()
-                .map(|records| LibsolvRepoData::from_records(records)),
-            specs: specs.clone(),
-            locked_packages: Default::default(),
-            pinned_packages: Default::default(),
-            virtual_packages: Default::default(),
-        };
-
-        let pkgs1 = LibsolvBackend.solve(solver_task).unwrap();
-
-        let solver_task = SolverTask {
-            available_packages: available_packages
-                .iter()
-                .map(|records| LibsolvRsRepoData::from_records(records)),
-            specs,
-            locked_packages: Default::default(),
-            pinned_packages: Default::default(),
-            virtual_packages: Default::default(),
-        };
-        let pkgs2 = LibsolvRsBackend.solve(solver_task).unwrap();
-
-        let extract_pkgs = |records: Vec<RepoDataRecord>| {
-            let mut pkgs = records
-                .into_iter()
-                .map(|pkg| {
-                    format!(
-                        "{} {} {}",
-                        pkg.package_record.name,
-                        pkg.package_record.version,
-                        pkg.package_record.build
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            // The order of packages is nondeterministic, so we sort them to ensure we can compare them
-            // to a previous run
-            pkgs.sort();
-            pkgs
-        };
-
-        (extract_pkgs(pkgs1), extract_pkgs(pkgs2))
-    }
-
-    #[test]
-    fn test_solve_tensorboard() {
-        let (libsolv_pkgs, libsolv_rs_pkgs) =
-            solve_real_world(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
-        insta::assert_yaml_snapshot!("solve_tensorboard_libsolv", libsolv_pkgs);
-        insta::assert_yaml_snapshot!("solve_tensorboard_libsolv_rs", libsolv_rs_pkgs);
-    }
-
-    #[test]
-    fn test_solve_python() {
-        let (libsolv_pkgs, libsolv_rs_pkgs) = solve_real_world(vec!["python=3.9"]);
-        insta::assert_yaml_snapshot!("solve_python_libsolv", libsolv_pkgs);
-        insta::assert_yaml_snapshot!("solve_python_libsolv_rs", libsolv_rs_pkgs);
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_install_non_existent() {
-        let result = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &["asdfasdf", "foo<4"],
-            false,
-        );
-
-        assert!(result.is_err());
-
-        let err = result.err().unwrap();
-        match err {
-            (SolveError::Unsolvable(libsolv_errors), SolveError::Unsolvable(libsolv_rs_errors)) => {
-                assert_eq!(libsolv_errors, vec!["nothing provides requested asdfasdf"]);
-                assert_eq!(
-                    libsolv_rs_errors,
-                    vec!["No candidates where found for asdfasdf.\n"]
-                );
-            }
-            _ => panic!("Unexpected error: {err:?}"),
-        }
-    }
-
-    #[test]
-    #[cfg(target_family = "unix")]
-    fn test_solve_with_cached_solv_file_install_new() {
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &["foo<4"],
-            true,
-        )
-        .unwrap();
-
-        assert_eq!(1, pkgs.len());
-        let info = &pkgs[0];
-
-        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
-        assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
-            info.url.to_string()
-        );
-        assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
-        assert_eq!("foo", info.package_record.name);
-        assert_eq!("linux-64", info.package_record.subdir);
-        assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_1", info.package_record.build);
-        assert_eq!(1, info.package_record.build_number);
-        assert_eq!(
-            rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
-                "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
-            )
-            .as_ref()
-            .unwrap(),
-            info.package_record.sha256.as_ref().unwrap()
-        );
-        assert_eq!(
-            rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
-                "fb731d9290f0bcbf3a054665f33ec94f"
-            )
-            .as_ref()
-            .unwrap(),
-            info.package_record.md5.as_ref().unwrap()
-        );
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_install_new() {
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &["foo<4"],
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(1, pkgs.len());
-        let info = &pkgs[0];
-
-        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
-        assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
-            info.url.to_string()
-        );
-        assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
-        assert_eq!("foo", info.package_record.name);
-        assert_eq!("linux-64", info.package_record.subdir);
-        assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_1", info.package_record.build);
-        assert_eq!(1, info.package_record.build_number);
-        assert_eq!(
-            rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
-                "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
-            )
-            .as_ref()
-            .unwrap(),
-            info.package_record.sha256.as_ref().unwrap()
-        );
-        assert_eq!(
-            rattler_digest::parse_digest_from_hex::<rattler_digest::Md5>(
-                "fb731d9290f0bcbf3a054665f33ec94f"
-            )
-            .as_ref()
-            .unwrap(),
-            info.package_record.md5.as_ref().unwrap()
-        );
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_prefers_conda_package() {
-        // There following package is provided as .tar.bz and as .conda in repodata.json
-        let match_spec = "foo=3.0.2=py36h1af98f8_1";
-
-        let operations = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &[match_spec],
-            false,
-        )
-        .unwrap();
-
-        // The .conda entry is selected for installing
-        assert_eq!(operations.len(), 1);
-        assert_eq!(operations[0].file_name, "foo-3.0.2-py36h1af98f8_1.conda");
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_install_noop() {
-        let already_installed = vec![installed_package(
-            "conda-forge",
-            "linux-64",
-            "foo",
-            "3.0.2",
-            "py36h1af98f8_1",
-            1,
-        )];
-
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            already_installed,
-            Vec::new(),
-            &["foo<4"],
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(1, pkgs.len());
-
-        // Install
-        let info = &pkgs[0];
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("3.0.2", &info.package_record.version.to_string());
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_upgrade() {
-        let already_installed = vec![installed_package(
-            "conda-forge",
-            "linux-64",
-            "foo",
-            "3.0.2",
-            "py36h1af98f8_1",
-            1,
-        )];
-
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            already_installed,
-            Vec::new(),
-            &["foo>=4"],
-            false,
-        )
-        .unwrap();
-
-        // Install
-        let info = &pkgs[0];
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("4.0.2", &info.package_record.version.to_string());
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_downgrade() {
-        let already_installed = vec![installed_package(
-            "conda-forge",
-            "linux-64",
-            "foo",
-            "4.0.2",
-            "py36h1af98f8_1",
-            1,
-        )];
-
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            already_installed,
-            Vec::new(),
-            &["foo<4"],
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(pkgs.len(), 1);
-
-        // Uninstall
-        let info = &pkgs[0];
-        assert_eq!("foo", &info.package_record.name);
-        assert_eq!("3.0.2", &info.package_record.version.to_string());
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_remove() {
-        let already_installed = vec![installed_package(
-            "conda-forge",
-            "linux-64",
-            "foo",
-            "3.0.2",
-            "py36h1af98f8_1",
-            1,
-        )];
-
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            already_installed,
-            Vec::new(),
-            &[],
-            false,
-        )
-        .unwrap();
-
-        // Should be no packages!
-        assert_eq!(0, pkgs.len());
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_with_virtual_package() {
-        let pkgs = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            vec![GenericVirtualPackage {
-                name: "__unix".to_string(),
-                version: Version::from_str("0").unwrap(),
-                build_string: "0".to_string(),
-            }],
-            &["bar"],
-            false,
-        )
-        .unwrap();
-
-        assert_eq!(pkgs.len(), 1);
-
-        let info = &pkgs[0];
-        assert_eq!("bar", &info.package_record.name);
-        assert_eq!("1.2.3", &info.package_record.version.to_string());
-    }
-
-    #[test]
-    fn test_solve_dummy_repo_missing_virtual_package() {
-        let result = solve(
-            dummy_channel_json_path(),
-            Vec::new(),
-            Vec::new(),
-            &["bar"],
-            false,
-        );
-
-        assert!(matches!(
-            result.err(),
-            Some((SolveError::Unsolvable(_), SolveError::Unsolvable(_)))
-        ));
-    }
-
-    #[cfg(test)]
-    fn solve(
-        repo_path: String,
-        installed_packages: Vec<RepoDataRecord>,
-        virtual_packages: Vec<GenericVirtualPackage>,
-        match_specs: &[&str],
-        with_solv_file: bool,
-    ) -> Result<Vec<RepoDataRecord>, (SolveError, SolveError)> {
-        let repo_data = read_repodata(&repo_path);
-
-        #[cfg(target_family = "unix")]
-        let cached_repo_data = super::cache_libsolv_repodata(
-            Channel::from_str("conda-forge", &ChannelConfig::default())
-                .unwrap()
-                .platform_url(rattler_conda_types::Platform::Linux64)
-                .to_string(),
-            &repo_data,
-        );
-
-        let libsolv_repodata = if with_solv_file {
-            #[cfg(not(target_family = "unix"))]
-            panic!("solv files are unsupported for this platform");
-
-            #[cfg(target_family = "unix")]
-            LibsolvRepoData {
-                records: repo_data.as_slice(),
-                solv_file: Some(&cached_repo_data),
-            }
-        } else {
-            LibsolvRepoData::from_records(&repo_data)
-        };
-
-        let specs: Vec<_> = match_specs
-            .iter()
-            .map(|m| MatchSpec::from_str(m).unwrap())
-            .collect();
-
-        let task = SolverTask {
-            locked_packages: installed_packages.clone(),
-            virtual_packages: virtual_packages.clone(),
-            available_packages: vec![libsolv_repodata].into_iter(),
-            specs: specs.clone(),
-            pinned_packages: Vec::new(),
-        };
-        let pkgs_libsolv = LibsolvBackend.solve(task);
-
-        let task = SolverTask {
-            locked_packages: installed_packages,
-            virtual_packages,
-            available_packages: vec![LibsolvRsRepoData::from_records(&repo_data)].into_iter(),
-            specs,
-            pinned_packages: Vec::new(),
-        };
-        let pkgs_libsolv_rs = LibsolvRsBackend.solve(task);
-
-        if pkgs_libsolv.is_ok() != pkgs_libsolv_rs.is_ok() {
-            panic!("one of libsolv and libsolv_rs returns unsat, the other sat!");
-        }
-
-        if let Err(pkgs_libsolv) = pkgs_libsolv {
-            return Err((pkgs_libsolv, pkgs_libsolv_rs.err().unwrap()));
-        }
-
-        let pkgs_libsolv = pkgs_libsolv.unwrap();
-        let pkgs_libsolv_rs = pkgs_libsolv_rs.unwrap();
-        if pkgs_libsolv != pkgs_libsolv_rs {
-            panic!("libsolv and libsolv_rs return different results!");
-        }
-
-        for pkg in pkgs_libsolv.iter() {
-            println!(
-                "{} {} {}",
-                pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
-            )
-        }
-
-        if pkgs_libsolv.is_empty() {
-            println!("No packages in the environment!");
-        }
-
-        Ok(pkgs_libsolv)
+impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for S {
+    fn into(self) -> S {
+        self
     }
 }

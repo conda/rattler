@@ -1,4 +1,7 @@
-use crate::{SolveError, SolverBackend, SolverTask};
+//! Provides an solver implementation based on the [`libsolv-sys`] crate.
+
+use crate::{IntoRepoData, SolverRepoData};
+use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
@@ -21,23 +24,35 @@ mod wrapper;
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
 #[derive(Clone)]
-pub struct LibsolvRepoData<'a> {
+pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
-    pub records: &'a [RepoDataRecord],
+    pub records: Vec<&'a RepoDataRecord>,
 
     /// The in-memory .solv file built from the records (if available)
     pub solv_file: Option<&'a LibcByteSlice>,
 }
 
-impl LibsolvRepoData<'_> {
-    /// Constructs a new `LibsolvRepoData` without a corresponding .solv file
-    pub fn from_records(records: &[RepoDataRecord]) -> LibsolvRepoData {
-        LibsolvRepoData {
-            records,
+impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
+    fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
+        Self {
+            records: Vec::from_iter(iter),
             solv_file: None,
         }
     }
 }
+
+impl<'a> RepoData<'a> {
+    /// Constructs a new `LibsolvRsRepoData`
+    #[deprecated(since = "0.6.0", note = "use From::from instead")]
+    pub fn from_records(records: impl Into<Vec<&'a RepoDataRecord>>) -> Self {
+        Self {
+            records: records.into(),
+            solv_file: None,
+        }
+    }
+}
+
+impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
 /// Convenience method that converts a string reference to a CString, replacing NUL characters with
 /// whitespace (` `)
@@ -60,13 +75,18 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
-/// A [`SolverBackend`] implemented using the `libsolv` library
-pub struct LibsolvBackend;
+/// A [`Solver`] implemented using the `libsolv` library
+#[derive(Default)]
+pub struct Solver;
 
-impl SolverBackend for LibsolvBackend {
-    type RepoData<'a> = LibsolvRepoData<'a>;
+impl super::SolverImpl for Solver {
+    type RepoData<'a> = RepoData<'a>;
 
-    fn solve<'a, TAvailablePackagesIterator: Iterator<Item = Self::RepoData<'a>>>(
+    fn solve<
+        'a,
+        R: IntoRepoData<'a, Self::RepoData<'a>>,
+        TAvailablePackagesIterator: IntoIterator<Item = R>,
+    >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
@@ -89,7 +109,7 @@ impl SolverBackend for LibsolvBackend {
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
-        for repodata in task.available_packages {
+        for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
             if repodata.records.is_empty() {
                 continue;
             }
@@ -100,7 +120,7 @@ impl SolverBackend for LibsolvBackend {
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
             } else {
-                add_repodata_records(&pool, &repo, repodata.records);
+                add_repodata_records(&pool, &repo, repodata.records.iter().copied());
             }
 
             // Keep our own info about repodata_records
@@ -117,7 +137,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(&task.locked_packages);
+        all_repodata_records.push(task.locked_packages.iter().collect());
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned");
@@ -125,7 +145,7 @@ impl SolverBackend for LibsolvBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
-        all_repodata_records.push(&task.pinned_packages);
+        all_repodata_records.push(task.pinned_packages.iter().collect());
 
         // Create datastructures for solving
         pool.create_whatprovides();
@@ -177,7 +197,7 @@ impl SolverBackend for LibsolvBackend {
 
 #[cfg(test)]
 mod test {
-    use crate::libsolv::c_string;
+    use super::*;
     use rstest::rstest;
 
     #[rstest]

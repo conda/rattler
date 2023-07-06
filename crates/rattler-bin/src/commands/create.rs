@@ -15,7 +15,7 @@ use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{LibsolvRepoData, LibsolvRsRepoData, SolverBackend, SolverTask};
+use rattler_solve::{libsolv_rs, libsolv_sys, SolverImpl, SolverTask};
 use reqwest::{Client, StatusCode};
 use std::{
     borrow::Cow,
@@ -201,32 +201,22 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .map(|record| record.repodata_record.clone())
         .collect();
 
+    let solver_task = SolverTask {
+        available_packages: &repodatas,
+        locked_packages,
+        virtual_packages,
+        specs,
+        pinned_packages: Vec::new(),
+    };
+
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
     let use_libsolv_rs = opt.use_experimental_libsolv_rs;
     let required_packages = wrap_in_progress("solving", move || {
         if use_libsolv_rs {
-            let solver_task = SolverTask {
-                available_packages: repodatas
-                    .iter()
-                    .map(|records| LibsolvRsRepoData::from_records(records)),
-                locked_packages,
-                virtual_packages,
-                specs,
-                pinned_packages: Vec::new(),
-            };
-            rattler_solve::LibsolvRsBackend.solve(solver_task)
+            libsolv_rs::Solver.solve(solver_task)
         } else {
-            let solver_task = SolverTask {
-                available_packages: repodatas
-                    .iter()
-                    .map(|records| LibsolvRepoData::from_records(records)),
-                locked_packages,
-                virtual_packages,
-                specs,
-                pinned_packages: Vec::new(),
-            };
-            rattler_solve::LibsolvBackend.solve(solver_task)
+            libsolv_sys::Solver.solve(solver_task)
         }
     })?;
 

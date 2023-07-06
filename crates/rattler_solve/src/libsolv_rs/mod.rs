@@ -1,6 +1,9 @@
-use crate::{SolveError, SolverBackend, SolverTask};
+//! Provides an solver implementation based on the [`libsolv_rs`] crate.
+
+use crate::{IntoRepoData, SolverRepoData};
+use crate::{SolveError, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use libsolv_rs::{Pool, SolveJobs, Solver};
+use libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
@@ -11,25 +14,33 @@ mod output;
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
 #[derive(Clone)]
-pub struct LibsolvRsRepoData<'a> {
+pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
-    pub records: &'a [RepoDataRecord],
+    pub records: Vec<&'a RepoDataRecord>,
 }
 
-impl LibsolvRsRepoData<'_> {
-    /// Constructs a new `LibsolvRsRepoData`
-    pub fn from_records(records: &[RepoDataRecord]) -> LibsolvRsRepoData {
-        LibsolvRsRepoData { records }
+impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
+    fn from_iter<T: IntoIterator<Item = &'a RepoDataRecord>>(iter: T) -> Self {
+        Self {
+            records: Vec::from_iter(iter),
+        }
     }
 }
 
-/// A [`SolverBackend`] implemented using the `libsolv` library
-pub struct LibsolvRsBackend;
+impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
-impl SolverBackend for LibsolvRsBackend {
-    type RepoData<'a> = LibsolvRsRepoData<'a>;
+/// A [`Solver`] implemented using the `libsolv` library
+#[derive(Default)]
+pub struct Solver;
 
-    fn solve<'a, TAvailablePackagesIterator: Iterator<Item = Self::RepoData<'a>>>(
+impl super::SolverImpl for Solver {
+    type RepoData<'a> = RepoData<'a>;
+
+    fn solve<
+        'a,
+        R: IntoRepoData<'a, Self::RepoData<'a>>,
+        TAvailablePackagesIterator: IntoIterator<Item = R>,
+    >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
@@ -43,13 +54,13 @@ impl SolverBackend for LibsolvRsBackend {
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
-        for repodata in task.available_packages {
+        for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
             if repodata.records.is_empty() {
                 continue;
             }
 
             let repo_id = pool.new_repo();
-            add_repodata_records(&mut pool, repo_id, repodata.records);
+            add_repodata_records(&mut pool, repo_id, repodata.records.iter().copied());
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo_id, repo_mapping.len());
@@ -62,7 +73,7 @@ impl SolverBackend for LibsolvRsBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());
-        all_repodata_records.push(&task.locked_packages);
+        all_repodata_records.push(task.locked_packages.iter().collect());
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo_id = pool.new_repo();
@@ -70,7 +81,7 @@ impl SolverBackend for LibsolvRsBackend {
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());
-        all_repodata_records.push(&task.pinned_packages);
+        all_repodata_records.push(task.pinned_packages.iter().collect());
 
         // Add matchspec to the queue
         let mut goal = SolveJobs::default();
@@ -91,7 +102,7 @@ impl SolverBackend for LibsolvRsBackend {
         }
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = Solver::new(pool);
+        let mut solver = LibSolvRsSolver::new(pool);
         let transaction = solver.solve(goal).map_err(|problem| {
             SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
         })?;
