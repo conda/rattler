@@ -158,8 +158,8 @@ impl<'a> Pool<'a> {
 
         if let Some(&favored_id) = favored_map.get(&name_id) {
             if let Some(pos) = pkgs.iter().position(|&s| s == favored_id) {
-                let removed = pkgs.remove(pos);
-                pkgs.insert(0, removed);
+                // Move the element at `pos` to the front of the array
+                pkgs[0..=pos].rotate_right(1);
             }
         }
 
