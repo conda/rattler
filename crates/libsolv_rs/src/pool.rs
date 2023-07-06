@@ -5,6 +5,7 @@ use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
+use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -131,6 +132,7 @@ impl<'a> Pool<'a> {
         match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
         match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
+        solvable_order: &mut HashMap<(SolvableId, SolvableId), Ordering>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec
@@ -153,16 +155,19 @@ impl<'a> Pool<'a> {
         .clone();
 
         pkgs.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(
-                p1,
-                p2,
-                &self.solvables,
-                &self.names_to_ids,
-                &self.packages_by_name,
-                &self.match_specs,
-                match_spec_to_candidates,
-                match_spec_highest_version,
-            )
+            let key = (p1, p2);
+            *solvable_order.entry(key).or_insert_with(|| {
+                conda_util::compare_candidates(
+                    p1,
+                    p2,
+                    &self.solvables,
+                    &self.names_to_ids,
+                    &self.packages_by_name,
+                    &self.match_specs,
+                    match_spec_to_candidates,
+                    match_spec_highest_version,
+                )
+            })
         });
 
         if let Some(&favored_id) = favored_map.get(&name_id) {
