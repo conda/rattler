@@ -111,7 +111,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             .collect::<HashSet<_>>();
 
         // Remove all current packages that are not in desired (but keep order of current)
-        for record in current_iter.clone() {
+        for record in current_iter {
             if !desired_names.contains(&record.as_ref().name) {
                 operations.push(TransactionOperation::Remove(record));
             }
