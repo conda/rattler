@@ -119,6 +119,12 @@ impl From<Version> for VersionWithSource {
     }
 }
 
+impl From<VersionWithSource> for Version {
+    fn from(version: VersionWithSource) -> Self {
+        version.version
+    }
+}
+
 impl AsRef<Version> for VersionWithSource {
     fn as_ref(&self) -> &Version {
         &self.version
