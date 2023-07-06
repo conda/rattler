@@ -1,7 +1,6 @@
 use crate::install::python::PythonInfoError;
 use crate::install::PythonInfo;
 use rattler_conda_types::{PackageRecord, Platform};
-use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {
@@ -97,38 +96,36 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             _ => false,
         };
 
-        // Create a lookup table by name for the desired packages.
-        let mut desired: HashMap<String, New> = desired
-            .into_iter()
-            .map(|record| (record.as_ref().name.clone(), record))
-            .collect();
-
         let mut operations = Vec::new();
 
-        // Find all the elements that are no longer in the desired set
-        for record in current {
-            match desired.remove(&record.as_ref().name) {
-                None => operations.push(TransactionOperation::Remove(record)),
-                Some(desired) => {
-                    // If the desired differs from the current it has to be updated.
-                    if !describe_same_content(desired.as_ref(), record.as_ref()) {
-                        operations.push(TransactionOperation::Change {
-                            old: record,
-                            new: desired,
-                        })
-                    }
-                    // If this is a noarch package and all python packages need to be relinked,
-                    // reinstall the package completely.
-                    else if desired.as_ref().noarch.is_python() && needs_python_relink {
-                        operations.push(TransactionOperation::Reinstall(record));
-                    }
-                }
+        // Figure out the operations to perform, but keep the order of the original "desired" iterator
+
+        // All current packages that are not in desired, remove
+        for record in current.clone() {
+            if !desired
+                .clone()
+                .any(|r| r.as_ref().name == record.as_ref().name)
+            {
+                operations.push(TransactionOperation::Remove(record));
             }
         }
 
-        // The remaining packages from the desired list need to be explicitly installed.
-        for record in desired.into_values() {
-            operations.push(TransactionOperation::Install(record))
+        for record in desired {
+            let name = &record.as_ref().name;
+            let old_record = current.clone().find(|r| r.as_ref().name == *name);
+
+            if let Some(old_record) = old_record {
+                if !describe_same_content(record.as_ref(), old_record.as_ref()) {
+                    operations.push(TransactionOperation::Change {
+                        old: old_record,
+                        new: record,
+                    });
+                } else if needs_python_relink {
+                    operations.push(TransactionOperation::Reinstall(old_record));
+                }
+            } else {
+                operations.push(TransactionOperation::Install(record));
+            }
         }
 
         Ok(Self {
