@@ -85,12 +85,12 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         CurIter::IntoIter: Clone,
         NewIter::IntoIter: Clone,
     {
-        let current = current.into_iter();
-        let desired = desired.into_iter();
+        let current_iter = current.into_iter();
+        let desired_iter = desired.into_iter();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(current.clone(), platform)?;
-        let desired_python_info = find_python_info(desired.clone(), platform)?;
+        let current_python_info = find_python_info(current_iter.clone(), platform)?;
+        let desired_python_info = find_python_info(desired_iter.clone(), platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
@@ -101,8 +101,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // Figure out the operations to perform, but keep the order of the original "desired" iterator
 
         // All current packages that are not in desired, remove
-        for record in current.clone() {
-            if !desired
+        for record in current_iter.clone() {
+            if !desired_iter
                 .clone()
                 .any(|r| r.as_ref().name == record.as_ref().name)
             {
@@ -110,9 +110,9 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             }
         }
 
-        for record in desired {
+        for record in desired_iter {
             let name = &record.as_ref().name;
-            let old_record = current.clone().find(|r| r.as_ref().name == *name);
+            let old_record = current_iter.clone().find(|r| r.as_ref().name == *name);
 
             if let Some(old_record) = old_record {
                 if !describe_same_content(record.as_ref(), old_record.as_ref()) {
