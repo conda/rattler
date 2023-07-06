@@ -157,7 +157,22 @@ fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
 macro_rules! solver_backend_tests {
     ($T:path) => {
         #[test]
-        fn test_solve_tensorboard_libsolv_rs() {
+        fn test_solve_quetz() {
+            insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["quetz",]));
+        }
+
+        #[test]
+        fn test_solve_xtensor_xsimd() {
+            insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["xtensor", "xsimd",]));
+        }
+
+        #[test]
+        fn test_solve_tensorflow() {
+            insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["tensorflow"]));
+        }
+
+        #[test]
+        fn test_solve_tensorboard() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec![
                 "tensorboard=2.1.1",
                 "grpc-cpp=1.39.1"
@@ -165,7 +180,7 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
-        fn test_solve_python_libsolv_rs() {
+        fn test_solve_python() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["python=3.9"]));
         }
 
@@ -575,4 +590,19 @@ fn compare_solve_tensorboard() {
 #[test]
 fn compare_solve_python() {
     compare_solve(vec!["python=3.9"]);
+}
+
+#[test]
+fn compare_solve_tensorflow() {
+    compare_solve(vec!["tensorflow"]);
+}
+
+#[test]
+fn compare_solve_quetz() {
+    compare_solve(vec!["quetz"]);
+}
+
+#[test]
+fn compare_solve_xtensor_xsimd() {
+    compare_solve(vec!["xtensor", "xsimd"]);
 }
