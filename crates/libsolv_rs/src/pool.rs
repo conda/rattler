@@ -3,13 +3,13 @@ use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
+use ahash::AHashMap;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::str::FromStr;
-use ahash::AHashMap;
 
 /// A pool that stores data related to the available packages
 ///

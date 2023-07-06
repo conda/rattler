@@ -9,10 +9,10 @@ use crate::solve_jobs::SolveJobs;
 use crate::transaction::Transaction;
 use std::cell::OnceCell;
 
+use ahash::{AHashMap, AHashSet};
 use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
-use ahash::{AHashMap, AHashSet};
 
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;

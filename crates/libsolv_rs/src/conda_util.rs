@@ -3,11 +3,11 @@ use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::MatchSpecId;
+use ahash::AHashMap;
 use rattler_conda_types::{MatchSpec, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use ahash::AHashMap;
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
