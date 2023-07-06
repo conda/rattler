@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::install::python::PythonInfoError;
 use crate::install::PythonInfo;
 use rattler_conda_types::{PackageRecord, Platform};
@@ -98,31 +100,44 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
 
         let mut operations = Vec::new();
 
-        // Figure out the operations to perform, but keep the order of the original "desired" iterator
+        let mut current_map = current_iter
+            .clone()
+            .map(|r| (r.as_ref().name.clone(), r))
+            .collect::<std::collections::HashMap<_, _>>();
 
-        // All current packages that are not in desired, remove
+        let desired_names = desired_iter
+            .clone()
+            .map(|r| r.as_ref().name.clone())
+            .collect::<HashSet<_>>();
+
+        // Remove all current packages that are not in desired (but keep order of current)
         for record in current_iter.clone() {
-            if !desired_iter
-                .clone()
-                .any(|r| r.as_ref().name == record.as_ref().name)
-            {
+            if !desired_names.contains(&record.as_ref().name) {
                 operations.push(TransactionOperation::Remove(record));
             }
         }
 
+        // reverse all removals, last in first out
+        operations.reverse();
+
+        // Figure out the operations to perform, but keep the order of the original "desired" iterator
         for record in desired_iter {
             let name = &record.as_ref().name;
-            let old_record = current_iter.clone().find(|r| r.as_ref().name == *name);
+            let old_record = current_map.remove(name);
 
             if let Some(old_record) = old_record {
                 if !describe_same_content(record.as_ref(), old_record.as_ref()) {
+                    // if the content changed, we need to reinstall (remove and install)
                     operations.push(TransactionOperation::Change {
                         old: old_record,
                         new: record,
                     });
                 } else if needs_python_relink {
+                    // when the python version changed, we need to relink all noarch packages
+                    // to recompile the bytecode
                     operations.push(TransactionOperation::Reinstall(old_record));
                 }
+                // if the content is the same, we dont need to do anything
             } else {
                 operations.push(TransactionOperation::Install(record));
             }
