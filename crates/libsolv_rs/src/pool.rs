@@ -7,8 +7,9 @@ use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{HashMap};
 use std::str::FromStr;
+use ahash::AHashMap;
 
 /// A pool that stores data related to the available packages
 ///
@@ -25,7 +26,7 @@ pub struct Pool<'a> {
     package_names: Arena<NameId, String>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<String, NameId>,
+    pub(crate) names_to_ids: AHashMap<String, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -34,7 +35,7 @@ pub struct Pool<'a> {
     pub(crate) match_specs: Arena<MatchSpecId, MatchSpec>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    match_specs_to_ids: HashMap<String, MatchSpecId>,
+    match_specs_to_ids: AHashMap<String, MatchSpecId>,
 
     /// Cached candidates for each match spec
     pub(crate) match_spec_to_sorted_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
@@ -52,11 +53,11 @@ impl<'a> Default for Pool<'a> {
             solvables,
             total_repos: 0,
 
-            names_to_ids: HashMap::new(),
+            names_to_ids: Default::default(),
             package_names: Arena::new(),
             packages_by_name: Mapping::empty(),
 
-            match_specs_to_ids: HashMap::default(),
+            match_specs_to_ids: Default::default(),
             match_specs: Arena::new(),
             match_spec_to_sorted_candidates: Mapping::empty(),
             match_spec_to_forbidden: Mapping::empty(),
@@ -132,7 +133,7 @@ impl<'a> Pool<'a> {
         match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
         match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
-        solvable_order: &mut HashMap<(SolvableId, SolvableId), Ordering>,
+        solvable_order: &mut AHashMap<u64, Ordering>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec
@@ -155,7 +156,7 @@ impl<'a> Pool<'a> {
         .clone();
 
         pkgs.sort_by(|&p1, &p2| {
-            let key = (p1, p2);
+            let key = u32::from(p1) as u64 | ((u32::from(p2) as u64) << 32);
             *solvable_order.entry(key).or_insert_with(|| {
                 conda_util::compare_candidates(
                     p1,

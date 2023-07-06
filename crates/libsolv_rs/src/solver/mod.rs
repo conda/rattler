@@ -12,6 +12,7 @@ use std::cell::OnceCell;
 use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
+use ahash::{AHashMap, AHashSet};
 
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
@@ -171,9 +172,9 @@ impl<'a> Solver<'a> {
             Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
         let match_spec_to_highest_version =
             Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
-        let mut sorting_cache = HashMap::new();
-        let mut seen_requires = HashSet::new();
-        let mut seen_forbidden = HashSet::new();
+        let mut sorting_cache = AHashMap::new();
+        let mut seen_requires = AHashSet::new();
+        let mut seen_forbidden = AHashSet::new();
         let empty_vec = Vec::new();
 
         while let Some(solvable_id) = stack.pop() {

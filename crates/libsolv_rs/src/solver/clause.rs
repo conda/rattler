@@ -230,6 +230,7 @@ impl ClauseState {
         }
     }
 
+    #[inline]
     pub fn next_watched_clause(&self, solvable_id: SolvableId) -> ClauseId {
         if solvable_id == self.watched_literals[0] {
             self.next_watches[0]

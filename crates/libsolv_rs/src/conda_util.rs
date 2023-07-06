@@ -7,6 +7,7 @@ use rattler_conda_types::{MatchSpec, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use ahash::AHashMap;
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
@@ -14,7 +15,7 @@ pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<String, NameId>,
+    interned_strings: &AHashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -140,7 +141,7 @@ pub(crate) fn compare_candidates(
 pub(crate) fn find_highest_version(
     match_spec_id: MatchSpecId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<String, NameId>,
+    interned_strings: &AHashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -184,7 +185,7 @@ pub(crate) fn find_highest_version(
 pub(crate) fn find_candidates<'b>(
     match_spec_id: MatchSpecId,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
-    names_to_ids: &HashMap<String, NameId>,
+    names_to_ids: &AHashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     solvables: &Arena<SolvableId, Solvable>,
     match_spec_to_candidates: &'b Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
