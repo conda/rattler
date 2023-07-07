@@ -1,0 +1,6 @@
+---
+source: crates/rattler_libsolv_rs/src/solver/mod.rs
+expression: error
+---
+No candidates where found for B 14.*.
+

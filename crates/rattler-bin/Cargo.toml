@@ -9,6 +9,7 @@ homepage.workspace = true
 repository.workspace = true
 license.workspace = true
 readme.workspace = true
+default-run = "rattler"
 
 [[bin]]
 name = "rattler"
