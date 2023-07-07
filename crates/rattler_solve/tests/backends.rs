@@ -57,6 +57,7 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
         Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
         "dummy".to_string(),
         path,
+        None,
     )
     .unwrap()
 }
@@ -108,7 +109,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let names = specs.iter().map(|s| s.name.clone().unwrap());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
     let solver_task = SolverTask {
         available_packages: &available_packages,
@@ -511,7 +512,7 @@ fn compare_solve(specs: Vec<&str>) {
 
     let names = specs.iter().filter_map(|s| s.name.clone());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records

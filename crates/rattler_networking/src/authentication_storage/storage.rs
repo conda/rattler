@@ -154,14 +154,31 @@ impl AuthenticationStorage {
     }
 
     /// Retrieve the authentication information for the given URL
+    /// (including the authentication information for the wildcard
+    /// host if no credentials are found for the given host)
+    ///
+    /// E.g. if credentials are stored for `*.prefix.dev` and the
+    /// given URL is `https://repo.prefix.dev`, the credentials
+    /// for `*.prefix.dev` will be returned.
     pub fn get_by_url<U: IntoUrl>(
         &self,
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
-
         if let Some(host) = url.host_str() {
             let credentials = self.get(host);
+
+            let credentials = match credentials {
+                Ok(None) => {
+                    // Check for credentials under e.g. `*.prefix.dev`
+                    let mut parts = host.rsplitn(2, '.').collect::<Vec<&str>>();
+                    parts.reverse();
+                    let wildcard_host = format!("*.{}", parts.join("."));
+                    self.get(&wildcard_host)
+                }
+                _ => credentials,
+            };
+
             match credentials {
                 Ok(None) => Ok((url, None)),
                 Ok(Some(credentials)) => Ok((url, Some(credentials))),

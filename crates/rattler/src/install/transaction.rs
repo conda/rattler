@@ -1,7 +1,8 @@
+use std::collections::HashSet;
+
 use crate::install::python::PythonInfoError;
 use crate::install::PythonInfo;
 use rattler_conda_types::{PackageRecord, Platform};
-use std::collections::HashMap;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {
@@ -86,49 +87,60 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         CurIter::IntoIter: Clone,
         NewIter::IntoIter: Clone,
     {
-        let current = current.into_iter();
-        let desired = desired.into_iter();
+        let current_iter = current.into_iter();
+        let desired_iter = desired.into_iter();
 
         // Determine the python version used in the current situation.
-        let current_python_info = find_python_info(current.clone(), platform)?;
-        let desired_python_info = find_python_info(desired.clone(), platform)?;
+        let current_python_info = find_python_info(current_iter.clone(), platform)?;
+        let desired_python_info = find_python_info(desired_iter.clone(), platform)?;
         let needs_python_relink = match (&current_python_info, &desired_python_info) {
             (Some(current), Some(desired)) => desired.is_relink_required(current),
             _ => false,
         };
 
-        // Create a lookup table by name for the desired packages.
-        let mut desired: HashMap<String, New> = desired
-            .into_iter()
-            .map(|record| (record.as_ref().name.clone(), record))
-            .collect();
-
         let mut operations = Vec::new();
 
-        // Find all the elements that are no longer in the desired set
-        for record in current {
-            match desired.remove(&record.as_ref().name) {
-                None => operations.push(TransactionOperation::Remove(record)),
-                Some(desired) => {
-                    // If the desired differs from the current it has to be updated.
-                    if !describe_same_content(desired.as_ref(), record.as_ref()) {
-                        operations.push(TransactionOperation::Change {
-                            old: record,
-                            new: desired,
-                        })
-                    }
-                    // If this is a noarch package and all python packages need to be relinked,
-                    // reinstall the package completely.
-                    else if desired.as_ref().noarch.is_python() && needs_python_relink {
-                        operations.push(TransactionOperation::Reinstall(record));
-                    }
-                }
+        let mut current_map = current_iter
+            .clone()
+            .map(|r| (r.as_ref().name.clone(), r))
+            .collect::<std::collections::HashMap<_, _>>();
+
+        let desired_names = desired_iter
+            .clone()
+            .map(|r| r.as_ref().name.clone())
+            .collect::<HashSet<_>>();
+
+        // Remove all current packages that are not in desired (but keep order of current)
+        for record in current_iter {
+            if !desired_names.contains(&record.as_ref().name) {
+                operations.push(TransactionOperation::Remove(record));
             }
         }
 
-        // The remaining packages from the desired list need to be explicitly installed.
-        for record in desired.into_values() {
-            operations.push(TransactionOperation::Install(record))
+        // reverse all removals, last in first out
+        operations.reverse();
+
+        // Figure out the operations to perform, but keep the order of the original "desired" iterator
+        for record in desired_iter {
+            let name = &record.as_ref().name;
+            let old_record = current_map.remove(name);
+
+            if let Some(old_record) = old_record {
+                if !describe_same_content(record.as_ref(), old_record.as_ref()) {
+                    // if the content changed, we need to reinstall (remove and install)
+                    operations.push(TransactionOperation::Change {
+                        old: old_record,
+                        new: record,
+                    });
+                } else if needs_python_relink {
+                    // when the python version changed, we need to relink all noarch packages
+                    // to recompile the bytecode
+                    operations.push(TransactionOperation::Reinstall(old_record));
+                }
+                // if the content is the same, we dont need to do anything
+            } else {
+                operations.push(TransactionOperation::Install(record));
+            }
         }
 
         Ok(Self {
