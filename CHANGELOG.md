@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2023-07-07
+
+### Highlights
+
+#### New rust based solver implementation
+
+This version of rattler includes a new solver implementation! 
+@aochagavia worked hard on porting libsolv to rust and integrating that with `rattler_solve`.
+The port performs slightly faster or similar to the original C code and does not contain unsafe code, is well documented, and thread-safe.
+Our implementation (`rattler_libsolv_rs`) is specific to solving conda packages by leveraging `rattler_conda_types` for matching and parsing.
+
+Some performance benchmarks taken on Apple M2 Max.
+
+|                                    | libsolv-c    | libsolv-rs    |
+| ---------------------------------- |--------------|---------------|
+| python=3.9                         | 7.3734 ms    | **4.5831 ms** |
+| xtensor, xsimd                     | 5.7521 ms    | **2.7643 ms** |
+| tensorflow                         | 654.38 ms    | **371.59 ms** |
+| quetz                              | **1.2577 s** | 1.3807 s      |
+| tensorboard=2.1.1, grpc-cpp=1.39.1 | 474.76 ms    | **132.79 ms** |
+
+> Run `cargo bench libsolv` to check the results on your own machine.
+
+Besides the much improved implementation the new solver also provides much better error messages based on the work from mamba.
+When a conflict is detected the incompatibilities are analyzed and displayed with a more user-friendly error message.
+
+```
+The following packages are incompatible
+|-- asdf can be installed with any of the following options:
+    |-- asdf 1.2.3 would require
+        |-- C >1, which can be installed with any of the following options:
+            |-- C 2.0.0
+|-- C 1.0.0 is locked, but another version is required as reported above
+```
+
+`rattler-solve` has also been refactored to accommodate this change.
+It is now more easily possible to switch between solvers add runtime by writing functions that are generic on the solver.
+The solvers now live in a separate module `rattler_solve::libsolv_c` for the original libsolv C implementation and `rattler_solve::libsolv_rs` for the rust version.
+Both solvers can be enabled with feature flags. The default features only select `libsolv_c`.
+
+### Caching of activation scripts
+
+This release contains code to execute an activation script and capture the changes it made to the environment.
+Caching the result of an activation script can be useful if you need to invoke multiple executables from the same environment.
+
+### Details
+
+#### Added
+
+- Run activation scripts and capture their output by @baszalmstra in ([#239](https://github.com/mamba-org/rattler/pull/239))
+- Support for sha256 and md5 field in matchspec by @0xbe7a in ([#241](https://github.com/mamba-org/rattler/pull/241))
+- A rust port of libsolv as an additional solver backend by @aochagavia, @baszalmstra in ([#243](https://github.com/mamba-org/rattler/pull/243) & [#253](https://github.com/mamba-org/rattler/pull/253)) 
+- Test cases and benchmarks for solver implementations by @baszalmstra in ([#250](https://github.com/mamba-org/rattler/pull/249) & [#250](https://github.com/mamba-org/rattler/pull/249))
+- The ability to add a dependency from `python` on `pip` while loading repodata @wolfv in ([#238](https://github.com/mamba-org/rattler/pull/238))
+
+#### Changed
+
+- Completely refactored version parsing by @baszalmstra in ([#240](https://github.com/mamba-org/rattler/pull/240))
+- Refactored solver interface to allow generic use of solver implementations by @baszalmstra in ([#245](https://github.com/mamba-org/rattler/pull/245))
+- Also check if credentials stored under wildcard host by @wolfv in ([#252](https://github.com/mamba-org/rattler/pull/252))
+
+#### Fixed
+
+- Compilation issues by @wolfv in ([#244](https://github.com/mamba-org/rattler/pull/244))
+- Add missing `From<VersionWithSource>` for `Version` by @baszalmstra in ([#246](https://github.com/mamba-org/rattler/pull/246))
+- Optimized libsolv port by removing redundant MatchSpec parsing by @baszalmstra in ([#246](https://github.com/mamba-org/rattler/pull/246))
+- Optimized libsolv port by caching matching Solvables by @baszalmstra in ([#251](https://github.com/mamba-org/rattler/pull/251))
+
 ## [0.5.0] - 2023-06-30
 
 ### Highlights
