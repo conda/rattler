@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 471
 expression: "solve_real_world::<rattler_solve::libsolv_rs::Solver>(vec![\"python=3.9\"])"
 ---
 - _libgcc_mutex 0.1 conda_forge
