@@ -3,12 +3,12 @@ use crate::version::flags::Flags;
 use crate::version::segment::Segment;
 use crate::version::{ComponentVec, SegmentVec};
 use nom::branch::alt;
-use nom::bytes::complete::{tag_no_case, take_while};
+use nom::bytes::complete::tag_no_case;
 use nom::character::complete::{alpha1, char, digit1, one_of};
-use nom::combinator::{cut, eof, map, map_res, opt, value};
+use nom::combinator::{map, opt, value};
 use nom::error::{ErrorKind, FromExternalError, ParseError};
-use nom::sequence::{preceded, terminated};
-use nom::{IResult, Parser};
+use nom::sequence::terminated;
+use nom::IResult;
 use smallvec::SmallVec;
 use std::{
     convert::Into,
@@ -83,6 +83,9 @@ pub enum ParseVersionErrorKind {
     /// Cannot mix and match dashes and underscores
     #[error("cannot use both underscores and dashes as version segment seperators")]
     CannotMixAndMatchDashesAndUnderscores,
+    /// Expected the end of the string
+    #[error("encountered more characters but expected none")]
+    ExpectedEof,
     /// Nom error
     #[error("{0:?}")]
     Nom(ErrorKind),
@@ -125,119 +128,145 @@ fn numeral_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
 }
 
 /// Parses a single version [`Component`].
-fn component_parser<'i>(
-    separator: Option<char>,
-) -> impl Parser<&'i str, Component, ParseVersionErrorKind> {
-    move |input: &'i str| {
-        alt((
-            // Parse a numeral
-            map(numeral_parser, Component::Numeral),
-            // Parse special case components
-            value(Component::Post, tag_no_case("post")),
-            value(Component::Dev, tag_no_case("dev")),
-            // Parse an identifier
-            map(alpha1, |alpha: &'i str| {
-                Component::Iden(alpha.to_lowercase().into_boxed_str())
-            }),
-            // Parse a `_` or `-` at the end of the string.
-            map_res(terminated(one_of("-_"), eof), |c: char| {
-                let is_dash = match (c, separator) {
-                    ('-', Some('-') | None) => true,
-                    ('_', Some('_') | None) => false,
-                    _ => return Err(ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores),
-                };
-                Ok(Component::UnderscoreOrDash { is_dash })
-            }),
-        ))(input)
-    }
+fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVersionErrorKind> {
+    alt((
+        // Parse a numeral
+        map(numeral_parser, Component::Numeral),
+        // Parse special case components
+        value(Component::Post, tag_no_case("post")),
+        value(Component::Dev, tag_no_case("dev")),
+        // Parse an identifier
+        map(alpha1, |alpha: &'i str| {
+            Component::Iden(alpha.to_lowercase().into_boxed_str())
+        }),
+    ))(input)
 }
 
 /// Parses a version segment from a list of components.
 fn segment_parser<'i>(
     components: &mut ComponentVec,
-    separator: Option<char>,
-) -> impl Parser<&'i str, Segment, ParseVersionErrorKind> + '_ {
-    move |input| {
-        // Parse the first component of the segment
-        let (mut rest, first_component) = match component_parser(separator).parse(input) {
-            Ok(result) => result,
-            // Convert undefined parse errors into an expect error
-            Err(nom::Err::Error(ParseVersionErrorKind::Nom(_))) => {
-                return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent))
+    input: &'i str,
+) -> IResult<&'i str, Segment, ParseVersionErrorKind> {
+    // Parse the first component of the segment
+    let (mut rest, first_component) = match component_parser(input) {
+        Ok(result) => result,
+        // Convert undefined parse errors into an expect error
+        Err(nom::Err::Error(ParseVersionErrorKind::Nom(_))) => {
+            return Err(nom::Err::Error(ParseVersionErrorKind::ExpectedComponent))
+        }
+        Err(e) => return Err(e),
+    };
+
+    // If the first component is not numeric we add a default component since each segment must
+    // always start with a number.
+    let mut component_count = 0u16;
+    let has_implicit_default = !first_component.is_numeric();
+
+    // Add the first component
+    components.push(first_component);
+    component_count += 1;
+
+    // Loop until we can't find any more components
+    loop {
+        let (remaining, component) = match opt(component_parser)(rest) {
+            Ok((i, o)) => (i, o),
+            Err(e) => {
+                // Remove any components that we may have added.
+                components.drain(components.len() - (component_count as usize)..);
+                return Err(e);
             }
-            Err(e) => return Err(e),
         };
-
-        // If the first component is not numeric we add a default component since each segment must
-        // always start with a number.
-        let mut component_count = 0u16;
-        let has_implicit_default = !first_component.is_numeric();
-
-        // Add the first component
-        components.push(first_component);
-        component_count += 1;
-
-        // Loop until we can't find any more components
-        loop {
-            let (remaining, component) = match opt(component_parser(separator))(rest) {
-                Ok((i, o)) => (i, o),
-                Err(e) => {
-                    // Remove any components that we may have added.
-                    components.drain(components.len() - (component_count as usize)..);
-                    return Err(e);
-                }
-            };
-            match component {
-                Some(component) => {
-                    components.push(component);
-                    component_count = match component_count.checked_add(1) {
-                        Some(length) => length,
-                        None => {
-                            return Err(nom::Err::Error(
-                                ParseVersionErrorKind::TooManyComponentsInASegment,
-                            ))
-                        }
+        match component {
+            Some(component) => {
+                components.push(component);
+                component_count = match component_count.checked_add(1) {
+                    Some(length) => length,
+                    None => {
+                        return Err(nom::Err::Failure(
+                            ParseVersionErrorKind::TooManyComponentsInASegment,
+                        ))
                     }
                 }
-                None => {
-                    let segment = Segment::new(component_count)
-                        .ok_or(nom::Err::Error(
-                            ParseVersionErrorKind::TooManyComponentsInASegment,
-                        ))?
-                        .with_implicit_default(has_implicit_default);
-
-                    break Ok((remaining, segment));
-                }
             }
-            rest = remaining;
+            None => {
+                let segment = Segment::new(component_count)
+                    .ok_or(nom::Err::Failure(
+                        ParseVersionErrorKind::TooManyComponentsInASegment,
+                    ))?
+                    .with_implicit_default(has_implicit_default);
+
+                break Ok((remaining, segment));
+            }
         }
+        rest = remaining;
     }
 }
 
-fn final_version_part_parser(
-    components: &mut ComponentVec,
-    segments: &mut SegmentVec,
+/// Parses a trailing underscore or dash.
+fn trailing_dash_underscore_parser(
     input: &str,
     dash_or_underscore: Option<char>,
-) -> Result<Option<char>, nom::Err<ParseVersionErrorKind>> {
+) -> IResult<&str, (Option<Component>, Option<char>), ParseVersionErrorKind> {
+    // Parse a - or _. Return early if it cannot be found.
+    let (rest, Some(separator)) = opt(one_of::<_,_,(&str, ErrorKind)>("-_"))(input).map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))? else {
+        return Ok((input, (None, dash_or_underscore)));
+    };
+
+    // Make sure dashes and underscores are not mixed.
+    let dash_or_underscore = match (dash_or_underscore, separator) {
+        (None, '-') => Some('-'),
+        (None, '_') => Some('_'),
+        (Some('-'), '_') | (Some('_'), '-') => {
+            return Err(nom::Err::Error(
+                ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
+            ))
+        }
+        _ => dash_or_underscore,
+    };
+
+    Ok((
+        rest,
+        (
+            Some(Component::UnderscoreOrDash {
+                is_dash: separator == '-',
+            }),
+            dash_or_underscore,
+        ),
+    ))
+}
+
+fn version_part_parser<'i>(
+    components: &mut ComponentVec,
+    segments: &mut SegmentVec,
+    input: &'i str,
+    dash_or_underscore: Option<char>,
+) -> IResult<&'i str, Option<char>, ParseVersionErrorKind> {
     let mut dash_or_underscore = dash_or_underscore;
-    let first_segment_idx = segments.len();
+    let mut recovery_segment_idx = segments.len();
 
     // Parse the first segment of the version. It must exists.
-    let (mut input, first_segment_length) =
-        segment_parser(components, dash_or_underscore).parse(input)?;
+    let (mut input, first_segment_length) = segment_parser(components, input)?;
     segments.push(first_segment_length);
+
+    // Iterate over any additional segments that we find.
     let result = loop {
-        // Parse either eof or a version segment separator.
-        let (rest, separator) = match alt((map(one_of("-._"), Some), value(None, eof)))(input) {
-            Ok((_, None)) => break Ok(dash_or_underscore),
+        // Parse a version segment separator.
+        let (rest, separator) = match opt(one_of("-._"))(input) {
+            Ok((_, None)) => {
+                // No additional separator found, exit early.
+                return Ok((input, dash_or_underscore));
+            }
             Ok((rest, Some(separator))) => (rest, separator),
+
             Err(nom::Err::Error(_)) => {
+                // If an error occured we convert it to a segment separator not found error instead.
                 break Err(nom::Err::Error(
                     ParseVersionErrorKind::ExpectedSegmentSeparator,
-                ))
+                ));
             }
-            Err(e) => return Err(e),
+
+            // Failure are propagated
+            Err(e) => break Err(e),
         };
 
         // Make sure dashes and underscores are not mixed.
@@ -245,7 +274,7 @@ fn final_version_part_parser(
             (None, '-') => dash_or_underscore = Some('-'),
             (None, '_') => dash_or_underscore = Some('_'),
             (Some('-'), '_') | (Some('_'), '-') => {
-                break Err(nom::Err::Error(
+                break Err(nom::Err::Failure(
                     ParseVersionErrorKind::CannotMixAndMatchDashesAndUnderscores,
                 ))
             }
@@ -253,25 +282,73 @@ fn final_version_part_parser(
         }
 
         // Parse the next segment.
-        let (rest, segment) = match segment_parser(components, dash_or_underscore).parse(rest) {
+        let (rest, segment) = match segment_parser(components, rest) {
             Ok(result) => result,
+            Err(nom::Err::Error(_)) => {
+                // If parsing of a segment failed, check if perhaps the seperator is followed by an
+                // underscore or dash.
+                match trailing_dash_underscore_parser(rest, dash_or_underscore)? {
+                    (rest, (Some(component), dash_or_underscore)) => {
+                        // We are parsing multiple dashes or underscores ("..__"), add a new segment
+                        // just for the trailing underscore/dash
+                        components.push(component);
+                        segments.push(
+                            Segment::new(1)
+                                .unwrap()
+                                .with_implicit_default(true)
+                                .with_separator(Some(separator))
+                                .unwrap(),
+                        );
+
+                        // Since the trailing is always at the end we immediately return
+                        return Ok((rest, dash_or_underscore));
+                    }
+                    (rest, (None, dash_or_underscore)) if separator == '-' || separator == '_' => {
+                        // We are parsing a single dash or underscore (".._"), update the last
+                        // segment we added
+                        let segment = segments
+                            .last_mut()
+                            .expect("there must be at least one segment added");
+                        components.push(Component::UnderscoreOrDash {
+                            is_dash: separator == '-',
+                        });
+
+                        *segment = segment
+                            .len()
+                            .checked_add(1)
+                            .and_then(|len| segment.with_component_count(len))
+                            .ok_or(nom::Err::Failure(
+                                ParseVersionErrorKind::TooManyComponentsInASegment,
+                            ))?;
+
+                        // Since the trailing is always at the end we immediately return
+                        return Ok((rest, dash_or_underscore));
+                    }
+                    _ => return Ok((input, dash_or_underscore)),
+                }
+            }
+
+            // Failures are propagated
             Err(e) => break Err(e),
         };
+
         segments.push(
             segment
                 .with_separator(Some(separator))
                 .expect("unrecognized separator"),
         );
-
+        recovery_segment_idx += 1;
         input = rest;
     };
 
-    // If there was an error, revert the `segment_lengths` array.
-    if result.is_err() {
-        segments.drain(first_segment_idx..);
+    match result {
+        // If there was an error, revert the `segment_lengths` array.
+        Err(e) => {
+            segments.drain(recovery_segment_idx..);
+            Err(e)
+        }
+        Ok(separator) => Ok((input, separator)),
     }
-
-    result
 }
 
 pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKind> {
@@ -291,16 +368,15 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
         flags = flags.with_has_epoch(true);
     }
 
-    // Scan the input to find the version segments.
-    let (rest, common_part) = recognize_segments(input)?;
-    let (rest, local_part) = opt(preceded(char('+'), cut(recognize_segments)))(rest)?;
-
-    // Parse the common version part
-    let dash_or_underscore =
-        final_version_part_parser(&mut components, &mut segments, common_part, None)?;
+    // Parse the common part of the version
+    let (rest, dash_or_underscore) =
+        match version_part_parser(&mut components, &mut segments, input, None) {
+            Ok(result) => result,
+            Err(e) => return Err(e),
+        };
 
     // Parse the local version part
-    if let Some(local_part) = local_part {
+    let rest = if let Ok((local_version_part, _)) = char::<_, (&str, ErrorKind)>('+')(rest) {
         let first_local_segment_idx = segments.len();
 
         // Encode the local segment index into the flags.
@@ -322,14 +398,18 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
             }
         }
 
-        // Parse the segments
-        final_version_part_parser(
+        match version_part_parser(
             &mut components,
             &mut segments,
-            local_part,
+            local_version_part,
             dash_or_underscore,
-        )?;
-    }
+        ) {
+            Ok((rest, _)) => rest,
+            Err(e) => return Err(e),
+        }
+    } else {
+        rest
+    };
 
     return Ok((
         rest,
@@ -339,19 +419,12 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
             segments,
         },
     ));
-
-    /// A helper function to crudely recognize version segments.
-    fn recognize_segments<'i, E: ParseError<&'i str>>(
-        input: &'i str,
-    ) -> IResult<&'i str, &'i str, E> {
-        take_while(|c: char| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')(input)
-    }
 }
 
 pub fn final_version_parser(input: &str) -> Result<Version, ParseVersionErrorKind> {
     match version_parser(input) {
         Ok(("", version)) => Ok(version),
-        Ok(_) => Err(ParseVersionErrorKind::ExpectedSegmentSeparator),
+        Ok(_) => Err(ParseVersionErrorKind::ExpectedEof),
         Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(e),
         Err(_) => unreachable!("not streaming, so no other error possible"),
     }
@@ -368,12 +441,21 @@ impl FromStr for Version {
 #[cfg(test)]
 mod test {
     use super::{final_version_parser, Version};
+    use crate::version::parse::version_parser;
     use crate::version::SegmentFormatter;
     use serde::Serialize;
     use std::collections::BTreeMap;
     use std::fmt::{Display, Formatter};
     use std::path::Path;
     use std::str::FromStr;
+
+    #[test]
+    fn test_parse_star() {
+        assert_eq!(
+            version_parser("1.*"),
+            Ok((".*", Version::from_str("1").unwrap()))
+        );
+    }
 
     #[test]
     fn test_parse() {

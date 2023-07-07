@@ -3,6 +3,7 @@
 
 mod constraint;
 pub(crate) mod version_tree;
+mod parse;
 
 use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;

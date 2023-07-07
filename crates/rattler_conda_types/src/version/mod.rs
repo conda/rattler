@@ -18,7 +18,7 @@ use smallvec::SmallVec;
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
 
 mod flags;
-mod parse;
+pub(crate) mod parse;
 mod segment;
 mod with_source;
 
@@ -218,7 +218,7 @@ impl Version {
         };
         version_segments.iter().map(move |&segment| {
             let start = idx;
-            idx += segment.len();
+            idx += segment.len() as usize;
             SegmentIter {
                 offset: start,
                 version: self,
@@ -312,12 +312,12 @@ impl Version {
             let mut idx = if self.has_epoch() { 1 } else { 0 };
             idx += self.segments[..start]
                 .iter()
-                .map(|segment| segment.len())
+                .map(|segment| segment.len() as usize)
                 .sum::<usize>();
             let version_segments = &self.segments[start..];
             Either::Left(version_segments.iter().map(move |&segment| {
                 let start = idx;
-                idx += segment.len();
+                idx += segment.len() as usize;
                 SegmentIter {
                     offset: start,
                     version: self,
@@ -914,7 +914,7 @@ impl<'v> SegmentIter<'v> {
     /// Returns the number of components stored in the version. Note that the number of components
     /// returned by [`Self::components`] might differ because it might include an implicit default.
     pub fn component_count(&self) -> usize {
-        self.segment.len()
+        self.segment.len() as usize
     }
 
     /// Returns an iterator over the components of this segment.
@@ -924,7 +924,7 @@ impl<'v> SegmentIter<'v> {
         let version = self.version;
 
         // Create an iterator over all component
-        let segment_components = (self.offset..self.offset + self.segment.len())
+        let segment_components = (self.offset..self.offset + self.segment.len() as usize)
             .map(move |idx| &version.components[idx]);
 
         // Add an implicit default if this segment has one
