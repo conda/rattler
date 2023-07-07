@@ -11,8 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-rattler_conda_types = { version = "0.5.0", path = "../rattler_conda_types" }
-rattler_digest = { version = "0.5.0", path = "../rattler_digest" }
+rattler_conda_types = { version = "0.6.0", path = "../rattler_conda_types" }
+rattler_digest = { version = "0.6.0", path = "../rattler_digest" }
 libc = { version = "0.2", optional = true }
 anyhow = "1.0.71"
 thiserror = "1.0.40"
@@ -21,11 +21,11 @@ serde = { version = "1.0.163", features = ["derive"] }
 url = "2.4.0"
 hex = "0.4.3"
 tempfile = "3.6.0"
-rattler_libsolv_c = { version = "0.5.0", path = "../rattler_libsolv_c", optional = true }
-rattler_libsolv_rs = { version = "0.5.0", path = "../rattler_libsolv_rs", optional = true }
+rattler_libsolv_c = { version = "0.6.0", path = "../rattler_libsolv_c", optional = true }
+rattler_libsolv_rs = { version = "0.6.0", path = "../rattler_libsolv_rs", optional = true }
 
 [dev-dependencies]
-rattler_repodata_gateway = { version = "0.5.0", path = "../rattler_repodata_gateway", default-features = false, features = ["sparse"] }
+rattler_repodata_gateway = { version = "0.6.0", path = "../rattler_repodata_gateway", default-features = false, features = ["sparse"] }
 insta = { version = "1.29.0", features = ["yaml"] }
 rstest = "0.17.0"
 serde_json = "1.0.96"
