@@ -391,18 +391,18 @@ macro_rules! solver_backend_tests {
     };
 }
 
-#[cfg(feature = "libsolv-sys")]
-mod libsolv_sys {
+#[cfg(feature = "libsolv_c")]
+mod libsolv_c {
     use super::*;
 
-    solver_backend_tests!(rattler_solve::libsolv_sys::Solver);
+    solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         let repo_data = read_repodata(&dummy_channel_json_path());
 
-        let cached_repo_data = rattler_solve::libsolv_sys::cache_repodata(
+        let cached_repo_data = rattler_solve::libsolv_c::cache_repodata(
             Channel::from_str("conda-forge", &ChannelConfig::default())
                 .unwrap()
                 .platform_url(rattler_conda_types::Platform::Linux64)
@@ -410,14 +410,14 @@ mod libsolv_sys {
             &repo_data,
         );
 
-        let libsolv_repodata = rattler_solve::libsolv_sys::RepoData {
+        let libsolv_repodata = rattler_solve::libsolv_c::RepoData {
             records: repo_data.iter().collect(),
             solv_file: Some(&cached_repo_data),
         };
 
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
 
-        let pkgs = rattler_solve::libsolv_sys::Solver
+        let pkgs = rattler_solve::libsolv_c::Solver
             .solve(SolverTask {
                 locked_packages: Vec::new(),
                 virtual_packages: Vec::new(),
@@ -532,11 +532,11 @@ fn compare_solve(specs: Vec<&str>) {
 
     let mut results = Vec::new();
 
-    #[cfg(feature = "libsolv-sys")]
+    #[cfg(feature = "libsolv_c")]
     results.push((
-        "libsolv-sys",
+        "libsolv_c",
         extract_pkgs(
-            rattler_solve::libsolv_sys::Solver
+            rattler_solve::libsolv_c::Solver
                 .solve(SolverTask {
                     available_packages: &available_packages,
                     specs: specs.clone(),

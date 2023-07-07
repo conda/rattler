@@ -5,8 +5,8 @@
 
 #[cfg(feature = "libsolv_rs")]
 pub mod libsolv_rs;
-#[cfg(feature = "libsolv-sys")]
-pub mod libsolv_sys;
+#[cfg(feature = "libsolv_c")]
+pub mod libsolv_c;
 
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
@@ -96,7 +96,7 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 /// repodata that is most suitable for a specific backend.
 ///
 /// Some solvers may add additional functionality to their specific implementation that enables
-/// caching the repodata to disk in an efficient way (see [`crate::libsolv_sys::RepoData`] for
+/// caching the repodata to disk in an efficient way (see [`crate::libsolv_c::RepoData`] for
 /// an example).
 pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
 

@@ -53,10 +53,10 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     let available_packages =
         SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
 
-    #[cfg(feature = "libsolv-sys")]
-    group.bench_function("libsolv-sys", |b| {
+    #[cfg(feature = "libsolv_c")]
+    group.bench_function("libsolv_c", |b| {
         b.iter(|| {
-            rattler_solve::libsolv_sys::Solver
+            rattler_solve::libsolv_c::Solver
                 .solve(black_box(SolverTask {
                     available_packages: &available_packages,
                     locked_packages: vec![],

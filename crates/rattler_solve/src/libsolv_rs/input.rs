@@ -1,7 +1,7 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use libsolv_rs::{Pool, RepoId, SolvableId};
+use rattler_libsolv_rs::{Pool, RepoId, SolvableId};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{GenericVirtualPackage, PackageRecord, RepoDataRecord};
 use std::cmp::Ordering;
