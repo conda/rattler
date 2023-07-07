@@ -7,6 +7,7 @@ use crate::problem::Problem;
 use crate::solvable::SolvableInner;
 use crate::solve_jobs::SolveJobs;
 use crate::transaction::Transaction;
+use std::cell::OnceCell;
 
 use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
@@ -72,7 +73,7 @@ impl<'a> Solver<'a> {
         self.clauses = vec![ClauseState::new(
             Clause::InstallRoot,
             &self.learnt_clauses,
-            &self.pool.match_spec_to_candidates,
+            &self.pool.match_spec_to_sorted_candidates,
         )];
 
         // Favored map
@@ -99,7 +100,7 @@ impl<'a> Solver<'a> {
                     self.clauses.push(ClauseState::new(
                         Clause::ForbidMultipleInstances(candidate, other_candidate),
                         &self.learnt_clauses,
-                        &self.pool.match_spec_to_candidates,
+                        &self.pool.match_spec_to_sorted_candidates,
                     ));
                 }
             }
@@ -114,7 +115,7 @@ impl<'a> Solver<'a> {
                     self.clauses.push(ClauseState::new(
                         Clause::Lock(locked_solvable_id, other_candidate),
                         &self.learnt_clauses,
-                        &self.pool.match_spec_to_candidates,
+                        &self.pool.match_spec_to_sorted_candidates,
                     ));
                 }
             }
@@ -162,10 +163,15 @@ impl<'a> Solver<'a> {
 
         stack.push(SolvableId::root());
 
-        let mut match_spec_to_candidates =
+        let mut match_spec_to_sorted_candidates =
             Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
         let mut match_spec_to_forbidden =
             Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
+        let match_spec_to_candidates =
+            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
+        let match_spec_to_highest_version =
+            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
+        let mut sorting_cache = HashMap::new();
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
@@ -179,11 +185,20 @@ impl<'a> Solver<'a> {
             // Enqueue the candidates of the dependencies
             for &dep in deps {
                 if seen_requires.insert(dep) {
-                    self.pool
-                        .populate_candidates(dep, favored_map, &mut match_spec_to_candidates);
+                    self.pool.populate_candidates(
+                        dep,
+                        favored_map,
+                        &mut match_spec_to_sorted_candidates,
+                        &match_spec_to_candidates,
+                        &match_spec_to_highest_version,
+                        &mut sorting_cache,
+                    );
                 }
 
-                for &candidate in match_spec_to_candidates.get(dep).unwrap_or(&empty_vec) {
+                for &candidate in match_spec_to_sorted_candidates
+                    .get(dep)
+                    .unwrap_or(&empty_vec)
+                {
                     // Note: we skip candidates we have already seen
                     if visited.insert(candidate) {
                         stack.push(candidate);
@@ -196,7 +211,7 @@ impl<'a> Solver<'a> {
                 self.clauses.push(ClauseState::new(
                     Clause::Requires(solvable_id, dep),
                     &self.learnt_clauses,
-                    &match_spec_to_candidates,
+                    &match_spec_to_sorted_candidates,
                 ));
             }
 
@@ -211,13 +226,13 @@ impl<'a> Solver<'a> {
                     self.clauses.push(ClauseState::new(
                         Clause::Constrains(solvable_id, dep),
                         &self.learnt_clauses,
-                        &match_spec_to_candidates,
+                        &match_spec_to_sorted_candidates,
                     ));
                 }
             }
         }
 
-        self.pool.match_spec_to_candidates = match_spec_to_candidates;
+        self.pool.match_spec_to_sorted_candidates = match_spec_to_sorted_candidates;
         self.pool.match_spec_to_forbidden = match_spec_to_forbidden;
     }
 
@@ -339,7 +354,7 @@ impl<'a> Solver<'a> {
                 }
 
                 // Consider only clauses in which no candidates have been installed
-                let candidates = &self.pool.match_spec_to_candidates[deps];
+                let candidates = &self.pool.match_spec_to_sorted_candidates[deps];
                 if candidates
                     .iter()
                     .any(|&c| self.decision_tracker.assigned_value(c) == Some(true))
@@ -844,7 +859,7 @@ impl<'a> Solver<'a> {
         let mut clause = ClauseState::new(
             Clause::Learnt(learnt_id),
             &self.learnt_clauses,
-            &self.pool.match_spec_to_candidates,
+            &self.pool.match_spec_to_sorted_candidates,
         );
 
         if clause.has_watches() {
