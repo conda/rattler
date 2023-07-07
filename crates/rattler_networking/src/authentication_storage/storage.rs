@@ -165,17 +165,15 @@ impl AuthenticationStorage {
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
-
         if let Some(host) = url.host_str() {
             let credentials = self.get(host);
 
             let credentials = match credentials {
                 Ok(None) => {
                     // Check for credentials under e.g. `*.prefix.dev`
-                    let wildcard_host = format!(
-                        "*.{}",
-                        host.rsplitn(2, '.').collect::<Vec<&str>>().join(".")
-                    );
+                    let mut parts = host.rsplitn(2, '.').collect::<Vec<&str>>();
+                    parts.reverse();
+                    let wildcard_host = format!("*.{}", parts.join("."));
                     self.get(&wildcard_host)
                 }
                 _ => credentials,
