@@ -25,6 +25,7 @@ fn read_sparse_repodata(path: &str) -> SparseRepoData {
         Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
         "dummy".to_string(),
         path,
+        None,
     )
     .unwrap()
 }
@@ -51,7 +52,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
     let names = specs.iter().map(|s| s.name.clone().unwrap());
     let available_packages =
-        SparseRepoData::load_records_recursive(&sparse_repo_datas, names).unwrap();
+        SparseRepoData::load_records_recursive(&sparse_repo_datas, names, None).unwrap();
 
     #[cfg(feature = "libsolv_c")]
     group.bench_function("libsolv_c", |b| {
