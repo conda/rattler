@@ -74,6 +74,12 @@ impl ArenaId for SolvableId {
     }
 }
 
+impl From<SolvableId> for u32 {
+    fn from(value: SolvableId) -> Self {
+        value.0
+    }
+}
+
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialOrd, Ord, Eq, PartialEq, Debug, Hash)]
 pub(crate) struct ClauseId(u32);
