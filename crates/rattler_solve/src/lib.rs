@@ -3,10 +3,10 @@
 
 #![deny(missing_docs)]
 
-#[cfg(feature = "libsolv_rs")]
-pub mod libsolv_rs;
 #[cfg(feature = "libsolv_c")]
 pub mod libsolv_c;
+#[cfg(feature = "libsolv_rs")]
+pub mod libsolv_rs;
 
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
