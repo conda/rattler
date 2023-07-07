@@ -3,7 +3,6 @@ use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::MatchSpecId;
-use ahash::AHashMap;
 use rattler_conda_types::{MatchSpec, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -15,7 +14,7 @@ pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &AHashMap<String, NameId>,
+    interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -141,7 +140,7 @@ pub(crate) fn compare_candidates(
 pub(crate) fn find_highest_version(
     match_spec_id: MatchSpecId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &AHashMap<String, NameId>,
+    interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -185,7 +184,7 @@ pub(crate) fn find_highest_version(
 pub(crate) fn find_candidates<'b>(
     match_spec_id: MatchSpecId,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
-    names_to_ids: &AHashMap<String, NameId>,
+    names_to_ids: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     solvables: &Arena<SolvableId, Solvable>,
     match_spec_to_candidates: &'b Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,

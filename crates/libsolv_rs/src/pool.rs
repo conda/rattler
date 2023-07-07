@@ -3,7 +3,6 @@ use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use ahash::AHashMap;
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -26,7 +25,7 @@ pub struct Pool<'a> {
     package_names: Arena<NameId, String>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: AHashMap<String, NameId>,
+    pub(crate) names_to_ids: HashMap<String, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -35,7 +34,7 @@ pub struct Pool<'a> {
     pub(crate) match_specs: Arena<MatchSpecId, MatchSpec>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    match_specs_to_ids: AHashMap<String, MatchSpecId>,
+    match_specs_to_ids: HashMap<String, MatchSpecId>,
 
     /// Cached candidates for each match spec
     pub(crate) match_spec_to_sorted_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
@@ -133,7 +132,7 @@ impl<'a> Pool<'a> {
         match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
         match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
         match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
-        solvable_order: &mut AHashMap<u64, Ordering>,
+        solvable_order: &mut HashMap<u64, Ordering>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec
