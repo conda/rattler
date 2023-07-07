@@ -1,3 +1,3 @@
 [submodule "crates/rattler/libsolv"]
-	path = crates/libsolv-sys/libsolv
+	path = crates/rattler_libsolv_c/libsolv
 	url = https://github.com/baszalmstra/libsolv

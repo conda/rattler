@@ -1,0 +1,10 @@
+---
+source: crates/rattler_libsolv_rs/src/solver/mod.rs
+expression: error
+---
+The following packages are incompatible
+|-- A >=5,<10 can be installed with any of the following options:
+    |-- A 5
+|-- A <4 cannot be installed because there are no viable options:
+    |-- A 2, which conflicts with the versions reported above.
+

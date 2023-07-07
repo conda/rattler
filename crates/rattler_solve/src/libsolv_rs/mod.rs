@@ -1,11 +1,11 @@
-//! Provides an solver implementation based on the [`libsolv_rs`] crate.
+//! Provides an solver implementation based on the [`rattler_libsolv_rs`] crate.
 
 use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
+use rattler_libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use std::collections::HashMap;
 
 mod input;

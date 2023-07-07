@@ -1,7 +1,7 @@
 [package]
-name = "libsolv-sys"
-version = "0.1.0"
-edition = "2021"
+name = "rattler_libsolv_c"
+version.workspace = true
+edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Bindings for libsolv"
 categories.workspace = true

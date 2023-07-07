@@ -1,0 +1,14 @@
+---
+source: crates/rattler_libsolv_rs/src/solver/mod.rs
+expression: error
+---
+The following packages are incompatible
+|-- A can be installed with any of the following options:
+    |-- A 9 | 10 would require
+        |-- B, which can be installed with any of the following options:
+            |-- B 42 | 100 would require
+                |-- C <100, which can be installed with any of the following options:
+                    |-- C 99
+|-- C >100 cannot be installed because there are no viable options:
+    |-- C 101 | 103, which conflicts with the versions reported above.
+

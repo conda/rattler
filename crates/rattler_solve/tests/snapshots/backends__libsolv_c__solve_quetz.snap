@@ -1,7 +1,7 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
 assertion_line: 398
-expression: "solve_real_world::<rattler_solve::libsolv_sys::Solver>(vec![\"quetz\",])"
+expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"quetz\",])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu

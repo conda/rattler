@@ -23,4 +23,4 @@ pub mod solve_problem;
 pub mod solver;
 pub mod transaction;
 
-pub use libsolv_sys as ffi;
+pub use rattler_libsolv_c as ffi;

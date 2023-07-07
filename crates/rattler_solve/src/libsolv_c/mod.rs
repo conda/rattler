@@ -1,4 +1,4 @@
-//! Provides an solver implementation based on the [`libsolv-sys`] crate.
+//! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
 use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
