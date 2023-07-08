@@ -70,7 +70,11 @@ expression: index_map
         },
     ),
     "1@2": Error(
+<<<<<<< HEAD
         "encountered more characters but expected none",
+=======
+        "expected a '.', '-', or '_'",
+>>>>>>> upstream/main
     ),
     "1_": Version(
         Version {
@@ -100,6 +104,10 @@ expression: index_map
         },
     ),
     "1___": Error(
+<<<<<<< HEAD
         "encountered more characters but expected none",
+=======
+        "expected a version component e.g. `2` or `rc`",
+>>>>>>> upstream/main
     ),
 }

@@ -7,15 +7,15 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, Platform, PrefixRecord,
-    RepoDataRecord,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, Platform,
+    PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{LibsolvRepoData, SolverBackend, SolverTask};
+use rattler_solve::{libsolv_c, libsolv_rs, SolverImpl, SolverTask};
 use reqwest::{Client, StatusCode};
 use std::{
     borrow::Cow,
@@ -36,6 +36,18 @@ pub struct Opt {
 
     #[clap(required = true)]
     specs: Vec<String>,
+
+    #[clap(long)]
+    dry_run: bool,
+
+    #[clap(long)]
+    platform: Option<String>,
+
+    #[clap(long)]
+    virtual_package: Option<Vec<String>>,
+
+    #[clap(long)]
+    use_experimental_libsolv_rs: bool,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -43,7 +55,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let target_prefix = env::current_dir()?.join(".prefix");
 
     // Determine the platform we're going to install for
-    let install_platform = Platform::current();
+    let install_platform = if let Some(platform) = opt.platform {
+        Platform::from_str(&platform)?
+    } else {
+        Platform::current()
+    };
+
+    println!("installing for platform: {:?}", install_platform);
 
     // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
     // with this because we need to parse the `channel_config` when parsing matchspecs.
@@ -75,10 +93,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_urls = channels
         .iter()
         .flat_map(|channel| {
-            channel
-                .platforms_or_default()
-                .iter()
-                .map(move |platform| (channel.clone(), *platform))
+            vec![
+                (channel.clone(), install_platform),
+                (channel.clone(), Platform::NoArch),
+            ]
         })
         .collect::<Vec<_>>();
 
@@ -140,32 +158,60 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Get the package names from the matchspecs so we can only load the package records that we need.
     let package_names = specs.iter().filter_map(|spec| spec.name.as_ref());
     let repodatas = wrap_in_progress("parsing repodata", move || {
-        SparseRepoData::load_records_recursive(&sparse_repo_datas, package_names)
+        SparseRepoData::load_records_recursive(
+            &sparse_repo_datas,
+            package_names,
+            Some(|record| {
+                if record.name == "python" {
+                    record.depends.push("pip".to_string());
+                }
+            }),
+        )
     })?;
 
     // Determine virtual packages of the system. These packages define the capabilities of the
     // system. Some packages depend on these virtual packages to indiciate compability with the
     // hardware of the system.
     let virtual_packages = wrap_in_progress("determining virtual packages", move || {
-        rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
-            vpkgs
+        if let Some(virtual_packages) = opt.virtual_package {
+            Ok(virtual_packages
                 .iter()
-                .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                .collect::<Vec<_>>()
-        })
+                .map(|virt_pkg| {
+                    let elems = virt_pkg.split('=').collect::<Vec<&str>>();
+                    GenericVirtualPackage {
+                        name: elems[0].to_string(),
+                        version: elems
+                            .get(1)
+                            .map(|s| Version::from_str(s))
+                            .unwrap_or(Version::from_str("0"))
+                            .expect("Could not parse virtual package version"),
+                        build_string: elems.get(2).unwrap_or(&"").to_string(),
+                    }
+                })
+                .collect::<Vec<_>>())
+        } else {
+            rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
+                vpkgs
+                    .iter()
+                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
+                    .collect::<Vec<_>>()
+            })
+        }
     })?;
+
+    println!("virtual packages: {:?}", virtual_packages);
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
     // information required to be able to solve the problem.
+    let locked_packages = installed_packages
+        .iter()
+        .map(|record| record.repodata_record.clone())
+        .collect();
+
     let solver_task = SolverTask {
-        available_packages: repodatas
-            .iter()
-            .map(|records| LibsolvRepoData::from_records(records)),
-        locked_packages: installed_packages
-            .iter()
-            .map(|record| record.repodata_record.clone())
-            .collect(),
+        available_packages: &repodatas,
+        locked_packages,
         virtual_packages,
         specs,
         pinned_packages: Vec::new(),
@@ -173,9 +219,17 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
+    let use_libsolv_rs = opt.use_experimental_libsolv_rs;
     let required_packages = wrap_in_progress("solving", move || {
-        rattler_solve::LibsolvBackend.solve(solver_task)
+        if use_libsolv_rs {
+            libsolv_rs::Solver.solve(solver_task)
+        } else {
+            libsolv_c::Solver.solve(solver_task)
+        }
     })?;
+
+    // sort topologically
+    let required_packages = PackageRecord::sort_topologically(required_packages);
 
     // Construct a transaction to
     let transaction = Transaction::from_current_and_desired(
@@ -183,6 +237,40 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         required_packages,
         install_platform,
     )?;
+
+    if opt.dry_run {
+        if transaction.operations.is_empty() {
+            println!("No operations necessary");
+        }
+
+        let format_record = |r: &RepoDataRecord| {
+            format!(
+                "{} {} {}",
+                r.package_record.name, r.package_record.version, r.package_record.build
+            )
+        };
+
+        for operation in &transaction.operations {
+            match operation {
+                TransactionOperation::Install(r) => println!("* Install: {}", format_record(r)),
+                TransactionOperation::Change { old, new } => {
+                    println!(
+                        "* Change: {} -> {}",
+                        format_record(&old.repodata_record),
+                        format_record(new)
+                    );
+                }
+                TransactionOperation::Reinstall(r) => {
+                    println!("* Reinstall: {}", format_record(&r.repodata_record))
+                }
+                TransactionOperation::Remove(r) => {
+                    println!("* Remove: {}", format_record(&r.repodata_record))
+                }
+            }
+        }
+
+        return Ok(());
+    }
 
     if !transaction.operations.is_empty() {
         // Execute the operations that are returned by the solver.
@@ -527,7 +615,16 @@ async fn fetch_repo_data_records_with_progress(
     // task.
     let repo_data_json_path = result.repo_data_json_path.clone();
     match tokio::task::spawn_blocking(move || {
-        SparseRepoData::new(channel, platform.to_string(), repo_data_json_path)
+        SparseRepoData::new(
+            channel,
+            platform.to_string(),
+            repo_data_json_path,
+            Some(|record: &mut PackageRecord| {
+                if record.name == "python" {
+                    record.depends.push("pip".to_string());
+                }
+            }),
+        )
     })
     .await
     {

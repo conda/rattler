@@ -1,0 +1,14 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 398
+expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"xtensor\",\n        \"xsimd\",])"
+---
+- _libgcc_mutex 0.1 conda_forge
+- _openmp_mutex 4.5 2_gnu
+- libgcc-ng 12.1.0 h8d9b700_16
+- libgomp 12.1.0 h8d9b700_16
+- libstdcxx-ng 12.1.0 ha89aaad_16
+- xsimd 8.1.0 h924138e_0
+- xtensor 0.24.2 h924138e_0
+- xtl 0.7.4 h4bd325d_0
+

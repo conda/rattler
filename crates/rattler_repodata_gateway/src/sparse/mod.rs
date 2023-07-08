@@ -29,6 +29,10 @@ pub struct SparseRepoData {
 
     /// The subdirectory from where the repodata is downloaded
     subdir: String,
+
+    /// A function that can be used to patch the package record after it has been parsed.
+    /// This is mainly used to add `pip` to `python` if desired
+    patch_record_fn: Option<fn(&mut PackageRecord)>,
 }
 
 /// A struct that holds a memory map of a `repodata.json` file and also a self-referential field which
@@ -47,10 +51,13 @@ struct SparseRepoDataInner {
 
 impl SparseRepoData {
     /// Construct an instance of self from a file on disk and a [`Channel`].
+    /// The `patch_function` can be used to patch the package record after it has been parsed
+    /// (e.g. to add `pip` to `python`).
     pub fn new(
         channel: Channel,
         subdir: impl Into<String>,
         path: impl AsRef<Path>,
+        patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
         let file = std::fs::File::open(path)?;
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
@@ -62,6 +69,7 @@ impl SparseRepoData {
             .try_build()?,
             subdir: subdir.into(),
             channel,
+            patch_record_fn: patch_function,
         })
     }
 
@@ -87,12 +95,14 @@ impl SparseRepoData {
             &repo_data.packages,
             &self.channel,
             &self.subdir,
+            self.patch_record_fn,
         )?;
         let mut conda_records = parse_records(
             package_name,
             &repo_data.conda_packages,
             &self.channel,
             &self.subdir,
+            self.patch_record_fn,
         )?;
         records.append(&mut conda_records);
         Ok(records)
@@ -106,6 +116,7 @@ impl SparseRepoData {
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = impl Into<String>>,
+        patch_function: Option<fn(&mut PackageRecord)>,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
@@ -130,12 +141,14 @@ impl SparseRepoData {
                     &repo_data_packages.packages,
                     &repo_data.channel,
                     &repo_data.subdir,
+                    patch_function,
                 )?;
                 let mut conda_records = parse_records(
                     &next_package,
                     &repo_data_packages.conda_packages,
                     &repo_data.channel,
                     &repo_data.subdir,
+                    patch_function,
                 )?;
                 records.append(&mut conda_records);
 
@@ -185,6 +198,7 @@ fn parse_records<'i>(
     packages: &[(PackageFilename<'i>, &'i RawValue)],
     channel: &Channel,
     subdir: &str,
+    patch_function: Option<fn(&mut PackageRecord)>,
 ) -> io::Result<Vec<RepoDataRecord>> {
     let channel_name = channel.canonical_name();
 
@@ -206,30 +220,44 @@ fn parse_records<'i>(
             file_name: key.filename.to_owned(),
         });
     }
+
+    // Apply the patch function if one was specified
+    if let Some(patch_fn) = patch_function {
+        for record in &mut result {
+            patch_fn(&mut record.package_record);
+        }
+    }
+
     Ok(result)
 }
 
 /// A helper function that immediately loads the records for the given packages (and their dependencies).
+/// Records for the specified packages are loaded from the repodata files.
+/// The patch_record_fn is applied to each record after it has been parsed and can mutate the record after
+/// it has been loaded.
 pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = impl Into<String>>,
+    patch_function: Option<fn(&mut PackageRecord)>,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
     let lazy_repo_data = stream::iter(repo_data_paths)
         .map(|(channel, subdir, path)| {
             let path = path.as_ref().to_path_buf();
             let subdir = subdir.into();
-            tokio::task::spawn_blocking(move || SparseRepoData::new(channel, subdir, path))
-                .unwrap_or_else(|r| match r.try_into_panic() {
-                    Ok(panic) => std::panic::resume_unwind(panic),
-                    Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
-                })
+            tokio::task::spawn_blocking(move || {
+                SparseRepoData::new(channel, subdir, path, patch_function)
+            })
+            .unwrap_or_else(|r| match r.try_into_panic() {
+                Ok(panic) => std::panic::resume_unwind(panic),
+                Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
+            })
         })
         .buffered(50)
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names)
+    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
 }
 
 fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
@@ -357,6 +385,7 @@ mod test {
                 ),
             ],
             package_names,
+            None,
         )
         .await
         .unwrap()

@@ -6,20 +6,56 @@ use fxhash::{FxHashMap, FxHashSet};
 /// This function is deterministic, meaning that it will return the same result regardless of the
 /// order of `packages` and of the `depends` vector inside the records.
 ///
+/// If cycles are encountered, and one of the packages in the cycle is noarch, the noarch package
+/// is sorted _after_ the other packages in the cycle. This is done to ensure that the noarch
+/// package is installed last, so that it can be linked correctly (ie. compiled with Python if
+/// necessary).
+///
 /// Note that this function only works for packages with unique names.
-pub fn sort_topologically<T: AsRef<PackageRecord>>(packages: Vec<T>) -> Vec<T> {
-    let roots = get_graph_roots(&packages);
+pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> Vec<T> {
+    let roots = get_graph_roots(&packages, None);
 
     let mut all_packages = packages
-        .into_iter()
+        .iter()
+        .cloned()
         .map(|p| (p.as_ref().name.clone(), p))
         .collect();
 
-    get_topological_order(roots, &mut all_packages)
+    // Detect cycles
+    let mut visited = FxHashSet::default();
+    let mut stack = Vec::new();
+    let mut cycles = Vec::new();
+
+    for root in &roots {
+        if !visited.contains(root) {
+            if let Some(cycle) = find_cycles(root, &all_packages, &mut visited, &mut stack) {
+                cycles.push(cycle);
+            }
+        }
+    }
+
+    // print all cycles
+    for cycle in &cycles {
+        tracing::debug!("Found cycle: {:?}", cycle);
+    }
+
+    // Break cycles
+    let cycle_breaks = break_cycles(cycles, &all_packages);
+
+    // obtain the new roots (packages that are not dependencies of any other package)
+    // this is needed because breaking cycles can create new roots
+    let roots = get_graph_roots(&packages, Some(&cycle_breaks));
+
+    get_topological_order(roots, &mut all_packages, &cycle_breaks)
 }
 
-/// Retrieves the names of the packages that form the roots of the graph
-fn get_graph_roots<T: AsRef<PackageRecord>>(records: &[T]) -> Vec<String> {
+/// Retrieves the names of the packages that form the roots of the graph and breaks specified
+/// cycles (e.g. if there is a cycle between A and B and there is a cycle_break (A, B), the edge
+/// A -> B will be removed)
+fn get_graph_roots<T: AsRef<PackageRecord>>(
+    records: &[T],
+    cycle_breaks: Option<&FxHashSet<(String, String)>>,
+) -> Vec<String> {
     let all_packages: FxHashSet<_> = records.iter().map(|r| r.as_ref().name.as_str()).collect();
 
     let dependencies: FxHashSet<_> = records
@@ -29,6 +65,14 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(records: &[T]) -> Vec<String> {
                 .depends
                 .iter()
                 .map(|d| package_name_from_match_spec(d))
+                .filter(|d| {
+                    // filter out circular dependencies
+                    if let Some(cycle_breaks) = cycle_breaks {
+                        !cycle_breaks.contains(&(r.as_ref().name.clone(), d.to_string()))
+                    } else {
+                        true
+                    }
+                })
         })
         .collect();
 
@@ -45,11 +89,77 @@ enum Action {
     Install(String),
 }
 
+/// Find cycles with DFS
+fn find_cycles<T: AsRef<PackageRecord>>(
+    node: &str,
+    packages: &FxHashMap<String, T>,
+    visited: &mut FxHashSet<String>,
+    stack: &mut Vec<String>,
+) -> Option<Vec<String>> {
+    visited.insert(node.to_string());
+    stack.push(node.to_string());
+
+    if let Some(package) = packages.get(node) {
+        for dependency in &package.as_ref().depends {
+            let dep_name = package_name_from_match_spec(dependency);
+
+            if !visited.contains(dep_name) {
+                if let Some(cycle) = find_cycles(dep_name, packages, visited, stack) {
+                    return Some(cycle);
+                }
+            } else if stack.contains(&dep_name.to_string()) {
+                // Cycle detected. We clone the part of the stack that forms the cycle.
+                if let Some(pos) = stack.iter().position(|x| *x == dep_name) {
+                    return Some(stack[pos..].to_vec());
+                }
+            }
+        }
+    }
+
+    stack.pop();
+    None
+}
+
+/// Breaks cycles by removing the edges that form them
+/// Edges from arch to noarch packages are removed to break the cycles.
+fn break_cycles<T: AsRef<PackageRecord>>(
+    cycles: Vec<Vec<String>>,
+    packages: &FxHashMap<String, T>,
+) -> FxHashSet<(String, String)> {
+    // we record the edges that we want to remove
+    let mut cycle_breaks = FxHashSet::default();
+
+    for cycle in cycles {
+        for i in 0..cycle.len() {
+            let pi1 = &cycle[i];
+            // Next package in cycle, wraps around
+            let pi2 = &cycle[(i + 1) % cycle.len()];
+
+            let p1 = &packages[pi1];
+            let p2 = &packages[pi2];
+
+            // prefer arch packages over noarch packages
+            let p1_noarch = p1.as_ref().noarch.is_none();
+            let p2_noarch = p2.as_ref().noarch.is_none();
+            if p1_noarch && !p2_noarch {
+                cycle_breaks.insert((pi1.clone(), pi2.clone()));
+                break;
+            } else if !p1_noarch && p2_noarch {
+                cycle_breaks.insert((pi2.clone(), pi1.clone()));
+                break;
+            }
+        }
+    }
+    tracing::debug!("Breaking cycle: {:?}", cycle_breaks);
+    cycle_breaks
+}
+
 /// Returns a vector containing the topological ordering of the packages, based on the provided
 /// roots
 fn get_topological_order<T: AsRef<PackageRecord>>(
     mut roots: Vec<String>,
     packages: &mut FxHashMap<String, T>,
+    cycle_breaks: &FxHashSet<(String, String)>,
 ) -> Vec<T> {
     // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
     // original order of the input)
@@ -82,6 +192,9 @@ fn get_topological_order<T: AsRef<PackageRecord>>(
                         continue;
                     }
                 };
+
+                // Remove the edges that form cycles
+                deps.retain(|dep| !cycle_breaks.contains(&(package_name.clone(), dep.clone())));
 
                 // Sorting makes this step deterministic (i.e. the same output is returned, regardless of the
                 // original order of the input)
@@ -204,13 +317,14 @@ mod tests {
 
     #[rstest]
     #[case(get_resolved_packages_for_python(), &["python"])]
+    #[case(get_resolved_packages_for_python_pip(), &["pip"])]
     #[case(get_resolved_packages_for_numpy(), &["numpy"])]
     #[case(get_resolved_packages_for_two_roots(), &["4ti2", "micromamba"])]
     fn test_get_graph_roots(
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_roots: &[&str],
     ) {
-        let mut roots = get_graph_roots(&packages);
+        let mut roots = get_graph_roots(&packages, None);
         roots.sort();
         assert_eq!(roots.as_slice(), expected_roots);
     }
@@ -219,6 +333,7 @@ mod tests {
     #[case(get_resolved_packages_for_python(), "python", &[("libzlib", "libgcc-ng")])]
     #[case(get_resolved_packages_for_numpy(), "numpy", &[("llvm-openmp", "libzlib")])]
     #[case(get_resolved_packages_for_two_roots(), "4ti2", &[("libzlib", "libgcc-ng")])]
+    #[case(get_resolved_packages_for_python_pip(), "pip", &[("pip", "python"), ("libzlib", "libgcc-ng")])]
     fn test_topological_sort(
         #[case] packages: Vec<RepoDataRecord>,
         #[case] expected_last_package: &str,
@@ -230,7 +345,7 @@ mod tests {
         sanity_check_topological_sort(&sorted_packages, &packages);
         simulate_install(&sorted_packages, &circular_deps);
 
-        // Sanity check: the last package should be python
+        // Sanity check: the last package should be python (or pip when it is present)
         let last_package = &sorted_packages[sorted_packages.len() - 1];
         assert_eq!(last_package.package_record.name, expected_last_package)
     }
@@ -1621,5 +1736,92 @@ mod tests {
           ]"#;
 
         serde_json::from_str(repodata_json).unwrap()
+    }
+
+    fn get_resolved_packages_for_python_pip() -> Vec<RepoDataRecord> {
+        let pip = r#"
+        [
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7",
+              "setuptools",
+              "wheel"
+            ],
+            "fn": "pip-23.1.2-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "license_family": "MIT",
+            "md5": "7288da0d36821349cf1126e8670292df",
+            "name": "pip",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "4fe1f47f6eac5b2635a622b6f985640bf835843c1d8d7ccbbae0f7d27cadec92",
+            "size": 1367644,
+            "subdir": "noarch",
+            "timestamp": 1682507713321,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/pip-23.1.2-pyhd8ed1ab_0.conda",
+            "version": "23.1.2"
+          },
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7"
+            ],
+            "fn": "wheel-0.40.0-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "md5": "49bb0d9e60ce1db25e151780331bb5f3",
+            "name": "wheel",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "79b4d29b0c004014a2abd5fc2c9fcd35cc6256222b960c2a317a27c4b0d8884d",
+            "size": 55729,
+            "subdir": "noarch",
+            "timestamp": 1678812153506,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/wheel-0.40.0-pyhd8ed1ab_0.conda",
+            "version": "0.40.0"
+          },
+          {
+            "arch": null,
+            "build": "pyhd8ed1ab_0",
+            "build_number": 0,
+            "build_string": "pyhd8ed1ab_0",
+            "channel": "https://conda.anaconda.org/conda-forge/noarch",
+            "constrains": [],
+            "depends": [
+              "python >=3.7"
+            ],
+            "fn": "setuptools-68.0.0-pyhd8ed1ab_0.conda",
+            "license": "MIT",
+            "license_family": "MIT",
+            "md5": "5a7739d0f57ee64133c9d32e6507c46d",
+            "name": "setuptools",
+            "noarch": "python",
+            "platform": null,
+            "sha256": "083a0913f5b56644051f31ac40b4eeea762a88c00aa12437817191b85a753cec",
+            "size": 463712,
+            "subdir": "noarch",
+            "timestamp": 1687527994911,
+            "track_features": "",
+            "url": "https://conda.anaconda.org/conda-forge/noarch/setuptools-68.0.0-pyhd8ed1ab_0.conda",
+            "version": "68.0.0"
+          }
+        ]"#;
+
+        let mut python = get_resolved_packages_for_python();
+        let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
+        python.extend(pip);
+        return python;
     }
 }

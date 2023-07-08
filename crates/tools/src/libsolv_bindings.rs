@@ -77,7 +77,7 @@ fn patch_enum_representation<'a>(input: &'a str, enum_name: &str) -> Cow<'a, str
 
 /// Generate or verify the libsolv bindings.
 pub fn generate(mode: Mode) -> anyhow::Result<()> {
-    let libsolv_path = project_root().join("crates/rattler_solve/libsolv");
+    let libsolv_path = project_root().join("crates/rattler_libsolv_c/libsolv");
 
     // Normally the `solvversion.h` is generated from the `solverversion.h.in` by CMake when
     // building libsolv. However, for the bindings we don't need that much information from that
@@ -137,7 +137,7 @@ pub fn generate(mode: Mode) -> anyhow::Result<()> {
 
     // Write (or check) the bindings
     update(
-        &project_root().join("crates/rattler_solve/src/libsolv/wrapper/ffi.rs"),
+        &project_root().join("crates/rattler_libsolv_c/src/lib.rs"),
         &libsolv_bindings,
         mode,
     )

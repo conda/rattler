@@ -1,0 +1,20 @@
+[package]
+name = "rattler_libsolv_rs"
+version.workspace = true
+edition.workspace = true
+authors = ["Adolfo Ochagavía <github@adolfo.ochagavia.nl>"]
+description = "SAT solving library for dependency resolution"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+itertools = "0.11.0"
+petgraph = "0.6.3"
+rattler_conda_types = { version = "0.5.0", path = "../rattler_conda_types" }
+tracing = "0.1.37"
+
+[dev-dependencies]
+insta = "1.29.0"

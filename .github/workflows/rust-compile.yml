@@ -14,7 +14,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo
+  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,libsolv_rs
 
 jobs:
   check:
@@ -26,7 +26,7 @@ jobs:
           submodules: recursive
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Run clippy
-        run: cargo check
+        run: cargo check --all-targets
 
   check-rustdoc-links:
     name: Check intra-doc links
@@ -158,7 +158,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} --features ${{ env.DEFAULT_FEATURES }}
+          args: --target=${{ matrix.job.target }} --all-targets ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} --features ${{ env.DEFAULT_FEATURES }}
 
       - name: Set test options
         id: test-options

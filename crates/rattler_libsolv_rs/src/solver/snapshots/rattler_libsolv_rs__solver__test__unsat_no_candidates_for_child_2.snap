@@ -1,0 +1,8 @@
+---
+source: crates/rattler_libsolv_rs/src/solver/mod.rs
+expression: error
+---
+A <1000 cannot be installed because there are no viable options:
+|-- A 41 would require
+    |-- B <20, for which no candidates where found.
+
