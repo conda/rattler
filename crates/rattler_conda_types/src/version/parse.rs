@@ -411,36 +411,35 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
         rest
     };
 
-    return Ok((
+    Ok((
         rest,
         Version {
             flags,
             components,
             segments,
         },
-    ));
-}
-
-pub fn final_version_parser(input: &str) -> Result<Version, ParseVersionErrorKind> {
-    match version_parser(input) {
-        Ok(("", version)) => Ok(version),
-        Ok(_) => Err(ParseVersionErrorKind::ExpectedEof),
-        Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(e),
-        Err(_) => unreachable!("not streaming, so no other error possible"),
-    }
+    ))
 }
 
 impl FromStr for Version {
     type Err = ParseVersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        final_version_parser(s).map_err(|kind| ParseVersionError::new(s, kind))
+        match version_parser(s) {
+            Ok(("", version)) => Ok(version),
+            Ok(_) => Err(ParseVersionError::new(
+                s,
+                ParseVersionErrorKind::ExpectedEof,
+            )),
+            Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(ParseVersionError::new(s, e)),
+            Err(_) => unreachable!("not streaming, so no other error possible"),
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::{final_version_parser, Version};
+    use super::Version;
     use crate::version::parse::version_parser;
     use crate::version::SegmentFormatter;
     use serde::Serialize;
@@ -493,12 +492,12 @@ mod test {
 
         let mut index_map: BTreeMap<String, VersionOrError> = BTreeMap::default();
         for version_str in versions {
-            let version_or_error = match final_version_parser(version_str) {
+            let version_or_error = match Version::from_str(version_str) {
                 Ok(version) => {
                     assert_eq!(version_str, version.to_string().as_str());
                     VersionOrError::Version(version)
                 }
-                Err(e) => VersionOrError::Error(e.to_string()),
+                Err(e) => VersionOrError::Error(e.kind.to_string()),
             };
             index_map.insert(version_str.to_owned(), version_or_error);
         }

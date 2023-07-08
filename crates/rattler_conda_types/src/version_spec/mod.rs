@@ -2,12 +2,12 @@
 //! [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
 
 mod constraint;
+pub(crate) mod parse;
 pub(crate) mod version_tree;
-mod parse;
 
-use crate::version_spec::constraint::{Constraint, ParseConstraintError};
 use crate::version_spec::version_tree::ParseVersionTreeError;
 use crate::{ParseVersionError, Version};
+pub(crate) use constraint::Constraint;
 use serde::{Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
@@ -16,6 +16,7 @@ use thiserror::Error;
 use version_tree::VersionTree;
 
 pub(crate) use constraint::is_start_of_version_constraint;
+pub(crate) use parse::ParseConstraintError;
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]

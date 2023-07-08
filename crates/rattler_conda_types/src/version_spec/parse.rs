@@ -2,13 +2,15 @@ use crate::version::parse::version_parser;
 use crate::version_spec::constraint::Constraint;
 use crate::version_spec::VersionOperator;
 use crate::{ParseVersionError, ParseVersionErrorKind};
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till, take_till1, take_until, take_while, take_while1};
-use nom::character::complete::char;
-use nom::combinator::{map, map_res, opt, value};
-use nom::error::{ErrorKind, ParseError};
-use nom::sequence::{delimited, terminated, tuple};
-use nom::IResult;
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_while, take_while1},
+    character::complete::char,
+    combinator::{opt, value},
+    error::{ErrorKind, ParseError},
+    sequence::{terminated, tuple},
+    IResult,
+};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
@@ -21,7 +23,7 @@ enum ParseVersionOperatorError<'i> {
 
 /// Parses a version operator, returns an error if the operator is not recognized or not found.
 fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOperatorError> {
-    // F
+    // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
         |_: nom::Err<nom::error::Error<&str>>| {
             nom::Err::Error(ParseVersionOperatorError::ExpectedOperator)
@@ -58,10 +60,13 @@ pub enum ParseConstraintError {
     #[error("invalid operator '{0}'")]
     InvalidOperator(String),
     #[error(transparent)]
-    InvalidVersion(#[from] ParseVersionErrorKind),
+    InvalidVersion(#[from] ParseVersionError),
     /// Expected a version
     #[error("expected a version")]
     ExpectedVersion,
+    /// Expected the end of the string
+    #[error("encountered more characters but expected none")]
+    ExpectedEof,
     /// Nom error
     #[error("{0:?}")]
     Nom(ErrorKind),
@@ -96,7 +101,7 @@ fn any_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstrai
 
 /// Parses a constraint with an operator in front of it.
 fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
-    // Parse the preceding operator
+    // Parse the optional preceding operator
     let (input, op) = match operator_parser(input) {
         Err(
             nom::Err::Failure(ParseVersionOperatorError::InvalidOperator(op))
@@ -106,43 +111,78 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
                 op.to_owned(),
             )))
         }
-        Err(nom::Err::Error(e)) => (input, None),
+        Err(nom::Err::Error(_)) => (input, None),
         Ok((rest, op)) => (rest, Some(op)),
         _ => unreachable!(),
     };
 
-    // Parse the version
-    let (input, version) = version_parser(input).map_err(|e| e.map(Into::into))?;
+    // Take everything that looks like a version and use that to parse the version. Any error means
+    // no characters were detected that belong to the version.
+    let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
+        c.is_alphanumeric() || "!-_.*".contains(c)
+    })(input)
+    .map_err(|_| {
+        nom::Err::Error(ParseConstraintError::InvalidVersion(ParseVersionError {
+            kind: ParseVersionErrorKind::Empty,
+            version: String::from(""),
+        }))
+    })?;
 
-    // Parse an optional terminating glob pattern.
-    let (rest, wildcard) = opt(alt((tag("*"), tag(".*"))))(input)?;
+    // Parse the string as a version
+    let (version_rest, version) = version_parser(input).map_err(|e| {
+        e.map(|e| {
+            ParseConstraintError::InvalidVersion(ParseVersionError {
+                kind: e,
+                version: String::from(""),
+            })
+        })
+    })?;
 
     // Convert the operator and the wildcard to something understandable
-    let op = match (wildcard, op) {
-        // Wildcard pattern
-        (Some(_), Some(VersionOperator::StartsWith)) => VersionOperator::StartsWith,
-        (Some(_), Some(VersionOperator::GreaterEquals)) => VersionOperator::GreaterEquals,
-        (Some(_), Some(VersionOperator::Greater)) => VersionOperator::GreaterEquals,
-        (Some(_), Some(VersionOperator::NotEquals)) => VersionOperator::NotStartsWith,
-        (Some(glob), Some(op)) => {
+    let op = match (version_rest, op) {
+        // The version was successfully parsed
+        ("", Some(op)) => op,
+        ("", None) => VersionOperator::Equals,
+
+        // The version ends in a wildcard pattern
+        ("*" | ".*", Some(VersionOperator::StartsWith)) => VersionOperator::StartsWith,
+        ("*" | ".*", Some(VersionOperator::GreaterEquals)) => VersionOperator::GreaterEquals,
+        ("*" | ".*", Some(VersionOperator::Greater)) => VersionOperator::GreaterEquals,
+        ("*" | ".*", Some(VersionOperator::NotEquals)) => VersionOperator::NotStartsWith,
+        (glob @ "*" | glob @ ".*", Some(op)) => {
             tracing::warn!("Using {glob} with relational operator is superfluous and deprecated and will be removed in a future version of conda.");
             op
         }
-        (Some(_), None) => VersionOperator::StartsWith,
+        ("*" | ".*", None) => VersionOperator::StartsWith,
 
-        // No wildcard, use the operator specified.
-        (None, Some(op)) => op,
+        // The version string kinda looks like a regular expression.
+        (version_remainder, _) if version_str.contains('*') || version_remainder.ends_with('$') => {
+            return Err(nom::Err::Error(
+                ParseConstraintError::RegexConstraintsNotSupported,
+            ));
+        }
 
-        // No wildcard, and no operator
-        (None, None) => VersionOperator::Equals,
+        // Otherwise its just a generic error.
+        _ => {
+            return Err(nom::Err::Error(ParseConstraintError::InvalidVersion(
+                ParseVersionError {
+                    version: version_str.to_owned(),
+                    kind: ParseVersionErrorKind::ExpectedEof,
+                },
+            )))
+        }
     };
 
     Ok((rest, Constraint::Comparison(op, version)))
 }
 
 /// Parses a version constraint.
-fn constraint_parse(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
-    alt((regex_constraint_parser, any_constraint_parser))(input)
+pub(crate) fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
+    alt((
+        regex_constraint_parser,
+        any_constraint_parser,
+        logical_constraint_parser,
+    ))(input)
 }
 
 #[cfg(test)]
@@ -185,9 +225,9 @@ mod test {
 
         assert_eq!(
             operator_parser("<==>3.1"),
-            Err(nom::Err::Error(ParseVersionOperatorError::InvalidOperator(
-                "<==>"
-            )))
+            Err(nom::Err::Failure(
+                ParseVersionOperatorError::InvalidOperator("<==>")
+            ))
         );
         assert_eq!(
             operator_parser("3.1"),
@@ -199,21 +239,21 @@ mod test {
     fn parse_regex_constraint() {
         assert_eq!(
             regex_constraint_parser("^.*"),
-            Err(nom::Err::Error(ParseConstraintError::UnterminatedRegex))
+            Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex))
         );
         assert_eq!(
             regex_constraint_parser("^"),
-            Err(nom::Err::Error(ParseConstraintError::UnterminatedRegex))
+            Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex))
         );
         assert_eq!(
             regex_constraint_parser("^$"),
-            Err(nom::Err::Error(
+            Err(nom::Err::Failure(
                 ParseConstraintError::RegexConstraintsNotSupported
             ))
         );
         assert_eq!(
             regex_constraint_parser("^1.2.3$"),
-            Err(nom::Err::Error(
+            Err(nom::Err::Failure(
                 ParseConstraintError::RegexConstraintsNotSupported
             ))
         );
@@ -286,18 +326,18 @@ mod test {
     fn parse_constraint() {
         // Regular expressions
         assert_eq!(
-            constraint_parse("^1.2.3$"),
+            constraint_parser("^1.2.3$"),
             Err(nom::Err::Failure(
                 ParseConstraintError::RegexConstraintsNotSupported
             ))
         );
         assert_eq!(
-            constraint_parse("^1.2.3"),
+            constraint_parser("^1.2.3"),
             Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex))
         );
 
         // Any constraints
-        assert_eq!(constraint_parse("*"), Ok(("", Constraint::Any)));
-        assert_eq!(constraint_parse("*.*"), Ok(("", Constraint::Any)));
+        assert_eq!(constraint_parser("*"), Ok(("", Constraint::Any)));
+        assert_eq!(constraint_parser("*.*"), Ok(("", Constraint::Any)));
     }
 }

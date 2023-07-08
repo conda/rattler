@@ -121,8 +121,22 @@ mod test {
         assert_eq!(Segment::new(8191).unwrap().len(), 8191);
         assert_eq!(Segment::new(8192), None);
 
-        assert_eq!(Segment::new(1).unwrap().with_component_count(1337).unwrap().len(), 1337);
-        assert_eq!(Segment::new(1).unwrap().with_component_count(4096).unwrap().len(), 4096);
+        assert_eq!(
+            Segment::new(1)
+                .unwrap()
+                .with_component_count(1337)
+                .unwrap()
+                .len(),
+            1337
+        );
+        assert_eq!(
+            Segment::new(1)
+                .unwrap()
+                .with_component_count(4096)
+                .unwrap()
+                .len(),
+            4096
+        );
 
         assert_eq!(Segment::new(4096).unwrap().has_implicit_default(), false);
         assert_eq!(
