@@ -80,6 +80,10 @@ mod test {
             Constraint::from_str("<=>1.2.3"),
             Err(ParseConstraintError::InvalidOperator(String::from("<=>")))
         );
+        assert_eq!(
+            Constraint::from_str("=>1.2.3"),
+            Err(ParseConstraintError::InvalidOperator(String::from("=>")))
+        );
     }
 
     #[test]
