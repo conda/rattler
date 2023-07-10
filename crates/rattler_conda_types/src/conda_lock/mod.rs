@@ -598,7 +598,10 @@ mod test {
         let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
 
         assert_eq!(repodata_record.package_record.name, "ncurses");
-        assert_eq!(repodata_record.package_record.version, VersionWithSource::from_str("6.4").unwrap());
+        assert_eq!(
+            repodata_record.package_record.version,
+            VersionWithSource::from_str("6.4").unwrap()
+        );
         assert!(repodata_record.package_record.noarch.is_none());
 
         insta::assert_yaml_snapshot!(repodata_record);
