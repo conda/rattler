@@ -447,10 +447,10 @@ impl From<&str> for Channel {
 #[cfg(test)]
 mod test {
     use super::{channel_from_url, file_name_from_url, CondaLock, PackageHashes};
-    use crate::{Platform, RepoDataRecord};
+    use crate::{Platform, RepoDataRecord, VersionWithSource};
     use insta::assert_yaml_snapshot;
     use serde_yaml::from_str;
-    use std::path::Path;
+    use std::{path::Path, str::FromStr};
     use url::Url;
 
     #[test]
@@ -598,7 +598,7 @@ mod test {
         let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
 
         assert_eq!(repodata_record.package_record.name, "ncurses");
-        // assert_eq!(repodata_record.package_record.version, "6.4");
+        assert_eq!(repodata_record.package_record.version, VersionWithSource::from_str("6.4").unwrap());
         assert!(repodata_record.package_record.noarch.is_none());
 
         insta::assert_yaml_snapshot!(repodata_record);
