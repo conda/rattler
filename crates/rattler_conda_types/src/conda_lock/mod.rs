@@ -242,7 +242,8 @@ pub struct LockedDependency {
     pub version: String,
     /// Pip or Conda managed
     pub manager: Manager,
-    /// What platform is this package for
+    /// What platform is this package for (different to other places in the conda ecosystem,
+    /// this actually represents the _full_ subdir (incl. arch))
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
 
@@ -370,6 +371,9 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
         let build = value
             .build
             .ok_or_else(|| ConversionError::Missing("build".to_string()))?;
+
+        let platform = value.platform.only_platform();
+
         Ok(Self {
             package_record: PackageRecord {
                 arch: value.arch,
@@ -385,10 +389,10 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
                 md5,
                 name: value.name,
                 noarch: value.noarch,
-                platform: Some(value.platform.to_string()),
+                platform: platform.map(|p| p.to_string()),
                 sha256,
                 size: value.size,
-                subdir: value.subdir.unwrap_or("noarch".to_string()),
+                subdir: value.subdir.unwrap_or(value.platform.to_string()),
                 timestamp: value.timestamp,
                 track_features: value.track_features.unwrap_or_default(),
                 version,
@@ -443,7 +447,7 @@ impl From<&str> for Channel {
 #[cfg(test)]
 mod test {
     use super::{channel_from_url, file_name_from_url, CondaLock, PackageHashes};
-    use crate::Platform;
+    use crate::{Platform, RepoDataRecord};
     use insta::assert_yaml_snapshot;
     use serde_yaml::from_str;
     use std::path::Path;
@@ -561,5 +565,42 @@ mod test {
             ),
             Some("foo-1-0.conda")
         );
+    }
+
+    #[test]
+    fn test_locked_dependency() {
+        let yaml = r#"
+        name: ncurses
+        version: '6.4'
+        manager: conda
+        platform: linux-64
+        arch: x86_64
+        dependencies:
+            libgcc-ng: '>=12'
+        url: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.4-hcb278e6_0.conda
+        hash:
+            md5: 681105bccc2a3f7f1a837d47d39c9179
+            sha256: ccf61e61d58a8a7b2d66822d5568e2dc9387883dd9b2da61e1d787ece4c4979a
+        optional: false
+        category: main
+        build: hcb278e6_0
+        subdir: linux-64
+        build_number: 0
+        license: X11 AND BSD-3-Clause
+        size: 880967
+        timestamp: 1686076725450"#;
+
+        let result: crate::conda_lock::LockedDependency = from_str(yaml).unwrap();
+
+        assert_eq!(result.name, "ncurses");
+        assert_eq!(result.version, "6.4");
+
+        let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
+
+        assert_eq!(repodata_record.package_record.name, "ncurses");
+        // assert_eq!(repodata_record.package_record.version, "6.4");
+        assert!(repodata_record.package_record.noarch.is_none());
+
+        insta::assert_yaml_snapshot!(repodata_record);
     }
 }

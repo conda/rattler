@@ -141,8 +141,8 @@ impl LockedPackages {
                     category: super::default_category(),
                     source: None,
                     build: Some(locked_package.build_string),
-                    arch: locked_package.arch,
-                    subdir: locked_package.subdir,
+                    arch: self.platform.arch().map(|arch| arch.to_string()),
+                    subdir: Some(self.platform.to_string()),
                     build_number: locked_package.build_number,
                     constrains: if locked_package.constrains.is_empty() {
                         None
@@ -450,7 +450,7 @@ mod tests {
         );
         assert_eq!(
             record.package_record.platform.clone().unwrap(),
-            locked_dep.platform.to_string()
+            locked_dep.platform.only_platform().unwrap()
         );
         assert_eq!(record.package_record.arch, locked_dep.arch);
         assert_eq!(
