@@ -49,7 +49,7 @@ pub enum FetchRepoDataError {
     FailedToDownloadRepoData(std::io::Error),
 
     #[error("repodata not found")]
-    NotFound(#[source] RepoDataNotFoundError),
+    NotFound(#[from] RepoDataNotFoundError),
 
     #[error("failed to create temporary file for repodata.json")]
     FailedToCreateTemporaryFile(#[source] std::io::Error),
@@ -79,12 +79,6 @@ impl From<tokio::task::JoinError> for FetchRepoDataError {
 
         // Otherwise it the operation has been cancelled
         FetchRepoDataError::Cancelled
-    }
-}
-
-impl From<RepoDataNotFoundError> for FetchRepoDataError {
-    fn from(err: RepoDataNotFoundError) -> Self {
-        FetchRepoDataError::NotFound(err)
     }
 }
 
@@ -206,8 +200,7 @@ async fn repodata_from_file(
     lock_file: LockedFile,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     // copy file from subdir_url to out_path
-    let copy_result = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await;
-    if let Err(e) = copy_result {
+    if let Err(e) = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await {
         return if e.kind() == ErrorKind::NotFound {
             Err(FetchRepoDataError::NotFound(
                 RepoDataNotFoundError::FileSystemError(e),
@@ -468,8 +461,7 @@ pub async fn fetch_repo_data(
         cache_headers.add_to_request(&mut headers)
     }
     // Send the request and wait for a reply
-    let result = request_builder.headers(headers).send().await;
-    let response = match result {
+    let response = match request_builder.headers(headers).send().await {
         Ok(response) if response.status() == StatusCode::NOT_FOUND => {
             return Err(FetchRepoDataError::NotFound(
                 RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
