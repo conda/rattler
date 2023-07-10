@@ -207,7 +207,7 @@ async fn repodata_from_file(
             ))
         } else {
             Err(FetchRepoDataError::FailedToDownloadRepoData(e))
-        }
+        };
     }
 
     // create a dummy cache state
