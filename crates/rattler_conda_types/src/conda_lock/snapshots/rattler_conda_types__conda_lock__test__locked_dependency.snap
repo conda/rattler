@@ -1,0 +1,22 @@
+---
+source: crates/rattler_conda_types/src/conda_lock/mod.rs
+expression: repodata_record
+---
+arch: x86_64
+build: hcb278e6_0
+build_number: 0
+depends:
+  - libgcc-ng >=12
+license: X11 AND BSD-3-Clause
+md5: 681105bccc2a3f7f1a837d47d39c9179
+name: ncurses
+platform: linux
+sha256: ccf61e61d58a8a7b2d66822d5568e2dc9387883dd9b2da61e1d787ece4c4979a
+size: 880967
+subdir: linux-64
+timestamp: 1686076725450
+version: "6.4"
+fn: ncurses-6.4-hcb278e6_0.conda
+url: "https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.4-hcb278e6_0.conda"
+channel: "https://conda.anaconda.org/conda-forge"
+

@@ -190,6 +190,26 @@ impl Platform {
     pub const fn is_osx(self) -> bool {
         matches!(self, Platform::Osx64 | Platform::OsxArm64)
     }
+
+    /// Return only the platform (linux, win, or osx from the platform enum)
+    pub fn only_platform(&self) -> Option<&str> {
+        match self {
+            Platform::NoArch => None,
+            Platform::Linux32
+            | Platform::Linux64
+            | Platform::LinuxAarch64
+            | Platform::LinuxArmV6l
+            | Platform::LinuxArmV7l
+            | Platform::LinuxPpc64le
+            | Platform::LinuxPpc64
+            | Platform::LinuxS390X
+            | Platform::LinuxRiscv32
+            | Platform::LinuxRiscv64 => Some("linux"),
+            Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
+            Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
+            Platform::Emscripten32 => Some("emscripten"),
+        }
+    }
 }
 
 /// An error that can occur when parsing a platform from a string.
