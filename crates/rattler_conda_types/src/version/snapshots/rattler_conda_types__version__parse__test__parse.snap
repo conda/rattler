@@ -70,7 +70,7 @@ expression: index_map
         },
     ),
     "1@2": Error(
-        "expected a '.', '-', or '_'",
+        "encountered more characters but expected none",
     ),
     "1_": Version(
         Version {
@@ -100,6 +100,6 @@ expression: index_map
         },
     ),
     "1___": Error(
-        "expected a version component e.g. `2` or `rc`",
+        "encountered more characters but expected none",
     ),
 }

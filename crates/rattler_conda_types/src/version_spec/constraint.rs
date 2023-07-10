@@ -1,7 +1,8 @@
+use super::ParseConstraintError;
 use super::VersionOperator;
-use crate::{ParseVersionError, Version};
+use crate::version_spec::parse::constraint_parser;
+use crate::Version;
 use std::str::FromStr;
-use thiserror::Error;
 
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
 #[allow(clippy::large_enum_variant)]
@@ -14,45 +15,6 @@ pub(crate) enum Constraint {
     Comparison(VersionOperator, Version),
 }
 
-#[derive(Debug, Clone, Error, Eq, PartialEq)]
-pub enum ParseConstraintError {
-    #[error("cannot parse version: {0}")]
-    InvalidVersion(#[source] ParseVersionError),
-    #[error("version operator followed by a whitespace")]
-    OperatorFollowedByWhitespace,
-    #[error("'.' is incompatible with '{0}' operator'")]
-    GlobVersionIncompatibleWithOperator(VersionOperator),
-    #[error("regex constraints are not supported")]
-    RegexConstraintsNotSupported,
-    #[error("invalid operator")]
-    InvalidOperator,
-}
-
-/// Parses an operator from a string. Returns the operator and the rest of the string.
-fn parse_operator(s: &str) -> Option<(VersionOperator, &str)> {
-    if let Some(rest) = s.strip_prefix("==") {
-        Some((VersionOperator::Equals, rest))
-    } else if let Some(rest) = s.strip_prefix("!=") {
-        Some((VersionOperator::NotEquals, rest))
-    } else if let Some(rest) = s.strip_prefix("<=") {
-        Some((VersionOperator::LessEquals, rest))
-    } else if let Some(rest) = s.strip_prefix(">=") {
-        Some((VersionOperator::GreaterEquals, rest))
-    } else if let Some(rest) = s.strip_prefix("~=") {
-        Some((VersionOperator::Compatible, rest))
-    } else if let Some(rest) = s.strip_prefix('<') {
-        Some((VersionOperator::Less, rest))
-    } else if let Some(rest) = s.strip_prefix('>') {
-        Some((VersionOperator::Greater, rest))
-    } else if let Some(rest) = s.strip_prefix('=') {
-        Some((VersionOperator::StartsWith, rest))
-    } else if s.starts_with(|c: char| c.is_alphanumeric()) {
-        Some((VersionOperator::Equals, s))
-    } else {
-        None
-    }
-}
-
 /// Returns true if the specified character is the first character of a version constraint.
 pub(crate) fn is_start_of_version_constraint(c: char) -> bool {
     matches!(c, '>' | '<' | '=' | '!' | '~')
@@ -61,59 +23,12 @@ pub(crate) fn is_start_of_version_constraint(c: char) -> bool {
 impl FromStr for Constraint {
     type Err = ParseConstraintError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let s = s.trim();
-        if s == "*" {
-            Ok(Constraint::Any)
-        } else if s.starts_with('^') || s.ends_with('$') {
-            Err(ParseConstraintError::RegexConstraintsNotSupported)
-        } else if s.starts_with(is_start_of_version_constraint) {
-            let (op, version_str) =
-                parse_operator(s).ok_or(ParseConstraintError::InvalidOperator)?;
-            if !version_str.starts_with(char::is_alphanumeric) {
-                return Err(ParseConstraintError::InvalidOperator);
-            }
-            if version_str.starts_with(char::is_whitespace) {
-                return Err(ParseConstraintError::OperatorFollowedByWhitespace);
-            }
-            let (version_str, op) = if let Some(version_str) = version_str
-                .strip_suffix(".*")
-                .or(version_str.strip_suffix('*'))
-            {
-                match op {
-                    VersionOperator::StartsWith | VersionOperator::GreaterEquals => {
-                        (version_str, op)
-                    }
-                    VersionOperator::Greater => (version_str, VersionOperator::GreaterEquals),
-                    VersionOperator::NotEquals => (version_str, VersionOperator::NotStartsWith),
-                    op => {
-                        // return Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(
-                        //     op,
-                        // ))
-                        tracing::warn!("Using .* with relational operator is superfluous and deprecated and will be removed in a future version of conda. Your spec was {version_str}.*, but conda is ignoring the .* and treating it as {version_str}");
-                        (version_str, op)
-                    }
-                }
-            } else {
-                (version_str, op)
-            };
-            Ok(Constraint::Comparison(
-                op,
-                Version::from_str(version_str).map_err(ParseConstraintError::InvalidVersion)?,
-            ))
-        } else if s.ends_with('*') {
-            let version_str = s.trim_end_matches('*').trim_end_matches('.');
-            Ok(Constraint::Comparison(
-                VersionOperator::StartsWith,
-                Version::from_str(version_str).map_err(ParseConstraintError::InvalidVersion)?,
-            ))
-        } else if s.contains('*') {
-            Err(ParseConstraintError::RegexConstraintsNotSupported)
-        } else {
-            Ok(Constraint::Comparison(
-                VersionOperator::Equals,
-                Version::from_str(s).map_err(ParseConstraintError::InvalidVersion)?,
-            ))
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match constraint_parser(input) {
+            Ok(("", version)) => Ok(version),
+            Ok((_, _)) => Err(ParseConstraintError::ExpectedEof),
+            Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(e),
+            Err(_) => unreachable!("not streaming, so no other error possible"),
         }
     }
 }
@@ -143,27 +58,31 @@ mod test {
     fn test_invalid_op() {
         assert_eq!(
             Constraint::from_str("<>1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("<>")))
         );
         assert_eq!(
             Constraint::from_str("=!1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("=!")))
         );
         assert_eq!(
             Constraint::from_str("<!=1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("<!=")))
         );
         assert_eq!(
             Constraint::from_str("<!>1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("<!>")))
         );
         assert_eq!(
             Constraint::from_str("!=!1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("!=!")))
         );
         assert_eq!(
             Constraint::from_str("<=>1.2.3"),
-            Err(ParseConstraintError::InvalidOperator)
+            Err(ParseConstraintError::InvalidOperator(String::from("<=>")))
+        );
+        assert_eq!(
+            Constraint::from_str("=>1.2.3"),
+            Err(ParseConstraintError::InvalidOperator(String::from("=>")))
         );
     }
 
@@ -223,6 +142,13 @@ mod test {
             Ok(Constraint::Comparison(
                 VersionOperator::LessEquals,
                 Version::from_str("1.2.3").unwrap()
+            ))
+        );
+        assert_eq!(
+            Constraint::from_str(">=1!1.2"),
+            Ok(Constraint::Comparison(
+                VersionOperator::GreaterEquals,
+                Version::from_str("1!1.2").unwrap()
             ))
         );
     }
@@ -289,10 +215,10 @@ mod test {
                 Version::from_str("1.2").unwrap()
             ))
         );
-        assert!(matches!(
+        assert_eq!(
             Constraint::from_str("1.2.*.*"),
-            Err(ParseConstraintError::InvalidVersion(_))
-        ));
+            Err(ParseConstraintError::RegexConstraintsNotSupported)
+        );
     }
 
     #[test]
@@ -310,7 +236,7 @@ mod test {
     fn test_regex() {
         assert_eq!(
             Constraint::from_str("^1.2.3"),
-            Err(ParseConstraintError::RegexConstraintsNotSupported)
+            Err(ParseConstraintError::UnterminatedRegex)
         );
         assert_eq!(
             Constraint::from_str("1.2.3$"),

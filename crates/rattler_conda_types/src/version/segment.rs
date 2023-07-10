@@ -35,9 +35,21 @@ impl Segment {
         ))
     }
 
+    pub fn with_component_count(self, len: u16) -> Option<Self> {
+        // The number of components is too large.
+        if len > COMPONENT_COUNT_MASK {
+            return None;
+        }
+
+        let component_mask = (len & COMPONENT_COUNT_MASK) << COMPONENT_COUNT_OFFSET;
+        Some(Self(
+            self.0 & !(COMPONENT_COUNT_MASK << COMPONENT_COUNT_OFFSET) | component_mask,
+        ))
+    }
+
     /// Returns the number of components in this segment
-    pub fn len(self) -> usize {
-        ((self.0 >> COMPONENT_COUNT_OFFSET) & COMPONENT_COUNT_MASK) as usize
+    pub fn len(self) -> u16 {
+        (self.0 >> COMPONENT_COUNT_OFFSET) & COMPONENT_COUNT_MASK
     }
 
     /// Sets whether the segment starts with an implicit default `Component`. This is the case when
@@ -108,6 +120,23 @@ mod test {
         assert_eq!(Segment::new(42).unwrap().len(), 42);
         assert_eq!(Segment::new(8191).unwrap().len(), 8191);
         assert_eq!(Segment::new(8192), None);
+
+        assert_eq!(
+            Segment::new(1)
+                .unwrap()
+                .with_component_count(1337)
+                .unwrap()
+                .len(),
+            1337
+        );
+        assert_eq!(
+            Segment::new(1)
+                .unwrap()
+                .with_component_count(4096)
+                .unwrap()
+                .len(),
+            4096
+        );
 
         assert_eq!(Segment::new(4096).unwrap().has_implicit_default(), false);
         assert_eq!(
