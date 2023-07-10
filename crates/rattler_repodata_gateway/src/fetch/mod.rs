@@ -206,9 +206,16 @@ async fn repodata_from_file(
     lock_file: LockedFile,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     // copy file from subdir_url to out_path
-    tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path)
-        .await
-        .map_err(RepoDataNotFoundError::FileSystemError)?;
+    let copy_result = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await;
+    if let Err(e) = copy_result {
+        if e.kind() == ErrorKind::NotFound {
+            return Err(FetchRepoDataError::NotFound(
+                RepoDataNotFoundError::FileSystemError(e),
+            ));
+        } else {
+            return Err(FetchRepoDataError::FailedToDownloadRepoData(e));
+        }
+    }
 
     // create a dummy cache state
     let new_cache_state = RepoDataState {
@@ -468,13 +475,7 @@ pub async fn fetch_repo_data(
                 RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
             ));
         }
-        Ok(response) => {
-            if response.status().is_success() {
-                response
-            } else {
-                response.error_for_status()?
-            }
-        }
+        Ok(response) => response.error_for_status()?,
         Err(e) => {
             return Err(FetchRepoDataError::HttpError(e));
         }
