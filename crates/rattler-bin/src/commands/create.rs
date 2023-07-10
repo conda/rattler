@@ -16,7 +16,7 @@ use rattler_repodata_gateway::fetch::{
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{libsolv_c, libsolv_rs, SolverImpl, SolverTask};
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use std::{
     borrow::Cow,
     env,
@@ -591,9 +591,7 @@ async fn fetch_repo_data_records_with_progress(
     // Error out if an error occurred, but also update the progress bar
     let result = match result {
         Err(e) => {
-            let not_found = matches!(&e,
-                FetchRepoDataError::HttpError(e) if e.status() == Some(StatusCode::NOT_FOUND)
-            );
+            let not_found = matches!(&e, FetchRepoDataError::NotFound(_));
             if not_found && platform != Platform::NoArch {
                 progress_bar.set_style(finished_progress_style());
                 progress_bar.finish_with_message("Not Found");
