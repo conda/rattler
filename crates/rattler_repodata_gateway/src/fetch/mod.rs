@@ -208,12 +208,12 @@ async fn repodata_from_file(
     // copy file from subdir_url to out_path
     let copy_result = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await;
     if let Err(e) = copy_result {
-        if e.kind() == ErrorKind::NotFound {
-            return Err(FetchRepoDataError::NotFound(
+        return if e.kind() == ErrorKind::NotFound {
+            Err(FetchRepoDataError::NotFound(
                 RepoDataNotFoundError::FileSystemError(e),
-            ));
+            ))
         } else {
-            return Err(FetchRepoDataError::FailedToDownloadRepoData(e));
+            Err(FetchRepoDataError::FailedToDownloadRepoData(e))
         }
     }
 
