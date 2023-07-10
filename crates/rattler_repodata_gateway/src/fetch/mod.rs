@@ -215,7 +215,7 @@ async fn repodata_from_file(
         url: subdir_url.clone(),
         cache_size: tokio::fs::metadata(&out_path)
             .await
-            .map_err(RepoDataNotFoundError::FileSystemError)?
+            .map_err(FetchRepoDataError::FailedToDownloadRepoData)?
             .len(),
         cache_headers: CacheHeaders {
             etag: None,
@@ -640,7 +640,7 @@ async fn stream_and_decode_to_file(
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
         .await
-        .map_err(RepoDataNotFoundError::FileSystemError)?;
+        .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
 
     // Finalize the hash
     let (_, hash) = hashing_file_writer.finalize();
