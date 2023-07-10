@@ -24,6 +24,18 @@ use url::Url;
 mod cache;
 pub mod jlap;
 
+/// RepoData could not be found for given channel and platform
+#[derive(Debug, thiserror::Error)]
+pub enum RepoDataNotFoundError {
+    /// There was an error on the Http request
+    #[error(transparent)]
+    HttpError(#[from] reqwest::Error),
+
+    /// There was a file system error
+    #[error(transparent)]
+    FileSystemError(std::io::Error),
+}
+
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum FetchRepoDataError {
@@ -35,6 +47,9 @@ pub enum FetchRepoDataError {
 
     #[error(transparent)]
     FailedToDownloadRepoData(std::io::Error),
+
+    #[error("repodata not found")]
+    NotFound(#[from] RepoDataNotFoundError),
 
     #[error("failed to create temporary file for repodata.json")]
     FailedToCreateTemporaryFile(#[source] std::io::Error),
@@ -185,9 +200,15 @@ async fn repodata_from_file(
     lock_file: LockedFile,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     // copy file from subdir_url to out_path
-    tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path)
-        .await
-        .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
+    if let Err(e) = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await {
+        return if e.kind() == ErrorKind::NotFound {
+            Err(FetchRepoDataError::NotFound(
+                RepoDataNotFoundError::FileSystemError(e),
+            ))
+        } else {
+            Err(FetchRepoDataError::FailedToDownloadRepoData(e))
+        };
+    }
 
     // create a dummy cache state
     let new_cache_state = RepoDataState {
@@ -440,11 +461,17 @@ pub async fn fetch_repo_data(
         cache_headers.add_to_request(&mut headers)
     }
     // Send the request and wait for a reply
-    let response = request_builder
-        .headers(headers)
-        .send()
-        .await?
-        .error_for_status()?;
+    let response = match request_builder.headers(headers).send().await {
+        Ok(response) if response.status() == StatusCode::NOT_FOUND => {
+            return Err(FetchRepoDataError::NotFound(
+                RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
+            ));
+        }
+        Ok(response) => response.error_for_status()?,
+        Err(e) => {
+            return Err(FetchRepoDataError::HttpError(e));
+        }
+    };
 
     // If the content didn't change, simply return whatever we have on disk.
     if response.status() == StatusCode::NOT_MODIFIED {
@@ -971,6 +998,7 @@ mod test {
     use super::{
         fetch_repo_data, CacheResult, CachedRepoData, DownloadProgress, FetchRepoDataOptions,
     };
+    use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
     use crate::utils::simple_channel_server::SimpleChannelServer;
     use crate::utils::Encoding;
     use assert_matches::assert_matches;
@@ -1347,5 +1375,57 @@ mod test {
         .unwrap();
 
         assert_eq!(last_download_progress.load(Ordering::SeqCst), 1110);
+    }
+
+    #[tracing_test::traced_test]
+    #[tokio::test]
+    pub async fn test_repodata_not_found() {
+        // Create a directory with some repodata.
+        let subdir_path = TempDir::new().unwrap();
+        // Don't add repodata to the channel.
+
+        // Download the "data" from the local filebased channel.
+        let cache_dir = TempDir::new().unwrap();
+        let result = fetch_repo_data(
+            Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
+                .unwrap(),
+            AuthenticatedClient::default(),
+            cache_dir.path(),
+            FetchRepoDataOptions {
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(FetchRepoDataError::NotFound(
+                RepoDataNotFoundError::FileSystemError(_)
+            ))
+        ));
+
+        // Start a server to test the http error
+        let server = SimpleChannelServer::new(subdir_path.path());
+
+        // Download the "data" from the channel.
+        let cache_dir = TempDir::new().unwrap();
+        let result = fetch_repo_data(
+            server.url(),
+            AuthenticatedClient::default(),
+            cache_dir.path(),
+            FetchRepoDataOptions {
+                ..Default::default()
+            },
+        )
+        .await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(FetchRepoDataError::NotFound(
+                RepoDataNotFoundError::HttpError(_)
+            ))
+        ));
     }
 }
