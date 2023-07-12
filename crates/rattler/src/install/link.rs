@@ -1,5 +1,4 @@
 use crate::install::python::PythonInfo;
-use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
@@ -30,7 +29,7 @@ pub enum LinkFileError {
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
     #[error("failed to sign Apple binary")]
-    FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
+    FailedToSignAppleBinary,
 
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
@@ -50,6 +49,21 @@ pub struct LinkedFile {
     /// The relative path of the file in the destination directory. This might be different from the
     /// relative path in the source directory for python noarch packages.
     pub relative_path: PathBuf,
+}
+
+fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
+    let status = std::process::Command::new("/usr/bin/codesign")
+        .arg("-s")
+        .arg("-")
+        .arg("-f")
+        .arg(destination_path)
+        .status()?;
+
+    if !status.success() {
+        return Err(LinkFileError::FailedToSignAppleBinary);
+    }
+
+    Ok(())
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -179,8 +193,12 @@ pub fn link_file(
 
             // If the binary changed it requires resigning.
             if content_changed {
-                let signer = UnifiedSigner::new(SigningSettings::default());
-                signer.sign_path_in_place(&destination_path)?;
+                match codesign(&destination_path) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::warn!("Failed to sign binary: {}", e);
+                    }
+                }
 
                 // The file on disk changed from the original file so the hash and file size
                 // also became invalid.

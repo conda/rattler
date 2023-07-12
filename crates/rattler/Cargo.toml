@@ -17,7 +17,6 @@ rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
 
 [dependencies]
 anyhow = "1.0.71"
-apple-codesign = "0.22.0"
 async-compression = { version = "0.4.1", features = ["gzip", "tokio", "bzip2", "zstd"] }
 bytes = "1.4.0"
 chrono = { version = "0.4.26", default-features = false, features = ["std", "serde", "alloc"] }
