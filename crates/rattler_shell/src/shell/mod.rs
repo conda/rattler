@@ -539,15 +539,7 @@ impl FromStr for ShellEnum {
 /// Determine the shell from a path to a shell.
 fn parse_shell_from_path(path: &Path) -> Option<ShellEnum> {
     let name = path.file_stem()?.to_str()?;
-    match name {
-        "bash" => Some(Bash.into()),
-        "zsh" => Some(Zsh.into()),
-        "xonsh" => Some(Xonsh.into()),
-        "fish" => Some(Fish.into()),
-        "cmd" => Some(CmdExe.into()),
-        "powershell" | "powershell_ise" => Some(PowerShell::default().into()),
-        _ => None,
-    }
+    ShellEnum::from_str(name).ok()
 }
 
 /// A helper struct for generating shell scripts.
