@@ -47,7 +47,7 @@ pub trait Shell {
         f: &mut impl Write,
         command: impl IntoIterator<Item = &'a str> + 'a,
     ) -> std::fmt::Result {
-        write!(f, "{}", command.into_iter().join(" "))
+        writeln!(f, "{}", command.into_iter().join(" "))
     }
 
     /// Set the PATH variable to the given paths.
@@ -311,7 +311,7 @@ impl Shell for CmdExe {
         f: &mut impl Write,
         command: impl IntoIterator<Item = &'a str> + 'a,
     ) -> std::fmt::Result {
-        write!(f, "@{}", command.into_iter().join(" "))
+        writeln!(f, "@{}", command.into_iter().join(" "))
     }
 
     fn extension(&self) -> &str {
