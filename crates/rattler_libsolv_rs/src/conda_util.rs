@@ -191,13 +191,8 @@ pub(crate) fn find_candidates<'b>(
 ) -> &'b Vec<SolvableId> {
     match_spec_to_candidates[match_spec_id].get_or_init(|| {
         let match_spec = &match_specs[match_spec_id];
-        let match_spec_name = match_spec
-            .name
-            .as_deref()
-            .expect("match spec without name!");
-        let name_id = names_to_ids
-            .get(match_spec_name)
-            .expect("cannot find name in name lookup");
+        let Some(match_spec_name) = match_spec.name.as_deref() else { return Vec::new() };
+        let Some(name_id) = names_to_ids.get(match_spec_name) else { return Vec::new() };
 
         packages_by_name[*name_id]
             .iter()
