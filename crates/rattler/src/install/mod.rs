@@ -1,3 +1,4 @@
+pub mod apple_codesign;
 mod driver;
 mod entry_point;
 pub mod link;
@@ -12,6 +13,7 @@ pub use transaction::{Transaction, TransactionOperation};
 use crate::install::entry_point::{
     create_unix_python_entry_point, create_windows_python_entry_point,
 };
+pub use apple_codesign::AppleCodeSignBehavior;
 use futures::FutureExt;
 pub use python::PythonInfo;
 use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
@@ -143,6 +145,18 @@ pub struct InstallOptions {
     /// If you're installing a noarch python package and do not provide this field, the
     /// [`link_package`] function will return [`InstallError::MissingPythonInfo`].
     pub python_info: Option<PythonInfo>,
+
+    /// For binaries on macOS ARM64 (Apple Silicon), binaries need to be signed with an ad-hoc
+    /// certificate to properly work. This field controls wether or not to do that.
+    /// Code signing is only executed when the target platform is macOS ARM64. By default,
+    /// codesigning will fail the installation if it fails. This behavior can be changed by setting
+    /// this field to `AppleCodeSignBehavior::Ignore` or `AppleCodeSignBehavior::DoNothing`.
+    ///
+    /// To sign the binaries, the `/usr/bin/codesign` executable is called with `--force` and
+    /// `--sign -` arguments. The `--force` argument is used to overwrite existing signatures, and
+    /// the `--sign -` argument is used to sign with an ad-hoc certificate.
+    /// Ad-hoc signing does not use an identity at all, and identifies exactly one instance of code.
+    pub apple_codesign_behavior: AppleCodeSignBehavior,
 }
 
 /// Given an extracted package archive (`package_dir`), installs its files to the `target_dir`.
@@ -240,6 +254,7 @@ pub async fn link_package(
                 allow_hard_links && !entry.no_link,
                 platform,
                 python_info.as_deref(),
+                options.apple_codesign_behavior,
             ) {
                 Ok(result) => Ok((
                     number_of_paths_entries,

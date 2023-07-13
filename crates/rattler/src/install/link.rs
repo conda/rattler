@@ -1,5 +1,4 @@
 use crate::install::python::PythonInfo;
-use apple_codesign::{SigningSettings, UnifiedSigner};
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
@@ -8,6 +7,8 @@ use std::borrow::Cow;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
 use std::path::{Path, PathBuf};
+
+use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
@@ -30,7 +31,7 @@ pub enum LinkFileError {
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
     #[error("failed to sign Apple binary")]
-    FailedToSignAppleBinary(#[from] apple_codesign::AppleCodesignError),
+    FailedToSignAppleBinary,
 
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
@@ -70,6 +71,7 @@ pub fn link_file(
     allow_hard_links: bool,
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
+    apple_codesign_behavior: AppleCodeSignBehavior,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -178,9 +180,15 @@ pub fn link_file(
             }
 
             // If the binary changed it requires resigning.
-            if content_changed {
-                let signer = UnifiedSigner::new(SigningSettings::default());
-                signer.sign_path_in_place(&destination_path)?;
+            if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
+                match codesign(&destination_path) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
+                            return Err(e);
+                        }
+                    }
+                }
 
                 // The file on disk changed from the original file so the hash and file size
                 // also became invalid.

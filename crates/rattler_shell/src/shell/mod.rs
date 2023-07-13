@@ -6,10 +6,12 @@ use itertools::Itertools;
 use rattler_conda_types::Platform;
 use std::collections::HashMap;
 use std::process::Command;
+use std::str::FromStr;
 use std::{
     fmt::Write,
     path::{Path, PathBuf},
 };
+use thiserror::Error;
 
 /// A trait for generating shell scripts.
 /// The trait is implemented for each shell individually.
@@ -510,18 +512,34 @@ impl ShellEnum {
     }
 }
 
+/// Parsing of a shell was not possible. The shell mostlikely is not supported.
+#[derive(Debug, Error)]
+#[error("{0}")]
+pub struct ParseShellEnumError(String);
+
+impl FromStr for ShellEnum {
+    type Err = ParseShellEnumError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "bash" => Ok(Bash.into()),
+            "zsh" => Ok(Zsh.into()),
+            "xonsh" => Ok(Xonsh.into()),
+            "fish" => Ok(Fish.into()),
+            "cmd" => Ok(CmdExe.into()),
+            "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
+            _ => Err(ParseShellEnumError(format!(
+                "'{}' is an unknown shell variant",
+                s
+            ))),
+        }
+    }
+}
+
 /// Determine the shell from a path to a shell.
 fn parse_shell_from_path(path: &Path) -> Option<ShellEnum> {
     let name = path.file_stem()?.to_str()?;
-    match name {
-        "bash" => Some(Bash.into()),
-        "zsh" => Some(Zsh.into()),
-        "xonsh" => Some(Xonsh.into()),
-        "fish" => Some(Fish.into()),
-        "cmd" => Some(CmdExe.into()),
-        "powershell" | "powershell_ise" => Some(PowerShell::default().into()),
-        _ => None,
-    }
+    ShellEnum::from_str(name).ok()
 }
 
 /// A helper struct for generating shell scripts.
