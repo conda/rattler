@@ -17,4 +17,4 @@ rattler_conda_types = { version = "0.5.0", path = "../rattler_conda_types" }
 tracing = "0.1.37"
 
 [dev-dependencies]
-insta = "1.29.0"
+insta = "1.30.0"

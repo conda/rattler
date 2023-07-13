@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-clap = { version = "4.3.2", features = ["derive"] }
-bindgen = "0.65.1"
+clap = { version = "4.3.11", features = ["derive"] }
+bindgen = "0.66.1"
 anyhow = "1.0.71"
 difference = "2.0.0"
 tempdir = "0.3.7"
