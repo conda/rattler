@@ -160,7 +160,7 @@ impl Shell for Bash {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+        writeln!(f, ". \"{}\"\n", path.to_string_lossy())
     }
 
     fn set_path(
@@ -239,7 +239,7 @@ impl Shell for Zsh {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+        writeln!(f, ". \"{}\"\n", path.to_string_lossy())
     }
 
     fn extension(&self) -> &str {
@@ -271,7 +271,7 @@ impl Shell for Xonsh {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source-bash \"{}\"", path.to_string_lossy())
+        writeln!(f, "source-bash \"{}\"\n", path.to_string_lossy())
     }
 
     fn extension(&self) -> &str {
@@ -303,7 +303,7 @@ impl Shell for CmdExe {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "@CALL \"{}\"", path.to_string_lossy())
+        writeln!(f, "@CALL \"{}\"\n", path.to_string_lossy())
     }
 
     fn run_command<'a>(
@@ -358,7 +358,7 @@ impl Shell for PowerShell {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, ". \"{}\"", path.to_string_lossy())
+        writeln!(f, ". \"{}\"\n", path.to_string_lossy())
     }
 
     fn extension(&self) -> &str {
@@ -399,7 +399,7 @@ impl Shell for Fish {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source \"{}\"", path.to_string_lossy())
+        writeln!(f, "source \"{}\"\n", path.to_string_lossy())
     }
 
     fn extension(&self) -> &str {
