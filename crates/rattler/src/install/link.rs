@@ -180,7 +180,7 @@ pub fn link_file(
             }
 
             // If the binary changed it requires resigning.
-            if content_changed {
+            if content_changed && apple_codesign_behavior != AppleCodeSignBehavior::DoNothing {
                 match codesign(&destination_path) {
                     Ok(_) => {}
                     Err(e) => {
