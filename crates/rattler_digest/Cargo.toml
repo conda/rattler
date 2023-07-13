@@ -12,10 +12,10 @@ readme.workspace = true
 
 [dependencies]
 digest = "0.10.7"
-tokio = { version = "1.28.2", features = ["io-util"], optional = true }
+tokio = { version = "1.29.1", features = ["io-util"], optional = true }
 hex = "0.4.3"
-serde = { version = "1.0.163", features = ["derive"], optional = true }
-sha2 = "0.10.6"
+serde = { version = "1.0.171", features = ["derive"], optional = true }
+sha2 = "0.10.7"
 md-5 = "0.10.5"
 blake2 = "0.10.6"
 serde_with = "3.0.0"
@@ -25,7 +25,7 @@ tokio = ["dep:tokio"]
 serde = ["dep:serde"]
 
 [dev-dependencies]
-rstest = "0.17.0"
+rstest = "0.18.1"
 tempfile = "3.6.0"
 md-5 = "0.10.5"
-serde_json = "1.0.96"
+serde_json = "1.0.102"
