@@ -8,6 +8,8 @@ use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
 use std::path::{Path, PathBuf};
 
+use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
     #[error(transparent)]
@@ -51,21 +53,6 @@ pub struct LinkedFile {
     pub relative_path: PathBuf,
 }
 
-fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
-    let status = std::process::Command::new("/usr/bin/codesign")
-        .arg("-s")
-        .arg("-")
-        .arg("-f")
-        .arg(destination_path)
-        .status()?;
-
-    if !status.success() {
-        return Err(LinkFileError::FailedToSignAppleBinary);
-    }
-
-    Ok(())
-}
-
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
 /// `prefix_placeholder` in the file with the `prefix`.
 ///
@@ -84,6 +71,7 @@ pub fn link_file(
     allow_hard_links: bool,
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
+    apple_codesign_behavior: AppleCodeSignBehavior,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -196,7 +184,9 @@ pub fn link_file(
                 match codesign(&destination_path) {
                     Ok(_) => {}
                     Err(e) => {
-                        tracing::warn!("Failed to sign binary: {}", e);
+                        if apple_codesign_behavior == AppleCodeSignBehavior::Fail {
+                            return Err(e);
+                        }
                     }
                 }
 
