@@ -409,12 +409,11 @@ impl<T: Shell + Clone> Activator<T> {
                 .map_err(ActivationError::FailedToWriteActivationScript)?;
         }
 
-
         if let Some(additional_activation_scripts) = &variables.additional_activation_scripts {
             for additional_activation_script in additional_activation_scripts {
                 self.shell_type
-                .run_script(&mut script, additional_activation_script)
-                .map_err(ActivationError::FailedToWriteActivationScript)?;
+                    .run_script(&mut script, additional_activation_script)
+                    .map_err(ActivationError::FailedToWriteActivationScript)?;
             }
         }
 
