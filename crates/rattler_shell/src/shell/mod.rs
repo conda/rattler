@@ -394,11 +394,6 @@ impl Shell for Fish {
         writeln!(f, "set -gx {} \"{}\"", env_var, value)
     }
 
-    fn format_env_var(&self, var_name: &str) -> String {
-        // Fish doesnt want the extra brackets '{}'
-        format!("${var_name}")
-    }
-
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
         writeln!(f, "set -e {}", env_var)
     }
