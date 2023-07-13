@@ -1,7 +1,7 @@
 use super::LinkFileError;
 use std::path::Path;
 
-/// Controls the behavior of the [`link_package`] function when it encounters a binary that needs
+/// Controls the behavior of the [`super::link_package`] function when it encounters a binary that needs
 /// to be signed on macOS ARM64 (Apple Silicon).
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum AppleCodeSignBehavior {
