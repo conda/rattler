@@ -1,0 +1,8 @@
+---
+source: crates/rattler_shell/src/shell/mod.rs
+expression: script.contents
+---
+set -gx FOO "bar"
+set -e FOO
+source "foo.sh"
+

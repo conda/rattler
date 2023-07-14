@@ -394,6 +394,11 @@ impl Shell for Fish {
         writeln!(f, "set -gx {} \"{}\"", env_var, value)
     }
 
+    fn format_env_var(&self, var_name: &str) -> String {
+        // Fish doesnt want the extra brackets '{}'
+        format!("${var_name}")
+    }
+
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
         writeln!(f, "set -e {}", env_var)
     }
@@ -607,6 +612,18 @@ mod tests {
     #[test]
     fn test_bash() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
+
+        script
+            .set_env_var("FOO", "bar")
+            .unset_env_var("FOO")
+            .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
+
+        insta::assert_snapshot!(script.contents);
+    }
+
+    #[test]
+    fn test_fish() {
+        let mut script = ShellScript::new(Fish, Platform::Linux64);
 
         script
             .set_env_var("FOO", "bar")
