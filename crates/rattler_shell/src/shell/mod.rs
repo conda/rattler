@@ -621,6 +621,18 @@ mod tests {
         insta::assert_snapshot!(script.contents);
     }
 
+    #[test]
+    fn test_fish() {
+        let mut script = ShellScript::new(Fish, Platform::Linux64);
+
+        script
+            .set_env_var("FOO", "bar")
+            .unset_env_var("FOO")
+            .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
+
+        insta::assert_snapshot!(script.contents);
+    }
+
     #[cfg(feature = "sysinfo")]
     #[test]
     fn test_from_parent_process_doenst_crash() {
