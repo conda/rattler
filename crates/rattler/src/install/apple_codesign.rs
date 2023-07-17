@@ -24,6 +24,8 @@ pub(crate) fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
         // replace any existing signature
         .arg("--force")
         .arg(destination_path)
+        .stdout(std::process::Stdio::null()) // Suppress stdout
+        .stderr(std::process::Stdio::null()) // Suppress stderr
         .status()?;
 
     if !status.success() {
