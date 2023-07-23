@@ -1,3 +1,5 @@
+//! This module contains the logic to link a give file from the package cache into the target directory.
+//! See [`link_file`] for more information.
 use crate::install::python::PythonInfo;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
@@ -10,29 +12,39 @@ use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 
+/// Errors that can occur when calling [`link_file`].
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
+    /// An IO error occurred.
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
+    /// The parent directory of the destination file could not be created.
     #[error("failed to create parent directory")]
     FailedToCreateParentDirectory(#[source] std::io::Error),
 
+    /// The source file could not be opened.
     #[error("could not open source file")]
     FailedToOpenSourceFile(#[source] std::io::Error),
 
+    /// The source file metadata could not be read.
     #[error("could not source file metadata")]
     FailedToReadSourceFileMetadata(#[source] std::io::Error),
 
+    /// The destination file could not be opened.
     #[error("could not open destination file for writing")]
     FailedToOpenDestinationFile(#[source] std::io::Error),
 
+    /// The permissions could not be updated on the destination file.
     #[error("could not update destination file permissions")]
     FailedToUpdateDestinationFilePermissions(#[source] std::io::Error),
 
+    /// The binary (dylib or executable) could not be signed (codesign -f -s -) on
+    /// macOS ARM64 (Apple Silicon).
     #[error("failed to sign Apple binary")]
     FailedToSignAppleBinary,
 
+    /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
 }

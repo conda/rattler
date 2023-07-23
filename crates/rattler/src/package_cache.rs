@@ -79,6 +79,7 @@ struct Package {
 /// An error that might be returned from one of the caching function of the [`PackageCache`].
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum PackageCacheError {
+    /// An error occurred while fetching the package.
     #[error(transparent)]
     FetchError(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
 }

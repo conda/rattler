@@ -1,3 +1,5 @@
+//! Code signing for Apple Silicon binaries
+
 use super::LinkFileError;
 use std::path::Path;
 

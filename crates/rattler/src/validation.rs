@@ -22,18 +22,23 @@ use std::{
 /// corrupted.
 #[derive(Debug, thiserror::Error)]
 pub enum PackageValidationError {
+    /// Neither a `paths.json` file nor a deprecated `files` file was found.
     #[error("neither a 'paths.json' or a deprecated 'files' file was found")]
     MetadataMissing,
 
+    /// An error occurred while reading the `paths.json` file.
     #[error("failed to read 'paths.json' file")]
     ReadPathsJsonError(#[source] std::io::Error),
 
+    /// An error occurred while reading the deprecated `files` file.
     #[error("failed to read validation data from deprecated files")]
     ReadDeprecatedPathsJsonError(#[source] std::io::Error),
 
+    /// The path seems to be corrupted.
     #[error("the path '{0}' seems to be corrupted")]
     CorruptedEntry(PathBuf, #[source] PackageEntryValidationError),
 
+    /// An error occurred while reading the `index.json` file.
     #[error("failed to read 'index.json'")]
     ReadIndexJsonError(#[source] std::io::Error),
 }
@@ -41,24 +46,31 @@ pub enum PackageValidationError {
 /// An error that indicates that a specific file in a package archive directory seems to be corrupted.
 #[derive(Debug, thiserror::Error)]
 pub enum PackageEntryValidationError {
+    /// An error occurred while reading the metadata of the file.
     #[error("failed to retrieve file metadata'")]
     GetMetadataFailed(#[source] std::io::Error),
 
+    /// The file does not exist.
     #[error("the file does not exist")]
     NotFound,
 
+    /// The file is not a symbolic link.
     #[error("expected a symbolic link")]
     ExpectedSymlink,
 
+    /// The file is not a directory.
     #[error("expected a directory")]
     ExpectedDirectory,
 
+    /// The size of the file does not match the expected size.
     #[error("incorrect size, expected {0} but file on disk is {1}")]
     IncorrectSize(u64, u64),
 
+    /// An IO error occurred while reading the file.
     #[error("an io error occurred")]
     IoError(#[from] std::io::Error),
 
+    /// The SHA256 hash of the file does not match the expected hash.
     #[error("sha256 hash mismatch, expected '{0}' but file on disk is '{1}'")]
     HashMismatch(String, String),
 }
