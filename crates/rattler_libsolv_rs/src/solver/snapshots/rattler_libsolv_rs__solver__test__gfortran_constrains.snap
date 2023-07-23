@@ -1,0 +1,7 @@
+---
+source: crates/rattler_libsolv_rs/src/solver/mod.rs
+expression: result
+---
+libgfortran 5.0.0 12_3_0_h123123_0
+libgfortran5 12.3.0
+
