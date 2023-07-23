@@ -909,6 +909,7 @@ mod test {
     use crate::id::RepoId;
     use rattler_conda_types::{PackageRecord, Version};
     use std::str::FromStr;
+    use tracing_test::traced_test;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {
@@ -1413,5 +1414,39 @@ mod test {
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
+    }
+
+    #[traced_test]
+    #[test]
+    fn test_gfortran_constrains() {
+        let mut pool = Pool::new();
+
+        let mut p1 = package("libgfortran", "5.0.0", &["libgfortran5>=11.3"], &[]);
+        p1.build_number = 32;
+        p1.build = "12_2_0_h123123_32".to_string();
+        let mut p2 = package("libgfortran", "5.0.0", &["libgfortran5>=11.3"], &[]);
+        p2.build_number = 0;
+        p2.build = "12_3_0_h123123_0".to_string();
+
+        add_package(&mut pool, p1);
+        add_package(&mut pool, p2);
+
+        add_package(
+            &mut pool,
+            package("libgfortran5", "12.3.0", &[], &["libgfortran 5.* *_0"]),
+        );
+        add_package(
+            &mut pool,
+            package("libgfortran5", "12.2.0", &[], &["libgfortran 5.* *_32"]),
+        );
+
+        let jobs = install(&["libgfortran"]);
+
+        let mut solver = Solver::new(pool);
+        let solved = solver.solve(jobs).unwrap();
+
+        let result = transaction_to_string(&solver.pool, &solved);
+
+        insta::assert_snapshot!(result);
     }
 }
