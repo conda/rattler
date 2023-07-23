@@ -422,6 +422,70 @@ impl Shell for Fish {
     }
 }
 
+/// A [`Shell`] implementation for the Bash shell.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Nushell;
+
+impl Shell for Nushell {
+    fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
+        writeln!(f, "let-env {} = \"{}\"", env_var, value)
+    }
+
+    fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
+        writeln!(f, "hide-env {}", env_var)
+    }
+
+    fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
+        writeln!(f, "source \"{}\"", path.to_string_lossy())
+    }
+
+    fn set_path(
+        &self,
+        f: &mut impl Write,
+        paths: &[PathBuf],
+        modification_behaviour: PathModificationBehaviour,
+        _platform: &Platform,
+    ) -> std::fmt::Result {
+        let path = paths
+            .iter()
+            .map(|path| format!("\"{}\"", path.to_string_lossy().into_owned()))
+            .join(" ");
+        // Replace, Append, or Prepend the path variable to the paths.
+        match modification_behaviour {
+            PathModificationBehaviour::Replace => {
+                self.set_env_var(f, "PATH", &format!("[{}]", path))
+            }
+            PathModificationBehaviour::Prepend => {
+                writeln!(f, "let-env PATH = ($env.PATH | prepend [{}])", path)
+            }
+            PathModificationBehaviour::Append => {
+                writeln!(f, "let-env PATH = ($env.PATH | append [{}])", path)
+            }
+        }
+    }
+
+    fn extension(&self) -> &str {
+        "nu"
+    }
+
+    fn executable(&self) -> &str {
+        "nu"
+    }
+
+    fn create_run_script_command(&self, path: &Path) -> Command {
+        let mut cmd = Command::new(self.executable());
+
+        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+        if cfg!(windows) {
+            cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
+        } else {
+            cmd.arg(path);
+        }
+
+        cmd
+    }
+}
+
 /// A generic [`Shell`] implementation for concrete shell types.
 #[enum_dispatch]
 #[allow(missing_docs)]
