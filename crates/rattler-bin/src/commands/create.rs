@@ -3,6 +3,7 @@ use anyhow::Context;
 use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::{HumanBytes, ProgressBar, ProgressState, ProgressStyle};
 use rattler::{
+    default_cache_dir,
     install::{link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation},
     package_cache::PackageCache,
 };
@@ -72,9 +73,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // Find the default cache directory. Create it if it doesnt exist yet.
-    let cache_dir = dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/cache");
+    let cache_dir = default_cache_dir()?;
     std::fs::create_dir_all(&cache_dir)
         .map_err(|e| anyhow::anyhow!("could not create cache directory: {}", e))?;
 
