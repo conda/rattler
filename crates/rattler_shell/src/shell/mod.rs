@@ -424,9 +424,9 @@ impl Shell for Fish {
 
 /// A [`Shell`] implementation for the Bash shell.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Nushell;
+pub struct NuShell;
 
-impl Shell for Nushell {
+impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
         writeln!(f, "let-env {} = \"{}\"", env_var, value)
     }
@@ -449,7 +449,8 @@ impl Shell for Nushell {
         let path = paths
             .iter()
             .map(|path| format!("\"{}\"", path.to_string_lossy().into_owned()))
-            .join(" ");
+            .join(", ");
+
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
             PathModificationBehaviour::Replace => {
@@ -474,14 +475,7 @@ impl Shell for Nushell {
 
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new(self.executable());
-
-        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
-        if cfg!(windows) {
-            cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
-        } else {
-            cmd.arg(path);
-        }
-
+        cmd.arg(path);
         cmd
     }
 }
@@ -497,6 +491,7 @@ pub enum ShellEnum {
     CmdExe,
     PowerShell,
     Fish,
+    NuShell,
 }
 
 // The default shell is determined by the current OS.
@@ -573,6 +568,8 @@ impl ShellEnum {
             Some(Xonsh.into())
         } else if parent_process_name.contains("fish") {
             Some(Fish.into())
+        } else if parent_process_name.contains("nu") {
+            Some(NuShell.into())
         } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
         {
             Some(
@@ -604,6 +601,7 @@ impl FromStr for ShellEnum {
             "xonsh" => Ok(Xonsh.into()),
             "fish" => Ok(Fish.into()),
             "cmd" => Ok(CmdExe.into()),
+            "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
             _ => Err(ParseShellEnumError(format!(
                 "'{}' is an unknown shell variant",
