@@ -1,3 +1,18 @@
+//! This module contains the logic to install a package into a prefix. The main entry point is the
+//! [`link_package`] function.
+//!
+//! The [`link_package`] function takes a package directory and a target directory. The package
+//! directory is the directory that contains the extracted package archive. The target directory is
+//! the directory into which the package should be installed. The target directory is also called
+//! the "prefix".
+//!
+//! The [`link_package`] function will read the `paths.json` file from the package directory and
+//! link all files specified in that file into the target directory. The `paths.json` file contains
+//! a list of files that should be installed and how they should be installed. For example, the
+//! `paths.json` file might contain a file that should be copied into the target directory. Or it
+//! might contain a file that should be linked into the target directory. The `paths.json` file
+//! also contains a SHA256 hash for each file. This hash is used to verify that the file was not
+//! tampered with.
 pub mod apple_codesign;
 mod driver;
 mod entry_point;
@@ -34,30 +49,39 @@ use tracing::instrument;
 /// An error that might occur when installing a package.
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
+    /// The operation was cancelled.
     #[error("the operation was cancelled")]
     Cancelled,
 
+    /// The paths.json file could not be read.
     #[error("failed to read 'paths.json'")]
     FailedToReadPathsJson(#[source] std::io::Error),
 
+    /// The index.json file could not be read.
     #[error("failed to read 'index.json'")]
     FailedToReadIndexJson(#[source] std::io::Error),
 
+    /// The link.json file could not be read.
     #[error("failed to read 'link.json'")]
     FailedToReadLinkJson(#[source] std::io::Error),
 
+    /// A file could not be linked.
     #[error("failed to link '{0}'")]
     FailedToLink(PathBuf, #[source] LinkFileError),
 
+    /// The target prefix is not UTF-8.
     #[error("target prefix is not UTF-8")]
     TargetPrefixIsNotUtf8,
 
+    /// Failed to create the target directory.
     #[error("failed to create target directory")]
     FailedToCreateTargetDirectory(#[source] std::io::Error),
 
+    /// A noarch package could not be installed because no python version was specified.
     #[error("cannot install noarch python package because there is no python version specified")]
     MissingPythonInfo,
 
+    /// Failed to create a python entry point for a noarch package.
     #[error("failed to create Python entry point")]
     FailedToCreatePythonEntryPoint(#[source] std::io::Error),
 }

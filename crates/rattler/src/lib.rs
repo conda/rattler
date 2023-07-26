@@ -8,6 +8,7 @@
 //! in a wide variaty of tools that do not rely on Python. Rust has excellent support for
 //! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefor a good
 //! candidate for a reimplementation.
+#![deny(missing_docs)]
 
 use std::path::PathBuf;
 

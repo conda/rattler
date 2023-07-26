@@ -1,3 +1,7 @@
+//! Some macros for the Rattler project.
+
+#![deny(missing_docs)]
+
 use proc_macro::TokenStream;
 use quote::quote_spanned;
 use syn::{parse_macro_input, Data, DeriveInput, Fields, FieldsNamed, Ident};
