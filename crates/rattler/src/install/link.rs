@@ -18,9 +18,21 @@ use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 /// destination directory.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum LinkMethod {
+    /// A hard link is created from the cache to the destination. This ensures that the file does
+    /// not take up more disk-space but has the downside that if the file is accidentally modified
+    /// it is also modified in the cache.
     Hardlink,
+
+    /// A soft link is created. The link does not refer to the original file in the cache directory
+    /// but instead it points to another file in the destination.
     Softlink,
+
+    /// A copy of a file is created from a file in the cache directory to a file in the destination
+    /// directory.
     Copy,
+
+    /// A copy of a file is created and it is also patched.
+    Patched(FileMode),
 }
 
 impl fmt::Display for LinkMethod {
@@ -29,6 +41,8 @@ impl fmt::Display for LinkMethod {
             LinkMethod::Hardlink => write!(f, "hardlink"),
             LinkMethod::Softlink => write!(f, "softlink"),
             LinkMethod::Copy => write!(f, "copy"),
+            LinkMethod::Patched(FileMode::Binary) => write!(f, "binary patched"),
+            LinkMethod::Patched(FileMode::Text) => write!(f, "text patched"),
         }
     }
 }
@@ -45,8 +59,16 @@ pub enum LinkFileError {
     FailedToCreateParentDirectory(#[source] std::io::Error),
 
     /// The source file could not be opened.
-    #[error("could not open source file")]
+    #[error("could not open source file for reading")]
     FailedToOpenSourceFile(#[source] std::io::Error),
+
+    /// The source file could not be opened.
+    #[error("failed to memory map the source file")]
+    FailedToMemoryMap(#[source] std::io::Error),
+
+    /// Unable to read the contents of a symlink
+    #[error("could not open source file")]
+    FailedToReadSymlink(#[source] std::io::Error),
 
     /// Linking the file from the source to the destination failed.
     #[error("failed to {0} file to destination")]
@@ -153,7 +175,7 @@ pub fn link_file(
         let source = {
             let file =
                 std::fs::File::open(&source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
-            unsafe { memmap2::Mmap::map(&file).map_err(LinkFileError::FailedToOpenSourceFile)? }
+            unsafe { memmap2::Mmap::map(&file).map_err(LinkFileError::FailedToMemoryMap)? }
         };
 
         // Open the destination file
@@ -236,25 +258,13 @@ pub fn link_file(
                 file_size = None;
             }
         }
-        LinkMethod::Copy
+        LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
         hardlink_to_destination(&source_path, &destination_path)?;
         LinkMethod::Hardlink
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        match symlink_to_destination(&source_path, &destination_path) {
-            Ok(()) => LinkMethod::Softlink,
-            Err(LinkFileError::FailedToOpenSourceFile(e)) => {
-                // If the operation failed to read the source file, symlinks might not actually be
-                // working properly on the system. This might be the case for docker mounted volumes
-                // where the symlink is not an absolute path (which is never the case for conda
-                // packages).
-                // In this case we simply fall back to copying the file.
-                tracing::warn!("failed to read symlink from the source directory: {e}. Falling back to copying..");
-                copy_to_destination(&source_path, &destination_path)?;
-                LinkMethod::Copy
-            }
-            Err(e) => return Err(e),
-        }
+        symlink_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Softlink
     } else {
         copy_to_destination(&source_path, &destination_path)?;
         LinkMethod::Copy
@@ -293,16 +303,16 @@ pub fn link_file(
 /// Symlink the specified file from the source (or cached) directory. If the file already exists it
 /// is removed and the operation is retried.
 fn hardlink_to_destination(
-    source_path: &PathBuf,
-    destination_path: &PathBuf,
+    source_path: &Path,
+    destination_path: &Path,
 ) -> Result<(), LinkFileError> {
     loop {
-        match std::fs::hard_link(&source_path, &destination_path) {
+        match std::fs::hard_link(source_path, destination_path) {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(&destination_path)?;
+                std::fs::remove_file(destination_path)?;
             }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Hardlink, e.into())),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Hardlink, e)),
         }
     }
 }
@@ -315,15 +325,15 @@ fn symlink_to_destination(
 ) -> Result<(), LinkFileError> {
     let linked_path = source_path
         .read_link()
-        .map_err(LinkFileError::FailedToOpenSourceFile)?;
+        .map_err(LinkFileError::FailedToReadSymlink)?;
 
     loop {
-        match symlink(&linked_path, &destination_path) {
+        match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(&destination_path)?;
+                std::fs::remove_file(destination_path)?;
             }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Softlink, e.into())),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Softlink, e)),
         }
     }
 }
@@ -332,13 +342,13 @@ fn symlink_to_destination(
 /// removed and the operation is retried.
 fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<(), LinkFileError> {
     loop {
-        match std::fs::copy(&source_path, &destination_path) {
+        match std::fs::copy(source_path, destination_path) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 // If the file already exists, remove it and try again.
-                std::fs::remove_file(&destination_path)?;
+                std::fs::remove_file(destination_path)?;
             }
             Ok(_) => return Ok(()),
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e.into())),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
 }
