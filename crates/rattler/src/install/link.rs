@@ -6,11 +6,32 @@ use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::borrow::Cow;
+use std::fmt;
+use std::fmt::Formatter;
 use std::fs::Permissions;
 use std::io::{ErrorKind, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+
+/// Describes the method to "link" a file from the source directory (or the cache directory) to the
+/// destination directory.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum LinkMethod {
+    Hardlink,
+    Softlink,
+    Copy,
+}
+
+impl fmt::Display for LinkMethod {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LinkMethod::Hardlink => write!(f, "hardlink"),
+            LinkMethod::Softlink => write!(f, "softlink"),
+            LinkMethod::Copy => write!(f, "copy"),
+        }
+    }
+}
 
 /// Errors that can occur when calling [`link_file`].
 #[derive(Debug, thiserror::Error)]
@@ -26,6 +47,10 @@ pub enum LinkFileError {
     /// The source file could not be opened.
     #[error("could not open source file")]
     FailedToOpenSourceFile(#[source] std::io::Error),
+
+    /// Linking the file from the source to the destination failed.
+    #[error("failed to {0} file to destination")]
+    FailedToLink(LinkMethod, #[source] std::io::Error),
 
     /// The source file metadata could not be read.
     #[error("could not source file metadata")]
@@ -63,6 +88,9 @@ pub struct LinkedFile {
     /// The relative path of the file in the destination directory. This might be different from the
     /// relative path in the source directory for python noarch packages.
     pub relative_path: PathBuf,
+
+    /// The way the file was linked
+    pub method: LinkMethod,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -115,7 +143,7 @@ pub fn link_file(
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
-    if let Some(PrefixPlaceholder {
+    let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
     }) = path_json_entry.prefix_placeholder.as_ref()
@@ -208,40 +236,28 @@ pub fn link_file(
                 file_size = None;
             }
         }
+        LinkMethod::Copy
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
-        loop {
-            match std::fs::hard_link(&source_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        hardlink_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Hardlink
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        let linked_path = source_path
-            .read_link()
-            .map_err(LinkFileError::FailedToOpenSourceFile)?;
-
-        loop {
-            match symlink(&linked_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
+        match symlink_to_destination(&source_path, &destination_path) {
+            Ok(()) => LinkMethod::Softlink,
+            Err(LinkFileError::FailedToOpenSourceFile(e)) => {
+                // If the operation failed to read the source file, symlinks might not actually be
+                // working properly on the system. This might be the case for docker mounted volumes
+                // where the symlink is not an absolute path (which is never the case for conda
+                // packages).
+                // In this case we simply fall back to copying the file.
+                tracing::warn!("failed to read symlink from the source directory: {e}. Falling back to copying..");
+                copy_to_destination(&source_path, &destination_path)?;
+                LinkMethod::Copy
             }
+            Err(e) => return Err(e),
         }
     } else {
-        loop {
-            match std::fs::copy(&source_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        copy_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Copy
     };
 
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
@@ -270,7 +286,61 @@ pub fn link_file(
         sha256,
         file_size,
         relative_path: destination_relative_path.into_owned(),
+        method: link_method,
     })
+}
+
+/// Symlink the specified file from the source (or cached) directory. If the file already exists it
+/// is removed and the operation is retried.
+fn hardlink_to_destination(
+    source_path: &PathBuf,
+    destination_path: &PathBuf,
+) -> Result<(), LinkFileError> {
+    loop {
+        match std::fs::hard_link(&source_path, &destination_path) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                std::fs::remove_file(&destination_path)?;
+            }
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Hardlink, e.into())),
+        }
+    }
+}
+
+/// Symlink the specified file from the source (or cached) directory. If the file already exists it
+/// is removed and the operation is retried.
+fn symlink_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<(), LinkFileError> {
+    let linked_path = source_path
+        .read_link()
+        .map_err(LinkFileError::FailedToOpenSourceFile)?;
+
+    loop {
+        match symlink(&linked_path, &destination_path) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                std::fs::remove_file(&destination_path)?;
+            }
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Softlink, e.into())),
+        }
+    }
+}
+
+/// Copy the specified file from the source (or cached) directory. If the file already exists it is
+/// removed and the operation is retried.
+fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<(), LinkFileError> {
+    loop {
+        match std::fs::copy(&source_path, &destination_path) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                // If the file already exists, remove it and try again.
+                std::fs::remove_file(&destination_path)?;
+            }
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e.into())),
+        }
+    }
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
