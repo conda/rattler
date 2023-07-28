@@ -1,6 +1,7 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
 use crate::install::python::PythonInfo;
+use memmap2::Mmap;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
@@ -9,7 +10,7 @@ use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{ErrorKind, Seek, Write};
+use std::io::{ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
@@ -63,8 +64,8 @@ pub enum LinkFileError {
     FailedToOpenSourceFile(#[source] std::io::Error),
 
     /// The source file could not be opened.
-    #[error("failed to memory map the source file")]
-    FailedToMemoryMap(#[source] std::io::Error),
+    #[error("failed to read the source file")]
+    FailedToReadSourceFile(#[source] std::io::Error),
 
     /// Unable to read the contents of a symlink
     #[error("could not open source file")]
@@ -172,11 +173,7 @@ pub fn link_file(
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
-        let source = {
-            let file =
-                std::fs::File::open(&source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
-            unsafe { memmap2::Mmap::map(&file).map_err(LinkFileError::FailedToMemoryMap)? }
-        };
+        let source = map_or_read_source_file(&source_path)?;
 
         // Open the destination file
         let destination = std::fs::File::create(&destination_path)
@@ -297,6 +294,53 @@ pub fn link_file(
         file_size,
         relative_path: destination_relative_path.into_owned(),
         method: link_method,
+    })
+}
+
+/// Either a memory mapped file or the complete contents of a file read to memory.
+enum MmapOrBytes {
+    Mmap(Mmap),
+    Bytes(Vec<u8>),
+}
+
+impl AsRef<[u8]> for MmapOrBytes {
+    fn as_ref(&self) -> &[u8] {
+        match &self {
+            MmapOrBytes::Mmap(mmap) => mmap.as_ref(),
+            MmapOrBytes::Bytes(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
+/// Either memory maps, or reads the contents of the file at the specified location.
+///
+/// This method prefers to memory map the file to reduce the memory load but if memory mapping fails
+/// it falls back to reading the contents of the file.
+///
+/// This fallback exists because we've seen that in some particular situations memory mapping is not
+/// allowed. A particular dubious case we've encountered is described in the this issue:
+/// https://github.com/prefix-dev/pixi/issues/234
+fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileError> {
+    let mut file =
+        std::fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
+
+    // Try to memory map the file
+    let mmap = unsafe { Mmap::map(&file) };
+
+    // If memory mapping the file failed for whatever reason, try reading it directly to
+    // memory instead.
+    Ok(match mmap {
+        Ok(memory) => MmapOrBytes::Mmap(memory),
+        Err(err) => {
+            tracing::warn!(
+                "failed to memory map {}: {err}. Reading the file to memory instead.",
+                source_path.display()
+            );
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)
+                .map_err(LinkFileError::FailedToReadSourceFile)?;
+            MmapOrBytes::Bytes(bytes)
+        }
     })
 }
 
