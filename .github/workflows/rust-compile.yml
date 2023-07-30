@@ -17,17 +17,6 @@ env:
   DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,libsolv_rs
 
 jobs:
-  check:
-    name: Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-      - name: Run clippy
-        run: cargo check --all-targets
-
   check-rustdoc-links:
     name: Check intra-doc links
     runs-on: ubuntu-latest
@@ -41,18 +30,8 @@ jobs:
             cargo rustdoc -p "$package" --all-features -- -D warnings -W unreachable-pub
           done
 
-  fmt:
-    name: Ensure 'cargo fmt' has been run
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: rustfmt
-      - name: Rustfmt Check
-        uses: actions-rust-lang/rustfmt@v1
-
-  clippy:
+  format_and_lint:
+    name: Format and Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -60,20 +39,22 @@ jobs:
           submodules: recursive
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          components: clippy
+          components: clippy, rustfmt
+      - name: Run rustfmt
+        uses: actions-rust-lang/rustfmt@v1
       - name: Run clippy
         run: cargo clippy
 
   build:
-    name: ${{ matrix.job.name }}
-    runs-on: ${{ matrix.job.os }}
-    needs: [ check ]
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    needs: [ format_and_lint ]
     strategy:
       fail-fast: false
       matrix:
-        job:
-          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-latest, use-cross: true }
-          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, use-cross: true, skip-tests: true }
+        include:
+          - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-latest }
+          - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
           # - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true                   }
 
           # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
@@ -92,46 +73,25 @@ jobs:
 
           - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
           # - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
-    env:
-      BUILD_CMD: cargo  # The build and test command to use if not overwritten
     steps:
       - name: Checkout source code
         uses: actions/checkout@v3
         with:
           submodules: recursive
-          lfs: ${{ !matrix.job.skip-tests }}
-
-      - name: Install prerequisites
-        shell: bash
-        run: |
-          case ${{ matrix.job.target }} in
-            arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-            aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-          esac
+          lfs: ${{ !matrix.skip-tests }}
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          target: ${{ matrix.job.target }}
+          target: ${{ matrix.target }}
           components: rustfmt
+          cache: false
 
-      - name: Install cross
-        if: matrix.job.use-cross
-        uses: taiki-e/install-action@v2
+      - uses: taiki-e/setup-cross-toolchain-action@v1
         with:
-          tool: cross
+          target: ${{ matrix.target }}
 
-      - name: Overwrite build command env variable
-        if: matrix.job.use-cross
-        shell: bash
-        run: echo "BUILD_CMD=cross" >> $GITHUB_ENV
-
-      - name: Add macOS cross build capability
-        if: matrix.job.target == 'aarch64-apple-darwin'
-        shell: bash
-        run: |
-          echo "SDKROOT=$(xcrun -sdk macosx --show-sdk-path)" >> $GITHUB_ENV
-          echo "MACOSX_DEPLOYMENT_TARGET=$(xcrun -sdk macosx --show-sdk-platform-version)" >> $GITHUB_ENV
+      - uses: Swatinem/rust-cache@v2
 
       - name: Show version information (Rust, cargo, GCC)
         shell: bash
@@ -142,40 +102,32 @@ jobs:
           cargo -V
           rustc -V
 
-      - name: Set build options
+      - name: Use rustls on musl targets.
         id: build-options
-        shell: bash
+        if: contains(matrix.target, '-musl')
         run: |
-          unset CARGO_BUILD_OPTIONS
-          case ${{ matrix.job.target }} in
-            *-musl*) CARGO_BUILD_OPTIONS="--no-default-features --features rustls-tls"  ;;
-            *) CARGO_BUILD_OPTIONS=""  ;;
-          esac
-          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS}" >> $GITHUB_OUTPUT
+          echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: build
-          args: --target=${{ matrix.job.target }} --all-targets ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} --features ${{ env.DEFAULT_FEATURES }}
+        run: >
+          cargo build 
+          --all-targets  
+          --features ${{ env.DEFAULT_FEATURES }}
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
 
-      - name: Set test options
+      - name: Disable testing the tools crate if cross compiling
         id: test-options
-        if: ${{ !matrix.job.skip-tests }}
-        shell: bash
+        if: ${{ !matrix.skip-tests }}
         run: |
-          unset CARGO_TEST_OPTIONS
-          case ${{ matrix.job.target }} in
-            *-musl*) CARGO_TEST_OPTIONS="--exclude tools"  ;;
-            *) CARGO_TEST_OPTIONS=""  ;;
-          esac
-          echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS}" >> $GITHUB_OUTPUT
+          echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
 
       - name: Run tests
-        if: ${{ !matrix.job.skip-tests }}
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: test
-          args: --workspace --features ${{ env.DEFAULT_FEATURES }} --target=${{ matrix.job.target }} ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} -- --nocapture
+        if: ${{ !matrix.skip-tests }}
+        run: >
+          cargo test 
+          --workspace 
+          --features ${{ env.DEFAULT_FEATURES }} 
+          ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
+          ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+          -- 
+          --nocapture
