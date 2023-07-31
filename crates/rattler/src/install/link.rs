@@ -1,16 +1,52 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
 use crate::install::python::PythonInfo;
+use memmap2::Mmap;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::borrow::Cow;
+use std::fmt;
+use std::fmt::Formatter;
 use std::fs::Permissions;
-use std::io::{ErrorKind, Seek, Write};
+use std::io::{ErrorKind, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use super::apple_codesign::{codesign, AppleCodeSignBehavior};
+
+/// Describes the method to "link" a file from the source directory (or the cache directory) to the
+/// destination directory.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub enum LinkMethod {
+    /// A hard link is created from the cache to the destination. This ensures that the file does
+    /// not take up more disk-space but has the downside that if the file is accidentally modified
+    /// it is also modified in the cache.
+    Hardlink,
+
+    /// A soft link is created. The link does not refer to the original file in the cache directory
+    /// but instead it points to another file in the destination.
+    Softlink,
+
+    /// A copy of a file is created from a file in the cache directory to a file in the destination
+    /// directory.
+    Copy,
+
+    /// A copy of a file is created and it is also patched.
+    Patched(FileMode),
+}
+
+impl fmt::Display for LinkMethod {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LinkMethod::Hardlink => write!(f, "hardlink"),
+            LinkMethod::Softlink => write!(f, "softlink"),
+            LinkMethod::Copy => write!(f, "copy"),
+            LinkMethod::Patched(FileMode::Binary) => write!(f, "binary patched"),
+            LinkMethod::Patched(FileMode::Text) => write!(f, "text patched"),
+        }
+    }
+}
 
 /// Errors that can occur when calling [`link_file`].
 #[derive(Debug, thiserror::Error)]
@@ -24,8 +60,20 @@ pub enum LinkFileError {
     FailedToCreateParentDirectory(#[source] std::io::Error),
 
     /// The source file could not be opened.
-    #[error("could not open source file")]
+    #[error("could not open source file for reading")]
     FailedToOpenSourceFile(#[source] std::io::Error),
+
+    /// The source file could not be opened.
+    #[error("failed to read the source file")]
+    FailedToReadSourceFile(#[source] std::io::Error),
+
+    /// Unable to read the contents of a symlink
+    #[error("could not open source file")]
+    FailedToReadSymlink(#[source] std::io::Error),
+
+    /// Linking the file from the source to the destination failed.
+    #[error("failed to {0} file to destination")]
+    FailedToLink(LinkMethod, #[source] std::io::Error),
 
     /// The source file metadata could not be read.
     #[error("could not source file metadata")]
@@ -63,6 +111,9 @@ pub struct LinkedFile {
     /// The relative path of the file in the destination directory. This might be different from the
     /// relative path in the source directory for python noarch packages.
     pub relative_path: PathBuf,
+
+    /// The way the file was linked
+    pub method: LinkMethod,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -115,18 +166,14 @@ pub fn link_file(
     let mut sha256 = None;
     let mut file_size = path_json_entry.size_in_bytes;
 
-    if let Some(PrefixPlaceholder {
+    let link_method = if let Some(PrefixPlaceholder {
         file_mode,
         placeholder,
     }) = path_json_entry.prefix_placeholder.as_ref()
     {
         // Memory map the source file. This provides us with easy access to a continuous stream of
         // bytes which makes it easier to search for the placeholder prefix.
-        let source = {
-            let file =
-                std::fs::File::open(&source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
-            unsafe { memmap2::Mmap::map(&file).map_err(LinkFileError::FailedToOpenSourceFile)? }
-        };
+        let source = map_or_read_source_file(&source_path)?;
 
         // Open the destination file
         let destination = std::fs::File::create(&destination_path)
@@ -208,40 +255,16 @@ pub fn link_file(
                 file_size = None;
             }
         }
+        LinkMethod::Patched(*file_mode)
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
-        loop {
-            match std::fs::hard_link(&source_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        hardlink_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Hardlink
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        let linked_path = source_path
-            .read_link()
-            .map_err(LinkFileError::FailedToOpenSourceFile)?;
-
-        loop {
-            match symlink(&linked_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        symlink_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Softlink
     } else {
-        loop {
-            match std::fs::copy(&source_path, &destination_path) {
-                Ok(_) => break,
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                    std::fs::remove_file(&destination_path)?;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        copy_to_destination(&source_path, &destination_path)?;
+        LinkMethod::Copy
     };
 
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
@@ -270,7 +293,108 @@ pub fn link_file(
         sha256,
         file_size,
         relative_path: destination_relative_path.into_owned(),
+        method: link_method,
     })
+}
+
+/// Either a memory mapped file or the complete contents of a file read to memory.
+enum MmapOrBytes {
+    Mmap(Mmap),
+    Bytes(Vec<u8>),
+}
+
+impl AsRef<[u8]> for MmapOrBytes {
+    fn as_ref(&self) -> &[u8] {
+        match &self {
+            MmapOrBytes::Mmap(mmap) => mmap.as_ref(),
+            MmapOrBytes::Bytes(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
+/// Either memory maps, or reads the contents of the file at the specified location.
+///
+/// This method prefers to memory map the file to reduce the memory load but if memory mapping fails
+/// it falls back to reading the contents of the file.
+///
+/// This fallback exists because we've seen that in some particular situations memory mapping is not
+/// allowed. A particular dubious case we've encountered is described in the this issue:
+/// https://github.com/prefix-dev/pixi/issues/234
+fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileError> {
+    let mut file =
+        std::fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;
+
+    // Try to memory map the file
+    let mmap = unsafe { Mmap::map(&file) };
+
+    // If memory mapping the file failed for whatever reason, try reading it directly to
+    // memory instead.
+    Ok(match mmap {
+        Ok(memory) => MmapOrBytes::Mmap(memory),
+        Err(err) => {
+            tracing::warn!(
+                "failed to memory map {}: {err}. Reading the file to memory instead.",
+                source_path.display()
+            );
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)
+                .map_err(LinkFileError::FailedToReadSourceFile)?;
+            MmapOrBytes::Bytes(bytes)
+        }
+    })
+}
+
+/// Symlink the specified file from the source (or cached) directory. If the file already exists it
+/// is removed and the operation is retried.
+fn hardlink_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<(), LinkFileError> {
+    loop {
+        match std::fs::hard_link(source_path, destination_path) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                std::fs::remove_file(destination_path)?;
+            }
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Hardlink, e)),
+        }
+    }
+}
+
+/// Symlink the specified file from the source (or cached) directory. If the file already exists it
+/// is removed and the operation is retried.
+fn symlink_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<(), LinkFileError> {
+    let linked_path = source_path
+        .read_link()
+        .map_err(LinkFileError::FailedToReadSymlink)?;
+
+    loop {
+        match symlink(&linked_path, destination_path) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                std::fs::remove_file(destination_path)?;
+            }
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Softlink, e)),
+        }
+    }
+}
+
+/// Copy the specified file from the source (or cached) directory. If the file already exists it is
+/// removed and the operation is retried.
+fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<(), LinkFileError> {
+    loop {
+        match std::fs::copy(source_path, destination_path) {
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                // If the file already exists, remove it and try again.
+                std::fs::remove_file(destination_path)?;
+            }
+            Ok(_) => return Ok(()),
+            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
+        }
+    }
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
