@@ -6,7 +6,6 @@ use std::path::{Path, PathBuf};
 use itertools::sorted;
 
 use rattler_conda_types::package::PackageMetadata;
-use tar::EntryType;
 
 /// a function that sorts paths into two iterators, one that starts with `info/` and one that does not
 /// both iterators are sorted alphabetically for reproducibility
