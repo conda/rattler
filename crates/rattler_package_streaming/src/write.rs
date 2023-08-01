@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use itertools::sorted;
 
 use rattler_conda_types::package::PackageMetadata;
+use tar::EntryType;
 
 /// a function that sorts paths into two iterators, one that starts with `info/` and one that does not
 /// both iterators are sorted alphabetically for reproducibility
@@ -238,7 +239,7 @@ fn prepare_header(
     header.set_device_major(0)?;
 
     if let Some(timestamp) = timestamp {
-        header.set_mtime(timestamp.timestamp() as u64);
+        header.set_mtime(timestamp.timestamp().unsigned_abs());
     }
 
     // let file_size = stat.len();
@@ -264,10 +265,10 @@ fn append_path_to_archive(
         .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
     if header.entry_type().is_file() {
-        let file = fs::File::open(base_path.join(path))
+        let mut file = fs::File::open(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
-        archive.append_data(&mut header, path, file)?;
+        archive.append_file(path, &mut file)?;
     } else if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
         let target = fs::read_link(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
