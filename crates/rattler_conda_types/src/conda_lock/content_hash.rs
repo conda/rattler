@@ -1,6 +1,5 @@
 use crate::conda_lock::Channel;
 use crate::{MatchSpec, Platform};
-use rattler_digest::serde::SerializableHash;
 use serde::Serialize;
 use serde_json_python_formatter::PythonFormatter;
 use std::string::FromUtf8Error;
@@ -108,10 +107,9 @@ pub fn calculate_content_hash(
     channels: &[Channel],
 ) -> Result<String, CalculateContentHashError> {
     let content_data = calculate_content_data(platform, input_specs, channels)?;
-    let json_str = serde_json::to_string(&SerializableHash::<rattler_digest::Sha256>(
-        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&content_data),
-    ))?;
-    Ok(json_str)
+    let content_hash =
+        rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&content_data);
+    Ok(format!("{:x}", content_hash))
 }
 
 #[cfg(test)]
@@ -122,7 +120,7 @@ mod tests {
     use crate::{MatchSpec, Platform};
 
     #[test]
-    fn test_content_hash() {
+    fn test_content_data() {
         let output = content_hash::calculate_content_data(
             &Platform::Osx64,
             &[MatchSpec::from_str("python =3.11.0").unwrap()],
@@ -139,5 +137,20 @@ mod tests {
 
         // TODO: add actual hash output checking when we have a default virtual package list
         //assert_eq!()
+    }
+
+    #[test]
+    fn test_content_hash() {
+        let output = content_hash::calculate_content_hash(
+            &Platform::Osx64,
+            &[MatchSpec::from_str("python =3.11.0").unwrap()],
+            &["conda-forge".into()],
+        )
+        .unwrap();
+
+        assert_eq!(
+            output,
+            "66c2193c7a9f1172bbd93eaf49119bd478d1408da018b2944974bbc8d85a6a50"
+        );
     }
 }
