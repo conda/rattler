@@ -1,0 +1,14 @@
+[project]
+name = "py-rattler"
+version = "0.1.0"
+description = "Add a short description here"
+authors = ["Bas Zalmstra <bas@prefix.dev>"]
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[tasks]
+build = "maturin develop"
+
+[dependencies]
+maturin = "~=1.2.2"
+pip = "23.2.1.*"

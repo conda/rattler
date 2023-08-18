@@ -1,0 +1,19 @@
+[build-system]
+requires = ["maturin~=1.2.1"]
+build-backend = "maturin"
+
+[project]
+name = "rattler"
+requires-python = ">=3.8"
+authors = [
+    { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" }
+]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
