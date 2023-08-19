@@ -1,4 +1,4 @@
-use crate::error::PyRattlerError;
+use crate::PyRattlerError;
 use pyo3::{pyclass, pymethods};
 use rattler_conda_types::Version;
 use std::str::FromStr;
@@ -8,12 +8,6 @@ use std::str::FromStr;
 #[derive(Clone)]
 pub struct PyVersion {
     inner: Version,
-}
-
-impl PyVersion {
-    pub(crate) fn new(version: Version) -> Self {
-        Self { inner: version }
-    }
 }
 
 impl From<Version> for PyVersion {
@@ -49,30 +43,30 @@ impl PyVersion {
     }
 
     pub fn equal(&self, other: &Self) -> bool {
-        &self.inner == &other.inner
+        self.inner == other.inner
     }
 
     pub fn not_equal(&self, other: &Self) -> bool {
-        &self.inner != &other.inner
+        self.inner != other.inner
     }
 
     pub fn less_than(&self, other: &Self) -> bool {
-        &self.inner < &other.inner
+        self.inner < other.inner
     }
 
     pub fn less_than_equals(&self, other: &Self) -> bool {
-        &self.inner <= &other.inner
+        self.inner <= other.inner
     }
 
     pub fn equals(&self, other: &Self) -> bool {
-        &self.inner == &other.inner
+        self.inner == other.inner
     }
 
     pub fn greater_than_equals(&self, other: &Self) -> bool {
-        &self.inner >= &other.inner
+        self.inner >= other.inner
     }
 
     pub fn greater_than(&self, other: &Self) -> bool {
-        &self.inner > &other.inner
+        self.inner > other.inner
     }
 }

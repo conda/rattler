@@ -1,5 +1,3 @@
 from rattler.version import Version
 
-__all__ = [
-    "Version"
-]
+__all__ = ["Version"]

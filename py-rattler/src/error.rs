@@ -12,7 +12,9 @@ pub enum PyRattlerError {
 impl From<PyRattlerError> for PyErr {
     fn from(value: PyRattlerError) -> Self {
         match value {
-            PyRattlerError::InvalidVersion(err) => InvalidVersionException::new_err(err.to_string()),
+            PyRattlerError::InvalidVersion(err) => {
+                InvalidVersionException::new_err(err.to_string())
+            }
         }
     }
 }

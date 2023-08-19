@@ -11,16 +11,16 @@ class Version:
             self._version = PyVersion(version)
         else:
             raise TypeError(
-                f"Version constructor received unsupported type {type(version).__name__!r}"
-                " for the `version` parameter"
+                "Version constructor received unsupported type "
+                f" {type(version).__name__!r} for the `version` parameter"
             )
 
     @classmethod
     def _from_py_version(cls, py_version: PyVersion) -> Version:
         """Construct Rattler version from FFI PyVersion object."""
-        df = cls.__new__(cls)
-        df._version = py_version
-        return df
+        version = cls.__new__(cls)
+        version._version = py_version
+        return version
 
     def __str__(self) -> str:
         return self._version.as_str()
@@ -43,7 +43,8 @@ class Version:
 
     def bump(self) -> Version:
         """
-        Returns a new version where the last numerical segment of this version has been bumped.
+        Returns a new version where the last numerical segment of this version has
+        been bumped.
 
         Examples
         --------
@@ -53,11 +54,11 @@ class Version:
         """
         return Version._from_py_version(self._version.bump())
 
-    def __eq__(self, other: Version) -> bool:  # type: ignore[override]
+    def __eq__(self, other: Version) -> bool:
         return self._version.equals(other._version)
 
-    def __ne__(self, other: Version) -> bool:  # type: ignore[override]
-        return self._version.not_equals(other._version)
+    def __ne__(self, other: Version) -> bool:
+        return self._version.not_equal(other._version)
 
     def __gt__(self, other: Version) -> bool:
         return self._version.greater_than(other._version)
