@@ -5,10 +5,12 @@ use chrono::Utc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
-use rattler_networking::AuthenticatedClient;
+use rattler_networking::{
+    retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
+    AuthenticatedClient,
+};
 use rattler_package_streaming::ExtractError;
 use reqwest::StatusCode;
-use retry_policies::{RetryDecision, RetryPolicy};
 use std::error::Error;
 use std::{
     fmt::{Display, Formatter},
@@ -19,14 +21,6 @@ use std::{
 use tokio::sync::broadcast;
 use tracing::Instrument;
 use url::Url;
-
-/// A simple [`RetryPolicy`] that just never retries.
-struct DoNotRetryPolicy;
-impl RetryPolicy for DoNotRetryPolicy {
-    fn should_retry(&self, _: u32) -> RetryDecision {
-        RetryDecision::DoNotRetry
-    }
-}
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
 ///

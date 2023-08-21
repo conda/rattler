@@ -37,7 +37,6 @@ rattler_networking = { version = "0.7.0", path = "../rattler_networking", defaul
 rattler_package_streaming = { version = "0.7.0", path = "../rattler_package_streaming", features = ["reqwest", "tokio"], default-features = false }
 regex = "1.9.1"
 reqwest = { version = "0.11.18", default-features = false, features = ["stream", "json", "gzip"] }
-retry-policies = { version = "0.2.0", default-features = false }
 serde = { version = "1.0.171", features = ["derive"] }
 serde_json = { version = "1.0.102", features = ["raw_value"] }
 serde_with = "3.0.0"

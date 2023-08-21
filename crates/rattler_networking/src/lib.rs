@@ -6,17 +6,9 @@ use std::path::PathBuf;
 
 pub use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 use reqwest::{Client, IntoUrl, Method, Url};
-use retry_policies::policies::ExponentialBackoff;
 
 pub mod authentication_storage;
-
-/// Returns the default retry policy that can be used .
-///
-/// This is useful if you just do not care about a retry policy and you just want something
-/// sensible. Note that the behavior of what is "sensible" might change over time.
-pub fn default_retry_policy() -> ExponentialBackoff {
-    ExponentialBackoff::builder().build_with_max_retries(3)
-}
+pub mod retry_policies;
 
 /// A client that can be used to make authenticated requests, based on the [`reqwest::Client`]
 #[derive(Clone)]
