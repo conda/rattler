@@ -119,7 +119,7 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
     // Take everything that looks like a version and use that to parse the version. Any error means
     // no characters were detected that belong to the version.
     let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
-        c.is_alphanumeric() || "!-_.*".contains(c)
+        c.is_alphanumeric() || "!-_.*+".contains(c)
     })(input)
     .map_err(|_| {
         nom::Err::Error(ParseConstraintError::InvalidVersion(ParseVersionError {
@@ -188,7 +188,7 @@ pub(crate) fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseC
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::Version;
+    use crate::{Version, VersionSpec};
     use std::str::FromStr;
 
     #[test]
@@ -339,5 +339,10 @@ mod test {
         // Any constraints
         assert_eq!(constraint_parser("*"), Ok(("", Constraint::Any)));
         assert_eq!(constraint_parser("*.*"), Ok(("", Constraint::Any)));
+    }
+
+    #[test]
+    fn pixi_issue_278() {
+        assert!(VersionSpec::from_str("1.8.1+g6b29558").is_ok());
     }
 }
