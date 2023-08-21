@@ -56,3 +56,8 @@ rand = "0.8.5"
 rstest = "0.18.1"
 tracing-test = { version = "0.2.4" }
 insta = { version = "1.30.0", features = ["yaml"] }
+
+tokio = { version = "1.29.1", features = ["macros", "rt-multi-thread"] }
+axum = "0.6.18"
+tower-http = { version = "0.4.1", features = ["fs"] }
+tower = { version = "0.4.13", default-features = false, features = ["util"] }

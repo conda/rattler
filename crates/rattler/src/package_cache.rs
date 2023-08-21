@@ -222,7 +222,7 @@ impl PackageCache {
                 if !matches!(
                     &err,
                     ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
-                ) || matches!(&err, ExtractError::ReqwestError(err) if
+                ) && !matches!(&err, ExtractError::ReqwestError(err) if
                     err.is_timeout() ||
                     err.is_connect() ||
                     err
@@ -304,9 +304,26 @@ where
 mod test {
     use super::PackageCache;
     use crate::{get_test_data_dir, validation::validate_package_directory};
+    use assert_matches::assert_matches;
+    use axum::{
+        extract::State,
+        http::{Request, StatusCode},
+        middleware,
+        middleware::Next,
+        response::Response,
+        routing::get_service,
+        Router,
+    };
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
-    use std::{fs::File, path::Path};
+    use rattler_networking::{
+        retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder},
+        AuthenticatedClient,
+    };
+    use std::{fs::File, net::SocketAddr, path::Path, sync::Arc};
     use tempfile::tempdir;
+    use tokio::sync::Mutex;
+    use tower_http::services::ServeDir;
+    use url::Url;
 
     #[tokio::test]
     pub async fn test_package_cache() {
@@ -347,5 +364,96 @@ mod test {
         // Make sure that the paths are the same as what we would expect from the original tar
         // archive.
         assert_eq!(current_paths, paths);
+    }
+
+    /// A helper middleware function that fails the first two requests.
+    async fn fail_the_first_two_requests<B>(
+        State(count): State<Arc<Mutex<i32>>>,
+        req: Request<B>,
+        next: Next<B>,
+    ) -> Result<Response, StatusCode> {
+        let count = {
+            let mut count = count.lock().await;
+            *count += 1;
+            *count
+        };
+
+        println!("Running middleware for request #{count} for {}", req.uri());
+        if count <= 2 {
+            println!("Discarding request!");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+
+        // requires the http crate to get the header name
+        Ok(next.run(req).await)
+    }
+
+    #[tokio::test]
+    pub async fn test_flaky_package_cache() {
+        let static_dir = get_test_data_dir();
+
+        // Construct a service that serves raw files from the test directory
+        let service = get_service(ServeDir::new(static_dir));
+
+        // Construct a router that returns data from the static dir but fails the first try.
+        let request_count = Arc::new(Mutex::new(0));
+        let router =
+            Router::new()
+                .route_service("/*key", service)
+                .layer(middleware::from_fn_with_state(
+                    request_count.clone(),
+                    fail_the_first_two_requests,
+                ));
+
+        // Construct the server that will listen on localhost but with a *random port*. The random
+        // port is very important because it enables creating multiple instances at the same time.
+        // We need this to be able to run tests in parallel.
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let server = axum::Server::bind(&addr).serve(router.into_make_service());
+
+        // Get the address of the server so we can bind to it at a later stage.
+        let addr = server.local_addr();
+
+        // Spawn the server.
+        tokio::spawn(server);
+
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let archive_name = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2";
+        let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
+
+        // Do the first request without
+        let result = cache
+            .get_or_fetch_from_url_with_retry(
+                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                server_url.join(archive_name).unwrap(),
+                AuthenticatedClient::default(),
+                DoNotRetryPolicy,
+            )
+            .await;
+
+        // First request without retry policy should fail
+        assert_matches!(result, Err(_));
+        {
+            let request_count_lock = request_count.lock().await;
+            assert_eq!(*request_count_lock, 1, "Expected there to be 1 request");
+        }
+
+        // The second one should fail after the 2nd try
+        let result = cache
+            .get_or_fetch_from_url_with_retry(
+                ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
+                server_url.join(archive_name).unwrap(),
+                AuthenticatedClient::default(),
+                ExponentialBackoffBuilder::default().build_with_max_retries(3),
+            )
+            .await;
+
+        assert!(result.is_ok());
+        {
+            let request_count_lock = request_count.lock().await;
+            assert_eq!(*request_count_lock, 3, "Expected there to be 3 requests");
+        }
     }
 }
