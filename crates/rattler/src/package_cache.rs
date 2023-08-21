@@ -1,14 +1,15 @@
 //! This module provides functionality to cache extracted Conda packages. See [`PackageCache`].
 
 use crate::validation::validate_package_directory;
+use chrono::Utc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
-use rattler_conda_types::package::ArchiveIdentifier;
-use rattler_conda_types::PackageRecord;
+use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
 use rattler_networking::AuthenticatedClient;
 use rattler_package_streaming::ExtractError;
+use reqwest::StatusCode;
+use retry_policies::{RetryDecision, RetryPolicy};
 use std::error::Error;
-use std::time::Duration;
 use std::{
     fmt::{Display, Formatter},
     future::Future,
@@ -18,6 +19,14 @@ use std::{
 use tokio::sync::broadcast;
 use tracing::Instrument;
 use url::Url;
+
+/// A simple [`RetryPolicy`] that just never retries.
+struct DoNotRetryPolicy;
+impl RetryPolicy for DoNotRetryPolicy {
+    fn should_retry(&self, _: u32) -> RetryDecision {
+        RetryDecision::DoNotRetry
+    }
+}
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
 ///
@@ -179,15 +188,26 @@ impl PackageCache {
     ///
     /// This is a convenience wrapper around `get_or_fetch` which fetches the package from the given
     /// URL if the package could not be found in the cache.
-    ///
-    /// The `retries` parameter specifies the number of retries to perform when an unexpected error
-    /// occurs. If `None` is passed the default of 3 is used.
     pub async fn get_or_fetch_from_url(
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
         client: AuthenticatedClient,
-        retries: Option<usize>,
+    ) -> Result<PathBuf, PackageCacheError> {
+        self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy)
+            .await
+    }
+
+    /// Returns the directory that contains the specified package.
+    ///
+    /// This is a convenience wrapper around `get_or_fetch` which fetches the package from the given
+    /// URL if the package could not be found in the cache.
+    pub async fn get_or_fetch_from_url_with_retry(
+        &self,
+        pkg: impl Into<CacheKey>,
+        url: Url,
+        client: AuthenticatedClient,
+        retry_policy: impl RetryPolicy + Send + 'static,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
             let mut current_try = 0;
@@ -204,34 +224,39 @@ impl PackageCache {
                 // Extract any potential error
                 let Err(err) = result else { return Ok(()); };
 
-                // If the number of tries is exceeded, simply return the error.
-                if current_try >= retries.unwrap_or(3) {
-                    return Err(err);
-                }
-
                 // Only retry on certain errors.
                 if !matches!(
                     &err,
                     ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
                 ) || matches!(&err, ExtractError::ReqwestError(err) if
-                    err.is_timeout()
-                        || err
+                    err.is_timeout() ||
+                    err.is_connect() ||
+                    err
                         .status()
-                        .map(|status| status.is_server_error())
+                        .map(|status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
                         .unwrap_or(false)
                 ) {
                     return Err(err);
                 }
 
+                // Determine whether or not to retry based on the retry policy
+                let execute_after = match retry_policy.should_retry(current_try) {
+                    RetryDecision::Retry { execute_after } => execute_after,
+                    RetryDecision::DoNotRetry => return Err(err),
+                };
+                let duration = (execute_after - Utc::now()).to_std().expect("the retry duration is out of range");
+
                 // Wait for a second to let the remote service restore itself. This increases the
                 // chance of success.
                 tracing::warn!(
-                    "failed to download and extract {} to {}: {}. Retrying after 1s...",
+                    "failed to download and extract {} to {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
                     &url,
                     destination.display(),
-                    err
+                    err,
+                    current_try,
+                    duration
                 );
-                tokio::time::sleep(Duration::from_secs(1)).await;
+                tokio::time::sleep(duration).await;
             }
         })
         .await

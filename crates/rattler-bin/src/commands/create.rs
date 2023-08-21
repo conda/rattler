@@ -11,7 +11,7 @@ use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, Platform,
     PrefixRecord, RepoDataRecord, Version,
 };
-use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
+use rattler_networking::{default_retry_policy, AuthenticatedClient, AuthenticationStorage};
 use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
@@ -397,11 +397,11 @@ async fn execute_operation(
         async {
             // Make sure the package is available in the package cache.
             let result = package_cache
-                .get_or_fetch_from_url(
+                .get_or_fetch_from_url_with_retry(
                     &install_record.package_record,
                     install_record.url.clone(),
                     download_client.clone(),
-                    None,
+                    default_retry_policy(),
                 )
                 .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
                 .map_err(anyhow::Error::from)

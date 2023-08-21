@@ -678,12 +678,7 @@ mod test {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(package_url).unwrap();
                     let package_dir = package_cache
-                        .get_or_fetch_from_url(
-                            package_info,
-                            package_url.clone(),
-                            client.clone(),
-                            None,
-                        )
+                        .get_or_fetch_from_url(package_info, package_url.clone(), client.clone())
                         .await
                         .unwrap();
 
