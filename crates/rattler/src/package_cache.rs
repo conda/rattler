@@ -6,7 +6,9 @@ use itertools::Itertools;
 use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_conda_types::PackageRecord;
 use rattler_networking::AuthenticatedClient;
+use rattler_package_streaming::ExtractError;
 use std::error::Error;
+use std::time::Duration;
 use std::{
     fmt::{Display, Formatter},
     future::Future,
@@ -177,17 +179,60 @@ impl PackageCache {
     ///
     /// This is a convenience wrapper around `get_or_fetch` which fetches the package from the given
     /// URL if the package could not be found in the cache.
+    ///
+    /// The `retries` parameter specifies the number of retries to perform when an unexpected error
+    /// occurs. If `None` is passed the default of 3 is used.
     pub async fn get_or_fetch_from_url(
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
         client: AuthenticatedClient,
+        retries: Option<usize>,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
-            tracing::debug!("downloading {} to {}", &url, destination.display());
-            rattler_package_streaming::reqwest::tokio::extract(client, url, &destination)
-                .await
-                .map(|_| ())
+            let mut current_try = 0;
+            loop {
+                current_try += 1;
+                tracing::debug!("downloading {} to {}", &url, destination.display());
+                let result = rattler_package_streaming::reqwest::tokio::extract(
+                    client.clone(),
+                    url.clone(),
+                    &destination,
+                )
+                .await;
+
+                // Extract any potential error
+                let Err(err) = result else { return Ok(()); };
+
+                // If the number of tries is exceeded, simply return the error.
+                if current_try >= retries.unwrap_or(3) {
+                    return Err(err);
+                }
+
+                // Only retry on certain errors.
+                if !matches!(
+                    &err,
+                    ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
+                ) || matches!(&err, ExtractError::ReqwestError(err) if
+                    err.is_timeout()
+                        || err
+                        .status()
+                        .map(|status| status.is_server_error())
+                        .unwrap_or(false)
+                ) {
+                    return Err(err);
+                }
+
+                // Wait for a second to let the remote service restore itself. This increases the
+                // chance of success.
+                tracing::warn!(
+                    "failed to download and extract {} to {}: {}. Retrying after 1s...",
+                    &url,
+                    destination.display(),
+                    err
+                );
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
         })
         .await
     }

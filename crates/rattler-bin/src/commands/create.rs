@@ -401,6 +401,7 @@ async fn execute_operation(
                     &install_record.package_record,
                     install_record.url.clone(),
                     download_client.clone(),
+                    None,
                 )
                 .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
                 .map_err(anyhow::Error::from)
