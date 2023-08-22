@@ -8,6 +8,8 @@ platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
 
 [tasks]
 build = "cargo build"
+fmt = "cargo fmt"
+lint = "cargo clippy"
 
 [dependencies]
 cxx-compiler = "1.6.0.*"
