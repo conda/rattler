@@ -12,7 +12,7 @@ fmt = "cargo fmt"
 lint = "cargo clippy"
 
 [dependencies]
-cxx-compiler = "1.6.0.*"
+cxx-compiler = "~=1.6.0"
 openssl = "3.1.2.*"
 make = "4.3.*"
 pkg-config = "0.29.2.*"
