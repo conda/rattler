@@ -397,7 +397,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name.to_owned()));
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name.into()));
 
     // Step 7. Otherwise sort our version + build
     let input = input.trim();
@@ -561,12 +561,12 @@ mod tests {
     #[test]
     fn test_match_spec_more() {
         let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
-        assert_eq!(spec.name, Some("foo".to_string()));
+        assert_eq!(spec.name, Some("foo".into()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
-        assert_eq!(spec.name, Some("foo".to_string()));
+        assert_eq!(spec.name, Some("foo".into()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
     }

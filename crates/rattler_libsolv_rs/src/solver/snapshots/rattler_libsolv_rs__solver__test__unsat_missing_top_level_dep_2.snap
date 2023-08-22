@@ -2,5 +2,5 @@
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: error
 ---
-No candidates were found for B 14.*.
+No candidates where found for b 14.*.
 

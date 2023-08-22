@@ -1,4 +1,4 @@
-use crate::{PackageRecord, VersionSpec};
+use crate::{PackageName, PackageRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
 use serde_with::{serde_as, skip_serializing_none};
@@ -114,7 +114,7 @@ use matcher::StringMatcher;
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
 pub struct MatchSpec {
     /// The name of the package
-    pub name: Option<String>,
+    pub name: Option<PackageName>,
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
@@ -189,7 +189,7 @@ impl MatchSpec {
     /// Match a MatchSpec against a PackageRecord
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
-            if name != &record.name {
+            if name.as_normalized().as_ref() != &record.name {
                 return false;
             }
         }
@@ -328,7 +328,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
 
 impl MatchSpec {
     /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
-    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<String>) -> Self {
+    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageName>) -> Self {
         Self {
             name,
             version: spec.version,

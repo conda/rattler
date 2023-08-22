@@ -100,7 +100,7 @@ impl Problem {
                         .cloned()
                         .find(|&ms| {
                             let ms = solver.pool().resolve_match_spec(ms);
-                            ms.name.as_deref().unwrap() == dep.record.name
+                            ms.name.as_ref().unwrap().as_normalized().as_ref() == dep.record.name
                         })
                         .unwrap();
 

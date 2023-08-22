@@ -3,7 +3,7 @@ use crate::conda_util;
 use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+use rattler_conda_types::{MatchSpec, PackageName, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -135,11 +135,11 @@ impl<'a> Pool<'a> {
         solvable_order: &mut HashMap<u64, Ordering>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
-        let match_spec_name = match_spec
-            .name
-            .as_deref()
-            .expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name) {
+        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
+        let name_id = match self
+            .names_to_ids
+            .get(match_spec_name.as_normalized().as_ref())
+        {
             None => return,
             Some(&name_id) => name_id,
         };
@@ -187,11 +187,11 @@ impl<'a> Pool<'a> {
         match_spec_to_forbidden: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
     ) {
         let match_spec = &self.match_specs[match_spec_id];
-        let match_spec_name = match_spec
-            .name
-            .as_deref()
-            .expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name) {
+        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
+        let name_id = match self
+            .names_to_ids
+            .get(match_spec_name.as_normalized().as_ref())
+        {
             None => return,
             Some(&name_id) => name_id,
         };
@@ -228,8 +228,12 @@ impl<'a> Pool<'a> {
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    fn intern_package_name<T: Into<String>>(&mut self, str: T) -> NameId {
-        match self.names_to_ids.entry(str.into()) {
+    fn intern_package_name<T: Into<PackageName>>(&mut self, name: T) -> NameId {
+        let package_name = name.into();
+        match self
+            .names_to_ids
+            .entry(package_name.as_normalized().to_string())
+        {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
                 let next_id = self.package_names.alloc(e.key().clone());
