@@ -1,0 +1,18 @@
+[project]
+name = "rattler"
+version = "0.7.0"
+description = "Rust library to install conda environments"
+authors = ["Wolf Vollprecht <wolf@prefix.dev>", "Bas Zalmstra <bas@prefix.dev>", "Tim de Jager <tim@prefix.dev>", "Ruben Arts <ruben@prefix.dev>"]
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[tasks]
+build = "cargo build"
+
+[dependencies]
+cxx-compiler = "1.6.0.*"
+openssl = "3.1.2.*"
+make = "4.3.*"
+pkg-config = "0.29.2.*"
+rust = "1.71.1.*"
+cmake = "3.26.4.*"
