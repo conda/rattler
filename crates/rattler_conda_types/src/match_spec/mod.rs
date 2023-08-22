@@ -189,7 +189,7 @@ impl MatchSpec {
     /// Match a MatchSpec against a PackageRecord
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
-            if name.as_normalized().as_ref() != &record.name {
+            if name.as_normalized().as_ref() != record.name {
                 return false;
             }
         }
