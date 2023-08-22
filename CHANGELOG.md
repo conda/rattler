@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2023-08-22
+
+### Highlights
+
+This release contains bug fixes.
+
+### Details
+
+#### Added
+
+- retry behavior when downloading package archives by @baszalmstra in ([#281](https://github.com/mamba-org/rattler/pull/281))
+
+#### Fixed
+
+- parsing of local versions in `Constraint`s by @baszalmstra in ([#280](https://github.com/mamba-org/rattler/pull/280))
 
 ## [0.7.0] - 2023-08-11
 
