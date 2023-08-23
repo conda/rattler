@@ -21,41 +21,54 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+/// The type of parse error that occurred when parsing match spec.
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseMatchSpecError {
+    /// The path or url of the package was invalid
     #[error("invalid package path or url")]
     InvalidPackagePathOrUrl,
 
+    /// Invalid bracket in match spec
     #[error("invalid bracket")]
     InvalidBracket,
 
+    /// Invalid number of colons in match spec
     #[error("invalid number of colons")]
     InvalidNumberOfColons,
 
+    /// Invalid channel provided in match spec
     #[error("invalid channel")]
     ParseChannelError(#[from] ParseChannelError),
 
+    /// Invalid key in match spec
     #[error("invalid bracket key: {0}")]
     InvalidBracketKey(String),
 
+    /// Missing package name in match spec
     #[error("missing package name")]
     MissingPackageName,
 
+    /// Multiple bracket sections in match spec
     #[error("multiple bracket sections not allowed")]
     MultipleBracketSectionsNotAllowed,
 
+    /// Invalid version and build
     #[error("Unable to parse version spec: {0}")]
     InvalidVersionAndBuild(String),
 
+    /// Invalid version spec
     #[error("invalid version spec: {0}")]
     InvalidVersionSpec(#[from] ParseVersionSpecError),
 
+    /// Invalid string matcher
     #[error("invalid string matcher: {0}")]
     InvalidStringMatcher(#[from] StringMatcherParseError),
 
+    /// Invalid build number
     #[error("invalid build number: {0}")]
     InvalidBuildNumber(#[from] ParseIntError),
 
+    /// Unable to parse hash digest from hex
     #[error("Unable to parse hash digest from hex")]
     InvalidHashDigest,
 }
