@@ -72,7 +72,8 @@ Try it!
 ## Contributing 😍
 
 We would love to have you contribute! 
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server. You can [join our discord server via this link][chat-url].
+See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server. 
+You can [join our discord server via this link][chat-url].
 
 
 ## Components
