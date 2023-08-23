@@ -1,0 +1,104 @@
+use pyo3::{pyclass, pymethods};
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec};
+use std::str::FromStr;
+
+use crate::{error::PyRattlerError, repo_data::package_record::PyPackageRecord};
+
+#[pyclass]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyMatchSpec {
+    inner: MatchSpec,
+}
+
+impl From<MatchSpec> for PyMatchSpec {
+    fn from(value: MatchSpec) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl Into<MatchSpec> for PyMatchSpec {
+    fn into(self) -> MatchSpec {
+        self.inner
+    }
+}
+
+#[pymethods]
+impl PyMatchSpec {
+    #[new]
+    pub fn __init__(spec: &str) -> pyo3::PyResult<Self> {
+        Ok(MatchSpec::from_str(spec)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a string representation of MatchSpec
+    pub fn as_str(&self) -> String {
+        format!("{}", self.inner)
+    }
+
+    /// Match a MatchSpec against a PackageRecord
+    pub fn matches(&self, record: &PyPackageRecord) -> bool {
+        self.inner.matches(&record.clone().into())
+    }
+
+    /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
+    #[staticmethod]
+    pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> Self {
+        Self {
+            inner: MatchSpec::from_nameless(spec.clone().into(), Some(name)),
+        }
+    }
+}
+
+#[pyclass]
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct PyNamelessMatchSpec {
+    inner: NamelessMatchSpec,
+}
+
+impl From<NamelessMatchSpec> for PyNamelessMatchSpec {
+    fn from(value: NamelessMatchSpec) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl Into<NamelessMatchSpec> for PyNamelessMatchSpec {
+    fn into(self) -> NamelessMatchSpec {
+        self.inner
+    }
+}
+
+impl From<PyMatchSpec> for PyNamelessMatchSpec {
+    fn from(value: PyMatchSpec) -> Self {
+        let inner: NamelessMatchSpec = Into::<MatchSpec>::into(value).into();
+        Self { inner }
+    }
+}
+
+#[pymethods]
+impl PyNamelessMatchSpec {
+    #[new]
+    pub fn __init__(spec: &str) -> pyo3::PyResult<Self> {
+        Ok(NamelessMatchSpec::from_str(spec)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a string representation of MatchSpec
+    pub fn as_str(&self) -> String {
+        format!("{}", self.inner)
+    }
+
+    /// Match a PyNamelessMatchSpec against a PyPackageRecord
+    pub fn matches(&self, record: &PyPackageRecord) -> bool {
+        self.inner.matches(&record.clone().into())
+    }
+
+    /// Constructs a [`PyNamelessMatchSpec`] from a [`PyMatchSpec`].
+    #[staticmethod]
+    pub fn from_match_spec(spec: &PyMatchSpec) -> Self {
+        Into::<Self>::into(spec.clone())
+    }
+}
