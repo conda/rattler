@@ -113,8 +113,8 @@ fn nvml_library_paths() -> &'static [&'static str] {
         "/usr/lib/x86_64-linux-gnu/libnvidia-ml.so",
         "/usr/lib/wsl/lib/libnvidia-ml.so.1", // WSL
         "/usr/lib/wsl/lib/libnvidia-ml.so",
-        "/usr/lib/x86_64-linux-gnu/nvidia/current/libcuda.so.1", // Debian
-        "/usr/lib/x86_64-linux-gnu/nvidia/current/libcuda.so",
+        "/usr/lib/x86_64-linux-gnu/libcuda.so.1", // Debian
+        "/usr/lib/x86_64-linux-gnu/libcuda.so",
     ];
     #[cfg(windows)]
     static FILENAMES: &[&str] = &["nvml.dll"];
