@@ -5,7 +5,8 @@ For a good list of things you could help us with, take a look at our [*good firs
 If you want to go deeper though, any [open issue](https://github.com/mamba-org/rattler/issues) is up for grabs.
 Just let us know what you start on something.
 
-For questions, requests or a casual chat, we are very active on our discord server. You can [join our discord server via this link][chat-url].
+For questions, requests or a casual chat, we are very active on our discord server. 
+You can [join our discord server via this link][chat-url].
 
 ## Development
 If you'd like to contribute code, then you may want to manage the build depends with a tool, we suggest pixi, but conda/mamba will also work.
