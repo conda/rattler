@@ -19,3 +19,7 @@ Cargo.lock
 
 # rattler
 .prefix
+
+# pixi
+.pixi/
+pixi.lock
