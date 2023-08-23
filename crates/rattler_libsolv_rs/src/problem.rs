@@ -561,9 +561,9 @@ impl<'a> DisplayUnsat<'a> {
                     if missing {
                         // No candidates for requirement
                         if depth == 0 {
-                            writeln!(f, "{indent}No candidates where found for {req}.")?;
+                            writeln!(f, "{indent}No candidates were found for {req}.")?;
                         } else {
-                            writeln!(f, "{indent}{req}, for which no candidates where found.",)?;
+                            writeln!(f, "{indent}{req}, for which no candidates were found.",)?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
