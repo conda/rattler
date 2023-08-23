@@ -18,7 +18,8 @@ You can use [pixi](https://github.com/prefix-dev/pixi) for setting up the enviro
 ```
 
 ### Virtual env with conda/mamba
-The environment can also be managed with conda using the spec in `environments.yml` in the project root. As below,
+The environment can also be managed with conda using the spec in `environments.yml` in the project root. 
+As below,
 ```sh
 ❱ mamba create -n name_of_your_rattler_env --file='environments.yml' && mamba activate name_of_your_rattler_env
 ❱ cargo build # uses cargo from your mamba venv
