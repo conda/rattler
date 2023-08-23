@@ -4,5 +4,5 @@ expression: error
 ---
 A <1000 cannot be installed because there are no viable options:
 |-- A 41 would require
-    |-- B <20, for which no candidates where found.
+    |-- B <20, for which no candidates were found.
 
