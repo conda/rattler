@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-bzip2 = { version = "0.4" }
+bzip2 = "0.4.4"
 chrono = "0.4.26"
 futures-util = { version = "0.3.28", optional = true }
 itertools = "0.11.0"
@@ -24,16 +24,16 @@ tokio = { version = "1", optional = true }
 tokio-util = { version = "0.7", optional = true }
 reqwest = { version = "0.11.18", optional = true, default-features = false }
 url = "2.4.0"
-zip = { version = "0.6.6" }
-zstd = "0.12.3"
+zip = { version = "0.6.6", default-features = false, features = ["deflate", "time"] }
+zstd = { version = "0.12.3", features = ["wasm"], default-features = false }
 rattler_networking = { version = "0.8.0", path = "../rattler_networking", default-features = false }
 
 [features]
-default = ['native-tls']
+default = ["native-tls", "blocking"]
 tokio = ["dep:tokio", "bzip2/tokio", "tokio/fs", "tokio-util/io", "tokio-util/io-util", "reqwest?/stream", "futures-util"]
-native-tls = ['reqwest?/native-tls']
-rustls-tls = ['reqwest?/rustls-tls']
-reqwest = ["reqwest/blocking"]
+native-tls = ["rattler_networking/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls"]
+blocking = ["rattler_networking/blocking"]
 
 [dev-dependencies]
 tempfile = "3.6.0"

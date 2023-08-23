@@ -146,7 +146,9 @@ impl Platform {
             target_os = "emscripten",
             windows
         )))]
-        compile_error!("unsupported target os");
+        {
+            return Platform::Linux64;
+        }
     }
 
     /// Returns a string representation of the platform.
