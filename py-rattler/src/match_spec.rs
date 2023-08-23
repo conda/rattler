@@ -17,9 +17,9 @@ impl From<MatchSpec> for PyMatchSpec {
     }
 }
 
-impl Into<MatchSpec> for PyMatchSpec {
-    fn into(self) -> MatchSpec {
-        self.inner
+impl From<PyMatchSpec> for MatchSpec {
+    fn from(value: PyMatchSpec) -> Self {
+        value.inner
     }
 }
 
@@ -64,9 +64,9 @@ impl From<NamelessMatchSpec> for PyNamelessMatchSpec {
     }
 }
 
-impl Into<NamelessMatchSpec> for PyNamelessMatchSpec {
-    fn into(self) -> NamelessMatchSpec {
-        self.inner
+impl From<PyNamelessMatchSpec> for NamelessMatchSpec {
+    fn from(val: PyNamelessMatchSpec) -> Self {
+        val.inner
     }
 }
 

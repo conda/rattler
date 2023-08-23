@@ -59,7 +59,9 @@ class NamelessMatchSpec:
         return self._nameless_match_spec.matches(package_record._package_record)
 
     @classmethod
-    def _from_py_nameless_match_spec(cls, py_nameless_match_spec: PyNamelessMatchSpec) -> NamelessMatchSpec:
+    def _from_py_nameless_match_spec(
+        cls, py_nameless_match_spec: PyNamelessMatchSpec
+    ) -> NamelessMatchSpec:
         """
         Construct py-rattler NamelessMatchSpec from PyNamelessMatchSpec FFI object.
         """

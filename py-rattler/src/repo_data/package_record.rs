@@ -15,9 +15,9 @@ impl From<PackageRecord> for PyPackageRecord {
     }
 }
 
-impl Into<PackageRecord> for PyPackageRecord {
-    fn into(self) -> PackageRecord {
-        self.inner
+impl From<PyPackageRecord> for PackageRecord {
+    fn from(val: PyPackageRecord) -> Self {
+        val.inner
     }
 }
 
