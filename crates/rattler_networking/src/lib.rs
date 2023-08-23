@@ -8,6 +8,7 @@ pub use authentication_storage::{authentication::Authentication, storage::Authen
 use reqwest::{Client, IntoUrl, Method, Url};
 
 pub mod authentication_storage;
+pub mod retry_policies;
 
 /// A client that can be used to make authenticated requests, based on the [`reqwest::Client`]
 #[derive(Clone)]
