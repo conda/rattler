@@ -1,20 +1,22 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::{GenericVirtualPackage, PackageRecord, RepoDataRecord};
+use rattler_conda_types::package::{ArchiveType};
+use rattler_conda_types::{GenericVirtualPackage, PackageRecord, RepoDataRecord, MatchSpec};
+use rattler_conda_types::ParseMatchSpecError;
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId};
 use std::cmp::Ordering;
+use std::str::FromStr;
 use std::collections::HashMap;
 
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
 pub fn add_repodata_records<'a>(
-    pool: &mut Pool<'a>,
+    pool: &mut Pool<'a, MatchSpec>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
-) -> Vec<SolvableId> {
+) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
 
@@ -37,18 +39,18 @@ pub fn add_repodata_records<'a>(
 
         // Dependencies
         for match_spec in record.depends.iter() {
-            pool.add_dependency(solvable_id, match_spec.to_string());
+            pool.add_dependency(solvable_id, MatchSpec::from_str(match_spec)?);
         }
 
         // Constrains
         for match_spec in record.constrains.iter() {
-            pool.add_constrains(solvable_id, match_spec.to_string());
+            pool.add_constrains(solvable_id, MatchSpec::from_str(match_spec)?);
         }
 
         solvable_ids.push(solvable_id)
     }
 
-    solvable_ids
+    Ok(solvable_ids)
 }
 
 /// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`
@@ -57,7 +59,7 @@ pub fn add_repodata_records<'a>(
 /// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool<'a>,
+    pool: &mut Pool<'a, MatchSpec>,
     repo_id: RepoId,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
@@ -99,7 +101,7 @@ fn add_or_reuse_solvable<'a>(
     Some(solvable_id)
 }
 
-pub fn add_virtual_packages(pool: &mut Pool, repo_id: RepoId, packages: &[GenericVirtualPackage]) {
+pub fn add_virtual_packages(pool: &mut Pool<MatchSpec>, repo_id: RepoId, packages: &[GenericVirtualPackage]) {
     let packages: &'static _ = packages
         .iter()
         .map(|p| PackageRecord {

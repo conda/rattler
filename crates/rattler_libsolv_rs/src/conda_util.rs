@@ -2,7 +2,7 @@ use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
-use crate::MatchSpecId;
+use crate::VersionSetId;
 use rattler_conda_types::{MatchSpec, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -16,9 +16,9 @@ pub(crate) fn compare_candidates(
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    match_specs: &Arena<MatchSpecId, MatchSpec>,
-    match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
-    match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
+    match_specs: &Arena<VersionSetId, MatchSpec>,
+    match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+    match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Ordering {
     let a_solvable = solvables[a].package();
     let b_solvable = solvables[b].package();
@@ -138,13 +138,13 @@ pub(crate) fn compare_candidates(
 }
 
 pub(crate) fn find_highest_version(
-    match_spec_id: MatchSpecId,
+    match_spec_id: VersionSetId,
     solvables: &Arena<SolvableId, Solvable>,
     interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    match_specs: &Arena<MatchSpecId, MatchSpec>,
-    match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
-    match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
+    match_specs: &Arena<VersionSetId, MatchSpec>,
+    match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+    match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Option<(Version, bool)> {
     match_spec_highest_version[match_spec_id]
         .get_or_init(|| {
@@ -182,12 +182,12 @@ pub(crate) fn find_highest_version(
 }
 
 pub(crate) fn find_candidates<'b>(
-    match_spec_id: MatchSpecId,
-    match_specs: &Arena<MatchSpecId, MatchSpec>,
+    match_spec_id: VersionSetId,
+    match_specs: &Arena<VersionSetId, MatchSpec>,
     names_to_ids: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     solvables: &Arena<SolvableId, Solvable>,
-    match_spec_to_candidates: &'b Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
+    match_spec_to_candidates: &'b Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
 ) -> &'b Vec<SolvableId> {
     match_spec_to_candidates[match_spec_id].get_or_init(|| {
         let match_spec = &match_specs[match_spec_id];

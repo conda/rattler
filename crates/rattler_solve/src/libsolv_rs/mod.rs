@@ -7,6 +7,7 @@ use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use rattler_libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use std::collections::HashMap;
+use rattler_conda_types::MatchSpec;
 
 mod input;
 mod output;
@@ -45,7 +46,7 @@ impl super::SolverImpl for Solver {
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
-        let mut pool = Pool::new();
+        let mut pool = Pool::<MatchSpec>::new();
 
         // Add virtual packages
         let repo_id = pool.new_repo();
@@ -60,7 +61,7 @@ impl super::SolverImpl for Solver {
             }
 
             let repo_id = pool.new_repo();
-            add_repodata_records(&mut pool, repo_id, repodata.records.iter().copied());
+            add_repodata_records(&mut pool, repo_id, repodata.records.iter().copied())?;
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo_id, repo_mapping.len());
@@ -69,7 +70,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo_id = pool.new_repo();
-        let installed_solvables = add_repodata_records(&mut pool, repo_id, &task.locked_packages);
+        let installed_solvables = add_repodata_records(&mut pool, repo_id, &task.locked_packages)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());
@@ -77,7 +78,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo_id = pool.new_repo();
-        let pinned_solvables = add_repodata_records(&mut pool, repo_id, &task.pinned_packages);
+        let pinned_solvables = add_repodata_records(&mut pool, repo_id, &task.pinned_packages)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());

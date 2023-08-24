@@ -1,11 +1,12 @@
 use crate::arena::Arena;
 use crate::id::ClauseId;
 use crate::id::SolvableId;
-use crate::id::{LearntClauseId, MatchSpecId};
+use crate::id::{LearntClauseId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
 use std::fmt::{Debug, Formatter};
+use rattler_conda_types::MatchSpec;
 
 /// Represents a single clause in the SAT problem
 ///
@@ -40,7 +41,7 @@ pub(crate) enum Clause {
     ///
     /// In SAT terms: (¬A ∨ B1 ∨ B2 ∨ ... ∨ B99), where B1 to B99 represent the possible candidates
     /// for the provided match spec
-    Requires(SolvableId, MatchSpecId),
+    Requires(SolvableId, VersionSetId),
     /// Ensures only a single version of a package is installed
     ///
     /// Usage: generate one [`Clause::ForbidMultipleInstances`] clause for each possible combination of
@@ -57,7 +58,7 @@ pub(crate) enum Clause {
     /// pays off to have a separate variant for user-friendly error messages.
     ///
     /// In SAT terms: (¬A ∨ ¬B)
-    Constrains(SolvableId, SolvableId),
+    Constrains(SolvableId, SolvableId, VersionSetId),
     /// Forbids the package on the right-hand side
     ///
     /// Note that the package on the left-hand side is not part of the clause, but just context to
@@ -78,11 +79,11 @@ impl Clause {
     fn initial_watches(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
+        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
     ) -> Option<[SolvableId; 2]> {
         match self {
             Clause::InstallRoot => None,
-            Clause::Constrains(s1, s2) | Clause::ForbidMultipleInstances(s1, s2) => {
+            Clause::Constrains(s1, s2, _) | Clause::ForbidMultipleInstances(s1, s2) => {
                 Some([*s1, *s2])
             }
             Clause::Lock(_, s) => Some([SolvableId::root(), *s]),
@@ -114,7 +115,7 @@ impl Clause {
     pub fn visit_literals(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool,
+        pool: &Pool<MatchSpec>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
@@ -137,7 +138,7 @@ impl Clause {
                     });
                 }
             }
-            Clause::Constrains(s1, s2) | Clause::ForbidMultipleInstances(s1, s2) => {
+            Clause::Constrains(s1, s2, _) | Clause::ForbidMultipleInstances(s1, s2) => {
                 visit(Literal {
                     solvable_id: s1,
                     negate: true,
@@ -184,7 +185,7 @@ impl ClauseState {
     pub fn new(
         kind: Clause,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<MatchSpecId, Vec<SolvableId>>,
+        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
     ) -> Self {
         let watched_literals = kind
             .initial_watches(learnt_clauses, match_spec_to_candidates)
@@ -201,7 +202,7 @@ impl ClauseState {
         clause
     }
 
-    pub fn debug<'a>(&self, pool: &'a Pool) -> ClauseDebug<'a> {
+    pub fn debug<'a>(&self, pool: &'a Pool<MatchSpec>) -> ClauseDebug<'a> {
         ClauseDebug {
             kind: self.kind,
             pool,
@@ -315,7 +316,7 @@ impl ClauseState {
 
     pub fn next_unwatched_variable(
         &self,
-        pool: &Pool,
+        pool: &Pool<MatchSpec>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
@@ -395,7 +396,7 @@ impl Literal {
 /// A representation of a clause that implements [`Debug`]
 pub(crate) struct ClauseDebug<'a> {
     kind: Clause,
-    pool: &'a Pool<'a>,
+    pool: &'a Pool<'a, MatchSpec>,
 }
 
 impl Debug for ClauseDebug<'_> {
@@ -404,19 +405,20 @@ impl Debug for ClauseDebug<'_> {
             Clause::InstallRoot => write!(f, "install root"),
             Clause::Learnt(learnt_id) => write!(f, "learnt clause {learnt_id:?}"),
             Clause::Requires(solvable_id, match_spec_id) => {
-                let match_spec = self.pool.resolve_match_spec(match_spec_id).to_string();
+                let match_spec = self.pool.resolve_version_set(match_spec_id).to_string();
                 write!(
                     f,
                     "{} requires {match_spec}",
                     self.pool.resolve_solvable_inner(solvable_id).display()
                 )
             }
-            Clause::Constrains(s1, s2) => {
+            Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
-                    "{} excludes {}",
+                    "{} excludes {} by {}",
                     self.pool.resolve_solvable_inner(s1).display(),
-                    self.pool.resolve_solvable_inner(s2).display()
+                    self.pool.resolve_solvable_inner(s2).display(),
+                    self.pool.resolve_version_set(vset_id)
                 )
             }
             Clause::Lock(locked, forbidden) => {
@@ -576,6 +578,6 @@ mod test {
         // This test is here to ensure we don't increase the size of `ClauseState` by accident, as
         // we are creating thousands of instances. Note: libsolv manages to bring down the size to
         // 24, so there is probably room for improvement.
-        assert_eq!(std::mem::size_of::<ClauseState>(), 28);
+        assert_eq!(std::mem::size_of::<ClauseState>(), 32);
     }
 }

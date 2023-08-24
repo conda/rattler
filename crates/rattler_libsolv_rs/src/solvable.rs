@@ -1,4 +1,4 @@
-use crate::id::MatchSpecId;
+use crate::id::VersionSetId;
 use crate::id::{NameId, RepoId};
 use rattler_conda_types::{PackageRecord, Version};
 use std::fmt::{Display, Formatter};
@@ -9,8 +9,8 @@ use std::fmt::{Display, Formatter};
 /// comes from the original `PackageRecord`)
 pub struct PackageSolvable<'a> {
     pub(crate) repo_id: RepoId,
-    pub(crate) dependencies: Vec<MatchSpecId>,
-    pub(crate) constrains: Vec<MatchSpecId>,
+    pub(crate) dependencies: Vec<VersionSetId>,
+    pub(crate) constrains: Vec<VersionSetId>,
     pub(crate) record: &'a PackageRecord,
     pub(crate) name: NameId,
     /// The solvable's metadata
@@ -41,7 +41,7 @@ pub(crate) struct Solvable<'a> {
 
 /// The inner representation of a solvable, which can be either a Conda package or the root solvable
 pub(crate) enum SolvableInner<'a> {
-    Root(Vec<MatchSpecId>),
+    Root(Vec<VersionSetId>),
     Package(PackageSolvable<'a>),
 }
 
@@ -80,7 +80,7 @@ impl<'a> Solvable<'a> {
         }
     }
 
-    pub(crate) fn root_mut(&mut self) -> &mut Vec<MatchSpecId> {
+    pub(crate) fn root_mut(&mut self) -> &mut Vec<VersionSetId> {
         match &mut self.inner {
             SolvableInner::Root(match_specs) => match_specs,
             _ => panic!("unexpected package solvable!"),

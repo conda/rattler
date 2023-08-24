@@ -38,6 +38,10 @@ pub enum SolveError {
     /// Each string is a somewhat user-friendly representation of which operation was not recognized
     /// and can be used for error reporting
     UnsupportedOperations(Vec<String>),
+
+    /// Error when converting matchspec
+    #[error(transparent)]
+    ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
 }
 
 impl fmt::Display for SolveError {
@@ -52,6 +56,9 @@ impl fmt::Display for SolveError {
             }
             SolveError::UnsupportedOperations(operations) => {
                 write!(f, "Unsupported operations: {}", operations.join(", "))
+            }
+            SolveError::ParseMatchSpecError(e) => {
+                write!(f, "Error parsing match spec: {}", e)
             }
         }
     }

@@ -11,10 +11,12 @@ use petgraph::graph::{DiGraph, EdgeIndex, EdgeReference, NodeIndex};
 use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
-use crate::id::{ClauseId, MatchSpecId, SolvableId};
+use crate::id::{ClauseId, VersionSetId, SolvableId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
+
+use rattler_conda_types::MatchSpec;
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -88,26 +90,17 @@ impl Problem {
                     let conflict = ConflictCause::ForbidMultipleInstances;
                     graph.add_edge(node1_id, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                Clause::Constrains(package_id, dep_id) => {
+                Clause::Constrains(package_id, dep_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
                     let dep_node = Self::add_node(&mut graph, &mut nodes, dep_id);
 
                     let package = solver.pool().resolve_solvable(package_id);
                     let dep = solver.pool().resolve_solvable(dep_id);
-                    let ms_id = package
-                        .constrains
-                        .iter()
-                        .cloned()
-                        .find(|&ms| {
-                            let ms = solver.pool().resolve_match_spec(ms);
-                            ms.name.as_deref().unwrap() == dep.record.name
-                        })
-                        .unwrap();
 
                     graph.add_edge(
                         package_node,
                         dep_node,
-                        ProblemEdge::Conflict(ConflictCause::Constrains(ms_id)),
+                        ProblemEdge::Conflict(ConflictCause::Constrains(version_set_id)),
                     );
                 }
             }
@@ -180,20 +173,20 @@ impl ProblemNode {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ProblemEdge {
     /// The target node is a candidate for the dependency specified by the match spec
-    Requires(MatchSpecId),
+    Requires(VersionSetId),
     /// The target node is involved in a conflict, caused by `ConflictCause`
     Conflict(ConflictCause),
 }
 
 impl ProblemEdge {
-    fn try_requires(self) -> Option<MatchSpecId> {
+    fn try_requires(self) -> Option<VersionSetId> {
         match self {
             ProblemEdge::Requires(match_spec_id) => Some(match_spec_id),
             ProblemEdge::Conflict(_) => None,
         }
     }
 
-    fn requires(self) -> MatchSpecId {
+    fn requires(self) -> VersionSetId {
         match self {
             ProblemEdge::Requires(match_spec_id) => match_spec_id,
             ProblemEdge::Conflict(_) => panic!("expected requires edge, found conflict"),
@@ -207,7 +200,7 @@ pub enum ConflictCause {
     /// The solvable is locked
     Locked(SolvableId),
     /// The target node is constrained by the specified match spec
-    Constrains(MatchSpecId),
+    Constrains(VersionSetId),
     /// It is forbidden to install multiple instances of the same dependency
     ForbidMultipleInstances,
 }
@@ -241,7 +234,7 @@ impl ProblemGraph {
     pub fn graphviz(
         &self,
         f: &mut impl std::io::Write,
-        pool: &Pool,
+        pool: &Pool<MatchSpec>,
         simplify: bool,
     ) -> Result<(), std::io::Error> {
         let graph = &self.graph;
@@ -281,7 +274,7 @@ impl ProblemGraph {
                 let label = match edge.weight() {
                     ProblemEdge::Requires(match_spec_id)
                     | ProblemEdge::Conflict(ConflictCause::Constrains(match_spec_id)) => {
-                        pool.resolve_match_spec(*match_spec_id).to_string()
+                        pool.resolve_version_set(*match_spec_id).to_string()
                     }
                     ProblemEdge::Conflict(ConflictCause::ForbidMultipleInstances)
                     | ProblemEdge::Conflict(ConflictCause::Locked(_)) => {
@@ -319,7 +312,7 @@ impl ProblemGraph {
         write!(f, "}}")
     }
 
-    fn simplify(&self, pool: &Pool) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
+    fn simplify(&self, pool: &Pool<MatchSpec>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
         let graph = &self.graph;
 
         // Gather information about nodes that can be merged
@@ -479,11 +472,11 @@ pub struct DisplayUnsat<'a> {
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
     missing_set: HashSet<NodeIndex>,
-    pool: &'a Pool<'a>,
+    pool: &'a Pool<'a, MatchSpec>,
 }
 
 impl<'a> DisplayUnsat<'a> {
-    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool) -> Self {
+    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<MatchSpec>) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
         let missing_set = graph.get_missing_set();
@@ -517,7 +510,7 @@ impl<'a> DisplayUnsat<'a> {
         top_level_indent: bool,
     ) -> fmt::Result {
         pub enum DisplayOp {
-            Requirement(MatchSpecId, Vec<EdgeIndex>),
+            Requirement(VersionSetId, Vec<EdgeIndex>),
             Candidate(NodeIndex),
         }
 
@@ -554,7 +547,7 @@ impl<'a> DisplayUnsat<'a> {
                         installable_nodes.contains(&target)
                     });
 
-                    let req = self.pool.resolve_match_spec(match_spec_id).to_string();
+                    let req = self.pool.resolve_version_set(match_spec_id).to_string();
                     let target_nx = graph.edge_endpoints(edges[0]).unwrap().1;
                     let missing =
                         edges.len() == 1 && graph[target_nx] == ProblemNode::UnresolvedDependency;
@@ -658,7 +651,7 @@ impl<'a> DisplayUnsat<'a> {
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
                         for &match_spec_id in match_specs {
-                            let match_spec = self.pool.resolve_match_spec(match_spec_id);
+                            let match_spec = self.pool.resolve_version_set(match_spec_id);
                             writeln!(
                                 f,
                                 "{indent}{} , which conflicts with any installable versions previously reported",

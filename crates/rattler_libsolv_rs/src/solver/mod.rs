@@ -29,7 +29,7 @@ mod watch_map;
 /// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
 /// comes from the original `PackageRecord`s)
 pub struct Solver<'a> {
-    pool: Pool<'a>,
+    pool: Pool<'a, MatchSpec>,
 
     pub(crate) clauses: Vec<ClauseState>,
     watches: WatchMap,
@@ -43,7 +43,7 @@ pub struct Solver<'a> {
 
 impl<'a> Solver<'a> {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool<'a>) -> Self {
+    pub fn new(pool: Pool<'a, MatchSpec>) -> Self {
         Self {
             clauses: Vec::new(),
             watches: WatchMap::new(),
@@ -56,7 +56,7 @@ impl<'a> Solver<'a> {
     }
 
     /// Returns a reference to the pool used by the solver
-    pub fn pool(&self) -> &Pool {
+    pub fn pool(&self) -> &Pool<MatchSpec> {
         &self.pool
     }
 
@@ -84,8 +84,8 @@ impl<'a> Solver<'a> {
         }
 
         // Populate the root solvable with the requested packages
-        for match_spec in &jobs.install {
-            let match_spec_id = self.pool.intern_matchspec(match_spec.to_string());
+        for match_spec in jobs.install.clone() {
+            let match_spec_id = self.pool.intern_version_set(match_spec);
             self.pool.root_solvable_mut().push(match_spec_id);
         }
 
@@ -164,13 +164,13 @@ impl<'a> Solver<'a> {
         stack.push(SolvableId::root());
 
         let mut match_spec_to_sorted_candidates =
-            Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
+            Mapping::new(vec![Vec::new(); self.pool.version_sets.len()]);
         let mut match_spec_to_forbidden =
-            Mapping::new(vec![Vec::new(); self.pool.match_specs.len()]);
+            Mapping::new(vec![Vec::new(); self.pool.version_sets.len()]);
         let match_spec_to_candidates =
-            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
+            Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
         let match_spec_to_highest_version =
-            Mapping::new(vec![OnceCell::new(); self.pool.match_specs.len()]);
+            Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
         let mut sorting_cache = HashMap::new();
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
@@ -222,9 +222,9 @@ impl<'a> Solver<'a> {
                         .populate_forbidden(dep, &mut match_spec_to_forbidden);
                 }
 
-                for &dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
+                for &solvable_dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
                     self.clauses.push(ClauseState::new(
-                        Clause::Constrains(solvable_id, dep),
+                        Clause::Constrains(solvable_id, solvable_dep, dep),
                         &self.learnt_clauses,
                         &match_spec_to_sorted_candidates,
                     ));
@@ -909,6 +909,7 @@ mod test {
     use crate::id::RepoId;
     use rattler_conda_types::{PackageRecord, Version};
     use std::str::FromStr;
+    use crate::pool::VersionSet;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {
@@ -935,20 +936,20 @@ mod test {
         }
     }
 
-    fn add_package(pool: &mut Pool, record: PackageRecord) {
+    fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
         let record = Box::leak(Box::new(record));
         let solvable_id = pool.add_package(RepoId::new(0), record);
 
         for dep in &record.depends {
-            pool.add_dependency(solvable_id, dep.to_string());
+            pool.add_dependency(solvable_id, MatchSpec::from_str(dep).unwrap());
         }
 
         for constrain in &record.constrains {
-            pool.add_constrains(solvable_id, constrain.to_string());
+            pool.add_constrains(solvable_id, MatchSpec::from_str(constrain).unwrap());
         }
     }
 
-    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<'static> {
+    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<'static, MatchSpec> {
         let mut pool = Pool::new();
         for (pkg_name, version, deps) in packages {
             let pkg_name = *pkg_name;
@@ -968,7 +969,7 @@ mod test {
         jobs
     }
 
-    fn transaction_to_string(pool: &Pool, transaction: &Transaction) -> String {
+    fn transaction_to_string(pool: &Pool<MatchSpec>, transaction: &Transaction) -> String {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in &transaction.steps {
@@ -983,7 +984,7 @@ mod test {
         buf
     }
 
-    fn solve_unsat(pool: Pool, jobs: SolveJobs) -> String {
+    fn solve_unsat(pool: Pool<MatchSpec>, jobs: SolveJobs) -> String {
         let mut solver = Solver::new(pool);
         match solver.solve(jobs) {
             Ok(_) => panic!("expected unsat, but a solution was found"),

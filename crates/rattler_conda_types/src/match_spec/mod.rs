@@ -3,6 +3,7 @@ use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
+use std::hash::{Hash, Hasher};
 
 pub mod matcher;
 pub mod parse;
@@ -341,6 +342,21 @@ impl MatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
         }
+    }
+}
+
+impl Hash for MatchSpec {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.version.hash(state);
+        self.build.hash(state);
+        self.build_number.hash(state);
+        self.file_name.hash(state);
+        self.channel.hash(state);
+        self.subdir.hash(state);
+        self.namespace.hash(state);
+        self.md5.hash(state);
+        self.sha256.hash(state);
     }
 }
 

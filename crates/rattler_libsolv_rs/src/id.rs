@@ -29,9 +29,9 @@ impl ArenaId for NameId {
 /// The id associated to a match spec
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-pub struct MatchSpecId(u32);
+pub struct VersionSetId(u32);
 
-impl ArenaId for MatchSpecId {
+impl ArenaId for VersionSetId {
     fn from_usize(x: usize) -> Self {
         Self(x as u32)
     }

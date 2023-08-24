@@ -21,6 +21,7 @@ use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
 
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Eq, PartialEq, Error)]
 pub enum ParseMatchSpecError {
     #[error("invalid package path or url")]
