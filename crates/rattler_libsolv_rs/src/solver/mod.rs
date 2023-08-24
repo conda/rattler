@@ -923,7 +923,7 @@ mod test {
             license: None,
             license_family: None,
             md5: None,
-            name: name.to_string(),
+            name: name.parse().unwrap(),
             noarch: Default::default(),
             platform: None,
             sha256: None,
@@ -1003,7 +1003,7 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
@@ -1023,14 +1023,14 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name, "efgh");
+        assert_eq!(solvable.record.name.as_normalized(), "efgh");
         assert_eq!(solvable.record.version.to_string(), "4.5.6");
     }
 
@@ -1051,14 +1051,14 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.4");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name, "efgh");
+        assert_eq!(solvable.record.name.as_normalized(), "efgh");
         assert_eq!(solvable.record.version.to_string(), "4.5.7");
     }
 
@@ -1101,7 +1101,7 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
@@ -1169,7 +1169,7 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version, Version::from_str("1.2.4").unwrap());
     }
 

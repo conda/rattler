@@ -4,11 +4,11 @@
 //! However, some types were added to enforce a bit more type safety.
 use self::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::match_spec::parse::ParseMatchSpecError;
-use crate::MatchSpec;
 use crate::{
     utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
     ParseVersionError, Platform, RepoDataRecord,
 };
+use crate::{MatchSpec, PackageName};
 use fxhash::FxHashMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
@@ -237,7 +237,7 @@ fn default_category() -> String {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct LockedDependency {
     /// Package name of dependency
-    pub name: String,
+    pub name: PackageName,
     /// Locked version
     pub version: String,
     /// Pip or Conda managed
@@ -248,7 +248,7 @@ pub struct LockedDependency {
     /// What are its own dependencies mapping name to version constraint
 
     #[serde_as(as = "FxHashMap<_, DisplayFromStr>")]
-    pub dependencies: FxHashMap<String, NamelessMatchSpec>,
+    pub dependencies: FxHashMap<PackageName, NamelessMatchSpec>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
@@ -348,9 +348,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
         let matchspecs = value
             .dependencies
             .into_iter()
-            .map(|(name, matchspec)| {
-                MatchSpec::from_nameless(matchspec, Some(name.into())).to_string()
-            })
+            .map(|(name, matchspec)| MatchSpec::from_nameless(matchspec, Some(name)).to_string())
             .collect::<Vec<_>>();
 
         let version = value.version.parse()?;
@@ -594,12 +592,15 @@ mod test {
 
         let result: crate::conda_lock::LockedDependency = from_str(yaml).unwrap();
 
-        assert_eq!(result.name, "ncurses");
+        assert_eq!(result.name.as_normalized(), "ncurses");
         assert_eq!(result.version, "6.4");
 
         let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
 
-        assert_eq!(repodata_record.package_record.name, "ncurses");
+        assert_eq!(
+            repodata_record.package_record.name.as_normalized(),
+            "ncurses"
+        );
         assert_eq!(
             repodata_record.package_record.version,
             VersionWithSource::from_str("6.4").unwrap()

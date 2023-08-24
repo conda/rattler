@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1306
 expression: error
 ---
-No candidates where found for b 14.*.
+No candidates were found for b 14.*.
 

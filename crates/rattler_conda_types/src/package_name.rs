@@ -1,85 +1,114 @@
 use serde::{Serialize, Serializer};
 use serde_with::DeserializeFromStr;
 use std::cmp::Ordering;
-use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
-use std::sync::Arc;
+use thiserror::Error;
 
 /// A representation of a conda package name. This struct both stores the source string from which
 /// this instance was created as well as a normalized name that can be used to compare different
 /// names. The normalized name is guaranteed to be a valid conda package name.
 ///
-/// Conda package names are always lowercase.
+/// Conda package names are always lowercase and can only contain ascii characters.
+///
+/// This struct explicitly does not implement [`Display`] because its ambiguous if that would
+/// display the source or the normalized version. Simply call `as_source` or `as_normalized` to make
+/// the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
-    source: Arc<str>,
-    normalized: Arc<str>,
+    normalized: Option<String>,
+    source: String,
 }
 
 impl PackageName {
+    /// Constructs a new `PackageName` from a string without checking if the string is actually a
+    /// valid or normalized conda package name. This should only be used if you are sure that the
+    /// input string is valid, otherwise use the `TryFrom` implementations.
+    pub fn new_unchecked<S: Into<String>>(normalized: S) -> Self {
+        Self {
+            normalized: None,
+            source: normalized.into(),
+        }
+    }
+
     /// Returns the source representation of the package name. This is the string from which this
     /// instance was created.
-    pub fn as_source(&self) -> &Arc<str> {
+    pub fn as_source(&self) -> &str {
         &self.source
     }
 
     /// Returns the normalized version of the package name. The normalized string is guaranteed to
     /// be a valid conda package name.
-    pub fn as_normalized(&self) -> &Arc<str> {
-        &self.normalized
+    pub fn as_normalized(&self) -> &str {
+        self.normalized.as_ref().unwrap_or(&self.source)
     }
 }
 
-impl From<&String> for PackageName {
-    fn from(value: &String) -> Self {
-        Arc::<str>::from(value.clone()).into()
+/// An error that is returned when conversion from a string to a [`PackageName`] fails.
+#[derive(Clone, Debug, Error)]
+pub enum InvalidPackageNameError {
+    /// The package name contains illegal characters
+    #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    InvalidCharacters(String),
+}
+
+impl TryFrom<&String> for PackageName {
+    type Error = InvalidPackageNameError;
+
+    fn try_from(value: &String) -> Result<Self, Self::Error> {
+        value.clone().try_into()
     }
 }
 
-impl From<String> for PackageName {
-    fn from(value: String) -> Self {
-        Arc::<str>::from(value).into()
-    }
-}
+impl TryFrom<String> for PackageName {
+    type Error = InvalidPackageNameError;
 
-impl From<Arc<str>> for PackageName {
-    fn from(value: Arc<str>) -> Self {
-        let normalized = if value.chars().any(char::is_uppercase) {
-            Arc::from(value.to_lowercase())
-        } else {
-            value.clone()
-        };
-        Self {
-            source: value,
-            normalized,
+    fn try_from(source: String) -> Result<Self, Self::Error> {
+        // Ensure that the string only contains valid characters
+        if !source
+            .chars()
+            .all(|c| matches!(c, 'a'..='z'|'A'..='Z'|'0'..='9'|'-'|'_'|'.'))
+        {
+            return Err(InvalidPackageNameError::InvalidCharacters(source));
         }
+
+        // Convert all characters to lowercase but only if it actually contains uppercase. This way
+        // we dont allocate the memory of the string if it is already lowercase.
+        let normalized = if source.chars().any(|c| c.is_ascii_uppercase()) {
+            Some(source.to_ascii_lowercase())
+        } else {
+            None
+        };
+
+        Ok(Self { source, normalized })
     }
 }
 
-impl<'a> From<&'a str> for PackageName {
-    fn from(value: &'a str) -> Self {
-        Arc::<str>::from(value.to_owned()).into()
+impl<'a> TryFrom<&'a str> for PackageName {
+    type Error = InvalidPackageNameError;
+
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        value.to_owned().try_into()
     }
 }
 
 impl FromStr for PackageName {
-    type Err = String;
+    type Err = InvalidPackageNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(s))
+        s.to_owned().try_into()
     }
 }
 
 impl Hash for PackageName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.normalized.hash(state)
+        self.as_normalized().hash(state)
     }
 }
 
 impl PartialEq for PackageName {
     fn eq(&self, other: &Self) -> bool {
-        self.normalized.eq(&other.normalized)
+        self.as_normalized().eq(other.as_normalized())
     }
 }
 
@@ -91,7 +120,7 @@ impl PartialOrd for PackageName {
 
 impl Ord for PackageName {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.normalized.cmp(&other.normalized)
+        self.as_normalized().cmp(&other.as_normalized())
     }
 }
 
@@ -100,13 +129,7 @@ impl Serialize for PackageName {
     where
         S: Serializer,
     {
-        self.source.as_ref().serialize(serializer)
-    }
-}
-
-impl Display for PackageName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.source.as_ref())
+        self.as_source().serialize(serializer)
     }
 }
 
@@ -115,15 +138,17 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_packagename_basics() {
-        let name1 = PackageName::from("cuDNN");
-        assert_eq!(name1.as_source().as_ref(), "cuDNN");
-        assert_eq!(name1.as_normalized().as_ref(), "cudnn");
+    fn test_package_name_basics() {
+        let name1 = PackageName::try_from("cuDNN").unwrap();
+        assert_eq!(name1.as_source(), "cuDNN");
+        assert_eq!(name1.as_normalized(), "cudnn");
 
-        let name2 = PackageName::from("cudnn");
-        assert_eq!(name2.as_source().as_ref(), "cudnn");
-        assert_eq!(name2.as_normalized().as_ref(), "cudnn");
+        let name2 = PackageName::try_from("cudnn").unwrap();
+        assert_eq!(name2.as_source(), "cudnn");
+        assert_eq!(name2.as_normalized(), "cudnn");
 
         assert_eq!(name1, name2);
+
+        assert!(PackageName::try_from("invalid$").is_err());
     }
 }

@@ -160,13 +160,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let package_names = specs
         .iter()
         .filter_map(|spec| spec.name.as_ref())
-        .map(|name| name.as_normalized().as_ref());
+        .map(|name| name.as_normalized());
     let repodatas = wrap_in_progress("parsing repodata", move || {
         SparseRepoData::load_records_recursive(
             &sparse_repo_datas,
             package_names,
             Some(|record| {
-                if record.name == "python" {
+                if record.name.as_normalized() == "python" {
                     record.depends.push("pip".to_string());
                 }
             }),
@@ -182,24 +182,26 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                 .iter()
                 .map(|virt_pkg| {
                     let elems = virt_pkg.split('=').collect::<Vec<&str>>();
-                    GenericVirtualPackage {
-                        name: elems[0].to_string(),
+                    Ok(GenericVirtualPackage {
+                        name: elems[0].try_into()?,
                         version: elems
                             .get(1)
                             .map(|s| Version::from_str(s))
                             .unwrap_or(Version::from_str("0"))
                             .expect("Could not parse virtual package version"),
                         build_string: elems.get(2).unwrap_or(&"").to_string(),
-                    }
+                    })
                 })
-                .collect::<Vec<_>>())
+                .collect::<anyhow::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::current().map(|vpkgs| {
-                vpkgs
-                    .iter()
-                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                    .collect::<Vec<_>>()
-            })
+            rattler_virtual_packages::VirtualPackage::current()
+                .map(|vpkgs| {
+                    vpkgs
+                        .iter()
+                        .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
+                        .collect::<Vec<_>>()
+                })
+                .map_err(anyhow::Error::from)
         }
     })?;
 
@@ -250,7 +252,9 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         let format_record = |r: &RepoDataRecord| {
             format!(
                 "{} {} {}",
-                r.package_record.name, r.package_record.version, r.package_record.build
+                r.package_record.name.as_normalized(),
+                r.package_record.version,
+                r.package_record.build
             )
         };
 
@@ -495,7 +499,11 @@ async fn install_package_to_environment(
         // Write the conda-meta information
         let pkg_meta_path = conda_meta_path.join(format!(
             "{}-{}-{}.json",
-            prefix_record.repodata_record.package_record.name,
+            prefix_record
+                .repodata_record
+                .package_record
+                .name
+                .as_normalized(),
             prefix_record.repodata_record.package_record.version,
             prefix_record.repodata_record.package_record.build
         ));
@@ -539,7 +547,7 @@ async fn remove_package_from_environment(
     // Remove the conda-meta file
     let conda_meta_path = target_prefix.join("conda-meta").join(format!(
         "{}-{}-{}.json",
-        package.repodata_record.package_record.name,
+        package.repodata_record.package_record.name.as_normalized(),
         package.repodata_record.package_record.version,
         package.repodata_record.package_record.build
     ));
@@ -623,7 +631,7 @@ async fn fetch_repo_data_records_with_progress(
             platform.to_string(),
             repo_data_json_path,
             Some(|record: &mut PackageRecord| {
-                if record.name == "python" {
+                if record.name.as_normalized() == "python" {
                     record.depends.push("pip".to_string());
                 }
             }),

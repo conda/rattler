@@ -63,38 +63,38 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName};
 /// use std::str::FromStr;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
 /// assert_eq!(spec.channel, Some("conda-forge".to_string()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// assert_eq!(spec.channel, Some("conda-forge".to_string()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// assert_eq!(spec.channel, Some("*".to_string()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
@@ -149,7 +149,7 @@ impl Display for MatchSpec {
         }
 
         match &self.name {
-            Some(name) => write!(f, "{name}")?,
+            Some(name) => write!(f, "{}", name.as_normalized())?,
             None => write!(f, "*")?,
         }
 
@@ -189,7 +189,7 @@ impl MatchSpec {
     /// Match a MatchSpec against a PackageRecord
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
-            if name.as_normalized().as_ref() != record.name {
+            if name != &record.name {
                 return false;
             }
         }
@@ -350,7 +350,7 @@ mod tests {
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
-    use crate::{MatchSpec, NamelessMatchSpec, PackageRecord, Version};
+    use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
 
     #[test]
     fn test_matchspec_format_eq() {
@@ -378,7 +378,7 @@ mod tests {
             ),
             md5: parse_digest_from_hex::<Md5>("dede6252c964db3f3e41c7d30d07f6bf"),
             ..PackageRecord::new(
-                String::from("mamba"),
+                PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
                 String::from(""),
             )

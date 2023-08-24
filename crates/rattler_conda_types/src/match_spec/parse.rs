@@ -3,7 +3,9 @@ use super::MatchSpec;
 use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{NamelessMatchSpec, ParseChannelError, VersionSpec};
+use crate::{
+    InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError, VersionSpec,
+};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
@@ -22,7 +24,7 @@ use thiserror::Error;
 use url::Url;
 
 /// The type of parse error that occurred when parsing match spec.
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
+#[derive(Debug, Clone, Error)]
 pub enum ParseMatchSpecError {
     /// The path or url of the package was invalid
     #[error("invalid package path or url")]
@@ -57,11 +59,11 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid version spec
-    #[error("invalid version spec: {0}")]
+    #[error(transparent)]
     InvalidVersionSpec(#[from] ParseVersionSpecError),
 
     /// Invalid string matcher
-    #[error("invalid string matcher: {0}")]
+    #[error(transparent)]
     InvalidStringMatcher(#[from] StringMatcherParseError),
 
     /// Invalid build number
@@ -71,6 +73,10 @@ pub enum ParseMatchSpecError {
     /// Unable to parse hash digest from hex
     #[error("Unable to parse hash digest from hex")]
     InvalidHashDigest,
+
+    /// The package name was invalid
+    #[error(transparent)]
+    InvalidPackageName(#[from] InvalidPackageNameError),
 }
 
 impl FromStr for MatchSpec {
@@ -221,11 +227,11 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(&str, &str), ParseMatchSpecError> {
+fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
     match take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(input)
         .finish()
     {
-        Ok((input, name)) => Ok((name.trim(), input.trim())),
+        Ok((input, name)) => Ok((PackageName::from_str(name.trim())?, input.trim())),
         Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::MissingPackageName),
     }
 }
@@ -397,7 +403,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
     // Step 6. Strip off the package name from the input
     let (name, input) = strip_package_name(input)?;
-    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name.into()));
+    let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
 
     // Step 7. Otherwise sort our version + build
     let input = input.trim();
@@ -454,6 +460,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
 #[cfg(test)]
 mod tests {
+    use assert_matches::assert_matches;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
     use std::collections::BTreeMap;
@@ -493,11 +500,11 @@ mod tests {
         let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", "1")];
         assert_eq!(result.1, expected);
 
-        assert_eq!(
+        assert_matches!(
             strip_brackets(r#"bla [version="1.2.3", build_number=]"#),
             Err(ParseMatchSpecError::InvalidBracket)
         );
-        assert_eq!(
+        assert_matches!(
             strip_brackets(r#"bla [version="1.2.3, build_number=1]"#),
             Err(ParseMatchSpecError::InvalidBracket)
         );
@@ -505,35 +512,35 @@ mod tests {
 
     #[test]
     fn test_split_version_and_build() {
-        assert_eq!(
+        assert_matches!(
             split_version_and_build("==1.0=py27_0"),
             Ok(("==1.0", Some("py27_0")))
         );
-        assert_eq!(split_version_and_build("=*=cuda"), Ok(("=*", Some("cuda"))));
-        assert_eq!(
+        assert_matches!(split_version_and_build("=*=cuda"), Ok(("=*", Some("cuda"))));
+        assert_matches!(
             split_version_and_build("=1.2.3 0"),
             Ok(("=1.2.3", Some("0")))
         );
-        assert_eq!(split_version_and_build("1.2.3=0"), Ok(("1.2.3", Some("0"))));
-        assert_eq!(
+        assert_matches!(split_version_and_build("1.2.3=0"), Ok(("1.2.3", Some("0"))));
+        assert_matches!(
             split_version_and_build(">=1.0 , < 2.0 py34_0"),
             Ok((">=1.0 , < 2.0", Some("py34_0")))
         );
-        assert_eq!(
+        assert_matches!(
             split_version_and_build(">=1.0 , < 2.0 =py34_0"),
             Ok((">=1.0 , < 2.0", Some("=py34_0")))
         );
-        assert_eq!(split_version_and_build("=1.2.3 "), Ok(("=1.2.3", None)));
-        assert_eq!(
+        assert_matches!(split_version_and_build("=1.2.3 "), Ok(("=1.2.3", None)));
+        assert_matches!(
             split_version_and_build(">1.8,<2|==1.7"),
             Ok((">1.8,<2|==1.7", None))
         );
-        assert_eq!(
+        assert_matches!(
             split_version_and_build("* openblas_0"),
             Ok(("*", Some("openblas_0")))
         );
-        assert_eq!(split_version_and_build("* *"), Ok(("*", Some("*"))));
-        assert_eq!(
+        assert_matches!(split_version_and_build("* *"), Ok(("*", Some("*"))));
+        assert_matches!(
             split_version_and_build(">=1!164.3095,<1!165"),
             Ok((">=1!164.3095,<1!165", None))
         );
@@ -561,12 +568,12 @@ mod tests {
     #[test]
     fn test_match_spec_more() {
         let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
-        assert_eq!(spec.name, Some("foo".into()));
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
-        assert_eq!(spec.name, Some("foo".into()));
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
     }
@@ -574,10 +581,10 @@ mod tests {
     #[test]
     fn test_hash_spec() {
         let spec = MatchSpec::from_str("conda-forge::foo[md5=1234567890]");
-        assert_eq!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
+        assert_matches!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
 
         let spec = MatchSpec::from_str("conda-forge::foo[sha256=1234567890]");
-        assert_eq!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
+        assert_matches!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
 
         let spec = MatchSpec::from_str("conda-forge::foo[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3]").unwrap();
         assert_eq!(

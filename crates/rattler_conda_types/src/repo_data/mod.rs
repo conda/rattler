@@ -18,7 +18,7 @@ use thiserror::Error;
 use rattler_macros::sorted;
 
 use crate::package::IndexJson;
-use crate::{Channel, NoArchType, Platform, RepoDataRecord, VersionWithSource};
+use crate::{Channel, NoArchType, PackageName, Platform, RepoDataRecord, VersionWithSource};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
@@ -106,7 +106,7 @@ pub struct PackageRecord {
     pub md5: Option<Md5Hash>,
 
     /// The name of the package
-    pub name: String,
+    pub name: PackageName,
 
     /// If this package is independent of architecture this field specifies in what way. See
     /// [`NoArchType`] for more information.
@@ -149,7 +149,13 @@ pub struct PackageRecord {
 
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}={}", self.name, self.version, self.build)
+        write!(
+            f,
+            "{}={}={}",
+            self.name.as_normalized(),
+            self.version,
+            self.build
+        )
     }
 }
 
@@ -182,7 +188,7 @@ impl RepoData {
 
 impl PackageRecord {
     /// A simple helper method that constructs a `PackageRecord` with the bare minimum values.
-    pub fn new(name: String, version: impl Into<VersionWithSource>, build: String) -> Self {
+    pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
         Self {
             arch: None,
             build,

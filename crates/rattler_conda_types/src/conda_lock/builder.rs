@@ -6,7 +6,7 @@ use crate::conda_lock::{
     content_hash, Channel, CondaLock, GitMeta, LockMeta, LockedDependency, Manager, PackageHashes,
     TimeMeta,
 };
-use crate::{MatchSpec, NamelessMatchSpec, NoArchType, Platform, RepoDataRecord};
+use crate::{MatchSpec, NamelessMatchSpec, NoArchType, PackageName, Platform, RepoDataRecord};
 use fxhash::{FxHashMap, FxHashSet};
 use std::str::FromStr;
 use url::Url;
@@ -169,7 +169,7 @@ impl LockedPackages {
 /// Short-hand for creating a LockedPackage that transforms into a [`LockedDependency`]
 pub struct LockedPackage {
     /// Name of the locked package
-    pub name: String,
+    pub name: PackageName,
     /// Package version
     pub version: String,
     /// Package build string
@@ -179,7 +179,7 @@ pub struct LockedPackage {
     /// Collection of package hash fields
     pub package_hashes: PackageHashes,
     /// List of dependencies for this package
-    pub dependency_list: FxHashMap<String, NamelessMatchSpec>,
+    pub dependency_list: FxHashMap<PackageName, NamelessMatchSpec>,
     /// Check if package is optional
     pub optional: Option<bool>,
 
@@ -245,9 +245,9 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
                 .ok_or_else(|| {
                     ConversionError::Missing(format!("dependency name for {}", match_spec_str))
                 })?
-                .to_string();
+                .clone();
             let version_constraint = NamelessMatchSpec::from(matchspec);
-            dependencies.insert(name, version_constraint);
+            dependencies.insert(name.clone(), version_constraint);
         }
 
         Ok(Self {
@@ -281,20 +281,19 @@ impl LockedPackage {
     }
 
     /// Add a single dependency
-    pub fn add_dependency<S: AsRef<str>>(
+    pub fn add_dependency(
         mut self,
-        key: S,
+        key: PackageName,
         version_constraint: NamelessMatchSpec,
     ) -> Self {
-        self.dependency_list
-            .insert(key.as_ref().to_string(), version_constraint);
+        self.dependency_list.insert(key, version_constraint);
         self
     }
 
     /// Add multiple dependencies
     pub fn add_dependencies(
         mut self,
-        value: impl IntoIterator<Item = (String, NamelessMatchSpec)>,
+        value: impl IntoIterator<Item = (PackageName, NamelessMatchSpec)>,
     ) -> Self {
         self.dependency_list.extend(value);
         self
@@ -391,7 +390,8 @@ mod tests {
     use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
     use crate::conda_lock::PackageHashes;
     use crate::{
-        ChannelConfig, MatchSpec, NamelessMatchSpec, NoArchType, Platform, RepoDataRecord,
+        ChannelConfig, MatchSpec, NamelessMatchSpec, NoArchType, PackageName, Platform,
+        RepoDataRecord,
     };
     use rattler_digest::parse_digest_from_hex;
 
@@ -405,13 +405,13 @@ mod tests {
         )
             .add_locked_packages(LockedPackages::new(Platform::Osx64)
                 .add_locked_package(LockedPackage {
-                    name: "python".to_string(),
+                    name: PackageName::new_unchecked("python"),
                     version: "3.11.0".to_string(),
                     build_string: "h4150a38_1_cpython".to_string(),
                     url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda".parse().unwrap(),
                     package_hashes:  PackageHashes::Md5Sha256(parse_digest_from_hex::<rattler_digest::Md5>("c6f4b87020c72e2700e3e94c1fc93b70").unwrap(),
                                                                parse_digest_from_hex::<rattler_digest::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
-                    dependency_list: FxHashMap::from_iter([("python".to_string(), NamelessMatchSpec::from_str("3.11.0.*").unwrap())]),
+                    dependency_list: FxHashMap::from_iter([(PackageName::new_unchecked("python"), NamelessMatchSpec::from_str("3.11.0.*").unwrap())]),
                     optional: None,
                     arch: Some("x86_64".to_string()),
                     subdir: Some("noarch".to_string()),

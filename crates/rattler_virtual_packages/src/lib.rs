@@ -34,7 +34,7 @@ pub mod linux;
 pub mod osx;
 
 use once_cell::sync::OnceCell;
-use rattler_conda_types::{GenericVirtualPackage, Platform, Version};
+use rattler_conda_types::{GenericVirtualPackage, PackageName, Platform, Version};
 use std::str::FromStr;
 
 use crate::osx::ParseOsxVersionError;
@@ -71,12 +71,12 @@ impl From<VirtualPackage> for GenericVirtualPackage {
     fn from(package: VirtualPackage) -> Self {
         match package {
             VirtualPackage::Win => GenericVirtualPackage {
-                name: "__win".into(),
+                name: PackageName::new_unchecked("__win"),
                 version: Version::from_str("0").unwrap(),
                 build_string: "0".into(),
             },
             VirtualPackage::Unix => GenericVirtualPackage {
-                name: "__unix".into(),
+                name: PackageName::new_unchecked("__unix"),
                 version: Version::from_str("0").unwrap(),
                 build_string: "0".into(),
             },
@@ -174,7 +174,7 @@ impl Linux {
 impl From<Linux> for GenericVirtualPackage {
     fn from(linux: Linux) -> Self {
         GenericVirtualPackage {
-            name: "__linux".into(),
+            name: PackageName::new_unchecked("__linux"),
             version: linux.version,
             build_string: "0".into(),
         }
@@ -211,7 +211,9 @@ impl LibC {
 impl From<LibC> for GenericVirtualPackage {
     fn from(libc: LibC) -> Self {
         GenericVirtualPackage {
-            name: format!("__{}", libc.family.to_lowercase()),
+            name: format!("__{}", libc.family.to_lowercase())
+                .try_into()
+                .unwrap(),
             version: libc.version,
             build_string: "0".into(),
         }
@@ -242,7 +244,7 @@ impl Cuda {
 impl From<Cuda> for GenericVirtualPackage {
     fn from(cuda: Cuda) -> Self {
         GenericVirtualPackage {
-            name: "__cuda".into(),
+            name: PackageName::new_unchecked("__cuda"),
             version: cuda.version,
             build_string: "0".into(),
         }
@@ -296,7 +298,7 @@ impl Archspec {
 impl From<Archspec> for GenericVirtualPackage {
     fn from(archspec: Archspec) -> Self {
         GenericVirtualPackage {
-            name: "__archspec".into(),
+            name: PackageName::new_unchecked("__archspec"),
             version: Version::from_str("1").unwrap(),
             build_string: archspec.spec,
         }
@@ -330,7 +332,7 @@ impl Osx {
 impl From<Osx> for GenericVirtualPackage {
     fn from(osx: Osx) -> Self {
         GenericVirtualPackage {
-            name: "__osx".into(),
+            name: PackageName::new_unchecked("__osx"),
             version: osx.version,
             build_string: "0".into(),
         }
