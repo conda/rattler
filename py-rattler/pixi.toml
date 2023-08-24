@@ -8,13 +8,18 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
 [tasks]
 build = "maturin develop"
-test = "pytest"
+test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "black ."
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff ."
 lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["lint-python", "lint-rust"] }
+
+# checks for the CI
+fmt-rust-check = "cargo fmt --all --check"
+fmt-python-check = "black . --check"
+fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 
 [dependencies]
 maturin = "~=1.2.2"

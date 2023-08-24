@@ -348,6 +348,9 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     if is_package_file(input) {
         let _url = match Url::parse(input) {
             Ok(url) => url,
+            #[cfg(target_arch = "wasm32")]
+            Err(_) => return Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
+            #[cfg(not(target_arch = "wasm32"))]
             Err(_) => match PathBuf::from_str(input) {
                 Ok(path) => Url::from_file_path(path)
                     .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)?,
