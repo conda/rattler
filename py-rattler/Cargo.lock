@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -610,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "blake2",
  "digest",
@@ -623,7 +623,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "quote",
  "syn 2.0.29",
