@@ -192,8 +192,7 @@ class Version:
         if new_py_version:
             return self._from_py_version(new_py_version)
         else:
-            raise InvalidVersionError(
-                "new Version must have atleast 1 valid segment")
+            raise InvalidVersionError("new Version must have atleast 1 valid segment")
 
     def with_segments(self, start: int, stop: int) -> Version:
         """
