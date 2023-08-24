@@ -157,10 +157,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // Get the package names from the matchspecs so we can only load the package records that we need.
-    let package_names = specs
-        .iter()
-        .filter_map(|spec| spec.name.as_ref())
-        .map(|name| name.as_normalized());
+    let package_names = specs.iter().filter_map(|spec| spec.name.as_ref().cloned());
     let repodatas = wrap_in_progress("parsing repodata", move || {
         SparseRepoData::load_records_recursive(
             &sparse_repo_datas,
