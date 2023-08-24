@@ -120,7 +120,7 @@ impl PartialOrd for PackageName {
 
 impl Ord for PackageName {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.as_normalized().cmp(&other.as_normalized())
+        self.as_normalized().cmp(other.as_normalized())
     }
 }
 

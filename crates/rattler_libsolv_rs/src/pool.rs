@@ -136,7 +136,7 @@ impl<'a> Pool<'a> {
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(&match_spec_name) {
+        let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,
             Some(&name_id) => name_id,
         };
@@ -185,7 +185,7 @@ impl<'a> Pool<'a> {
     ) {
         let match_spec = &self.match_specs[match_spec_id];
         let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(&match_spec_name) {
+        let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,
             Some(&name_id) => name_id,
         };
