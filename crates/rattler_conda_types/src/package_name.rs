@@ -11,9 +11,9 @@ use thiserror::Error;
 ///
 /// Conda package names are always lowercase and can only contain ascii characters.
 ///
-/// This struct explicitly does not implement [`Display`] because its ambiguous if that would
-/// display the source or the normalized version. Simply call `as_source` or `as_normalized` to make
-/// the distinction.
+/// This struct explicitly does not implement [`std::fmt::Display`] because its ambiguous if that
+/// would display the source or the normalized version. Simply call `as_source` or `as_normalized`
+/// to make the distinction.
 #[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
     normalized: Option<String>,
