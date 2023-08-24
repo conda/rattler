@@ -81,7 +81,7 @@ impl PyVersion {
     }
 
     /// Returns the number of segments in the version.
-    pub fn segnment_count(&self) -> usize {
+    pub fn segment_count(&self) -> usize {
         self.inner.segment_count()
     }
 
