@@ -33,4 +33,5 @@ jobs:
           pixi run fmt-check
       - name: Run tests
         run: |
+          cd py-rattler
           pixi run test
