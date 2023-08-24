@@ -70,6 +70,20 @@ impl PyVersion {
         })
     }
 
+    pub fn segments(&self) -> Vec<Vec<String>> {
+        self.inner
+            .segments()
+            .map(|s| s.components().map(|c| format!("{c}")).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    }
+
+    pub fn local_segments(&self) -> Vec<Vec<String>> {
+        self.inner
+            .local_segments()
+            .map(|s| s.components().map(|c| format!("{c}")).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    }
+
     /// Returns new version with with segments ranging from `start` to `stop`.
     /// `stop` is exclusive.
     pub fn with_segments(&self, start: usize, stop: usize) -> Option<Self> {

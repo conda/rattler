@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from rattler.rattler import PyVersion, InvalidVersionError
 
@@ -78,6 +78,30 @@ class Version:
         True
         """
         return self._version.has_local()
+
+    def segments(self) -> List[List[str]]:
+        """
+        Returns a list of segments of the version. It does not contain
+        the local segment of the version.
+
+        Examples
+        --------
+        >>> v = Version("1.2dev.3-alpha4.5+6.8")
+        [['1'], ['2', 'dev'], ['3'], ['0', 'alpha', '4'], ['5']]
+        """
+        return self._version.segments()
+
+    def local_segments(self) -> List[List[str]]:
+        """
+        Returns a list of local segments of the version. It does not
+        contain the non-local segment of the version.
+
+        Examples
+        --------
+        >>> v = Version("1.2dev.3-alpha4.5+6.8")
+        [['6'], ['8']]
+        """
+        return self._version.local_segments()
 
     def as_major_minor(self) -> Optional[Tuple[int, int]]:
         """
