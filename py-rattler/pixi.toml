@@ -16,6 +16,11 @@ lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["lint-python", "lint-rust"] }
 
+# checks for the CI
+fmt-rust-check = "cargo fmt --all --check"
+fmt-python-check = "black . --check"
+fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
+
 [dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
