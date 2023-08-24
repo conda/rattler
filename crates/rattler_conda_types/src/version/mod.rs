@@ -207,7 +207,7 @@ impl Version {
     }
 
     /// Returns the individual segments of the version.
-    fn segments(
+    pub fn segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         let mut idx = if self.has_epoch() { 1 } else { 0 };
@@ -305,7 +305,7 @@ impl Version {
     /// 1.2+3.2.1-alpha0
     ///     ^^^^^^^^^^^^ This is the local part of the version
     /// ```
-    fn local_segments(
+    pub fn local_segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
@@ -671,7 +671,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 
 /// Either a number, literal or the infinity.
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-enum Component {
+pub enum Component {
     Numeral(u64),
 
     /// Post should always be ordered greater than anything else.
@@ -887,7 +887,7 @@ impl<'de> Deserialize<'de> for Version {
     }
 }
 
-struct SegmentIter<'v> {
+pub struct SegmentIter<'v> {
     /// Information about the segment we are iterating.
     segment: Segment,
 
