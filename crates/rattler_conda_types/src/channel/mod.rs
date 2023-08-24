@@ -66,13 +66,20 @@ impl Channel {
             Channel::from_url(url, platforms, config)
         } else if is_path(channel) {
             let path = PathBuf::from(channel);
-            let absolute_path = absolute_path(&path);
-            let url = Url::from_directory_path(absolute_path)
-                .map_err(|_| ParseChannelError::InvalidPath(path))?;
-            Self {
-                platforms,
-                base_url: url,
-                name: Some(channel.to_owned()),
+
+            #[cfg(target_arch = "wasm32")]
+            return Err(ParseChannelError::InvalidPath(path));
+
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let absolute_path = absolute_path(&path);
+                let url = Url::from_directory_path(absolute_path)
+                    .map_err(|_| ParseChannelError::InvalidPath(path))?;
+                Self {
+                    platforms,
+                    base_url: url,
+                    name: Some(channel.to_owned()),
+                }
             }
         } else {
             Channel::from_name(channel, platforms, config)
