@@ -6,6 +6,17 @@ from rattler.rattler import PyVersion, InvalidVersionError
 
 
 class Version:
+    """
+    This class implements an order relation between version strings.
+    Version strings can contain the usual alphanumeric characters
+    (A-Za-z0-9), separated into segments by dots and underscores.
+    Empty segments (i.e. two consecutive dots, a leading/trailing
+    underscore) are not permitted. An optional epoch number - an
+    integer followed by '!' - can precede the actual version string
+    (this is useful to indicate a change in the versioning scheme itself).
+    Version comparison is case-insensitive.
+    """
+
     def __init__(self, version: str):
         if isinstance(version, str):
             self._version = PyVersion(version)
@@ -58,18 +69,21 @@ class Version:
     def has_local(self) -> bool:
         """
         Returns true if this version has a local segment defined.
+        The local part of a version is the part behind the (optional) `+`.
 
         Examples
         --------
-        >>> v = Version('1.0')
-        >>> v.local
-        False
+        >>> v = Version('1.0+3.2-alpha0')
+        >>> v.has_local
+        True
         """
         return self._version.has_local()
 
     def as_major_minor(self) -> Optional[Tuple[int, int]]:
         """
         Returns the major and minor segments from the version.
+        Requires a minimum of 2 segments in version to be split
+        into major and minor, returns `None` otherwise.
 
         Examples
         --------
@@ -82,12 +96,16 @@ class Version:
     @property
     def is_dev(self) -> bool:
         """
-        Returns true if the version contains a component name "dev".
+        Returns true if the version contains a component name "dev",
+        dev versions are sorted before non-dev version.
 
         Examples
         --------
         >>> v = Version('1.0.1dev')
-        >>> v.dev
+        >>> v.is_dev
+        True
+        >>> v_non_dev = Version('1.0.1')
+        >>> v_non_dev > v
         True
         """
         return self._version.is_dev()
@@ -109,25 +127,65 @@ class Version:
     def compatible_with(self, other: Version) -> bool:
         """
         Checks if this version is compatible with other version.
+        Minor versions changes are compatible with older versions,
+        major version changes are breaking and will not be compatible.
+
+        Examples
+        --------
+        >>> v1 = Version('1.0.1')
+        >>> v2 = Version('1.2')
+        >>> v_major = Version('2.0')
+        >>> v1.compatible_with(v2)
+        False
+        >>> v2.compatible_with(v1)
+        True
+        >>> v_major.compatible_with(v2)
+        False
+        >>> v2.compatible_with(v_major)
+        False
         """
         return self._version.compatible_with(other._version)
 
     def pop_segments(self, n: int = 1) -> Version:
         """
         Pops `n` number of segments from the version and returns
-        the new version. Returns `None` if the version becomes
-        invalid due to the operation.
+        the new version. Raises `InvalidVersionError` if version
+        becomes invalid due to the operation.
+
+        Examples
+        --------
+        >>> v = Version('2!1.0.1')
+        >>> v.pop_segments() # `n` defaults to 1 if left empty
+        2!1.0
+        >>> v.pop_segments(2) # `pop_segments` returns new Version object so old
+        version is still usable
+        2!1
+        >>> v.pop_segments(3)
+        Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+        File "/rattler/version/version.py", line 132, in pop_segments
+            def pop_segments(self, n: int = 1) -> Version:
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        exceptions.InvalidVersionException: new Version must have atleast 1 valid
+        segment
         """
         new_py_version = self._version.pop_segments(n)
         if new_py_version:
             return self._from_py_version(new_py_version)
         else:
-            raise InvalidVersionError("Version must have atleast 1 valid segment")
+            raise InvalidVersionError("new Version must have atleast 1 valid segment")
 
     def with_segments(self, start: int, stop: int) -> Version:
         """
         Returns new version with with segments ranging from `start` to `stop`.
-        `stop` is exclusive.
+        `stop` is exclusive. Raises `InvalidVersionError` if the provided range
+        is invalid.
+
+        Examples
+        --------
+        >>> v = Version('2!1.2.3')
+        >>> v.with_segments(0, 2)
+        2!1.2
         """
         new_py_version = self._version.with_segments(start, stop)
         if new_py_version:
@@ -139,12 +197,24 @@ class Version:
     def segment_count(self) -> int:
         """
         Returns the number of segments in the version.
+
+        Examples
+        --------
+        >>> v = Version('2!1.2.3')
+        >>> v.segment_count
+        3
         """
         return self._version.segment_count()
 
     def strip_local(self) -> Version:
         """
         Returns a new version with local segment stripped.
+
+        Examples
+        --------
+        >>> v = Version('1.2.3+4.alpha-5')
+        >>> v.strip_local()
+        1.2.3
         """
         return self._from_py_version(self._version.strip_local())
 
