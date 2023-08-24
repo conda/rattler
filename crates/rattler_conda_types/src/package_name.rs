@@ -1,10 +1,10 @@
+use crate::utils::serde::DeserializeFromStrUnchecked;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, DeserializeFromStr};
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use thiserror::Error;
-use crate::utils::serde::DeserializeFromStrUnchecked;
 
 /// A representation of a conda package name. This struct both stores the source string from which
 /// this instance was created as well as a normalized name that can be used to compare different
