@@ -17,8 +17,10 @@ use thiserror::Error;
 
 use rattler_macros::sorted;
 
-use crate::package::IndexJson;
-use crate::{Channel, NoArchType, PackageName, Platform, RepoDataRecord, VersionWithSource};
+use crate::{
+    package::IndexJson, utils::serde::DeserializeFromStrUnchecked, Channel, NoArchType,
+    PackageName, Platform, RepoDataRecord, VersionWithSource,
+};
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
@@ -106,6 +108,7 @@ pub struct PackageRecord {
     pub md5: Option<Md5Hash>,
 
     /// The name of the package
+    #[serde_as(deserialize_as = "DeserializeFromStrUnchecked")]
     pub name: PackageName,
 
     /// If this package is independent of architecture this field specifies in what way. See
