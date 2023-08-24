@@ -13,8 +13,8 @@ permissions:
   contents: read
 
 jobs:
-  format_and_lint:
-    name: Format and Lint
+  format_lint_test:
+    name: Format, Lint and Test the Python bindings
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
