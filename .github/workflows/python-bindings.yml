@@ -26,7 +26,11 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy, rustfmt
-      - run: |
+      - name: Format and Lint
+        run: |
           cd py-rattler
           pixi run lint
           pixi run fmt-check
+      - name: Run tests
+        run: |
+          pixi run test
