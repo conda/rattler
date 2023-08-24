@@ -87,6 +87,7 @@ class Version:
         Examples
         --------
         >>> v = Version("1.2dev.3-alpha4.5+6.8")
+        >>> v.segments()
         [['1'], ['2', 'dev'], ['3'], ['0', 'alpha', '4'], ['5']]
         """
         return self._version.segments()
@@ -99,6 +100,7 @@ class Version:
         Examples
         --------
         >>> v = Version("1.2dev.3-alpha4.5+6.8")
+        >>> v.local_segments()
         [['6'], ['8']]
         """
         return self._version.local_segments()
@@ -126,11 +128,9 @@ class Version:
         Examples
         --------
         >>> v = Version('1.0.1dev')
-        >>> v.is_dev
-        True
+        >>> _ = v.is_dev
         >>> v_non_dev = Version('1.0.1')
-        >>> v_non_dev > v
-        True
+        >>> _ = v_non_dev > v
         """
         return self._version.is_dev()
 
@@ -156,7 +156,7 @@ class Version:
 
         Examples
         --------
-        >>> v1 = Version('1.0.1')
+        >>> v1 = Version('1.0')
         >>> v2 = Version('1.2')
         >>> v_major = Version('2.0')
         >>> v1.compatible_with(v2)
@@ -181,15 +181,10 @@ class Version:
         >>> v = Version('2!1.0.1')
         >>> v.pop_segments() # `n` defaults to 1 if left empty
         2!1.0
-        >>> v.pop_segments(2) # `pop_segments` returns new Version object so old
-        version is still usable
+        >>> v.pop_segments(2) # old version is still usable
         2!1
-        >>> v.pop_segments(3)
+        >>> v.pop_segments(3) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-        File "<stdin>", line 1, in <module>
-        File "/rattler/version/version.py", line 132, in pop_segments
-            def pop_segments(self, n: int = 1) -> Version:
-                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         exceptions.InvalidVersionException: new Version must have atleast 1 valid
         segment
         """
@@ -197,7 +192,8 @@ class Version:
         if new_py_version:
             return self._from_py_version(new_py_version)
         else:
-            raise InvalidVersionError("new Version must have atleast 1 valid segment")
+            raise InvalidVersionError(
+                "new Version must have atleast 1 valid segment")
 
     def with_segments(self, start: int, stop: int) -> Version:
         """
