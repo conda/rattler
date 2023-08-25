@@ -1,8 +1,10 @@
 from __future__ import annotations
+from typing import Self, TYPE_CHECKING
 
-from rattler.match_spec import MatchSpec
 from rattler.rattler import PyNamelessMatchSpec
-from rattler.repo_data import PackageRecord
+if TYPE_CHECKING:
+    from rattler.match_spec import MatchSpec
+    from rattler.repo_data import PackageRecord
 
 
 class NamelessMatchSpec:
@@ -27,7 +29,7 @@ class NamelessMatchSpec:
     @classmethod
     def _from_py_nameless_match_spec(
         cls, py_nameless_match_spec: PyNamelessMatchSpec
-    ) -> NamelessMatchSpec:
+    ) -> Self:
         """
         Construct py-rattler NamelessMatchSpec from PyNamelessMatchSpec FFI object.
         """
@@ -36,12 +38,12 @@ class NamelessMatchSpec:
 
         return nameless_match_spec
 
-    @staticmethod
-    def from_match_spec(spec: MatchSpec) -> NamelessMatchSpec:
+    @classmethod
+    def from_match_spec(cls, spec: MatchSpec) -> Self:
         """
         Constructs a NamelessMatchSpec from a MatchSpec.
         """
-        return NamelessMatchSpec._from_py_nameless_match_spec(
+        return cls._from_py_nameless_match_spec(
             PyNamelessMatchSpec.from_match_spec(spec._match_spec)
         )
 

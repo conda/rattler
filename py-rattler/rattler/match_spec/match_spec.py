@@ -1,8 +1,10 @@
 from __future__ import annotations
+from typing import Self, TYPE_CHECKING
 
-from rattler.match_spec import NamelessMatchSpec
 from rattler.rattler import PyMatchSpec
-from rattler.repo_data import PackageRecord
+if TYPE_CHECKING:
+    from rattler.match_spec import NamelessMatchSpec
+    from rattler.repo_data import PackageRecord
 
 
 class MatchSpec:
@@ -84,7 +86,7 @@ class MatchSpec:
             )
 
     @classmethod
-    def _from_py_match_spec(cls, py_match_spec: PyMatchSpec) -> MatchSpec:
+    def _from_py_match_spec(cls, py_match_spec: PyMatchSpec) -> Self:
         """
         Construct py-rattler MatchSpec from PyMatchSpec FFI object.
         """
@@ -97,13 +99,13 @@ class MatchSpec:
         """Match a MatchSpec against a PackageRecord."""
         return self._match_spec.matches(record._package_record)
 
-    @staticmethod
-    def from_nameless(spec: NamelessMatchSpec, name: str) -> MatchSpec:
+    @classmethod
+    def from_nameless(cls, spec: NamelessMatchSpec, name: str) -> Self:
         """
         Constructs a MatchSpec from a NamelessMatchSpec
         and a name.
         """
-        return MatchSpec._from_py_match_spec(
+        return cls._from_py_match_spec(
             PyMatchSpec.from_nameless(spec._nameless_match_spec, name)
         )
 
