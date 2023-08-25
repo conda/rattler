@@ -1,10 +1,12 @@
 mod error;
 mod match_spec;
+mod nameless_match_spec;
 mod repo_data;
 mod version;
 
 use error::{InvalidMatchSpecException, InvalidVersionException, PyRattlerError};
-use match_spec::{PyMatchSpec, PyNamelessMatchSpec};
+use match_spec::PyMatchSpec;
+use nameless_match_spec::PyNamelessMatchSpec;
 use repo_data::package_record::PyPackageRecord;
 use version::PyVersion;
 
