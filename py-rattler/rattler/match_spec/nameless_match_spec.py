@@ -25,6 +25,9 @@ class NamelessMatchSpec:
             )
 
     def matches(self, package_record: PackageRecord) -> bool:
+        """
+        Match a MatchSpec against a PackageRecord
+        """
         return self._nameless_match_spec.matches(package_record._package_record)
 
     @classmethod
