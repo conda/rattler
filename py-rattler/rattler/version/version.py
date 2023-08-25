@@ -135,7 +135,7 @@ class Version:
         True
         >>> v_non_dev = Version('1.0.1')
         >>> v_non_dev >= v
-        False
+        True
         """
         return self._version.is_dev()
 
