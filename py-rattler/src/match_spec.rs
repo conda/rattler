@@ -42,7 +42,7 @@ impl PyMatchSpec {
 
     /// Match a MatchSpec against a PackageRecord
     pub fn matches(&self, record: &PyPackageRecord) -> bool {
-        self.inner.matches(&record.clone().into())
+        self.inner.matches(&record.inner)
     }
 
     /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.

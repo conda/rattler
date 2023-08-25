@@ -6,7 +6,7 @@ use pyo3::{pyclass, pymethods};
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyPackageRecord {
-    inner: PackageRecord,
+    pub(crate) inner: PackageRecord,
 }
 
 impl From<PackageRecord> for PyPackageRecord {
