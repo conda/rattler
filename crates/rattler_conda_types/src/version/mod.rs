@@ -672,6 +672,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 /// Either a number, literal or the infinity.
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Component {
+    /// Numeral Component.
     Numeral(u64),
 
     /// Post should always be ordered greater than anything else.
@@ -686,11 +687,13 @@ pub enum Component {
 
     /// An underscore or dash.
     UnderscoreOrDash {
+        /// Dash flag.
         is_dash: bool,
     },
 }
 
 impl Component {
+    /// Return a component as numeric value.
     pub fn as_number(&self) -> Option<u64> {
         match self {
             Component::Numeral(value) => Some(*value),
@@ -698,6 +701,7 @@ impl Component {
         }
     }
 
+    /// Return a component as mutable numeric value.
     pub fn as_number_mut(&mut self) -> Option<&mut u64> {
         match self {
             Component::Numeral(value) => Some(value),
@@ -705,6 +709,7 @@ impl Component {
         }
     }
 
+    /// Return a component as string value.
     #[allow(dead_code)]
     pub fn as_string(&self) -> Option<&str> {
         match self {
@@ -713,16 +718,19 @@ impl Component {
         }
     }
 
+    /// Check whether a component is [`Component::Post`]
     #[allow(dead_code)]
     pub fn is_post(&self) -> bool {
         matches!(self, Component::Post)
     }
 
+    /// Check whether a component is [`Component::Dev`]
     #[allow(dead_code)]
     pub fn is_dev(&self) -> bool {
         matches!(self, Component::Dev)
     }
 
+    /// Check whether a component is [`Component::Numeral`]
     pub fn is_numeric(&self) -> bool {
         matches!(self, Component::Numeral(_))
     }
