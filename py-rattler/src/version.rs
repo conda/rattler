@@ -70,6 +70,9 @@ impl PyVersion {
         })
     }
 
+    /// Returns a list of segments of the version. It does not contain
+    /// the local segment of the version. See `local_segments` for
+    /// local segments in version.
     pub fn segments(&self) -> Vec<Vec<String>> {
         self.inner
             .segments()
@@ -77,6 +80,8 @@ impl PyVersion {
             .collect::<Vec<_>>()
     }
 
+    /// Returns a list of local segments of the version. It does not
+    /// contain the non-local segment of the version.
     pub fn local_segments(&self) -> Vec<Vec<String>> {
         self.inner
             .local_segments()

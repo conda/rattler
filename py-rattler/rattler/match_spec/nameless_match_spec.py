@@ -6,6 +6,12 @@ from rattler.repo_data import PackageRecord
 
 
 class NamelessMatchSpec:
+    """
+    Similar to a `MatchSpec` but does not include the package name.
+    This is useful in places where the package name is already known
+    (e.g. `foo = "3.4.1 *cuda"`).
+    """
+
     def __init__(self, spec: str):
         if isinstance(spec, str):
             self._nameless_match_spec = PyNamelessMatchSpec(spec)

@@ -76,6 +76,9 @@ class Version:
         >>> v = Version('1.0+3.2-alpha0')
         >>> v.has_local
         True
+        >>> v2 = Version('1.0')
+        >>> v.has_local
+        False
         """
         return self._version.has_local()
 
@@ -128,9 +131,11 @@ class Version:
         Examples
         --------
         >>> v = Version('1.0.1dev')
-        >>> _ = v.is_dev
+        >>> v.is_dev
+        True
         >>> v_non_dev = Version('1.0.1')
-        >>> _ = v_non_dev > v
+        >>> v_non_dev >= v
+        False
         """
         return self._version.is_dev()
 
@@ -216,6 +221,7 @@ class Version:
     def segment_count(self) -> int:
         """
         Returns the number of segments in the version.
+        This does not include epoch or local segment of the version
 
         Examples
         --------
