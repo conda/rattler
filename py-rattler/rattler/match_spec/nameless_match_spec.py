@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Self, TYPE_CHECKING
 
 from rattler.rattler import PyNamelessMatchSpec
+
 if TYPE_CHECKING:
     from rattler.match_spec import MatchSpec
     from rattler.repo_data import PackageRecord

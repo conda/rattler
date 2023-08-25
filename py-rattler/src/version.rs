@@ -1,4 +1,4 @@
-use crate::PyRattlerError;
+use crate::{component::PyComponent, PyRattlerError};
 use pyo3::{pyclass, pymethods};
 use rattler_conda_types::Version;
 use std::str::FromStr;
@@ -73,19 +73,27 @@ impl PyVersion {
     /// Returns a list of segments of the version. It does not contain
     /// the local segment of the version. See `local_segments` for
     /// local segments in version.
-    pub fn segments(&self) -> Vec<Vec<String>> {
+    pub fn segments(&self) -> Vec<Vec<PyComponent>> {
         self.inner
             .segments()
-            .map(|s| s.components().map(|c| format!("{c}")).collect::<Vec<_>>())
+            .map(|s| {
+                s.components()
+                    .map(|c| c.to_owned().into())
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>()
     }
 
     /// Returns a list of local segments of the version. It does not
     /// contain the non-local segment of the version.
-    pub fn local_segments(&self) -> Vec<Vec<String>> {
+    pub fn local_segments(&self) -> Vec<Vec<PyComponent>> {
         self.inner
             .local_segments()
-            .map(|s| s.components().map(|c| format!("{c}")).collect::<Vec<_>>())
+            .map(|s| {
+                s.components()
+                    .map(|c| c.to_owned().into())
+                    .collect::<Vec<PyComponent>>()
+            })
             .collect::<Vec<_>>()
     }
 
