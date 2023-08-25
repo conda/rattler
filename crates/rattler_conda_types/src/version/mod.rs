@@ -358,7 +358,7 @@ impl Version {
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
-            .any(|component| component.as_string() == Some("dev"))
+            .any(|component| component.is_dev())
     }
 
     /// Check if this version version and local strings start with the same as other.
