@@ -7,7 +7,7 @@ channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 
 [tasks]
-build = "maturin develop"
+build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "black ."
 fmt-rust = "cargo fmt --all"
