@@ -7,7 +7,8 @@ use crate::conda_lock::{
     TimeMeta,
 };
 use crate::{MatchSpec, NamelessMatchSpec, NoArchType, Platform, RepoDataRecord};
-use fxhash::{FxHashMap, FxHashSet};
+use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
+use indexmap::IndexMap;
 use std::str::FromStr;
 use url::Url;
 
@@ -76,7 +77,7 @@ impl LockFileBuilder {
                     content_hash::calculate_content_hash(plat, &self.input_specs, &self.channels)?,
                 ))
             })
-            .collect::<Result<FxHashMap<_, _>, CalculateContentHashError>>()?;
+            .collect::<Result<_, CalculateContentHashError>>()?;
 
         let lock = CondaLock {
             metadata: LockMeta {
@@ -179,7 +180,7 @@ pub struct LockedPackage {
     /// Collection of package hash fields
     pub package_hashes: PackageHashes,
     /// List of dependencies for this package
-    pub dependency_list: FxHashMap<String, NamelessMatchSpec>,
+    pub dependency_list: IndexMap<String, NamelessMatchSpec, FxBuildHasher>,
     /// Check if package is optional
     pub optional: Option<bool>,
 
@@ -236,7 +237,7 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
         let hashes = hashes.ok_or_else(|| ConversionError::Missing("md5 or sha265".to_string()))?;
 
         // Convert dependencies
-        let mut dependencies = FxHashMap::default();
+        let mut dependencies = IndexMap::default();
         for match_spec_str in record.package_record.depends.iter() {
             let matchspec = MatchSpec::from_str(match_spec_str)?;
             let name = matchspec
@@ -385,7 +386,6 @@ impl LockedPackage {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use fxhash::FxHashMap;
     use std::str::FromStr;
 
     use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
@@ -411,7 +411,7 @@ mod tests {
                     url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda".parse().unwrap(),
                     package_hashes:  PackageHashes::Md5Sha256(parse_digest_from_hex::<rattler_digest::Md5>("c6f4b87020c72e2700e3e94c1fc93b70").unwrap(),
                                                                parse_digest_from_hex::<rattler_digest::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
-                    dependency_list: FxHashMap::from_iter([("python".to_string(), NamelessMatchSpec::from_str("3.11.0.*").unwrap())]),
+                    dependency_list: FromIterator::from_iter([("python".to_string(), NamelessMatchSpec::from_str("3.11.0.*").unwrap())]),
                     optional: None,
                     arch: Some("x86_64".to_string()),
                     subdir: Some("noarch".to_string()),

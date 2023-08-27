@@ -9,11 +9,12 @@ use crate::{
     utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
     ParseVersionError, Platform, RepoDataRecord,
 };
-use fxhash::FxHashMap;
+use fxhash::FxBuildHasher;
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::{collections::BTreeMap, fs::File, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 pub mod builder;
@@ -98,7 +99,7 @@ impl CondaLock {
 /// Metadata for the [`CondaLock`] file
 pub struct LockMeta {
     /// Hash of dependencies for each target platform
-    pub content_hash: FxHashMap<Platform, String>,
+    pub content_hash: BTreeMap<Platform, String>,
     /// Channels used to resolve dependencies
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
@@ -111,9 +112,9 @@ pub struct LockMeta {
     /// Metadata dealing with the git repo the lockfile was created in and the user that created it
     pub git_metadata: Option<GitMeta>,
     /// Metadata dealing with the input files used to create the lockfile
-    pub inputs_metadata: Option<FxHashMap<String, PackageHashes>>,
+    pub inputs_metadata: Option<IndexMap<String, PackageHashes>>,
     /// Custom metadata provided by the user to be added to the lockfile
-    pub custom_metadata: Option<FxHashMap<String, String>>,
+    pub custom_metadata: Option<IndexMap<String, String>>,
 }
 
 /// Stores information about when the lockfile was generated
@@ -246,9 +247,8 @@ pub struct LockedDependency {
     /// this actually represents the _full_ subdir (incl. arch))
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
-
-    #[serde_as(as = "FxHashMap<_, DisplayFromStr>")]
-    pub dependencies: FxHashMap<String, NamelessMatchSpec>,
+    #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
+    pub dependencies: IndexMap<String, NamelessMatchSpec, FxBuildHasher>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
