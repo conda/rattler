@@ -9,35 +9,27 @@ use crate::{
     utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
     ParseVersionError, Platform, RepoDataRecord,
 };
-use fxhash::FxHashMap;
+use fxhash::FxBuildHasher;
+use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::{collections::BTreeMap, fs::File, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 pub mod builder;
 mod content_hash;
 
-/// Default version for the conda-lock file format
-const fn default_version() -> u32 {
-    1
-}
-
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
 /// also the locked packages
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct CondaLock {
     /// Metadata for the lock file
     pub metadata: LockMeta,
 
     /// Locked packages
     pub package: Vec<LockedDependency>,
-
-    /// Version of the conda-lock file format
-    #[serde(default = "default_version")]
-    pub version: u32,
 }
 
 #[allow(missing_docs)]
@@ -98,7 +90,7 @@ impl CondaLock {
 /// Metadata for the [`CondaLock`] file
 pub struct LockMeta {
     /// Hash of dependencies for each target platform
-    pub content_hash: FxHashMap<Platform, String>,
+    pub content_hash: BTreeMap<Platform, String>,
     /// Channels used to resolve dependencies
     pub channels: Vec<Channel>,
     /// The platforms this lock file supports
@@ -111,9 +103,9 @@ pub struct LockMeta {
     /// Metadata dealing with the git repo the lockfile was created in and the user that created it
     pub git_metadata: Option<GitMeta>,
     /// Metadata dealing with the input files used to create the lockfile
-    pub inputs_metadata: Option<FxHashMap<String, PackageHashes>>,
+    pub inputs_metadata: Option<IndexMap<String, PackageHashes>>,
     /// Custom metadata provided by the user to be added to the lockfile
-    pub custom_metadata: Option<FxHashMap<String, String>>,
+    pub custom_metadata: Option<IndexMap<String, String>>,
 }
 
 /// Stores information about when the lockfile was generated
@@ -246,9 +238,8 @@ pub struct LockedDependency {
     /// this actually represents the _full_ subdir (incl. arch))
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
-
-    #[serde_as(as = "FxHashMap<_, DisplayFromStr>")]
-    pub dependencies: FxHashMap<String, NamelessMatchSpec>,
+    #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
+    pub dependencies: IndexMap<String, NamelessMatchSpec, FxBuildHasher>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
@@ -441,6 +432,41 @@ impl From<&str> for Channel {
             url: url.to_string(),
             used_env_vars: Default::default(),
         }
+    }
+}
+
+impl Serialize for CondaLock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        struct Raw<'a> {
+            metadata: &'a LockMeta,
+            package: Vec<&'a LockedDependency>,
+            version: u32,
+        }
+
+        // Sort all packages in alphabetical order. We choose to use alphabetic order instead of
+        // topological because the alphabetic order will create smaller diffs when packages change
+        // or are added.
+        // See: https://github.com/conda/conda-lock/issues/491
+        let mut sorted_deps = self.package.iter().collect::<Vec<_>>();
+        sorted_deps.sort_by(|&a, &b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.platform.cmp(&b.platform))
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.build.cmp(&b.build))
+        });
+
+        let raw = Raw {
+            metadata: &self.metadata,
+            package: sorted_deps,
+            version: 1,
+        };
+
+        raw.serialize(serializer)
     }
 }
 

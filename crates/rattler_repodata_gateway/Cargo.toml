@@ -35,7 +35,7 @@ rattler_conda_types = { version = "0.8.0", path = "../rattler_conda_types", opti
 fxhash = { version = "0.2.1", optional = true }
 memmap2 = { version = "0.7.1", optional = true }
 ouroboros = { version = "0.17.0", optional = true }
-serde_with = "3.0.0"
+serde_with = "3.3.0"
 superslice = { version = "1.0.0", optional = true }
 itertools = { version = "0.11.0", optional = true }
 json-patch = "1.0.0"
@@ -62,4 +62,4 @@ rstest = "0.18.1"
 default = ['native-tls']
 native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros",  "superslice", "itertools", "serde_json/raw_value"]
+sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
