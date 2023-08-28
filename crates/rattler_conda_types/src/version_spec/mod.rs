@@ -230,10 +230,10 @@ impl Display for VersionSpec {
                 },
                 VersionSpec::Range(op, version) => {
                     write!(f, "{}{}", op, version)
-                },
+                }
                 VersionSpec::Exact(op, version) => {
                     write!(f, "{}{}", op, version)
-                },
+                }
                 VersionSpec::Group(op, group) => {
                     let requires_parenthesis = *op == LogicalOperator::And && part_of_or;
                     if requires_parenthesis {
