@@ -940,6 +940,52 @@ impl<'v> SegmentIter<'v> {
     }
 }
 
+/// Version that only has equality when it is exactly the same
+/// e.g for [`Version`] 1.0.0 == 1.0 while in [`StrictVersion`]
+/// this is not equal. Useful in ranges where we are talking
+/// about equality over version ranges instead of specific
+/// version instances
+#[derive(Clone, Ord, Eq, Debug)]
+pub struct StrictVersion(pub Version);
+
+impl PartialEq for StrictVersion {
+    fn eq(&self, other: &Self) -> bool {
+        // StrictVersion is only equal if the number
+        // of components are the same
+        // and the components are the same
+        self.0.components.len() == other.0.components.len() && self.0 == other.0
+    }
+}
+
+impl PartialOrd for StrictVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.0.cmp(&other.0))
+    }
+}
+
+impl Display for StrictVersion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Hash for StrictVersion {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        fn hash_segments<'i, I: Iterator<Item = SegmentIter<'i>>, H: Hasher>(
+            state: &mut H,
+            segments: I,
+        ) {
+            for segment in segments {
+                segment.components().rev().for_each(|c| c.hash(state));
+            }
+        }
+
+        self.0.epoch().hash(state);
+        hash_segments(state, self.0.segments());
+        hash_segments(state, self.0.local_segments());
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::cmp::Ordering;
@@ -949,6 +995,8 @@ mod test {
     use std::hash::{Hash, Hasher};
 
     use rand::seq::SliceRandom;
+
+    use crate::version::StrictVersion;
 
     use super::Version;
 
@@ -1136,6 +1184,22 @@ mod test {
     }
 
     #[test]
+    fn strict_version_test() {
+        let v_1_0 = StrictVersion::from_str("1.0.0").unwrap();
+        // Should be equal to itself
+        assert_eq!(v_1_0, v_1_0);
+        let v_1_0_0 = StrictVersion::from_str("1.0").unwrap();
+        // Strict version should not discard zero's
+        assert_ne!(v_1_0, v_1_0_0);
+        // Ordering should stay the same as version
+        assert_eq!(v_1_0.cmp(&v_1_0_0), Ordering::Equal);
+
+        // Hashing should consider v_1_0 and v_1_0_0 as unequal
+        assert_eq!(get_hash(&v_1_0), get_hash(&v_1_0));
+        assert_ne!(get_hash(&v_1_0), get_hash(&v_1_0_0));
+    }
+
+    #[test]
     fn bump() {
         assert_eq!(
             Version::from_str("1.1").unwrap().bump(),
@@ -1158,7 +1222,7 @@ mod test {
             .starts_with(&Version::from_str("1.2").unwrap()));
     }
 
-    fn get_hash(spec: &Version) -> u64 {
+    fn get_hash(spec: &impl Hash) -> u64 {
         let mut s = DefaultHasher::new();
         spec.hash(&mut s);
         s.finish()

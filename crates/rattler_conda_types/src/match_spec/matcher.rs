@@ -3,6 +3,7 @@ use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
+use std::hash::{Hash, Hasher};
 
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
@@ -18,6 +19,18 @@ pub enum StringMatcher {
     /// Note that the regex is anchored, so it must match the entire string.
     Regex(regex::Regex),
 }
+
+
+impl Hash for StringMatcher {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            StringMatcher::Exact(s) => s.hash(state),
+            StringMatcher::Glob(pattern) => pattern.hash(state),
+            StringMatcher::Regex(regex) => regex.as_str().hash(state),
+        }
+    }
+}
+
 
 impl PartialEq for StringMatcher {
     fn eq(&self, other: &Self) -> bool {
