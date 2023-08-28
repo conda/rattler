@@ -112,7 +112,7 @@ use matcher::StringMatcher;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<String>,
@@ -345,21 +345,6 @@ impl MatchSpec {
     }
 }
 
-impl Hash for MatchSpec {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-        self.version.hash(state);
-        self.build.hash(state);
-        self.build_number.hash(state);
-        self.file_name.hash(state);
-        self.channel.hash(state);
-        self.subdir.hash(state);
-        self.namespace.hash(state);
-        self.md5.hash(state);
-        self.sha256.hash(state);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -389,7 +374,6 @@ mod tests {
 
     #[test]
     fn test_hash_match() {
-        // These should not be equal as they are unequal ranges
         let spec1 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
         let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
         assert_eq!(spec1, spec2);
@@ -405,7 +389,6 @@ mod tests {
     fn test_hash_no_match() {
         let spec1 = MatchSpec::from_str("tensorflow 2.6.0.*").unwrap();
         let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
-        dbg!(&spec1, &spec2);
         assert_ne!(spec1, spec2);
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
