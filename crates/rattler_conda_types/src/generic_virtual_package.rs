@@ -1,4 +1,4 @@
-use crate::Version;
+use crate::{PackageName, Version};
 use std::fmt::{Display, Formatter};
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter};
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GenericVirtualPackage {
     /// The name of the package
-    pub name: String,
+    pub name: PackageName,
 
     /// The version of the package
     pub version: Version,
@@ -17,6 +17,12 @@ pub struct GenericVirtualPackage {
 
 impl Display for GenericVirtualPackage {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}={}={}", &self.name, &self.version, &self.build_string)
+        write!(
+            f,
+            "{}={}={}",
+            &self.name.as_normalized(),
+            &self.version,
+            &self.build_string
+        )
     }
 }

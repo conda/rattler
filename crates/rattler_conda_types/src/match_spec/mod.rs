@@ -1,4 +1,4 @@
-use crate::{PackageRecord, VersionSpec};
+use crate::{PackageName, PackageRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
 use serde_with::{serde_as, skip_serializing_none};
@@ -64,38 +64,38 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName};
 /// use std::str::FromStr;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
 /// assert_eq!(spec.channel, Some("conda-forge".to_string()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// assert_eq!(spec.channel, Some("conda-forge".to_string()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
 /// assert_eq!(spec.channel, Some("*".to_string()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
-/// assert_eq!(spec.name, Some("foo".to_string()));
+/// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
 ///
@@ -115,7 +115,7 @@ use matcher::StringMatcher;
 #[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
-    pub name: Option<String>,
+    pub name: Option<PackageName>,
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
@@ -150,7 +150,7 @@ impl Display for MatchSpec {
         }
 
         match &self.name {
-            Some(name) => write!(f, "{name}")?,
+            Some(name) => write!(f, "{}", name.as_normalized())?,
             None => write!(f, "*")?,
         }
 
@@ -329,7 +329,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
 
 impl MatchSpec {
     /// Constructs a [`MatchSpec`] from a [`NamelessMatchSpec`] and a name.
-    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<String>) -> Self {
+    pub fn from_nameless(spec: NamelessMatchSpec, name: Option<PackageName>) -> Self {
         Self {
             name,
             version: spec.version,
@@ -351,7 +351,7 @@ mod tests {
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
-    use crate::{MatchSpec, NamelessMatchSpec, PackageRecord, Version};
+    use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
     use std::hash::{Hash, Hasher};
 
     #[test]
@@ -408,7 +408,7 @@ mod tests {
             ),
             md5: parse_digest_from_hex::<Md5>("dede6252c964db3f3e41c7d30d07f6bf"),
             ..PackageRecord::new(
-                String::from("mamba"),
+                PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
                 String::from(""),
             )

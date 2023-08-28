@@ -3,7 +3,7 @@ use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::MatchSpecId;
-use rattler_conda_types::{MatchSpec, Version};
+use rattler_conda_types::{MatchSpec, PackageName, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<String, NameId>,
+    interned_strings: &HashMap<PackageName, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -140,7 +140,7 @@ pub(crate) fn compare_candidates(
 pub(crate) fn find_highest_version(
     match_spec_id: MatchSpecId,
     solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<String, NameId>,
+    interned_strings: &HashMap<PackageName, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
     match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
@@ -184,14 +184,14 @@ pub(crate) fn find_highest_version(
 pub(crate) fn find_candidates<'b>(
     match_spec_id: MatchSpecId,
     match_specs: &Arena<MatchSpecId, MatchSpec>,
-    names_to_ids: &HashMap<String, NameId>,
+    names_to_ids: &HashMap<PackageName, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     solvables: &Arena<SolvableId, Solvable>,
     match_spec_to_candidates: &'b Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
 ) -> &'b Vec<SolvableId> {
     match_spec_to_candidates[match_spec_id].get_or_init(|| {
         let match_spec = &match_specs[match_spec_id];
-        let Some(match_spec_name) = match_spec.name.as_deref() else { return Vec::new() };
+        let Some(match_spec_name) = match_spec.name.as_ref() else { return Vec::new() };
         let Some(name_id) = names_to_ids.get(match_spec_name) else { return Vec::new() };
 
         packages_by_name[*name_id]

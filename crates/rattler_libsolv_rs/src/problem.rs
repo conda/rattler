@@ -100,7 +100,7 @@ impl Problem {
                         .cloned()
                         .find(|&ms| {
                             let ms = solver.pool().resolve_match_spec(ms);
-                            ms.name.as_deref().unwrap() == dep.record.name
+                            ms.name.as_ref().unwrap() == &dep.record.name
                         })
                         .unwrap();
 
@@ -636,9 +636,13 @@ impl<'a> DisplayUnsat<'a> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(f, "{indent}{} {version}", solvable.record.name)?;
+                        writeln!(
+                            f,
+                            "{indent}{} {version}",
+                            solvable.record.name.as_normalized()
+                        )?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name)?;
+                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name.as_normalized())?;
                     } else if constrains_conflict {
                         let match_specs = graph
                             .edges(candidate)
@@ -653,7 +657,7 @@ impl<'a> DisplayUnsat<'a> {
                         writeln!(
                             f,
                             "{indent}{} {version} would constrain",
-                            solvable.record.name
+                            solvable.record.name.as_normalized()
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
@@ -669,7 +673,7 @@ impl<'a> DisplayUnsat<'a> {
                         writeln!(
                             f,
                             "{indent}{} {version} would require",
-                            solvable.record.name
+                            solvable.record.name.as_normalized()
                         )?;
                         let requirements = graph
                             .edges(candidate)
@@ -735,7 +739,8 @@ impl fmt::Display for DisplayUnsat<'_> {
                 writeln!(
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
-                    locked.record.name, locked.record.version
+                    locked.record.name.as_normalized(),
+                    locked.record.version
                 )?;
             }
         }
