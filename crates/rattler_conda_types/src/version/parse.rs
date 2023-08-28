@@ -1,4 +1,4 @@
-use super::{Component, Version};
+use super::{Component, StrictVersion, Version};
 use crate::version::flags::Flags;
 use crate::version::segment::Segment;
 use crate::version::{ComponentVec, SegmentVec};
@@ -434,6 +434,14 @@ impl FromStr for Version {
             Err(nom::Err::Failure(e) | nom::Err::Error(e)) => Err(ParseVersionError::new(s, e)),
             Err(_) => unreachable!("not streaming, so no other error possible"),
         }
+    }
+}
+
+impl FromStr for StrictVersion {
+    type Err = ParseVersionError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StrictVersion(Version::from_str(s)?))
     }
 }
 

@@ -1,4 +1,5 @@
 use serde::{Serialize, Serializer};
+use std::hash::{Hash, Hasher};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
@@ -17,6 +18,16 @@ pub enum StringMatcher {
     /// For example, `^py.*37$` matches any string starting with `py` and ending with `37`.
     /// Note that the regex is anchored, so it must match the entire string.
     Regex(regex::Regex),
+}
+
+impl Hash for StringMatcher {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            StringMatcher::Exact(s) => s.hash(state),
+            StringMatcher::Glob(pattern) => pattern.hash(state),
+            StringMatcher::Regex(regex) => regex.as_str().hash(state),
+        }
+    }
 }
 
 impl PartialEq for StringMatcher {
