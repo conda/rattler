@@ -1,9 +1,9 @@
 use serde::{Serialize, Serializer};
+use std::hash::{Hash, Hasher};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
-use std::hash::{Hash, Hasher};
 
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
@@ -20,7 +20,6 @@ pub enum StringMatcher {
     Regex(regex::Regex),
 }
 
-
 impl Hash for StringMatcher {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
@@ -30,7 +29,6 @@ impl Hash for StringMatcher {
         }
     }
 }
-
 
 impl PartialEq for StringMatcher {
     fn eq(&self, other: &Self) -> bool {

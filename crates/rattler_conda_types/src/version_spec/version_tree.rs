@@ -30,13 +30,25 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
 ) -> Result<(&'a str, VersionOperators), nom::Err<E>> {
     alt((
         value(VersionOperators::Exact(EqualityOperator::Equals), tag("==")),
-        value(VersionOperators::Exact(EqualityOperator::NotEquals), tag("!=")),
+        value(
+            VersionOperators::Exact(EqualityOperator::NotEquals),
+            tag("!="),
+        ),
         value(VersionOperators::Range(RangeOperator::StartsWith), tag("=")),
-        value(VersionOperators::Range(RangeOperator::GreaterEquals), tag(">=")),
+        value(
+            VersionOperators::Range(RangeOperator::GreaterEquals),
+            tag(">="),
+        ),
         value(VersionOperators::Range(RangeOperator::Greater), tag(">")),
-        value(VersionOperators::Range(RangeOperator::LessEquals), tag("<=")),
+        value(
+            VersionOperators::Range(RangeOperator::LessEquals),
+            tag("<="),
+        ),
         value(VersionOperators::Range(RangeOperator::Less), tag("<")),
-        value(VersionOperators::Range(RangeOperator::Compatible), tag("~=")),
+        value(
+            VersionOperators::Range(RangeOperator::Compatible),
+            tag("~="),
+        ),
     ))(input)
 }
 
@@ -259,7 +271,10 @@ mod tests {
             parse_operator::<Err>(">="),
             Ok(("", VersionOperators::Range(RangeOperator::GreaterEquals)))
         );
-        assert_eq!(parse_operator::<Err>("<"), Ok(("", VersionOperators::Range(RangeOperator::Less))));
+        assert_eq!(
+            parse_operator::<Err>("<"),
+            Ok(("", VersionOperators::Range(RangeOperator::Less)))
+        );
         assert_eq!(
             parse_operator::<Err>("<="),
             Ok(("", VersionOperators::Range(RangeOperator::LessEquals)))

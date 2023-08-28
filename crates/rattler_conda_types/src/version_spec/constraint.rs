@@ -1,9 +1,9 @@
 use super::ParseConstraintError;
 use super::RangeOperator;
 use crate::version_spec::parse::constraint_parser;
+use crate::version_spec::EqualityOperator;
 use crate::Version;
 use std::str::FromStr;
-use crate::version_spec::EqualityOperator;
 
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
 #[allow(clippy::large_enum_variant)]
@@ -17,7 +17,6 @@ pub(crate) enum Constraint {
 
     /// Exact Version
     Exact(EqualityOperator, Version),
-
 }
 
 /// Returns true if the specified character is the first character of a version constraint.

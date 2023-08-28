@@ -15,9 +15,9 @@ use std::str::FromStr;
 use thiserror::Error;
 use version_tree::VersionTree;
 
+use crate::version::StrictVersion;
 pub(crate) use constraint::is_start_of_version_constraint;
 pub(crate) use parse::ParseConstraintError;
-use crate::version::StrictVersion;
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]
@@ -49,8 +49,6 @@ impl RangeOperator {
     }
 }
 
-
-
 /// An operator set a version equal to another
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
@@ -67,9 +65,7 @@ impl EqualityOperator {
             EqualityOperator::NotEquals => EqualityOperator::Equals,
         }
     }
-
 }
-
 
 /// Range and equality operators combined
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
@@ -77,9 +73,8 @@ pub enum VersionOperators {
     /// Specifies a range of versions
     Range(RangeOperator),
     /// Specifies an exact version
-    Exact(EqualityOperator)
+    Exact(EqualityOperator),
 }
-
 
 /// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or
 /// `>=3.4|<4.0`,
@@ -145,7 +140,9 @@ impl FromStr for VersionSpec {
                         .map_err(ParseVersionSpecError::InvalidConstraint)?;
                     Ok(match constraint {
                         Constraint::Any => VersionSpec::Any,
-                        Constraint::Comparison(op, ver) => VersionSpec::Range(op, StrictVersion(ver)),
+                        Constraint::Comparison(op, ver) => {
+                            VersionSpec::Range(op, StrictVersion(ver))
+                        }
                         Constraint::Exact(e, ver) => VersionSpec::Exact(e, ver),
                     })
                 }
@@ -186,7 +183,6 @@ impl Display for EqualityOperator {
         }
     }
 }
-
 
 impl Display for LogicalOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -277,10 +273,10 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
+    use crate::version::StrictVersion;
     use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator};
     use crate::{Version, VersionSpec};
     use std::str::FromStr;
-    use crate::version::StrictVersion;
 
     #[test]
     fn test_simple() {
