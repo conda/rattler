@@ -4,7 +4,6 @@ use rattler_conda_types::Component;
 pub enum PyComponent {
     String(String),
     Number(u64),
-    None,
 }
 
 impl IntoPy<PyObject> for PyComponent {
@@ -12,7 +11,6 @@ impl IntoPy<PyObject> for PyComponent {
         match self {
             Self::Number(val) => val.into_py(py),
             Self::String(val) => val.into_py(py),
-            Self::None => py.None(),
         }
     }
 }
@@ -24,7 +22,7 @@ impl From<Component> for PyComponent {
             Component::Numeral(n) => Self::Number(n),
             Component::Dev => Self::String("dev".to_string()),
             Component::Post => Self::String("post".to_string()),
-            _ => Self::None,
+            Component::UnderscoreOrDash { .. } => Self::String("_".to_string()),
         }
     }
 }

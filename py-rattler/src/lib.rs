@@ -1,4 +1,3 @@
-mod component;
 mod error;
 mod match_spec;
 mod nameless_match_spec;

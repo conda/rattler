@@ -1,4 +1,7 @@
-use crate::{component::PyComponent, PyRattlerError};
+mod component;
+
+use crate::PyRattlerError;
+use component::PyComponent;
 use pyo3::{pyclass, pymethods};
 use rattler_conda_types::Version;
 use std::str::FromStr;
