@@ -111,6 +111,7 @@ impl AuthenticatedClient {
     }
 }
 
+#[cfg(feature = "blocking")]
 /// A blocking client that can be used to make authenticated requests, based on the [`reqwest::blocking::Client`]
 pub struct AuthenticatedClientBlocking {
     /// The underlying client
@@ -120,6 +121,7 @@ pub struct AuthenticatedClientBlocking {
     auth_storage: AuthenticationStorage,
 }
 
+#[cfg(feature = "blocking")]
 impl AuthenticatedClientBlocking {
     /// Create a new authenticated client from the given client and authentication storage
     pub fn from_client(
@@ -133,6 +135,7 @@ impl AuthenticatedClientBlocking {
     }
 }
 
+#[cfg(feature = "blocking")]
 impl Default for AuthenticatedClientBlocking {
     fn default() -> Self {
         AuthenticatedClientBlocking {
@@ -142,6 +145,7 @@ impl Default for AuthenticatedClientBlocking {
     }
 }
 
+#[cfg(feature = "blocking")]
 impl AuthenticatedClientBlocking {
     /// Create a GET request builder for the given URL (see also [`reqwest::blocking::Client::get`])
     pub fn get<U: IntoUrl>(&self, url: U) -> reqwest::blocking::RequestBuilder {

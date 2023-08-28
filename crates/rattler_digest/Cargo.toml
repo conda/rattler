@@ -18,7 +18,7 @@ serde = { version = "1.0.171", features = ["derive"], optional = true }
 sha2 = "0.10.7"
 md-5 = "0.10.5"
 blake2 = "0.10.6"
-serde_with = "3.0.0"
+serde_with = "3.3.0"
 
 [features]
 tokio = ["dep:tokio"]

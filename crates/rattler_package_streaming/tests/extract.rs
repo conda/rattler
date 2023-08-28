@@ -194,7 +194,7 @@ async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[c
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(feature = "reqwest")]
+#[cfg(all(feature = "reqwest", feature = "blocking"))]
 #[apply(url_archives)]
 fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
     use rattler_networking::AuthenticatedClientBlocking;
