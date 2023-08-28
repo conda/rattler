@@ -3,11 +3,11 @@ source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: error
 ---
 The following packages are incompatible
-|-- A can be installed with any of the following options:
-    |-- A 9 | 10 would require
-        |-- B >=50, which can be installed with any of the following options:
-            |-- B 50
-|-- C cannot be installed because there are no viable options:
-    |-- C 8 | 10 would constrain
-        |-- B <50 , which conflicts with any installable versions previously reported
+|-- a can be installed with any of the following options:
+    |-- a 9 | 10 would require
+        |-- b >=50, which can be installed with any of the following options:
+            |-- b 50
+|-- c cannot be installed because there are no viable options:
+    |-- c 8 | 10 would constrain
+        |-- b <50 , which conflicts with any installable versions previously reported
 

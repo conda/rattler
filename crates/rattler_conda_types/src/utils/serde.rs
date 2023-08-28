@@ -172,3 +172,6 @@ impl<T: Ord, TAs: SerializeAs<T>> SerializeAs<Vec<T>> for Ordered<TAs> {
         SerializeAsWrap::<Vec<&T>, Vec<&TAs>>::new(&elements).serialize(serializer)
     }
 }
+
+/// A helper struct to deserialize types from a string without checking the string.
+pub struct DeserializeFromStrUnchecked;

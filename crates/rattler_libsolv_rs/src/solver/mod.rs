@@ -924,7 +924,7 @@ mod test {
             license: None,
             license_family: None,
             md5: None,
-            name: name.to_string(),
+            name: name.parse().unwrap(),
             noarch: Default::default(),
             platform: None,
             sha256: None,
@@ -1004,7 +1004,7 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
@@ -1024,14 +1024,14 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name, "efgh");
+        assert_eq!(solvable.record.name.as_normalized(), "efgh");
         assert_eq!(solvable.record.version.to_string(), "4.5.6");
     }
 
@@ -1052,14 +1052,14 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.4");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name, "efgh");
+        assert_eq!(solvable.record.name.as_normalized(), "efgh");
         assert_eq!(solvable.record.version.to_string(), "4.5.7");
     }
 
@@ -1102,7 +1102,7 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
@@ -1170,20 +1170,20 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name, "asdf");
+        assert_eq!(solvable.record.name.as_normalized(), "asdf");
         assert_eq!(solvable.record.version, Version::from_str("1.2.4").unwrap());
     }
 
     #[test]
     fn test_resolve_favor_without_conflict() {
         let pool = pool(&[
-            ("A", "1", vec![]),
-            ("A", "2", vec![]),
-            ("B", "1", vec![]),
-            ("B", "2", vec![]),
+            ("a", "1", vec![]),
+            ("a", "2", vec![]),
+            ("b", "1", vec![]),
+            ("b", "2", vec![]),
         ]);
 
-        let mut jobs = install(&["A", "B>=2"]);
+        let mut jobs = install(&["a", "b>=2"]);
 
         // Already installed: A=1; B=1
         let already_installed = pool
@@ -1204,23 +1204,23 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        B 2
-        A 1
+        b 2
+        a 1
         "###);
     }
 
     #[test]
     fn test_resolve_favor_with_conflict() {
         let pool = pool(&[
-            ("A", "1", vec!["C=1"]),
-            ("A", "2", vec![]),
-            ("B", "1", vec!["C=1"]),
-            ("B", "2", vec!["C=2"]),
-            ("C", "1", vec![]),
-            ("C", "2", vec![]),
+            ("a", "1", vec!["c=1"]),
+            ("a", "2", vec![]),
+            ("b", "1", vec!["c=1"]),
+            ("b", "2", vec!["c=2"]),
+            ("c", "1", vec![]),
+            ("c", "2", vec![]),
         ]);
 
-        let mut jobs = install(&["A", "B>=2"]);
+        let mut jobs = install(&["a", "b>=2"]);
 
         // Already installed: A=1; B=1; C=1
         let already_installed = pool
@@ -1241,32 +1241,32 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        B 2
-        C 2
-        A 2
+        b 2
+        c 2
+        a 2
         "###);
     }
 
     #[test]
     fn test_resolve_cyclic() {
-        let pool = pool(&[("A", "2", vec!["B<=10"]), ("B", "5", vec!["A>=2,<=4"])]);
-        let jobs = install(&["A<100"]);
+        let pool = pool(&[("a", "2", vec!["b<=10"]), ("b", "5", vec!["a>=2,<=4"])]);
+        let jobs = install(&["a<100"]);
         let mut solver = Solver::new(pool);
         let solved = solver.solve(jobs).unwrap();
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        A 2
-        B 5
+        a 2
+        b 5
         "###);
     }
 
     #[test]
     fn test_unsat_locked_and_excluded() {
         let pool = pool(&[
-            ("asdf", "1.2.3", vec!["C>1"]),
-            ("C", "2.0.0", vec![]),
-            ("C", "1.0.0", vec![]),
+            ("asdf", "1.2.3", vec!["c>1"]),
+            ("c", "2.0.0", vec![]),
+            ("c", "1.0.0", vec![]),
         ]);
         let mut job = install(&["asdf"]);
         job.lock(SolvableId::from_usize(3)); // C 1.0.0
@@ -1284,7 +1284,7 @@ mod test {
 
     #[test]
     fn test_unsat_no_candidates_for_child_2() {
-        let pool = pool(&[("A", "41", vec!["B<20"])]);
+        let pool = pool(&[("a", "41", vec!["B<20"])]);
         let jobs = install(&["A<1000"]);
 
         let error = solve_unsat(pool, jobs);
@@ -1300,8 +1300,8 @@ mod test {
 
     #[test]
     fn test_unsat_missing_top_level_dep_2() {
-        let pool = pool(&[("A", "41", vec!["B=15"]), ("B", "15", vec![])]);
-        let jobs = install(&["A=41", "B=14"]);
+        let pool = pool(&[("a", "41", vec!["b=15"]), ("b", "15", vec![])]);
+        let jobs = install(&["a=41", "b=14"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1310,24 +1310,24 @@ mod test {
     #[test]
     fn test_unsat_after_backtracking() {
         let pool = pool(&[
-            ("B", "4.5.7", vec!["D=1"]),
-            ("B", "4.5.6", vec!["D=1"]),
-            ("C", "1.0.1", vec!["D=2"]),
-            ("C", "1.0.0", vec!["D=2"]),
-            ("D", "2.0.0", vec![]),
-            ("D", "1.0.0", vec![]),
-            ("E", "1.0.0", vec![]),
-            ("E", "1.0.1", vec![]),
+            ("b", "4.5.7", vec!["d=1"]),
+            ("b", "4.5.6", vec!["d=1"]),
+            ("c", "1.0.1", vec!["d=2"]),
+            ("c", "1.0.0", vec!["d=2"]),
+            ("d", "2.0.0", vec![]),
+            ("d", "1.0.0", vec![]),
+            ("e", "1.0.0", vec![]),
+            ("e", "1.0.1", vec![]),
         ]);
 
-        let error = solve_unsat(pool, install(&["B", "C", "E"]));
+        let error = solve_unsat(pool, install(&["b", "c", "e"]));
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_incompatible_root_requirements() {
-        let pool = pool(&[("A", "2", vec![]), ("A", "5", vec![])]);
-        let jobs = install(&["A<4", "A>=5,<10"]);
+        let pool = pool(&[("a", "2", vec![]), ("a", "5", vec![])]);
+        let jobs = install(&["a<4", "a>=5,<10"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1382,17 +1382,17 @@ mod test {
     #[test]
     fn test_unsat_applies_graph_compression() {
         let pool = pool(&[
-            ("A", "10", vec!["B"]),
-            ("A", "9", vec!["B"]),
-            ("B", "100", vec!["C<100"]),
-            ("B", "42", vec!["C<100"]),
-            ("C", "103", vec![]),
-            ("C", "101", vec![]),
-            ("C", "100", vec![]),
-            ("C", "99", vec![]),
+            ("a", "10", vec!["b"]),
+            ("a", "9", vec!["b"]),
+            ("b", "100", vec!["c<100"]),
+            ("b", "42", vec!["c<100"]),
+            ("c", "103", vec![]),
+            ("c", "101", vec![]),
+            ("c", "100", vec![]),
+            ("c", "99", vec![]),
         ]);
 
-        let jobs = install(&["A", "C>100"]);
+        let jobs = install(&["a", "c>100"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1401,16 +1401,16 @@ mod test {
     #[test]
     fn test_unsat_constrains() {
         let mut pool = pool(&[
-            ("A", "10", vec!["B>=50"]),
-            ("A", "9", vec!["B>=50"]),
-            ("B", "50", vec![]),
-            ("B", "42", vec![]),
+            ("a", "10", vec!["b>=50"]),
+            ("a", "9", vec!["b>=50"]),
+            ("b", "50", vec![]),
+            ("b", "42", vec![]),
         ]);
 
-        add_package(&mut pool, package("C", "10", &[], &["B<50"]));
-        add_package(&mut pool, package("C", "8", &[], &["B<50"]));
+        add_package(&mut pool, package("c", "10", &[], &["b<50"]));
+        add_package(&mut pool, package("c", "8", &[], &["b<50"]));
 
-        let jobs = install(&["A", "C"]);
+        let jobs = install(&["a", "c"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);

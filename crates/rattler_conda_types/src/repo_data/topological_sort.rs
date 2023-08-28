@@ -18,7 +18,7 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
     let mut all_packages = packages
         .iter()
         .cloned()
-        .map(|p| (p.as_ref().name.clone(), p))
+        .map(|p| (p.as_ref().name.as_normalized().to_owned(), p))
         .collect();
 
     // Detect cycles
@@ -56,7 +56,10 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
     cycle_breaks: Option<&FxHashSet<(String, String)>>,
 ) -> Vec<String> {
-    let all_packages: FxHashSet<_> = records.iter().map(|r| r.as_ref().name.as_str()).collect();
+    let all_packages: FxHashSet<_> = records
+        .iter()
+        .map(|r| r.as_ref().name.as_normalized())
+        .collect();
 
     let dependencies: FxHashSet<_> = records
         .iter()
@@ -68,7 +71,8 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
                 .filter(|d| {
                     // filter out circular dependencies
                     if let Some(cycle_breaks) = cycle_breaks {
-                        !cycle_breaks.contains(&(r.as_ref().name.clone(), d.to_string()))
+                        !cycle_breaks
+                            .contains(&(r.as_ref().name.as_normalized().to_owned(), d.to_string()))
                     } else {
                         true
                     }
@@ -236,11 +240,11 @@ mod tests {
     ) {
         let all_sorted_packages: FxHashSet<_> = sorted_packages
             .iter()
-            .map(|p| p.package_record.name.as_str())
+            .map(|p| p.package_record.name.as_normalized())
             .collect();
         let all_original_packages: FxHashSet<_> = original_packages
             .iter()
-            .map(|p| p.package_record.name.as_str())
+            .map(|p| p.package_record.name.as_normalized())
             .collect();
         let missing_in_sorted: Vec<_> = all_original_packages
             .difference(&all_sorted_packages)
@@ -274,7 +278,7 @@ mod tests {
             .iter()
             .map(|p| {
                 (
-                    p.package_record.name.as_str(),
+                    p.package_record.name.as_normalized(),
                     p.package_record.depends.as_slice(),
                 )
             })
@@ -282,7 +286,7 @@ mod tests {
         let mut installed = FxHashSet::default();
 
         for (i, p) in sorted_packages.iter().enumerate() {
-            let name = p.package_record.name.as_str();
+            let name = p.package_record.name.as_normalized();
             let &deps = packages_by_name.get(name).unwrap();
 
             // All the package's dependencies must have already been installed
@@ -347,7 +351,10 @@ mod tests {
 
         // Sanity check: the last package should be python (or pip when it is present)
         let last_package = &sorted_packages[sorted_packages.len() - 1];
-        assert_eq!(last_package.package_record.name, expected_last_package)
+        assert_eq!(
+            last_package.package_record.name.as_normalized(),
+            expected_last_package
+        )
     }
 
     fn get_resolved_packages_for_two_roots() -> Vec<RepoDataRecord> {

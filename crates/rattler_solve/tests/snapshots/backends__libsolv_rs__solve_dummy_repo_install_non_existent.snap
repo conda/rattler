@@ -4,6 +4,6 @@ expression: err
 ---
 Unsolvable(
     [
-        "No candidates where found for asdfasdf.\n",
+        "No candidates were found for asdfasdf.\n",
     ],
 )

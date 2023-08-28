@@ -3,7 +3,7 @@ use crate::conda_util;
 use crate::id::{VersionSetId, NameId, RepoId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+use rattler_conda_types::{MatchSpec, PackageName, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -41,10 +41,10 @@ pub struct Pool<'a, V: VersionSet> {
     total_repos: u32,
 
     /// Interned package names
-    package_names: Arena<NameId, String>,
+    package_names: Arena<NameId, PackageName>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<String, NameId>,
+    pub(crate) names_to_ids: HashMap<PackageName, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -168,8 +168,8 @@ impl<'a, V: VersionSet> Pool<'a, V> {
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    fn intern_package_name<T: Into<String>>(&mut self, str: T) -> NameId {
-        match self.names_to_ids.entry(str.into()) {
+    fn intern_package_name(&mut self, name: &PackageName) -> NameId {
+        match self.names_to_ids.entry(name.clone()) {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
                 let next_id = self.package_names.alloc(e.key().clone());
@@ -186,7 +186,7 @@ impl<'a, V: VersionSet> Pool<'a, V> {
     /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &str {
+    pub fn resolve_package_name(&self, name_id: NameId) -> &PackageName {
         &self.package_names[name_id]
     }
 
@@ -238,7 +238,7 @@ impl Pool<'_, MatchSpec> {
         let match_spec = &self.version_sets[match_spec_id];
         let match_spec_name = match_spec
             .name
-            .as_deref()
+            .as_ref()
             .expect("match spec without name!");
         let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,
@@ -290,7 +290,7 @@ impl Pool<'_, MatchSpec> {
         let match_spec = &self.version_sets[match_spec_id];
         let match_spec_name = match_spec
             .name
-            .as_deref()
+            .as_ref()
             .expect("match spec without name!");
         let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,

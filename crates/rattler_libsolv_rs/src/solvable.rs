@@ -73,7 +73,7 @@ impl<'a> Solvable<'a> {
                 build: None,
             },
             SolvableInner::Package(p) => SolvableDisplay {
-                name: &p.record.name,
+                name: p.record.name.as_normalized(),
                 version: Some(&p.record.version),
                 build: Some(&p.record.build),
             },

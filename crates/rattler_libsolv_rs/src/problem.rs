@@ -94,9 +94,6 @@ impl Problem {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
                     let dep_node = Self::add_node(&mut graph, &mut nodes, dep_id);
 
-                    let package = solver.pool().resolve_solvable(package_id);
-                    let dep = solver.pool().resolve_solvable(dep_id);
-
                     graph.add_edge(
                         package_node,
                         dep_node,
@@ -554,9 +551,9 @@ impl<'a> DisplayUnsat<'a> {
                     if missing {
                         // No candidates for requirement
                         if depth == 0 {
-                            writeln!(f, "{indent}No candidates where found for {req}.")?;
+                            writeln!(f, "{indent}No candidates were found for {req}.")?;
                         } else {
-                            writeln!(f, "{indent}{req}, for which no candidates where found.",)?;
+                            writeln!(f, "{indent}{req}, for which no candidates were found.",)?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
@@ -629,9 +626,13 @@ impl<'a> DisplayUnsat<'a> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(f, "{indent}{} {version}", solvable.record.name)?;
+                        writeln!(
+                            f,
+                            "{indent}{} {version}",
+                            solvable.record.name.as_normalized()
+                        )?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name)?;
+                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name.as_normalized())?;
                     } else if constrains_conflict {
                         let match_specs = graph
                             .edges(candidate)
@@ -646,7 +647,7 @@ impl<'a> DisplayUnsat<'a> {
                         writeln!(
                             f,
                             "{indent}{} {version} would constrain",
-                            solvable.record.name
+                            solvable.record.name.as_normalized()
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
@@ -662,7 +663,7 @@ impl<'a> DisplayUnsat<'a> {
                         writeln!(
                             f,
                             "{indent}{} {version} would require",
-                            solvable.record.name
+                            solvable.record.name.as_normalized()
                         )?;
                         let requirements = graph
                             .edges(candidate)
@@ -728,7 +729,8 @@ impl fmt::Display for DisplayUnsat<'_> {
                 writeln!(
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
-                    locked.record.name, locked.record.version
+                    locked.record.name.as_normalized(),
+                    locked.record.version
                 )?;
             }
         }

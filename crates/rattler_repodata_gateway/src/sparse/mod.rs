@@ -3,7 +3,7 @@
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
@@ -88,7 +88,7 @@ impl SparseRepoData {
     }
 
     /// Returns all the records for the specified package name.
-    pub fn load_records(&self, package_name: &str) -> io::Result<Vec<RepoDataRecord>> {
+    pub fn load_records(&self, package_name: &PackageName) -> io::Result<Vec<RepoDataRecord>> {
         let repo_data = self.inner.borrow_repo_data();
         let mut records = parse_records(
             package_name,
@@ -115,7 +115,7 @@ impl SparseRepoData {
     /// depend on.
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
-        package_names: impl IntoIterator<Item = impl Into<String>>,
+        package_names: impl IntoIterator<Item = PackageName>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
@@ -124,8 +124,7 @@ impl SparseRepoData {
         let mut result = Vec::from_iter((0..repo_data.len()).map(|_| Vec::new()));
 
         // Construct a set of packages that we have seen and have been added to the pending list.
-        let mut seen: HashSet<String> =
-            HashSet::from_iter(package_names.into_iter().map(Into::into));
+        let mut seen: HashSet<PackageName> = HashSet::from_iter(package_names);
 
         // Construct a queue to store packages in that still need to be processed
         let mut pending = VecDeque::from_iter(seen.iter().cloned());
@@ -155,11 +154,12 @@ impl SparseRepoData {
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
                     for dependency in &record.package_record.depends {
-                        let dependency_name =
-                            dependency.split_once(' ').unwrap_or((dependency, "")).0;
-                        if !seen.contains(dependency_name) {
-                            pending.push_back(dependency_name.to_string());
-                            seen.insert(dependency_name.to_string());
+                        let dependency_name = PackageName::new_unchecked(
+                            dependency.split_once(' ').unwrap_or((dependency, "")).0,
+                        );
+                        if !seen.contains(&dependency_name) {
+                            pending.push_back(dependency_name.clone());
+                            seen.insert(dependency_name);
                         }
                     }
                 }
@@ -194,7 +194,7 @@ struct LazyRepoData<'i> {
 
 /// Parse the records for the specified package from the raw index
 fn parse_records<'i>(
-    package_name: &str,
+    package_name: &PackageName,
     packages: &[(PackageFilename<'i>, &'i RawValue)],
     channel: &Channel,
     subdir: &str,
@@ -202,7 +202,8 @@ fn parse_records<'i>(
 ) -> io::Result<Vec<RepoDataRecord>> {
     let channel_name = channel.canonical_name();
 
-    let package_indices = packages.equal_range_by(|(package, _)| package.package.cmp(package_name));
+    let package_indices =
+        packages.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
     let mut result = Vec::with_capacity(package_indices.len());
     for (key, raw_json) in &packages[package_indices] {
         let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
@@ -237,7 +238,7 @@ fn parse_records<'i>(
 /// it has been loaded.
 pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
-    package_names: impl IntoIterator<Item = impl Into<String>>,
+    package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
@@ -360,7 +361,7 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 #[cfg(test)]
 mod test {
     use super::{load_repo_data_recursively, PackageFilename};
-    use rattler_conda_types::{Channel, ChannelConfig, RepoData, RepoDataRecord};
+    use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
     use std::path::{Path, PathBuf};
 
@@ -369,7 +370,7 @@ mod test {
     }
 
     async fn load_sparse(
-        package_names: impl IntoIterator<Item = impl Into<String>>,
+        package_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Vec<Vec<RepoDataRecord>> {
         load_repo_data_recursively(
             [
@@ -384,7 +385,9 @@ mod test {
                     test_dir().join("channels/conda-forge/linux-64/repodata.json"),
                 ),
             ],
-            package_names,
+            package_names
+                .into_iter()
+                .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
             None,
         )
         .await

@@ -11,6 +11,7 @@ use thiserror::Error;
 #[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
+    Unknown,
 
     Linux32,
     Linux64,
@@ -146,7 +147,9 @@ impl Platform {
             target_os = "emscripten",
             windows
         )))]
-        compile_error!("unsupported target os");
+        {
+            return Platform::Unknown;
+        }
     }
 
     /// Returns a string representation of the platform.
@@ -194,7 +197,7 @@ impl Platform {
     /// Return only the platform (linux, win, or osx from the platform enum)
     pub fn only_platform(&self) -> Option<&str> {
         match self {
-            Platform::NoArch => None,
+            Platform::NoArch | Platform::Unknown => None,
             Platform::Linux32
             | Platform::Linux64
             | Platform::LinuxAarch64
@@ -281,6 +284,7 @@ impl From<Platform> for &'static str {
             Platform::Win64 => "win-64",
             Platform::WinArm64 => "win-arm64",
             Platform::Emscripten32 => "emscripten-32",
+            Platform::Unknown => "unknown",
         }
     }
 }
@@ -292,6 +296,7 @@ impl Platform {
     pub fn arch(&self) -> Option<Arch> {
         match self {
             Platform::NoArch => None,
+            Platform::Unknown => None,
             Platform::Linux32 => Some(Arch::X86),
             Platform::Linux64 => Some(Arch::X86_64),
             Platform::LinuxAarch64 => Some(Arch::Aarch64),

@@ -207,7 +207,7 @@ impl Version {
     }
 
     /// Returns the individual segments of the version.
-    fn segments(
+    pub fn segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         let mut idx = if self.has_epoch() { 1 } else { 0 };
@@ -305,7 +305,7 @@ impl Version {
     /// 1.2+3.2.1-alpha0
     ///     ^^^^^^^^^^^^ This is the local part of the version
     /// ```
-    fn local_segments(
+    pub fn local_segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
@@ -358,7 +358,7 @@ impl Version {
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
-            .any(|component| component.as_string() == Some("dev"))
+            .any(|component| component.is_dev())
     }
 
     /// Check if this version version and local strings start with the same as other.
@@ -671,7 +671,8 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 
 /// Either a number, literal or the infinity.
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
-enum Component {
+pub enum Component {
+    /// Numeral Component.
     Numeral(u64),
 
     /// Post should always be ordered greater than anything else.
@@ -686,11 +687,13 @@ enum Component {
 
     /// An underscore or dash.
     UnderscoreOrDash {
+        /// Dash flag.
         is_dash: bool,
     },
 }
 
 impl Component {
+    /// Returns a component as numeric value.
     pub fn as_number(&self) -> Option<u64> {
         match self {
             Component::Numeral(value) => Some(*value),
@@ -698,6 +701,7 @@ impl Component {
         }
     }
 
+    /// Returns a component as mutable numeric value.
     pub fn as_number_mut(&mut self) -> Option<&mut u64> {
         match self {
             Component::Numeral(value) => Some(value),
@@ -705,6 +709,7 @@ impl Component {
         }
     }
 
+    /// Returns a component as string value.
     #[allow(dead_code)]
     pub fn as_string(&self) -> Option<&str> {
         match self {
@@ -713,16 +718,19 @@ impl Component {
         }
     }
 
+    /// Checks whether a component is [`Component::Post`]
     #[allow(dead_code)]
     pub fn is_post(&self) -> bool {
         matches!(self, Component::Post)
     }
 
+    /// Checks whether a component is [`Component::Dev`]
     #[allow(dead_code)]
     pub fn is_dev(&self) -> bool {
         matches!(self, Component::Dev)
     }
 
+    /// Checks whether a component is [`Component::Numeral`]
     pub fn is_numeric(&self) -> bool {
         matches!(self, Component::Numeral(_))
     }
@@ -887,7 +895,7 @@ impl<'de> Deserialize<'de> for Version {
     }
 }
 
-struct SegmentIter<'v> {
+pub struct SegmentIter<'v> {
     /// Information about the segment we are iterating.
     segment: Segment,
 

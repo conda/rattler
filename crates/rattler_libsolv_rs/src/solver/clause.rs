@@ -436,7 +436,7 @@ impl Debug for ClauseDebug<'_> {
                     .package()
                     .record
                     .name
-                    .as_str();
+                    .as_normalized();
                 write!(f, "only one {name} allowed")
             }
         }
