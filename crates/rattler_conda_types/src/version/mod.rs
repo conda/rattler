@@ -953,7 +953,7 @@ impl<'v> SegmentIter<'v> {
 /// this is not equal. Useful in ranges where we are talking
 /// about equality over version ranges instead of specific
 /// version instances
-#[derive(Clone, PartialOrd, Ord, Eq, Debug)]
+#[derive(Clone, PartialOrd, Ord, Eq, Debug, Deserialize)]
 pub struct StrictVersion(pub Version);
 
 impl PartialEq for StrictVersion {

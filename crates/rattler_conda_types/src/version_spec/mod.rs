@@ -8,7 +8,7 @@ pub(crate) mod version_tree;
 use crate::version_spec::version_tree::ParseVersionTreeError;
 use crate::{ParseVersionError, Version};
 pub(crate) use constraint::Constraint;
-use serde::{Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
@@ -21,7 +21,7 @@ pub(crate) use parse::ParseConstraintError;
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum RangeOperator {
     Greater,
     GreaterEquals,
@@ -42,7 +42,7 @@ impl RangeOperator {
 }
 
 #[allow(missing_docs)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum StrictRangeOperator {
     StartsWith,
     NotStartsWith,
@@ -64,7 +64,7 @@ impl StrictRangeOperator {
 
 /// An operator set a version equal to another
 #[allow(missing_docs)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum EqualityOperator {
     Equals,
     NotEquals,
@@ -93,7 +93,7 @@ pub enum VersionOperators {
 
 /// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or
 /// `>=3.4|<4.0`,
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum LogicalOperator {
     /// All comparators must evaluate to true for the group to evaluate to true.
     And,
@@ -114,7 +114,7 @@ impl LogicalOperator {
 
 /// A version specification.
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize)]
 pub enum VersionSpec {
     /// No version specified
     None,

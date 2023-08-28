@@ -1,7 +1,7 @@
 use crate::{PackageName, PackageRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::Serialize;
-use serde_with::{serde_as, skip_serializing_none};
+use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
@@ -227,11 +227,13 @@ impl MatchSpec {
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub version: Option<VersionSpec>,
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
+    #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
     pub build_number: Option<u64>,
