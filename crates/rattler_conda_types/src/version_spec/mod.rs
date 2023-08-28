@@ -27,10 +27,6 @@ pub enum RangeOperator {
     GreaterEquals,
     Less,
     LessEquals,
-    StartsWith,
-    NotStartsWith,
-    Compatible,
-    NotCompatible,
 }
 
 impl RangeOperator {
@@ -41,10 +37,27 @@ impl RangeOperator {
             RangeOperator::GreaterEquals => RangeOperator::Less,
             RangeOperator::Less => RangeOperator::GreaterEquals,
             RangeOperator::LessEquals => RangeOperator::Greater,
-            RangeOperator::StartsWith => RangeOperator::NotStartsWith,
-            RangeOperator::NotStartsWith => RangeOperator::StartsWith,
-            RangeOperator::Compatible => RangeOperator::NotCompatible,
-            RangeOperator::NotCompatible => RangeOperator::Compatible,
+        }
+    }
+}
+
+#[allow(missing_docs)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
+pub enum StrictRangeOperator {
+    StartsWith,
+    NotStartsWith,
+    Compatible,
+    NotCompatible,
+}
+
+impl StrictRangeOperator {
+    /// Returns the complement of the current operator.
+    pub fn complement(self) -> Self {
+        match self {
+            StrictRangeOperator::StartsWith => StrictRangeOperator::NotStartsWith,
+            StrictRangeOperator::NotStartsWith => StrictRangeOperator::StartsWith,
+            StrictRangeOperator::Compatible => StrictRangeOperator::NotCompatible,
+            StrictRangeOperator::NotCompatible => StrictRangeOperator::Compatible,
         }
     }
 }
@@ -72,6 +85,8 @@ impl EqualityOperator {
 pub enum VersionOperators {
     /// Specifies a range of versions
     Range(RangeOperator),
+    /// Specifies a range of versions using the strict operator
+    StrictRange(StrictRangeOperator),
     /// Specifies an exact version
     Exact(EqualityOperator),
 }
@@ -106,7 +121,9 @@ pub enum VersionSpec {
     /// Any version
     Any,
     /// A version range
-    Range(RangeOperator, StrictVersion),
+    Range(RangeOperator, Version),
+    /// A version range using the strict operator
+    StrictRange(StrictRangeOperator, StrictVersion),
     /// A exact version
     Exact(EqualityOperator, Version),
     /// A group of version specifications
@@ -140,8 +157,9 @@ impl FromStr for VersionSpec {
                         .map_err(ParseVersionSpecError::InvalidConstraint)?;
                     Ok(match constraint {
                         Constraint::Any => VersionSpec::Any,
-                        Constraint::Comparison(op, ver) => {
-                            VersionSpec::Range(op, StrictVersion(ver))
+                        Constraint::Comparison(op, ver) => VersionSpec::Range(op, ver),
+                        Constraint::StrictComparison(op, ver) => {
+                            VersionSpec::StrictRange(op, StrictVersion(ver))
                         }
                         Constraint::Exact(e, ver) => VersionSpec::Exact(e, ver),
                     })
@@ -167,10 +185,17 @@ impl Display for RangeOperator {
             RangeOperator::GreaterEquals => write!(f, ">="),
             RangeOperator::Less => write!(f, "<"),
             RangeOperator::LessEquals => write!(f, "<="),
-            RangeOperator::StartsWith => write!(f, "="),
-            RangeOperator::NotStartsWith => write!(f, "!=startswith"),
-            RangeOperator::Compatible => write!(f, "~="),
-            RangeOperator::NotCompatible => write!(f, "!~="),
+        }
+    }
+}
+
+impl Display for StrictRangeOperator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StrictRangeOperator::StartsWith => write!(f, "="),
+            StrictRangeOperator::NotStartsWith => write!(f, "!=startswith"),
+            StrictRangeOperator::Compatible => write!(f, "~="),
+            StrictRangeOperator::NotCompatible => write!(f, "!~="),
         }
     }
 }
@@ -198,9 +223,12 @@ impl Display for VersionSpec {
         fn write(spec: &VersionSpec, f: &mut Formatter<'_>, part_of_or: bool) -> std::fmt::Result {
             match spec {
                 VersionSpec::Any => write!(f, "*"),
+                VersionSpec::StrictRange(op, version) => match op {
+                    StrictRangeOperator::StartsWith => write!(f, "{}.*", version),
+                    StrictRangeOperator::NotStartsWith => write!(f, "!={}.*", version),
+                    op => write!(f, "{}{}", op, version),
+                },
                 VersionSpec::Range(op, version) => match op {
-                    RangeOperator::StartsWith => write!(f, "{}.*", version),
-                    RangeOperator::NotStartsWith => write!(f, "!={}.*", version),
                     op => write!(f, "{}{}", op, version),
                 },
                 VersionSpec::Exact(op, version) => match op {
@@ -247,18 +275,20 @@ impl VersionSpec {
             VersionSpec::Any => true,
             VersionSpec::Exact(EqualityOperator::Equals, limit) => limit == version,
             VersionSpec::Exact(EqualityOperator::NotEquals, limit) => limit != version,
-            VersionSpec::Range(RangeOperator::Greater, limit) => version > &limit.0,
-            VersionSpec::Range(RangeOperator::GreaterEquals, limit) => version >= &limit.0,
-            VersionSpec::Range(RangeOperator::Less, limit) => version < &limit.0,
-            VersionSpec::Range(RangeOperator::LessEquals, limit) => version <= &limit.0,
-            VersionSpec::Range(RangeOperator::StartsWith, limit) => version.starts_with(&limit.0),
-            VersionSpec::Range(RangeOperator::NotStartsWith, limit) => {
+            VersionSpec::Range(RangeOperator::Greater, limit) => version > &limit,
+            VersionSpec::Range(RangeOperator::GreaterEquals, limit) => version >= &limit,
+            VersionSpec::Range(RangeOperator::Less, limit) => version < &limit,
+            VersionSpec::Range(RangeOperator::LessEquals, limit) => version <= &limit,
+            VersionSpec::StrictRange(StrictRangeOperator::StartsWith, limit) => {
+                version.starts_with(&limit.0)
+            }
+            VersionSpec::StrictRange(StrictRangeOperator::NotStartsWith, limit) => {
                 !version.starts_with(&limit.0)
             }
-            VersionSpec::Range(RangeOperator::Compatible, limit) => {
+            VersionSpec::StrictRange(StrictRangeOperator::Compatible, limit) => {
                 version.compatible_with(&limit.0)
             }
-            VersionSpec::Range(RangeOperator::NotCompatible, limit) => {
+            VersionSpec::StrictRange(StrictRangeOperator::NotCompatible, limit) => {
                 !version.compatible_with(&limit.0)
             }
             VersionSpec::Group(LogicalOperator::And, group) => {
@@ -291,7 +321,7 @@ mod tests {
             VersionSpec::from_str(">=1.2.3"),
             Ok(VersionSpec::Range(
                 RangeOperator::GreaterEquals,
-                StrictVersion::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap()
             ))
         );
     }
@@ -305,12 +335,9 @@ mod tests {
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        StrictVersion::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
-                    VersionSpec::Range(
-                        RangeOperator::Less,
-                        StrictVersion::from_str("2.0.0").unwrap()
-                    ),
+                    VersionSpec::Range(RangeOperator::Less, Version::from_str("2.0.0").unwrap()),
                 ]
             ))
         );
@@ -321,12 +348,9 @@ mod tests {
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        StrictVersion::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
-                    VersionSpec::Range(
-                        RangeOperator::Less,
-                        StrictVersion::from_str("1.0.0").unwrap()
-                    ),
+                    VersionSpec::Range(RangeOperator::Less, Version::from_str("1.0.0").unwrap()),
                 ]
             ))
         );
@@ -337,12 +361,9 @@ mod tests {
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        StrictVersion::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap()
                     ),
-                    VersionSpec::Range(
-                        RangeOperator::Less,
-                        StrictVersion::from_str("1.0.0").unwrap()
-                    ),
+                    VersionSpec::Range(RangeOperator::Less, Version::from_str("1.0.0").unwrap()),
                 ]
             ))
         );

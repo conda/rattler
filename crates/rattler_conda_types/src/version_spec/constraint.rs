@@ -1,7 +1,7 @@
 use super::ParseConstraintError;
 use super::RangeOperator;
 use crate::version_spec::parse::constraint_parser;
-use crate::version_spec::EqualityOperator;
+use crate::version_spec::{EqualityOperator, StrictRangeOperator};
 use crate::Version;
 use std::str::FromStr;
 
@@ -14,6 +14,9 @@ pub(crate) enum Constraint {
 
     /// Version comparison (e.g `>1.2.3`)
     Comparison(RangeOperator, Version),
+
+    /// Strict comparison (e.g `~=1.2.3`)
+    StrictComparison(StrictRangeOperator, Version),
 
     /// Exact Version
     Exact(EqualityOperator, Version),
@@ -41,7 +44,7 @@ impl FromStr for Constraint {
 mod test {
     use super::Constraint;
     use crate::version_spec::constraint::ParseConstraintError;
-    use crate::version_spec::{EqualityOperator, RangeOperator};
+    use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator};
     use crate::Version;
     use std::str::FromStr;
 
@@ -108,8 +111,8 @@ mod test {
         );
         assert_eq!(
             Constraint::from_str("=1.2.3"),
-            Ok(Constraint::Comparison(
-                RangeOperator::StartsWith,
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::StartsWith,
                 Version::from_str("1.2.3").unwrap()
             ))
         );
@@ -129,8 +132,8 @@ mod test {
         );
         assert_eq!(
             Constraint::from_str("~=1.2.3"),
-            Ok(Constraint::Comparison(
-                RangeOperator::Compatible,
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::Compatible,
                 Version::from_str("1.2.3").unwrap()
             ))
         );
@@ -161,15 +164,15 @@ mod test {
     fn test_glob_op() {
         assert_eq!(
             Constraint::from_str("=1.2.*"),
-            Ok(Constraint::Comparison(
-                RangeOperator::StartsWith,
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::StartsWith,
                 Version::from_str("1.2").unwrap()
             ))
         );
         assert_eq!(
             Constraint::from_str("!=1.2.*"),
-            Ok(Constraint::Comparison(
-                RangeOperator::NotStartsWith,
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::NotStartsWith,
                 Version::from_str("1.2").unwrap()
             ))
         );
@@ -214,8 +217,8 @@ mod test {
     fn test_starts_with() {
         assert_eq!(
             Constraint::from_str("1.2.*"),
-            Ok(Constraint::Comparison(
-                RangeOperator::StartsWith,
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::StartsWith,
                 Version::from_str("1.2").unwrap()
             ))
         );

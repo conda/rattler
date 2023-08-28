@@ -1,4 +1,6 @@
-use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator, VersionOperators};
+use crate::version_spec::{
+    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
@@ -34,7 +36,10 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
             VersionOperators::Exact(EqualityOperator::NotEquals),
             tag("!="),
         ),
-        value(VersionOperators::Range(RangeOperator::StartsWith), tag("=")),
+        value(
+            VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
+            tag("="),
+        ),
         value(
             VersionOperators::Range(RangeOperator::GreaterEquals),
             tag(">="),
@@ -46,7 +51,7 @@ fn parse_operator<'a, E: ParseError<&'a str>>(
         ),
         value(VersionOperators::Range(RangeOperator::Less), tag("<")),
         value(
-            VersionOperators::Range(RangeOperator::Compatible),
+            VersionOperators::StrictRange(StrictRangeOperator::Compatible),
             tag("~="),
         ),
     ))(input)
@@ -198,7 +203,9 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 mod tests {
     use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
     use crate::version_spec::version_tree::{parse_version_epoch, recognize_constraint};
-    use crate::version_spec::{EqualityOperator, RangeOperator, VersionOperators};
+    use crate::version_spec::{
+        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+    };
     use std::convert::TryFrom;
 
     #[test]
@@ -281,11 +288,17 @@ mod tests {
         );
         assert_eq!(
             parse_operator::<Err>("="),
-            Ok(("", VersionOperators::Range(RangeOperator::StartsWith)))
+            Ok((
+                "",
+                VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+            ))
         );
         assert_eq!(
             parse_operator::<Err>("~="),
-            Ok(("", VersionOperators::Range(RangeOperator::Compatible)))
+            Ok((
+                "",
+                VersionOperators::StrictRange(StrictRangeOperator::Compatible)
+            ))
         );
 
         // Anything else is an error
