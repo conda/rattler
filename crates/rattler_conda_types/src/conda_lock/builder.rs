@@ -95,7 +95,6 @@ impl LockFileBuilder {
                 .into_values()
                 .flat_map(|package| package.build())
                 .collect(),
-            version: super::default_version(),
         };
         Ok(lock)
     }

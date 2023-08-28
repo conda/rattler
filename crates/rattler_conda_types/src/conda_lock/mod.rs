@@ -20,25 +20,16 @@ use url::Url;
 pub mod builder;
 mod content_hash;
 
-/// Default version for the conda-lock file format
-const fn default_version() -> u32 {
-    1
-}
-
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
 /// also the locked packages
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct CondaLock {
     /// Metadata for the lock file
     pub metadata: LockMeta,
 
     /// Locked packages
     pub package: Vec<LockedDependency>,
-
-    /// Version of the conda-lock file format
-    #[serde(default = "default_version")]
-    pub version: u32,
 }
 
 #[allow(missing_docs)]
@@ -441,6 +432,41 @@ impl From<&str> for Channel {
             url: url.to_string(),
             used_env_vars: Default::default(),
         }
+    }
+}
+
+impl Serialize for CondaLock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        #[derive(Serialize)]
+        struct Raw<'a> {
+            metadata: &'a LockMeta,
+            package: Vec<&'a LockedDependency>,
+            version: u32,
+        }
+
+        // Sort all packages in alphabetical order. We choose to use alphabetic order instead of
+        // topological because the alphabetic order will create smaller diffs when packages change
+        // or are added.
+        // See: https://github.com/conda/conda-lock/issues/491
+        let mut sorted_deps = self.package.iter().collect::<Vec<_>>();
+        sorted_deps.sort_by(|&a, &b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.platform.cmp(&b.platform))
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.build.cmp(&b.build))
+        });
+
+        let raw = Raw {
+            metadata: &self.metadata,
+            package: sorted_deps,
+            version: 1,
+        };
+
+        raw.serialize(serializer)
     }
 }
 
