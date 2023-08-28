@@ -3,7 +3,7 @@ use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 pub mod matcher;
 pub mod parse;
@@ -112,7 +112,7 @@ use matcher::StringMatcher;
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
 #[skip_serializing_none]
 #[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<PackageName>,
@@ -345,21 +345,6 @@ impl MatchSpec {
     }
 }
 
-impl Hash for MatchSpec {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
-        self.version.hash(state);
-        self.build.hash(state);
-        self.build_number.hash(state);
-        self.file_name.hash(state);
-        self.channel.hash(state);
-        self.subdir.hash(state);
-        self.namespace.hash(state);
-        self.md5.hash(state);
-        self.sha256.hash(state);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -367,6 +352,7 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
+    use std::hash::{Hash, Hasher};
 
     #[test]
     fn test_matchspec_format_eq() {
@@ -384,6 +370,34 @@ mod tests {
         let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
 
         assert_eq!(spec, rebuild_spec)
+    }
+
+    #[test]
+    fn test_hash_match() {
+        let spec1 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
+        let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
+        assert_eq!(spec1, spec2);
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        let hash1 = spec1.hash(&mut hasher);
+        let hash2 = spec2.hash(&mut hasher);
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_hash_no_match() {
+        let spec1 = MatchSpec::from_str("tensorflow 2.6.0.*").unwrap();
+        let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
+        assert_ne!(spec1, spec2);
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        spec1.hash(&mut hasher);
+        let hash1 = hasher.finish();
+        spec2.hash(&mut hasher);
+        let hash2 = hasher.finish();
+
+        assert_ne!(hash1, hash2);
     }
 
     #[test]

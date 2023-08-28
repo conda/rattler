@@ -1,6 +1,6 @@
 use crate::arena::Arena;
 use crate::conda_util;
-use crate::id::{VersionSetId, NameId, RepoId, SolvableId};
+use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
 use rattler_conda_types::{MatchSpec, PackageName, PackageRecord, Version};
@@ -12,12 +12,11 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
 /// Trait describing sets of versions.
-pub trait VersionSet: Debug + Display + Clone + Eq + Hash  {
+pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     type V: Debug + Display + Clone + Eq + Ord;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
-
 }
 
 impl VersionSet for MatchSpec {
@@ -27,7 +26,6 @@ impl VersionSet for MatchSpec {
         self.matches(v)
     }
 }
-
 
 /// A pool that stores data related to the available packages
 ///
@@ -148,9 +146,7 @@ impl<'a, V: VersionSet> Pool<'a, V> {
         match self.version_set_to_id.entry(version_set.clone()) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
-                let id = self
-                    .version_sets
-                    .alloc(version_set);
+                let id = self.version_sets.alloc(version_set);
 
                 // Update the entry
                 entry.insert(id);
@@ -236,10 +232,7 @@ impl Pool<'_, MatchSpec> {
         solvable_order: &mut HashMap<u64, Ordering>,
     ) {
         let match_spec = &self.version_sets[match_spec_id];
-        let match_spec_name = match_spec
-            .name
-            .as_ref()
-            .expect("match spec without name!");
+        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
         let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,
             Some(&name_id) => name_id,
@@ -253,7 +246,7 @@ impl Pool<'_, MatchSpec> {
             &self.solvables,
             match_spec_to_candidates,
         )
-            .clone();
+        .clone();
 
         pkgs.sort_by(|&p1, &p2| {
             let key = u32::from(p1) as u64 | ((u32::from(p2) as u64) << 32);
@@ -288,10 +281,7 @@ impl Pool<'_, MatchSpec> {
         version_set_to_forbidden: &mut Mapping<VersionSetId, Vec<SolvableId>>,
     ) {
         let match_spec = &self.version_sets[match_spec_id];
-        let match_spec_name = match_spec
-            .name
-            .as_ref()
-            .expect("match spec without name!");
+        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
         let name_id = match self.names_to_ids.get(match_spec_name) {
             None => return,
             Some(&name_id) => name_id,

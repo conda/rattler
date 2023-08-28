@@ -1,13 +1,13 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
-use rattler_conda_types::package::{ArchiveType};
-use rattler_conda_types::{GenericVirtualPackage, PackageRecord, RepoDataRecord, MatchSpec};
+use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::ParseMatchSpecError;
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId};
 use std::cmp::Ordering;
-use std::str::FromStr;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// Adds [`RepoDataRecord`] to `repo`
 ///
@@ -101,7 +101,11 @@ fn add_or_reuse_solvable<'a>(
     Some(solvable_id)
 }
 
-pub fn add_virtual_packages(pool: &mut Pool<MatchSpec>, repo_id: RepoId, packages: &[GenericVirtualPackage]) {
+pub fn add_virtual_packages(
+    pool: &mut Pool<MatchSpec>,
+    repo_id: RepoId,
+    packages: &[GenericVirtualPackage],
+) {
     let packages: &'static _ = packages
         .iter()
         .map(|p| PackageRecord {

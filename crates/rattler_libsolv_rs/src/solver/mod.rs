@@ -907,9 +907,9 @@ impl<'a> Solver<'a> {
 mod test {
     use super::*;
     use crate::id::RepoId;
+    use crate::pool::VersionSet;
     use rattler_conda_types::{PackageRecord, Version};
     use std::str::FromStr;
-    use crate::pool::VersionSet;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {

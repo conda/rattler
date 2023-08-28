@@ -1,6 +1,6 @@
 use crate::version::parse::version_parser;
 use crate::version_spec::constraint::Constraint;
-use crate::version_spec::VersionOperator;
+use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
 use crate::{ParseVersionError, ParseVersionErrorKind};
 use nom::{
     branch::alt,
@@ -22,7 +22,7 @@ enum ParseVersionOperatorError<'i> {
 }
 
 /// Parses a version operator, returns an error if the operator is not recognized or not found.
-fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOperatorError> {
+fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError> {
     // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
         |_: nom::Err<nom::error::Error<&str>>| {
@@ -31,14 +31,14 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOp
     )?;
 
     let op = match operator_str {
-        "==" => VersionOperator::Equals,
-        "!=" => VersionOperator::NotEquals,
-        "<=" => VersionOperator::LessEquals,
-        ">=" => VersionOperator::GreaterEquals,
-        "<" => VersionOperator::Less,
-        ">" => VersionOperator::Greater,
-        "=" => VersionOperator::StartsWith,
-        "~=" => VersionOperator::Compatible,
+        "==" => VersionOperators::Exact(EqualityOperator::Equals),
+        "!=" => VersionOperators::Exact(EqualityOperator::NotEquals),
+        "<=" => VersionOperators::Range(RangeOperator::LessEquals),
+        ">=" => VersionOperators::Range(RangeOperator::GreaterEquals),
+        "<" => VersionOperators::Range(RangeOperator::Less),
+        ">" => VersionOperators::Range(RangeOperator::Greater),
+        "=" => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
+        "~=" => VersionOperators::StrictRange(StrictRangeOperator::Compatible),
         _ => {
             return Err(nom::Err::Failure(
                 ParseVersionOperatorError::InvalidOperator(operator_str),
@@ -52,7 +52,7 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOp
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
     #[error("'.' is incompatible with '{0}' operator'")]
-    GlobVersionIncompatibleWithOperator(VersionOperator),
+    GlobVersionIncompatibleWithOperator(RangeOperator),
     #[error("regex constraints are not supported")]
     RegexConstraintsNotSupported,
     #[error("unterminated unsupported regular expression")]
@@ -142,18 +142,26 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
     let op = match (version_rest, op) {
         // The version was successfully parsed
         ("", Some(op)) => op,
-        ("", None) => VersionOperator::Equals,
+        ("", None) => VersionOperators::Exact(EqualityOperator::Equals),
 
         // The version ends in a wildcard pattern
-        ("*" | ".*", Some(VersionOperator::StartsWith)) => VersionOperator::StartsWith,
-        ("*" | ".*", Some(VersionOperator::GreaterEquals)) => VersionOperator::GreaterEquals,
-        ("*" | ".*", Some(VersionOperator::Greater)) => VersionOperator::GreaterEquals,
-        ("*" | ".*", Some(VersionOperator::NotEquals)) => VersionOperator::NotStartsWith,
+        ("*" | ".*", Some(VersionOperators::StrictRange(StrictRangeOperator::StartsWith))) => {
+            VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+        }
+        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::GreaterEquals))) => {
+            VersionOperators::Range(RangeOperator::GreaterEquals)
+        }
+        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::Greater))) => {
+            VersionOperators::Range(RangeOperator::GreaterEquals)
+        }
+        ("*" | ".*", Some(VersionOperators::Exact(EqualityOperator::NotEquals))) => {
+            VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
+        }
         (glob @ "*" | glob @ ".*", Some(op)) => {
             tracing::warn!("Using {glob} with relational operator is superfluous and deprecated and will be removed in a future version of conda.");
             op
         }
-        ("*" | ".*", None) => VersionOperator::StartsWith,
+        ("*" | ".*", None) => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
 
         // The version string kinda looks like a regular expression.
         (version_remainder, _) if version_str.contains('*') || version_remainder.ends_with('$') => {
@@ -173,7 +181,11 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
         }
     };
 
-    Ok((rest, Constraint::Comparison(op, version)))
+    match op {
+        VersionOperators::Range(r) => Ok((rest, Constraint::Comparison(r, version))),
+        VersionOperators::Exact(e) => Ok((rest, Constraint::Exact(e, version))),
+        VersionOperators::StrictRange(s) => Ok((rest, Constraint::StrictComparison(s, version))),
+    }
 }
 
 /// Parses a version constraint.
@@ -195,32 +207,41 @@ mod test {
     fn test_operator_parser() {
         assert_eq!(
             operator_parser(">3.1"),
-            Ok(("3.1", VersionOperator::Greater))
+            Ok(("3.1", VersionOperators::Range(RangeOperator::Greater)))
         );
         assert_eq!(
             operator_parser(">=3.1"),
-            Ok(("3.1", VersionOperator::GreaterEquals))
+            Ok(("3.1", VersionOperators::Range(RangeOperator::GreaterEquals)))
         );
-        assert_eq!(operator_parser("<3.1"), Ok(("3.1", VersionOperator::Less)));
+        assert_eq!(
+            operator_parser("<3.1"),
+            Ok(("3.1", VersionOperators::Range(RangeOperator::Less)))
+        );
         assert_eq!(
             operator_parser("<=3.1"),
-            Ok(("3.1", VersionOperator::LessEquals))
+            Ok(("3.1", VersionOperators::Range(RangeOperator::LessEquals)))
         );
         assert_eq!(
             operator_parser("==3.1"),
-            Ok(("3.1", VersionOperator::Equals))
+            Ok(("3.1", VersionOperators::Exact(EqualityOperator::Equals)))
         );
         assert_eq!(
             operator_parser("!=3.1"),
-            Ok(("3.1", VersionOperator::NotEquals))
+            Ok(("3.1", VersionOperators::Exact(EqualityOperator::NotEquals)))
         );
         assert_eq!(
             operator_parser("=3.1"),
-            Ok(("3.1", VersionOperator::StartsWith))
+            Ok((
+                "3.1",
+                VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+            ))
         );
         assert_eq!(
             operator_parser("~=3.1"),
-            Ok(("3.1", VersionOperator::Compatible))
+            Ok((
+                "3.1",
+                VersionOperators::StrictRange(StrictRangeOperator::Compatible)
+            ))
         );
 
         assert_eq!(
@@ -265,7 +286,7 @@ mod test {
             logical_constraint_parser("3.1"),
             Ok((
                 "",
-                Constraint::Comparison(VersionOperator::Equals, Version::from_str("3.1").unwrap())
+                Constraint::Exact(EqualityOperator::Equals, Version::from_str("3.1").unwrap())
             ))
         );
 
@@ -273,7 +294,7 @@ mod test {
             logical_constraint_parser(">3.1"),
             Ok((
                 "",
-                Constraint::Comparison(VersionOperator::Greater, Version::from_str("3.1").unwrap())
+                Constraint::Comparison(RangeOperator::Greater, Version::from_str("3.1").unwrap())
             ))
         );
 
@@ -281,8 +302,8 @@ mod test {
             logical_constraint_parser("3.1*"),
             Ok((
                 "",
-                Constraint::Comparison(
-                    VersionOperator::StartsWith,
+                Constraint::StrictComparison(
+                    StrictRangeOperator::StartsWith,
                     Version::from_str("3.1").unwrap()
                 )
             ))
@@ -292,8 +313,8 @@ mod test {
             logical_constraint_parser("3.1.*"),
             Ok((
                 "",
-                Constraint::Comparison(
-                    VersionOperator::StartsWith,
+                Constraint::StrictComparison(
+                    StrictRangeOperator::StartsWith,
                     Version::from_str("3.1").unwrap()
                 )
             ))
@@ -303,8 +324,8 @@ mod test {
             logical_constraint_parser("~=3.1"),
             Ok((
                 "",
-                Constraint::Comparison(
-                    VersionOperator::Compatible,
+                Constraint::StrictComparison(
+                    StrictRangeOperator::Compatible,
                     Version::from_str("3.1").unwrap()
                 )
             ))
@@ -315,7 +336,7 @@ mod test {
             Ok((
                 "",
                 Constraint::Comparison(
-                    VersionOperator::GreaterEquals,
+                    RangeOperator::GreaterEquals,
                     Version::from_str("3.1").unwrap()
                 )
             ))

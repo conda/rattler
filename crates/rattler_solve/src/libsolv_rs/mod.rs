@@ -4,10 +4,10 @@ use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
+use rattler_conda_types::MatchSpec;
 use rattler_conda_types::RepoDataRecord;
 use rattler_libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
 use std::collections::HashMap;
-use rattler_conda_types::MatchSpec;
 
 mod input;
 mod output;

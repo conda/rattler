@@ -1,9 +1,9 @@
 use serde::{Serialize, Serializer};
+use std::hash::{Hash, Hasher};
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
-use std::hash::{Hash, Hasher};
 
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]

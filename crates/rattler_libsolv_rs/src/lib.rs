@@ -21,7 +21,7 @@ mod solve_jobs;
 mod solver;
 mod transaction;
 
-pub use id::{VersionSetId, NameId, RepoId, SolvableId};
+pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;

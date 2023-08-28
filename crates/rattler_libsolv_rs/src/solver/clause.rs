@@ -5,8 +5,8 @@ use crate::id::{LearntClauseId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
-use std::fmt::{Debug, Formatter};
 use rattler_conda_types::MatchSpec;
+use std::fmt::{Debug, Formatter};
 
 /// Represents a single clause in the SAT problem
 ///
