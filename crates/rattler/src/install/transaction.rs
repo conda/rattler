@@ -166,7 +166,7 @@ fn find_python_info(
 
 /// Returns true if the specified record refers to Python.
 fn is_python_record(record: &PackageRecord) -> bool {
-    record.name == "python"
+    record.name.as_normalized() == "python"
 }
 
 /// Returns true if the `from` and `to` describe the same package content

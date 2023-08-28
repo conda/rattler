@@ -75,7 +75,7 @@ fn installed_package(
         channel: channel.to_string(),
         file_name: "dummy-filename".to_string(),
         package_record: PackageRecord {
-            name: name.to_string(),
+            name: name.parse().unwrap(),
             version: version.parse().unwrap(),
             build: build.to_string(),
             build_number,
@@ -107,7 +107,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let sparse_repo_datas = read_real_world_repo_data();
 
-    let names = specs.iter().map(|s| s.name.clone().unwrap());
+    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
         SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
@@ -127,7 +127,9 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
             .map(|pkg| {
                 format!(
                     "{} {} {}",
-                    pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
+                    pkg.package_record.name.as_normalized(),
+                    pkg.package_record.version,
+                    pkg.package_record.build
                 )
             })
             .collect::<Vec<_>>();
@@ -213,7 +215,7 @@ macro_rules! solver_backend_tests {
                 dummy_channel_json_path(),
                 Vec::new(),
                 vec![GenericVirtualPackage {
-                    name: "__unix".to_string(),
+                    name: rattler_conda_types::PackageName::new_unchecked("__unix"),
                     version: Version::from_str("0").unwrap(),
                     build_string: "0".to_string(),
                 }],
@@ -224,7 +226,7 @@ macro_rules! solver_backend_tests {
             assert_eq!(pkgs.len(), 1);
 
             let info = &pkgs[0];
-            assert_eq!("bar", &info.package_record.name);
+            assert_eq!("bar", info.package_record.name.as_normalized());
             assert_eq!("1.2.3", &info.package_record.version.to_string());
         }
 
@@ -247,7 +249,7 @@ macro_rules! solver_backend_tests {
                 info.url.to_string()
             );
             assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
-            assert_eq!("foo", info.package_record.name);
+            assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
             assert_eq!("py36h1af98f8_1", info.package_record.build);
@@ -311,7 +313,7 @@ macro_rules! solver_backend_tests {
 
             // Install
             let info = &pkgs[0];
-            assert_eq!("foo", &info.package_record.name);
+            assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("3.0.2", &info.package_record.version.to_string());
         }
 
@@ -336,7 +338,7 @@ macro_rules! solver_backend_tests {
 
             // Install
             let info = &pkgs[0];
-            assert_eq!("foo", &info.package_record.name);
+            assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("4.0.2", &info.package_record.version.to_string());
         }
 
@@ -363,7 +365,7 @@ macro_rules! solver_backend_tests {
 
             // Uninstall
             let info = &pkgs[0];
-            assert_eq!("foo", &info.package_record.name);
+            assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("3.0.2", &info.package_record.version.to_string());
         }
 
@@ -441,7 +443,7 @@ mod libsolv_c {
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
-        assert_eq!("foo", info.package_record.name);
+        assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
         assert_eq!("py36h1af98f8_1", info.package_record.build);
@@ -510,7 +512,7 @@ fn compare_solve(specs: Vec<&str>) {
 
     let sparse_repo_datas = read_real_world_repo_data();
 
-    let names = specs.iter().filter_map(|s| s.name.clone());
+    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
         SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
@@ -520,7 +522,9 @@ fn compare_solve(specs: Vec<&str>) {
             .map(|pkg| {
                 format!(
                     "{} {} {}",
-                    pkg.package_record.name, pkg.package_record.version, pkg.package_record.build
+                    pkg.package_record.name.as_normalized(),
+                    pkg.package_record.version,
+                    pkg.package_record.build
                 )
             })
             .collect::<Vec<_>>();

@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::MatchSpec;
+use rattler_conda_types::{MatchSpec, PackageName};
 use std::str::FromStr;
 
 use crate::{
@@ -47,9 +47,12 @@ impl PyMatchSpec {
 
     /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
     #[staticmethod]
-    pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> Self {
-        Self {
-            inner: MatchSpec::from_nameless(spec.clone().into(), Some(name)),
-        }
+    pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> pyo3::PyResult<Self> {
+        Ok(Self {
+            inner: MatchSpec::from_nameless(
+                spec.clone().into(),
+                Some(PackageName::try_from(name).map_err(PyRattlerError::from)?),
+            ),
+        })
     }
 }

@@ -56,7 +56,7 @@ impl From<ArchiveIdentifier> for CacheKey {
 impl From<&PackageRecord> for CacheKey {
     fn from(record: &PackageRecord) -> Self {
         Self {
-            name: record.name.to_string(),
+            name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
             build_string: record.build.to_string(),
         }

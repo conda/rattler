@@ -84,7 +84,7 @@ pub fn add_repodata_records<'a>(
         let record = &repo_data.package_record;
 
         // Name and version
-        solvable.name = pool.intern_str(record.name.as_str()).into();
+        solvable.name = pool.intern_str(record.name.as_normalized()).into();
         solvable.evr = pool.intern_str(record.version.to_string()).into();
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);
@@ -248,7 +248,7 @@ pub fn add_virtual_packages(pool: &Pool, repo: &Repo, packages: &[GenericVirtual
         let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
 
         // Name and version
-        solvable.name = pool.intern_str(package.name.as_str()).into();
+        solvable.name = pool.intern_str(package.name.as_normalized()).into();
         solvable.evr = pool.intern_str(package.version.to_string()).into();
         let rel_eq = pool.rel_eq(solvable.name, solvable.evr);
         repo.add_provides(solvable, rel_eq);

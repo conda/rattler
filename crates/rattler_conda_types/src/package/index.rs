@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::PackageFile;
-use crate::{NoArchType, VersionWithSource};
+use crate::{NoArchType, PackageName, VersionWithSource};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
@@ -45,7 +45,7 @@ pub struct IndexJson {
     pub license_family: Option<String>,
 
     /// The lowercase name of the package
-    pub name: String,
+    pub name: PackageName,
 
     /// If this package is independent of architecture this field specifies in what way. See
     /// [`NoArchType`] for more information.

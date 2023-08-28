@@ -58,9 +58,14 @@ pub fn calculate_content_data(
         .iter()
         .map(|spec| {
             Ok(CondaLockVersionedDependency {
-                name: spec.name.clone().ok_or_else(|| {
-                    CalculateContentHashError::RequiredAttributeMissing("name".to_string())
-                })?,
+                name: spec
+                    .name
+                    .clone()
+                    .ok_or_else(|| {
+                        CalculateContentHashError::RequiredAttributeMissing("name".to_string())
+                    })?
+                    .as_source()
+                    .to_string(),
                 manager: "conda".to_string(),
                 optional: false,
                 category: "main".to_string(),

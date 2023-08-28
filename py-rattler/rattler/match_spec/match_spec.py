@@ -105,6 +105,16 @@ class MatchSpec:
         """
         Constructs a MatchSpec from a NamelessMatchSpec
         and a name.
+
+        Examples
+        --------
+        >>> from rattler import NamelessMatchSpec
+        >>> spec = NamelessMatchSpec('3.4')
+        >>> MatchSpec.from_nameless(spec, "foo")
+        foo ==3.4
+        >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        exceptions.InvalidPackageNameException
         """
         return cls._from_py_match_spec(
             PyMatchSpec.from_nameless(spec._nameless_match_spec, name)

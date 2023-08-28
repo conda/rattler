@@ -18,6 +18,7 @@ pub mod version_spec;
 pub mod conda_lock;
 mod generic_virtual_package;
 pub mod package;
+mod package_name;
 pub mod prefix_record;
 
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
@@ -31,6 +32,7 @@ pub use match_spec::matcher::StringMatcher;
 pub use match_spec::parse::ParseMatchSpecError;
 pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
+pub use package_name::{InvalidPackageNameError, PackageName};
 pub use platform::{ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch};

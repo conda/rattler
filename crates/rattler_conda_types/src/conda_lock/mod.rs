@@ -4,11 +4,11 @@
 //! However, some types were added to enforce a bit more type safety.
 use self::PackageHashes::{Md5, Md5Sha256, Sha256};
 use crate::match_spec::parse::ParseMatchSpecError;
-use crate::MatchSpec;
 use crate::{
     utils::serde::Ordered, NamelessMatchSpec, NoArchType, PackageRecord, ParsePlatformError,
     ParseVersionError, Platform, RepoDataRecord,
 };
+use crate::{MatchSpec, PackageName};
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
@@ -229,7 +229,7 @@ fn default_category() -> String {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 pub struct LockedDependency {
     /// Package name of dependency
-    pub name: String,
+    pub name: PackageName,
     /// Locked version
     pub version: String,
     /// Pip or Conda managed
@@ -239,7 +239,7 @@ pub struct LockedDependency {
     pub platform: Platform,
     /// What are its own dependencies mapping name to version constraint
     #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
-    pub dependencies: IndexMap<String, NamelessMatchSpec, FxBuildHasher>,
+    pub dependencies: IndexMap<PackageName, NamelessMatchSpec, FxBuildHasher>,
     /// URL to find it at
     pub url: Url,
     /// Hashes of the package
@@ -618,12 +618,15 @@ mod test {
 
         let result: crate::conda_lock::LockedDependency = from_str(yaml).unwrap();
 
-        assert_eq!(result.name, "ncurses");
+        assert_eq!(result.name.as_normalized(), "ncurses");
         assert_eq!(result.version, "6.4");
 
         let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
 
-        assert_eq!(repodata_record.package_record.name, "ncurses");
+        assert_eq!(
+            repodata_record.package_record.name.as_normalized(),
+            "ncurses"
+        );
         assert_eq!(
             repodata_record.package_record.version,
             VersionWithSource::from_str("6.4").unwrap()
