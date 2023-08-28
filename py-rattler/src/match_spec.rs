@@ -40,7 +40,7 @@ impl PyMatchSpec {
         format!("{}", self.inner)
     }
 
-    /// Match a MatchSpec against a PackageRecord
+    /// Matches a MatchSpec against a PackageRecord
     pub fn matches(&self, record: &PyPackageRecord) -> bool {
         self.inner.matches(&record.inner)
     }
