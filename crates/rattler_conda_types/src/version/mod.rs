@@ -945,7 +945,7 @@ impl<'v> SegmentIter<'v> {
 /// this is not equal. Useful in ranges where we are talking
 /// about equality over version ranges instead of specific
 /// version instances
-#[derive(Clone, Ord, Eq, Debug)]
+#[derive(Clone, PartialOrd, Ord, Eq, Debug)]
 pub struct StrictVersion(pub Version);
 
 impl PartialEq for StrictVersion {
@@ -954,12 +954,6 @@ impl PartialEq for StrictVersion {
         // of components are the same
         // and the components are the same
         self.0.components.len() == other.0.components.len() && self.0 == other.0
-    }
-}
-
-impl PartialOrd for StrictVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.0.cmp(&other.0))
     }
 }
 

@@ -3,7 +3,7 @@ use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::Serialize;
 use serde_with::{serde_as, skip_serializing_none};
 use std::fmt::{Debug, Display, Formatter};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 pub mod matcher;
 pub mod parse;

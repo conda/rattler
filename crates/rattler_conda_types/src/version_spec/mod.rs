@@ -228,11 +228,11 @@ impl Display for VersionSpec {
                     StrictRangeOperator::NotStartsWith => write!(f, "!={}.*", version),
                     op => write!(f, "{}{}", op, version),
                 },
-                VersionSpec::Range(op, version) => match op {
-                    op => write!(f, "{}{}", op, version),
+                VersionSpec::Range(op, version) => {
+                    write!(f, "{}{}", op, version)
                 },
-                VersionSpec::Exact(op, version) => match op {
-                    op => write!(f, "{}{}", op, version),
+                VersionSpec::Exact(op, version) => {
+                    write!(f, "{}{}", op, version)
                 },
                 VersionSpec::Group(op, group) => {
                     let requires_parenthesis = *op == LogicalOperator::And && part_of_or;
@@ -275,10 +275,10 @@ impl VersionSpec {
             VersionSpec::Any => true,
             VersionSpec::Exact(EqualityOperator::Equals, limit) => limit == version,
             VersionSpec::Exact(EqualityOperator::NotEquals, limit) => limit != version,
-            VersionSpec::Range(RangeOperator::Greater, limit) => version > &limit,
-            VersionSpec::Range(RangeOperator::GreaterEquals, limit) => version >= &limit,
-            VersionSpec::Range(RangeOperator::Less, limit) => version < &limit,
-            VersionSpec::Range(RangeOperator::LessEquals, limit) => version <= &limit,
+            VersionSpec::Range(RangeOperator::Greater, limit) => version > limit,
+            VersionSpec::Range(RangeOperator::GreaterEquals, limit) => version >= limit,
+            VersionSpec::Range(RangeOperator::Less, limit) => version < limit,
+            VersionSpec::Range(RangeOperator::LessEquals, limit) => version <= limit,
             VersionSpec::StrictRange(StrictRangeOperator::StartsWith, limit) => {
                 version.starts_with(&limit.0)
             }
@@ -303,7 +303,6 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
-    use crate::version::StrictVersion;
     use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator};
     use crate::{Version, VersionSpec};
     use std::str::FromStr;
