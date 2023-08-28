@@ -82,7 +82,7 @@ class Version:
         """
         return self._version.has_local()
 
-    def segments(self) -> List[List[Optional[Union[str, int]]]]:
+    def segments(self) -> List[List[Union[str, int]]]:
         """
         Returns a list of segments of the version. It does not contain
         the local segment of the version.
@@ -95,7 +95,7 @@ class Version:
         """
         return self._version.segments()
 
-    def local_segments(self) -> List[List[Optional[Union[str, int]]]]:
+    def local_segments(self) -> List[List[Union[str, int]]]:
         """
         Returns a list of local segments of the version. It does not
         contain the non-local segment of the version.
