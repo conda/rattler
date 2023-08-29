@@ -5,8 +5,8 @@ use crate::id::{LearntClauseId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
-use crate::VersionSet;
-use rattler_conda_types::MatchSpec;
+use crate::{Record, VersionSet};
+
 use std::fmt::{Debug, Formatter};
 
 /// Represents a single clause in the SAT problem
@@ -395,9 +395,9 @@ impl Literal {
 }
 
 /// A representation of a clause that implements [`Debug`]
-pub(crate) struct ClauseDebug<'a, VS> {
+pub(crate) struct ClauseDebug<'pool, VS: VersionSet> {
     kind: Clause,
-    pool: &'a Pool<'a, VS>,
+    pool: &'pool Pool<VS>,
 }
 
 impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
@@ -410,15 +410,15 @@ impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
                 write!(
                     f,
                     "{} requires {match_spec}",
-                    self.pool.resolve_solvable_inner(solvable_id).display()
+                    self.pool.resolve_solvable_inner(solvable_id)
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
                     "{} excludes {} by {}",
-                    self.pool.resolve_solvable_inner(s1).display(),
-                    self.pool.resolve_solvable_inner(s2).display(),
+                    self.pool.resolve_solvable_inner(s1),
+                    self.pool.resolve_solvable_inner(s2),
                     self.pool.resolve_version_set(vset_id)
                 )
             }
@@ -426,18 +426,12 @@ impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
                 write!(
                     f,
                     "{} is locked, so {} is forbidden",
-                    self.pool.resolve_solvable_inner(locked).display(),
-                    self.pool.resolve_solvable_inner(forbidden).display()
+                    self.pool.resolve_solvable_inner(locked),
+                    self.pool.resolve_solvable_inner(forbidden)
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {
-                let name = self
-                    .pool
-                    .resolve_solvable_inner(s1)
-                    .package()
-                    .record
-                    .name
-                    .as_normalized();
+                let name = self.pool.resolve_solvable_inner(s1).package().record.name();
                 write!(f, "only one {name} allowed")
             }
         }

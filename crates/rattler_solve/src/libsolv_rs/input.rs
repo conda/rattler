@@ -13,7 +13,7 @@ use std::str::FromStr;
 ///
 /// Panics if the repo does not belong to the pool
 pub fn add_repodata_records<'a>(
-    pool: &mut Pool<'a, MatchSpec>,
+    pool: &mut Pool<MatchSpec>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
@@ -59,7 +59,7 @@ pub fn add_repodata_records<'a>(
 /// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool<'a, MatchSpec>,
+    pool: &mut Pool<MatchSpec>,
     repo_id: RepoId,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
@@ -81,7 +81,7 @@ fn add_or_reuse_solvable<'a>(
                     package_to_type.insert(filename, (archive_type, old_solvable_id));
 
                     // Reuse the old solvable
-                    pool.overwrite_package(repo_id, old_solvable_id, &repo_data.package_record);
+                    pool.overwrite_package(repo_id, old_solvable_id, repo_data.package_record.clone());
                     return Some(old_solvable_id);
                 }
                 Ordering::Equal => {
@@ -89,7 +89,7 @@ fn add_or_reuse_solvable<'a>(
                 }
             }
         } else {
-            let solvable_id = pool.add_package(repo_id, &repo_data.package_record);
+            let solvable_id = pool.add_package(repo_id, repo_data.package_record.clone());
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
         }
@@ -97,7 +97,7 @@ fn add_or_reuse_solvable<'a>(
         tracing::warn!("unknown package extension: {}", &repo_data.file_name);
     }
 
-    let solvable_id = pool.add_package(repo_id, &repo_data.package_record);
+    let solvable_id = pool.add_package(repo_id, repo_data.package_record.clone());
     Some(solvable_id)
 }
 
@@ -134,6 +134,6 @@ pub fn add_virtual_packages(
         .leak();
 
     for package in packages {
-        pool.add_package(repo_id, package);
+        pool.add_package(repo_id, package.clone());
     }
 }

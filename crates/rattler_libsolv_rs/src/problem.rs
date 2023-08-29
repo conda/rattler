@@ -15,9 +15,9 @@ use crate::id::{ClauseId, SolvableId, VersionSetId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
-use crate::VersionSet;
+use crate::{Record, VersionSet};
 
-use rattler_conda_types::{MatchSpec, Version};
+use rattler_conda_types::MatchSpec;
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -292,9 +292,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_solvable_inner(solvable_2)
-                            .display()
-                            .to_string()
+                        pool.resolve_solvable_inner(solvable_2).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
@@ -302,8 +300,7 @@ impl ProblemGraph {
                 write!(
                     f,
                     "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
-                    solvable.display(),
-                    target
+                    solvable, target
                 )?;
             }
         }
@@ -361,7 +358,7 @@ impl ProblemGraph {
         let mut merged_candidates = HashMap::default();
         for mut m in maybe_merge.into_values() {
             if m.len() > 1 {
-                m.sort_unstable_by_key(|&(_, id)| &pool.resolve_solvable(id).record.version);
+                m.sort_unstable_by_key(|&(_, id)| pool.resolve_solvable(id).record.version());
                 let m = Rc::new(MergedProblemNode {
                     ids: m.into_iter().map(|(_, snd)| snd).collect(),
                 });
@@ -468,16 +465,16 @@ impl ProblemGraph {
 
 /// A struct implementing [`fmt::Display`] that generates a user-friendly representation of a
 /// problem graph
-pub struct DisplayUnsat<'a, VS> {
+pub struct DisplayUnsat<'pool, VS: VersionSet> {
     graph: ProblemGraph,
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
     missing_set: HashSet<NodeIndex>,
-    pool: &'a Pool<'a, VS>,
+    pool: &'pool Pool<VS>,
 }
 
-impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
-    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<VS>) -> Self {
+impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
+    pub(crate) fn new(graph: ProblemGraph, pool: &'pool Pool<VS>) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
         let missing_set = graph.get_missing_set();
@@ -612,10 +609,10 @@ impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
                         merged
                             .ids
                             .iter()
-                            .map(|&id| self.pool.resolve_solvable(id).record.version.to_string())
+                            .map(|&id| self.pool.resolve_solvable(id).record.version().to_string())
                             .join(" | ")
                     } else {
-                        solvable.record.version.to_string()
+                        solvable.record.version().to_string()
                     };
 
                     let already_installed = graph.edges(candidate).any(|e| {
@@ -630,13 +627,9 @@ impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(
-                            f,
-                            "{indent}{} {version}",
-                            solvable.record.name.as_normalized()
-                        )?;
+                        writeln!(f, "{indent}{} {version}", solvable.record.name())?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name.as_normalized())?;
+                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name())?;
                     } else if constrains_conflict {
                         let match_specs = graph
                             .edges(candidate)
@@ -651,7 +644,7 @@ impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
                         writeln!(
                             f,
                             "{indent}{} {version} would constrain",
-                            solvable.record.name.as_normalized()
+                            solvable.record.name()
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
@@ -667,7 +660,7 @@ impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
                         writeln!(
                             f,
                             "{indent}{} {version} would require",
-                            solvable.record.name.as_normalized()
+                            solvable.record.name()
                         )?;
                         let requirements = graph
                             .edges(candidate)
@@ -733,8 +726,8 @@ impl<VS: VersionSet> fmt::Display for DisplayUnsat<'_, VS> {
                 writeln!(
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
-                    locked.record.name.as_normalized(),
-                    locked.record.version
+                    locked.record.name(),
+                    locked.record.version()
                 )?;
             }
         }

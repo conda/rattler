@@ -3,7 +3,7 @@ use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
 use crate::VersionSetId;
-use rattler_conda_types::{MatchSpec, PackageName, Version};
+use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -13,8 +13,8 @@ use std::collections::HashMap;
 pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
-    solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<PackageName, NameId>,
+    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
+    interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<VersionSetId, MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
@@ -23,8 +23,8 @@ pub(crate) fn compare_candidates(
     let a_solvable = solvables[a].package();
     let b_solvable = solvables[b].package();
 
-    let a_record = a_solvable.record;
-    let b_record = b_solvable.record;
+    let a_record = &a_solvable.record;
+    let b_record = &b_solvable.record;
 
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
@@ -139,8 +139,8 @@ pub(crate) fn compare_candidates(
 
 pub(crate) fn find_highest_version(
     match_spec_id: VersionSetId,
-    solvables: &Arena<SolvableId, Solvable>,
-    interned_strings: &HashMap<PackageName, NameId>,
+    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
+    interned_strings: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     match_specs: &Arena<VersionSetId, MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
@@ -184,20 +184,20 @@ pub(crate) fn find_highest_version(
 pub(crate) fn find_candidates<'b>(
     match_spec_id: VersionSetId,
     match_specs: &Arena<VersionSetId, MatchSpec>,
-    names_to_ids: &HashMap<PackageName, NameId>,
+    names_to_ids: &HashMap<String, NameId>,
     packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    solvables: &Arena<SolvableId, Solvable>,
+    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
     match_spec_to_candidates: &'b Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
 ) -> &'b Vec<SolvableId> {
     match_spec_to_candidates[match_spec_id].get_or_init(|| {
         let match_spec = &match_specs[match_spec_id];
         let Some(match_spec_name) = match_spec.name.as_ref() else { return Vec::new() };
-        let Some(name_id) = names_to_ids.get(match_spec_name) else { return Vec::new() };
+        let Some(name_id) = names_to_ids.get(match_spec_name.as_normalized()) else { return Vec::new() };
 
         packages_by_name[*name_id]
             .iter()
             .cloned()
-            .filter(|&solvable| match_spec.matches(solvables[solvable].package().record))
+            .filter(|&solvable| match_spec.matches(&solvables[solvable].package().record))
             .collect()
     })
 }

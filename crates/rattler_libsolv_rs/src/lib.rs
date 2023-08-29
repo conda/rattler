@@ -23,7 +23,7 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
-use rattler_conda_types::PackageRecord;
+use rattler_conda_types::{PackageRecord};
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
@@ -33,10 +33,27 @@ pub use transaction::Transaction;
 
 use rattler_conda_types::MatchSpec;
 
+/// Record is a name and a version specification.
+pub trait Record: Display {
+    /// The name of the package associated with this record.
+    type Name: Display + Sized + Hash + Eq + Clone;
+
+    /// The version associated with this record.
+    type Version: Display + Ord;
+
+    /// Returns the package name associated with this record
+    // TODO: Can we get rid of this?
+    fn name(&self) -> Self::Name;
+
+    /// Returns the version associated with this record
+    // TODO: Can we get rid of this?
+    fn version(&self) -> Self::Version;
+}
+
 /// Trait describing sets of versions.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
-    type V;
+    type V: Record;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
@@ -48,4 +65,21 @@ impl VersionSet for MatchSpec {
     fn contains(&self, v: &Self::V) -> bool {
         self.matches(v)
     }
+}
+
+impl Record for PackageRecord {
+    type Name = String;
+    type Version = rattler_conda_types::Version;
+    fn name(&self) -> Self::Name {
+        self.name.as_normalized().to_string()
+    }
+
+    fn version(&self) -> Self::Version {
+        self.version.version().clone()
+    }
+}
+
+/// Bla
+pub trait DependencyProvider<VS: VersionSet> {
+    // ???
 }

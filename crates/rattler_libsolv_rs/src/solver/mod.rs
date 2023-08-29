@@ -29,8 +29,8 @@ mod watch_map;
 ///
 /// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
 /// comes from the original `PackageRecord`s)
-pub struct Solver<'a> {
-    pool: Pool<'a, MatchSpec>,
+pub struct Solver {
+    pool: Pool<MatchSpec>,
 
     pub(crate) clauses: Vec<ClauseState>,
     watches: WatchMap,
@@ -42,9 +42,9 @@ pub struct Solver<'a> {
     decision_tracker: DecisionTracker,
 }
 
-impl<'a> Solver<'a> {
+impl Solver {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool<'a, MatchSpec>) -> Self {
+    pub fn new(pool: Pool<MatchSpec>) -> Self {
         Self {
             clauses: Vec::new(),
             watches: WatchMap::new(),
@@ -313,7 +313,7 @@ impl<'a> Solver<'a> {
                     if decided {
                         tracing::info!(
                             "Set {} = false",
-                            self.pool.resolve_solvable_inner(solvable_id).display()
+                            self.pool.resolve_solvable_inner(solvable_id)
                         );
                     }
                 }
@@ -408,8 +408,8 @@ impl<'a> Solver<'a> {
 
         tracing::info!(
             "=== Install {} at level {level} (required by {})",
-            self.pool.resolve_solvable_inner(solvable).display(),
-            self.pool.resolve_solvable_inner(required_by).display(),
+            self.pool.resolve_solvable_inner(solvable),
+            self.pool.resolve_solvable_inner(required_by),
         );
 
         self.decision_tracker
@@ -427,10 +427,7 @@ impl<'a> Solver<'a> {
             {
                 tracing::info!(
                     "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self
-                        .pool
-                        .resolve_solvable_inner(conflicting_solvable)
-                        .display()
+                    solvable = self.pool.resolve_solvable_inner(conflicting_solvable)
                 );
                 tracing::info!(
                     "During unit propagation for clause: {:?}",
@@ -466,9 +463,7 @@ impl<'a> Solver<'a> {
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool
-                            .resolve_solvable_inner(decision.solvable_id)
-                            .display(),
+                        self.pool.resolve_solvable_inner(decision.solvable_id),
                         clause.debug(&self.pool),
                     );
                 }
@@ -492,9 +487,7 @@ impl<'a> Solver<'a> {
                 .expect("bug: solvable was already decided!");
             tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
-                self.pool
-                    .resolve_solvable_inner(literal.solvable_id)
-                    .display()
+                self.pool.resolve_solvable_inner(literal.solvable_id)
             );
         }
 
@@ -539,9 +532,7 @@ impl<'a> Solver<'a> {
             if decided {
                 tracing::info!(
                     "Propagate assertion {} = {}",
-                    self.pool
-                        .resolve_solvable_inner(literal.solvable_id)
-                        .display(),
+                    self.pool.resolve_solvable_inner(literal.solvable_id),
                     decision
                 );
             }
@@ -639,8 +630,7 @@ impl<'a> Solver<'a> {
                                     tracing::info!(
                                         "Propagate {} = {}. {:?}",
                                         self.pool
-                                            .resolve_solvable_inner(remaining_watch.solvable_id)
-                                            .display(),
+                                            .resolve_solvable_inner(remaining_watch.solvable_id),
                                         remaining_watch.satisfying_value(),
                                         clause.debug(&self.pool),
                                     );
@@ -876,7 +866,7 @@ impl<'a> Solver<'a> {
                 .format_with("\n", |lit, f| f(&format_args!(
                     "- {}{}",
                     if lit.negate { "NOT " } else { "" },
-                    self.pool.resolve_solvable_inner(lit.solvable_id).display()
+                    self.pool.resolve_solvable_inner(lit.solvable_id)
                 )))
         );
 
@@ -911,6 +901,7 @@ mod test {
     use rattler_conda_types::{PackageRecord, Version};
     use std::fmt::Debug;
     use std::str::FromStr;
+    use crate::Record;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {
@@ -939,7 +930,7 @@ mod test {
 
     fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
         let record = Box::leak(Box::new(record));
-        let solvable_id = pool.add_package(RepoId::new(0), record);
+        let solvable_id = pool.add_package(RepoId::new(0), record.clone());
 
         for dep in &record.depends {
             pool.add_dependency(solvable_id, MatchSpec::from_str(dep).unwrap());
@@ -950,7 +941,7 @@ mod test {
         }
     }
 
-    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<'static, MatchSpec> {
+    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<MatchSpec> {
         let mut pool = Pool::new();
         for (pkg_name, version, deps) in packages {
             let pkg_name = *pkg_name;
@@ -962,10 +953,7 @@ mod test {
         pool
     }
 
-    fn install<VS: VersionSet + FromStr>(
-        pool: &mut Pool<'static, VS>,
-        packages: &[&str],
-    ) -> SolveJobs
+    fn install<VS: VersionSet + FromStr>(pool: &mut Pool<VS>, packages: &[&str]) -> SolveJobs
     where
         <VS as FromStr>::Err: Debug,
     {
@@ -981,12 +969,7 @@ mod test {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in &transaction.steps {
-            writeln!(
-                buf,
-                "{}",
-                pool.resolve_solvable_inner(solvable_id).display()
-            )
-            .unwrap();
+            writeln!(buf, "{}", pool.resolve_solvable_inner(solvable_id)).unwrap();
         }
 
         buf
@@ -1014,7 +997,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.version().to_string(), "1.2.3");
     }
 
     #[test]
@@ -1035,14 +1018,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.version().to_string(), "1.2.3");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version.to_string(), "4.5.6");
+        assert_eq!(solvable.record.version().to_string(), "4.5.6");
     }
 
     #[test]
@@ -1064,14 +1047,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.4");
+        assert_eq!(solvable.record.version().to_string(), "1.2.4");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version.to_string(), "4.5.7");
+        assert_eq!(solvable.record.version().to_string(), "4.5.7");
     }
 
     #[test]
@@ -1091,7 +1074,7 @@ mod test {
         use std::fmt::Write;
         let mut display_result = String::new();
         for &solvable_id in &solved.steps {
-            let solvable = solver.pool().resolve_solvable_inner(solvable_id).display();
+            let solvable = solver.pool().resolve_solvable_inner(solvable_id);
             writeln!(display_result, "{solvable}").unwrap();
         }
 
@@ -1116,7 +1099,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.version().to_string(), "1.2.3");
     }
 
     #[test]
@@ -1129,7 +1112,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version == Version::from_str("1.2.3").unwrap()
+                    package.record.version() == Version::from_str("1.2.3").unwrap()
                 } else {
                     false
                 }
@@ -1163,7 +1146,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version == Version::from_str("1.0.0").unwrap()
+                    package.record.version() == Version::from_str("1.0.0").unwrap()
                 } else {
                     false
                 }
@@ -1184,7 +1167,10 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version, Version::from_str("1.2.4").unwrap());
+        assert_eq!(
+            solvable.record.version(),
+            Version::from_str("1.2.4").unwrap()
+        );
     }
 
     #[test]
@@ -1205,7 +1191,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version() == Version::from_str("1").unwrap())
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
@@ -1242,7 +1228,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version() == Version::from_str("1").unwrap())
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
