@@ -309,7 +309,7 @@ impl ProblemGraph {
         write!(f, "}}")
     }
 
-    fn simplify<V: VersionSet>(&self, pool: &Pool<V>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
+    fn simplify<VS: VersionSet>(&self, pool: &Pool<VS>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
         let graph = &self.graph;
 
         // Gather information about nodes that can be merged
@@ -464,16 +464,16 @@ impl ProblemGraph {
 
 /// A struct implementing [`fmt::Display`] that generates a user-friendly representation of a
 /// problem graph
-pub struct DisplayUnsat<'a, V> {
+pub struct DisplayUnsat<'a, VS> {
     graph: ProblemGraph,
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
     missing_set: HashSet<NodeIndex>,
-    pool: &'a Pool<'a, V>,
+    pool: &'a Pool<'a, VS>,
 }
 
-impl<'a, V: VersionSet> DisplayUnsat<'a, V> {
-    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<V>) -> Self {
+impl<'a, VS: VersionSet> DisplayUnsat<'a, VS> {
+    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<VS>) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
         let missing_set = graph.get_missing_set();
@@ -693,7 +693,7 @@ impl<'a, V: VersionSet> DisplayUnsat<'a, V> {
     }
 }
 
-impl<V: VersionSet> fmt::Display for DisplayUnsat<'_, V> {
+impl<VS: VersionSet> fmt::Display for DisplayUnsat<'_, VS> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let (top_level_missing, top_level_conflicts): (Vec<_>, _) = self
             .graph

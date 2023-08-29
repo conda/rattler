@@ -112,10 +112,10 @@ impl Clause {
     }
 
     /// Visits each literal in the clause
-    pub fn visit_literals<V: VersionSet>(
+    pub fn visit_literals<VS: VersionSet>(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool<V>,
+        pool: &Pool<VS>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
@@ -202,7 +202,7 @@ impl ClauseState {
         clause
     }
 
-    pub fn debug<'a, V: VersionSet>(&self, pool: &'a Pool<V>) -> ClauseDebug<'a, V> {
+    pub fn debug<'a, VS: VersionSet>(&self, pool: &'a Pool<VS>) -> ClauseDebug<'a, VS> {
         ClauseDebug {
             kind: self.kind,
             pool,
@@ -314,9 +314,9 @@ impl ClauseState {
         }
     }
 
-    pub fn next_unwatched_variable<V: VersionSet>(
+    pub fn next_unwatched_variable<VS: VersionSet>(
         &self,
-        pool: &Pool<V>,
+        pool: &Pool<VS>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
@@ -394,12 +394,12 @@ impl Literal {
 }
 
 /// A representation of a clause that implements [`Debug`]
-pub(crate) struct ClauseDebug<'a, V> {
+pub(crate) struct ClauseDebug<'a, VS> {
     kind: Clause,
-    pool: &'a Pool<'a, V>,
+    pool: &'a Pool<'a, VS>,
 }
 
-impl<V: VersionSet> Debug for ClauseDebug<'_, V> {
+impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             Clause::InstallRoot => write!(f, "install root"),

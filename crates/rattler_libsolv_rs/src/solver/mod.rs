@@ -962,9 +962,9 @@ mod test {
         pool
     }
 
-    fn install<V: VersionSet + FromStr>(pool: &mut Pool<'static, V>, packages: &[&str]) -> SolveJobs
+    fn install<VS: VersionSet + FromStr>(pool: &mut Pool<'static, VS>, packages: &[&str]) -> SolveJobs
     where
-        <V as FromStr>::Err: Debug,
+        <VS as FromStr>::Err: Debug,
     {
         let mut jobs = SolveJobs::default();
         for &p in packages {

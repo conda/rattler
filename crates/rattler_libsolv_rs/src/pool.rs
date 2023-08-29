@@ -13,16 +13,16 @@ use std::hash::Hash;
 
 /// Trait describing sets of versions.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
-    type V: Debug + Display + Clone + Eq + Ord;
+    type VS: Debug + Display + Clone + Eq + Ord;
 
     /// Evaluate membership of a version in this set.
-    fn contains(&self, v: &Self::V) -> bool;
+    fn contains(&self, v: &Self::VS) -> bool;
 }
 
 impl VersionSet for MatchSpec {
-    type V = PackageRecord;
+    type VS = PackageRecord;
 
-    fn contains(&self, v: &Self::V) -> bool {
+    fn contains(&self, v: &Self::VS) -> bool {
         self.matches(v)
     }
 }
@@ -31,7 +31,7 @@ impl VersionSet for MatchSpec {
 ///
 /// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
 /// from the original `PackageRecord`s)
-pub struct Pool<'a, V> {
+pub struct Pool<'a, VS> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<'a>>,
 
@@ -48,10 +48,10 @@ pub struct Pool<'a, V> {
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
 
     /// Interned match specs
-    pub(crate) version_sets: Arena<VersionSetId, V>,
+    pub(crate) version_sets: Arena<VersionSetId, VS>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    version_set_to_id: HashMap<V, VersionSetId>,
+    version_set_to_id: HashMap<VS, VersionSetId>,
 
     /// Cached candidates for each match spec
     pub(crate) match_spec_to_sorted_candidates: Mapping<VersionSetId, Vec<SolvableId>>,
@@ -60,7 +60,7 @@ pub struct Pool<'a, V> {
     pub(crate) match_spec_to_forbidden: Mapping<VersionSetId, Vec<SolvableId>>,
 }
 
-impl<'a, V: VersionSet> Default for Pool<'a, V> {
+impl<'a, VS: VersionSet> Default for Pool<'a, VS> {
     fn default() -> Self {
         let mut solvables = Arena::new();
         solvables.alloc(Solvable::new_root());
@@ -81,7 +81,7 @@ impl<'a, V: VersionSet> Default for Pool<'a, V> {
     }
 }
 
-impl<'a, V: VersionSet> Pool<'a, V> {
+impl<'a, VS: VersionSet> Pool<'a, VS> {
     /// Creates a new [`Pool`]
     pub fn new() -> Self {
         Self::default()
@@ -128,21 +128,21 @@ impl<'a, V: VersionSet> Pool<'a, V> {
     }
 
     /// Registers a dependency for the provided solvable
-    pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set: V) {
+    pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set: VS) {
         let match_spec_id = self.intern_version_set(version_set);
         let solvable = self.solvables[solvable_id].package_mut();
         solvable.dependencies.push(match_spec_id);
     }
 
     /// Registers a constrains for the provided solvable
-    pub fn add_constrains(&mut self, solvable_id: SolvableId, version_set: V) {
+    pub fn add_constrains(&mut self, solvable_id: SolvableId, version_set: VS) {
         let match_spec_id = self.intern_version_set(version_set);
         let solvable = self.solvables[solvable_id].package_mut();
         solvable.constrains.push(match_spec_id);
     }
 
     /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
-    pub fn intern_version_set(&mut self, version_set: V) -> VersionSetId {
+    pub fn intern_version_set(&mut self, version_set: VS) -> VersionSetId {
         match self.version_set_to_id.entry(version_set.clone()) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
@@ -159,7 +159,7 @@ impl<'a, V: VersionSet> Pool<'a, V> {
     /// Returns the match spec associated to the provided id
     ///
     /// Panics if the match spec is not found in the pool
-    pub fn resolve_version_set(&self, id: VersionSetId) -> &V {
+    pub fn resolve_version_set(&self, id: VersionSetId) -> &VS {
         &self.version_sets[id]
     }
 
