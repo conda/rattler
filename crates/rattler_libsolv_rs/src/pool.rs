@@ -1,8 +1,8 @@
 use crate::arena::Arena;
-use crate::conda_util;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
+use crate::{conda_util, VersionSet};
 use rattler_conda_types::{MatchSpec, PackageName, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -10,22 +10,6 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-
-/// Trait describing sets of versions.
-pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
-    type VS: Debug + Display + Clone + Eq + Ord;
-
-    /// Evaluate membership of a version in this set.
-    fn contains(&self, v: &Self::VS) -> bool;
-}
-
-impl VersionSet for MatchSpec {
-    type VS = PackageRecord;
-
-    fn contains(&self, v: &Self::VS) -> bool {
-        self.matches(v)
-    }
-}
 
 /// A pool that stores data related to the available packages
 ///

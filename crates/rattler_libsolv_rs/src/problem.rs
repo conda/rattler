@@ -12,9 +12,10 @@ use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
 use crate::id::{ClauseId, SolvableId, VersionSetId};
-use crate::pool::{Pool, VersionSet};
+use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
+use crate::VersionSet;
 
 use rattler_conda_types::{MatchSpec, Version};
 
@@ -309,7 +310,10 @@ impl ProblemGraph {
         write!(f, "}}")
     }
 
-    fn simplify<VS: VersionSet>(&self, pool: &Pool<VS>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
+    fn simplify<VS: VersionSet>(
+        &self,
+        pool: &Pool<VS>,
+    ) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
         let graph = &self.graph;
 
         // Gather information about nodes that can be merged

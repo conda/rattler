@@ -907,7 +907,7 @@ impl<'a> Solver<'a> {
 mod test {
     use super::*;
     use crate::id::RepoId;
-    use crate::pool::VersionSet;
+    use crate::VersionSet;
     use rattler_conda_types::{PackageRecord, Version};
     use std::fmt::Debug;
     use std::str::FromStr;
@@ -962,7 +962,10 @@ mod test {
         pool
     }
 
-    fn install<VS: VersionSet + FromStr>(pool: &mut Pool<'static, VS>, packages: &[&str]) -> SolveJobs
+    fn install<VS: VersionSet + FromStr>(
+        pool: &mut Pool<'static, VS>,
+        packages: &[&str],
+    ) -> SolveJobs
     where
         <VS as FromStr>::Err: Debug,
     {

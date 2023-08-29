@@ -3,8 +3,9 @@ use crate::id::ClauseId;
 use crate::id::SolvableId;
 use crate::id::{LearntClauseId, VersionSetId};
 use crate::mapping::Mapping;
-use crate::pool::{Pool, VersionSet};
+use crate::pool::Pool;
 use crate::solver::decision_map::DecisionMap;
+use crate::VersionSet;
 use rattler_conda_types::MatchSpec;
 use std::fmt::{Debug, Formatter};
 

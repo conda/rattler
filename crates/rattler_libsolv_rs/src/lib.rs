@@ -23,7 +23,29 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
+use rattler_conda_types::PackageRecord;
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
 pub use transaction::Transaction;
+
+use rattler_conda_types::MatchSpec;
+
+/// Trait describing sets of versions.
+pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
+    /// Version type associated with the sets manipulated.
+    type V;
+
+    /// Evaluate membership of a version in this set.
+    fn contains(&self, v: &Self::V) -> bool;
+}
+
+impl VersionSet for MatchSpec {
+    type V = PackageRecord;
+
+    fn contains(&self, v: &Self::V) -> bool {
+        self.matches(v)
+    }
+}
