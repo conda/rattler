@@ -2,7 +2,7 @@ use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
 use crate::solvable::Solvable;
-use crate::VersionSetId;
+use crate::{Pool, VersionSetId};
 use rattler_conda_types::{MatchSpec, PackageRecord, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
@@ -13,15 +13,15 @@ use std::collections::HashMap;
 pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
-    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
-    interned_strings: &HashMap<String, NameId>,
-    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    match_specs: &Arena<VersionSetId, MatchSpec>,
+    pool: &Pool<MatchSpec>,
+    // solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
+    // packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
+    // match_specs: &Arena<VersionSetId, MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Ordering {
-    let a_solvable = solvables[a].package();
-    let b_solvable = solvables[b].package();
+    let a_solvable = pool.resolve_solvable(a);
+    let b_solvable = pool.resolve_solvable(b);
 
     let a_record = &a_solvable.record;
     let b_record = &b_solvable.record;
@@ -55,11 +55,11 @@ pub(crate) fn compare_candidates(
     let a_match_specs = a_solvable
         .dependencies
         .iter()
-        .map(|id| (*id, &match_specs[*id]));
+        .map(|id| (*id, pool.resolve_version_set(*id)));
     let b_match_specs = b_solvable
         .dependencies
         .iter()
-        .map(|id| (*id, &match_specs[*id]));
+        .map(|id| (*id, pool.resolve_version_set(*id)));
 
     let b_specs_by_name: HashMap<_, _> = b_match_specs
         .filter_map(|(spec_id, spec)| spec.name.as_ref().map(|name| (name, (spec_id))))
@@ -78,19 +78,15 @@ pub(crate) fn compare_candidates(
             // Find which of the two specs selects the highest version
             let highest_a = find_highest_version(
                 a_spec_id,
-                solvables,
-                interned_strings,
-                packages_by_name,
-                match_specs,
+                a_solvable.name,
+                pool,
                 match_spec_to_candidates,
                 match_spec_highest_version,
             );
             let highest_b = find_highest_version(
                 *b_spec_id,
-                solvables,
-                interned_strings,
-                packages_by_name,
-                match_specs,
+                b_solvable.name,
+                pool,
                 match_spec_to_candidates,
                 match_spec_highest_version,
             );
@@ -139,27 +135,21 @@ pub(crate) fn compare_candidates(
 
 pub(crate) fn find_highest_version(
     match_spec_id: VersionSetId,
-    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
-    interned_strings: &HashMap<String, NameId>,
-    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    match_specs: &Arena<VersionSetId, MatchSpec>,
+    name_id: NameId,
+    // solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
+    // packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
+    pool: &Pool<MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Option<(Version, bool)> {
     match_spec_highest_version[match_spec_id]
         .get_or_init(|| {
-            let candidates = find_candidates(
-                match_spec_id,
-                match_specs,
-                interned_strings,
-                packages_by_name,
-                solvables,
-                match_spec_to_candidates,
-            );
+            let candidates = match_spec_to_candidates[match_spec_id]
+                .get_or_init(|| pool.find_candidates(match_spec_id, name_id));
 
             candidates
                 .iter()
-                .map(|id| &solvables[*id].package().record)
+                .map(|id| &pool.resolve_solvable(*id).record)
                 .fold(None, |init, record| {
                     Some(init.map_or_else(
                         || {
@@ -179,25 +169,4 @@ pub(crate) fn find_highest_version(
         })
         .as_ref()
         .map(|(version, has_tracked_features)| (version.clone(), *has_tracked_features))
-}
-
-pub(crate) fn find_candidates<'b>(
-    match_spec_id: VersionSetId,
-    match_specs: &Arena<VersionSetId, MatchSpec>,
-    names_to_ids: &HashMap<String, NameId>,
-    packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
-    match_spec_to_candidates: &'b Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-) -> &'b Vec<SolvableId> {
-    match_spec_to_candidates[match_spec_id].get_or_init(|| {
-        let match_spec = &match_specs[match_spec_id];
-        let Some(match_spec_name) = match_spec.name.as_ref() else { return Vec::new() };
-        let Some(name_id) = names_to_ids.get(match_spec_name.as_normalized()) else { return Vec::new() };
-
-        packages_by_name[*name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| match_spec.matches(&solvables[solvable].package().record))
-            .collect()
-    })
 }

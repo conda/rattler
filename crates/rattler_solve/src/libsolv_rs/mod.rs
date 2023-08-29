@@ -6,7 +6,7 @@ use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
 use rattler_conda_types::MatchSpec;
 use rattler_conda_types::RepoDataRecord;
-use rattler_libsolv_rs::{Pool, SolveJobs, Solver as LibSolvRsSolver};
+use rattler_libsolv_rs::{CondaDependencyProvider, Pool, SolveJobs, Solver as LibSolvRsSolver};
 use std::collections::HashMap;
 
 mod input;
@@ -104,7 +104,7 @@ impl super::SolverImpl for Solver {
         }
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = LibSolvRsSolver::new(pool);
+        let mut solver = LibSolvRsSolver::new(pool, CondaDependencyProvider);
         let transaction = solver.solve(goal).map_err(|problem| {
             SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
         })?;

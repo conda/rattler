@@ -153,12 +153,7 @@ pub struct PackageRecord {
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.build.is_empty() {
-            write!(
-                f,
-                "{} {}",
-                self.name.as_normalized(),
-                self.version,
-            )
+            write!(f, "{} {}", self.name.as_normalized(), self.version,)
         } else {
             write!(
                 f,

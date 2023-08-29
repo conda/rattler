@@ -13,7 +13,7 @@ use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
-use crate::VersionSetId;
+use crate::{DependencyProvider, VersionSet, VersionSetId};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -29,8 +29,9 @@ mod watch_map;
 ///
 /// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
 /// comes from the original `PackageRecord`s)
-pub struct Solver {
-    pool: Pool<MatchSpec>,
+pub struct Solver<VS: VersionSet, D: DependencyProvider<VS>> {
+    provider: D,
+    pool: Pool<VS>,
 
     pub(crate) clauses: Vec<ClauseState>,
     watches: WatchMap,
@@ -42,9 +43,9 @@ pub struct Solver {
     decision_tracker: DecisionTracker,
 }
 
-impl Solver {
+impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool<MatchSpec>) -> Self {
+    pub fn new(pool: Pool<VS>, provider: D) -> Self {
         Self {
             clauses: Vec::new(),
             watches: WatchMap::new(),
@@ -53,11 +54,12 @@ impl Solver {
             learnt_why: Mapping::empty(),
             decision_tracker: DecisionTracker::new(pool.solvables.len() as u32),
             pool,
+            provider,
         }
     }
 
     /// Returns a reference to the pool used by the solver
-    pub fn pool(&self) -> &Pool<MatchSpec> {
+    pub fn pool(&self) -> &Pool<VS> {
         &self.pool
     }
 
@@ -171,7 +173,6 @@ impl Solver {
             Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
         let match_spec_to_highest_version =
             Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
-        let mut sorting_cache = HashMap::new();
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
@@ -185,14 +186,34 @@ impl Solver {
             // Enqueue the candidates of the dependencies
             for &dep in deps {
                 if seen_requires.insert(dep) {
-                    self.pool.populate_candidates(
-                        dep,
-                        favored_map,
-                        &mut match_spec_to_sorted_candidates,
+                    // Extract the name to which this version set applies.
+                    let version_set = self.pool.resolve_version_set(dep);
+                    let version_set_name = version_set.name();
+                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { return continue };
+
+                    // Find all solvables that match the version set
+                    let mut candidates = match_spec_to_candidates[dep]
+                        .get_or_init(|| self.pool.find_candidates(dep, version_set_name_id))
+                        .clone();
+
+                    // Sort all the candidates in order in which they should betried by the solver.
+                    self.provider.sort_candidates(
+                        &self.pool,
+                        &mut candidates,
                         &match_spec_to_candidates,
                         &match_spec_to_highest_version,
-                        &mut sorting_cache,
                     );
+
+                    // If we have a solvable that we favor, we sort that to the front. This ensures that that version
+                    // that is favored is picked first.
+                    if let Some(&favored_id) = favored_map.get(&version_set_name_id) {
+                        if let Some(pos) = candidates.iter().position(|&s| s == favored_id) {
+                            // Move the element at `pos` to the front of the array
+                            candidates[0..=pos].rotate_right(1);
+                        }
+                    }
+
+                    match_spec_to_sorted_candidates[dep] = candidates
                 }
 
                 for &candidate in match_spec_to_sorted_candidates
@@ -218,8 +239,18 @@ impl Solver {
             // Constrains
             for &dep in constrains {
                 if seen_forbidden.insert(dep) {
-                    self.pool
-                        .populate_forbidden(dep, &mut match_spec_to_forbidden);
+                    let forbidden_candidates = match_spec_to_candidates[dep]
+                        .get_or_init(|| {
+                            // Extract the name to which this version set applies.
+                            let version_set = self.pool.resolve_version_set(dep);
+                            let version_set_name = version_set.name();
+                            let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { return vec![] };
+
+                            // Find all the solvables that match the constraint version set
+                            self.pool.find_candidates(dep, version_set_name_id)
+                        });
+
+                    match_spec_to_forbidden[dep] = forbidden_candidates.clone();
                 }
 
                 for &solvable_dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
@@ -897,11 +928,11 @@ impl Solver {
 mod test {
     use super::*;
     use crate::id::RepoId;
+    use crate::{CondaDependencyProvider, Record};
     use crate::VersionSet;
     use rattler_conda_types::{PackageRecord, Version};
     use std::fmt::Debug;
     use std::str::FromStr;
-    use crate::Record;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {
@@ -976,7 +1007,7 @@ mod test {
     }
 
     fn solve_unsat(pool: Pool<MatchSpec>, jobs: SolveJobs) -> String {
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         match solver.solve(jobs) {
             Ok(_) => panic!("expected unsat, but a solution was found"),
             Err(problem) => problem.display_user_friendly(&solver).to_string(),
@@ -987,7 +1018,7 @@ mod test {
     fn test_unit_propagation_1() {
         let mut pool = pool(&[("asdf", "1.2.3", vec![])]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1008,7 +1039,7 @@ mod test {
             ("dummy", "42.42.42", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
@@ -1037,7 +1068,7 @@ mod test {
             ("efgh", "4.5.6", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
@@ -1068,7 +1099,7 @@ mod test {
             ("conflicting", "1.0.0", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         use std::fmt::Write;
@@ -1089,7 +1120,7 @@ mod test {
             ("b", "1.2.3", vec!["idontexist"]),
         ]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1124,7 +1155,7 @@ mod test {
         let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1158,7 +1189,7 @@ mod test {
         let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1198,7 +1229,7 @@ mod test {
             jobs.favor(solvable_id);
         }
 
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         let result = transaction_to_string(&solver.pool, &solved);
@@ -1235,7 +1266,7 @@ mod test {
             jobs.favor(solvable_id);
         }
 
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         let result = transaction_to_string(&solver.pool, &solved);
@@ -1250,7 +1281,7 @@ mod test {
     fn test_resolve_cyclic() {
         let mut pool = pool(&[("a", "2", vec!["b<=10"]), ("b", "5", vec!["a>=2,<=4"])]);
         let jobs = install(&mut pool, &["a<100"]);
-        let mut solver = Solver::new(pool);
+        let mut solver = Solver::new(pool, CondaDependencyProvider);
         let solved = solver.solve(jobs).unwrap();
 
         let result = transaction_to_string(&solver.pool, &solved);

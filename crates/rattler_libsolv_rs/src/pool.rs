@@ -3,15 +3,13 @@ use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-
-
 use rattler_conda_types::{MatchSpec, Version};
 
-use crate::{conda_util, Record, VersionSet};
 use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
+use crate::{conda_util, Record, VersionSet};
 
 /// A pool that stores data related to the available packages
 ///
@@ -145,7 +143,7 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    fn intern_package_name(&mut self, name: <VS::V as Record>::Name) -> NameId {
+    pub fn intern_package_name(&mut self, name: <VS::V as Record>::Name) -> NameId {
         match self.names_to_ids.entry(name) {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
@@ -158,6 +156,11 @@ impl<VS: VersionSet> Pool<VS> {
                 next_id
             }
         }
+    }
+
+    /// Lookup the package name id associated to the provided name
+    pub fn lookup_package_name(&self, name: &<VS::V as Record>::Name) -> Option<NameId> {
+        self.names_to_ids.get(name).copied()
     }
 
     /// Returns the package name associated to the provided id
@@ -199,79 +202,39 @@ impl<VS: VersionSet> Pool<VS> {
     pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<VersionSetId> {
         self.solvables[SolvableId::root()].root_mut()
     }
+
+    /// Populates the list of forbidden packages for the provided [`VersionSet`]
+    pub(crate) fn find_candidates(
+        &self,
+        version_set_id: VersionSetId,
+        name_id: NameId,
+    ) -> Vec<SolvableId> {
+        let version_set = &self.version_sets[version_set_id];
+
+        self.packages_by_name[name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))
+            .collect()
+    }
 }
 
 impl Pool<MatchSpec> {
     /// Populates the list of candidates for the provided match spec
-    pub(crate) fn populate_candidates(
+    pub(crate) fn sort_candidates(
         &self,
-        match_spec_id: VersionSetId,
-        favored_map: &HashMap<NameId, SolvableId>,
-        match_spec_to_sorted_candidates: &mut Mapping<VersionSetId, Vec<SolvableId>>,
+        solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
         match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
-        solvable_order: &mut HashMap<u64, Ordering>,
     ) {
-        let match_spec = &self.version_sets[match_spec_id];
-        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name.as_normalized()) {
-            None => return,
-            Some(&name_id) => name_id,
-        };
-
-        let mut pkgs = conda_util::find_candidates(
-            match_spec_id,
-            &self.version_sets,
-            &self.names_to_ids,
-            &self.packages_by_name,
-            &self.solvables,
-            match_spec_to_candidates,
-        )
-        .clone();
-
-        pkgs.sort_by(|&p1, &p2| {
-            let key = u32::from(p1) as u64 | ((u32::from(p2) as u64) << 32);
-            *solvable_order.entry(key).or_insert_with(|| {
-                conda_util::compare_candidates(
-                    p1,
-                    p2,
-                    &self.solvables,
-                    &self.names_to_ids,
-                    &self.packages_by_name,
-                    &self.version_sets,
-                    match_spec_to_candidates,
-                    match_spec_highest_version,
-                )
-            })
+        solvables.sort_by(|&p1, &p2| {
+            conda_util::compare_candidates(
+                p1,
+                p2,
+                self,
+                match_spec_to_candidates,
+                match_spec_highest_version,
+            )
         });
-
-        if let Some(&favored_id) = favored_map.get(&name_id) {
-            if let Some(pos) = pkgs.iter().position(|&s| s == favored_id) {
-                // Move the element at `pos` to the front of the array
-                pkgs[0..=pos].rotate_right(1);
-            }
-        }
-
-        match_spec_to_sorted_candidates[match_spec_id] = pkgs;
-    }
-
-    /// Populates the list of forbidden packages for the provided match spec
-    pub(crate) fn populate_forbidden(
-        &self,
-        match_spec_id: VersionSetId,
-        version_set_to_forbidden: &mut Mapping<VersionSetId, Vec<SolvableId>>,
-    ) {
-        let match_spec = &self.version_sets[match_spec_id];
-        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name.as_normalized()) {
-            None => return,
-            Some(&name_id) => name_id,
-        };
-
-        version_set_to_forbidden[match_spec_id] = self.packages_by_name[name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| !match_spec.matches(&self.solvables[solvable].package().record))
-            .collect();
     }
 }

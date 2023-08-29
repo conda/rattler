@@ -81,7 +81,11 @@ fn add_or_reuse_solvable<'a>(
                     package_to_type.insert(filename, (archive_type, old_solvable_id));
 
                     // Reuse the old solvable
-                    pool.overwrite_package(repo_id, old_solvable_id, repo_data.package_record.clone());
+                    pool.overwrite_package(
+                        repo_id,
+                        old_solvable_id,
+                        repo_data.package_record.clone(),
+                    );
                     return Some(old_solvable_id);
                 }
                 Ordering::Equal => {

@@ -23,13 +23,16 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
-use rattler_conda_types::{PackageRecord};
+use rattler_conda_types::{PackageRecord, Version};
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
+use std::cell::OnceCell;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 pub use transaction::Transaction;
+
+pub use mapping::Mapping;
 
 use rattler_conda_types::MatchSpec;
 
@@ -55,6 +58,9 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
     type V: Record;
 
+    /// Returns the name to which this set applies.
+    fn name(&self) -> <Self::V as Record>::Name;
+
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
@@ -64,6 +70,10 @@ impl VersionSet for MatchSpec {
 
     fn contains(&self, v: &Self::V) -> bool {
         self.matches(v)
+    }
+
+    fn name(&self) -> <Self::V as Record>::Name {
+        self.name.as_ref().unwrap().as_normalized().to_string()
     }
 }
 
@@ -81,5 +91,34 @@ impl Record for PackageRecord {
 
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
-    // ???
+    /// Sort the specified solvables based on which solvable to try first.
+    fn sort_candidates(
+        &self,
+        pool: &Pool<VS>,
+        solvables: &mut [SolvableId],
+        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+        match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
+    );
+}
+/// Dependency provider fro conda
+pub struct CondaDependencyProvider;
+
+impl DependencyProvider<MatchSpec> for CondaDependencyProvider {
+    fn sort_candidates(
+        &self,
+        pool: &Pool<MatchSpec>,
+        solvables: &mut [SolvableId],
+        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+        match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
+    ) {
+        solvables.sort_by(|&p1, &p2| {
+            conda_util::compare_candidates(
+                p1,
+                p2,
+                pool,
+                match_spec_to_candidates,
+                match_spec_highest_version,
+            )
+        });
+    }
 }

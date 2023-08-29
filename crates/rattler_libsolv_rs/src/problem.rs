@@ -15,7 +15,7 @@ use crate::id::{ClauseId, SolvableId, VersionSetId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
-use crate::{Record, VersionSet};
+use crate::{DependencyProvider, Record, VersionSet};
 
 use rattler_conda_types::MatchSpec;
 
@@ -40,7 +40,10 @@ impl Problem {
     }
 
     /// Generates a graph representation of the problem (see [`ProblemGraph`] for details)
-    pub fn graph(&self, solver: &Solver) -> ProblemGraph {
+    pub fn graph<VS: VersionSet, D: DependencyProvider<VS>>(
+        &self,
+        solver: &Solver<VS, D>,
+    ) -> ProblemGraph {
         let mut graph = DiGraph::<ProblemNode, ProblemEdge>::default();
         let mut nodes: HashMap<SolvableId, NodeIndex> = HashMap::default();
 
@@ -141,7 +144,10 @@ impl Problem {
     }
 
     /// Display a user-friendly error explaining the problem
-    pub fn display_user_friendly<'a>(&self, solver: &'a Solver) -> DisplayUnsat<'a, MatchSpec> {
+    pub fn display_user_friendly<'a, VS: VersionSet, D: DependencyProvider<VS>>(
+        &self,
+        solver: &'a Solver<VS, D>,
+    ) -> DisplayUnsat<'a, VS> {
         let graph = self.graph(solver);
         DisplayUnsat::new(graph, solver.pool())
     }
