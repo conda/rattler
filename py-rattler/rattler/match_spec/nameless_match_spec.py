@@ -55,4 +55,4 @@ class NamelessMatchSpec:
         return self._nameless_match_spec.as_str()
 
     def __repr__(self) -> str:
-        return self.__str__()
+        return f"NamelessMatchSpec(\"{self._nameless_match_spec.as_str()}\")"
