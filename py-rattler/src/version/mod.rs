@@ -2,9 +2,13 @@ mod component;
 
 use crate::PyRattlerError;
 use component::PyComponent;
-use pyo3::{pyclass, pymethods};
+use pyo3::{basic::CompareOp, pyclass, pymethods};
 use rattler_conda_types::Version;
-use std::str::FromStr;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    str::FromStr,
+};
 
 #[pyclass]
 #[repr(transparent)]
@@ -129,31 +133,15 @@ impl PyVersion {
         }
     }
 
-    pub fn equal(&self, other: &Self) -> bool {
-        self.inner == other.inner
+    /// Compute the hash of the version.
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.inner.hash(&mut hasher);
+        hasher.finish()
     }
 
-    pub fn not_equal(&self, other: &Self) -> bool {
-        self.inner != other.inner
-    }
-
-    pub fn less_than(&self, other: &Self) -> bool {
-        self.inner < other.inner
-    }
-
-    pub fn less_than_equals(&self, other: &Self) -> bool {
-        self.inner <= other.inner
-    }
-
-    pub fn equals(&self, other: &Self) -> bool {
-        self.inner == other.inner
-    }
-
-    pub fn greater_than_equals(&self, other: &Self) -> bool {
-        self.inner >= other.inner
-    }
-
-    pub fn greater_than(&self, other: &Self) -> bool {
-        self.inner > other.inner
+    /// Performs comparison between this version and another.
+    pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.inner.cmp(&other.inner))
     }
 }
