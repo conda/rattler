@@ -99,7 +99,8 @@ impl super::SolverImpl for Solver {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            goal.install(spec);
+            let match_spec_id = pool.intern_version_set(spec);
+            goal.install(match_spec_id);
         }
 
         // Construct a solver and solve the problems in the queue

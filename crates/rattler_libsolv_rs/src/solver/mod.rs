@@ -13,6 +13,7 @@ use itertools::Itertools;
 use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
+use crate::VersionSetId;
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -84,9 +85,8 @@ impl<'a> Solver<'a> {
         }
 
         // Populate the root solvable with the requested packages
-        for match_spec in jobs.install.clone() {
-            let match_spec_id = self.pool.intern_version_set(match_spec);
-            self.pool.root_solvable_mut().push(match_spec_id);
+        for match_spec in jobs.install.iter() {
+            self.pool.root_solvable_mut().push(*match_spec);
         }
 
         // Create clauses for root's dependencies, and their dependencies, and so forth
@@ -259,7 +259,7 @@ impl<'a> Solver<'a> {
     /// The solver loop can be found in [`Solver::resolve_dependencies`].
     fn run_sat(
         &mut self,
-        top_level_requirements: &[MatchSpec],
+        top_level_requirements: &[VersionSetId],
         locked_solvables: &[SolvableId],
     ) -> Result<(), Problem> {
         assert!(self.decision_tracker.is_empty());
@@ -295,7 +295,7 @@ impl<'a> Solver<'a> {
         &mut self,
         level: u32,
         _locked_solvables: &[SolvableId],
-        _top_level_requirements: &[MatchSpec],
+        _top_level_requirements: &[VersionSetId],
     ) -> Result<(), ClauseId> {
         tracing::info!("=== Deciding assertions for requires without candidates");
 
@@ -909,6 +909,7 @@ mod test {
     use crate::id::RepoId;
     use crate::pool::VersionSet;
     use rattler_conda_types::{PackageRecord, Version};
+    use std::fmt::Debug;
     use std::str::FromStr;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
@@ -961,10 +962,14 @@ mod test {
         pool
     }
 
-    fn install(packages: &[&str]) -> SolveJobs {
+    fn install<V: VersionSet + FromStr>(pool: &mut Pool<'static, V>, packages: &[&str]) -> SolveJobs
+    where
+        <V as FromStr>::Err: Debug,
+    {
         let mut jobs = SolveJobs::default();
         for &p in packages {
-            jobs.install(p.parse().unwrap());
+            let version_set_id = pool.intern_version_set(p.parse().unwrap());
+            jobs.install(version_set_id);
         }
         jobs
     }
@@ -994,9 +999,10 @@ mod test {
 
     #[test]
     fn test_unit_propagation_1() {
-        let pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let mut pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let jobs = install(&mut pool, &["asdf"]);
         let mut solver = Solver::new(pool);
-        let solved = solver.solve(install(&["asdf"])).unwrap();
+        let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
 
@@ -1010,13 +1016,14 @@ mod test {
 
     #[test]
     fn test_unit_propagation_nested() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.3", vec!["efgh"]),
             ("efgh", "4.5.6", vec![]),
             ("dummy", "42.42.42", vec![]),
         ]);
+        let jobs = install(&mut pool, &["asdf"]);
         let mut solver = Solver::new(pool);
-        let solved = solver.solve(install(&["asdf"])).unwrap();
+        let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
 
@@ -1037,14 +1044,15 @@ mod test {
 
     #[test]
     fn test_resolve_dependencies() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.4", vec![]),
             ("asdf", "1.2.3", vec![]),
             ("efgh", "4.5.7", vec![]),
             ("efgh", "4.5.6", vec![]),
         ]);
+        let jobs = install(&mut pool, &["asdf", "efgh"]);
         let mut solver = Solver::new(pool);
-        let solved = solver.solve(install(&["asdf", "efgh"])).unwrap();
+        let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
 
@@ -1065,7 +1073,7 @@ mod test {
 
     #[test]
     fn test_resolve_with_conflict() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.4", vec!["conflicting=1.0.1"]),
             ("asdf", "1.2.3", vec!["conflicting=1.0.0"]),
             ("efgh", "4.5.7", vec!["conflicting=1.0.0"]),
@@ -1073,8 +1081,9 @@ mod test {
             ("conflicting", "1.0.1", vec![]),
             ("conflicting", "1.0.0", vec![]),
         ]);
+        let jobs = install(&mut pool, &["asdf", "efgh"]);
         let mut solver = Solver::new(pool);
-        let solved = solver.solve(install(&["asdf", "efgh"])).unwrap();
+        let solved = solver.solve(jobs).unwrap();
 
         use std::fmt::Write;
         let mut display_result = String::new();
@@ -1088,13 +1097,14 @@ mod test {
 
     #[test]
     fn test_resolve_with_nonexisting() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.4", vec!["b"]),
             ("asdf", "1.2.3", vec![]),
             ("b", "1.2.3", vec!["idontexist"]),
         ]);
+        let jobs = install(&mut pool, &["asdf"]);
         let mut solver = Solver::new(pool);
-        let solved = solver.solve(install(&["asdf"])).unwrap();
+        let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
 
@@ -1108,7 +1118,7 @@ mod test {
 
     #[test]
     fn test_resolve_locked_top_level() {
-        let pool = pool(&[("asdf", "1.2.4", vec![]), ("asdf", "1.2.3", vec![])]);
+        let mut pool = pool(&[("asdf", "1.2.4", vec![]), ("asdf", "1.2.3", vec![])]);
 
         let locked = pool
             .solvables
@@ -1125,10 +1135,10 @@ mod test {
 
         let locked = SolvableId::from_usize(locked);
 
-        let mut solver = Solver::new(pool);
-        let mut jobs = install(&["asdf"]);
+        let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
+        let mut solver = Solver::new(pool);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1138,7 +1148,7 @@ mod test {
 
     #[test]
     fn test_resolve_ignored_locked_top_level() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.4", vec![]),
             ("asdf", "1.2.3", vec!["fgh"]),
             ("fgh", "1.0.0", vec![]),
@@ -1159,10 +1169,10 @@ mod test {
 
         let locked = SolvableId::from_usize(locked);
 
-        let mut solver = Solver::new(pool);
-        let mut jobs = install(&["asdf"]);
+        let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
+        let mut solver = Solver::new(pool);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1176,14 +1186,14 @@ mod test {
 
     #[test]
     fn test_resolve_favor_without_conflict() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("a", "1", vec![]),
             ("a", "2", vec![]),
             ("b", "1", vec![]),
             ("b", "2", vec![]),
         ]);
 
-        let mut jobs = install(&["a", "b>=2"]);
+        let mut jobs = install(&mut pool, &["a", "b>=2"]);
 
         // Already installed: A=1; B=1
         let already_installed = pool
@@ -1211,7 +1221,7 @@ mod test {
 
     #[test]
     fn test_resolve_favor_with_conflict() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("a", "1", vec!["c=1"]),
             ("a", "2", vec![]),
             ("b", "1", vec!["c=1"]),
@@ -1220,7 +1230,7 @@ mod test {
             ("c", "2", vec![]),
         ]);
 
-        let mut jobs = install(&["a", "b>=2"]);
+        let mut jobs = install(&mut pool, &["a", "b>=2"]);
 
         // Already installed: A=1; B=1; C=1
         let already_installed = pool
@@ -1249,8 +1259,8 @@ mod test {
 
     #[test]
     fn test_resolve_cyclic() {
-        let pool = pool(&[("a", "2", vec!["b<=10"]), ("b", "5", vec!["a>=2,<=4"])]);
-        let jobs = install(&["a<100"]);
+        let mut pool = pool(&[("a", "2", vec!["b<=10"]), ("b", "5", vec!["a>=2,<=4"])]);
+        let jobs = install(&mut pool, &["a<100"]);
         let mut solver = Solver::new(pool);
         let solved = solver.solve(jobs).unwrap();
 
@@ -1263,12 +1273,12 @@ mod test {
 
     #[test]
     fn test_unsat_locked_and_excluded() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("asdf", "1.2.3", vec!["c>1"]),
             ("c", "2.0.0", vec![]),
             ("c", "1.0.0", vec![]),
         ]);
-        let mut job = install(&["asdf"]);
+        let mut job = install(&mut pool, &["asdf"]);
         job.lock(SolvableId::from_usize(3)); // C 1.0.0
 
         let error = solve_unsat(pool, job);
@@ -1277,15 +1287,16 @@ mod test {
 
     #[test]
     fn test_unsat_no_candidates_for_child_1() {
-        let pool = pool(&[("asdf", "1.2.3", vec!["C>1"]), ("C", "1.0.0", vec![])]);
-        let error = solve_unsat(pool, install(&["asdf"]));
+        let mut pool = pool(&[("asdf", "1.2.3", vec!["C>1"]), ("C", "1.0.0", vec![])]);
+        let jobs = install(&mut pool, &["asdf"]);
+        let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_no_candidates_for_child_2() {
-        let pool = pool(&[("a", "41", vec!["B<20"])]);
-        let jobs = install(&["A<1000"]);
+        let mut pool = pool(&[("a", "41", vec!["B<20"])]);
+        let jobs = install(&mut pool, &["A<1000"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1293,15 +1304,16 @@ mod test {
 
     #[test]
     fn test_unsat_missing_top_level_dep_1() {
-        let pool = pool(&[("asdf", "1.2.3", vec![])]);
-        let error = solve_unsat(pool, install(&["fghj"]));
+        let mut pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let jobs = install(&mut pool, &["fghj"]);
+        let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_missing_top_level_dep_2() {
-        let pool = pool(&[("a", "41", vec!["b=15"]), ("b", "15", vec![])]);
-        let jobs = install(&["a=41", "b=14"]);
+        let mut pool = pool(&[("a", "41", vec!["b=15"]), ("b", "15", vec![])]);
+        let jobs = install(&mut pool, &["a=41", "b=14"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1309,7 +1321,7 @@ mod test {
 
     #[test]
     fn test_unsat_after_backtracking() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("b", "4.5.7", vec!["d=1"]),
             ("b", "4.5.6", vec!["d=1"]),
             ("c", "1.0.1", vec!["d=2"]),
@@ -1320,14 +1332,15 @@ mod test {
             ("e", "1.0.1", vec![]),
         ]);
 
-        let error = solve_unsat(pool, install(&["b", "c", "e"]));
+        let jobs = install(&mut pool, &["b", "c", "e"]);
+        let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_incompatible_root_requirements() {
-        let pool = pool(&[("a", "2", vec![]), ("a", "5", vec![])]);
-        let jobs = install(&["a<4", "a>=5,<10"]);
+        let mut pool = pool(&[("a", "2", vec![]), ("a", "5", vec![])]);
+        let jobs = install(&mut pool, &["a<4", "a>=5,<10"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1335,7 +1348,7 @@ mod test {
 
     #[test]
     fn test_unsat_bluesky_conflict() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("suitcase-utils", "54", vec![]),
             ("suitcase-utils", "53", vec![]),
             (
@@ -1353,7 +1366,10 @@ mod test {
             ("python", "1", vec![]),
         ]);
 
-        let jobs = install(&["bluesky-widgets<100", "suitcase-utils>=54,<100"]);
+        let jobs = install(
+            &mut pool,
+            &["bluesky-widgets<100", "suitcase-utils>=54,<100"],
+        );
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1362,7 +1378,7 @@ mod test {
     #[test]
     fn test_unsat_pubgrub_article() {
         // Taken from the pubgrub article: https://nex3.medium.com/pubgrub-2fb6470504f
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("menu", "1.5.0", vec!["dropdown>=2.0.0,<=2.3.0"]),
             ("menu", "1.0.0", vec!["dropdown>=1.8.0,<2.0.0"]),
             ("dropdown", "2.3.0", vec!["icons=2.0.0"]),
@@ -1373,7 +1389,7 @@ mod test {
             ("intl", "3.0.0", vec![]),
         ]);
 
-        let jobs = install(&["menu", "icons=1.0.0", "intl=5.0.0"]);
+        let jobs = install(&mut pool, &["menu", "icons=1.0.0", "intl=5.0.0"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1381,7 +1397,7 @@ mod test {
 
     #[test]
     fn test_unsat_applies_graph_compression() {
-        let pool = pool(&[
+        let mut pool = pool(&[
             ("a", "10", vec!["b"]),
             ("a", "9", vec!["b"]),
             ("b", "100", vec!["c<100"]),
@@ -1392,7 +1408,7 @@ mod test {
             ("c", "99", vec![]),
         ]);
 
-        let jobs = install(&["a", "c>100"]);
+        let jobs = install(&mut pool, &["a", "c>100"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);
@@ -1410,7 +1426,7 @@ mod test {
         add_package(&mut pool, package("c", "10", &[], &["b<50"]));
         add_package(&mut pool, package("c", "8", &[], &["b<50"]));
 
-        let jobs = install(&["a", "c"]);
+        let jobs = install(&mut pool, &["a", "c"]);
 
         let error = solve_unsat(pool, jobs);
         insta::assert_snapshot!(error);

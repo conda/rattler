@@ -142,7 +142,7 @@ impl<'a, V: VersionSet> Pool<'a, V> {
     }
 
     /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
-    pub(crate) fn intern_version_set(&mut self, version_set: V) -> VersionSetId {
+    pub fn intern_version_set(&mut self, version_set: V) -> VersionSetId {
         match self.version_set_to_id.entry(version_set.clone()) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
