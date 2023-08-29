@@ -12,11 +12,11 @@ use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
 use crate::id::{ClauseId, SolvableId, VersionSetId};
-use crate::pool::Pool;
+use crate::pool::{Pool, VersionSet};
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
 
-use rattler_conda_types::MatchSpec;
+use rattler_conda_types::{MatchSpec, Version};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -140,7 +140,7 @@ impl Problem {
     }
 
     /// Display a user-friendly error explaining the problem
-    pub fn display_user_friendly<'a>(&self, solver: &'a Solver) -> DisplayUnsat<'a> {
+    pub fn display_user_friendly<'a>(&self, solver: &'a Solver) -> DisplayUnsat<'a, MatchSpec> {
         let graph = self.graph(solver);
         DisplayUnsat::new(graph, solver.pool())
     }
@@ -309,7 +309,7 @@ impl ProblemGraph {
         write!(f, "}}")
     }
 
-    fn simplify(&self, pool: &Pool<MatchSpec>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
+    fn simplify<V: VersionSet>(&self, pool: &Pool<V>) -> HashMap<SolvableId, Rc<MergedProblemNode>> {
         let graph = &self.graph;
 
         // Gather information about nodes that can be merged
@@ -464,16 +464,16 @@ impl ProblemGraph {
 
 /// A struct implementing [`fmt::Display`] that generates a user-friendly representation of a
 /// problem graph
-pub struct DisplayUnsat<'a> {
+pub struct DisplayUnsat<'a, V> {
     graph: ProblemGraph,
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
     missing_set: HashSet<NodeIndex>,
-    pool: &'a Pool<'a, MatchSpec>,
+    pool: &'a Pool<'a, V>,
 }
 
-impl<'a> DisplayUnsat<'a> {
-    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<MatchSpec>) -> Self {
+impl<'a, V: VersionSet> DisplayUnsat<'a, V> {
+    pub(crate) fn new(graph: ProblemGraph, pool: &'a Pool<V>) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
         let missing_set = graph.get_missing_set();
@@ -693,7 +693,7 @@ impl<'a> DisplayUnsat<'a> {
     }
 }
 
-impl fmt::Display for DisplayUnsat<'_> {
+impl<V: VersionSet> fmt::Display for DisplayUnsat<'_, V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let (top_level_missing, top_level_conflicts): (Vec<_>, _) = self
             .graph

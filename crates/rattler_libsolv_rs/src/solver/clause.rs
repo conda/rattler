@@ -112,10 +112,10 @@ impl Clause {
     }
 
     /// Visits each literal in the clause
-    pub fn visit_literals(
+    pub fn visit_literals<V: VersionSet>(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool<MatchSpec>,
+        pool: &Pool<V>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
