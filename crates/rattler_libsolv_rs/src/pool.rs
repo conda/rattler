@@ -31,7 +31,7 @@ impl VersionSet for MatchSpec {
 ///
 /// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
 /// from the original `PackageRecord`s)
-pub struct Pool<'a, V: VersionSet> {
+pub struct Pool<'a, V> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<'a>>,
 

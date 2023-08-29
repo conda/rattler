@@ -3,7 +3,7 @@ use crate::id::ClauseId;
 use crate::id::SolvableId;
 use crate::id::{LearntClauseId, VersionSetId};
 use crate::mapping::Mapping;
-use crate::pool::Pool;
+use crate::pool::{Pool, VersionSet};
 use crate::solver::decision_map::DecisionMap;
 use rattler_conda_types::MatchSpec;
 use std::fmt::{Debug, Formatter};
@@ -202,7 +202,7 @@ impl ClauseState {
         clause
     }
 
-    pub fn debug<'a>(&self, pool: &'a Pool<MatchSpec>) -> ClauseDebug<'a> {
+    pub fn debug<'a, V: VersionSet>(&self, pool: &'a Pool<V>) -> ClauseDebug<'a, V> {
         ClauseDebug {
             kind: self.kind,
             pool,
@@ -314,9 +314,9 @@ impl ClauseState {
         }
     }
 
-    pub fn next_unwatched_variable(
+    pub fn next_unwatched_variable<V: VersionSet>(
         &self,
-        pool: &Pool<MatchSpec>,
+        pool: &Pool<V>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
@@ -394,12 +394,12 @@ impl Literal {
 }
 
 /// A representation of a clause that implements [`Debug`]
-pub(crate) struct ClauseDebug<'a> {
+pub(crate) struct ClauseDebug<'a, V> {
     kind: Clause,
-    pool: &'a Pool<'a, MatchSpec>,
+    pool: &'a Pool<'a, V>,
 }
 
-impl Debug for ClauseDebug<'_> {
+impl<V: VersionSet> Debug for ClauseDebug<'_, V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             Clause::InstallRoot => write!(f, "install root"),
