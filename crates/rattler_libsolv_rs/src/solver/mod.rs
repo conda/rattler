@@ -928,8 +928,8 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 mod test {
     use super::*;
     use crate::id::RepoId;
-    use crate::{CondaDependencyProvider, Record};
     use crate::VersionSet;
+    use crate::{CondaDependencyProvider, Record};
     use rattler_conda_types::{PackageRecord, Version};
     use std::fmt::Debug;
     use std::str::FromStr;
