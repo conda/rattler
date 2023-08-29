@@ -1,9 +1,7 @@
-use crate::arena::Arena;
 use crate::id::{NameId, SolvableId};
 use crate::mapping::Mapping;
-use crate::solvable::Solvable;
 use crate::{Pool, VersionSetId};
-use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+use rattler_conda_types::{MatchSpec, Version};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -145,7 +143,7 @@ pub(crate) fn find_highest_version(
     match_spec_highest_version[match_spec_id]
         .get_or_init(|| {
             let candidates = match_spec_to_candidates[match_spec_id]
-                .get_or_init(|| pool.find_candidates(match_spec_id, name_id));
+                .get_or_init(|| pool.find_matching_solvables(match_spec_id, name_id));
 
             candidates
                 .iter()

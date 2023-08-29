@@ -10,7 +10,6 @@ use crate::transaction::Transaction;
 use std::cell::OnceCell;
 
 use itertools::Itertools;
-use rattler_conda_types::MatchSpec;
 use std::collections::{HashMap, HashSet};
 
 use crate::{DependencyProvider, VersionSet, VersionSetId};
@@ -189,11 +188,11 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                     // Extract the name to which this version set applies.
                     let version_set = self.pool.resolve_version_set(dep);
                     let version_set_name = version_set.name();
-                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { return continue };
+                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { continue };
 
                     // Find all solvables that match the version set
                     let mut candidates = match_spec_to_candidates[dep]
-                        .get_or_init(|| self.pool.find_candidates(dep, version_set_name_id))
+                        .get_or_init(|| self.pool.find_matching_solvables(dep, version_set_name_id))
                         .clone();
 
                     // Sort all the candidates in order in which they should betried by the solver.
@@ -239,18 +238,16 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
             // Constrains
             for &dep in constrains {
                 if seen_forbidden.insert(dep) {
-                    let forbidden_candidates = match_spec_to_candidates[dep]
-                        .get_or_init(|| {
-                            // Extract the name to which this version set applies.
-                            let version_set = self.pool.resolve_version_set(dep);
-                            let version_set_name = version_set.name();
-                            let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { return vec![] };
+                    // Extract the name to which this version set applies.
+                    let version_set = self.pool.resolve_version_set(dep);
+                    let version_set_name = version_set.name();
+                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { continue };
 
-                            // Find all the solvables that match the constraint version set
-                            self.pool.find_candidates(dep, version_set_name_id)
-                        });
+                    // Find all the solvables that do not match the constraint version set
+                    let forbidden_candidates =
+                        self.pool.find_unmatched_solvables(dep, version_set_name_id);
 
-                    match_spec_to_forbidden[dep] = forbidden_candidates.clone();
+                    match_spec_to_forbidden[dep] = forbidden_candidates;
                 }
 
                 for &solvable_dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
@@ -927,12 +924,9 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::id::RepoId;
-    use crate::VersionSet;
-    use crate::{CondaDependencyProvider, Record};
-    use rattler_conda_types::{PackageRecord, Version};
-    use std::fmt::Debug;
-    use std::str::FromStr;
+    use crate::{id::RepoId, CondaDependencyProvider, Record, VersionSet};
+    use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+    use std::{fmt::Debug, str::FromStr};
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {

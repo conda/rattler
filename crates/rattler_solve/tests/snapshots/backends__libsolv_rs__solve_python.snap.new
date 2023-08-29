@@ -1,0 +1,25 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 474
+expression: "solve_real_world::<rattler_solve::libsolv_rs::Solver>(vec![\"python=3.9\"])"
+---
+- _libgcc_mutex 0.1 conda_forge
+- _openmp_mutex 4.5 2_gnu
+- ca-certificates 2022.6.15 ha878542_0
+- ld_impl_linux-64 2.36.1 hea4e1c9_2
+- libffi 3.3 h58526e2_2
+- libgcc-ng 12.1.0 h8d9b700_16
+- libgomp 12.1.0 h8d9b700_16
+- libsqlite 3.39.2 h753d276_1
+- libstdcxx-ng 12.1.0 ha89aaad_16
+- libzlib 1.2.12 h166bdaf_2
+- ncurses 6.3 h27087fc_1
+- openssl 1.1.1q h166bdaf_0
+- python 3.9.7 h49503c6_0_cpython
+- readline 8.1.2 h0f457ee_0
+- sqlite 3.39.2 h4ff8645_1
+- tk 8.6.12 h27826a3_0
+- tzdata 2021e he74cb21_0
+- xz 5.2.6 h166bdaf_0
+- zlib 1.2.12 h166bdaf_2
+

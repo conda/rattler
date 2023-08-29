@@ -1,15 +1,11 @@
-use std::cell::OnceCell;
-use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-
-use rattler_conda_types::{MatchSpec, Version};
 
 use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{conda_util, Record, VersionSet};
+use crate::{Record, VersionSet};
 
 /// A pool that stores data related to the available packages
 ///
@@ -203,8 +199,8 @@ impl<VS: VersionSet> Pool<VS> {
         self.solvables[SolvableId::root()].root_mut()
     }
 
-    /// Populates the list of forbidden packages for the provided [`VersionSet`]
-    pub(crate) fn find_candidates(
+    /// Finds all the solvables that match the specified version set.
+    pub(crate) fn find_matching_solvables(
         &self,
         version_set_id: VersionSetId,
         name_id: NameId,
@@ -217,24 +213,19 @@ impl<VS: VersionSet> Pool<VS> {
             .filter(|&solvable| version_set.contains(&self.solvables[solvable].package().record))
             .collect()
     }
-}
 
-impl Pool<MatchSpec> {
-    /// Populates the list of candidates for the provided match spec
-    pub(crate) fn sort_candidates(
+    /// Finds all the solvables that do not match the specified version set.
+    pub(crate) fn find_unmatched_solvables(
         &self,
-        solvables: &mut [SolvableId],
-        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
-    ) {
-        solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(
-                p1,
-                p2,
-                self,
-                match_spec_to_candidates,
-                match_spec_highest_version,
-            )
-        });
+        version_set_id: VersionSetId,
+        name_id: NameId,
+    ) -> Vec<SolvableId> {
+        let version_set = &self.version_sets[version_set_id];
+
+        self.packages_by_name[name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))
+            .collect()
     }
 }
