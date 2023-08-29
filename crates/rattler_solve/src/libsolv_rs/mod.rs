@@ -99,7 +99,13 @@ impl super::SolverImpl for Solver {
 
         // Specify the matchspec requests
         for spec in task.specs {
-            let match_spec_id = pool.intern_version_set(spec);
+            let dependency_name = pool.intern_package_name(
+                spec.name
+                    .as_ref()
+                    .expect("match specs without names are not supported")
+                    .as_normalized(),
+            );
+            let match_spec_id = pool.intern_version_set(dependency_name, spec);
             goal.install(match_spec_id);
         }
 

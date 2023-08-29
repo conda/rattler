@@ -28,10 +28,10 @@ pub struct Pool<VS: VersionSet> {
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
 
     /// Interned match specs
-    pub(crate) version_sets: Arena<VersionSetId, VS>,
+    pub(crate) version_sets: Arena<VersionSetId, (NameId, VS)>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    version_set_to_id: HashMap<VS, VersionSetId>,
+    version_set_to_id: HashMap<(NameId, VS), VersionSetId>,
 
     /// Cached candidates for each match spec
     pub(crate) match_spec_to_sorted_candidates: Mapping<VersionSetId, Vec<SolvableId>>,
@@ -103,25 +103,38 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Registers a dependency for the provided solvable
-    pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set: VS) {
-        let match_spec_id = self.intern_version_set(version_set);
+    pub fn add_dependency(
+        &mut self,
+        solvable_id: SolvableId,
+        dependency_name: NameId,
+        version_set: VS,
+    ) {
+        let match_spec_id = self.intern_version_set(dependency_name, version_set);
         let solvable = self.solvables[solvable_id].package_mut();
         solvable.dependencies.push(match_spec_id);
     }
 
     /// Registers a constrains for the provided solvable
-    pub fn add_constrains(&mut self, solvable_id: SolvableId, version_set: VS) {
-        let match_spec_id = self.intern_version_set(version_set);
+    pub fn add_constrains(
+        &mut self,
+        solvable_id: SolvableId,
+        dependency_name: NameId,
+        version_set: VS,
+    ) {
+        let match_spec_id = self.intern_version_set(dependency_name, version_set);
         let solvable = self.solvables[solvable_id].package_mut();
         solvable.constrains.push(match_spec_id);
     }
 
-    /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
-    pub fn intern_version_set(&mut self, version_set: VS) -> VersionSetId {
-        match self.version_set_to_id.entry(version_set.clone()) {
+    /// Interns a match spec into the [`Pool`], returning its [`VersionSetId`]
+    pub fn intern_version_set(&mut self, package_name: NameId, version_set: VS) -> VersionSetId {
+        match self
+            .version_set_to_id
+            .entry((package_name, version_set.clone()))
+        {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
-                let id = self.version_sets.alloc(version_set);
+                let id = self.version_sets.alloc((package_name, version_set));
 
                 // Update the entry
                 entry.insert(id);
@@ -133,14 +146,24 @@ impl<VS: VersionSet> Pool<VS> {
 
     /// Returns the match spec associated to the provided id
     ///
-    /// Panics if the match spec is not found in the pool
+    /// Panics if the version set is not found in the pool
     pub fn resolve_version_set(&self, id: VersionSetId) -> &VS {
-        &self.version_sets[id]
+        &self.version_sets[id].1
+    }
+
+    /// Returns the package name associated with the given version spec id.
+    ///
+    /// Panics if the version set is not found in the pool
+    pub fn resolve_version_set_package_name(&self, id: VersionSetId) -> NameId {
+        self.version_sets[id].0
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    pub fn intern_package_name(&mut self, name: <VS::V as Record>::Name) -> NameId {
-        match self.names_to_ids.entry(name) {
+    pub fn intern_package_name<N>(&mut self, name: N) -> NameId
+    where
+        N: Into<<VS::V as Record>::Name>,
+    {
+        match self.names_to_ids.entry(name.into()) {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
                 let next_id = self.package_names.alloc(e.key().clone());
@@ -200,14 +223,10 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Finds all the solvables that match the specified version set.
-    pub(crate) fn find_matching_solvables(
-        &self,
-        version_set_id: VersionSetId,
-        name_id: NameId,
-    ) -> Vec<SolvableId> {
-        let version_set = &self.version_sets[version_set_id];
+    pub(crate) fn find_matching_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
 
-        self.packages_by_name[name_id]
+        self.packages_by_name[*name_id]
             .iter()
             .cloned()
             .filter(|&solvable| version_set.contains(&self.solvables[solvable].package().record))
@@ -215,14 +234,10 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Finds all the solvables that do not match the specified version set.
-    pub(crate) fn find_unmatched_solvables(
-        &self,
-        version_set_id: VersionSetId,
-        name_id: NameId,
-    ) -> Vec<SolvableId> {
-        let version_set = &self.version_sets[version_set_id];
+    pub(crate) fn find_unmatched_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
 
-        self.packages_by_name[name_id]
+        self.packages_by_name[*name_id]
             .iter()
             .cloned()
             .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))

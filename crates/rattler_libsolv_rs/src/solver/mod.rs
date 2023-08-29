@@ -185,14 +185,9 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
             // Enqueue the candidates of the dependencies
             for &dep in deps {
                 if seen_requires.insert(dep) {
-                    // Extract the name to which this version set applies.
-                    let version_set = self.pool.resolve_version_set(dep);
-                    let version_set_name = version_set.name();
-                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { continue };
-
                     // Find all solvables that match the version set
                     let mut candidates = match_spec_to_candidates[dep]
-                        .get_or_init(|| self.pool.find_matching_solvables(dep, version_set_name_id))
+                        .get_or_init(|| self.pool.find_matching_solvables(dep))
                         .clone();
 
                     // Sort all the candidates in order in which they should betried by the solver.
@@ -205,7 +200,9 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 
                     // If we have a solvable that we favor, we sort that to the front. This ensures that that version
                     // that is favored is picked first.
-                    if let Some(&favored_id) = favored_map.get(&version_set_name_id) {
+                    if let Some(&favored_id) =
+                        favored_map.get(&self.pool.resolve_version_set_package_name(dep))
+                    {
                         if let Some(pos) = candidates.iter().position(|&s| s == favored_id) {
                             // Move the element at `pos` to the front of the array
                             candidates[0..=pos].rotate_right(1);
@@ -238,14 +235,8 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
             // Constrains
             for &dep in constrains {
                 if seen_forbidden.insert(dep) {
-                    // Extract the name to which this version set applies.
-                    let version_set = self.pool.resolve_version_set(dep);
-                    let version_set_name = version_set.name();
-                    let Some(version_set_name_id) = self.pool.lookup_package_name(&version_set_name) else { continue };
-
                     // Find all the solvables that do not match the constraint version set
-                    let forbidden_candidates =
-                        self.pool.find_unmatched_solvables(dep, version_set_name_id);
+                    let forbidden_candidates = self.pool.find_unmatched_solvables(dep);
 
                     match_spec_to_forbidden[dep] = forbidden_candidates;
                 }
@@ -924,9 +915,9 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{id::RepoId, CondaDependencyProvider, Record, VersionSet};
+    use crate::{id::RepoId, CondaDependencyProvider, Record};
     use rattler_conda_types::{MatchSpec, PackageRecord, Version};
-    use std::{fmt::Debug, str::FromStr};
+    use std::str::FromStr;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
         PackageRecord {
@@ -958,11 +949,15 @@ mod test {
         let solvable_id = pool.add_package(RepoId::new(0), record.clone());
 
         for dep in &record.depends {
-            pool.add_dependency(solvable_id, MatchSpec::from_str(dep).unwrap());
+            let spec = MatchSpec::from_str(dep).unwrap();
+            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+            pool.add_dependency(solvable_id, dep_name, spec);
         }
 
         for constrain in &record.constrains {
-            pool.add_constrains(solvable_id, MatchSpec::from_str(constrain).unwrap());
+            let spec = MatchSpec::from_str(constrain).unwrap();
+            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+            pool.add_constrains(solvable_id, dep_name, spec);
         }
     }
 
@@ -978,13 +973,12 @@ mod test {
         pool
     }
 
-    fn install<VS: VersionSet + FromStr>(pool: &mut Pool<VS>, packages: &[&str]) -> SolveJobs
-    where
-        <VS as FromStr>::Err: Debug,
-    {
+    fn install(pool: &mut Pool<MatchSpec>, packages: &[&str]) -> SolveJobs {
         let mut jobs = SolveJobs::default();
         for &p in packages {
-            let version_set_id = pool.intern_version_set(p.parse().unwrap());
+            let spec = MatchSpec::from_str(p).unwrap();
+            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+            let version_set_id = pool.intern_version_set(dep_name, spec);
             jobs.install(version_set_id);
         }
         jobs

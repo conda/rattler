@@ -1,4 +1,4 @@
-use crate::id::{NameId, SolvableId};
+use crate::id::SolvableId;
 use crate::mapping::Mapping;
 use crate::{Pool, VersionSetId};
 use rattler_conda_types::{MatchSpec, Version};
@@ -12,9 +12,6 @@ pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
     pool: &Pool<MatchSpec>,
-    // solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
-    // packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
-    // match_specs: &Arena<VersionSetId, MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Ordering {
@@ -76,14 +73,12 @@ pub(crate) fn compare_candidates(
             // Find which of the two specs selects the highest version
             let highest_a = find_highest_version(
                 a_spec_id,
-                a_solvable.name,
                 pool,
                 match_spec_to_candidates,
                 match_spec_highest_version,
             );
             let highest_b = find_highest_version(
                 *b_spec_id,
-                b_solvable.name,
                 pool,
                 match_spec_to_candidates,
                 match_spec_highest_version,
@@ -133,9 +128,6 @@ pub(crate) fn compare_candidates(
 
 pub(crate) fn find_highest_version(
     match_spec_id: VersionSetId,
-    name_id: NameId,
-    // solvables: &Arena<SolvableId, Solvable<PackageRecord>>,
-    // packages_by_name: &Mapping<NameId, Vec<SolvableId>>,
     pool: &Pool<MatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
@@ -143,7 +135,7 @@ pub(crate) fn find_highest_version(
     match_spec_highest_version[match_spec_id]
         .get_or_init(|| {
             let candidates = match_spec_to_candidates[match_spec_id]
-                .get_or_init(|| pool.find_matching_solvables(match_spec_id, name_id));
+                .get_or_init(|| pool.find_matching_solvables(match_spec_id));
 
             candidates
                 .iter()

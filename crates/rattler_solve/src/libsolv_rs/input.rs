@@ -38,13 +38,29 @@ pub fn add_repodata_records<'a>(
         let record = &repo_data.package_record;
 
         // Dependencies
-        for match_spec in record.depends.iter() {
-            pool.add_dependency(solvable_id, MatchSpec::from_str(match_spec)?);
+        for match_spec_str in record.depends.iter() {
+            let match_spec = MatchSpec::from_str(match_spec_str)?;
+            let dependency_name = pool.intern_package_name(
+                match_spec
+                    .name
+                    .as_ref()
+                    .expect("match specs without names are not supported")
+                    .as_normalized(),
+            );
+            pool.add_dependency(solvable_id, dependency_name, match_spec);
         }
 
         // Constrains
-        for match_spec in record.constrains.iter() {
-            pool.add_constrains(solvable_id, MatchSpec::from_str(match_spec)?);
+        for match_spec_str in record.constrains.iter() {
+            let match_spec = MatchSpec::from_str(match_spec_str)?;
+            let dependency_name = pool.intern_package_name(
+                match_spec
+                    .name
+                    .as_ref()
+                    .expect("match specs without names are not supported")
+                    .as_normalized(),
+            );
+            pool.add_constrains(solvable_id, dependency_name, match_spec);
         }
 
         solvable_ids.push(solvable_id)

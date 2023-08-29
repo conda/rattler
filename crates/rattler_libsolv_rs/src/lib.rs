@@ -58,9 +58,6 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
     type V: Record;
 
-    /// Returns the name to which this set applies.
-    fn name(&self) -> <Self::V as Record>::Name;
-
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
@@ -70,10 +67,6 @@ impl VersionSet for MatchSpec {
 
     fn contains(&self, v: &Self::V) -> bool {
         self.matches(v)
-    }
-
-    fn name(&self) -> <Self::V as Record>::Name {
-        self.name.as_ref().unwrap().as_normalized().to_string()
     }
 }
 
