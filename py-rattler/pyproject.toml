@@ -21,3 +21,6 @@ license = "BSD-3-Clause"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.ruff]
+line-length = 120

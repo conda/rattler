@@ -47,6 +47,7 @@ impl Ord for Platform {
 }
 
 /// Known architectures supported by Conda.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Arch {
     X86,
@@ -356,9 +357,11 @@ impl Arch {
     }
 }
 
+/// An error that can occur when parsing an arch from a string.
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
 #[error("'{string}' is not a known arch")]
 pub struct ParseArchError {
+    /// The arch string that could not be parsed.
     pub string: String,
 }
 
