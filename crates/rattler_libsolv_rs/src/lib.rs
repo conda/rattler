@@ -23,7 +23,7 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
-use rattler_conda_types::{PackageRecord, Version};
+use rattler_conda_types::PackageRecord;
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
@@ -37,7 +37,7 @@ pub use mapping::Mapping;
 use rattler_conda_types::MatchSpec;
 
 /// Record is a name and a version specification.
-pub trait Record: Display {
+pub trait Version: Display {
     /// The name of the package associated with this record.
     /// TODO: Can we move this to the Pool?
     type Name: Display + Sized + Hash + Eq + Clone;
@@ -53,7 +53,7 @@ pub trait Record: Display {
 /// Trait describing sets of versions.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
-    type V: Record;
+    type V: Version;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
@@ -67,7 +67,7 @@ impl VersionSet for MatchSpec {
     }
 }
 
-impl Record for PackageRecord {
+impl Version for PackageRecord {
     type Name = String;
     type Version = rattler_conda_types::Version;
 
@@ -84,7 +84,10 @@ pub trait DependencyProvider<VS: VersionSet> {
         pool: &Pool<VS>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
+        match_spec_highest_version: &Mapping<
+            VersionSetId,
+            OnceCell<Option<(rattler_conda_types::Version, bool)>>,
+        >,
     );
 }
 /// Dependency provider fro conda
@@ -96,7 +99,10 @@ impl DependencyProvider<MatchSpec> for CondaDependencyProvider {
         pool: &Pool<MatchSpec>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
+        match_spec_highest_version: &Mapping<
+            VersionSetId,
+            OnceCell<Option<(rattler_conda_types::Version, bool)>>,
+        >,
     ) {
         solvables.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(

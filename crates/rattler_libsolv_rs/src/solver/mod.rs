@@ -915,7 +915,7 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{id::RepoId, CondaDependencyProvider, Record};
+    use crate::{id::RepoId, CondaDependencyProvider};
     use rattler_conda_types::{MatchSpec, PackageRecord, Version};
     use std::str::FromStr;
 
@@ -1017,7 +1017,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version().to_string(), "1.2.3");
+        assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
     #[test]
@@ -1038,14 +1038,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version().to_string(), "1.2.3");
+        assert_eq!(solvable.record.version.to_string(), "1.2.3");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version().to_string(), "4.5.6");
+        assert_eq!(solvable.record.version.to_string(), "4.5.6");
     }
 
     #[test]
@@ -1067,14 +1067,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version().to_string(), "1.2.4");
+        assert_eq!(solvable.record.version.to_string(), "1.2.4");
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version().to_string(), "4.5.7");
+        assert_eq!(solvable.record.version.to_string(), "4.5.7");
     }
 
     #[test]
@@ -1119,7 +1119,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version().to_string(), "1.2.3");
+        assert_eq!(solvable.record.version.to_string(), "1.2.3");
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version() == Version::from_str("1.2.3").unwrap()
+                    package.record.version == Version::from_str("1.2.3").unwrap()
                 } else {
                     false
                 }
@@ -1166,7 +1166,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version() == Version::from_str("1.0.0").unwrap()
+                    package.record.version == Version::from_str("1.0.0").unwrap()
                 } else {
                     false
                 }
@@ -1187,10 +1187,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(
-            solvable.record.version(),
-            Version::from_str("1.2.4").unwrap()
-        );
+        assert_eq!(solvable.record.version, Version::from_str("1.2.4").unwrap());
     }
 
     #[test]
@@ -1211,7 +1208,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version() == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
@@ -1248,7 +1245,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version() == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {

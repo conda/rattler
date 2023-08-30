@@ -15,7 +15,7 @@ use crate::id::{ClauseId, SolvableId, VersionSetId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
-use crate::{DependencyProvider, Record, VersionSet};
+use crate::{DependencyProvider, Version, VersionSet};
 
 use rattler_conda_types::MatchSpec;
 
