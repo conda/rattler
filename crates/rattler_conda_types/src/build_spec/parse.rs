@@ -52,7 +52,7 @@ impl FromStr for UnstrictOrdering {
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseOrdConstraintError {
-    #[error("could not parse as operator")]
+    #[error("could not parse optionally prepended operator")]
     Operator,
     #[error("could not parse as value of set element")]
     Value,

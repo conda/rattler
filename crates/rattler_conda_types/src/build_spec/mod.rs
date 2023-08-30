@@ -4,36 +4,37 @@ pub(crate) mod parse;
 use constraint::OrdConstraint;
 pub use constraint::Set; // expose Set::is_member
 
-pub type BuildNumberSpec = OrdConstraint<u32>;
+pub type BuildNumber = u32;
+pub type BuildNumberSpec = OrdConstraint<BuildNumber>;
 
-impl BuildNumberSpec {}
+impl BuildNumberSpec {
+    pub fn matches(&self, b: &BuildNumber) -> bool {
+        self.is_member()(b)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::constraint::{OrdConstraint, Set};
     use super::BuildNumberSpec;
+
     #[test]
-    fn is_member_parse() {
-        // inits
+    fn check_build_number_cmp_spec() {
         let above = 10;
         let below = 1;
         let exact = 5;
-        let s: String = String::from(">=") + &exact.to_string();
+        let spec: BuildNumberSpec = (">=".to_string() + &exact.to_string()).parse().unwrap();
 
-        // Construct to internal type and check
-        let spec = s.parse::<OrdConstraint<u32>>().unwrap();
-        let matcher = spec.is_member();
-
-        assert!(!matcher(&below), "{below} not ge {exact}");
-        assert!(matcher(&above), "{above} ge {exact}");
-        assert!(matcher(&exact), "{exact} ge {exact}");
+        assert!(!spec.matches(&below), "{below} not ge {exact}");
+        assert!(spec.matches(&above), "{above} ge {exact}");
+        assert!(spec.matches(&exact), "{exact} ge {exact}");
     }
 
     #[test]
-    fn check_as_if_build_number() {
-        let above = 10;
-        let below = 1;
+    fn check_build_number_exact_spec() {
+        let mismatch = 10;
         let exact = 5;
-        let matcher = ">5".to_string();
+        let spec: BuildNumberSpec = exact.to_string().parse().unwrap();
+        assert!(spec.matches(&exact));
     }
 }
