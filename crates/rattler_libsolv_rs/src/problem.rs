@@ -17,8 +17,6 @@ use crate::solver::clause::Clause;
 use crate::solver::Solver;
 use crate::{DependencyProvider, Version, VersionSet};
 
-use rattler_conda_types::MatchSpec;
-
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
 pub struct Problem {
@@ -235,10 +233,10 @@ pub struct ProblemGraph {
 
 impl ProblemGraph {
     /// Writes a graphviz graph that represents this instance to the specified output.
-    pub fn graphviz(
+    pub fn graphviz<VS: VersionSet>(
         &self,
         f: &mut impl std::io::Write,
-        pool: &Pool<MatchSpec>,
+        pool: &Pool<VS>,
         simplify: bool,
     ) -> Result<(), std::io::Error> {
         let graph = &self.graph;
@@ -276,9 +274,9 @@ impl ProblemGraph {
                 };
 
                 let label = match edge.weight() {
-                    ProblemEdge::Requires(match_spec_id)
-                    | ProblemEdge::Conflict(ConflictCause::Constrains(match_spec_id)) => {
-                        pool.resolve_version_set(*match_spec_id).to_string()
+                    ProblemEdge::Requires(version_set_id)
+                    | ProblemEdge::Conflict(ConflictCause::Constrains(version_set_id)) => {
+                        pool.resolve_version_set(*version_set_id).to_string()
                     }
                     ProblemEdge::Conflict(ConflictCause::ForbidMultipleInstances)
                     | ProblemEdge::Conflict(ConflictCause::Locked(_)) => {
@@ -405,10 +403,10 @@ impl ProblemGraph {
                 .graph
                 .edges_directed(nx, Direction::Outgoing)
                 .map(|e| match e.weight() {
-                    ProblemEdge::Requires(match_spec_id) => (match_spec_id, e.target()),
+                    ProblemEdge::Requires(version_set_id) => (version_set_id, e.target()),
                     ProblemEdge::Conflict(_) => unreachable!(),
                 })
-                .group_by(|(&match_spec_id, _)| match_spec_id);
+                .group_by(|(&version_set_id, _)| version_set_id);
 
             for (_, mut deps) in &dependencies {
                 if deps.all(|(_, target)| !installable.contains(&target)) {
@@ -451,10 +449,10 @@ impl ProblemGraph {
                 .graph
                 .edges_directed(nx, Direction::Outgoing)
                 .map(|e| match e.weight() {
-                    ProblemEdge::Requires(match_spec_id) => (match_spec_id, e.target()),
+                    ProblemEdge::Requires(version_set_id) => (version_set_id, e.target()),
                     ProblemEdge::Conflict(_) => unreachable!(),
                 })
-                .group_by(|(&match_spec_id, _)| match_spec_id);
+                .group_by(|(&version_set_id, _)| version_set_id);
 
             // Missing if at least one dependency is missing
             if dependencies
@@ -528,22 +526,22 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
             .filter(|e| e.weight().try_requires().is_some())
             .group_by(|e| e.weight().requires())
             .into_iter()
-            .map(|(match_spec_id, group)| {
+            .map(|(version_set_id, group)| {
                 let edges: Vec<_> = group.map(|e| e.id()).collect();
-                (match_spec_id, edges)
+                (version_set_id, edges)
             })
-            .sorted_by_key(|(_match_spec_id, edges)| {
+            .sorted_by_key(|(_version_set_id, edges)| {
                 edges
                     .iter()
                     .any(|&edge| installable_nodes.contains(&graph.edge_endpoints(edge).unwrap().1))
             })
-            .map(|(match_spec_id, edges)| (DisplayOp::Requirement(match_spec_id, edges), 0))
+            .map(|(version_set_id, edges)| (DisplayOp::Requirement(version_set_id, edges), 0))
             .collect::<Vec<_>>();
         while let Some((node, depth)) = stack.pop() {
             let indent = Self::get_indent(depth, top_level_indent);
 
             match node {
-                DisplayOp::Requirement(match_spec_id, edges) => {
+                DisplayOp::Requirement(version_set_id, edges) => {
                     debug_assert!(!edges.is_empty());
 
                     let installable = edges.iter().any(|&e| {
@@ -551,7 +549,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         installable_nodes.contains(&target)
                     });
 
-                    let req = self.pool.resolve_version_set(match_spec_id).to_string();
+                    let req = self.pool.resolve_version_set(version_set_id).to_string();
                     let target_nx = graph.edge_endpoints(edges[0]).unwrap().1;
                     let missing =
                         edges.len() == 1 && graph[target_nx] == ProblemNode::UnresolvedDependency;
@@ -637,12 +635,12 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     } else if already_installed {
                         writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.name.display(self.pool))?;
                     } else if constrains_conflict {
-                        let match_specs = graph
+                        let version_sets = graph
                             .edges(candidate)
                             .flat_map(|e| match e.weight() {
-                                ProblemEdge::Conflict(ConflictCause::Constrains(match_spec_id)) => {
-                                    Some(match_spec_id)
-                                }
+                                ProblemEdge::Conflict(ConflictCause::Constrains(
+                                    version_set_id,
+                                )) => Some(version_set_id),
                                 _ => None,
                             })
                             .dedup();
@@ -654,12 +652,12 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
-                        for &match_spec_id in match_specs {
-                            let match_spec = self.pool.resolve_version_set(match_spec_id);
+                        for &version_set_id in version_sets {
+                            let version_set = self.pool.resolve_version_set(version_set_id);
                             writeln!(
                                 f,
                                 "{indent}{} , which conflicts with any installable versions previously reported",
-                                match_spec
+                                version_set
                             )?;
                         }
                     } else {
@@ -672,18 +670,18 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                             .edges(candidate)
                             .group_by(|e| e.weight().requires())
                             .into_iter()
-                            .map(|(match_spec_id, group)| {
+                            .map(|(version_set_id, group)| {
                                 let edges: Vec<_> = group.map(|e| e.id()).collect();
-                                (match_spec_id, edges)
+                                (version_set_id, edges)
                             })
-                            .sorted_by_key(|(_match_spec_id, edges)| {
+                            .sorted_by_key(|(_version_set_id, edges)| {
                                 edges.iter().any(|&edge| {
                                     installable_nodes
                                         .contains(&graph.edge_endpoints(edge).unwrap().1)
                                 })
                             })
-                            .map(|(match_spec_id, edges)| {
-                                (DisplayOp::Requirement(match_spec_id, edges), depth + 1)
+                            .map(|(version_set_id, edges)| {
+                                (DisplayOp::Requirement(version_set_id, edges), depth + 1)
                             });
 
                         stack.extend(requirements);
