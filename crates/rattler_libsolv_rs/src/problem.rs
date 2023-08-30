@@ -633,9 +633,9 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(f, "{indent}{} {version}", solvable.record.name())?;
+                        writeln!(f, "{indent}{} {version}", solvable.name.display(self.pool))?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.record.name())?;
+                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.name.display(self.pool))?;
                     } else if constrains_conflict {
                         let match_specs = graph
                             .edges(candidate)
@@ -650,7 +650,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         writeln!(
                             f,
                             "{indent}{} {version} would constrain",
-                            solvable.record.name()
+                            solvable.name.display(self.pool)
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
@@ -666,7 +666,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         writeln!(
                             f,
                             "{indent}{} {version} would require",
-                            solvable.record.name()
+                            solvable.name.display(self.pool)
                         )?;
                         let requirements = graph
                             .edges(candidate)
@@ -732,7 +732,7 @@ impl<VS: VersionSet> fmt::Display for DisplayUnsat<'_, VS> {
                 writeln!(
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
-                    locked.record.name(),
+                    locked.name.display(self.pool),
                     locked.record.version()
                 )?;
             }

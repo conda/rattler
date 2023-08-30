@@ -39,14 +39,11 @@ use rattler_conda_types::MatchSpec;
 /// Record is a name and a version specification.
 pub trait Record: Display {
     /// The name of the package associated with this record.
+    /// TODO: Can we move this to the Pool?
     type Name: Display + Sized + Hash + Eq + Clone;
 
     /// The version associated with this record.
     type Version: Display + Ord;
-
-    /// Returns the package name associated with this record
-    // TODO: Can we get rid of this?
-    fn name(&self) -> Self::Name;
 
     /// Returns the version associated with this record
     // TODO: Can we get rid of this?
@@ -73,9 +70,6 @@ impl VersionSet for MatchSpec {
 impl Record for PackageRecord {
     type Name = String;
     type Version = rattler_conda_types::Version;
-    fn name(&self) -> Self::Name {
-        self.name.as_normalized().to_string()
-    }
 
     fn version(&self) -> Self::Version {
         self.version.version().clone()

@@ -80,6 +80,9 @@ fn add_or_reuse_solvable<'a>(
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
+    // Resolve the name in the pool
+    let package_name_id = pool.intern_package_name(repo_data.package_record.name.as_normalized());
+
     // Sometimes we can reuse an existing solvable
     if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
@@ -100,6 +103,7 @@ fn add_or_reuse_solvable<'a>(
                     pool.overwrite_package(
                         repo_id,
                         old_solvable_id,
+                        package_name_id,
                         repo_data.package_record.clone(),
                     );
                     return Some(old_solvable_id);
@@ -109,7 +113,8 @@ fn add_or_reuse_solvable<'a>(
                 }
             }
         } else {
-            let solvable_id = pool.add_package(repo_id, repo_data.package_record.clone());
+            let solvable_id =
+                pool.add_package(repo_id, package_name_id, repo_data.package_record.clone());
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
         }
@@ -117,7 +122,7 @@ fn add_or_reuse_solvable<'a>(
         tracing::warn!("unknown package extension: {}", &repo_data.file_name);
     }
 
-    let solvable_id = pool.add_package(repo_id, repo_data.package_record.clone());
+    let solvable_id = pool.add_package(repo_id, package_name_id, repo_data.package_record.clone());
     Some(solvable_id)
 }
 
@@ -154,6 +159,7 @@ pub fn add_virtual_packages(
         .leak();
 
     for package in packages {
-        pool.add_package(repo_id, package.clone());
+        let package_name_id = pool.intern_package_name(package.name.as_normalized());
+        pool.add_package(repo_id, package_name_id, package.clone());
     }
 }

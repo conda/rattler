@@ -946,7 +946,8 @@ mod test {
 
     fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
         let record = Box::leak(Box::new(record));
-        let solvable_id = pool.add_package(RepoId::new(0), record.clone());
+        let package_name = pool.intern_package_name(record.name.as_normalized());
+        let solvable_id = pool.add_package(RepoId::new(0), package_name, record.clone());
 
         for dep in &record.depends {
             let spec = MatchSpec::from_str(dep).unwrap();

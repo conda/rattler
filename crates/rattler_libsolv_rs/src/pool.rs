@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 
 use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
@@ -75,16 +76,14 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Adds a package to a repo and returns it's [`SolvableId`]
-    pub fn add_package(&mut self, repo_id: RepoId, record: VS::V) -> SolvableId {
+    pub fn add_package(&mut self, repo_id: RepoId, name_id: NameId, record: VS::V) -> SolvableId {
         assert!(self.solvables.len() <= u32::MAX as usize);
-
-        let name = self.intern_package_name(record.name());
 
         let solvable_id = self
             .solvables
-            .alloc(Solvable::new_package(repo_id, name, record));
+            .alloc(Solvable::new_package(repo_id, name_id, record));
 
-        self.packages_by_name[name].push(solvable_id);
+        self.packages_by_name[name_id].push(solvable_id);
 
         solvable_id
     }
@@ -93,13 +92,16 @@ impl<VS: VersionSet> Pool<VS> {
     /// [`Pool::add_package`]
     ///
     /// Panics if the new package has a different name than the existing package
-    pub fn overwrite_package(&mut self, repo_id: RepoId, solvable_id: SolvableId, record: VS::V) {
+    pub fn overwrite_package(
+        &mut self,
+        repo_id: RepoId,
+        solvable_id: SolvableId,
+        name_id: NameId,
+        record: VS::V,
+    ) {
         assert!(!solvable_id.is_root());
-
-        let name = self.intern_package_name(record.name());
-        assert_eq!(self.solvables[solvable_id].package().name, name);
-
-        self.solvables[solvable_id] = Solvable::new_package(repo_id, name, record);
+        assert_eq!(self.solvables[solvable_id].package().name, name_id);
+        self.solvables[solvable_id] = Solvable::new_package(repo_id, name_id, record);
     }
 
     /// Registers a dependency for the provided solvable
@@ -242,5 +244,25 @@ impl<VS: VersionSet> Pool<VS> {
             .cloned()
             .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))
             .collect()
+    }
+}
+
+/// A helper struct to visualize a name.
+pub struct NameDisplay<'pool, VS: VersionSet> {
+    id: NameId,
+    pool: &'pool Pool<VS>,
+}
+
+impl<'pool, VS: VersionSet> Display for NameDisplay<'pool, VS> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = self.pool.resolve_package_name(self.id);
+        write!(f, "{}", name)
+    }
+}
+
+impl NameId {
+    /// Returns an object that can be used to format the name.
+    pub fn display<VS: VersionSet>(self, pool: &Pool<VS>) -> NameDisplay<'_, VS> {
+        NameDisplay { id: self, pool }
     }
 }

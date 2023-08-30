@@ -1,11 +1,11 @@
-use crate::arena::Arena;
-use crate::id::ClauseId;
-use crate::id::SolvableId;
-use crate::id::{LearntClauseId, VersionSetId};
-use crate::mapping::Mapping;
-use crate::pool::Pool;
-use crate::solver::decision_map::DecisionMap;
-use crate::{Record, VersionSet};
+use crate::{
+    arena::Arena,
+    id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
+    mapping::Mapping,
+    pool::Pool,
+    solver::decision_map::DecisionMap,
+    VersionSet,
+};
 
 use std::fmt::{Debug, Formatter};
 
@@ -431,7 +431,12 @@ impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {
-                let name = self.pool.resolve_solvable_inner(s1).package().record.name();
+                let name = self
+                    .pool
+                    .resolve_solvable_inner(s1)
+                    .package()
+                    .name
+                    .display(self.pool);
                 write!(f, "only one {name} allowed")
             }
         }
