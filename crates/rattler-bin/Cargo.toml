@@ -21,12 +21,12 @@ native-tls = ["reqwest/native-tls", "rattler/native-tls", "rattler_repodata_gate
 rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gateway/rustls-tls", "rattler_networking/rustls-tls"]
 
 [dependencies]
-anyhow = "1.0.71"
-clap = { version = "4.3.11", features = ["derive"] }
+anyhow = "1.0.75"
+clap = { version = "4.4.1", features = ["derive"] }
 console = { version = "0.15.7", features = ["windows-console-colors"] }
 dirs = "5.0.1"
 futures = "0.3.28"
-indicatif = "0.17.5"
+indicatif = "0.17.6"
 itertools = "0.11.0"
 once_cell = "1.18.0"
 rattler = { version = "0.8.0", path = "../rattler", default-features = false }
@@ -35,8 +35,8 @@ rattler_conda_types = { version = "0.8.0", path = "../rattler_conda_types" }
 rattler_repodata_gateway = { version = "0.8.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
 rattler_solve = { version = "0.8.0", path = "../rattler_solve", features = ["libsolv_rs", "libsolv_c"] }
 rattler_virtual_packages = { version = "0.8.0", path = "../rattler_virtual_packages" }
-reqwest = { version = "0.11.18", default-features = false }
-tokio = { version = "1.29.1", features = ["rt-multi-thread", "macros"] }
+reqwest = { version = "0.11.20", default-features = false }
+tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 [package.metadata.release]
