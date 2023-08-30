@@ -10,13 +10,14 @@ use error::{
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use repo_data::package_record::PyPackageRecord;
-use version::PyVersion;
+use version::{PyVersion, PyVersionWithSource};
 
 use pyo3::prelude::*;
 
 #[pymodule]
 fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVersion>().unwrap();
+    m.add_class::<PyVersionWithSource>().unwrap();
 
     m.add_class::<PyMatchSpec>().unwrap();
     m.add_class::<PyNamelessMatchSpec>().unwrap();

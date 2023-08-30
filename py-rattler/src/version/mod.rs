@@ -1,4 +1,5 @@
 mod component;
+mod version_with_source;
 
 use crate::PyRattlerError;
 use component::PyComponent;
@@ -10,16 +11,24 @@ use std::{
     str::FromStr,
 };
 
-#[pyclass]
+pub use version_with_source::PyVersionWithSource;
+
+#[pyclass(subclass)]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersion {
-    inner: Version,
+    pub(crate) inner: Version,
 }
 
 impl From<Version> for PyVersion {
     fn from(value: Version) -> Self {
         PyVersion { inner: value }
+    }
+}
+
+impl From<PyVersion> for Version {
+    fn from(value: PyVersion) -> Self {
+        value.inner
     }
 }
 
