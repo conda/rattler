@@ -16,6 +16,8 @@ license = "BSD-3-Clause"
 build = "cargo build"
 fmt = "cargo fmt"
 lint = "cargo clippy"
+test = "cargo test"
+cargo = "cargo"
 
 [dependencies]
 cxx-compiler = "~=1.6.0"
