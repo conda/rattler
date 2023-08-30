@@ -6,13 +6,16 @@ build-backend = "maturin"
 name = "rattler"
 requires-python = ">=3.8"
 authors = [
-    { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" }
+    { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" },
+    { name = "Tarun Pratap Singh", email = "pratapsinghtarun9@gmail.com" },
 ]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+license = "BSD-3-Clause"
+license-files = { paths = ["LICENSE"] }
 
 
 [tool.maturin]

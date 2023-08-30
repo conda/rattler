@@ -2,9 +2,14 @@
 name = "py-rattler"
 version = "0.1.0"
 description = "Add a short description here"
-authors = ["Bas Zalmstra <bas@prefix.dev>"]
+authors = [
+    "Bas Zalmstra <bas@prefix.dev>",
+    "Tarun Pratap Singh <pratapsinghtarun9@gmail.com>",
+]
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
+license = "BSD-3-Clause"
+license-files = { paths = ["LICENSE"] }
 
 [tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
