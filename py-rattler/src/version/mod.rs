@@ -1,5 +1,5 @@
 mod component;
-mod version_with_source;
+mod with_source;
 
 use crate::PyRattlerError;
 use component::PyComponent;
@@ -11,7 +11,7 @@ use std::{
     str::FromStr,
 };
 
-pub use version_with_source::PyVersionWithSource;
+pub use with_source::PyVersionWithSource;
 
 #[pyclass(subclass)]
 #[repr(transparent)]

@@ -1,4 +1,9 @@
-use pyo3::{pyclass, pymethods, PyClassInitializer};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
+
+use pyo3::{basic::CompareOp, pyclass, pymethods, PyClassInitializer};
 use rattler_conda_types::VersionWithSource;
 
 use crate::version::PyVersion;
@@ -38,5 +43,17 @@ impl PyVersionWithSource {
     /// Returns a string representation of `PyVersionWithSource`.
     pub fn as_str(&self) -> String {
         self.inner.as_str().into_owned()
+    }
+
+    /// Compute the hash of the version.
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.inner.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Performs comparison between this version and another.
+    pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.inner.cmp(&other.inner))
     }
 }
