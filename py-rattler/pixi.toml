@@ -9,7 +9,6 @@ authors = [
 channels = ["conda-forge"]
 platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
-license-files = { paths = ["LICENSE"] }
 
 [tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"

@@ -14,7 +14,6 @@ categories = ["conda"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
 license = "BSD-3-Clause"
-license-files = { paths = ["LICENSE"] }
 edition = "2021"
 readme = "README.md"
 
