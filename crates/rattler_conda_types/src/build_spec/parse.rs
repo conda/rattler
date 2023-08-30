@@ -33,6 +33,8 @@ impl Display for UnstrictOrdering {
     }
 }
 
+/// TODO: implement a nom based parser for this, then this impl will wrap that parser
+/// where if rest is not empty, then err expected EOF
 impl FromStr for UnstrictOrdering {
     type Err = ParseUnstrictOrderingError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -56,7 +58,12 @@ pub enum ParseOrdConstraintError {
     Value,
 }
 
-impl FromStr for OrdConstraint<u32> {
+/// TODO: implement a nom based parser for this, then this impl will wrap that parser
+/// where if rest is not empty, then err expected EOF
+impl<T> FromStr for OrdConstraint<T>
+where
+    T: FromStr,
+{
     type Err = ParseOrdConstraintError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let op: UnstrictOrdering = s
@@ -65,14 +72,14 @@ impl FromStr for OrdConstraint<u32> {
             .collect::<String>()
             .parse()
             .map_err(|_| ParseOrdConstraintError::Operator)?;
-        let num: u32 = s
+        let elem: T = s
             .chars()
             .skip_while(UnstrictOrdering::is_operator_char)
             .collect::<String>()
             .parse()
             .map_err(|_| ParseOrdConstraintError::Value)?;
 
-        Ok(OrdConstraint::new(op, num))
+        Ok(OrdConstraint::new(op, elem))
     }
 }
 

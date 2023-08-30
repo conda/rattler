@@ -37,15 +37,12 @@ impl std::ops::Not for UnstrictOrdering {
 /// This describes a constraint via a compare clause and an element
 /// Note that the compare clause needs to be meaningful for the element
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct OrdConstraint<T: Ord> {
+pub struct OrdConstraint<T> {
     ordering: UnstrictOrdering,
     element: T,
 }
 
-impl<T> OrdConstraint<T>
-where
-    T: Ord,
-{
+impl<T> OrdConstraint<T> {
     pub fn new(ordering: UnstrictOrdering, element: T) -> Self {
         OrdConstraint { ordering, element }
     }
@@ -55,7 +52,7 @@ where
 /// defined by the OrdConstraint
 impl<T> Set for OrdConstraint<T>
 where
-    T: PartialEq + Ord + Copy,
+    T: Ord + Copy,
 {
     type Matchable = T;
     fn is_member(&self) -> Box<dyn Fn(&Self::Matchable) -> bool + '_> {
