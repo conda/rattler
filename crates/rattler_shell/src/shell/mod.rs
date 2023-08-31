@@ -350,11 +350,11 @@ pub struct PowerShell {
 
 impl Shell for PowerShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "$Env:{} = \"{}\"", env_var, value)
+        writeln!(f, "${{Env:{}}} = \"{}\"", env_var, value)
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "$Env:{}=\"\"", env_var)
+        writeln!(f, "${{Env:{}}}=\"\"", env_var)
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
