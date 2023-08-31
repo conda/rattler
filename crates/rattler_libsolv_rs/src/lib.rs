@@ -76,14 +76,12 @@ impl VersionTrait for PackageRecord {
     }
 }
 
-
 /// TODO: Make this more generic, maybe even a generic <From, To> cache or something
 /// like axum with any
 pub trait SortCache {
     /// Initialize the cache with a specific size
     fn init_with_size(size: usize) -> Self;
 }
-
 
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
@@ -95,14 +93,15 @@ pub trait DependencyProvider<VS: VersionSet> {
         pool: &Pool<VS>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &Self::SortingCache
+        sort_cache: &Self::SortingCache,
     );
 }
 /// Dependency provider for conda
 pub struct CondaDependencyProvider;
 /// Used when sorting conda candidates
 pub struct CondaSortCache {
-    match_spec_to_highest_version: Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
+    match_spec_to_highest_version:
+        Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
 }
 
 impl SortCache for CondaSortCache {

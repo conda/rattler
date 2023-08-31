@@ -187,6 +187,14 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
             for &dep in deps {
                 if seen_requires.insert(dep) {
                     // Find all solvables that match the version set
+
+                    // TODO: it would be nice add some type safety here
+                    // because the `find_matching_solvables` method should return *only* solvables that
+                    // match the `VersionSet` this we can be certain of then we can constraint the `SolvableId`
+                    // to a special case `SolvableId`, `MatchedSolvableId` or something that we know are not random solvables
+                    // rather they are a very specific subset of solvables that we know are matched to a `VersionSet`
+                    // because otherwise `sort_candidates` makes no sense, you get the first feeling this is a bit weird when
+                    // writing the test
                     let mut candidates = version_set_to_candidates[dep]
                         .get_or_init(|| self.pool.find_matching_solvables(dep))
                         .clone();
@@ -916,8 +924,10 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{id::RepoId, CondaDependencyProvider};
+    use crate::{id::RepoId, CondaDependencyProvider, VersionTrait};
     use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+    use std::fmt::{Display, Formatter};
+    use std::ops::Range;
     use std::str::FromStr;
 
     fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
@@ -1001,6 +1011,69 @@ mod test {
         match solver.solve(jobs) {
             Ok(_) => panic!("expected unsat, but a solution was found"),
             Err(problem) => problem.display_user_friendly(&solver).to_string(),
+        }
+    }
+
+    // Our custom dependency providers
+
+    #[derive(Debug)]
+    struct SimpleVersion(String, u32);
+
+    impl Display for SimpleVersion {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    impl VersionTrait for SimpleVersion {
+        type Name = String;
+        type Version = u32;
+
+        fn version(&self) -> Self::Version {
+            SimpleVersion.1
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    struct SimpleMatcher {
+        name: String,
+        versions: Range<u32>
+    }
+
+    impl Display for SimpleMatcher {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self)
+        }
+    }
+
+    impl VersionSet for SimpleMatcher {
+        type V = SimpleVersion;
+
+        fn contains(&self, v: &Self::V) -> bool {
+            if !self.name.eq(&v.0) {
+                return false;
+            }
+            self.versions.contains(&v.1)
+        }
+    }
+
+    struct SimpleDependencyProvider;
+
+    impl DependencyProvider<SimpleMatcher> for SimpleDependencyProvider {
+        type SortingCache = ();
+
+        fn sort_candidates(
+            &self,
+            pool: &Pool<SimpleMatcher>,
+            solvables: &mut [SolvableId],
+            match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+            sort_cache: &Self::SortingCache,
+        ) {
+            solvables.sort_by(|a, b| {
+                let a = pool.resolve_solvable_inner(*a).package();
+                let b = pool.resolve_solvable_inner(*b).package();
+                a.record.1.cmp(&b.record.1)
+            });
         }
     }
 
