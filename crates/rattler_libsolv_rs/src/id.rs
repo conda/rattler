@@ -28,7 +28,7 @@ impl ArenaId for NameId {
 
 /// The id associated to a match spec
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Default, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct VersionSetId(u32);
 
 impl ArenaId for VersionSetId {

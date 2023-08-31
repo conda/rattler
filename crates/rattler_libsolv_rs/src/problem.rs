@@ -15,7 +15,7 @@ use crate::id::{ClauseId, SolvableId, VersionSetId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
-use crate::{DependencyProvider, Version, VersionSet};
+use crate::{DependencyProvider, VersionTrait, VersionSet};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]

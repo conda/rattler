@@ -12,7 +12,7 @@ use std::cell::OnceCell;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
-use crate::{DependencyProvider, VersionSet, VersionSetId};
+use crate::{DependencyProvider, SortCache, VersionSet, VersionSetId};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -164,17 +164,18 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 
         stack.push(SolvableId::root());
 
-        let mut match_spec_to_sorted_candidates =
+        let mut version_set_to_sorted_candidates =
             Mapping::new(vec![Vec::new(); self.pool.version_sets.len()]);
-        let mut match_spec_to_forbidden =
+        let mut version_set_to_forbidden =
             Mapping::new(vec![Vec::new(); self.pool.version_sets.len()]);
-        let match_spec_to_candidates =
-            Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
-        let match_spec_to_highest_version =
+        let version_set_to_candidates =
             Mapping::new(vec![OnceCell::new(); self.pool.version_sets.len()]);
         let mut seen_requires = HashSet::new();
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
+
+        // Cache used for sorting candidates
+        let sort_cache = D::SortingCache::init_with_size(self.pool.version_sets.len());
 
         while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id].inner {
@@ -186,7 +187,7 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
             for &dep in deps {
                 if seen_requires.insert(dep) {
                     // Find all solvables that match the version set
-                    let mut candidates = match_spec_to_candidates[dep]
+                    let mut candidates = version_set_to_candidates[dep]
                         .get_or_init(|| self.pool.find_matching_solvables(dep))
                         .clone();
 
@@ -194,8 +195,8 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                     self.provider.sort_candidates(
                         &self.pool,
                         &mut candidates,
-                        &match_spec_to_candidates,
-                        &match_spec_to_highest_version,
+                        &version_set_to_candidates,
+                        &sort_cache,
                     );
 
                     // If we have a solvable that we favor, we sort that to the front. This ensures that that version
@@ -209,10 +210,10 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                         }
                     }
 
-                    match_spec_to_sorted_candidates[dep] = candidates
+                    version_set_to_sorted_candidates[dep] = candidates
                 }
 
-                for &candidate in match_spec_to_sorted_candidates
+                for &candidate in version_set_to_sorted_candidates
                     .get(dep)
                     .unwrap_or(&empty_vec)
                 {
@@ -228,7 +229,7 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                 self.clauses.push(ClauseState::new(
                     Clause::Requires(solvable_id, dep),
                     &self.learnt_clauses,
-                    &match_spec_to_sorted_candidates,
+                    &version_set_to_sorted_candidates,
                 ));
             }
 
@@ -238,21 +239,21 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                     // Find all the solvables that do not match the constraint version set
                     let forbidden_candidates = self.pool.find_unmatched_solvables(dep);
 
-                    match_spec_to_forbidden[dep] = forbidden_candidates;
+                    version_set_to_forbidden[dep] = forbidden_candidates;
                 }
 
-                for &solvable_dep in match_spec_to_forbidden.get(dep).unwrap_or(&empty_vec) {
+                for &solvable_dep in version_set_to_forbidden.get(dep).unwrap_or(&empty_vec) {
                     self.clauses.push(ClauseState::new(
                         Clause::Constrains(solvable_id, solvable_dep, dep),
                         &self.learnt_clauses,
-                        &match_spec_to_sorted_candidates,
+                        &version_set_to_sorted_candidates,
                     ));
                 }
             }
         }
 
-        self.pool.match_spec_to_sorted_candidates = match_spec_to_sorted_candidates;
-        self.pool.match_spec_to_forbidden = match_spec_to_forbidden;
+        self.pool.match_spec_to_sorted_candidates = version_set_to_sorted_candidates;
+        self.pool.match_spec_to_forbidden = version_set_to_forbidden;
     }
 
     /// Run the CDCL algorithm to solve the SAT problem

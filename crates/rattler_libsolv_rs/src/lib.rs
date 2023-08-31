@@ -36,14 +36,14 @@ pub use mapping::Mapping;
 
 use rattler_conda_types::MatchSpec;
 
-/// Record is a name and a version specification.
-pub trait Version: Display {
+/// Version is a name and a version specification.
+pub trait VersionTrait: Display {
     /// The name of the package associated with this record.
     /// TODO: Can we move this to the Pool?
     type Name: Display + Sized + Hash + Eq + Clone;
 
     /// The version associated with this record.
-    type Version: Display + Ord;
+    type Version: Display + Ord + Clone;
 
     /// Returns the version associated with this record
     // TODO: Can we get rid of this?
@@ -53,7 +53,7 @@ pub trait Version: Display {
 /// Trait describing sets of versions.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
-    type V: Version;
+    type V: VersionTrait;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
@@ -67,7 +67,7 @@ impl VersionSet for MatchSpec {
     }
 }
 
-impl Version for PackageRecord {
+impl VersionTrait for PackageRecord {
     type Name = String;
     type Version = rattler_conda_types::Version;
 
@@ -76,34 +76,54 @@ impl Version for PackageRecord {
     }
 }
 
+
+/// TODO: Make this more generic, maybe even a generic <From, To> cache or something
+/// like axum with any
+pub trait SortCache {
+    /// Initialize the cache with a specific size
+    fn init_with_size(size: usize) -> Self;
+}
+
+
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
+    /// Potential cache used when sorting candidates with each other
+    type SortingCache: Default + SortCache;
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
         &self,
         pool: &Pool<VS>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<
-            VersionSetId,
-            OnceCell<Option<(rattler_conda_types::Version, bool)>>,
-        >,
+        sort_cache: &Self::SortingCache
     );
 }
-/// Dependency provider fro conda
+/// Dependency provider for conda
 pub struct CondaDependencyProvider;
+/// Used when sorting conda candidates
+#[derive(Default)]
+pub struct CondaSortCache {
+    match_spec_to_highest_version: Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
+}
+
+impl SortCache for CondaSortCache {
+    fn init_with_size(size: usize) -> Self {
+        Self {
+            match_spec_to_highest_version: Mapping::new(vec![OnceCell::new(); size]),
+        }
+    }
+}
 
 impl DependencyProvider<MatchSpec> for CondaDependencyProvider {
+    type SortingCache = CondaSortCache;
     fn sort_candidates(
         &self,
         pool: &Pool<MatchSpec>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<
-            VersionSetId,
-            OnceCell<Option<(rattler_conda_types::Version, bool)>>,
-        >,
+        sort_cache: &Self::SortingCache,
     ) {
+        let match_spec_highest_version = &sort_cache.match_spec_to_highest_version;
         solvables.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
                 p1,

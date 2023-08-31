@@ -97,7 +97,7 @@ pub(crate) fn compare_candidates(
             };
 
             // If one of the dependencies only selects versions with tracked features, down-
-            // weight that variant.
+            // weigh that variant.
             if let Some(score) = match a_tracked_features.cmp(&b_tracked_features) {
                 Ordering::Less => Some(-100),
                 Ordering::Greater => Some(100),

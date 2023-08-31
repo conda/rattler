@@ -6,7 +6,7 @@ use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{Version, VersionSet};
+use crate::{VersionTrait, VersionSet};
 
 /// A pool that stores data related to the available packages
 ///
@@ -20,10 +20,10 @@ pub struct Pool<VS: VersionSet> {
     total_repos: u32,
 
     /// Interned package names
-    package_names: Arena<NameId, <VS::V as Version>::Name>,
+    package_names: Arena<NameId, <VS::V as VersionTrait>::Name>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<<VS::V as Version>::Name, NameId>,
+    pub(crate) names_to_ids: HashMap<<VS::V as VersionTrait>::Name, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -163,7 +163,7 @@ impl<VS: VersionSet> Pool<VS> {
     /// Interns a package name into the `Pool`, returning its `NameId`
     pub fn intern_package_name<N>(&mut self, name: N) -> NameId
     where
-        N: Into<<VS::V as Version>::Name>,
+        N: Into<<VS::V as VersionTrait>::Name>,
     {
         match self.names_to_ids.entry(name.into()) {
             Entry::Occupied(e) => *e.get(),
@@ -180,14 +180,14 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Lookup the package name id associated to the provided name
-    pub fn lookup_package_name(&self, name: &<VS::V as Version>::Name) -> Option<NameId> {
+    pub fn lookup_package_name(&self, name: &<VS::V as VersionTrait>::Name) -> Option<NameId> {
         self.names_to_ids.get(name).copied()
     }
 
     /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &<VS::V as Version>::Name {
+    pub fn resolve_package_name(&self, name_id: NameId) -> &<VS::V as VersionTrait>::Name {
         &self.package_names[name_id]
     }
 
