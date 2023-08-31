@@ -489,15 +489,24 @@ impl ShellEnum {
         let parent_process_name = parent_process.name().to_lowercase();
 
         tracing::debug!(
-            "guessing ShellEnum. Parent process name: {}",
-            &parent_process_name
+            "Guessing ShellEnum. Parent process name: {} and args: {:?}",
+            &parent_process_name,
+            &parent_process.cmd()
         );
 
         if parent_process_name.contains("bash") {
             Some(Bash.into())
         } else if parent_process_name.contains("zsh") {
             Some(Zsh.into())
-        } else if parent_process_name.contains("xonsh") {
+        } else if parent_process_name.contains("xonsh")
+            // xonsh is a python shell, so we need to check if the parent process is python and if it
+            // contains xonsh in the arguments.
+            || (parent_process_name.contains("python")
+                && parent_process
+                    .cmd().iter()
+                    .find(|arg| arg.contains("xonsh"))
+                    .is_some())
+        {
             Some(Xonsh.into())
         } else if parent_process_name.contains("fish") {
             Some(Fish.into())
