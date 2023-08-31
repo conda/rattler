@@ -360,6 +360,8 @@ impl ProblemGraph {
         }
 
         let mut merged_candidates = HashMap::default();
+        // TODO: could probably use `sort_candidates` by the dependency provider directly
+        // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
         for mut m in maybe_merge.into_values() {
             if m.len() > 1 {
                 m.sort_unstable_by_key(|&(_, id)| pool.resolve_solvable(id).record.version());

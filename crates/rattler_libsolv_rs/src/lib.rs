@@ -46,7 +46,7 @@ pub trait VersionTrait: Display {
     type Version: Display + Ord + Clone;
 
     /// Returns the version associated with this record
-    // TODO: Can we get rid of this?
+    // TODO: We could maybe get rid of this, but would need to know what is generic to display and replace sorting in `problem.rs`
     fn version(&self) -> Self::Version;
 }
 
@@ -88,7 +88,7 @@ pub trait SortCache {
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
     /// Potential cache used when sorting candidates with each other
-    type SortingCache: Default + SortCache;
+    type SortingCache: SortCache;
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
         &self,
@@ -101,7 +101,6 @@ pub trait DependencyProvider<VS: VersionSet> {
 /// Dependency provider for conda
 pub struct CondaDependencyProvider;
 /// Used when sorting conda candidates
-#[derive(Default)]
 pub struct CondaSortCache {
     match_spec_to_highest_version: Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
 }
