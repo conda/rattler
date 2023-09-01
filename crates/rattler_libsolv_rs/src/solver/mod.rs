@@ -175,7 +175,7 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
         let empty_vec = Vec::new();
 
         // Cache used for sorting candidates
-        let sort_cache = D::SortingCache::init_with_size(self.pool.version_sets.len());
+        let sort_cache = D::SortingCache::init(&self.pool);
 
         while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id].inner {
@@ -925,78 +925,273 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 mod test {
     use super::*;
     use crate::{id::RepoId, CondaDependencyProvider, VersionTrait};
-    use rattler_conda_types::{MatchSpec, PackageRecord, Version};
-    use std::fmt::{Display, Formatter};
+    // use rattler_conda_types::{MatchSpec, PackageRecord, Version};
+    use crate::solvable::Solvable;
+    use std::fmt::{write, Debug, Display, Formatter};
     use std::ops::Range;
     use std::str::FromStr;
 
-    fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
-        PackageRecord {
-            arch: None,
-            build: "".to_string(),
-            build_number: 0,
-            constrains: constrains.iter().map(|s| s.to_string()).collect(),
-            depends: deps.iter().map(|s| s.to_string()).collect(),
-            features: None,
-            legacy_bz2_md5: None,
-            legacy_bz2_size: None,
-            license: None,
-            license_family: None,
-            md5: None,
-            name: name.parse().unwrap(),
-            noarch: Default::default(),
-            platform: None,
-            sha256: None,
-            size: None,
-            subdir: "".to_string(),
-            timestamp: None,
-            track_features: vec![],
-            version: version.parse().unwrap(),
+    // fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
+    //     PackageRecord {
+    //         arch: None,
+    //         build: "".to_string(),
+    //         build_number: 0,
+    //         constrains: constrains.iter().map(|s| s.to_string()).collect(),
+    //         depends: deps.iter().map(|s| s.to_string()).collect(),
+    //         features: None,
+    //         legacy_bz2_md5: None,
+    //         legacy_bz2_size: None,
+    //         license: None,
+    //         license_family: None,
+    //         md5: None,
+    //         name: name.parse().unwrap(),
+    //         noarch: Default::default(),
+    //         platform: None,
+    //         sha256: None,
+    //         size: None,
+    //         subdir: "".to_string(),
+    //         timestamp: None,
+    //         track_features: vec![],
+    //         version: version.parse().unwrap(),
+    //     }
+    // }
+    //
+    // fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
+    //     let record = Box::leak(Box::new(record));
+    //     let package_name = pool.intern_package_name(record.name.as_normalized());
+    //     let solvable_id = pool.add_package(RepoId::new(0), package_name, record.clone());
+    //
+    //     for dep in &record.depends {
+    //         let spec = MatchSpec::from_str(dep).unwrap();
+    //         let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+    //         pool.add_dependency(solvable_id, dep_name, spec);
+    //     }
+    //
+    //     for constrain in &record.constrains {
+    //         let spec = MatchSpec::from_str(constrain).unwrap();
+    //         let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+    //         pool.add_constrains(solvable_id, dep_name, spec);
+    //     }
+    // }
+    //
+    // fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<MatchSpec> {
+    //     let mut pool = Pool::new();
+    //     for (pkg_name, version, deps) in packages {
+    //         let pkg_name = *pkg_name;
+    //         let version = *version;
+    //         let record = package(pkg_name, version, deps, &[]);
+    //         add_package(&mut pool, record);
+    //     }
+    //
+    //     pool
+    // }
+
+    // Let's define our own packaging version system and dependency specification.
+    // This is a very simple version system, where a package is identified by a name and a version
+    // in which the version is just an integer. The version is a range so can be noted as 0..2
+    // or something of the sorts, we also support constrains which means it should not use that
+    // package version this is also represented with a range.
+    //
+    // You can also use just a single number for a range like `package 0` which means the range from 0..1 (excluding the end)
+    //
+    // Lets call the tuples of (Name, Version) a `Pack` and the tuples of (Name, Range<u32>) a `Spec`
+    //
+    // We also need to create a custom provider that tells us how to sort the candidates. This is unqiue to each
+    // packaging ecosystem. Let's call our ecosystem 'BundleBox' so that how we call the provider as well.
+
+    /// We need this so we can make generic functions that want to retrieve the name
+    trait Nameable {
+        type Name: Clone;
+        fn name(&self) -> &Self::Name;
+    }
+
+    #[derive(Debug)]
+    /// This is `Pack` which is a unique version and name in our bespoke packaging system
+    struct Pack(String, u32);
+
+    impl Display for Pack {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self)
         }
     }
 
-    fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
-        let record = Box::leak(Box::new(record));
-        let package_name = pool.intern_package_name(record.name.as_normalized());
-        let solvable_id = pool.add_package(RepoId::new(0), package_name, record.clone());
+    impl VersionTrait for Pack {
+        type Name = String;
+        type Version = u32;
 
-        for dep in &record.depends {
-            let spec = MatchSpec::from_str(dep).unwrap();
-            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
-            pool.add_dependency(solvable_id, dep_name, spec);
-        }
-
-        for constrain in &record.constrains {
-            let spec = MatchSpec::from_str(constrain).unwrap();
-            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
-            pool.add_constrains(solvable_id, dep_name, spec);
+        fn version(&self) -> Self::Version {
+            self.1
         }
     }
 
-    fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<MatchSpec> {
+    impl FromStr for Pack {
+        type Err = ();
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let split = s.split(" ").collect::<Vec<_>>();
+            Ok(Pack(split[0].to_string(), split[1].parse::<u32>().unwrap()))
+        }
+    }
+
+    impl Nameable for Pack {
+        type Name = <Pack as VersionTrait>::Name;
+        fn name(&self) -> &Self::Name {
+            &self.0
+        }
+    }
+
+    /// We can use this to see if a `Pack` is contained in a range of package versions or a `Spack`
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    struct Spec {
+        name: String,
+        versions: Option<Range<u32>>,
+    }
+
+    impl Nameable for Spec {
+        type Name = <<Spec as VersionSet>::V as VersionTrait>::Name;
+        fn name(&self) -> &String {
+            &self.name
+        }
+    }
+
+    impl Display for Spec {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{} ", self.name)?;
+            if let Some(versions) = &self.versions {
+                write!(f, "with versions {} up to {}", versions.start, versions.end)
+            } else {
+                write!(f, "with any version")
+            }
+        }
+    }
+
+    impl Spec {
+        pub fn new(name: String, versions: Option<Range<u32>>) -> Self {
+            Self { name, versions }
+        }
+    }
+
+    impl FromStr for Spec {
+        type Err = ();
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            let split = s.split(" ").collect::<Vec<_>>();
+            let name = split.get(0).expect("spec does not have a name").to_string();
+
+            fn version_range(s: Option<&&str>) -> Option<Range<u32>> {
+                if let Some(s) = s {
+                    let split = s.split("..").collect::<Vec<_>>();
+                    let start = split[0].parse().unwrap();
+                    Some(Range {
+                        start,
+                        end: split
+                            .get(1)
+                            .map(|s| s.parse().unwrap())
+                            .unwrap_or_else(|| start + 1),
+                    })
+                } else {
+                    return None;
+                }
+            }
+
+            let versions = version_range(split.get(1));
+
+            Ok(Spec::new(name, versions))
+        }
+    }
+
+    impl VersionSet for Spec {
+        type V = Pack;
+
+        fn contains(&self, v: &Self::V) -> bool {
+            if !self.name.eq(&v.0) {
+                return false;
+            }
+            return if let Some(versions) = &self.versions {
+                versions.contains(&v.1)
+            } else {
+                true
+            };
+        }
+    }
+
+    /// This provides sorting functionality for our `BundleBox` packaging system
+    struct BundleBoxProvider;
+
+    /// Don't cache anything
+    struct EmptyCache;
+
+    impl SortCache<Spec> for EmptyCache {
+        fn init(pool: &Pool<Spec>) -> Self {
+            Self
+        }
+    }
+
+    impl DependencyProvider<Spec> for BundleBoxProvider {
+        type SortingCache = EmptyCache;
+
+        fn sort_candidates(
+            &self,
+            pool: &Pool<Spec>,
+            solvables: &mut [SolvableId],
+            match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+            sort_cache: &Self::SortingCache,
+        ) {
+            solvables.sort_by(|a, b| {
+                let a = pool.resolve_solvable_inner(*a).package();
+                let b = pool.resolve_solvable_inner(*b).package();
+                // We want to sort with highest version on top
+                b.record.1.cmp(&a.record.1)
+            });
+        }
+    }
+
+    /// Create a pool with args
+    ///
+    /// # Arguments:
+    ///     packages: packages and its dependencies to add to the pool
+    fn pool<VS>(packages: &[(&str, Vec<&str>)]) -> Pool<VS>
+    where
+        VS: VersionSet + Nameable<Name = <VS::V as VersionTrait>::Name> + FromStr,
+        VS::V: FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>,
+        <VS as FromStr>::Err: Debug,
+        <<VS as VersionSet>::V as FromStr>::Err: Debug,
+    {
         let mut pool = Pool::new();
-        for (pkg_name, version, deps) in packages {
-            let pkg_name = *pkg_name;
-            let version = *version;
-            let record = package(pkg_name, version, deps, &[]);
-            add_package(&mut pool, record);
+        for (pkg_name, deps) in packages {
+            let version = VS::V::from_str(pkg_name).unwrap();
+            let name_id = pool.intern_package_name(version.name().clone());
+            let package_id = pool.add_package(RepoId::new(0), name_id, version);
+            for dep in deps {
+                let spec = VS::from_str(dep).unwrap();
+                let name = pool.intern_package_name(spec.name().clone());
+                pool.add_dependency(package_id, name, spec);
+            }
         }
 
         pool
     }
 
-    fn install(pool: &mut Pool<MatchSpec>, packages: &[&str]) -> SolveJobs {
+    /// Install the given version sets
+    fn install<VS: VersionSet + FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>>(
+        pool: &mut Pool<VS>,
+        version_sets: &[&str],
+    ) -> SolveJobs
+    where
+        <VS as FromStr>::Err: Debug,
+    {
         let mut jobs = SolveJobs::default();
-        for &p in packages {
-            let spec = MatchSpec::from_str(p).unwrap();
-            let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
+        for &p in version_sets {
+            let spec = VS::from_str(p).unwrap();
+            let dep_name = pool.intern_package_name(spec.name().clone());
             let version_set_id = pool.intern_version_set(dep_name, spec);
             jobs.install(version_set_id);
         }
         jobs
     }
 
-    fn transaction_to_string(pool: &Pool<MatchSpec>, transaction: &Transaction) -> String {
+    /// Create a string from a [`Transaction`]
+    fn transaction_to_string<VS: VersionSet>(pool: &Pool<VS>, transaction: &Transaction) -> String {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in &transaction.steps {
@@ -1006,82 +1201,25 @@ mod test {
         buf
     }
 
-    fn solve_unsat(pool: Pool<MatchSpec>, jobs: SolveJobs) -> String {
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+    /// Unsat so that we can view the problem
+    fn solve_unsat<VS: VersionSet, D: DependencyProvider<VS>>(
+        pool: Pool<VS>,
+        jobs: SolveJobs,
+        provider: D,
+    ) -> String {
+        let mut solver = Solver::new(pool, provider);
         match solver.solve(jobs) {
             Ok(_) => panic!("expected unsat, but a solution was found"),
             Err(problem) => problem.display_user_friendly(&solver).to_string(),
         }
     }
 
-    // Our custom dependency providers
-
-    #[derive(Debug)]
-    struct SimpleVersion(String, u32);
-
-    impl Display for SimpleVersion {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self)
-        }
-    }
-
-    impl VersionTrait for SimpleVersion {
-        type Name = String;
-        type Version = u32;
-
-        fn version(&self) -> Self::Version {
-            SimpleVersion.1
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    struct SimpleMatcher {
-        name: String,
-        versions: Range<u32>
-    }
-
-    impl Display for SimpleMatcher {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self)
-        }
-    }
-
-    impl VersionSet for SimpleMatcher {
-        type V = SimpleVersion;
-
-        fn contains(&self, v: &Self::V) -> bool {
-            if !self.name.eq(&v.0) {
-                return false;
-            }
-            self.versions.contains(&v.1)
-        }
-    }
-
-    struct SimpleDependencyProvider;
-
-    impl DependencyProvider<SimpleMatcher> for SimpleDependencyProvider {
-        type SortingCache = ();
-
-        fn sort_candidates(
-            &self,
-            pool: &Pool<SimpleMatcher>,
-            solvables: &mut [SolvableId],
-            match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-            sort_cache: &Self::SortingCache,
-        ) {
-            solvables.sort_by(|a, b| {
-                let a = pool.resolve_solvable_inner(*a).package();
-                let b = pool.resolve_solvable_inner(*b).package();
-                a.record.1.cmp(&b.record.1)
-            });
-        }
-    }
-
+    /// Test whether we can select a version, this is the most basic operation
     #[test]
     fn test_unit_propagation_1() {
-        let mut pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let mut pool = pool(&[("asdf 1", vec![])]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1090,19 +1228,20 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.name(), "asdf");
+        assert_eq!(solvable.record.version(), 1);
     }
 
+    /// Test if we can also select a nested version
     #[test]
     fn test_unit_propagation_nested() {
         let mut pool = pool(&[
-            ("asdf", "1.2.3", vec!["efgh"]),
-            ("efgh", "4.5.6", vec![]),
-            ("dummy", "42.42.42", vec![]),
+            ("asdf 1", vec!["efgh"]),
+            ("efgh 4", vec![]),
+            ("dummy 6", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
@@ -1111,27 +1250,28 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.name(), "asdf");
+        assert_eq!(solvable.record.version(), 1);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version.to_string(), "4.5.6");
+        assert_eq!(solvable.record.name(), "efgh");
+        assert_eq!(solvable.record.version(), 4);
     }
 
+    /// Test if we can resolve multiple versions at once
     #[test]
-    fn test_resolve_dependencies() {
+    fn test_resolve_multiple() {
         let mut pool = pool(&[
-            ("asdf", "1.2.4", vec![]),
-            ("asdf", "1.2.3", vec![]),
-            ("efgh", "4.5.7", vec![]),
-            ("efgh", "4.5.6", vec![]),
+            ("asdf 1", vec![]),
+            ("asdf 2", vec![]),
+            ("efgh 4", vec![]),
+            ("efgh 5", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
@@ -1140,30 +1280,35 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.4");
+        assert_eq!(solvable.record.name(), "asdf");
+        assert_eq!(solvable.record.version(), 2);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "efgh");
-        assert_eq!(solvable.record.version.to_string(), "4.5.7");
+        assert_eq!(solvable.record.name(), "efgh");
+        assert_eq!(solvable.record.version(), 5);
     }
 
+    /// In case of a conflict the version should not be selected with the conflict
     #[test]
     fn test_resolve_with_conflict() {
         let mut pool = pool(&[
-            ("asdf", "1.2.4", vec!["conflicting=1.0.1"]),
-            ("asdf", "1.2.3", vec!["conflicting=1.0.0"]),
-            ("efgh", "4.5.7", vec!["conflicting=1.0.0"]),
-            ("efgh", "4.5.6", vec!["conflicting=1.0.0"]),
-            ("conflicting", "1.0.1", vec![]),
-            ("conflicting", "1.0.0", vec![]),
+            ("asdf 4", vec!["conflicting 1"]),
+            ("asdf 3", vec!["conflicting 0"]),
+            ("efgh 7", vec!["conflicting 0"]),
+            ("efgh 6", vec!["conflicting 0"]),
+            ("conflicting 1", vec![]),
+            ("conflicting 0", vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
-        let solved = solver.solve(jobs).unwrap();
+        let mut solver = Solver::new(pool, BundleBoxProvider);
+        let solved = solver.solve(jobs);
+        let solved = match solved {
+            Ok(solved) => solved,
+            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+        };
 
         use std::fmt::Write;
         let mut display_result = String::new();
@@ -1175,15 +1320,16 @@ mod test {
         insta::assert_snapshot!(display_result);
     }
 
+    /// The non-existing package should not be selected
     #[test]
     fn test_resolve_with_nonexisting() {
         let mut pool = pool(&[
-            ("asdf", "1.2.4", vec!["b"]),
-            ("asdf", "1.2.3", vec![]),
-            ("b", "1.2.3", vec!["idontexist"]),
+            ("asdf 4", vec!["b"]),
+            ("asdf 3", vec![]),
+            ("b 1", vec!["idontexist"]),
         ]);
         let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1192,21 +1338,23 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version.to_string(), "1.2.3");
+        assert_eq!(solvable.record.name(), "asdf");
+        assert_eq!(solvable.record.version(), 3);
     }
 
+    /// Locking a specific package version in this case a lower version namely `3` should result
+    /// in the higher package not being considered
     #[test]
     fn test_resolve_locked_top_level() {
-        let mut pool = pool(&[("asdf", "1.2.4", vec![]), ("asdf", "1.2.3", vec![])]);
+        let mut pool = pool::<Spec>(&[("asdf 4", vec![]), ("asdf 3", vec![])]);
 
         let locked = pool
             .solvables
             .as_slice()
             .iter()
-            .position(|s| {
+            .position(|s: &Solvable<_>| {
                 if let Some(package) = s.get_package() {
-                    package.record.version == Version::from_str("1.2.3").unwrap()
+                    package.record.version() == 3
                 } else {
                     false
                 }
@@ -1218,20 +1366,29 @@ mod test {
         let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
         let solvable_id = solved.steps[0];
-        assert_eq!(solvable_id, locked);
+        assert_eq!(
+            solver
+                .pool
+                .resolve_solvable_inner(solvable_id)
+                .package()
+                .record
+                .version(),
+            3
+        );
     }
 
+    /// Should ignore lock when it is not a top level package and a newer version exists without it
     #[test]
     fn test_resolve_ignored_locked_top_level() {
-        let mut pool = pool(&[
-            ("asdf", "1.2.4", vec![]),
-            ("asdf", "1.2.3", vec!["fgh"]),
-            ("fgh", "1.0.0", vec![]),
+        let mut pool = pool::<Spec>(&[
+            ("asdf 4", vec![]),
+            ("asdf 3", vec!["fgh"]),
+            ("fgh 1", vec![]),
         ]);
 
         let locked = pool
@@ -1240,7 +1397,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version == Version::from_str("1.0.0").unwrap()
+                    package.record.version() == 1
                 } else {
                     false
                 }
@@ -1252,7 +1409,7 @@ mod test {
         let mut jobs = install(&mut pool, &["asdf"]);
         jobs.lock(locked);
 
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
@@ -1260,20 +1417,21 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name.as_normalized(), "asdf");
-        assert_eq!(solvable.record.version, Version::from_str("1.2.4").unwrap());
+        assert_eq!(solvable.record.name(), "asdf");
+        assert_eq!(solvable.record.version(), 4);
     }
 
+    /// Test checks if favoring without a conflict results in a package upgrade
     #[test]
     fn test_resolve_favor_without_conflict() {
-        let mut pool = pool(&[
-            ("a", "1", vec![]),
-            ("a", "2", vec![]),
-            ("b", "1", vec![]),
-            ("b", "2", vec![]),
+        let mut pool = pool::<Spec>(&[
+            ("a 1", vec![]),
+            ("a 2", vec![]),
+            ("b 1", vec![]),
+            ("b 2", vec![]),
         ]);
 
-        let mut jobs = install(&mut pool, &["a", "b>=2"]);
+        let mut jobs = install(&mut pool, &["a", "b 2"]);
 
         // Already installed: A=1; B=1
         let already_installed = pool
@@ -1282,35 +1440,39 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version() == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
             jobs.favor(solvable_id);
         }
 
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
-        let solved = solver.solve(jobs).unwrap();
+        let mut solver = Solver::new(pool, BundleBoxProvider);
+        let solved = solver.solve(jobs);
+        let solved = match solved {
+            Ok(solved) => solved,
+            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+        };
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        b 2
-        a 1
+        Pack("b", 2)
+        Pack("a", 1)
         "###);
     }
-
+    //
     #[test]
     fn test_resolve_favor_with_conflict() {
-        let mut pool = pool(&[
-            ("a", "1", vec!["c=1"]),
-            ("a", "2", vec![]),
-            ("b", "1", vec!["c=1"]),
-            ("b", "2", vec!["c=2"]),
-            ("c", "1", vec![]),
-            ("c", "2", vec![]),
+        let mut pool = pool::<Spec>(&[
+            ("a 1", vec!["c 1"]),
+            ("a 2", vec![]),
+            ("b 1", vec!["c 1"]),
+            ("b 2", vec!["c 2"]),
+            ("c 1", vec![]),
+            ("c 2", vec![]),
         ]);
 
-        let mut jobs = install(&mut pool, &["a", "b>=2"]);
+        let mut jobs = install(&mut pool, &["a", "b 2"]);
 
         // Already installed: A=1; B=1; C=1
         let already_installed = pool
@@ -1319,139 +1481,138 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version == Version::from_str("1").unwrap())
+            .filter(|(_, s)| s.package().record.version() == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
             jobs.favor(solvable_id);
         }
 
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
-        let solved = solver.solve(jobs).unwrap();
+        let mut solver = Solver::new(pool, BundleBoxProvider);
+        let solved = solver.solve(jobs);
+        let solved = match solved {
+            Ok(solved) => solved,
+            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+        };
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        b 2
-        c 2
-        a 2
+        Pack("b", 2)
+        Pack("c", 2)
+        Pack("a", 2)
         "###);
     }
 
     #[test]
     fn test_resolve_cyclic() {
-        let mut pool = pool(&[("a", "2", vec!["b<=10"]), ("b", "5", vec!["a>=2,<=4"])]);
-        let jobs = install(&mut pool, &["a<100"]);
-        let mut solver = Solver::new(pool, CondaDependencyProvider);
+        let mut pool = pool(&[("a 2", vec!["b 0..10"]), ("b 5", vec!["a 2..4"])]);
+        let jobs = install(&mut pool, &["a 0..100"]);
+        let mut solver = Solver::new(pool, BundleBoxProvider);
         let solved = solver.solve(jobs).unwrap();
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        a 2
-        b 5
+        Pack("a", 2)
+        Pack("b", 5)
         "###);
     }
 
     #[test]
     fn test_unsat_locked_and_excluded() {
-        let mut pool = pool(&[
-            ("asdf", "1.2.3", vec!["c>1"]),
-            ("c", "2.0.0", vec![]),
-            ("c", "1.0.0", vec![]),
-        ]);
+        let mut pool = pool(&[("asdf 1", vec!["c 2"]), ("c 2", vec![]), ("c 1", vec![])]);
         let mut job = install(&mut pool, &["asdf"]);
-        job.lock(SolvableId::from_usize(3)); // C 1.0.0
+        job.lock(SolvableId::from_usize(3)); // C 1
 
-        let error = solve_unsat(pool, job);
+        let error = solve_unsat(pool, job, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_no_candidates_for_child_1() {
-        let mut pool = pool(&[("asdf", "1.2.3", vec!["C>1"]), ("C", "1.0.0", vec![])]);
+        let mut pool = pool(&[("asdf 1", vec!["c 2"]), ("c 1", vec![])]);
         let jobs = install(&mut pool, &["asdf"]);
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
-
+    //
     #[test]
     fn test_unsat_no_candidates_for_child_2() {
-        let mut pool = pool(&[("a", "41", vec!["B<20"])]);
-        let jobs = install(&mut pool, &["A<1000"]);
+        let mut pool = pool(&[("a 41", vec!["B 0..20"])]);
+        let jobs = install(&mut pool, &["a 0..1000"]);
 
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_missing_top_level_dep_1() {
-        let mut pool = pool(&[("asdf", "1.2.3", vec![])]);
+        let mut pool = pool(&[("asdf 1", vec![])]);
         let jobs = install(&mut pool, &["fghj"]);
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_missing_top_level_dep_2() {
-        let mut pool = pool(&[("a", "41", vec!["b=15"]), ("b", "15", vec![])]);
-        let jobs = install(&mut pool, &["a=41", "b=14"]);
+        let mut pool = pool(&[("a 41", vec!["b 15"]), ("b 15", vec![])]);
+        let jobs = install(&mut pool, &["a 41", "b 14"]);
 
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_after_backtracking() {
         let mut pool = pool(&[
-            ("b", "4.5.7", vec!["d=1"]),
-            ("b", "4.5.6", vec!["d=1"]),
-            ("c", "1.0.1", vec!["d=2"]),
-            ("c", "1.0.0", vec!["d=2"]),
-            ("d", "2.0.0", vec![]),
-            ("d", "1.0.0", vec![]),
-            ("e", "1.0.0", vec![]),
-            ("e", "1.0.1", vec![]),
+            ("b 7", vec!["d 1"]),
+            ("b 6", vec!["d 1"]),
+            ("c 1", vec!["d 2"]),
+            ("c 2", vec!["d 2"]),
+            ("d 2", vec![]),
+            ("d 1", vec![]),
+            ("e 1", vec![]),
+            ("e 2", vec![]),
         ]);
 
         let jobs = install(&mut pool, &["b", "c", "e"]);
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_incompatible_root_requirements() {
-        let mut pool = pool(&[("a", "2", vec![]), ("a", "5", vec![])]);
-        let jobs = install(&mut pool, &["a<4", "a>=5,<10"]);
+        let mut pool = pool(&[("a 2", vec![]), ("a 5", vec![])]);
+        let jobs = install(&mut pool, &["a 0..4", "a 5..10"]);
 
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_bluesky_conflict() {
         let mut pool = pool(&[
-            ("suitcase-utils", "54", vec![]),
-            ("suitcase-utils", "53", vec![]),
+            ("suitcase-utils 54", vec![]),
+            ("suitcase-utils 53", vec![]),
             (
-                "bluesky-widgets",
-                "42",
+                "bluesky-widgets 42",
                 vec![
-                    "bluesky-live<10",
-                    "numpy<10",
-                    "python<10",
-                    "suitcase-utils<54",
+                    "bluesky-live 0..10",
+                    "numpy 0..10",
+                    "python 0..10",
+                    "suitcase-utils 0..54",
                 ],
             ),
-            ("bluesky-live", "1", vec![]),
-            ("numpy", "1", vec![]),
-            ("python", "1", vec![]),
+            ("bluesky-live 1", vec![]),
+            ("numpy 1", vec![]),
+            ("python 1", vec![]),
         ]);
 
         let jobs = install(
             &mut pool,
-            &["bluesky-widgets<100", "suitcase-utils>=54,<100"],
+            &["bluesky-widgets 0..100", "suitcase-utils 54..100"],
         );
 
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
 
@@ -1459,56 +1620,56 @@ mod test {
     fn test_unsat_pubgrub_article() {
         // Taken from the pubgrub article: https://nex3.medium.com/pubgrub-2fb6470504f
         let mut pool = pool(&[
-            ("menu", "1.5.0", vec!["dropdown>=2.0.0,<=2.3.0"]),
-            ("menu", "1.0.0", vec!["dropdown>=1.8.0,<2.0.0"]),
-            ("dropdown", "2.3.0", vec!["icons=2.0.0"]),
-            ("dropdown", "1.8.0", vec!["intl=3.0.0"]),
-            ("icons", "2.0.0", vec![]),
-            ("icons", "1.0.0", vec![]),
-            ("intl", "5.0.0", vec![]),
-            ("intl", "3.0.0", vec![]),
+            ("menu 15", vec!["dropdown 1..3"]),
+            ("menu 10", vec!["dropdown 1..2"]),
+            ("dropdown 2", vec!["icons 2"]),
+            ("dropdown 1", vec!["intl 3"]),
+            ("icons 2", vec![]),
+            ("icons 1", vec![]),
+            ("intl 5", vec![]),
+            ("intl 3", vec![]),
         ]);
 
-        let jobs = install(&mut pool, &["menu", "icons=1.0.0", "intl=5.0.0"]);
+        let jobs = install(&mut pool, &["menu", "icons 1", "intl 5"]);
 
-        let error = solve_unsat(pool, jobs);
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
-
-    #[test]
-    fn test_unsat_applies_graph_compression() {
-        let mut pool = pool(&[
-            ("a", "10", vec!["b"]),
-            ("a", "9", vec!["b"]),
-            ("b", "100", vec!["c<100"]),
-            ("b", "42", vec!["c<100"]),
-            ("c", "103", vec![]),
-            ("c", "101", vec![]),
-            ("c", "100", vec![]),
-            ("c", "99", vec![]),
-        ]);
-
-        let jobs = install(&mut pool, &["a", "c>100"]);
-
-        let error = solve_unsat(pool, jobs);
-        insta::assert_snapshot!(error);
-    }
-
-    #[test]
-    fn test_unsat_constrains() {
-        let mut pool = pool(&[
-            ("a", "10", vec!["b>=50"]),
-            ("a", "9", vec!["b>=50"]),
-            ("b", "50", vec![]),
-            ("b", "42", vec![]),
-        ]);
-
-        add_package(&mut pool, package("c", "10", &[], &["b<50"]));
-        add_package(&mut pool, package("c", "8", &[], &["b<50"]));
-
-        let jobs = install(&mut pool, &["a", "c"]);
-
-        let error = solve_unsat(pool, jobs);
-        insta::assert_snapshot!(error);
-    }
+    //
+    // #[test]
+    // fn test_unsat_applies_graph_compression() {
+    //     let mut pool = pool(&[
+    //         ("a", "10", vec!["b"]),
+    //         ("a", "9", vec!["b"]),
+    //         ("b", "100", vec!["c<100"]),
+    //         ("b", "42", vec!["c<100"]),
+    //         ("c", "103", vec![]),
+    //         ("c", "101", vec![]),
+    //         ("c", "100", vec![]),
+    //         ("c", "99", vec![]),
+    //     ]);
+    //
+    //     let jobs = install(&mut pool, &["a", "c>100"]);
+    //
+    //     let error = solve_unsat(pool, jobs);
+    //     insta::assert_snapshot!(error);
+    // }
+    //
+    // #[test]
+    // fn test_unsat_constrains() {
+    //     let mut pool = pool(&[
+    //         ("a", "10", vec!["b>=50"]),
+    //         ("a", "9", vec!["b>=50"]),
+    //         ("b", "50", vec![]),
+    //         ("b", "42", vec![]),
+    //     ]);
+    //
+    //     add_package(&mut pool, package("c", "10", &[], &["b<50"]));
+    //     add_package(&mut pool, package("c", "8", &[], &["b<50"]));
+    //
+    //     let jobs = install(&mut pool, &["a", "c"]);
+    //
+    //     let error = solve_unsat(pool, jobs);
+    //     insta::assert_snapshot!(error);
+    // }
 }

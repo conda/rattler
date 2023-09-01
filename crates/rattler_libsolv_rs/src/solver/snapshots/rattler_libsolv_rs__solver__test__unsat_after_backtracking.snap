@@ -3,12 +3,12 @@ source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: error
 ---
 The following packages are incompatible
-|-- b can be installed with any of the following options:
-    |-- b 4.5.6 | 4.5.7 would require
-        |-- d 1.*, which can be installed with any of the following options:
-            |-- d 1.0.0
-|-- c cannot be installed because there are no viable options:
-    |-- c 1.0.0 | 1.0.1 would require
-        |-- d 2.*, which cannot be installed because there are no viable options:
-            |-- d 2.0.0, which conflicts with the versions reported above.
+|-- b with any version can be installed with any of the following options:
+    |-- b 6 | 7 would require
+        |-- d with versions 1 up to 2, which can be installed with any of the following options:
+            |-- d 1
+|-- c with any version cannot be installed because there are no viable options:
+    |-- c 1 | 2 would require
+        |-- d with versions 2 up to 3, which cannot be installed because there are no viable options:
+            |-- d 2, which conflicts with the versions reported above.
 

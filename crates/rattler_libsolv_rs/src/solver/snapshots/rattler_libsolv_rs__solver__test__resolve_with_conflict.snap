@@ -2,7 +2,7 @@
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: display_result
 ---
-conflicting 1.0.0
-asdf 1.2.3
-efgh 4.5.7
+Pack("conflicting", 0)
+Pack("asdf", 3)
+Pack("efgh", 7)
 
