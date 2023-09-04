@@ -93,6 +93,14 @@ impl VersionTrait for SolverPackageRecord {
 
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider {
+
+    // TODO: cache is dangerous as it is now because it is not invalidated when the pool changes
+    // this never happens when the pool is moved, because it belongs to the solver.
+    // but if there is a case the solver calls `overwrite_package` on the pool this cache might
+    // become invalid.
+    // Note that using https://docs.rs/slotmap/latest/slotmap/ instead of our own Arena types
+    // could solve this issue as we could store a version with the VersionSetId and check if it
+    // is invalidated
     matchspec_to_highest_version: HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>
 }
 
