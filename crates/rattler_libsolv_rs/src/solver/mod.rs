@@ -930,61 +930,6 @@ mod test {
     use std::ops::Range;
     use std::str::FromStr;
 
-    // fn package(name: &str, version: &str, deps: &[&str], constrains: &[&str]) -> PackageRecord {
-    //     PackageRecord {
-    //         arch: None,
-    //         build: "".to_string(),
-    //         build_number: 0,
-    //         constrains: constrains.iter().map(|s| s.to_string()).collect(),
-    //         depends: deps.iter().map(|s| s.to_string()).collect(),
-    //         features: None,
-    //         legacy_bz2_md5: None,
-    //         legacy_bz2_size: None,
-    //         license: None,
-    //         license_family: None,
-    //         md5: None,
-    //         name: name.parse().unwrap(),
-    //         noarch: Default::default(),
-    //         platform: None,
-    //         sha256: None,
-    //         size: None,
-    //         subdir: "".to_string(),
-    //         timestamp: None,
-    //         track_features: vec![],
-    //         version: version.parse().unwrap(),
-    //     }
-    // }
-    //
-    // fn add_package(pool: &mut Pool<MatchSpec>, record: PackageRecord) {
-    //     let record = Box::leak(Box::new(record));
-    //     let package_name = pool.intern_package_name(record.name.as_normalized());
-    //     let solvable_id = pool.add_package(RepoId::new(0), package_name, record.clone());
-    //
-    //     for dep in &record.depends {
-    //         let spec = MatchSpec::from_str(dep).unwrap();
-    //         let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
-    //         pool.add_dependency(solvable_id, dep_name, spec);
-    //     }
-    //
-    //     for constrain in &record.constrains {
-    //         let spec = MatchSpec::from_str(constrain).unwrap();
-    //         let dep_name = pool.intern_package_name(spec.name.as_ref().unwrap().as_normalized());
-    //         pool.add_constrains(solvable_id, dep_name, spec);
-    //     }
-    // }
-    //
-    // fn pool(packages: &[(&str, &str, Vec<&str>)]) -> Pool<MatchSpec> {
-    //     let mut pool = Pool::new();
-    //     for (pkg_name, version, deps) in packages {
-    //         let pkg_name = *pkg_name;
-    //         let version = *version;
-    //         let record = package(pkg_name, version, deps, &[]);
-    //         add_package(&mut pool, record);
-    //     }
-    //
-    //     pool
-    // }
-
     // Let's define our own packaging version system and dependency specification.
     // This is a very simple version system, where a package is identified by a name and a version
     // in which the version is just an integer. The version is a range so can be noted as 0..2

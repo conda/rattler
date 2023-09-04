@@ -59,7 +59,7 @@ impl VersionSet for SolverMatchSpec {
     type V = SolverPackageRecord;
 
     fn contains(&self, v: &Self::V) -> bool {
-        self.matches(&v.0)
+        self.matches(&v.deref())
     }
 }
 
