@@ -16,7 +16,8 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
         Self::new(Vec::new())
     }
 
-    pub(crate) fn new(data: Vec<TValue>) -> Self {
+    /// TODO: if we get rid of the `init` for the cache this need not be public
+    pub fn new(data: Vec<TValue>) -> Self {
         Self {
             data,
             phantom: PhantomData::default(),

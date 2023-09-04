@@ -205,6 +205,33 @@ impl<VS: VersionSet> Pool<VS> {
         self.resolve_solvable_inner_mut(id).package_mut()
     }
 
+    /// Finds all the solvables that match the specified version set.
+    pub fn find_matching_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
+
+        self.packages_by_name[*name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| version_set.contains(&self.solvables[solvable].package().record))
+            .collect()
+    }
+
+    /// Finds all the solvables that do not match the specified version set.
+    pub fn find_unmatched_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
+
+        self.packages_by_name[*name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))
+            .collect()
+    }
+
+    /// Returns the current number of version sets stored
+    pub fn num_version_sets(&self) -> usize {
+        self.version_sets.len()
+    }
+
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
@@ -222,28 +249,6 @@ impl<VS: VersionSet> Pool<VS> {
     /// Returns the dependencies associated to the root solvable
     pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<VersionSetId> {
         self.solvables[SolvableId::root()].root_mut()
-    }
-
-    /// Finds all the solvables that match the specified version set.
-    pub(crate) fn find_matching_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
-        let (name_id, version_set) = &self.version_sets[version_set_id];
-
-        self.packages_by_name[*name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| version_set.contains(&self.solvables[solvable].package().record))
-            .collect()
-    }
-
-    /// Finds all the solvables that do not match the specified version set.
-    pub(crate) fn find_unmatched_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
-        let (name_id, version_set) = &self.version_sets[version_set_id];
-
-        self.packages_by_name[*name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().record))
-            .collect()
     }
 }
 

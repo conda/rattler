@@ -1,7 +1,6 @@
-use crate::id::SolvableId;
-use crate::mapping::Mapping;
-use crate::{Pool, VersionSetId};
-use rattler_conda_types::{MatchSpec, Version};
+use crate::libsolv_rs::SolverMatchSpec;
+use rattler_conda_types::Version;
+use rattler_libsolv_rs::{Mapping, Pool, SolvableId, VersionSetId};
 use std::cell::OnceCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -11,15 +10,15 @@ use std::collections::HashMap;
 pub(crate) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
-    pool: &Pool<MatchSpec>,
+    pool: &Pool<SolverMatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Ordering {
     let a_solvable = pool.resolve_solvable(a);
     let b_solvable = pool.resolve_solvable(b);
 
-    let a_record = &a_solvable.record;
-    let b_record = &b_solvable.record;
+    let a_record = &a_solvable.record();
+    let b_record = &b_solvable.record();
 
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
@@ -48,11 +47,11 @@ pub(crate) fn compare_candidates(
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
     let a_match_specs = a_solvable
-        .dependencies
+        .dependencies()
         .iter()
         .map(|id| (*id, pool.resolve_version_set(*id)));
     let b_match_specs = b_solvable
-        .dependencies
+        .dependencies()
         .iter()
         .map(|id| (*id, pool.resolve_version_set(*id)));
 
@@ -128,7 +127,7 @@ pub(crate) fn compare_candidates(
 
 pub(crate) fn find_highest_version(
     match_spec_id: VersionSetId,
-    pool: &Pool<MatchSpec>,
+    pool: &Pool<SolverMatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     match_spec_highest_version: &Mapping<VersionSetId, OnceCell<Option<(Version, bool)>>>,
 ) -> Option<(Version, bool)> {
@@ -139,7 +138,7 @@ pub(crate) fn find_highest_version(
 
             candidates
                 .iter()
-                .map(|id| &pool.resolve_solvable(*id).record)
+                .map(|id| pool.resolve_solvable(*id).record())
                 .fold(None, |init, record| {
                     Some(init.map_or_else(
                         || {

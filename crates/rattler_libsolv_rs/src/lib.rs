@@ -11,7 +11,6 @@
 #![deny(missing_docs)]
 
 mod arena;
-mod conda_util;
 mod id;
 mod mapping;
 mod pool;
@@ -23,7 +22,6 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
-use rattler_conda_types::PackageRecord;
 pub use solvable::{PackageSolvable, SolvableMetadata};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
@@ -33,8 +31,6 @@ use std::hash::Hash;
 pub use transaction::Transaction;
 
 pub use mapping::Mapping;
-
-use rattler_conda_types::MatchSpec;
 
 /// Version is a name and a version specification.
 pub trait VersionTrait: Display {
@@ -58,24 +54,6 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
-
-impl VersionSet for MatchSpec {
-    type V = PackageRecord;
-
-    fn contains(&self, v: &Self::V) -> bool {
-        self.matches(v)
-    }
-}
-
-impl VersionTrait for PackageRecord {
-    type Name = String;
-    type Version = rattler_conda_types::Version;
-
-    fn version(&self) -> Self::Version {
-        self.version.version().clone()
-    }
-}
-
 /// TODO: Make this more generic, maybe even a generic <From, To> cache or something
 /// like axum with any
 pub trait SortCache<VS: VersionSet> {
@@ -95,44 +73,4 @@ pub trait DependencyProvider<VS: VersionSet> {
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
         sort_cache: &Self::SortingCache,
     );
-}
-/// Dependency provider for conda
-pub struct CondaDependencyProvider;
-/// Used when sorting conda candidates
-pub struct CondaSortCache {
-    match_spec_to_highest_version:
-        Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
-}
-
-impl SortCache<MatchSpec> for CondaSortCache {
-    fn init(pool: &Pool<MatchSpec>) -> Self {
-        Self {
-            match_spec_to_highest_version: Mapping::new(vec![
-                OnceCell::new();
-                pool.version_sets.len()
-            ]),
-        }
-    }
-}
-
-impl DependencyProvider<MatchSpec> for CondaDependencyProvider {
-    type SortingCache = CondaSortCache;
-    fn sort_candidates(
-        &self,
-        pool: &Pool<MatchSpec>,
-        solvables: &mut [SolvableId],
-        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &Self::SortingCache,
-    ) {
-        let match_spec_highest_version = &sort_cache.match_spec_to_highest_version;
-        solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(
-                p1,
-                p2,
-                pool,
-                match_spec_to_candidates,
-                match_spec_highest_version,
-            )
-        });
-    }
 }

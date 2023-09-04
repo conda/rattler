@@ -1121,7 +1121,7 @@ mod test {
     struct EmptyCache;
 
     impl SortCache<Spec> for EmptyCache {
-        fn init(pool: &Pool<Spec>) -> Self {
+        fn init(_pool: &Pool<Spec>) -> Self {
             Self
         }
     }
@@ -1133,8 +1133,8 @@ mod test {
             &self,
             pool: &Pool<Spec>,
             solvables: &mut [SolvableId],
-            match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-            sort_cache: &Self::SortingCache,
+            _match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+            _sort_cache: &Self::SortingCache,
         ) {
             solvables.sort_by(|a, b| {
                 let a = pool.resolve_solvable_inner(*a).package();
@@ -1681,7 +1681,7 @@ mod test {
     fn test_unsat_constrains() {
         let mut pool = pool(&[
             ("a 10", vec!["b 50..100"]),
-            ("a 9",  vec!["b 50..100"]),
+            ("a 9", vec!["b 50..100"]),
             ("b 50", vec![]),
             ("b 42", vec![]),
         ]);

@@ -1,6 +1,7 @@
 //! Contains business logic that loads information into libsolv in order to solve a conda
 //! environment
 
+use crate::libsolv_rs::{SolverMatchSpec, SolverPackageRecord};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::ParseMatchSpecError;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
@@ -9,11 +10,14 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::str::FromStr;
 
+// TODO: could abstract away methods adding packages and virtual packages
+// to pool
+
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
 pub fn add_repodata_records<'a>(
-    pool: &mut Pool<MatchSpec>,
+    pool: &mut Pool<SolverMatchSpec>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
@@ -47,7 +51,7 @@ pub fn add_repodata_records<'a>(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            pool.add_dependency(solvable_id, dependency_name, match_spec);
+            pool.add_dependency(solvable_id, dependency_name, SolverMatchSpec(match_spec));
         }
 
         // Constrains
@@ -60,7 +64,7 @@ pub fn add_repodata_records<'a>(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            pool.add_constrains(solvable_id, dependency_name, match_spec);
+            pool.add_constrains(solvable_id, dependency_name, SolverMatchSpec(match_spec));
         }
 
         solvable_ids.push(solvable_id)
@@ -75,7 +79,7 @@ pub fn add_repodata_records<'a>(
 /// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool<MatchSpec>,
+    pool: &mut Pool<SolverMatchSpec>,
     repo_id: RepoId,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
@@ -104,7 +108,7 @@ fn add_or_reuse_solvable<'a>(
                         repo_id,
                         old_solvable_id,
                         package_name_id,
-                        repo_data.package_record.clone(),
+                        SolverPackageRecord(repo_data.package_record.clone()),
                     );
                     return Some(old_solvable_id);
                 }
@@ -113,8 +117,11 @@ fn add_or_reuse_solvable<'a>(
                 }
             }
         } else {
-            let solvable_id =
-                pool.add_package(repo_id, package_name_id, repo_data.package_record.clone());
+            let solvable_id = pool.add_package(
+                repo_id,
+                package_name_id,
+                SolverPackageRecord(repo_data.package_record.clone()),
+            );
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
         }
@@ -122,12 +129,16 @@ fn add_or_reuse_solvable<'a>(
         tracing::warn!("unknown package extension: {}", &repo_data.file_name);
     }
 
-    let solvable_id = pool.add_package(repo_id, package_name_id, repo_data.package_record.clone());
+    let solvable_id = pool.add_package(
+        repo_id,
+        package_name_id,
+        SolverPackageRecord(repo_data.package_record.clone()),
+    );
     Some(solvable_id)
 }
 
 pub fn add_virtual_packages(
-    pool: &mut Pool<MatchSpec>,
+    pool: &mut Pool<SolverMatchSpec>,
     repo_id: RepoId,
     packages: &[GenericVirtualPackage],
 ) {
@@ -160,6 +171,10 @@ pub fn add_virtual_packages(
 
     for package in packages {
         let package_name_id = pool.intern_package_name(package.name.as_normalized());
-        pool.add_package(repo_id, package_name_id, package.clone());
+        pool.add_package(
+            repo_id,
+            package_name_id,
+            SolverPackageRecord(package.clone()),
+        );
     }
 }

@@ -4,11 +4,18 @@ use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
-use rattler_conda_types::MatchSpec;
 use rattler_conda_types::RepoDataRecord;
-use rattler_libsolv_rs::{CondaDependencyProvider, Pool, SolveJobs, Solver as LibSolvRsSolver};
+use rattler_conda_types::{MatchSpec, PackageRecord};
+use rattler_libsolv_rs::{
+    DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver, SortCache,
+    VersionSet, VersionSetId, VersionTrait,
+};
+use std::cell::OnceCell;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::ops::Deref;
 
+mod conda_util;
 mod input;
 mod output;
 
@@ -30,6 +37,99 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
 
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
+/// Wrapper around `MatchSpec` so that we can use it in the `libsolv_rs` pool
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct SolverMatchSpec(MatchSpec);
+
+impl Display for SolverMatchSpec {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for SolverMatchSpec {
+    type Target = MatchSpec;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl VersionSet for SolverMatchSpec {
+    type V = SolverPackageRecord;
+
+    fn contains(&self, v: &Self::V) -> bool {
+        self.matches(&v.0)
+    }
+}
+
+/// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+pub struct SolverPackageRecord(PackageRecord);
+
+impl Deref for SolverPackageRecord {
+    type Target = PackageRecord;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for SolverPackageRecord {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl VersionTrait for SolverPackageRecord {
+    type Name = String;
+    type Version = rattler_conda_types::Version;
+
+    fn version(&self) -> Self::Version {
+        self.0.version.version().clone()
+    }
+}
+
+/// Dependency provider for conda
+pub(crate) struct CondaDependencyProvider;
+/// Used when sorting conda candidates
+pub(crate) struct CondaSortCache {
+    match_spec_to_highest_version:
+        Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
+}
+
+impl SortCache<SolverMatchSpec> for CondaSortCache {
+    fn init(pool: &Pool<SolverMatchSpec>) -> Self {
+        Self {
+            match_spec_to_highest_version: Mapping::new(vec![
+                OnceCell::new();
+                pool.num_version_sets()
+            ]),
+        }
+    }
+}
+
+impl DependencyProvider<SolverMatchSpec> for CondaDependencyProvider {
+    type SortingCache = CondaSortCache;
+    fn sort_candidates(
+        &self,
+        pool: &Pool<SolverMatchSpec>,
+        solvables: &mut [SolvableId],
+        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+        sort_cache: &Self::SortingCache,
+    ) {
+        let match_spec_highest_version = &sort_cache.match_spec_to_highest_version;
+        solvables.sort_by(|&p1, &p2| {
+            conda_util::compare_candidates(
+                p1,
+                p2,
+                pool,
+                match_spec_to_candidates,
+                match_spec_highest_version,
+            )
+        });
+    }
+}
+
 /// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
 pub struct Solver;
@@ -46,7 +146,7 @@ impl super::SolverImpl for Solver {
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
-        let mut pool = Pool::<MatchSpec>::new();
+        let mut pool = Pool::new();
 
         // Add virtual packages
         let repo_id = pool.new_repo();
@@ -105,7 +205,7 @@ impl super::SolverImpl for Solver {
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let match_spec_id = pool.intern_version_set(dependency_name, spec);
+            let match_spec_id = pool.intern_version_set(dependency_name, SolverMatchSpec(spec));
             goal.install(match_spec_id);
         }
 

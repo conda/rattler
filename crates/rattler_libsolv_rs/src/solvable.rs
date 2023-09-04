@@ -22,6 +22,16 @@ impl<V> PackageSolvable<V> {
     pub fn repo_id(&self) -> RepoId {
         self.repo_id
     }
+
+    /// Gets the record associated to this solvable
+    pub fn record(&self) -> &V {
+        &self.record
+    }
+
+    /// Get the dependencies for theis solvable
+    pub fn dependencies(&self) -> &[VersionSetId] {
+        &self.dependencies
+    }
 }
 
 /// Metadata associated to the solvable
