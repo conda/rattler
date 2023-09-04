@@ -10,9 +10,11 @@ use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
 };
+use ref_cast::RefCast;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
 use std::ops::Deref;
 
 mod conda_util;
@@ -40,24 +42,36 @@ impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 /// Wrapper around `MatchSpec` so that we can use it in the `libsolv_rs` pool
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct SolverMatchSpec<'a>(MatchSpec);
+pub struct SolverMatchSpec<'a> {
+    inner: MatchSpec,
+    _marker: PhantomData<&'a PackageRecord>,
+}
 
-impl Display for SolverMatchSpec {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+impl<'a> From<MatchSpec> for SolverMatchSpec<'a> {
+    fn from(value: MatchSpec) -> Self {
+        Self {
+            inner: value,
+            _marker: Default::default(),
+        }
     }
 }
 
-impl Deref for SolverMatchSpec {
+impl<'a> Display for SolverMatchSpec<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.inner)
+    }
+}
+
+impl<'a> Deref for SolverMatchSpec<'a> {
     type Target = MatchSpec;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
-impl VersionSet for SolverMatchSpec {
-    type V = SolverPackageRecord;
+impl<'a> VersionSet for SolverMatchSpec<'a> {
+    type V = &'a SolverPackageRecord;
 
     fn contains(&self, v: &Self::V) -> bool {
         self.matches(&v.deref())
@@ -65,10 +79,11 @@ impl VersionSet for SolverMatchSpec {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+#[derive(RefCast)]
 #[repr(transparent)]
 pub struct SolverPackageRecord(PackageRecord);
 
-impl Deref for SolverPackageRecord {
+impl<'a> Deref for SolverPackageRecord {
     type Target = PackageRecord;
 
     fn deref(&self) -> &Self::Target {
@@ -82,7 +97,7 @@ impl Display for SolverPackageRecord {
     }
 }
 
-impl VersionTrait for SolverPackageRecord {
+impl<'a> VersionTrait for &'a SolverPackageRecord {
     type Name = String;
     type Version = rattler_conda_types::Version;
 
@@ -95,7 +110,6 @@ impl VersionTrait for SolverPackageRecord {
 
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider {
-
     // TODO: cache is dangerous as it is now because it is not invalidated when the pool changes
     // this never happens when the pool is moved, because it belongs to the solver.
     // but if there is a case the solver calls `overwrite_package` on the pool this cache might
@@ -103,14 +117,14 @@ pub(crate) struct CondaDependencyProvider {
     // Note that using https://docs.rs/slotmap/latest/slotmap/ instead of our own Arena types
     // could solve this issue as we could store a version with the VersionSetId and check if it
     // is invalidated
-    matchspec_to_highest_version: HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>
+    matchspec_to_highest_version:
+        HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>,
 }
 
-impl DependencyProvider<SolverMatchSpec> for CondaDependencyProvider {
-
+impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider {
     fn sort_candidates(
         &mut self,
-        pool: &Pool<SolverMatchSpec>,
+        pool: &Pool<SolverMatchSpec<'a>>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     ) {
@@ -142,7 +156,7 @@ impl super::SolverImpl for Solver {
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
-        let mut pool = Pool::new();
+        let mut pool: Pool<SolverMatchSpec> = Pool::new();
 
         // Add virtual packages
         let repo_id = pool.new_repo();
@@ -201,7 +215,7 @@ impl super::SolverImpl for Solver {
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let match_spec_id = pool.intern_version_set(dependency_name, SolverMatchSpec(spec));
+            let match_spec_id = pool.intern_version_set(dependency_name, spec.into());
             goal.install(match_spec_id);
         }
 

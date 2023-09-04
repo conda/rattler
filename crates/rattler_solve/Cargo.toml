@@ -23,6 +23,7 @@ hex = "0.4.3"
 tempfile = "3.8.0"
 rattler_libsolv_c = { version = "0.8.0", path = "../rattler_libsolv_c", optional = true }
 rattler_libsolv_rs = { version = "0.8.0", path = "../rattler_libsolv_rs", optional = true }
+ref-cast = { version = "1.0.19", optional = true }
 
 [dev-dependencies]
 rattler_repodata_gateway = { version = "0.8.0", path = "../rattler_repodata_gateway", default-features = false, features = ["sparse"] }
@@ -37,7 +38,7 @@ criterion = "0.5.1"
 [features]
 default = ["libsolv_c"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
-libsolv_rs = ["rattler_libsolv_rs"]
+libsolv_rs = ["rattler_libsolv_rs", "ref-cast"]
 
 [[bench]]
 name = "bench"

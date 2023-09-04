@@ -6,6 +6,7 @@ use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::ParseMatchSpecError;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId};
+use ref_cast::RefCast;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -17,7 +18,7 @@ use std::str::FromStr;
 ///
 /// Panics if the repo does not belong to the pool
 pub fn add_repodata_records<'a>(
-    pool: &mut Pool<SolverMatchSpec>,
+    pool: &mut Pool<SolverMatchSpec<'a>>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
@@ -51,7 +52,7 @@ pub fn add_repodata_records<'a>(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            pool.add_dependency(solvable_id, dependency_name, SolverMatchSpec(match_spec));
+            pool.add_dependency(solvable_id, dependency_name, match_spec.into());
         }
 
         // Constrains
@@ -64,7 +65,7 @@ pub fn add_repodata_records<'a>(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            pool.add_constrains(solvable_id, dependency_name, SolverMatchSpec(match_spec));
+            pool.add_constrains(solvable_id, dependency_name, match_spec.into());
         }
 
         solvable_ids.push(solvable_id)
@@ -79,7 +80,7 @@ pub fn add_repodata_records<'a>(
 /// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool<SolverMatchSpec>,
+    pool: &mut Pool<SolverMatchSpec<'a>>,
     repo_id: RepoId,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
@@ -108,7 +109,7 @@ fn add_or_reuse_solvable<'a>(
                         repo_id,
                         old_solvable_id,
                         package_name_id,
-                        SolverPackageRecord(repo_data.package_record.clone()),
+                        SolverPackageRecord::ref_cast(&repo_data.package_record),
                     );
                     return Some(old_solvable_id);
                 }
@@ -120,7 +121,7 @@ fn add_or_reuse_solvable<'a>(
             let solvable_id = pool.add_package(
                 repo_id,
                 package_name_id,
-                SolverPackageRecord(repo_data.package_record.clone()),
+                SolverPackageRecord::ref_cast(&repo_data.package_record),
             );
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
@@ -132,7 +133,7 @@ fn add_or_reuse_solvable<'a>(
     let solvable_id = pool.add_package(
         repo_id,
         package_name_id,
-        SolverPackageRecord(repo_data.package_record.clone()),
+        SolverPackageRecord::ref_cast(&repo_data.package_record),
     );
     Some(solvable_id)
 }
@@ -174,7 +175,7 @@ pub fn add_virtual_packages(
         pool.add_package(
             repo_id,
             package_name_id,
-            SolverPackageRecord(package.clone()),
+            SolverPackageRecord::ref_cast(&package),
         );
     }
 }
