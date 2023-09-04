@@ -504,8 +504,7 @@ impl ShellEnum {
             || (parent_process_name.contains("python")
                 && parent_process
                     .cmd().iter()
-                    .find(|arg| arg.contains("xonsh"))
-                    .is_some())
+                    .any(|arg| arg.contains("xonsh")))
         {
             Some(Xonsh.into())
         } else if parent_process_name.contains("fish") {
