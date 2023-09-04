@@ -924,10 +924,9 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{id::RepoId, CondaDependencyProvider, VersionTrait};
-    // use rattler_conda_types::{MatchSpec, PackageRecord, Version};
     use crate::solvable::Solvable;
-    use std::fmt::{write, Debug, Display, Formatter};
+    use crate::{id::RepoId, VersionTrait};
+    use std::fmt::{Debug, Display, Formatter};
     use std::ops::Range;
     use std::str::FromStr;
 
@@ -1159,17 +1158,40 @@ mod test {
     {
         let mut pool = Pool::new();
         for (pkg_name, deps) in packages {
-            let version = VS::V::from_str(pkg_name).unwrap();
-            let name_id = pool.intern_package_name(version.name().clone());
-            let package_id = pool.add_package(RepoId::new(0), name_id, version);
-            for dep in deps {
-                let spec = VS::from_str(dep).unwrap();
-                let name = pool.intern_package_name(spec.name().clone());
-                pool.add_dependency(package_id, name, spec);
-            }
+            add_package(&mut pool, pkg_name, deps, &vec![]);
         }
 
         pool
+    }
+
+    fn add_package<VS>(
+        pool: &mut Pool<VS>,
+        package_spec: &str,
+        dependencies: &Vec<&str>,
+        constrains: &Vec<&str>,
+    ) where
+        VS: VersionSet + Nameable<Name = <VS::V as VersionTrait>::Name> + FromStr,
+        VS::V: FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>,
+        <VS as FromStr>::Err: Debug,
+        <<VS as VersionSet>::V as FromStr>::Err: Debug,
+    {
+        // Add the package
+        let version = VS::V::from_str(package_spec).unwrap();
+        let name_id = pool.intern_package_name(version.name().clone());
+        let package_id = pool.add_package(RepoId::new(0), name_id, version);
+
+        // And its the dependencies
+        for dep in dependencies {
+            let spec = VS::from_str(dep).unwrap();
+            let name = pool.intern_package_name(spec.name().clone());
+            pool.add_dependency(package_id, name, spec);
+        }
+
+        for constrain in constrains {
+            let spec = VS::from_str(constrain).unwrap();
+            let name_id = pool.intern_package_name(spec.name().clone());
+            pool.add_constrains(package_id, name_id, spec);
+        }
     }
 
     /// Install the given version sets
@@ -1620,7 +1642,7 @@ mod test {
     fn test_unsat_pubgrub_article() {
         // Taken from the pubgrub article: https://nex3.medium.com/pubgrub-2fb6470504f
         let mut pool = pool(&[
-            ("menu 15", vec!["dropdown 1..3"]),
+            ("menu 15", vec!["dropdown 2..3"]),
             ("menu 10", vec!["dropdown 1..2"]),
             ("dropdown 2", vec!["icons 2"]),
             ("dropdown 1", vec!["intl 3"]),
@@ -1635,41 +1657,41 @@ mod test {
         let error = solve_unsat(pool, jobs, BundleBoxProvider);
         insta::assert_snapshot!(error);
     }
+
+    #[test]
+    fn test_unsat_applies_graph_compression() {
+        let mut pool = pool(&[
+            ("a 10", vec!["b"]),
+            ("a 9", vec!["b"]),
+            ("b 100", vec!["c 0..100"]),
+            ("b 42", vec!["c 0..100"]),
+            ("c 103", vec![]),
+            ("c 101", vec![]),
+            ("c 100", vec![]),
+            ("c 99", vec![]),
+        ]);
+
+        let jobs = install(&mut pool, &["a", "c 101..104"]);
+
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
+        insta::assert_snapshot!(error);
+    }
     //
-    // #[test]
-    // fn test_unsat_applies_graph_compression() {
-    //     let mut pool = pool(&[
-    //         ("a", "10", vec!["b"]),
-    //         ("a", "9", vec!["b"]),
-    //         ("b", "100", vec!["c<100"]),
-    //         ("b", "42", vec!["c<100"]),
-    //         ("c", "103", vec![]),
-    //         ("c", "101", vec![]),
-    //         ("c", "100", vec![]),
-    //         ("c", "99", vec![]),
-    //     ]);
-    //
-    //     let jobs = install(&mut pool, &["a", "c>100"]);
-    //
-    //     let error = solve_unsat(pool, jobs);
-    //     insta::assert_snapshot!(error);
-    // }
-    //
-    // #[test]
-    // fn test_unsat_constrains() {
-    //     let mut pool = pool(&[
-    //         ("a", "10", vec!["b>=50"]),
-    //         ("a", "9", vec!["b>=50"]),
-    //         ("b", "50", vec![]),
-    //         ("b", "42", vec![]),
-    //     ]);
-    //
-    //     add_package(&mut pool, package("c", "10", &[], &["b<50"]));
-    //     add_package(&mut pool, package("c", "8", &[], &["b<50"]));
-    //
-    //     let jobs = install(&mut pool, &["a", "c"]);
-    //
-    //     let error = solve_unsat(pool, jobs);
-    //     insta::assert_snapshot!(error);
-    // }
+    #[test]
+    fn test_unsat_constrains() {
+        let mut pool = pool(&[
+            ("a 10", vec!["b 50..100"]),
+            ("a 9",  vec!["b 50..100"]),
+            ("b 50", vec![]),
+            ("b 42", vec![]),
+        ]);
+
+        add_package(&mut pool, "c 10", &vec![], &vec!["b 0..50"]);
+        add_package(&mut pool, "c 8", &vec![], &vec!["b 0..50"]);
+
+        let jobs = install(&mut pool, &["a", "c"]);
+
+        let error = solve_unsat(pool, jobs, BundleBoxProvider);
+        insta::assert_snapshot!(error);
+    }
 }
