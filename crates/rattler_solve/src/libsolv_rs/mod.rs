@@ -38,8 +38,9 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
 /// Wrapper around `MatchSpec` so that we can use it in the `libsolv_rs` pool
+#[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct SolverMatchSpec(MatchSpec);
+pub struct SolverMatchSpec<'a>(MatchSpec);
 
 impl Display for SolverMatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -64,6 +65,7 @@ impl VersionSet for SolverMatchSpec {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+#[repr(transparent)]
 pub struct SolverPackageRecord(PackageRecord);
 
 impl Deref for SolverPackageRecord {
