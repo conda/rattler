@@ -350,11 +350,11 @@ pub struct PowerShell {
 
 impl Shell for PowerShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "$Env:{} = \"{}\"", env_var, value)
+        writeln!(f, "${{Env:{}}} = \"{}\"", env_var, value)
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "$Env:{}=\"\"", env_var)
+        writeln!(f, "${{Env:{}}}=\"\"", env_var)
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -489,15 +489,23 @@ impl ShellEnum {
         let parent_process_name = parent_process.name().to_lowercase();
 
         tracing::debug!(
-            "guessing ShellEnum. Parent process name: {}",
-            &parent_process_name
+            "Guessing ShellEnum. Parent process name: {} and args: {:?}",
+            &parent_process_name,
+            &parent_process.cmd()
         );
 
         if parent_process_name.contains("bash") {
             Some(Bash.into())
         } else if parent_process_name.contains("zsh") {
             Some(Zsh.into())
-        } else if parent_process_name.contains("xonsh") {
+        } else if parent_process_name.contains("xonsh")
+            // xonsh is a python shell, so we need to check if the parent process is python and if it
+            // contains xonsh in the arguments.
+            || (parent_process_name.contains("python")
+                && parent_process
+                    .cmd().iter()
+                    .any(|arg| arg.contains("xonsh")))
+        {
             Some(Xonsh.into())
         } else if parent_process_name.contains("fish") {
             Some(Fish.into())

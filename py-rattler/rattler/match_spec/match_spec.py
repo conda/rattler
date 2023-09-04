@@ -111,7 +111,7 @@ class MatchSpec:
         >>> from rattler import NamelessMatchSpec
         >>> spec = NamelessMatchSpec('3.4')
         >>> MatchSpec.from_nameless(spec, "foo")
-        foo ==3.4
+        MatchSpec("foo ==3.4")
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         exceptions.InvalidPackageNameException
@@ -124,4 +124,4 @@ class MatchSpec:
         return self._match_spec.as_str()
 
     def __repr__(self) -> str:
-        return self.__str__()
+        return f'MatchSpec("{self._match_spec.as_str()}")'

@@ -2,9 +2,15 @@
 name = "rattler"
 version = "0.7.0"
 description = "Rust library to install conda environments"
-authors = ["Wolf Vollprecht <wolf@prefix.dev>", "Bas Zalmstra <bas@prefix.dev>", "Tim de Jager <tim@prefix.dev>", "Ruben Arts <ruben@prefix.dev>"]
+authors = [
+    "Wolf Vollprecht <wolf@prefix.dev>",
+    "Bas Zalmstra <bas@prefix.dev>",
+    "Tim de Jager <tim@prefix.dev>",
+    "Ruben Arts <ruben@prefix.dev>",
+]
 channels = ["conda-forge"]
 platforms = ["linux-64", "win-64", "osx-64", "osx-arm64"]
+license = "BSD-3-Clause"
 
 [tasks]
 build = "cargo build"

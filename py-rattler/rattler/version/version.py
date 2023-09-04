@@ -33,12 +33,6 @@ class Version:
         version._version = py_version
         return version
 
-    def __str__(self) -> str:
-        return self._version.as_str()
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
     @property
     def epoch(self) -> Optional[str]:
         """
@@ -61,7 +55,7 @@ class Version:
         --------
         >>> v = Version('1.0')
         >>> v.bump()
-        1.1
+        Version("1.1")
         """
         return Version._from_py_version(self._version.bump())
 
@@ -185,9 +179,9 @@ class Version:
         --------
         >>> v = Version('2!1.0.1')
         >>> v.pop_segments() # `n` defaults to 1 if left empty
-        2!1.0
+        Version("2!1.0")
         >>> v.pop_segments(2) # old version is still usable
-        2!1
+        Version("2!1")
         >>> v.pop_segments(3) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         exceptions.InvalidVersionException: new Version must have atleast 1 valid
@@ -209,7 +203,7 @@ class Version:
         --------
         >>> v = Version('2!1.2.3')
         >>> v.with_segments(0, 2)
-        2!1.2
+        Version("2!1.2")
         """
         new_py_version = self._version.with_segments(start, stop)
         if new_py_version:
@@ -239,24 +233,153 @@ class Version:
         --------
         >>> v = Version('1.2.3+4.alpha-5')
         >>> v.strip_local()
-        1.2.3
+        Version("1.2.3")
         """
         return self._from_py_version(self._version.strip_local())
 
+    def __str__(self) -> str:
+        """
+        Returns the string representation of the version
+
+        Examples
+        --------
+        >>> str(Version("1.2.3"))
+        '1.2.3'
+        """
+        return self._version.as_str()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the version
+
+        Examples
+        --------
+        >>> Version("1.2.3")
+        Version("1.2.3")
+        """
+        return f'Version("{self._version.as_str()}")'
+
+    def __hash__(self) -> int:
+        """
+        Computes the hash of this instance.
+
+        Examples
+        --------
+        >>> hash(Version("1.2.3")) == hash(Version("1.2.3"))
+        True
+        >>> hash(Version("1.2.3")) == hash(Version("3.2.1"))
+        False
+        >>> hash(Version("1")) == hash(Version("1.0.0"))
+        True
+        """
+        return self._version.__hash__()
+
     def __eq__(self, other: Version) -> bool:
-        return self._version.equals(other._version)
+        """
+        Returns True if this instance represents the same version as `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") == Version("1.2.3")
+        True
+        >>> Version("3.2.1") == Version("1.2.3")
+        False
+        >>> Version("1") == Version("1.0.0")
+        True
+        """
+        return self._version == other._version
 
     def __ne__(self, other: Version) -> bool:
-        return self._version.not_equal(other._version)
+        """
+        Returns True if this instance represents the same version as `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") != Version("1.2.3")
+        False
+        >>> Version("3.2.1") != Version("1.2.3")
+        True
+        >>> Version("1") != Version("1.0.0")
+        False
+        """
+        return self._version != other._version
 
     def __gt__(self, other: Version) -> bool:
-        return self._version.greater_than(other._version)
+        """
+        Returns True if this instance should be ordered *after* `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") > Version("1.2.3")
+        False
+        >>> Version("1.2.4") > Version("1.2.3")
+        True
+        >>> Version("1.2.3.1") > Version("1.2.3")
+        True
+        >>> Version("3.2.1") > Version("1.2.3")
+        True
+        >>> Version("1") > Version("1.0.0")
+        False
+        """
+        return self._version > other._version
 
     def __lt__(self, other: Version) -> bool:
-        return self._version.less_than(other._version)
+        """
+        Returns True if this instance should be ordered *before* `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") < Version("1.2.3")
+        False
+        >>> Version("1.2.3") < Version("1.2.4")
+        True
+        >>> Version("1.2.3") < Version("1.2.3.1")
+        True
+        >>> Version("3.2.1") < Version("1.2.3")
+        False
+        >>> Version("1") < Version("1.0.0")
+        False
+        """
+        return self._version < other._version
 
     def __ge__(self, other: Version) -> bool:
-        return self._version.greater_than_equals(other._version)
+        """
+        Returns True if this instance should be ordered *after* or at the same location
+        as `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") >= Version("1.2.3")
+        True
+        >>> Version("1.2.4") >= Version("1.2.3")
+        True
+        >>> Version("1.2.3.1") >= Version("1.2.3")
+        True
+        >>> Version("3.2.1") >= Version("1.2.3")
+        True
+        >>> Version("1.2.3") >= Version("3.2.1")
+        False
+        >>> Version("1") >= Version("1.0.0")
+        True
+        """
+        return self._version >= other._version
 
     def __le__(self, other: Version) -> bool:
-        return self._version.less_than_equals(other._version)
+        """
+        Returns True if this instance should be ordered *before* or at the same
+        location as `other`.
+
+        Examples
+        --------
+        >>> Version("1.2.3") <= Version("1.2.3")
+        True
+        >>> Version("1.2.3") <= Version("1.2.4")
+        True
+        >>> Version("1.2.3") <= Version("1.2.3.1")
+        True
+        >>> Version("3.2.1") <= Version("1.2.3")
+        False
+        >>> Version("1") <= Version("1.0.0")
+        True
+        """
+        return self._version <= other._version
