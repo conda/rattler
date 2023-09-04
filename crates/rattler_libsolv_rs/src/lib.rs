@@ -57,15 +57,11 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
 
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
-    // TODO: replace this with proper caching we can directly construct in solver
-    /// Potential cache used when sorting candidates with each other
-    type SortingCache: Default;
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
-        &self,
+        &mut self,
         pool: &Pool<VS>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &mut Self::SortingCache,
     );
 }

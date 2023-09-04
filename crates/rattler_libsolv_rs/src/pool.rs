@@ -227,11 +227,6 @@ impl<VS: VersionSet> Pool<VS> {
             .collect()
     }
 
-    /// Returns the current number of version sets stored
-    pub fn num_version_sets(&self) -> usize {
-        self.version_sets.len()
-    }
-
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool

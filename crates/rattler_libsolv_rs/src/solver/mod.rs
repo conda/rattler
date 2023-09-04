@@ -174,9 +174,6 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
         let mut seen_forbidden = HashSet::new();
         let empty_vec = Vec::new();
 
-        // Cache used for sorting candidates
-        let mut sort_cache = D::SortingCache::default();
-
         while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id].inner {
                 SolvableInner::Root(deps) => (deps, &[] as &[_]),
@@ -204,7 +201,6 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
                         &self.pool,
                         &mut candidates,
                         &version_set_to_candidates,
-                        &mut sort_cache,
                     );
 
                     // If we have a solvable that we favor, we sort that to the front. This ensures that that version
@@ -1062,20 +1058,14 @@ mod test {
     /// This provides sorting functionality for our `BundleBox` packaging system
     struct BundleBoxProvider;
 
-    /// Don't cache anything
-    #[derive(Default)]
-    struct EmptyCache;
-
 
     impl DependencyProvider<Spec> for BundleBoxProvider {
-        type SortingCache = EmptyCache;
 
         fn sort_candidates(
-            &self,
+            &mut self,
             pool: &Pool<Spec>,
             solvables: &mut [SolvableId],
             _match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-            _sort_cache: &mut Self::SortingCache,
         ) {
             solvables.sort_by(|a, b| {
                 let a = pool.resolve_solvable_inner(*a).package();

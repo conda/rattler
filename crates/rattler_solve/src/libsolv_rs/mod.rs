@@ -90,17 +90,19 @@ impl VersionTrait for SolverPackageRecord {
 }
 
 /// Dependency provider for conda
-pub(crate) struct CondaDependencyProvider;
+
+#[derive(Default)]
+pub(crate) struct CondaDependencyProvider {
+    matchspec_to_highest_version: HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>
+}
 
 impl DependencyProvider<SolverMatchSpec> for CondaDependencyProvider {
-    type SortingCache = HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>;
 
     fn sort_candidates(
-        &self,
+        &mut self,
         pool: &Pool<SolverMatchSpec>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &mut Self::SortingCache,
     ) {
         solvables.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
@@ -108,7 +110,7 @@ impl DependencyProvider<SolverMatchSpec> for CondaDependencyProvider {
                 p2,
                 pool,
                 match_spec_to_candidates,
-                sort_cache,
+                &mut self.matchspec_to_highest_version,
             )
         });
     }
@@ -194,7 +196,7 @@ impl super::SolverImpl for Solver {
         }
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = LibSolvRsSolver::new(pool, CondaDependencyProvider);
+        let mut solver = LibSolvRsSolver::new(pool, CondaDependencyProvider::default());
         let transaction = solver.solve(goal).map_err(|problem| {
             SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
         })?;
