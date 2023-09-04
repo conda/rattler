@@ -7,7 +7,7 @@ use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use rattler_conda_types::{MatchSpec, PackageRecord};
 use rattler_libsolv_rs::{
-    DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver, SortCache,
+    DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
 };
 use std::cell::OnceCell;
@@ -91,40 +91,24 @@ impl VersionTrait for SolverPackageRecord {
 
 /// Dependency provider for conda
 pub(crate) struct CondaDependencyProvider;
-/// Used when sorting conda candidates
-pub(crate) struct CondaSortCache {
-    match_spec_to_highest_version:
-        Mapping<VersionSetId, OnceCell<Option<(rattler_conda_types::Version, bool)>>>,
-}
-
-impl SortCache<SolverMatchSpec> for CondaSortCache {
-    fn init(pool: &Pool<SolverMatchSpec>) -> Self {
-        Self {
-            match_spec_to_highest_version: Mapping::new(vec![
-                OnceCell::new();
-                pool.num_version_sets()
-            ]),
-        }
-    }
-}
 
 impl DependencyProvider<SolverMatchSpec> for CondaDependencyProvider {
-    type SortingCache = CondaSortCache;
+    type SortingCache = HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>;
+
     fn sort_candidates(
         &self,
         pool: &Pool<SolverMatchSpec>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &Self::SortingCache,
+        sort_cache: &mut Self::SortingCache,
     ) {
-        let match_spec_highest_version = &sort_cache.match_spec_to_highest_version;
         solvables.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(
                 p1,
                 p2,
                 pool,
                 match_spec_to_candidates,
-                match_spec_highest_version,
+                sort_cache,
             )
         });
     }

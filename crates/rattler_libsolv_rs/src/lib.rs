@@ -54,23 +54,17 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
-/// TODO: Make this more generic, maybe even a generic <From, To> cache or something
-/// like axum with any
-pub trait SortCache<VS: VersionSet> {
-    /// Initialize the cache with a specific size
-    fn init(pool: &Pool<VS>) -> Self;
-}
 
 /// Bla
 pub trait DependencyProvider<VS: VersionSet> {
     /// Potential cache used when sorting candidates with each other
-    type SortingCache: SortCache<VS>;
+    type SortingCache: Default;
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
         &self,
         pool: &Pool<VS>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-        sort_cache: &Self::SortingCache,
+        sort_cache: &mut Self::SortingCache,
     );
 }
