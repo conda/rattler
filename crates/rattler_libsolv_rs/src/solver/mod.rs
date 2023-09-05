@@ -1058,9 +1058,7 @@ mod test {
     /// This provides sorting functionality for our `BundleBox` packaging system
     struct BundleBoxProvider;
 
-
     impl DependencyProvider<Spec> for BundleBoxProvider {
-
         fn sort_candidates(
             &mut self,
             pool: &Pool<Spec>,
@@ -1114,14 +1112,16 @@ mod test {
         // And its the dependencies
         for dep in dependencies {
             let spec = VS::from_str(dep).unwrap();
-            let name = pool.intern_package_name(spec.name().clone());
-            pool.add_dependency(package_id, name, spec);
+            let name_id = pool.intern_package_name(spec.name().clone());
+            let spec_id = pool.intern_version_set(name_id, spec);
+            pool.add_dependency(package_id, spec_id);
         }
 
         for constrain in constrains {
             let spec = VS::from_str(constrain).unwrap();
             let name_id = pool.intern_package_name(spec.name().clone());
-            pool.add_constrains(package_id, name_id, spec);
+            let spec_id = pool.intern_version_set(name_id, spec);
+            pool.add_constrains(package_id, spec_id);
         }
     }
 

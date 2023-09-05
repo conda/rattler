@@ -5,7 +5,7 @@ use crate::libsolv_rs::{SolverMatchSpec, SolverPackageRecord};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::ParseMatchSpecError;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
-use rattler_libsolv_rs::{Pool, RepoId, SolvableId};
+use rattler_libsolv_rs::{Pool, RepoId, SolvableId, VersionSetId};
 use ref_cast::RefCast;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -21,6 +21,7 @@ pub fn add_repodata_records<'a>(
     pool: &mut Pool<SolverMatchSpec<'a>>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
+    parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
@@ -44,28 +45,14 @@ pub fn add_repodata_records<'a>(
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
-            let match_spec = MatchSpec::from_str(match_spec_str)?;
-            let dependency_name = pool.intern_package_name(
-                match_spec
-                    .name
-                    .as_ref()
-                    .expect("match specs without names are not supported")
-                    .as_normalized(),
-            );
-            pool.add_dependency(solvable_id, dependency_name, match_spec.into());
+            let version_set_id = parse_match_spec(pool, match_spec_str, parse_match_spec_cache)?;
+            pool.add_dependency(solvable_id, version_set_id);
         }
 
         // Constrains
         for match_spec_str in record.constrains.iter() {
-            let match_spec = MatchSpec::from_str(match_spec_str)?;
-            let dependency_name = pool.intern_package_name(
-                match_spec
-                    .name
-                    .as_ref()
-                    .expect("match specs without names are not supported")
-                    .as_normalized(),
-            );
-            pool.add_constrains(solvable_id, dependency_name, match_spec.into());
+            let version_set_id = parse_match_spec(pool, match_spec_str, parse_match_spec_cache)?;
+            pool.add_constrains(solvable_id, version_set_id);
         }
 
         solvable_ids.push(solvable_id)
@@ -178,4 +165,27 @@ pub fn add_virtual_packages(
             SolverPackageRecord::ref_cast(&package),
         );
     }
+}
+
+pub(crate) fn parse_match_spec(
+    pool: &mut Pool<SolverMatchSpec>,
+    spec_str: &str,
+    parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
+) -> Result<VersionSetId, ParseMatchSpecError> {
+    Ok(match parse_match_spec_cache.get(spec_str) {
+        Some(spec_id) => *spec_id,
+        None => {
+            let match_spec = MatchSpec::from_str(spec_str)?;
+            let dependency_name = pool.intern_package_name(
+                match_spec
+                    .name
+                    .as_ref()
+                    .expect("match specs without names are not supported")
+                    .as_normalized(),
+            );
+            let version_set_id = pool.intern_version_set(dependency_name, match_spec.into());
+            parse_match_spec_cache.insert(spec_str.to_owned(), version_set_id);
+            version_set_id
+        }
+    })
 }

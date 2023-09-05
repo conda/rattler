@@ -105,27 +105,15 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Registers a dependency for the provided solvable
-    pub fn add_dependency(
-        &mut self,
-        solvable_id: SolvableId,
-        dependency_name: NameId,
-        version_set: VS,
-    ) {
-        let match_spec_id = self.intern_version_set(dependency_name, version_set);
+    pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set_id: VersionSetId) {
         let solvable = self.solvables[solvable_id].package_mut();
-        solvable.dependencies.push(match_spec_id);
+        solvable.dependencies.push(version_set_id);
     }
 
     /// Registers a constrains for the provided solvable
-    pub fn add_constrains(
-        &mut self,
-        solvable_id: SolvableId,
-        dependency_name: NameId,
-        version_set: VS,
-    ) {
-        let match_spec_id = self.intern_version_set(dependency_name, version_set);
+    pub fn add_constrains(&mut self, solvable_id: SolvableId, version_set_id: VersionSetId) {
         let solvable = self.solvables[solvable_id].package_mut();
-        solvable.constrains.push(match_spec_id);
+        solvable.constrains.push(version_set_id);
     }
 
     /// Interns a match spec into the [`Pool`], returning its [`VersionSetId`]

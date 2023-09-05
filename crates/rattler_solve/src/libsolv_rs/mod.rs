@@ -1,21 +1,21 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_rs`] crate.
 
-use crate::{IntoRepoData, SolverRepoData};
-use crate::{SolveError, SolverTask};
+use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
-use rattler_conda_types::RepoDataRecord;
-use rattler_conda_types::{MatchSpec, PackageRecord};
+use rattler_conda_types::{MatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
 };
 use ref_cast::RefCast;
-use std::cell::OnceCell;
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::marker::PhantomData;
-use std::ops::Deref;
+use std::{
+    cell::OnceCell,
+    collections::HashMap,
+    fmt::{Display, Formatter},
+    marker::PhantomData,
+    ops::Deref,
+};
 
 mod conda_util;
 mod input;
@@ -157,6 +157,7 @@ impl super::SolverImpl for Solver {
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
         // Construct a default libsolv pool
         let mut pool: Pool<SolverMatchSpec> = Pool::new();
+        let mut parse_match_spec_cache = HashMap::new();
 
         // Add virtual packages
         let repo_id = pool.new_repo();
@@ -171,7 +172,12 @@ impl super::SolverImpl for Solver {
             }
 
             let repo_id = pool.new_repo();
-            add_repodata_records(&mut pool, repo_id, repodata.records.iter().copied())?;
+            add_repodata_records(
+                &mut pool,
+                repo_id,
+                repodata.records.iter().copied(),
+                &mut parse_match_spec_cache,
+            )?;
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo_id, repo_mapping.len());
@@ -180,7 +186,12 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo_id = pool.new_repo();
-        let installed_solvables = add_repodata_records(&mut pool, repo_id, &task.locked_packages)?;
+        let installed_solvables = add_repodata_records(
+            &mut pool,
+            repo_id,
+            &task.locked_packages,
+            &mut parse_match_spec_cache,
+        )?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());
@@ -188,7 +199,12 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo_id = pool.new_repo();
-        let pinned_solvables = add_repodata_records(&mut pool, repo_id, &task.pinned_packages)?;
+        let pinned_solvables = add_repodata_records(
+            &mut pool,
+            repo_id,
+            &task.pinned_packages,
+            &mut parse_match_spec_cache,
+        )?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo_id, repo_mapping.len());

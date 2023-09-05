@@ -12,7 +12,10 @@ pub(crate) fn compare_candidates(
     b: SolvableId,
     pool: &Pool<SolverMatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-    match_spec_highest_version: &mut HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>,
+    match_spec_highest_version: &mut HashMap<
+        VersionSetId,
+        Option<(rattler_conda_types::Version, bool)>,
+    >,
 ) -> Ordering {
     let a_solvable = pool.resolve_solvable(a);
     let b_solvable = pool.resolve_solvable(b);
@@ -129,34 +132,36 @@ pub(crate) fn find_highest_version(
     match_spec_id: VersionSetId,
     pool: &Pool<SolverMatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-    match_spec_highest_version: &mut HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>,
+    match_spec_highest_version: &mut HashMap<
+        VersionSetId,
+        Option<(rattler_conda_types::Version, bool)>,
+    >,
 ) -> Option<(Version, bool)> {
+    match_spec_highest_version
+        .entry(match_spec_id)
+        .or_insert_with(|| {
+            let candidates = match_spec_to_candidates[match_spec_id]
+                .get_or_init(|| pool.find_matching_solvables(match_spec_id));
 
-    let entry = match_spec_highest_version.entry(match_spec_id).or_insert_with(|| {
-        let candidates = match_spec_to_candidates[match_spec_id]
-            .get_or_init(|| pool.find_matching_solvables(match_spec_id));
-
-        candidates
-            .iter()
-            .map(|id| pool.resolve_solvable(*id).inner())
-
-            .fold(None, |init, record| {
-                Some(init.map_or_else(
-                    || {
-                        (
-                            record.version.version().clone(),
-                            !record.track_features.is_empty(),
-                        )
-                    },
-                    |(version, has_tracked_features)| {
-                        (
-                            version.max(record.version.version().clone()),
-                            has_tracked_features && record.track_features.is_empty(),
-                        )
-                    },
-                ))
-            })
-    });
-
-    entry.take()
+            candidates
+                .iter()
+                .map(|id| pool.resolve_solvable(*id).inner())
+                .fold(None, |init, record| {
+                    Some(init.map_or_else(
+                        || {
+                            (
+                                record.version.version().clone(),
+                                !record.track_features.is_empty(),
+                            )
+                        },
+                        |(version, has_tracked_features)| {
+                            (
+                                version.max(record.version.version().clone()),
+                                has_tracked_features && record.track_features.is_empty(),
+                            )
+                        },
+                    ))
+                })
+        })
+        .clone()
 }
