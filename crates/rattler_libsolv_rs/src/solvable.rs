@@ -28,9 +28,19 @@ impl<V> PackageSolvable<V> {
         &self.record
     }
 
-    /// Get the dependencies for theis solvable
+    /// Get the dependencies for this solvable
     pub fn dependencies(&self) -> &[VersionSetId] {
         &self.dependencies
+    }
+
+    /// Get the constrains for this solvable
+    pub fn constrains(&self) -> &[VersionSetId] {
+        &self.dependencies
+    }
+
+    /// Returns the name of the solvable
+    pub fn name_id(&self) -> NameId {
+        self.name
     }
 }
 
