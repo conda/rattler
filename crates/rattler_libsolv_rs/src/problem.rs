@@ -364,7 +364,7 @@ impl ProblemGraph {
         // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
         for mut m in maybe_merge.into_values() {
             if m.len() > 1 {
-                m.sort_unstable_by_key(|&(_, id)| pool.resolve_solvable(id).record.version());
+                m.sort_unstable_by_key(|&(_, id)| pool.resolve_solvable(id).inner.version());
                 let m = Rc::new(MergedProblemNode {
                     ids: m.into_iter().map(|(_, snd)| snd).collect(),
                 });
@@ -615,10 +615,10 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         merged
                             .ids
                             .iter()
-                            .map(|&id| self.pool.resolve_solvable(id).record.version().to_string())
+                            .map(|&id| self.pool.resolve_solvable(id).inner.version().to_string())
                             .join(" | ")
                     } else {
-                        solvable.record.version().to_string()
+                        solvable.inner.version().to_string()
                     };
 
                     let already_installed = graph.edges(candidate).any(|e| {
@@ -733,7 +733,7 @@ impl<VS: VersionSet> fmt::Display for DisplayUnsat<'_, VS> {
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
                     locked.name.display(self.pool),
-                    locked.record.version()
+                    locked.inner.version()
                 )?;
             }
         }

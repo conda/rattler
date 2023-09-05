@@ -1071,7 +1071,7 @@ mod test {
                 let a = pool.resolve_solvable_inner(*a).package();
                 let b = pool.resolve_solvable_inner(*b).package();
                 // We want to sort with highest version on top
-                b.record.1.cmp(&a.record.1)
+                b.inner.1.cmp(&a.inner.1)
             });
         }
     }
@@ -1181,8 +1181,8 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name(), "asdf");
-        assert_eq!(solvable.record.version(), 1);
+        assert_eq!(solvable.inner.name(), "asdf");
+        assert_eq!(solvable.inner.version(), 1);
     }
 
     /// Test if we can also select a nested version
@@ -1203,15 +1203,15 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name(), "asdf");
-        assert_eq!(solvable.record.version(), 1);
+        assert_eq!(solvable.inner.name(), "asdf");
+        assert_eq!(solvable.inner.version(), 1);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name(), "efgh");
-        assert_eq!(solvable.record.version(), 4);
+        assert_eq!(solvable.inner.name(), "efgh");
+        assert_eq!(solvable.inner.version(), 4);
     }
 
     /// Test if we can resolve multiple versions at once
@@ -1233,15 +1233,15 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name(), "asdf");
-        assert_eq!(solvable.record.version(), 2);
+        assert_eq!(solvable.inner.name(), "asdf");
+        assert_eq!(solvable.inner.version(), 2);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solvable.record.name(), "efgh");
-        assert_eq!(solvable.record.version(), 5);
+        assert_eq!(solvable.inner.name(), "efgh");
+        assert_eq!(solvable.inner.version(), 5);
     }
 
     /// In case of a conflict the version should not be selected with the conflict
@@ -1291,8 +1291,8 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name(), "asdf");
-        assert_eq!(solvable.record.version(), 3);
+        assert_eq!(solvable.inner.name(), "asdf");
+        assert_eq!(solvable.inner.version(), 3);
     }
 
     /// Locking a specific package version in this case a lower version namely `3` should result
@@ -1307,7 +1307,7 @@ mod test {
             .iter()
             .position(|s: &Solvable<_>| {
                 if let Some(package) = s.get_package() {
-                    package.record.version() == 3
+                    package.inner.version() == 3
                 } else {
                     false
                 }
@@ -1329,7 +1329,7 @@ mod test {
                 .pool
                 .resolve_solvable_inner(solvable_id)
                 .package()
-                .record
+                .inner
                 .version(),
             3
         );
@@ -1350,7 +1350,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.record.version() == 1
+                    package.inner.version() == 1
                 } else {
                     false
                 }
@@ -1370,8 +1370,8 @@ mod test {
             .pool
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solvable.record.name(), "asdf");
-        assert_eq!(solvable.record.version(), 4);
+        assert_eq!(solvable.inner.name(), "asdf");
+        assert_eq!(solvable.inner.version(), 4);
     }
 
     /// Test checks if favoring without a conflict results in a package upgrade
@@ -1393,7 +1393,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version() == 1)
+            .filter(|(_, s)| s.package().inner.version() == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
@@ -1434,7 +1434,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().record.version() == 1)
+            .filter(|(_, s)| s.package().inner.version() == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {

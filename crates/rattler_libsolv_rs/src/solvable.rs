@@ -11,7 +11,7 @@ pub struct PackageSolvable<V> {
     pub(crate) repo_id: RepoId,
     pub(crate) dependencies: Vec<VersionSetId>,
     pub(crate) constrains: Vec<VersionSetId>,
-    pub(crate) record: V,
+    pub(crate) inner: V,
     pub(crate) name: NameId,
     /// The solvable's metadata
     pub metadata: SolvableMetadata,
@@ -24,8 +24,8 @@ impl<V> PackageSolvable<V> {
     }
 
     /// Gets the record associated to this solvable
-    pub fn record(&self) -> &V {
-        &self.record
+    pub fn inner(&self) -> &V {
+        &self.inner
     }
 
     /// Get the dependencies for this solvable
@@ -76,7 +76,7 @@ impl<V> Solvable<V> {
         Self {
             inner: SolvableInner::Package(PackageSolvable {
                 repo_id,
-                record,
+                inner: record,
                 name,
                 dependencies: Vec::new(),
                 constrains: Vec::new(),
@@ -119,7 +119,7 @@ impl<V: Display> Display for Solvable<V> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self.inner {
             SolvableInner::Root(_) => write!(f, "<root>"),
-            SolvableInner::Package(p) => write!(f, "{}", &p.record),
+            SolvableInner::Package(p) => write!(f, "{}", &p.inner),
         }
     }
 }

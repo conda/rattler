@@ -17,8 +17,8 @@ pub(crate) fn compare_candidates(
     let a_solvable = pool.resolve_solvable(a);
     let b_solvable = pool.resolve_solvable(b);
 
-    let a_record = &a_solvable.record();
-    let b_record = &b_solvable.record();
+    let a_record = &a_solvable.inner();
+    let b_record = &b_solvable.inner();
 
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
@@ -138,7 +138,7 @@ pub(crate) fn find_highest_version(
 
         candidates
             .iter()
-            .map(|id| pool.resolve_solvable(*id).record())
+            .map(|id| pool.resolve_solvable(*id).inner())
 
             .fold(None, |init, record| {
                 Some(init.map_or_else(
