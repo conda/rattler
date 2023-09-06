@@ -2,57 +2,16 @@
 // use constraint::OrdConstraint;
 
 mod parse;
-use crate::constraint;
-use std::fmt::{self, Display, Formatter};
+use crate::constraint::{operators::OrdOperator, OperatorConstraint};
 
 type BuildNumber = u64;
 /// named type for the Set specified by BuildNumberOperator on BuildNumber
-type BuildNumberSpec = constraint::OperatorConstraint<BuildNumber, BuildNumberOperator>;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum BuildNumberOperator {
-    Eq,
-    Ne,
-    Gt,
-    Ge,
-    Lt,
-    Le,
-}
-
-impl Display for BuildNumberOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Eq => write!(f, "=="),
-            Self::Ne => write!(f, "!="),
-            Self::Gt => write!(f, ">"),
-            Self::Ge => write!(f, ">="),
-            Self::Lt => write!(f, "<"),
-            Self::Le => write!(f, "<="),
-        }
-    }
-}
-
-impl<Element> constraint::Operator<Element> for BuildNumberOperator
-where
-    Element: std::cmp::PartialOrd,
-{
-    fn compares(&self, source: &Element, target: &Element) -> bool {
-        match self {
-            Self::Eq => target.eq(&source),
-            Self::Ne => target.ne(&source),
-            Self::Gt => target.gt(&source),
-            Self::Ge => target.ge(&source),
-            Self::Lt => target.lt(&source),
-            Self::Le => target.le(&source),
-        }
-    }
-}
+type BuildNumberSpec = OperatorConstraint<BuildNumber, OrdOperator>;
 
 #[cfg(test)]
 mod tests {
-    use crate::constraint::Set;
-
     use super::*;
+    use crate::constraint::Set; // expose is_member
 
     #[test]
     fn check_build_number_cmp_spec() {
@@ -61,7 +20,7 @@ mod tests {
         let exact = 5;
         let spec: BuildNumberSpec = (">=".to_string() + &exact.to_string()).parse().unwrap();
 
-        assert_eq!(spec, BuildNumberSpec::new(BuildNumberOperator::Ge, exact));
+        assert_eq!(spec, BuildNumberSpec::new(OrdOperator::Ge, exact));
 
         assert!(!spec.is_member(&below), "{below} not ge {exact}");
         assert!(spec.is_member(&above), "{above} ge {exact}");

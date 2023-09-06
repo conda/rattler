@@ -1,7 +1,8 @@
 /// This module contains conversions to and from string representations for items defined in other parts of `build_spec` module
 /// including two-way string (attempted) conversion and parsing with nom.
 /// nom parsing is completely TODO
-use super::{BuildNumberOperator, BuildNumberSpec};
+use super::BuildNumberSpec;
+use super::OrdOperator;
 // use crate::constraint::{parse::ParseOperatorError, OperatorConstraint};
 use nom::{
     bytes::complete::take_while,
@@ -37,7 +38,7 @@ impl<'i> ParseError<&'i str> for ParseBuildNumberSpecError {
     }
 }
 
-impl FromStr for BuildNumberOperator {
+impl FromStr for OrdOperator {
     type Err = ParseBuildNumberSpecError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         match Self::parse(&input) {
@@ -50,7 +51,7 @@ impl FromStr for BuildNumberOperator {
     }
 }
 
-impl BuildNumberOperator {
+impl OrdOperator {
     fn is_start_of_operator(c: char) -> bool {
         matches!(c, '>' | '<' | '=' | '!')
     }
@@ -64,12 +65,12 @@ impl BuildNumberOperator {
         )?;
 
         let op = match operator_str {
-            "==" | "" => Ok(BuildNumberOperator::Eq),
-            "!=" => Ok(BuildNumberOperator::Ne),
-            "<" => Ok(BuildNumberOperator::Lt),
-            ">=" => Ok(BuildNumberOperator::Ge),
-            ">" => Ok(BuildNumberOperator::Gt),
-            "<=" => Ok(BuildNumberOperator::Le),
+            "==" | "" => Ok(OrdOperator::Eq),
+            "!=" => Ok(OrdOperator::Ne),
+            "<" => Ok(OrdOperator::Lt),
+            ">=" => Ok(OrdOperator::Ge),
+            ">" => Ok(OrdOperator::Gt),
+            "<=" => Ok(OrdOperator::Le),
             _ => Err(nom::Err::Failure(
                 ParseBuildNumberSpecError::InvalidOperator(operator_str.to_string()),
             )),
@@ -81,7 +82,7 @@ impl BuildNumberOperator {
 
 impl BuildNumberSpec {
     pub fn parse(input: &str) -> IResult<&str, Self, ParseBuildNumberSpecError> {
-        tuple((BuildNumberOperator::parse, nom::character::complete::u64))(input)
+        tuple((OrdOperator::parse, nom::character::complete::u64))(input)
             .map(|(rest, (op, elem))| (rest, BuildNumberSpec::new(op, elem)))
         // something needed to map the u64 error to ParseBuildNumberSpecError::ExpectedNumber
     }
@@ -110,7 +111,7 @@ mod tests {
             (String::from(">=") + &exact.to_string())
                 .parse::<BuildNumberSpec>()
                 .unwrap(),
-            BuildNumberSpec::new(BuildNumberOperator::Ge, exact)
+            BuildNumberSpec::new(OrdOperator::Ge, exact)
         );
 
         assert!((exact.to_string() + &String::from(">="))

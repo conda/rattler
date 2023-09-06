@@ -3,6 +3,9 @@
 
 use std::fmt::{self, Display, Formatter};
 
+use serde::{Deserialize, Serialize};
+pub mod operators;
+
 /// expose is_member so that it can be called for VersionSpec and BuildNumberSpec
 pub trait Set<Element> {
     fn is_member(&self, elem: &Element) -> bool;
@@ -12,7 +15,7 @@ pub trait Operator<Element> {
     fn compares(&self, source: &Element, target: &Element) -> bool;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct OperatorConstraint<Element, Op> {
     op: Op,
     elem: Element,
