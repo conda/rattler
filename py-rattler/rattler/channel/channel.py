@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+from typing import Optional
 
 from rattler.rattler import PyChannel
 from rattler.channel.channel_config import ChannelConfig
