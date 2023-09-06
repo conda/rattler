@@ -1,52 +1,8 @@
 from __future__ import annotations
 from typing import Literal
 
-from rattler.rattler import PyPlatform, PyArch
-
-
-ArchLiteral = Literal[
-    "x86",
-    "x86_64",
-    "aarch64",
-    "armv6l",
-    "armv7l",
-    "ppc64le",
-    "ppc64",
-    "s390x",
-    "riscv32",
-    "riscv64",
-]
-
-
-class Arch:
-    def __init__(self, value: ArchLiteral):
-        self._inner = PyArch(value)
-
-    @classmethod
-    def _from_py_arch(cls, py_arch: PyArch) -> Arch:
-        """Construct Rattler version from FFI PyArch object."""
-        arch = cls.__new__(cls)
-        arch._inner = py_arch
-        return arch
-
-    def __str__(self):
-        """
-        Returns a string representation of the architecture.
-
-        >>> str(Arch("x86_64"))
-        'x86_64'
-        """
-        return self._inner.as_str()
-
-    def __repr__(self) -> str:
-        """
-        Returns a representation of the architecture.
-
-        >>> Arch("aarch64")
-        Arch(aarch64)
-        """
-        return f"Arch({self._inner.as_str()})"
-
+from rattler.rattler import PyPlatform
+from rattler.platform.arch import Arch
 
 PlatformLiteral = Literal[
     "noarch",
@@ -80,7 +36,7 @@ class Platform:
         platform._inner = py_platform
         return platform
 
-    def __str__(self):
+    def __str__(self) -> str:
         """
         Returns a string representation of the platform.
 
@@ -98,7 +54,8 @@ class Platform:
         """
         return f"Platform({self._inner.name})"
 
-    def current() -> Platform:
+    @classmethod
+    def current(cls) -> Platform:
         """
         Returns the current platform.
 
@@ -108,7 +65,7 @@ class Platform:
         return Platform._from_py_platform(PyPlatform.current())
 
     @property
-    def is_linux(self):
+    def is_linux(self) -> bool:
         """
         Return True if the platform is linux.
 
@@ -120,7 +77,7 @@ class Platform:
         return self._inner.is_linux
 
     @property
-    def is_osx(self):
+    def is_osx(self) -> bool:
         """
         Return True if the platform is osx.
 
@@ -132,7 +89,7 @@ class Platform:
         return self._inner.is_osx
 
     @property
-    def is_windows(self):
+    def is_windows(self) -> bool:
         """
         Return True if the platform is win.
 
@@ -144,7 +101,7 @@ class Platform:
         return self._inner.is_windows
 
     @property
-    def is_unix(self):
+    def is_unix(self) -> bool:
         """
         Return True if the platform is unix.
 
@@ -156,7 +113,7 @@ class Platform:
         return self._inner.is_unix
 
     @property
-    def arch(self):
+    def arch(self) -> Arch:
         """
         Return the architecture of the platform.
 

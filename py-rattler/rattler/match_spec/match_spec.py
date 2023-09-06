@@ -77,7 +77,7 @@ class MatchSpec:
     - build
     """
 
-    def __init__(self, spec: str):
+    def __init__(self, spec: str) -> None:
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(spec)
         else:

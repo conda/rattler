@@ -4,7 +4,7 @@ from rattler.rattler import PyChannelConfig
 
 
 class ChannelConfig:
-    def __init__(self, channel_alias="https://conda.anaconda.org/"):
+    def __init__(self, channel_alias: str = "https://conda.anaconda.org/") -> None:
         """
         Create a new channel configuration.
 

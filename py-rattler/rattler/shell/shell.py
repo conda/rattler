@@ -5,7 +5,7 @@ from typing import Iterable, Optional
 from pathlib import Path
 import os
 import sys
-from rattler.platform.platform import Platform
+from rattler.platform.platform import Platform, PlatformLiteral
 
 from rattler.rattler import (
     PyActivationVariables,
@@ -33,10 +33,10 @@ class ActivationVariables:
 
     def __init__(
         self,
-        current_prefix: Optional[os.PathLike] = None,
-        current_path: Optional[Iterable[str] | Iterable[os.PathLike]] = sys.path,
+        current_prefix: Optional[os.PathLike[str]] = None,
+        current_path: Optional[Iterable[str] | Iterable[os.PathLike[str]]] = sys.path,
         path_modification_behavior: PathModificationBehavior = PathModificationBehavior.Prepend,
-    ):
+    ) -> None:
         """
         Construct a new ActivationVariables object.
 
@@ -57,6 +57,8 @@ class ActivationVariables:
 
 class ActivationResult:
     """An object that holds the result of activating a conda environment."""
+
+    _py_activation_result: PyActivationResult
 
     @classmethod
     def _from_py_activation_result(
@@ -92,8 +94,8 @@ class Shell:
 def activate(
     prefix: Path,
     activation_variables: ActivationVariables,
-    shell: Shell,
-    platform: Optional[Platform | str] = None,
+    shell: Optional[Shell],
+    platform: Optional[Platform | PlatformLiteral] = None,
 ) -> ActivationResult:
     """
     Return an ActivationResult object that contains the new PATH environment variable
@@ -121,7 +123,11 @@ def activate(
         >>> print(a)
         <rattler.shell.shell.ActivationResult object at ...>
     """
-    platform = platform or Platform.current()
+    platform = (
+        Platform(platform)
+        if isinstance(platform, str)
+        else platform or Platform.current()
+    )
     shell = shell or Shell.bash
     return ActivationResult._from_py_activation_result(
         PyActivator.activate(
