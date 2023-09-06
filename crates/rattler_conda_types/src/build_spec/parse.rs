@@ -56,7 +56,6 @@ impl BuildNumberOperator {
     }
 
     pub fn parse(input: &str) -> IResult<&str, Self, ParseBuildNumberSpecError> {
-        use crate::constraint::{Equal, Greater, Less};
         // Take anything that looks like an operator.
         let (rest, operator_str) = take_while(Self::is_start_of_operator)(input).map_err(
             |_: nom::Err<nom::error::Error<&str>>| {
@@ -65,12 +64,12 @@ impl BuildNumberOperator {
         )?;
 
         let op = match operator_str {
-            "==" | "" => Ok(BuildNumberOperator::Equal(Equal(true))),
-            "!=" => Ok(BuildNumberOperator::Equal(Equal(false))),
-            "<" => Ok(BuildNumberOperator::Less(Less(true))),
-            ">=" => Ok(BuildNumberOperator::Less(Less(false))),
-            ">" => Ok(BuildNumberOperator::Greater(Greater(true))),
-            "<=" => Ok(BuildNumberOperator::Greater(Greater(false))),
+            "==" | "" => Ok(BuildNumberOperator::Eq),
+            "!=" => Ok(BuildNumberOperator::Ne),
+            "<" => Ok(BuildNumberOperator::Lt),
+            ">=" => Ok(BuildNumberOperator::Ge),
+            ">" => Ok(BuildNumberOperator::Gt),
+            "<=" => Ok(BuildNumberOperator::Le),
             _ => Err(nom::Err::Failure(
                 ParseBuildNumberSpecError::InvalidOperator(operator_str.to_string()),
             )),
@@ -101,21 +100,21 @@ impl FromStr for BuildNumberSpec {
 
 #[cfg(test)]
 mod tests {
-    use crate::constraint::{self, Equal, Greater, Less};
-
     use super::*;
 
     #[test]
     fn ordering_constraint_parse() {
         let exact = 5;
-        let s: String = String::from(">=") + &exact.to_string();
-        let constraint: BuildNumberSpec = BuildNumberSpec::new(
-            crate::build_spec::BuildNumberOperator::Less(Less(false)),
-            exact,
+
+        assert_eq!(
+            (String::from(">=") + &exact.to_string())
+                .parse::<BuildNumberSpec>()
+                .unwrap(),
+            BuildNumberSpec::new(BuildNumberOperator::Ge, exact)
         );
 
-        let repr = BuildNumberSpec::from_str(&s).unwrap();
-        println!("{}", repr);
-        assert_eq!(constraint, repr);
+        assert!((exact.to_string() + &String::from(">="))
+            .parse::<BuildNumberSpec>()
+            .is_err());
     }
 }

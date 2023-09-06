@@ -11,17 +11,23 @@ type BuildNumberSpec = constraint::OperatorConstraint<BuildNumber, BuildNumberOp
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum BuildNumberOperator {
-    Greater(constraint::Greater),
-    Less(constraint::Less),
-    Equal(constraint::Equal),
+    Eq,
+    Ne,
+    Gt,
+    Ge,
+    Lt,
+    Le,
 }
 
 impl Display for BuildNumberOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Greater(op) => op.fmt(f),
-            Self::Less(op) => op.fmt(f),
-            Self::Equal(op) => op.fmt(f),
+            Self::Eq => write!(f, "=="),
+            Self::Ne => write!(f, "!="),
+            Self::Gt => write!(f, ">"),
+            Self::Ge => write!(f, ">="),
+            Self::Lt => write!(f, "<"),
+            Self::Le => write!(f, "<="),
         }
     }
 }
@@ -32,9 +38,12 @@ where
 {
     fn compares(&self, source: &Element, target: &Element) -> bool {
         match self {
-            Self::Greater(op) => op.compares(&source, &target),
-            Self::Less(op) => op.compares(&source, &target),
-            Self::Equal(op) => op.compares(&source, &target),
+            Self::Eq => target.eq(&source),
+            Self::Ne => target.ne(&source),
+            Self::Gt => target.gt(&source),
+            Self::Ge => target.ge(&source),
+            Self::Lt => target.lt(&source),
+            Self::Le => target.le(&source),
         }
     }
 }
@@ -52,6 +61,8 @@ mod tests {
         let exact = 5;
         let spec: BuildNumberSpec = (">=".to_string() + &exact.to_string()).parse().unwrap();
 
+        assert_eq!(spec, BuildNumberSpec::new(BuildNumberOperator::Ge, exact));
+
         assert!(!spec.is_member(&below), "{below} not ge {exact}");
         assert!(spec.is_member(&above), "{above} ge {exact}");
         assert!(spec.is_member(&exact), "{exact} ge {exact}");
@@ -63,5 +74,6 @@ mod tests {
         let exact = 5;
         let spec: BuildNumberSpec = exact.to_string().parse().unwrap();
         assert!(spec.is_member(&exact));
+        assert!(!spec.is_member(&mismatch));
     }
 }
