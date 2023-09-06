@@ -466,6 +466,10 @@ impl<T: Shell + Clone> Activator<T> {
         Ok(after_env
             .into_iter()
             .filter(|(key, value)| before_env.get(key) != Some(value))
+            // this happens on Windows for some reason
+            // @SET "=C:=C:\Users\robostack\Programs\pixi"
+            // @SET "=ExitCode=00000000"
+            .filter(|(key, _)| !key.is_empty())
             .map(|(key, value)| (key.to_owned(), value.to_owned()))
             .collect())
     }
