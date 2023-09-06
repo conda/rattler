@@ -18,6 +18,7 @@ pyo3 = { version = "0.19", features = [
 ] }
 
 thiserror = "1.0.44"
+url = "2.4.1"
 
 # Prevent package from thinking it's in the workspace
 [workspace]
