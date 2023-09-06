@@ -2,13 +2,16 @@ mod channel;
 mod error;
 mod match_spec;
 mod nameless_match_spec;
+mod platform;
 mod repo_data;
+mod shell;
 mod version;
 
 use channel::{PyChannel, PyChannelConfig};
 use error::{
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, PyRattlerError,
+    ActivationException, InvalidChannelException, InvalidMatchSpecException,
+    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, ParseArchException,
+    ParsePlatformException, PyRattlerError,
 };
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
@@ -16,6 +19,9 @@ use repo_data::package_record::PyPackageRecord;
 use version::PyVersion;
 
 use pyo3::prelude::*;
+
+use platform::{PyArch, PyPlatform};
+use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 
 #[pymodule]
 fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
@@ -28,6 +34,14 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyChannel>().unwrap();
     m.add_class::<PyChannelConfig>().unwrap();
+    m.add_class::<PyPlatform>().unwrap();
+    m.add_class::<PyArch>().unwrap();
+
+    // Shell activation things
+    m.add_class::<PyActivationVariables>().unwrap();
+    m.add_class::<PyActivationResult>().unwrap();
+    m.add_class::<PyShellEnum>().unwrap();
+    m.add_class::<PyActivator>().unwrap();
 
     // Exceptions
     m.add(
@@ -52,6 +66,15 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
         py.get_type::<InvalidChannelException>(),
     )
     .unwrap();
+    m.add("ActivationError", py.get_type::<ActivationException>())
+        .unwrap();
+    m.add(
+        "ParsePlatformError",
+        py.get_type::<ParsePlatformException>(),
+    )
+    .unwrap();
+    m.add("ParseArchError", py.get_type::<ParseArchException>())
+        .unwrap();
 
     Ok(())
 }

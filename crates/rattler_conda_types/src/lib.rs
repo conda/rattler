@@ -33,7 +33,7 @@ pub use match_spec::parse::ParseMatchSpecError;
 pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
-pub use platform::{ParsePlatformError, Platform};
+pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch};
 pub use repo_data::{ChannelInfo, ConvertSubdirError, PackageRecord, RepoData};
