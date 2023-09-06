@@ -2,13 +2,11 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
 
 from rattler.rattler import PyChannel
-
-if TYPE_CHECKING:
-    from rattler.channel import ChannelConfiguration
+from rattler.channel.channel_config import ChannelConfig
 
 
 class Channel:
-    def __init__(self, name: str, channel_configuration: ChannelConfiguration):
+    def __init__(self, name: str, channel_configuration: ChannelConfig):
         """
         Create a new channel.
 
@@ -25,7 +23,7 @@ class Channel:
 
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> channel.name
-        conda-forge
+        'conda-forge'
         """
         return self._channel.name
 
@@ -36,7 +34,7 @@ class Channel:
 
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> channel.base_url
-        https://conda.anaconda.org/conda-forge/
+        'https://conda.anaconda.org/conda-forge/'
         """
         return self._channel.base_url
 
