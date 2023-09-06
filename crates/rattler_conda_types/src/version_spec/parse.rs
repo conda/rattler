@@ -1,7 +1,8 @@
-use crate::version::parse::version_parser;
-use crate::version_spec::constraint::{is_start_of_version_constraint, Constraint};
-use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
-use crate::{ParseVersionError, ParseVersionErrorKind};
+use super::constraint::{is_start_of_version_constraint, VersionConstraint};
+use super::{RangeOperator, StrictRangeOperator, VersionOperator};
+use crate::constraint::operators::OrdOperator;
+use crate::version::parse::{version_parser, ParseVersionError, ParseVersionErrorKind};
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
@@ -22,7 +23,7 @@ enum ParseVersionOperatorError<'i> {
 }
 
 /// Parses a version operator, returns an error if the operator is not recognized or not found.
-fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError> {
+fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOperatorError> {
     // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(is_start_of_version_constraint)(input).map_err(
         |_: nom::Err<nom::error::Error<&str>>| {
@@ -31,14 +32,14 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionO
     )?;
 
     let op = match operator_str {
-        "==" => VersionOperators::Exact(EqualityOperator::Equals),
-        "!=" => VersionOperators::Exact(EqualityOperator::NotEquals),
-        "<=" => VersionOperators::Range(RangeOperator::LessEquals),
-        ">=" => VersionOperators::Range(RangeOperator::GreaterEquals),
-        "<" => VersionOperators::Range(RangeOperator::Less),
-        ">" => VersionOperators::Range(RangeOperator::Greater),
-        "=" => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
-        "~=" => VersionOperators::StrictRange(StrictRangeOperator::Compatible),
+        "==" => VersionOperator::OrdRange(OrdOperator::Eq),
+        "!=" => VersionOperator::OrdRange(OrdOperator::Ne),
+        "<=" => VersionOperator::OrdRange(OrdOperator::Le),
+        ">=" => VersionOperator::OrdRange(OrdOperator::Ge),
+        "<" => VersionOperator::OrdRange(OrdOperator::Lt),
+        ">" => VersionOperator::OrdRange(OrdOperator::Gt),
+        "=" => VersionOperator::StrictRange(StrictRangeOperator::StartsWith),
+        "~=" => VersionOperator::StrictRange(StrictRangeOperator::Compatible),
         _ => {
             return Err(nom::Err::Failure(
                 ParseVersionOperatorError::InvalidOperator(operator_str),
@@ -83,7 +84,7 @@ impl<'i> ParseError<&'i str> for ParseConstraintError {
 }
 
 /// Parses a regex constraint. Returns an error if no terminating `$` is found.
-fn regex_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
+fn regex_constraint_parser(input: &str) -> IResult<&str, VersionConstraint, ParseConstraintError> {
     let (_rest, (_, _, terminator)) =
         tuple((char('^'), take_while(|c| c != '$'), opt(char('$'))))(input)?;
     match terminator {
@@ -95,12 +96,14 @@ fn regex_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstr
 }
 
 /// Parses the any constraint. This matches "*" and ".*"
-fn any_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
-    value(Constraint::Any, terminated(tag("*"), opt(tag(".*"))))(input)
+fn any_constraint_parser(input: &str) -> IResult<&str, VersionConstraint, ParseConstraintError> {
+    value(VersionConstraint::Any, terminated(tag("*"), opt(tag(".*"))))(input)
 }
 
 /// Parses a constraint with an operator in front of it.
-fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
+fn logical_constraint_parser(
+    input: &str,
+) -> IResult<&str, VersionConstraint, ParseConstraintError> {
     // Parse the optional preceding operator
     let (input, op) = match operator_parser(input) {
         Err(
@@ -142,26 +145,26 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
     let op = match (version_rest, op) {
         // The version was successfully parsed
         ("", Some(op)) => op,
-        ("", None) => VersionOperators::Exact(EqualityOperator::Equals),
+        ("", None) => VersionOperator::OrdRange(OrdOperator::Eq),
 
         // The version ends in a wildcard pattern
-        ("*" | ".*", Some(VersionOperators::StrictRange(StrictRangeOperator::StartsWith))) => {
-            VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+        ("*" | ".*", Some(VersionOperator::StrictRange(StrictRangeOperator::StartsWith))) => {
+            VersionOperator::StrictRange(StrictRangeOperator::StartsWith)
         }
-        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::GreaterEquals))) => {
-            VersionOperators::Range(RangeOperator::GreaterEquals)
+        ("*" | ".*", Some(VersionOperator::OrdRange(OrdOperator::Ge))) => {
+            VersionOperator::OrdRange(OrdOperator::Ge)
         }
-        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::Greater))) => {
-            VersionOperators::Range(RangeOperator::GreaterEquals)
+        ("*" | ".*", Some(VersionOperator::OrdRange(OrdOperator::Gt))) => {
+            VersionOperator::OrdRange(OrdOperator::Ge)
         }
-        ("*" | ".*", Some(VersionOperators::Exact(EqualityOperator::NotEquals))) => {
-            VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
+        ("*" | ".*", Some(VersionOperator::OrdRange(OrdOperator::Ne))) => {
+            VersionOperator::StrictRange(StrictRangeOperator::NotStartsWith)
         }
         (glob @ "*" | glob @ ".*", Some(op)) => {
             tracing::warn!("Using {glob} with relational operator is superfluous and deprecated and will be removed in a future version of conda.");
             op
         }
-        ("*" | ".*", None) => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
+        ("*" | ".*", None) => VersionOperator::StrictRange(StrictRangeOperator::StartsWith),
 
         // The version string kinda looks like a regular expression.
         (version_remainder, _) if version_str.contains('*') || version_remainder.ends_with('$') => {
@@ -182,14 +185,18 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
     };
 
     match op {
-        VersionOperators::Range(r) => Ok((rest, Constraint::Comparison(r, version))),
-        VersionOperators::Exact(e) => Ok((rest, Constraint::Exact(e, version))),
-        VersionOperators::StrictRange(s) => Ok((rest, Constraint::StrictComparison(s, version))),
+        VersionOperator::OrdRange(r) => Ok((rest, VersionConstraint::OrdComparison(r, version))),
+        VersionOperator::StrictRange(s) => {
+            Ok((rest, VersionConstraint::StrictComparison(s, version)))
+        }
+        _ => panic!("actively removing Range and Exact variants"),
     }
 }
 
 /// Parses a version constraint.
-pub(crate) fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
+pub(crate) fn constraint_parser(
+    input: &str,
+) -> IResult<&str, VersionConstraint, ParseConstraintError> {
     alt((
         regex_constraint_parser,
         any_constraint_parser,
@@ -200,6 +207,7 @@ pub(crate) fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseC
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::constraint::operators::OrdOperator;
     use crate::{Version, VersionSpec};
     use std::str::FromStr;
 
@@ -207,40 +215,40 @@ mod test {
     fn test_operator_parser() {
         assert_eq!(
             operator_parser(">3.1"),
-            Ok(("3.1", VersionOperators::Range(RangeOperator::Greater)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Gt)))
         );
         assert_eq!(
             operator_parser(">=3.1"),
-            Ok(("3.1", VersionOperators::Range(RangeOperator::GreaterEquals)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Ge)))
         );
         assert_eq!(
             operator_parser("<3.1"),
-            Ok(("3.1", VersionOperators::Range(RangeOperator::Less)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Lt)))
         );
         assert_eq!(
             operator_parser("<=3.1"),
-            Ok(("3.1", VersionOperators::Range(RangeOperator::LessEquals)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Le)))
         );
         assert_eq!(
             operator_parser("==3.1"),
-            Ok(("3.1", VersionOperators::Exact(EqualityOperator::Equals)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Eq)))
         );
         assert_eq!(
             operator_parser("!=3.1"),
-            Ok(("3.1", VersionOperators::Exact(EqualityOperator::NotEquals)))
+            Ok(("3.1", VersionOperator::OrdRange(OrdOperator::Ne)))
         );
         assert_eq!(
             operator_parser("=3.1"),
             Ok((
                 "3.1",
-                VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+                VersionOperator::StrictRange(StrictRangeOperator::StartsWith)
             ))
         );
         assert_eq!(
             operator_parser("~=3.1"),
             Ok((
                 "3.1",
-                VersionOperators::StrictRange(StrictRangeOperator::Compatible)
+                VersionOperator::StrictRange(StrictRangeOperator::Compatible)
             ))
         );
 
@@ -286,7 +294,10 @@ mod test {
             logical_constraint_parser("3.1"),
             Ok((
                 "",
-                Constraint::Exact(EqualityOperator::Equals, Version::from_str("3.1").unwrap())
+                VersionConstraint::OrdComparison(
+                    OrdOperator::Eq,
+                    Version::from_str("3.1").unwrap()
+                )
             ))
         );
 
@@ -294,7 +305,10 @@ mod test {
             logical_constraint_parser(">3.1"),
             Ok((
                 "",
-                Constraint::Comparison(RangeOperator::Greater, Version::from_str("3.1").unwrap())
+                VersionConstraint::OrdComparison(
+                    OrdOperator::Gt,
+                    Version::from_str("3.1").unwrap()
+                )
             ))
         );
 
@@ -302,7 +316,7 @@ mod test {
             logical_constraint_parser("3.1*"),
             Ok((
                 "",
-                Constraint::StrictComparison(
+                VersionConstraint::StrictComparison(
                     StrictRangeOperator::StartsWith,
                     Version::from_str("3.1").unwrap()
                 )
@@ -313,7 +327,7 @@ mod test {
             logical_constraint_parser("3.1.*"),
             Ok((
                 "",
-                Constraint::StrictComparison(
+                VersionConstraint::StrictComparison(
                     StrictRangeOperator::StartsWith,
                     Version::from_str("3.1").unwrap()
                 )
@@ -324,7 +338,7 @@ mod test {
             logical_constraint_parser("~=3.1"),
             Ok((
                 "",
-                Constraint::StrictComparison(
+                VersionConstraint::StrictComparison(
                     StrictRangeOperator::Compatible,
                     Version::from_str("3.1").unwrap()
                 )
@@ -335,8 +349,8 @@ mod test {
             logical_constraint_parser(">=3.1*"),
             Ok((
                 "",
-                Constraint::Comparison(
-                    RangeOperator::GreaterEquals,
+                VersionConstraint::OrdComparison(
+                    OrdOperator::Ge,
                     Version::from_str("3.1").unwrap()
                 )
             ))
@@ -358,12 +372,13 @@ mod test {
         );
 
         // Any constraints
-        assert_eq!(constraint_parser("*"), Ok(("", Constraint::Any)));
-        assert_eq!(constraint_parser("*.*"), Ok(("", Constraint::Any)));
+        assert_eq!(constraint_parser("*"), Ok(("", VersionConstraint::Any)));
+        assert_eq!(constraint_parser("*.*"), Ok(("", VersionConstraint::Any)));
     }
 
     #[test]
     fn pixi_issue_278() {
+        // TODO, move something so that from_str is in same submodule as this test
         assert!(VersionSpec::from_str("1.8.1+g6b29558").is_ok());
     }
 }

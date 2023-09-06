@@ -1,6 +1,6 @@
-use crate::version_spec::{
-    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
-};
+use super::OrdOperator;
+use crate::version_spec::{LogicalOperator, StrictRangeOperator, VersionOperator};
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
@@ -29,29 +29,20 @@ pub enum ParseVersionTreeError {
 /// A parser that parses version operators.
 fn parse_operator<'a, E: ParseError<&'a str>>(
     input: &'a str,
-) -> Result<(&'a str, VersionOperators), nom::Err<E>> {
+) -> Result<(&'a str, VersionOperator), nom::Err<E>> {
     alt((
-        value(VersionOperators::Exact(EqualityOperator::Equals), tag("==")),
+        value(VersionOperator::OrdRange(OrdOperator::Eq), tag("==")),
+        value(VersionOperator::OrdRange(OrdOperator::Ne), tag("!=")),
         value(
-            VersionOperators::Exact(EqualityOperator::NotEquals),
-            tag("!="),
-        ),
-        value(
-            VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
+            VersionOperator::StrictRange(StrictRangeOperator::StartsWith),
             tag("="),
         ),
+        value(VersionOperator::OrdRange(OrdOperator::Ge), tag(">=")),
+        value(VersionOperator::OrdRange(OrdOperator::Gt), tag(">")),
+        value(VersionOperator::OrdRange(OrdOperator::Le), tag("<=")),
+        value(VersionOperator::OrdRange(OrdOperator::Lt), tag("<")),
         value(
-            VersionOperators::Range(RangeOperator::GreaterEquals),
-            tag(">="),
-        ),
-        value(VersionOperators::Range(RangeOperator::Greater), tag(">")),
-        value(
-            VersionOperators::Range(RangeOperator::LessEquals),
-            tag("<="),
-        ),
-        value(VersionOperators::Range(RangeOperator::Less), tag("<")),
-        value(
-            VersionOperators::StrictRange(StrictRangeOperator::Compatible),
+            VersionOperator::StrictRange(StrictRangeOperator::Compatible),
             tag("~="),
         ),
     ))(input)
@@ -201,11 +192,13 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 
 #[cfg(test)]
 mod tests {
+    use super::OrdOperator;
     use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
     use crate::version_spec::version_tree::{parse_version_epoch, recognize_constraint};
     use crate::version_spec::{
-        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperator,
     };
+
     use std::convert::TryFrom;
 
     #[test]
@@ -264,40 +257,40 @@ mod tests {
 
         assert_eq!(
             parse_operator::<Err>("=="),
-            Ok(("", VersionOperators::Exact(EqualityOperator::Equals)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Eq)))
         );
         assert_eq!(
             parse_operator::<Err>("!="),
-            Ok(("", VersionOperators::Exact(EqualityOperator::NotEquals)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Ne)))
         );
         assert_eq!(
             parse_operator::<Err>(">"),
-            Ok(("", VersionOperators::Range(RangeOperator::Greater)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Gt)))
         );
         assert_eq!(
             parse_operator::<Err>(">="),
-            Ok(("", VersionOperators::Range(RangeOperator::GreaterEquals)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Ge)))
         );
         assert_eq!(
             parse_operator::<Err>("<"),
-            Ok(("", VersionOperators::Range(RangeOperator::Less)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Lt)))
         );
         assert_eq!(
             parse_operator::<Err>("<="),
-            Ok(("", VersionOperators::Range(RangeOperator::LessEquals)))
+            Ok(("", VersionOperator::OrdRange(OrdOperator::Le)))
         );
         assert_eq!(
             parse_operator::<Err>("="),
             Ok((
                 "",
-                VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+                VersionOperator::StrictRange(StrictRangeOperator::StartsWith)
             ))
         );
         assert_eq!(
             parse_operator::<Err>("~="),
             Ok((
                 "",
-                VersionOperators::StrictRange(StrictRangeOperator::Compatible)
+                VersionOperator::StrictRange(StrictRangeOperator::Compatible)
             ))
         );
 
@@ -308,7 +301,10 @@ mod tests {
         // Only the operator is parsed
         assert_eq!(
             parse_operator::<Err>(">=3.8"),
-            Ok(("3.8", VersionOperators::Range(RangeOperator::GreaterEquals)))
+            Ok((
+                "3.8",
+                VersionOperator::OrdRange(crate::constraint::operators::OrdOperator::Ge)
+            ))
         );
     }
 
