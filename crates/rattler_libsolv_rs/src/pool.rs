@@ -88,22 +88,6 @@ impl<VS: VersionSet> Pool<VS> {
         solvable_id
     }
 
-    /// Overwrites the package associated to the id, as though it had just been created using
-    /// [`Pool::add_package`]
-    ///
-    /// Panics if the new package has a different name than the existing package
-    pub fn overwrite_package(
-        &mut self,
-        repo_id: RepoId,
-        solvable_id: SolvableId,
-        name_id: NameId,
-        record: VS::V,
-    ) {
-        assert!(!solvable_id.is_root());
-        assert_eq!(self.solvables[solvable_id].package().name, name_id);
-        self.solvables[solvable_id] = Solvable::new_package(repo_id, name_id, record);
-    }
-
     /// Registers a dependency for the provided solvable
     pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set_id: VersionSetId) {
         let solvable = self.solvables[solvable_id].package_mut();
@@ -186,13 +170,6 @@ impl<VS: VersionSet> Pool<VS> {
         self.resolve_solvable_inner(id).package()
     }
 
-    /// Returns the solvable associated to the provided id
-    ///
-    /// Panics if the solvable is not found in the pool
-    pub fn resolve_solvable_mut(&mut self, id: SolvableId) -> &mut PackageSolvable<VS::V> {
-        self.resolve_solvable_inner_mut(id).package_mut()
-    }
-
     /// Finds all the solvables that match the specified version set.
     pub fn find_matching_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
         let (name_id, version_set) = &self.version_sets[version_set_id];
@@ -220,13 +197,6 @@ impl<VS: VersionSet> Pool<VS> {
     /// Panics if the solvable is not found in the pool
     pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable<VS::V> {
         &self.solvables[id]
-    }
-
-    /// Returns the solvable associated to the provided id
-    ///
-    /// Panics if the solvable is not found in the pool
-    pub(crate) fn resolve_solvable_inner_mut(&mut self, id: SolvableId) -> &mut Solvable<VS::V> {
-        &mut self.solvables[id]
     }
 
     /// Returns the dependencies associated to the root solvable
