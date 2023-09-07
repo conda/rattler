@@ -17,7 +17,7 @@ class Version:
     Version comparison is case-insensitive.
     """
 
-    def __init__(self, version: str):
+    def __init__(self, version: str) -> None:
         if isinstance(version, str):
             self._version = PyVersion(version)
         else:
@@ -274,7 +274,7 @@ class Version:
         """
         return self._version.__hash__()
 
-    def __eq__(self, other: Version) -> bool:
+    def __eq__(self, other: Version) -> bool:  # type: ignore[override]
         """
         Returns True if this instance represents the same version as `other`.
 
@@ -289,7 +289,7 @@ class Version:
         """
         return self._version == other._version
 
-    def __ne__(self, other: Version) -> bool:
+    def __ne__(self, other: Version) -> bool:  # type: ignore[override]
         """
         Returns True if this instance represents the same version as `other`.
 
