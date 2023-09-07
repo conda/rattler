@@ -149,7 +149,6 @@ impl<'a> Display for SolverPackageRecord<'a> {
 }
 
 impl<'a> VersionTrait for SolverPackageRecord<'a> {
-    type Name = String;
     type Version = rattler_conda_types::Version;
 
     fn version(&self) -> Self::Version {

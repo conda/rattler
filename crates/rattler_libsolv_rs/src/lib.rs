@@ -34,10 +34,6 @@ pub use mapping::Mapping;
 
 /// Version is a name and a version specification.
 pub trait VersionTrait: Display {
-    /// The name of the package associated with this record.
-    /// TODO: Can we move this to the Pool?
-    type Name: Display + Sized + Hash + Eq + Clone;
-
     /// The version associated with this record.
     type Version: Display + Ord + Clone;
 

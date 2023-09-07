@@ -14,12 +14,18 @@ use std::{
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyVersion {
-    inner: Version,
+    pub(crate) inner: Version,
 }
 
 impl From<Version> for PyVersion {
     fn from(value: Version) -> Self {
         PyVersion { inner: value }
+    }
+}
+
+impl From<PyVersion> for Version {
+    fn from(value: PyVersion) -> Self {
+        value.inner
     }
 }
 

@@ -22,19 +22,48 @@ pub(super) fn add_repodata_records<'a>(
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
     parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
-    // Keeps a mapping from packages added to the repo to the type and solvable
-    let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
+    // Iterate over all records and dedup records that refer to the same package data but with
+    // different archive types. This can happen if you have two variants of the same package but
+    // with different extensions. We prefer `.conda` packages over `.tar.bz`.
+    let mut package_to_type: HashMap<&str, (ArchiveType, &'a RepoDataRecord)> = HashMap::new();
+    for record in repo_datas.into_iter() {
+        let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
+            .unwrap_or((&record.file_name, ArchiveType::TarBz2));
+        match package_to_type.get_mut(file_name) {
+            None => {
+                package_to_type.insert(file_name, (archive_type, record));
+            }
+            Some((prev_archive_type, prev_record)) => match archive_type.cmp(prev_archive_type) {
+                Ordering::Greater => {
+                    // A previous package has a worse package "type", we'll use the current record
+                    // instead.
+                    *prev_archive_type = archive_type;
+                    *prev_record = record;
+                }
+                Ordering::Less => {
+                    // A previous package that we already stored is actually a package of a better
+                    // "type" so we'll just use that instead (.conda > .tar.bz)
+                }
+                Ordering::Equal => {
+                    if record != *prev_record {
+                        unreachable!(
+                            "found duplicate record with different values for {}",
+                            &record.file_name
+                        );
+                    }
+                }
+            },
+        }
+    }
 
-    let mut solvable_ids = Vec::new();
-    for repo_data in repo_datas.into_iter() {
-        // Create a solvable for the package
-        let solvable_id =
-            match add_or_reuse_solvable(pool, repo_id, &mut package_to_type, repo_data) {
-                Some(id) => id,
-                None => continue,
-            };
-
+    let solvable_ids = Vec::new();
+    for (_archive_type, repo_data) in package_to_type.into_values() {
         let record = &repo_data.package_record;
+
+        // Add the package to the pool
+        let name_id = pool.intern_package_name(record.name.as_normalized());
+        let solvable_id =
+            pool.add_package(repo_id, name_id, SolverPackageRecord::Record(repo_data));
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
@@ -47,75 +76,9 @@ pub(super) fn add_repodata_records<'a>(
             let version_set_id = parse_match_spec(pool, match_spec_str, parse_match_spec_cache)?;
             pool.add_constrains(solvable_id, version_set_id);
         }
-
-        solvable_ids.push(solvable_id)
     }
 
     Ok(solvable_ids)
-}
-
-/// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`
-/// packages. For that reason, when adding a solvable we check first if a `.conda` version of the
-/// package has already been added, in which case we forgo adding its `.tar.bz` version (and return
-/// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
-/// solvable for the `.tar.bz` version of the package).
-fn add_or_reuse_solvable<'a>(
-    pool: &mut Pool<SolverMatchSpec<'a>>,
-    repo_id: RepoId,
-    package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
-    repo_data: &'a RepoDataRecord,
-) -> Option<SolvableId> {
-    // Resolve the name in the pool
-    let package_name_id = pool.intern_package_name(repo_data.package_record.name.as_normalized());
-
-    // Sometimes we can reuse an existing solvable
-    if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
-        if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
-            match archive_type.cmp(&other_package_type) {
-                Ordering::Less => {
-                    // A previous package that we already stored is actually a package of a better
-                    // "type" so we'll just use that instead (.conda > .tar.bz)
-                    return None;
-                }
-                Ordering::Greater => {
-                    // A previous package has a worse package "type", we'll reuse the handle but
-                    // overwrite its attributes
-
-                    // Update the package to the new type mapping
-                    package_to_type.insert(filename, (archive_type, old_solvable_id));
-
-                    // Reuse the old solvable
-                    pool.overwrite_package(
-                        repo_id,
-                        old_solvable_id,
-                        package_name_id,
-                        SolverPackageRecord::Record(repo_data),
-                    );
-                    return Some(old_solvable_id);
-                }
-                Ordering::Equal => {
-                    unreachable!("found a duplicate package")
-                }
-            }
-        } else {
-            let solvable_id = pool.add_package(
-                repo_id,
-                package_name_id,
-                SolverPackageRecord::Record(repo_data),
-            );
-            package_to_type.insert(filename, (archive_type, solvable_id));
-            return Some(solvable_id);
-        }
-    } else {
-        tracing::warn!("unknown package extension: {}", &repo_data.file_name);
-    }
-
-    let solvable_id = pool.add_package(
-        repo_id,
-        package_name_id,
-        SolverPackageRecord::Record(repo_data),
-    );
-    Some(solvable_id)
 }
 
 pub(super) fn add_virtual_packages<'a>(
