@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union
 
 from rattler.version import Version
 
@@ -19,24 +19,20 @@ class VersionWithSource:
     which can be accessed by `source` property.
     """
 
-    def __init__(self, source: str, version: Optional[Version] = None):
-        if not isinstance(source, str):
-            raise TypeError(
-                "VersionWithSource constructor received unsupported type "
-                f" {type(source).__name__!r} for the `source` parameter"
-            )
-
-        if version is None:
-            version = Version(source)
-
-        if not isinstance(version, Version):
+    def __init__(self, version: Union[str, Version]):
+        if not isinstance(version, (str, Version)):
             raise TypeError(
                 "VersionWithSource constructor received unsupported type "
                 f" {type(version).__name__!r} for the `version` parameter"
             )
 
-        self._source = source
-        self._version = version
+        if isinstance(version, str):
+            self._source = version
+            self._version = Version(version)
+
+        if isinstance(version, Version):
+            self._source = str(version)
+            self._version = version
 
     @property
     def version(self) -> Version:
@@ -48,7 +44,7 @@ class VersionWithSource:
         >>> v = VersionWithSource("1.01")
         >>> v.version
         Version("1.1")
-        >>> v2 = VersionWithSource("1.01", v.version)
+        >>> v2 = VersionWithSource(v.version)
         >>> v2.version
         Version("1.1")
         """
