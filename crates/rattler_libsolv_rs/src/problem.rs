@@ -552,25 +552,27 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     });
 
                     let req = self.pool.resolve_version_set(version_set_id).to_string();
+                    let name = self.pool.resolve_version_set_package_name(version_set_id);
+                    let name = self.pool.resolve_package_name(name);
                     let target_nx = graph.edge_endpoints(edges[0]).unwrap().1;
                     let missing =
                         edges.len() == 1 && graph[target_nx] == ProblemNode::UnresolvedDependency;
                     if missing {
                         // No candidates for requirement
                         if depth == 0 {
-                            writeln!(f, "{indent}No candidates were found for {req}.")?;
+                            writeln!(f, "{indent}No candidates were found for {name} {req}.")?;
                         } else {
-                            writeln!(f, "{indent}{req}, for which no candidates were found.",)?;
+                            writeln!(f, "{indent}{name} {req}, for which no candidates were found.",)?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
                         if depth == 0 {
                             writeln!(
                                 f,
-                                "{indent}{req} can be installed with any of the following options:"
+                                "{indent}{name} {req} can be installed with any of the following options:"
                             )?;
                         } else {
-                            writeln!(f, "{indent}{req}, which can be installed with any of the following options:")?;
+                            writeln!(f, "{indent}{name} {req}, which can be installed with any of the following options:")?;
                         }
 
                         stack.extend(
@@ -589,9 +591,9 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     } else {
                         // Package cannot be installed (the conflicting requirement is further down the tree)
                         if depth == 0 {
-                            writeln!(f, "{indent}{req} cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{name} {req} cannot be installed because there are no viable options:")?;
                         } else {
-                            writeln!(f, "{indent}{req}, which cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{name} {req}, which cannot be installed because there are no viable options:")?;
                         }
 
                         stack.extend(edges.iter().map(|&e| {
