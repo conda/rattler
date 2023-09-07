@@ -956,7 +956,6 @@ mod test {
     }
 
     impl VersionTrait for Pack {
-        type Name = String;
         type Version = u32;
 
         fn version(&self) -> Self::Version {
@@ -974,7 +973,7 @@ mod test {
     }
 
     impl Nameable for Pack {
-        type Name = <Pack as VersionTrait>::Name;
+        type Name = String;
         fn name(&self) -> &Self::Name {
             &self.0
         }
@@ -988,7 +987,7 @@ mod test {
     }
 
     impl Nameable for Spec {
-        type Name = <<Spec as VersionSet>::V as VersionTrait>::Name;
+        type Name = String;
         fn name(&self) -> &String {
             &self.name
         }
@@ -1080,8 +1079,8 @@ mod test {
     ///     packages: packages and its dependencies to add to the pool
     fn pool<VS>(packages: &[(&str, Vec<&str>)]) -> Pool<VS>
     where
-        VS: VersionSet + Nameable<Name = <VS::V as VersionTrait>::Name> + FromStr,
-        VS::V: FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>,
+        VS: VersionSet + Nameable<Name = String> + FromStr,
+        VS::V: FromStr + Nameable<Name = String>,
         <VS as FromStr>::Err: Debug,
         <<VS as VersionSet>::V as FromStr>::Err: Debug,
     {
@@ -1099,8 +1098,8 @@ mod test {
         dependencies: &Vec<&str>,
         constrains: &Vec<&str>,
     ) where
-        VS: VersionSet + Nameable<Name = <VS::V as VersionTrait>::Name> + FromStr,
-        VS::V: FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>,
+        VS: VersionSet + Nameable<Name = String> + FromStr,
+        VS::V: FromStr + Nameable<Name = String>,
         <VS as FromStr>::Err: Debug,
         <<VS as VersionSet>::V as FromStr>::Err: Debug,
     {
@@ -1126,7 +1125,7 @@ mod test {
     }
 
     /// Install the given version sets
-    fn install<VS: VersionSet + FromStr + Nameable<Name = <VS::V as VersionTrait>::Name>>(
+    fn install<VS: VersionSet + FromStr + Nameable<Name = String>>(
         pool: &mut Pool<VS>,
         version_sets: &[&str],
     ) -> SolveJobs

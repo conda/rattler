@@ -1,6 +1,7 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 
 use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
@@ -12,7 +13,7 @@ use crate::{VersionSet, VersionTrait};
 ///
 /// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
 /// from the original `PackageRecord`s)
-pub struct Pool<VS: VersionSet> {
+pub struct Pool<VS: VersionSet, Name: Hash + Eq = String> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
 
@@ -20,10 +21,10 @@ pub struct Pool<VS: VersionSet> {
     total_repos: u32,
 
     /// Interned package names
-    package_names: Arena<NameId, <VS::V as VersionTrait>::Name>,
+    package_names: Arena<NameId, Name>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<<VS::V as VersionTrait>::Name, NameId>,
+    pub(crate) names_to_ids: HashMap<Name, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -41,7 +42,7 @@ pub struct Pool<VS: VersionSet> {
     pub(crate) match_spec_to_forbidden: Mapping<VersionSetId, Vec<SolvableId>>,
 }
 
-impl<VS: VersionSet> Default for Pool<VS> {
+impl<VS: VersionSet, Name: Hash + Eq> Default for Pool<VS, Name> {
     fn default() -> Self {
         let mut solvables = Arena::new();
         solvables.alloc(Solvable::new_root());
@@ -62,7 +63,7 @@ impl<VS: VersionSet> Default for Pool<VS> {
     }
 }
 
-impl<VS: VersionSet> Pool<VS> {
+impl<VS: VersionSet, Name: Hash + Eq + Clone> Pool<VS, Name> {
     /// Creates a new [`Pool`]
     pub fn new() -> Self {
         Self::default()
@@ -133,9 +134,9 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    pub fn intern_package_name<N>(&mut self, name: N) -> NameId
+    pub fn intern_package_name<NValue>(&mut self, name: NValue) -> NameId
     where
-        N: Into<<VS::V as VersionTrait>::Name>,
+        NValue: Into<Name>,
     {
         match self.names_to_ids.entry(name.into()) {
             Entry::Occupied(e) => *e.get(),
@@ -152,14 +153,14 @@ impl<VS: VersionSet> Pool<VS> {
     }
 
     /// Lookup the package name id associated to the provided name
-    pub fn lookup_package_name(&self, name: &<VS::V as VersionTrait>::Name) -> Option<NameId> {
+    pub fn lookup_package_name(&self, name: &Name) -> Option<NameId> {
         self.names_to_ids.get(name).copied()
     }
 
     /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &<VS::V as VersionTrait>::Name {
+    pub fn resolve_package_name(&self, name_id: NameId) -> &Name {
         &self.package_names[name_id]
     }
 
