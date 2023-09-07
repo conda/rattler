@@ -3,7 +3,7 @@
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
-use rattler_conda_types::{MatchSpec, NamelessMatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{NamelessMatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,

@@ -968,7 +968,7 @@ mod test {
         type Err = ();
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
-            let split = s.split(" ").collect::<Vec<_>>();
+            let split = s.split(' ').collect::<Vec<_>>();
             Ok(Pack(split[0].to_string(), split[1].parse::<u32>().unwrap()))
         }
     }
@@ -1015,8 +1015,8 @@ mod test {
         type Err = ();
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
-            let split = s.split(" ").collect::<Vec<_>>();
-            let name = split.get(0).expect("spec does not have a name").to_string();
+            let split = s.split(' ').collect::<Vec<_>>();
+            let name = split.first().expect("spec does not have a name").to_string();
 
             fn version_range(s: Option<&&str>) -> Option<Range<u32>> {
                 if let Some(s) = s {
@@ -1030,7 +1030,7 @@ mod test {
                             .unwrap_or_else(|| start + 1),
                     })
                 } else {
-                    return None;
+                    None
                 }
             }
 
@@ -1047,11 +1047,11 @@ mod test {
             if !self.name.eq(&v.0) {
                 return false;
             }
-            return if let Some(versions) = &self.versions {
+            if let Some(versions) = &self.versions {
                 versions.contains(&v.1)
             } else {
                 true
-            };
+            }
         }
     }
 
