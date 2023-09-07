@@ -162,7 +162,7 @@ pub fn add_virtual_packages(
         pool.add_package(
             repo_id,
             package_name_id,
-            SolverPackageRecord::ref_cast(&package),
+            SolverPackageRecord::ref_cast(package),
         );
     }
 }

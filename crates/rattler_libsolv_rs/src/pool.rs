@@ -200,7 +200,7 @@ impl<VS: VersionSet> Pool<VS> {
         self.packages_by_name[*name_id]
             .iter()
             .cloned()
-            .filter(|&solvable| version_set.contains(&self.solvables[solvable].package().inner()))
+            .filter(|&solvable| version_set.contains(self.solvables[solvable].package().inner()))
             .collect()
     }
 
@@ -211,7 +211,7 @@ impl<VS: VersionSet> Pool<VS> {
         self.packages_by_name[*name_id]
             .iter()
             .cloned()
-            .filter(|&solvable| !version_set.contains(&self.solvables[solvable].package().inner()))
+            .filter(|&solvable| !version_set.contains(self.solvables[solvable].package().inner()))
             .collect()
     }
 

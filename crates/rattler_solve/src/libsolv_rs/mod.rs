@@ -74,7 +74,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
     type V = &'a SolverPackageRecord;
 
     fn contains(&self, v: &Self::V) -> bool {
-        self.matches(&v.deref())
+        self.matches(v.deref())
     }
 }
 
@@ -83,7 +83,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 #[repr(transparent)]
 pub struct SolverPackageRecord(PackageRecord);
 
-impl<'a> Deref for SolverPackageRecord {
+impl Deref for SolverPackageRecord {
     type Target = PackageRecord;
 
     fn deref(&self) -> &Self::Target {

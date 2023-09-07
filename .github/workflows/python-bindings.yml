@@ -17,7 +17,7 @@ jobs:
     name: Format, Lint and Test the Python bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
       - run: |
@@ -31,6 +31,10 @@ jobs:
           cd py-rattler
           pixi run lint
           pixi run fmt-check
+      - name: Run tests
+        run: |
+          cd py-rattler
+          pixi run type-check
       - name: Run tests
         run: |
           cd py-rattler

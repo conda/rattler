@@ -35,7 +35,7 @@ impl<V> PackageSolvable<V> {
 
     /// Get the constrains for this solvable
     pub fn constrains(&self) -> &[VersionSetId] {
-        &self.dependencies
+        &self.constrains
     }
 
     /// Returns the name of the solvable
