@@ -8,7 +8,7 @@ class AuthenticatedClient:
     A client that can be used to make authenticated requests.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._client = PyAuthenticatedClient()
 
     @classmethod
@@ -20,12 +20,6 @@ class AuthenticatedClient:
         authenticated_client._client = client
         return authenticated_client
 
-    def __str__(self) -> str:
-        """
-        Returns the string representation of the AuthenticatedClient
-        """
-        return ""
-
     def __repr__(self) -> str:
         """
         Returns a representation of the AuthenticatedClient
@@ -35,4 +29,4 @@ class AuthenticatedClient:
         >>> AuthenticatedClient()
         AuthenticatedClient()
         """
-        return f"{type(self).__name__}({self.__str__()})"
+        return f"{type(self).__name__}()"
