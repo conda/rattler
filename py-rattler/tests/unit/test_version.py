@@ -2,7 +2,7 @@ import pytest
 from rattler import Version
 
 
-def test_version_dash_normalisation():
+def test_version_dash_normalisation() -> None:
     assert Version("1.0-").segments() == [[1], [0, "_"]]
     assert Version("1.0_").segments() == [[1], [0, "_"]]
     assert Version("1.0dev-+2.3").segments() == [[1], [0, "dev", "_"]]

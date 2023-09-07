@@ -18,7 +18,8 @@ fmt-rust = "cargo fmt --all"
 lint-python = "ruff ."
 lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
-lint = { depends_on = ["lint-python", "lint-rust"] }
+lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
+type-check = { cmd = "mypy", depends_on = ["build"] }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
@@ -31,3 +32,4 @@ pip = "~=23.2.1"
 pytest = "~=7.4.0"
 black = "~=23.7.0"
 ruff = "~=0.0.285"
+mypy = "~=1.5.1"

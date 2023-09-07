@@ -2,6 +2,7 @@ mod channel;
 mod error;
 mod match_spec;
 mod nameless_match_spec;
+mod networking;
 mod platform;
 mod repo_data;
 mod shell;
@@ -15,6 +16,7 @@ use error::{
 };
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
+use networking::PyAuthenticatedClient;
 use repo_data::package_record::PyPackageRecord;
 use version::PyVersion;
 
@@ -36,6 +38,8 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyChannelConfig>().unwrap();
     m.add_class::<PyPlatform>().unwrap();
     m.add_class::<PyArch>().unwrap();
+
+    m.add_class::<PyAuthenticatedClient>().unwrap();
 
     // Shell activation things
     m.add_class::<PyActivationVariables>().unwrap();

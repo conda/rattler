@@ -2,5 +2,5 @@
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: error
 ---
-No candidates were found for fghj.
+No candidates were found for fghj with any version.
 

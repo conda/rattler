@@ -21,3 +21,6 @@ readme = "README.md"
 allow-branch = ["main"]
 consolidate-commits = true
 tag-prefix = ""
+
+[profile.bench]
+lto = true

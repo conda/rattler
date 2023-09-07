@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Details
-- added `constraint` module, shared API for `build_spec` and `version_spec` by @YeungOnion in ([#305](https://github.com/mamba-org/rattler/pull/305))
+- added `constraint` module, shared API for `build_spec` and `version_spec` (not implemented in #305) by @YeungOnion in ([#305](https://github.com/mamba-org/rattler/pull/305))
 
 ### Added
 - support build number spec to support compare
