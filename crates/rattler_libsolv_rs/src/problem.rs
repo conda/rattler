@@ -562,7 +562,10 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                         if depth == 0 {
                             writeln!(f, "{indent}No candidates were found for {name} {req}.")?;
                         } else {
-                            writeln!(f, "{indent}{name} {req}, for which no candidates were found.",)?;
+                            writeln!(
+                                f,
+                                "{indent}{name} {req}, for which no candidates were found.",
+                            )?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
@@ -612,6 +615,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     }
 
                     let solvable = self.pool.resolve_solvable(solvable_id);
+                    let name = self.pool.resolve_package_name(solvable.name);
                     let version = if let Some(merged) = self.merged_candidates.get(&solvable_id) {
                         reported.extend(merged.ids.iter().cloned());
                         merged
@@ -648,6 +652,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                                 _ => None,
                             })
                             .dedup();
+
 
                         writeln!(
                             f,
