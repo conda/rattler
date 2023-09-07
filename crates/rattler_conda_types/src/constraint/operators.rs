@@ -26,8 +26,8 @@ where
 {
     fn compares(&self, source: &Element, target: &Element) -> bool {
         match self {
-            Self::Eq => target.eq(&source),
-            Self::Ne => target.ne(&source),
+            Self::Eq => target.eq(source),
+            Self::Ne => target.ne(source),
         }
     }
 }
@@ -62,12 +62,12 @@ where
 {
     fn compares(&self, source: &Element, target: &Element) -> bool {
         match self {
-            Self::Eq => target.eq(&source),
-            Self::Ne => target.ne(&source),
-            Self::Gt => target.gt(&source),
-            Self::Ge => target.ge(&source),
-            Self::Lt => target.lt(&source),
-            Self::Le => target.le(&source),
+            Self::Eq => target.eq(source),
+            Self::Ne => target.ne(source),
+            Self::Gt => target.gt(source),
+            Self::Ge => target.ge(source),
+            Self::Lt => target.lt(source),
+            Self::Le => target.le(source),
         }
     }
 }

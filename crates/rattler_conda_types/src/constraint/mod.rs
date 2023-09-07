@@ -26,7 +26,7 @@ where
     Op: Operator<Element>,
 {
     fn is_member(&self, elem: &Element) -> bool {
-        self.op.compares(&self.elem, &elem)
+        self.op.compares(&self.elem, elem)
     }
 }
 

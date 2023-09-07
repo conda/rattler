@@ -41,7 +41,7 @@ impl<'i> ParseError<&'i str> for ParseBuildNumberSpecError {
 impl FromStr for OrdOperator {
     type Err = ParseBuildNumberSpecError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Self::parse(&input) {
+        match Self::parse(input) {
             Ok(("", op)) => Ok(op),
             Ok((_, _)) => Err(ParseBuildNumberSpecError::ExpectedEOF),
             _ => Err(ParseBuildNumberSpecError::InvalidOperator(
@@ -91,7 +91,7 @@ impl BuildNumberSpec {
 impl FromStr for BuildNumberSpec {
     type Err = ParseBuildNumberSpecError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Self::parse(&s) {
+        match Self::parse(s) {
             Ok(("", spec)) => Ok(spec),
             Ok((_, _)) => Err(ParseBuildNumberSpecError::ExpectedEOF),
             Err(_) => unimplemented!(),
