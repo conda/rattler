@@ -1401,8 +1401,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack("b", 2)
-        Pack("a", 1)
+        Pack(2)
+        Pack(1)
         "###);
     }
     //
@@ -1442,9 +1442,9 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack("b", 2)
-        Pack("c", 2)
-        Pack("a", 2)
+        Pack(2)
+        Pack(2)
+        Pack(2)
         "###);
     }
 
@@ -1457,8 +1457,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack("a", 2)
-        Pack("b", 5)
+        Pack(2)
+        Pack(5)
         "###);
     }
 

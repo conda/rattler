@@ -639,9 +639,9 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(f, "{indent}{} {version}", solvable.name.display(self.pool))?;
+                        writeln!(f, "{indent}{name} {version}")?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.name.display(self.pool))?;
+                        writeln!(f, "{indent}{name} {version}, which conflicts with the versions reported above.")?;
                     } else if constrains_conflict {
                         let version_sets = graph
                             .edges(candidate)
@@ -656,24 +656,23 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
 
                         writeln!(
                             f,
-                            "{indent}{} {version} would constrain",
-                            solvable.name.display(self.pool)
+                            "{indent}{name} {version} would constrain",
                         )?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
                         for &version_set_id in version_sets {
                             let version_set = self.pool.resolve_version_set(version_set_id);
+                            let name = self.pool.resolve_version_set_package_name(version_set_id);
+                            let name = self.pool.resolve_package_name(name);
                             writeln!(
                                 f,
-                                "{indent}{} , which conflicts with any installable versions previously reported",
-                                version_set
+                                "{indent}{name} {version_set} , which conflicts with any installable versions previously reported",
                             )?;
                         }
                     } else {
                         writeln!(
                             f,
-                            "{indent}{} {version} would require",
-                            solvable.name.display(self.pool)
+                            "{indent}{name} {version} would require",
                         )?;
                         let requirements = graph
                             .edges(candidate)
