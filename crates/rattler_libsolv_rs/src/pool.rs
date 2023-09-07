@@ -7,7 +7,7 @@ use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{VersionSet, VersionTrait};
+use crate::VersionSet;
 
 /// A pool that stores data related to the available packages
 ///
