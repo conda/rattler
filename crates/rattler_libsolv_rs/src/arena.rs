@@ -52,7 +52,7 @@ impl<TId: ArenaId, TValue> IndexMut<TId> for Arena<TId, TValue> {
 }
 
 /// A trait indicating that the type can be transformed to `usize` and back
-pub(crate) trait ArenaId {
+pub trait ArenaId {
     fn from_usize(x: usize) -> Self;
     fn to_usize(self) -> usize;
 }

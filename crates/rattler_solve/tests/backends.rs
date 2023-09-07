@@ -223,11 +223,7 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(pkgs.len(), 1);
-
-            let info = &pkgs[0];
-            assert_eq!("bar", info.package_record.name.as_normalized());
-            assert_eq!("1.2.3", &info.package_record.version.to_string());
+            insta::assert_debug_snapshot!(pkgs);
         }
 
         #[test]
@@ -425,7 +421,7 @@ mod libsolv_c {
                 locked_packages: Vec::new(),
                 virtual_packages: Vec::new(),
                 available_packages: [libsolv_repodata],
-                specs: specs,
+                specs,
                 pinned_packages: Vec::new(),
             })
             .unwrap();
@@ -489,9 +485,9 @@ fn solve<T: SolverImpl + Default>(
 
     let task = SolverTask {
         locked_packages: installed_packages,
-        virtual_packages: virtual_packages,
+        virtual_packages,
         available_packages: [&repo_data],
-        specs: specs,
+        specs,
         pinned_packages: Vec::new(),
     };
 

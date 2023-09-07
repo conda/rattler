@@ -1,9 +1,8 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1290
 expression: error
 ---
-a <1000 cannot be installed because there are no viable options:
+a with versions 0 up to 1000 cannot be installed because there are no viable options:
 |-- a 41 would require
-    |-- b <20, for which no candidates were found.
+    |-- B with versions 0 up to 20, for which no candidates were found.
 

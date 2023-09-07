@@ -10,7 +10,7 @@ class PackageRecord:
     of a package on a Conda channel.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._package_record = PyPackageRecord()
 
     def __str__(self) -> str:

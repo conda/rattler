@@ -3,9 +3,9 @@ source: crates/rattler_libsolv_rs/src/solver/mod.rs
 expression: error
 ---
 The following packages are incompatible
-|-- asdf can be installed with any of the following options:
-    |-- asdf 1.2.3 would require
-        |-- c >1, which can be installed with any of the following options:
-            |-- c 2.0.0
-|-- c 1.0.0 is locked, but another version is required as reported above
+|-- asdf with any version can be installed with any of the following options:
+    |-- asdf 1 would require
+        |-- c with versions 2 up to 3, which can be installed with any of the following options:
+            |-- c 2
+|-- c 1 is locked, but another version is required as reported above
 

@@ -15,7 +15,7 @@ class NamelessMatchSpec:
     (e.g. `foo = "3.4.1 *cuda"`).
     """
 
-    def __init__(self, spec: str):
+    def __init__(self, spec: str) -> None:
         if isinstance(spec, str):
             self._nameless_match_spec = PyNamelessMatchSpec(spec)
         else:
