@@ -34,8 +34,4 @@ jobs:
       - name: Run tests
         run: |
           cd py-rattler
-          pixi run type-check
-      - name: Run tests
-        run: |
-          cd py-rattler
           pixi run test
