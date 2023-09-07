@@ -3,10 +3,9 @@
 
 use crate::libsolv_rs::{SolverMatchSpec, SolverPackageRecord};
 use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::{NamelessMatchSpec, ParseMatchSpecError};
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{NamelessMatchSpec, MatchSpec, ParseMatchSpecError};
+use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId, VersionSetId};
-use ref_cast::RefCast;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -17,7 +16,7 @@ use std::str::FromStr;
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
-pub fn add_repodata_records<'a>(
+pub(super) fn add_repodata_records<'a>(
     pool: &mut Pool<SolverMatchSpec<'a>>,
     repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
@@ -27,19 +26,13 @@ pub fn add_repodata_records<'a>(
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
 
     let mut solvable_ids = Vec::new();
-    for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
+    for repo_data in repo_datas.into_iter() {
         // Create a solvable for the package
         let solvable_id =
             match add_or_reuse_solvable(pool, repo_id, &mut package_to_type, repo_data) {
                 Some(id) => id,
                 None => continue,
             };
-
-        // Store the current index so we can retrieve the original repo data record
-        // from the final transaction
-        pool.resolve_solvable_mut(solvable_id)
-            .metadata
-            .original_index = Some(repo_data_index);
 
         let record = &repo_data.package_record;
 
@@ -96,7 +89,7 @@ fn add_or_reuse_solvable<'a>(
                         repo_id,
                         old_solvable_id,
                         package_name_id,
-                        SolverPackageRecord::ref_cast(&repo_data.package_record),
+                        SolverPackageRecord::Record(repo_data),
                     );
                     return Some(old_solvable_id);
                 }
@@ -108,7 +101,7 @@ fn add_or_reuse_solvable<'a>(
             let solvable_id = pool.add_package(
                 repo_id,
                 package_name_id,
-                SolverPackageRecord::ref_cast(&repo_data.package_record),
+                SolverPackageRecord::Record(repo_data),
             );
             package_to_type.insert(filename, (archive_type, solvable_id));
             return Some(solvable_id);
@@ -120,54 +113,27 @@ fn add_or_reuse_solvable<'a>(
     let solvable_id = pool.add_package(
         repo_id,
         package_name_id,
-        SolverPackageRecord::ref_cast(&repo_data.package_record),
+        SolverPackageRecord::Record(repo_data),
     );
     Some(solvable_id)
 }
 
-pub fn add_virtual_packages(
-    pool: &mut Pool<SolverMatchSpec>,
+pub(super) fn add_virtual_packages<'a>(
+    pool: &mut Pool<SolverMatchSpec<'a>>,
     repo_id: RepoId,
-    packages: &[GenericVirtualPackage],
+    packages: &'a [GenericVirtualPackage],
 ) {
-    let packages: &'static _ = packages
-        .iter()
-        .map(|p| PackageRecord {
-            arch: None,
-            name: p.name.clone(),
-            noarch: Default::default(),
-            platform: None,
-            sha256: None,
-            size: None,
-            subdir: "".to_string(),
-            timestamp: None,
-            build_number: 0,
-            version: p.version.clone().into(),
-            build: p.build_string.clone(),
-            depends: Vec::new(),
-            features: None,
-            legacy_bz2_md5: None,
-            legacy_bz2_size: None,
-            license: None,
-            license_family: None,
-            constrains: vec![],
-            md5: None,
-            track_features: vec![],
-        })
-        .collect::<Vec<_>>()
-        .leak();
-
     for package in packages {
         let package_name_id = pool.intern_package_name(package.name.as_normalized());
         pool.add_package(
             repo_id,
             package_name_id,
-            SolverPackageRecord::ref_cast(package),
+            SolverPackageRecord::VirtualPackage(package),
         );
     }
 }
 
-pub(crate) fn parse_match_spec(
+pub(super) fn parse_match_spec(
     pool: &mut Pool<SolverMatchSpec>,
     spec_str: &str,
     parse_match_spec_cache: &mut HashMap<String, VersionSetId>,

@@ -2,13 +2,11 @@
 
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use output::get_required_packages;
-use rattler_conda_types::{NamelessMatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{GenericVirtualPackage, NamelessMatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
 };
-use ref_cast::RefCast;
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -19,7 +17,6 @@ use std::{
 
 mod conda_util;
 mod input;
-mod output;
 
 /// Represents the information required to load available packages into libsolv for a single channel
 /// and platform combination
@@ -42,7 +39,7 @@ impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 /// Wrapper around `MatchSpec` so that we can use it in the `libsolv_rs` pool
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct SolverMatchSpec<'a> {
+struct SolverMatchSpec<'a> {
     inner: NamelessMatchSpec,
     _marker: PhantomData<&'a PackageRecord>,
 }
@@ -71,38 +68,93 @@ impl<'a> Deref for SolverMatchSpec<'a> {
 }
 
 impl<'a> VersionSet for SolverMatchSpec<'a> {
-    type V = &'a SolverPackageRecord;
+    type V = SolverPackageRecord<'a>;
 
     fn contains(&self, v: &Self::V) -> bool {
-        self.matches(v.deref())
+        match v {
+            SolverPackageRecord::Record(rec) => self.inner.matches(&rec.package_record),
+            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
+                version,
+                build_string,
+                ..
+            }) => {
+                if let Some(spec) = self.inner.version.as_ref() {
+                    if !spec.matches(version) {
+                        return false;
+                    }
+                }
+
+                if let Some(build_match) = self.inner.build.as_ref() {
+                    if !build_match.matches(build_string) {
+                        return false;
+                    }
+                }
+
+                true
+            }
+        }
     }
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
-#[derive(RefCast)]
-#[repr(transparent)]
-pub struct SolverPackageRecord(PackageRecord);
+enum SolverPackageRecord<'a> {
+    Record(&'a RepoDataRecord),
+    VirtualPackage(&'a GenericVirtualPackage),
+}
 
-impl Deref for SolverPackageRecord {
-    type Target = PackageRecord;
+impl<'a> SolverPackageRecord<'a> {
+    fn version(&self) -> &rattler_conda_types::Version {
+        match self {
+            SolverPackageRecord::Record(rec) => rec.package_record.version.version(),
+            SolverPackageRecord::VirtualPackage(rec) => &rec.version,
+        }
+    }
 
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    fn track_features(&self) -> &[String] {
+        const EMPTY: [String; 0] = [];
+        match self {
+            SolverPackageRecord::Record(rec) => &rec.package_record.track_features,
+            SolverPackageRecord::VirtualPackage(_rec) => &EMPTY,
+        }
+    }
+
+    fn build_number(&self) -> u64 {
+        match self {
+            SolverPackageRecord::Record(rec) => rec.package_record.build_number,
+            SolverPackageRecord::VirtualPackage(_rec) => 0,
+        }
+    }
+
+    fn timestamp(&self) -> Option<&chrono::DateTime<chrono::Utc>> {
+        match self {
+            SolverPackageRecord::Record(rec) => rec.package_record.timestamp.as_ref(),
+            SolverPackageRecord::VirtualPackage(_rec) => None,
+        }
     }
 }
 
-impl Display for SolverPackageRecord {
+impl<'a> Display for SolverPackageRecord<'a> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        match self {
+            SolverPackageRecord::Record(rec) => {
+                write!(f, "{}", &rec.package_record)
+            }
+            SolverPackageRecord::VirtualPackage(rec) => {
+                write!(f, "{}", rec)
+            }
+        }
     }
 }
 
-impl<'a> VersionTrait for &'a SolverPackageRecord {
+impl<'a> VersionTrait for SolverPackageRecord<'a> {
     type Name = String;
     type Version = rattler_conda_types::Version;
 
     fn version(&self) -> Self::Version {
-        self.0.version.version().clone()
+        match self {
+            SolverPackageRecord::Record(rec) => rec.package_record.version.version().clone(),
+            SolverPackageRecord::VirtualPackage(rec) => rec.version.clone(),
+        }
     }
 }
 
@@ -164,8 +216,6 @@ impl super::SolverImpl for Solver {
         add_virtual_packages(&mut pool, repo_id, &task.virtual_packages);
 
         // Create repos for all channel + platform combinations
-        let mut repo_mapping = HashMap::new();
-        let mut all_repodata_records = Vec::new();
         for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
             if repodata.records.is_empty() {
                 continue;
@@ -178,10 +228,6 @@ impl super::SolverImpl for Solver {
                 repodata.records.iter().copied(),
                 &mut parse_match_spec_cache,
             )?;
-
-            // Keep our own info about repodata_records
-            repo_mapping.insert(repo_id, repo_mapping.len());
-            all_repodata_records.push(repodata.records);
         }
 
         // Create a special pool for records that are already installed or locked.
@@ -193,10 +239,6 @@ impl super::SolverImpl for Solver {
             &mut parse_match_spec_cache,
         )?;
 
-        // Also add the installed records to the repodata
-        repo_mapping.insert(repo_id, repo_mapping.len());
-        all_repodata_records.push(task.locked_packages.iter().collect());
-
         // Create a special pool for records that are pinned and cannot be changed.
         let repo_id = pool.new_repo();
         let pinned_solvables = add_repodata_records(
@@ -205,10 +247,6 @@ impl super::SolverImpl for Solver {
             &task.pinned_packages,
             &mut parse_match_spec_cache,
         )?;
-
-        // Also add the installed records to the repodata
-        repo_mapping.insert(repo_id, repo_mapping.len());
-        all_repodata_records.push(task.pinned_packages.iter().collect());
 
         // Add matchspec to the queue
         let mut goal = SolveJobs::default();
@@ -241,12 +279,14 @@ impl super::SolverImpl for Solver {
             SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
         })?;
 
-        let required_records = get_required_packages(
-            solver.pool(),
-            &repo_mapping,
-            &transaction,
-            all_repodata_records.as_slice(),
-        );
+        let required_records = transaction
+            .steps
+            .into_iter()
+            .filter_map(|id| match solver.pool().resolve_solvable(id).inner() {
+                SolverPackageRecord::Record(rec) => Some(rec.deref().clone()),
+                SolverPackageRecord::VirtualPackage(_) => None,
+            })
+            .collect();
 
         Ok(required_records)
     }

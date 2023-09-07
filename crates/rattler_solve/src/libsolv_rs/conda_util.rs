@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn compare_candidates(
+pub(super) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
     pool: &Pool<SolverMatchSpec>,
@@ -25,8 +25,8 @@ pub(crate) fn compare_candidates(
 
     // First compare by "tracked_features". If one of the packages has a tracked feature it is
     // sorted below the one that doesn't have the tracked feature.
-    let a_has_tracked_features = !a_record.track_features.is_empty();
-    let b_has_tracked_features = !b_record.track_features.is_empty();
+    let a_has_tracked_features = !a_record.track_features().is_empty();
+    let b_has_tracked_features = !b_record.track_features().is_empty();
     match a_has_tracked_features.cmp(&b_has_tracked_features) {
         Ordering::Less => return Ordering::Less,
         Ordering::Greater => return Ordering::Greater,
@@ -34,14 +34,14 @@ pub(crate) fn compare_candidates(
     };
 
     // Otherwise, select the variant with the highest version
-    match a_record.version.cmp(&b_record.version) {
+    match a_record.version().cmp(b_record.version()) {
         Ordering::Less => return Ordering::Greater,
         Ordering::Greater => return Ordering::Less,
         Ordering::Equal => {}
     };
 
     // Otherwise, select the variant with the highest build number
-    match a_record.build_number.cmp(&b_record.build_number) {
+    match a_record.build_number().cmp(&b_record.build_number()) {
         Ordering::Less => return Ordering::Greater,
         Ordering::Greater => return Ordering::Less,
         Ordering::Equal => {}
@@ -125,10 +125,10 @@ pub(crate) fn compare_candidates(
     };
 
     // Otherwise, order by timestamp
-    b_record.timestamp.cmp(&a_record.timestamp)
+    b_record.timestamp().cmp(&a_record.timestamp())
 }
 
-pub(crate) fn find_highest_version(
+pub(super) fn find_highest_version(
     match_spec_id: VersionSetId,
     pool: &Pool<SolverMatchSpec>,
     match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
@@ -150,14 +150,14 @@ pub(crate) fn find_highest_version(
                     Some(init.map_or_else(
                         || {
                             (
-                                record.version.version().clone(),
-                                !record.track_features.is_empty(),
+                                record.version().clone(),
+                                !record.track_features().is_empty(),
                             )
                         },
                         |(version, has_tracked_features)| {
                             (
-                                version.max(record.version.version().clone()),
-                                has_tracked_features && record.track_features.is_empty(),
+                                version.max(record.version().clone()),
+                                has_tracked_features && record.track_features().is_empty(),
                             )
                         },
                     ))

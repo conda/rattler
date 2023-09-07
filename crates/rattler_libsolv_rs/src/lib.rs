@@ -22,7 +22,7 @@ mod transaction;
 
 pub use id::{NameId, RepoId, SolvableId, VersionSetId};
 pub use pool::Pool;
-pub use solvable::{PackageSolvable, SolvableMetadata};
+pub use solvable::PackageSolvable;
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
 use std::cell::OnceCell;
