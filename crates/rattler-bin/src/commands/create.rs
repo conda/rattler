@@ -28,6 +28,7 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 use tokio::task::JoinHandle;
@@ -589,10 +590,12 @@ async fn fetch_repo_data_records_with_progress(
         client,
         repodata_cache,
         FetchRepoDataOptions {
-            download_progress: Some(Box::new(move |DownloadProgress { total, bytes }| {
-                download_progress_progress_bar.set_length(total.unwrap_or(bytes));
-                download_progress_progress_bar.set_position(bytes);
-            })),
+            download_progress: Some(Arc::new(Box::new(
+                move |DownloadProgress { total, bytes }| {
+                    download_progress_progress_bar.set_length(total.unwrap_or(bytes));
+                    download_progress_progress_bar.set_position(bytes);
+                },
+            ))),
             ..Default::default()
         },
     )
