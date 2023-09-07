@@ -1,0 +1,11 @@
+---
+source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 488
+expression: file_urls
+---
+- "file:///E:/Developer/prefix/rattler/test-data/channels/dummy/linux-64/foo-3.0.2-py36h1af98f8_1.tar.bz2"
+- "file:///E:/Developer/prefix/rattler/test-data/channels/dummy/linux-64/baz-1.0-unix_py36h1af98f8_2%00.tar.bz2"
+- "file:///E:/Developer/prefix/rattler/test-data/channels/dummy/linux-64/foo-4.0.2-py36h1af98f8_2.tar.bz2"
+- "file:///E:/Developer/prefix/rattler/test-data/channels/dummy/linux-64/bar-1.0-unix_py36h1af98f8_2.tar.bz2"
+- "file:///E:/Developer/prefix/rattler/test-data/channels/dummy/linux-64/foo-3.0.2-py36h1af98f8_1.conda"
+

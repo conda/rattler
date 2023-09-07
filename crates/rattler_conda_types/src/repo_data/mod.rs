@@ -4,6 +4,7 @@
 pub mod patches;
 mod topological_sort;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
@@ -194,10 +195,12 @@ impl RepoData {
         for (filename, package_record) in self.packages.into_iter().chain(self.conda_packages) {
             records.push(RepoDataRecord {
                 url: compute_package_url(
-                    channel,
+                    &channel
+                        .base_url()
+                        .join(&package_record.subdir)
+                        .expect("cannot join channel base_url and subdir"),
                     base_url.as_deref(),
                     &filename,
-                    &package_record.subdir,
                 ),
                 channel: channel_name.clone(),
                 package_record,
@@ -210,40 +213,45 @@ impl RepoData {
 
 /// Computes the URL for a package.
 pub fn compute_package_url(
-    channel: &Channel,
+    repo_data_base_url: &Url,
     base_url: Option<&str>,
     filename: &str,
-    subdir: &str,
 ) -> Url {
-    match base_url {
-        None => channel
-            .base_url()
-            .join(&format!("{subdir}/{filename}"))
-            .expect("failed to build a url from channel and package record"),
-        Some(base_url) => {
-            let mut absolute_url = match Url::parse(base_url) {
-                Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
-                    channel
-                        .base_url()
-                        .join(&format!("{subdir}/{base_url}/"))
-                        .expect("failed to join base_url with channel")
-                }
-                Err(url::ParseError::RelativeUrlWithoutBase) => {
-                    let mut url = channel.base_url().clone();
-                    url.set_path(base_url);
-                    url
-                }
-                Err(e) => unreachable!("{e}"),
-                Ok(base_url) => base_url,
-            };
-            let path = absolute_url.path();
-            if !path.ends_with('/') {
-                absolute_url.set_path(&format!("{path}/"))
+    let mut absolute_url = match base_url {
+        None => repo_data_base_url.clone(),
+        Some(base_url) => match Url::parse(base_url) {
+            Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
+                add_trailing_slash(repo_data_base_url)
+                    .join(base_url)
+                    .expect("failed to join base_url with channel")
             }
-            absolute_url
-                .join(filename)
-                .expect("failed to join base_url and filename")
-        }
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                let mut url = repo_data_base_url.clone();
+                url.set_path(base_url);
+                url
+            }
+            Err(e) => unreachable!("{e}"),
+            Ok(base_url) => base_url,
+        },
+    };
+
+    let path = absolute_url.path();
+    if !path.ends_with('/') {
+        absolute_url.set_path(&format!("{path}/"))
+    }
+    absolute_url
+        .join(filename)
+        .expect("failed to join base_url and filename")
+}
+
+fn add_trailing_slash(url: &Url) -> Cow<Url> {
+    let path = url.path();
+    if !path.ends_with('/') {
+        let mut url = url.clone();
+        url.set_path(&format!("{path}/"));
+        Cow::Owned(url)
+    } else {
+        Cow::Borrowed(url)
     }
 }
 
@@ -453,32 +461,55 @@ mod test {
     }
 
     #[test]
+    fn test_base_url_packages() {
+        // load test data
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+
+        let channel = Channel::from_str(
+            url::Url::from_directory_path(data_path.parent().unwrap().parent().unwrap())
+                .unwrap()
+                .as_str(),
+            &ChannelConfig::default(),
+        )
+        .unwrap();
+
+        dbg!(&channel);
+
+        let file_urls = repodata
+            .into_repo_data_records(&channel)
+            .into_iter()
+            .map(|r| r.url)
+            .collect::<Vec<_>>();
+
+        // serialize to yaml
+        insta::assert_yaml_snapshot!(file_urls);
+    }
+
+    #[test]
     fn test_base_url() {
         let channel = Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap();
+        let base_url = channel.base_url().join("linux-64/").unwrap();
         assert_eq!(
-            compute_package_url(&channel, None, "bla.conda", "linux-64").to_string(),
+            compute_package_url(&base_url, None, "bla.conda").to_string(),
             "https://conda.anaconda.org/conda-forge/linux-64/bla.conda"
         );
         assert_eq!(
-            compute_package_url(
-                &channel,
-                Some("https://host.some.org"),
-                "bla.conda",
-                "linux-64"
-            )
-            .to_string(),
+            compute_package_url(&base_url, Some("https://host.some.org"), "bla.conda",).to_string(),
             "https://host.some.org/bla.conda"
         );
         assert_eq!(
-            compute_package_url(&channel, Some("/root"), "bla.conda", "linux-64").to_string(),
+            compute_package_url(&base_url, Some("/root"), "bla.conda").to_string(),
             "https://conda.anaconda.org/root/bla.conda"
         );
         assert_eq!(
-            compute_package_url(&channel, Some("foo/bar"), "bla.conda", "linux-64").to_string(),
+            compute_package_url(&base_url, Some("foo/bar"), "bla.conda").to_string(),
             "https://conda.anaconda.org/conda-forge/linux-64/foo/bar/bla.conda"
         );
         assert_eq!(
-            compute_package_url(&channel, Some("../../root"), "bla.conda", "linux-64").to_string(),
+            compute_package_url(&base_url, Some("../../root"), "bla.conda").to_string(),
             "https://conda.anaconda.org/root/bla.conda"
         );
     }

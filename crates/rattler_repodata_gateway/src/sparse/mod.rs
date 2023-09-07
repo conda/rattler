@@ -227,7 +227,14 @@ fn parse_records<'i>(
             package_record.subdir = subdir.to_owned();
         }
         result.push(RepoDataRecord {
-            url: compute_package_url(channel, base_url, key.filename, &package_record.subdir),
+            url: compute_package_url(
+                &channel
+                    .base_url
+                    .join(&format!("{}/", &package_record.subdir))
+                    .expect("failed determine repo_base_url"),
+                base_url,
+                key.filename,
+            ),
             channel: channel_name.clone(),
             package_record,
             file_name: key.filename.to_owned(),

@@ -1,9 +1,11 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 448
 expression: repodata
 ---
 info:
   subdir: linux-64
+  base_url: "../linux-64"
 packages:
   bar-1.0-unix_py36h1af98f8_2.tar.bz2:
     build: unix_py36h1af98f8_2
@@ -73,5 +75,5 @@ packages:
     timestamp: 1605110689658
     version: 4.0.2
 packages.conda: {}
-repodata_version: 1
+repodata_version: 2
 
