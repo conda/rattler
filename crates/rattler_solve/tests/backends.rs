@@ -223,11 +223,7 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
-            assert_eq!(pkgs.len(), 1);
-
-            let info = &pkgs[0];
-            assert_eq!("bar", info.package_record.name.as_normalized());
-            assert_eq!("1.2.3", &info.package_record.version.to_string());
+            insta::assert_debug_snapshot!(pkgs);
         }
 
         #[test]

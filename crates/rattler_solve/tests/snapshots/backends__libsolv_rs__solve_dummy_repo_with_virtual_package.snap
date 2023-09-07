@@ -1,0 +1,125 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 470
+expression: pkgs
+---
+[
+    RepoDataRecord {
+        package_record: PackageRecord {
+            arch: None,
+            build: "unix_py36h1af98f8_2\0",
+            build_number: 1,
+            constrains: [],
+            depends: [
+                "__unix",
+            ],
+            features: None,
+            legacy_bz2_md5: None,
+            legacy_bz2_size: None,
+            license: Some(
+                "MIT",
+            ),
+            license_family: Some(
+                "MIT",
+            ),
+            md5: Some(
+                [
+                    188,
+                    19,
+                    170,
+                    88,
+                    226,
+                    9,
+                    43,
+                    203,
+                    11,
+                    151,
+                    197,
+                    97,
+                    55,
+                    61,
+                    57,
+                    5,
+                ],
+            ),
+            name: PackageName {
+                normalized: None,
+                source: "bar",
+            },
+            noarch: NoArchType(
+                None,
+            ),
+            platform: None,
+            sha256: Some(
+                [
+                    151,
+                    236,
+                    55,
+                    125,
+                    42,
+                    216,
+                    61,
+                    254,
+                    241,
+                    25,
+                    75,
+                    122,
+                    163,
+                    27,
+                    12,
+                    144,
+                    118,
+                    25,
+                    78,
+                    16,
+                    217,
+                    149,
+                    166,
+                    230,
+                    150,
+                    201,
+                    208,
+                    125,
+                    215,
+                    130,
+                    177,
+                    74,
+                ],
+            ),
+            size: Some(
+                414494,
+            ),
+            subdir: "linux-64",
+            timestamp: Some(
+                2020-11-11T16:04:49.658Z,
+            ),
+            track_features: [],
+            version: VersionWithSource {
+                version: Version {
+                    version: [[0], [1], [2], [3]],
+                    local: [],
+                },
+                source: Some(
+                    "1.2.3",
+                ),
+            },
+        },
+        file_name: "baz-1.0-unix_py36h1af98f8_2\0.tar.bz2",
+        url: Url {
+            scheme: "https",
+            cannot_be_a_base: false,
+            username: "",
+            password: None,
+            host: Some(
+                Domain(
+                    "conda.anaconda.org",
+                ),
+            ),
+            port: None,
+            path: "/conda-forge/linux-64/baz-1.0-unix_py36h1af98f8_2%00.tar.bz2",
+            query: None,
+            fragment: None,
+        },
+        channel: "https://conda.anaconda.org/conda-forge/",
+    },
+]
