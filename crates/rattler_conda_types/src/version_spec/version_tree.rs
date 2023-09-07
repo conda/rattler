@@ -192,12 +192,11 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::OrdOperator;
-    use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
-    use crate::version_spec::version_tree::{parse_version_epoch, recognize_constraint};
-    use crate::version_spec::{
-        EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperator,
+    use super::{
+        parse_operator, recognize_version, LogicalOperator, OrdOperator, StrictRangeOperator,
+        VersionOperator,
     };
+    use super::{parse_version_epoch, recognize_constraint, VersionTree};
 
     use std::convert::TryFrom;
 

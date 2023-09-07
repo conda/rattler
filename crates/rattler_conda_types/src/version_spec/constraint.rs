@@ -1,5 +1,5 @@
 use super::ParseConstraintError;
-use super::{EqualityOperator, RangeOperator, StrictRangeOperator};
+use super::StrictRangeOperator;
 use crate::constraint::operators::OrdOperator;
 use crate::version_spec::parse::constraint_parser;
 use crate::Version;
@@ -16,22 +16,8 @@ pub(crate) enum VersionConstraint {
     /// Version comparison (e.g `>1.2.3`)
     OrdComparison(OrdOperator, Version),
 
-    #[deprecated(
-        since = "0.8.1",
-        note = "joined this with Exact variant into OrdComparison"
-    )]
-    /// Version comparison (e.g `>1.2.3`)
-    Comparison(RangeOperator, Version),
-
     /// Strict comparison (e.g `~=1.2.3`)
     StrictComparison(StrictRangeOperator, Version),
-
-    #[deprecated(
-        since = "0.8.1",
-        note = "joined this with Comparison variant into OrdComparison"
-    )]
-    /// Exact Version
-    Exact(EqualityOperator, Version),
 }
 
 /// Returns true if the specified character is the first character of a version constraint.
@@ -57,7 +43,7 @@ mod test {
     use super::VersionConstraint;
     use crate::version_spec::constraint::ParseConstraintError;
     use crate::version_spec::OrdOperator;
-    use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator};
+    use crate::version_spec::StrictRangeOperator;
     use crate::Version;
 
     use std::str::FromStr;

@@ -20,28 +20,6 @@ use crate::version::StrictVersion;
 pub(crate) use constraint::is_start_of_version_constraint;
 pub(crate) use parse::ParseConstraintError;
 
-/// An operator to compare two versions.
-#[allow(missing_docs)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
-pub enum RangeOperator {
-    Greater,
-    GreaterEquals,
-    Less,
-    LessEquals,
-}
-
-impl RangeOperator {
-    /// Returns the complement of the current operator.
-    pub fn complement(self) -> Self {
-        match self {
-            RangeOperator::Greater => RangeOperator::LessEquals,
-            RangeOperator::GreaterEquals => RangeOperator::Less,
-            RangeOperator::Less => RangeOperator::GreaterEquals,
-            RangeOperator::LessEquals => RangeOperator::Greater,
-        }
-    }
-}
-
 #[allow(missing_docs)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum StrictRangeOperator {
@@ -63,41 +41,11 @@ impl StrictRangeOperator {
     }
 }
 
-/// An operator set a version equal to another
-#[allow(missing_docs)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
-pub enum EqualityOperator {
-    Equals,
-    NotEquals,
-}
-
-impl EqualityOperator {
-    /// Returns the complement of the current operator.
-    pub fn complement(self) -> Self {
-        match self {
-            EqualityOperator::Equals => EqualityOperator::NotEquals,
-            EqualityOperator::NotEquals => EqualityOperator::Equals,
-        }
-    }
-}
-
 /// Range and equality operators combined
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize)]
 pub enum VersionOperator {
-    #[deprecated(
-        since = "0.8.1",
-        note = "OrdRange was created as transparent enum union for Range and Exact"
-    )]
-    /// Specifies a range of versions
-    Range(RangeOperator),
     /// Specifies a range of versions using the strict operator
     StrictRange(StrictRangeOperator),
-    #[deprecated(
-        since = "0.8.1",
-        note = "OrdRange was created as transparent enum union for Range and Exact"
-    )]
-    /// Specifies an exact version
-    Exact(EqualityOperator),
     /// Uses methods from impl Ord to specify a version
     OrdRange(OrdOperator),
 }
@@ -139,13 +87,6 @@ pub enum VersionSpec {
     StrictRange(StrictRangeOperator, StrictVersion),
     /// A group of version specifications
     Group(LogicalOperator, Vec<VersionSpec>),
-    #[deprecated(
-        since = "0.8.1",
-        note = "VersionOperator::OrdRange as transparent enum union for Range
-                and Exact removes need for Exact using EqualityOperator"
-    )]
-    /// A specific version
-    Exact(EqualityOperator, Version),
 }
 
 #[allow(clippy::enum_variant_names, missing_docs)]
@@ -179,9 +120,6 @@ impl FromStr for VersionSpec {
                         VersionConstraint::StrictComparison(op, ver) => {
                             VersionSpec::StrictRange(op, StrictVersion(ver))
                         }
-                        VersionConstraint::Exact(_, _) | VersionConstraint::Comparison(_, _) => {
-                            panic!("actively removing this variant")
-                        }
                     })
                 }
                 VersionTree::Group(op, groups) => Ok(VersionSpec::Group(
@@ -198,17 +136,6 @@ impl FromStr for VersionSpec {
     }
 }
 
-impl Display for RangeOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RangeOperator::Greater => write!(f, ">"),
-            RangeOperator::GreaterEquals => write!(f, ">="),
-            RangeOperator::Less => write!(f, "<"),
-            RangeOperator::LessEquals => write!(f, "<="),
-        }
-    }
-}
-
 impl Display for StrictRangeOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -216,15 +143,6 @@ impl Display for StrictRangeOperator {
             StrictRangeOperator::NotStartsWith => write!(f, "!=startswith"),
             StrictRangeOperator::Compatible => write!(f, "~="),
             StrictRangeOperator::NotCompatible => write!(f, "!~="),
-        }
-    }
-}
-
-impl Display for EqualityOperator {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Equals => write!(f, "=="),
-            Self::NotEquals => write!(f, "!="),
         }
     }
 }
@@ -248,7 +166,6 @@ impl Display for VersionSpec {
                     StrictRangeOperator::NotStartsWith => write!(f, "!={}.*", version),
                     op => write!(f, "{}{}", op, version),
                 },
-                VersionSpec::Exact(_, _) => panic!("Actively removing this variant"),
                 VersionSpec::OrdRange(op, version) => {
                     write!(f, "{}{}", op, version)
                 }
@@ -297,7 +214,6 @@ impl VersionSpec {
             VersionSpec::OrdRange(OrdOperator::Ge, limit) => version >= limit,
             VersionSpec::OrdRange(OrdOperator::Lt, limit) => version < limit,
             VersionSpec::OrdRange(OrdOperator::Le, limit) => version <= limit,
-            VersionSpec::Exact(_, _) => panic!("actively removing this variant"),
             VersionSpec::StrictRange(StrictRangeOperator::StartsWith, limit) => {
                 version.starts_with(&limit.0)
             }
@@ -322,8 +238,8 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
+    use crate::version_spec::LogicalOperator;
     use crate::version_spec::OrdOperator;
-    use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator};
     use crate::{Version, VersionSpec};
     use std::str::FromStr;
 

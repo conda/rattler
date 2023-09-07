@@ -1,5 +1,5 @@
 use super::constraint::{is_start_of_version_constraint, VersionConstraint};
-use super::{RangeOperator, StrictRangeOperator, VersionOperator};
+use super::{StrictRangeOperator, VersionOperator};
 use crate::constraint::operators::OrdOperator;
 use crate::version::parse::{version_parser, ParseVersionError, ParseVersionErrorKind};
 
@@ -53,7 +53,7 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOp
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
     #[error("'.' is incompatible with '{0}' operator'")]
-    GlobVersionIncompatibleWithOperator(RangeOperator),
+    GlobVersionIncompatibleWithOperator(OrdOperator),
     #[error("regex constraints are not supported")]
     RegexConstraintsNotSupported,
     #[error("unterminated unsupported regular expression")]
@@ -189,7 +189,6 @@ fn logical_constraint_parser(
         VersionOperator::StrictRange(s) => {
             Ok((rest, VersionConstraint::StrictComparison(s, version)))
         }
-        _ => panic!("actively removing Range and Exact variants"),
     }
 }
 
