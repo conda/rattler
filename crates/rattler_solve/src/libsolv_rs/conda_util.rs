@@ -59,11 +59,11 @@ pub(crate) fn compare_candidates(
         .map(|id| (*id, pool.resolve_version_set(*id)));
 
     let b_specs_by_name: HashMap<_, _> = b_match_specs
-        .filter_map(|(spec_id, spec)| spec.name.as_ref().map(|name| (name, (spec_id))))
+        .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
         .collect();
 
     let a_specs_by_name = a_match_specs
-        .filter_map(|(spec_id, spec)| spec.name.as_ref().map(|name| (name, (spec_id))));
+        .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id));
 
     let mut total_score = 0;
     for (a_dep_name, a_spec_id) in a_specs_by_name {

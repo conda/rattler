@@ -3,7 +3,7 @@
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
 use output::get_required_packages;
-use rattler_conda_types::{MatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
@@ -43,12 +43,12 @@ impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct SolverMatchSpec<'a> {
-    inner: MatchSpec,
+    inner: NamelessMatchSpec,
     _marker: PhantomData<&'a PackageRecord>,
 }
 
-impl<'a> From<MatchSpec> for SolverMatchSpec<'a> {
-    fn from(value: MatchSpec) -> Self {
+impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
+    fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
             _marker: Default::default(),
@@ -63,7 +63,7 @@ impl<'a> Display for SolverMatchSpec<'a> {
 }
 
 impl<'a> Deref for SolverMatchSpec<'a> {
-    type Target = MatchSpec;
+    type Target = NamelessMatchSpec;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -231,7 +231,7 @@ impl super::SolverImpl for Solver {
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let match_spec_id = pool.intern_version_set(dependency_name, spec.into());
+            let match_spec_id = pool.intern_version_set(dependency_name, NamelessMatchSpec::from(spec).into());
             goal.install(match_spec_id);
         }
 

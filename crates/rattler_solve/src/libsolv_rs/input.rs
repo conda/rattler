@@ -3,7 +3,7 @@
 
 use crate::libsolv_rs::{SolverMatchSpec, SolverPackageRecord};
 use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::ParseMatchSpecError;
+use rattler_conda_types::{NamelessMatchSpec, ParseMatchSpecError};
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId, VersionSetId};
 use ref_cast::RefCast;
@@ -183,7 +183,7 @@ pub(crate) fn parse_match_spec(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let version_set_id = pool.intern_version_set(dependency_name, match_spec.into());
+            let version_set_id = pool.intern_version_set(dependency_name, NamelessMatchSpec::from(match_spec).into());
             parse_match_spec_cache.insert(spec_str.to_owned(), version_set_id);
             version_set_id
         }
