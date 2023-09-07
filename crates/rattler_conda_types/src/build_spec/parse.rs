@@ -108,9 +108,7 @@ mod tests {
         let exact = 5;
 
         assert_eq!(
-            (String::from(">=") + &exact.to_string())
-                .parse::<BuildNumberSpec>()
-                .unwrap(),
+            BuildNumberSpec::from_str(&(String::from(">=") + &exact.to_string())).unwrap(),
             BuildNumberSpec::new(OrdOperator::Ge, exact)
         );
 

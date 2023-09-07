@@ -20,11 +20,6 @@ pub(crate) enum VersionConstraint {
     StrictComparison(StrictRangeOperator, Version),
 }
 
-/// Returns true if the specified character is the first character of a version constraint.
-pub(crate) fn is_start_of_version_constraint(c: char) -> bool {
-    matches!(c, '>' | '<' | '=' | '!' | '~')
-}
-
 impl FromStr for VersionConstraint {
     type Err = ParseConstraintError;
 

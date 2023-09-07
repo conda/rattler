@@ -1,8 +1,9 @@
 use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
+use crate::build_spec::ParseBuildNumberSpecError;
 use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
-use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
+use crate::version_spec::{ParseVersionSpecError, VersionOperator};
 use crate::{
     InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError, VersionSpec,
 };
@@ -68,7 +69,7 @@ pub enum ParseMatchSpecError {
 
     /// Invalid build number
     #[error("invalid build number: {0}")]
-    InvalidBuildNumber(#[from] ParseIntError),
+    InvalidBuildNumber(#[from] ParseBuildNumberSpecError),
 
     /// Unable to parse hash digest from hex
     #[error("Unable to parse hash digest from hex")]
@@ -228,8 +229,10 @@ fn parse_bracket_vec_into_components(
 
 /// Strip the package name from the input.
 fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
-    match take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(input)
-        .finish()
+    match take_while1(|c: char| !c.is_whitespace() && !VersionOperator::is_start_of_operator(c))(
+        input,
+    )
+    .finish()
     {
         Ok((input, name)) => Ok((PackageName::from_str(name.trim())?, input.trim())),
         Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::MissingPackageName),
@@ -473,7 +476,7 @@ mod tests {
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::match_spec::parse::parse_bracket_list;
-    use crate::{NamelessMatchSpec, VersionSpec};
+    use crate::{BuildNumberSpec, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
@@ -503,6 +506,11 @@ mod tests {
         let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", "1")];
         assert_eq!(result.1, expected);
 
+        let result = strip_brackets(r#"bla [version="1.2.3", build_number=">1"]"#).unwrap();
+        assert_eq!(result.0, "bla ");
+        let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", ">1")];
+        assert_eq!(result.1, expected);
+
         assert_matches!(
             strip_brackets(r#"bla [version="1.2.3", build_number=]"#),
             Err(ParseMatchSpecError::InvalidBracket)
@@ -519,6 +527,10 @@ mod tests {
             split_version_and_build("==1.0=py27_0"),
             Ok(("==1.0", Some("py27_0")))
         );
+        assert_matches!(
+            split_version_and_build("==1.0=py27_>0"),
+            Ok(("==1.0", Some("py27_>0")))
+        );
         assert_matches!(split_version_and_build("=*=cuda"), Ok(("=*", Some("cuda"))));
         assert_matches!(
             split_version_and_build("=1.2.3 0"),
@@ -526,8 +538,8 @@ mod tests {
         );
         assert_matches!(split_version_and_build("1.2.3=0"), Ok(("1.2.3", Some("0"))));
         assert_matches!(
-            split_version_and_build(">=1.0 , < 2.0 py34_0"),
-            Ok((">=1.0 , < 2.0", Some("py34_0")))
+            split_version_and_build(">=1.0 , < 2.0 py34_>0"),
+            Ok((">=1.0 , < 2.0", Some("py34_>0")))
         );
         assert_matches!(
             split_version_and_build(">=1.0 , < 2.0 =py34_0"),
@@ -579,6 +591,16 @@ mod tests {
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
+
+        let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*", build_number=">=2"]"#)
+            .unwrap();
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(spec.channel, Some("conda-forge".to_string()));
+        assert_eq!(
+            spec.build_number,
+            Some(BuildNumberSpec::from_str(">=2").unwrap())
+        )
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! `rattler-conda-types` contains data models for types commonly found within the Conda ecosystem.
 //! The library itself doesnt provide any functionality besides parsing the data types.
 
-mod build_spec;
+pub mod build_spec;
 mod channel;
 mod channel_data;
 mod constraint;
@@ -23,6 +23,7 @@ pub mod package;
 mod package_name;
 pub mod prefix_record;
 
+pub use build_spec::BuildNumberSpec;
 pub use channel::{Channel, ChannelConfig, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use explicit_environment_spec::{

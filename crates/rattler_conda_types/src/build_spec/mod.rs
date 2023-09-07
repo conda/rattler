@@ -2,16 +2,26 @@
 // use constraint::OrdConstraint;
 
 mod parse;
-use crate::constraint::{operators::OrdOperator, OperatorConstraint};
 
-type BuildNumber = u64;
+use crate::constraint::{operators::OrdOperator, OperatorConstraint, Set};
+pub(crate) use parse::ParseBuildNumberSpecError;
+
+/// named type for internal representation for build number
+pub type BuildNumber = u64;
 /// named type for the Set specified by BuildNumberOperator on BuildNumber
-type BuildNumberSpec = OperatorConstraint<BuildNumber, OrdOperator>;
+pub type BuildNumberSpec = OperatorConstraint<BuildNumber, OrdOperator>;
+
+/// Same API as other fields in `crate::match_spec::MatchSpec`
+/// Internally relies on
+impl BuildNumberSpec {
+    pub fn matches(&self, num: &BuildNumber) -> bool {
+        self.is_member(num)
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constraint::Set; // expose is_member
 
     #[test]
     fn check_build_number_cmp_spec() {
@@ -22,9 +32,9 @@ mod tests {
 
         assert_eq!(spec, BuildNumberSpec::new(OrdOperator::Ge, exact));
 
-        assert!(!spec.is_member(&below), "{below} not ge {exact}");
-        assert!(spec.is_member(&above), "{above} ge {exact}");
-        assert!(spec.is_member(&exact), "{exact} ge {exact}");
+        assert!(!spec.matches(&below), "{below} not ge {exact}");
+        assert!(spec.matches(&above), "{above} ge {exact}");
+        assert!(spec.matches(&exact), "{exact} ge {exact}");
     }
 
     #[test]
@@ -32,7 +42,7 @@ mod tests {
         let mismatch = 10;
         let exact = 5;
         let spec: BuildNumberSpec = exact.to_string().parse().unwrap();
-        assert!(spec.is_member(&exact));
-        assert!(!spec.is_member(&mismatch));
+        assert!(spec.matches(&exact));
+        assert!(!spec.matches(&mismatch));
     }
 }

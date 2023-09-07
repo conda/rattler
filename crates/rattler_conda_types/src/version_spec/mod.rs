@@ -17,7 +17,6 @@ use thiserror::Error;
 use version_tree::VersionTree;
 
 use crate::version::StrictVersion;
-pub(crate) use constraint::is_start_of_version_constraint;
 pub(crate) use parse::ParseConstraintError;
 
 #[allow(missing_docs)]
@@ -48,6 +47,13 @@ pub enum VersionOperator {
     StrictRange(StrictRangeOperator),
     /// Uses methods from impl Ord to specify a version
     OrdRange(OrdOperator),
+}
+
+impl VersionOperator {
+    /// returns boolean if char is one of those that could parse to a single or multiple character VersionOperator
+    pub fn is_start_of_operator(c: char) -> bool {
+        matches!(c, '>' | '<' | '=' | '!' | '~')
+    }
 }
 
 /// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or

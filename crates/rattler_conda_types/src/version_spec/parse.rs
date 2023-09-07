@@ -1,4 +1,4 @@
-use super::constraint::{is_start_of_version_constraint, VersionConstraint};
+use super::constraint::VersionConstraint;
 use super::{StrictRangeOperator, VersionOperator};
 use crate::constraint::operators::OrdOperator;
 use crate::version::parse::{version_parser, ParseVersionError, ParseVersionErrorKind};
@@ -25,7 +25,7 @@ enum ParseVersionOperatorError<'i> {
 /// Parses a version operator, returns an error if the operator is not recognized or not found.
 fn operator_parser(input: &str) -> IResult<&str, VersionOperator, ParseVersionOperatorError> {
     // Take anything that looks like an operator.
-    let (rest, operator_str) = take_while1(is_start_of_version_constraint)(input).map_err(
+    let (rest, operator_str) = take_while1(VersionOperator::is_start_of_operator)(input).map_err(
         |_: nom::Err<nom::error::Error<&str>>| {
             nom::Err::Error(ParseVersionOperatorError::ExpectedOperator)
         },
