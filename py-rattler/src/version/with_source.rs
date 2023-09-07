@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use pyo3::{basic::CompareOp, pyclass, pymethods, PyClassInitializer};
+use pyo3::{pyclass, pymethods, PyClassInitializer};
 use rattler_conda_types::VersionWithSource;
 
 use crate::version::PyVersion;
@@ -50,10 +50,5 @@ impl PyVersionWithSource {
         let mut hasher = DefaultHasher::new();
         self.inner.hash(&mut hasher);
         hasher.finish()
-    }
-
-    /// Performs comparison between this version and another.
-    pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
-        op.matches(self.inner.cmp(&other.inner))
     }
 }
