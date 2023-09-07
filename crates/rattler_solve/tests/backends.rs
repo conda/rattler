@@ -425,7 +425,7 @@ mod libsolv_c {
                 locked_packages: Vec::new(),
                 virtual_packages: Vec::new(),
                 available_packages: [libsolv_repodata],
-                specs: specs,
+                specs,
                 pinned_packages: Vec::new(),
             })
             .unwrap();
@@ -489,9 +489,9 @@ fn solve<T: SolverImpl + Default>(
 
     let task = SolverTask {
         locked_packages: installed_packages,
-        virtual_packages: virtual_packages,
+        virtual_packages,
         available_packages: [&repo_data],
-        specs: specs,
+        specs,
         pinned_packages: Vec::new(),
     };
 

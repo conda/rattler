@@ -5,7 +5,8 @@ use std::ops::{Index, IndexMut};
 /// A `Mapping<TValue>` holds a collection of `TValue`s that can be addressed by `TId`s. You can
 /// think of it as a HashMap<TId, TValue>, optimized for the case in which we know the `TId`s are
 /// contiguous.
-pub(crate) struct Mapping<TId: ArenaId, TValue> {
+#[derive(Default)]
+pub struct Mapping<TId: ArenaId, TValue> {
     data: Vec<TValue>,
     phantom: PhantomData<TId>,
 }
@@ -15,7 +16,8 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
         Self::new(Vec::new())
     }
 
-    pub(crate) fn new(data: Vec<TValue>) -> Self {
+    /// TODO: if we get rid of the `init` for the cache this need not be public
+    pub fn new(data: Vec<TValue>) -> Self {
         Self {
             data,
             phantom: PhantomData::default(),

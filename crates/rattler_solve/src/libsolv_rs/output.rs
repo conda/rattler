@@ -1,6 +1,7 @@
 //! Contains business logic to retrieve the results from libsolv after attempting to resolve a conda
 //! environment
 
+use crate::libsolv_rs::SolverMatchSpec;
 use rattler_conda_types::RepoDataRecord;
 use rattler_libsolv_rs::{Pool, RepoId, SolvableId, Transaction};
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use std::collections::HashMap;
 /// If the transaction contains libsolv operations that are not "install" an error is returned
 /// containing their ids.
 pub fn get_required_packages(
-    pool: &Pool,
+    pool: &Pool<SolverMatchSpec>,
     repo_mapping: &HashMap<RepoId, usize>,
     transaction: &Transaction,
     repodata_records: &[Vec<&RepoDataRecord>],
@@ -31,7 +32,7 @@ pub fn get_required_packages(
 }
 
 fn get_solvable_indexes(
-    pool: &Pool,
+    pool: &Pool<SolverMatchSpec>,
     repo_mapping: &HashMap<RepoId, usize>,
     id: SolvableId,
 ) -> Option<(usize, usize)> {

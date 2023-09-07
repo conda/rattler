@@ -1,49 +1,47 @@
-use crate::arena::Arena;
-use crate::conda_util;
-use crate::id::{MatchSpecId, NameId, RepoId, SolvableId};
-use crate::mapping::Mapping;
-use crate::solvable::{PackageSolvable, Solvable};
-use rattler_conda_types::{MatchSpec, PackageName, PackageRecord, Version};
-use std::cell::OnceCell;
-use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::str::FromStr;
+use std::fmt::{Display, Formatter};
+
+use crate::arena::Arena;
+use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
+use crate::mapping::Mapping;
+use crate::solvable::{PackageSolvable, Solvable};
+use crate::{VersionSet, VersionTrait};
 
 /// A pool that stores data related to the available packages
 ///
 /// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
 /// from the original `PackageRecord`s)
-pub struct Pool<'a> {
+pub struct Pool<VS: VersionSet> {
     /// All the solvables that have been registered
-    pub(crate) solvables: Arena<SolvableId, Solvable<'a>>,
+    pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
 
     /// The total amount of registered repos
     total_repos: u32,
 
     /// Interned package names
-    package_names: Arena<NameId, PackageName>,
+    package_names: Arena<NameId, <VS::V as VersionTrait>::Name>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<PackageName, NameId>,
+    pub(crate) names_to_ids: HashMap<<VS::V as VersionTrait>::Name, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
 
     /// Interned match specs
-    pub(crate) match_specs: Arena<MatchSpecId, MatchSpec>,
+    pub(crate) version_sets: Arena<VersionSetId, (NameId, VS)>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    match_specs_to_ids: HashMap<String, MatchSpecId>,
+    version_set_to_id: HashMap<(NameId, VS), VersionSetId>,
 
     /// Cached candidates for each match spec
-    pub(crate) match_spec_to_sorted_candidates: Mapping<MatchSpecId, Vec<SolvableId>>,
+    pub(crate) match_spec_to_sorted_candidates: Mapping<VersionSetId, Vec<SolvableId>>,
 
     /// Cached forbidden solvables for each match spec
-    pub(crate) match_spec_to_forbidden: Mapping<MatchSpecId, Vec<SolvableId>>,
+    pub(crate) match_spec_to_forbidden: Mapping<VersionSetId, Vec<SolvableId>>,
 }
 
-impl<'a> Default for Pool<'a> {
+impl<VS: VersionSet> Default for Pool<VS> {
     fn default() -> Self {
         let mut solvables = Arena::new();
         solvables.alloc(Solvable::new_root());
@@ -56,15 +54,15 @@ impl<'a> Default for Pool<'a> {
             package_names: Arena::new(),
             packages_by_name: Mapping::empty(),
 
-            match_specs_to_ids: Default::default(),
-            match_specs: Arena::new(),
+            version_set_to_id: Default::default(),
+            version_sets: Arena::new(),
             match_spec_to_sorted_candidates: Mapping::empty(),
             match_spec_to_forbidden: Mapping::empty(),
         }
     }
 }
 
-impl<'a> Pool<'a> {
+impl<VS: VersionSet> Pool<VS> {
     /// Creates a new [`Pool`]
     pub fn new() -> Self {
         Self::default()
@@ -78,16 +76,14 @@ impl<'a> Pool<'a> {
     }
 
     /// Adds a package to a repo and returns it's [`SolvableId`]
-    pub fn add_package(&mut self, repo_id: RepoId, record: &'a PackageRecord) -> SolvableId {
+    pub fn add_package(&mut self, repo_id: RepoId, name_id: NameId, record: VS::V) -> SolvableId {
         assert!(self.solvables.len() <= u32::MAX as usize);
-
-        let name = self.intern_package_name(&record.name);
 
         let solvable_id = self
             .solvables
-            .alloc(Solvable::new_package(repo_id, name, record));
+            .alloc(Solvable::new_package(repo_id, name_id, record));
 
-        self.packages_by_name[name].push(solvable_id);
+        self.packages_by_name[name_id].push(solvable_id);
 
         solvable_id
     }
@@ -100,111 +96,35 @@ impl<'a> Pool<'a> {
         &mut self,
         repo_id: RepoId,
         solvable_id: SolvableId,
-        record: &'a PackageRecord,
+        name_id: NameId,
+        record: VS::V,
     ) {
         assert!(!solvable_id.is_root());
-
-        let name = self.intern_package_name(&record.name);
-        assert_eq!(self.solvables[solvable_id].package().name, name);
-
-        self.solvables[solvable_id] = Solvable::new_package(repo_id, name, record);
+        assert_eq!(self.solvables[solvable_id].package().name, name_id);
+        self.solvables[solvable_id] = Solvable::new_package(repo_id, name_id, record);
     }
 
     /// Registers a dependency for the provided solvable
-    pub fn add_dependency(&mut self, solvable_id: SolvableId, match_spec: String) {
-        let match_spec_id = self.intern_matchspec(match_spec);
+    pub fn add_dependency(&mut self, solvable_id: SolvableId, version_set_id: VersionSetId) {
         let solvable = self.solvables[solvable_id].package_mut();
-        solvable.dependencies.push(match_spec_id);
+        solvable.dependencies.push(version_set_id);
     }
 
     /// Registers a constrains for the provided solvable
-    pub fn add_constrains(&mut self, solvable_id: SolvableId, match_spec: String) {
-        let match_spec_id = self.intern_matchspec(match_spec);
+    pub fn add_constrains(&mut self, solvable_id: SolvableId, version_set_id: VersionSetId) {
         let solvable = self.solvables[solvable_id].package_mut();
-        solvable.constrains.push(match_spec_id);
+        solvable.constrains.push(version_set_id);
     }
 
-    /// Populates the list of candidates for the provided match spec
-    pub(crate) fn populate_candidates(
-        &self,
-        match_spec_id: MatchSpecId,
-        favored_map: &HashMap<NameId, SolvableId>,
-        match_spec_to_sorted_candidates: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
-        match_spec_to_candidates: &Mapping<MatchSpecId, OnceCell<Vec<SolvableId>>>,
-        match_spec_highest_version: &Mapping<MatchSpecId, OnceCell<Option<(Version, bool)>>>,
-        solvable_order: &mut HashMap<u64, Ordering>,
-    ) {
-        let match_spec = &self.match_specs[match_spec_id];
-        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name) {
-            None => return,
-            Some(&name_id) => name_id,
-        };
-
-        let mut pkgs = conda_util::find_candidates(
-            match_spec_id,
-            &self.match_specs,
-            &self.names_to_ids,
-            &self.packages_by_name,
-            &self.solvables,
-            match_spec_to_candidates,
-        )
-        .clone();
-
-        pkgs.sort_by(|&p1, &p2| {
-            let key = u32::from(p1) as u64 | ((u32::from(p2) as u64) << 32);
-            *solvable_order.entry(key).or_insert_with(|| {
-                conda_util::compare_candidates(
-                    p1,
-                    p2,
-                    &self.solvables,
-                    &self.names_to_ids,
-                    &self.packages_by_name,
-                    &self.match_specs,
-                    match_spec_to_candidates,
-                    match_spec_highest_version,
-                )
-            })
-        });
-
-        if let Some(&favored_id) = favored_map.get(&name_id) {
-            if let Some(pos) = pkgs.iter().position(|&s| s == favored_id) {
-                // Move the element at `pos` to the front of the array
-                pkgs[0..=pos].rotate_right(1);
-            }
-        }
-
-        match_spec_to_sorted_candidates[match_spec_id] = pkgs;
-    }
-
-    /// Populates the list of forbidden packages for the provided match spec
-    pub(crate) fn populate_forbidden(
-        &self,
-        match_spec_id: MatchSpecId,
-        match_spec_to_forbidden: &mut Mapping<MatchSpecId, Vec<SolvableId>>,
-    ) {
-        let match_spec = &self.match_specs[match_spec_id];
-        let match_spec_name = match_spec.name.as_ref().expect("match spec without name!");
-        let name_id = match self.names_to_ids.get(match_spec_name) {
-            None => return,
-            Some(&name_id) => name_id,
-        };
-
-        match_spec_to_forbidden[match_spec_id] = self.packages_by_name[name_id]
-            .iter()
-            .cloned()
-            .filter(|&solvable| !match_spec.matches(self.solvables[solvable].package().record))
-            .collect();
-    }
-
-    /// Interns a match spec into the `Pool`, returning its `MatchSpecId`
-    pub(crate) fn intern_matchspec(&mut self, match_spec: String) -> MatchSpecId {
-        match self.match_specs_to_ids.entry(match_spec) {
+    /// Interns a match spec into the [`Pool`], returning its [`VersionSetId`]
+    pub fn intern_version_set(&mut self, package_name: NameId, version_set: VS) -> VersionSetId {
+        match self
+            .version_set_to_id
+            .entry((package_name, version_set.clone()))
+        {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
-                let id = self
-                    .match_specs
-                    .alloc(MatchSpec::from_str(entry.key()).unwrap());
+                let id = self.version_sets.alloc((package_name, version_set));
 
                 // Update the entry
                 entry.insert(id);
@@ -216,14 +136,24 @@ impl<'a> Pool<'a> {
 
     /// Returns the match spec associated to the provided id
     ///
-    /// Panics if the match spec is not found in the pool
-    pub fn resolve_match_spec(&self, id: MatchSpecId) -> &MatchSpec {
-        &self.match_specs[id]
+    /// Panics if the version set is not found in the pool
+    pub fn resolve_version_set(&self, id: VersionSetId) -> &VS {
+        &self.version_sets[id].1
+    }
+
+    /// Returns the package name associated with the given version spec id.
+    ///
+    /// Panics if the version set is not found in the pool
+    pub fn resolve_version_set_package_name(&self, id: VersionSetId) -> NameId {
+        self.version_sets[id].0
     }
 
     /// Interns a package name into the `Pool`, returning its `NameId`
-    fn intern_package_name(&mut self, name: &PackageName) -> NameId {
-        match self.names_to_ids.entry(name.clone()) {
+    pub fn intern_package_name<N>(&mut self, name: N) -> NameId
+    where
+        N: Into<<VS::V as VersionTrait>::Name>,
+    {
+        match self.names_to_ids.entry(name.into()) {
             Entry::Occupied(e) => *e.get(),
             Entry::Vacant(e) => {
                 let next_id = self.package_names.alloc(e.key().clone());
@@ -237,43 +167,90 @@ impl<'a> Pool<'a> {
         }
     }
 
+    /// Lookup the package name id associated to the provided name
+    pub fn lookup_package_name(&self, name: &<VS::V as VersionTrait>::Name) -> Option<NameId> {
+        self.names_to_ids.get(name).copied()
+    }
+
     /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &PackageName {
+    pub fn resolve_package_name(&self, name_id: NameId) -> &<VS::V as VersionTrait>::Name {
         &self.package_names[name_id]
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub fn resolve_solvable(&self, id: SolvableId) -> &PackageSolvable {
+    pub fn resolve_solvable(&self, id: SolvableId) -> &PackageSolvable<VS::V> {
         self.resolve_solvable_inner(id).package()
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub fn resolve_solvable_mut(&mut self, id: SolvableId) -> &mut PackageSolvable<'a> {
+    pub fn resolve_solvable_mut(&mut self, id: SolvableId) -> &mut PackageSolvable<VS::V> {
         self.resolve_solvable_inner_mut(id).package_mut()
+    }
+
+    /// Finds all the solvables that match the specified version set.
+    pub fn find_matching_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
+
+        self.packages_by_name[*name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| version_set.contains(self.solvables[solvable].package().inner()))
+            .collect()
+    }
+
+    /// Finds all the solvables that do not match the specified version set.
+    pub fn find_unmatched_solvables(&self, version_set_id: VersionSetId) -> Vec<SolvableId> {
+        let (name_id, version_set) = &self.version_sets[version_set_id];
+
+        self.packages_by_name[*name_id]
+            .iter()
+            .cloned()
+            .filter(|&solvable| !version_set.contains(self.solvables[solvable].package().inner()))
+            .collect()
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable {
+    pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable<VS::V> {
         &self.solvables[id]
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub(crate) fn resolve_solvable_inner_mut(&mut self, id: SolvableId) -> &mut Solvable<'a> {
+    pub(crate) fn resolve_solvable_inner_mut(&mut self, id: SolvableId) -> &mut Solvable<VS::V> {
         &mut self.solvables[id]
     }
 
     /// Returns the dependencies associated to the root solvable
-    pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<MatchSpecId> {
+    pub(crate) fn root_solvable_mut(&mut self) -> &mut Vec<VersionSetId> {
         self.solvables[SolvableId::root()].root_mut()
+    }
+}
+
+/// A helper struct to visualize a name.
+pub struct NameDisplay<'pool, VS: VersionSet> {
+    id: NameId,
+    pool: &'pool Pool<VS>,
+}
+
+impl<'pool, VS: VersionSet> Display for NameDisplay<'pool, VS> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let name = self.pool.resolve_package_name(self.id);
+        write!(f, "{}", name)
+    }
+}
+
+impl NameId {
+    /// Returns an object that can be used to format the name.
+    pub fn display<VS: VersionSet>(self, pool: &Pool<VS>) -> NameDisplay<'_, VS> {
+        NameDisplay { id: self, pool }
     }
 }
