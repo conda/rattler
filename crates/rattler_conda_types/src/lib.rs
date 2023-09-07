@@ -36,7 +36,9 @@ pub use package_name::{InvalidPackageNameError, PackageName};
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch};
-pub use repo_data::{ChannelInfo, ConvertSubdirError, PackageRecord, RepoData};
+pub use repo_data::{
+    compute_package_url, ChannelInfo, ConvertSubdirError, PackageRecord, RepoData,
+};
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{
