@@ -1016,7 +1016,10 @@ mod test {
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             let split = s.split(' ').collect::<Vec<_>>();
-            let name = split.first().expect("spec does not have a name").to_string();
+            let name = split
+                .first()
+                .expect("spec does not have a name")
+                .to_string();
 
             fn version_range(s: Option<&&str>) -> Option<Range<u32>> {
                 if let Some(s) = s {

@@ -2,7 +2,9 @@
 
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use rattler_conda_types::{GenericVirtualPackage, NamelessMatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{
+    GenericVirtualPackage, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
@@ -269,7 +271,8 @@ impl super::SolverImpl for Solver {
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let match_spec_id = pool.intern_version_set(dependency_name, NamelessMatchSpec::from(spec).into());
+            let match_spec_id =
+                pool.intern_version_set(dependency_name, NamelessMatchSpec::from(spec).into());
             goal.install(match_spec_id);
         }
 
