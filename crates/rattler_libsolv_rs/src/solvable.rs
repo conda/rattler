@@ -13,8 +13,6 @@ pub struct PackageSolvable<V> {
     pub(crate) constrains: Vec<VersionSetId>,
     pub(crate) inner: V,
     pub(crate) name: NameId,
-    /// The solvable's metadata
-    pub metadata: SolvableMetadata,
 }
 
 impl<V> PackageSolvable<V> {
@@ -44,16 +42,6 @@ impl<V> PackageSolvable<V> {
     }
 }
 
-/// Metadata associated to the solvable
-#[derive(Default)]
-pub struct SolvableMetadata {
-    /// The original index of the package in the repository that loaded it
-    ///
-    /// Note: this is highly rattler-specific, and is used to retrieve the original `RepoDataRecord`
-    /// of the solvables after a solution is found
-    pub original_index: Option<usize>,
-}
-
 /// Represents a package that can be installed
 pub(crate) struct Solvable<V> {
     pub(crate) inner: SolvableInner<V>,
@@ -80,7 +68,6 @@ impl<V> Solvable<V> {
                 name,
                 dependencies: Vec::new(),
                 constrains: Vec::new(),
-                metadata: SolvableMetadata::default(),
             }),
         }
     }
