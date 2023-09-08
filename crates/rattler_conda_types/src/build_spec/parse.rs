@@ -42,12 +42,9 @@ impl<'i> ParseError<&'i str> for ParseBuildNumberSpecError {
 impl FromStr for OrdOperator {
     type Err = ParseBuildNumberSpecError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Self::parse(input).finish() {
-            Ok(("", op)) => Ok(op),
-            Ok((_, _)) => Err(ParseBuildNumberSpecError::ExpectedEOF),
-            _ => Err(ParseBuildNumberSpecError::InvalidOperator(
-                input.to_string(),
-            )),
+        match Self::parse(input).finish()? {
+            ("", op) => Ok(op),
+            (_, _) => Err(ParseBuildNumberSpecError::ExpectedEOF),
         }
     }
 }
@@ -85,9 +82,17 @@ impl BuildNumberSpec {
     /// parses a spec for a build number, optional operator followed by sequence of digits
     /// unrecognized operators can result in either `InvalidOperator` of `ExpectedOperator` errors
     pub fn parse(input: &str) -> IResult<&str, Self, ParseBuildNumberSpecError> {
-        match tuple((opt(OrdOperator::parse), nom::character::complete::u64))(input) {
-            Ok((rest, (Some(op), elem))) => Ok((rest, BuildNumberSpec::new(op, elem))),
-            Ok((rest, (None, elem))) => Ok((rest, BuildNumberSpec::new(OrdOperator::Eq, elem))),
+        match tuple((opt(OrdOperator::parse), opt(nom::character::complete::u64)))(input) {
+            Ok((rest, (Some(op), Some(elem)))) => Ok((rest, BuildNumberSpec::new(op, elem))),
+            Ok((rest, (None, Some(elem)))) => {
+                Ok((rest, BuildNumberSpec::new(OrdOperator::Eq, elem)))
+            }
+            Ok((_, (None, None))) => Err(nom::Err::Failure(
+                ParseBuildNumberSpecError::ExpectedOperator,
+            )),
+            Ok((_, (Some(_), None))) => {
+                Err(nom::Err::Failure(ParseBuildNumberSpecError::ExpectedNumber))
+            }
             Err(nom::Err::Error(ParseBuildNumberSpecError::Nom(ErrorKind::Digit))) => Err(
                 nom::Err::Failure(ParseBuildNumberSpecError::ExpectedOperator),
             ),
@@ -112,16 +117,69 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ordering_constraint_parse() {
+    fn operator_repr_ident() {
+        for op_str in vec![">", "<", ">=", "<=", "==", "!="] {
+            assert_eq!(
+                OrdOperator::from_str(op_str).map(|op| format!("{}", op)),
+                Ok(op_str.to_string())
+            );
+        }
+    }
+
+    #[test]
+    fn ordering_operator_parse() {
+        assert_eq!(OrdOperator::from_str(">"), Ok(OrdOperator::Gt));
+        assert_eq!(OrdOperator::from_str("<"), Ok(OrdOperator::Lt));
+        assert_eq!(OrdOperator::from_str(">="), Ok(OrdOperator::Ge));
+        assert_eq!(OrdOperator::from_str("<="), Ok(OrdOperator::Le));
+        assert_eq!(OrdOperator::from_str("=="), Ok(OrdOperator::Eq));
+        assert_eq!(OrdOperator::from_str("!="), Ok(OrdOperator::Ne));
+        assert_eq!(
+            OrdOperator::from_str(""),
+            Err(ParseBuildNumberSpecError::ExpectedOperator)
+        );
+    }
+
+    #[test]
+    fn ordering_constraint_success() {
         let exact = 5;
 
         assert_eq!(
-            BuildNumberSpec::from_str(&(String::from(">=") + &exact.to_string())).unwrap(),
-            BuildNumberSpec::new(OrdOperator::Ge, exact)
+            BuildNumberSpec::from_str(&(String::from(">=") + &exact.to_string())),
+            Ok(BuildNumberSpec::new(OrdOperator::Ge, exact))
         );
 
-        assert!((exact.to_string() + &String::from(">="))
-            .parse::<BuildNumberSpec>()
-            .is_err());
+        assert_eq!(
+            BuildNumberSpec::from_str(&(String::from("") + &exact.to_string())),
+            Ok(BuildNumberSpec::new(OrdOperator::Eq, exact))
+        );
+    }
+
+    #[test]
+    fn ordering_constraint_error() {
+        let exact = 5;
+        assert_eq!(
+            BuildNumberSpec::from_str(&(String::from(">="))),
+            Err(ParseBuildNumberSpecError::ExpectedNumber)
+        );
+
+        assert_eq!(
+            BuildNumberSpec::from_str(&(String::from("><") + &exact.to_string())),
+            Err(ParseBuildNumberSpecError::InvalidOperator("><".to_string()))
+        );
+
+        // operators not composed of unrecognizable characters are not consumed
+        // and immediately fail as expect operator,
+        // would it be better to take_while1 non digit and emit that?
+        assert_eq!(
+            BuildNumberSpec::from_str(&(String::from("~<-") + &exact.to_string())),
+            Err(ParseBuildNumberSpecError::ExpectedOperator)
+        );
+
+        // parsing u64 implies operator was Eq and expect end of spec
+        assert_eq!(
+            (exact.to_string() + &String::from(">=")).parse::<BuildNumberSpec>(),
+            Err(ParseBuildNumberSpecError::ExpectedEOF)
+        );
     }
 }
