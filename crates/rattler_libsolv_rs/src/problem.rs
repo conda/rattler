@@ -653,11 +653,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                             })
                             .dedup();
 
-
-                        writeln!(
-                            f,
-                            "{indent}{name} {version} would constrain",
-                        )?;
+                        writeln!(f, "{indent}{name} {version} would constrain",)?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
                         for &version_set_id in version_sets {
@@ -670,10 +666,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                             )?;
                         }
                     } else {
-                        writeln!(
-                            f,
-                            "{indent}{name} {version} would require",
-                        )?;
+                        writeln!(f, "{indent}{name} {version} would require",)?;
                         let requirements = graph
                             .edges(candidate)
                             .group_by(|e| e.weight().requires())
