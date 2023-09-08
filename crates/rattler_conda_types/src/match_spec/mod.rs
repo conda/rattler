@@ -233,7 +233,7 @@ impl MatchSpec {
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct NamelessMatchSpec {
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
     #[serde_as(as = "Option<DisplayFromStr>")]

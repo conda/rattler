@@ -3,9 +3,9 @@
 
 use crate::libsolv_rs::{SolverMatchSpec, SolverPackageRecord};
 use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::ParseMatchSpecError;
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
-use rattler_libsolv_rs::{Pool, RepoId, SolvableId, VersionSetId};
+use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec, ParseMatchSpecError};
+use rattler_libsolv_rs::{Pool, SolvableId, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -18,7 +18,6 @@ use std::str::FromStr;
 /// Panics if the repo does not belong to the pool
 pub(super) fn add_repodata_records<'a>(
     pool: &mut Pool<SolverMatchSpec<'a>>,
-    repo_id: RepoId,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
     parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
 ) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
@@ -62,8 +61,7 @@ pub(super) fn add_repodata_records<'a>(
 
         // Add the package to the pool
         let name_id = pool.intern_package_name(record.name.as_normalized());
-        let solvable_id =
-            pool.add_package(repo_id, name_id, SolverPackageRecord::Record(repo_data));
+        let solvable_id = pool.add_package(name_id, SolverPackageRecord::Record(repo_data));
 
         // Dependencies
         for match_spec_str in record.depends.iter() {
@@ -83,13 +81,11 @@ pub(super) fn add_repodata_records<'a>(
 
 pub(super) fn add_virtual_packages<'a>(
     pool: &mut Pool<SolverMatchSpec<'a>>,
-    repo_id: RepoId,
     packages: &'a [GenericVirtualPackage],
 ) {
     for package in packages {
         let package_name_id = pool.intern_package_name(package.name.as_normalized());
         pool.add_package(
-            repo_id,
             package_name_id,
             SolverPackageRecord::VirtualPackage(package),
         );
@@ -112,7 +108,8 @@ pub(super) fn parse_match_spec(
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let version_set_id = pool.intern_version_set(dependency_name, match_spec.into());
+            let version_set_id = pool
+                .intern_version_set(dependency_name, NamelessMatchSpec::from(match_spec).into());
             parse_match_spec_cache.insert(spec_str.to_owned(), version_set_id);
             version_set_id
         }

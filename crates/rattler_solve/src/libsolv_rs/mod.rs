@@ -2,7 +2,9 @@
 
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use input::{add_repodata_records, add_virtual_packages};
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{
+    GenericVirtualPackage, NamelessMatchSpec, PackageRecord, RepoDataRecord,
+};
 use rattler_libsolv_rs::{
     DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
     VersionSet, VersionSetId, VersionTrait,
@@ -40,12 +42,12 @@ impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 struct SolverMatchSpec<'a> {
-    inner: MatchSpec,
+    inner: NamelessMatchSpec,
     _marker: PhantomData<&'a PackageRecord>,
 }
 
-impl<'a> From<MatchSpec> for SolverMatchSpec<'a> {
-    fn from(value: MatchSpec) -> Self {
+impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
+    fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
             _marker: Default::default(),
@@ -60,7 +62,7 @@ impl<'a> Display for SolverMatchSpec<'a> {
 }
 
 impl<'a> Deref for SolverMatchSpec<'a> {
-    type Target = MatchSpec;
+    type Target = NamelessMatchSpec;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -211,8 +213,7 @@ impl super::SolverImpl for Solver {
         let mut parse_match_spec_cache = HashMap::new();
 
         // Add virtual packages
-        let repo_id = pool.new_repo();
-        add_virtual_packages(&mut pool, repo_id, &task.virtual_packages);
+        add_virtual_packages(&mut pool, &task.virtual_packages);
 
         // Create repos for all channel + platform combinations
         for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
@@ -220,29 +221,23 @@ impl super::SolverImpl for Solver {
                 continue;
             }
 
-            let repo_id = pool.new_repo();
             add_repodata_records(
                 &mut pool,
-                repo_id,
                 repodata.records.iter().copied(),
                 &mut parse_match_spec_cache,
             )?;
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo_id = pool.new_repo();
         let installed_solvables = add_repodata_records(
             &mut pool,
-            repo_id,
             &task.locked_packages,
             &mut parse_match_spec_cache,
         )?;
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo_id = pool.new_repo();
         let pinned_solvables = add_repodata_records(
             &mut pool,
-            repo_id,
             &task.pinned_packages,
             &mut parse_match_spec_cache,
         )?;
@@ -268,7 +263,8 @@ impl super::SolverImpl for Solver {
                     .expect("match specs without names are not supported")
                     .as_normalized(),
             );
-            let match_spec_id = pool.intern_version_set(dependency_name, spec.into());
+            let match_spec_id =
+                pool.intern_version_set(dependency_name, NamelessMatchSpec::from(spec).into());
             goal.install(match_spec_id);
         }
 

@@ -41,7 +41,8 @@
 //!         repodata_url,
 //!         client,
 //!         cache,
-//!         fetch::FetchRepoDataOptions { ..Default::default() }
+//!         fetch::FetchRepoDataOptions { ..Default::default() },
+//!         None,
 //!     ).await;
 //!
 //!     let result = match result {
