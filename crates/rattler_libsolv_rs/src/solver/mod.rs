@@ -1245,7 +1245,7 @@ mod test {
             ("efgh", 7, vec!["conflicting 0"]),
             ("efgh", 6, vec!["conflicting 0"]),
             ("conflicting", 1, vec![]),
-            ("conflicting", 1, vec![]),
+            ("conflicting", 0, vec![]),
         ]);
         let jobs = install(&mut pool, &["asdf", "efgh"]);
         let mut solver = Solver::new(pool, BundleBoxProvider);
