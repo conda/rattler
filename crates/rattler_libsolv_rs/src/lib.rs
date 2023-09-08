@@ -32,7 +32,7 @@ pub use transaction::Transaction;
 
 pub use mapping::Mapping;
 
-/// Blanked trait implementation for something that we consider a package name.
+/// Blanket trait implementation for something that we consider a package name.
 pub trait PackageName: Eq + Hash {}
 impl<N: Eq + Hash> PackageName for N {}
 
