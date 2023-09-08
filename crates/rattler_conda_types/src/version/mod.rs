@@ -253,8 +253,7 @@ impl Version {
                 let last_numeral_component = segment_components
                     .iter_mut()
                     .filter_map(Component::as_number_mut)
-                    .rev()
-                    .next()
+                    .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
             }
