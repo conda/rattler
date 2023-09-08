@@ -278,6 +278,10 @@ impl ClauseState {
         clause
     }
 
+    pub fn new_requires(
+
+    )
+
     pub fn debug<'a, VS: VersionSet, N: PackageName>(
         &self,
         pool: &'a Pool<VS, N>,

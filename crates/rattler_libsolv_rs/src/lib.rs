@@ -66,4 +66,51 @@ pub trait DependencyProvider<VS: VersionSet, N: PackageName = String> {
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     );
+
+    /// Returns a list of solvables that should be considered when a package with the given name is
+    /// requested.
+    ///
+    /// Returns `None` if no such package exist.
+    fn get_candidates(&mut self, pool: &mut Pool<VS, N>, name: NameId) -> Option<Candidates>;
+
+    /// Returns the dependencies for the specified solvable.
+    fn get_dependencies(&mut self, pool: &mut Pool<VS, N>, solvable: SolvableId) -> Dependencies;
+}
+
+/// A list of candidate solvables for a specific package. This is returned from
+/// [`DependencyProvider::get_candidates`].
+#[derive(Default, Clone, Debug)]
+pub struct Candidates {
+    /// A list of all solvables for the package.
+    pub candidates: Vec<SolvableId>,
+
+    /// Optionally the id of the solvable that is favored over other solvables. The solver will
+    /// first attempt to solve for the specified solvable but will fall back to other candidates if
+    /// no solution could be found otherwise.
+    ///
+    /// The same behavior can be achieved by sorting this candidate to the top using the
+    /// [`DependencyProvider::sort_candidates`] function but using this method providers better
+    /// error messages to the user.
+    pub favored: Option<SolvableId>,
+
+    /// If specified this is the Id of the only solvable that can be selected. Although it would
+    /// also be possible to simply return a single candidate using this field provides better error
+    /// messages to the user.
+    pub locked: Option<SolvableId>,
+}
+
+/// Holds information about the dependencies of a package.
+#[derive(Default, Clone, Debug)]
+pub struct Dependencies {
+    /// Defines which packages should be installed alongside the depending package and the
+    /// constraints applied to the package.
+    pub requirements: Vec<VersionSetId>,
+
+    /// Defines additional constraints on packages that may or may not be part of the solution.
+    /// Different from `requirements` packages in this set are not necessarily included in the
+    /// solution. Only when one or more packages list the package in their `requirements` is the
+    /// package also added to the solution.
+    ///
+    /// This is often useful to use for optional dependencies.
+    pub constrains: Vec<VersionSetId>,
 }
