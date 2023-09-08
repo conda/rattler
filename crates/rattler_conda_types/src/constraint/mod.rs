@@ -30,6 +30,7 @@ where
     }
 }
 
+/// Wrapper for OperatorConstraint constructor
 impl<Element, Op> OperatorConstraint<Element, Op> {
     pub fn new(op: Op, elem: Element) -> Self {
         OperatorConstraint { op, elem }

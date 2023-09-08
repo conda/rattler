@@ -5,10 +5,11 @@ use super::BuildNumberSpec;
 use super::OrdOperator;
 // use crate::constraint::{parse::ParseOperatorError, OperatorConstraint};
 use nom::{
-    bytes::complete::take_while,
+    bytes::complete::take_while1,
+    combinator::opt,
     error::{ErrorKind, ParseError},
     sequence::tuple,
-    IResult,
+    Finish, IResult,
 };
 use std::str::FromStr;
 use thiserror::Error;
@@ -41,7 +42,7 @@ impl<'i> ParseError<&'i str> for ParseBuildNumberSpecError {
 impl FromStr for OrdOperator {
     type Err = ParseBuildNumberSpecError;
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        match Self::parse(input) {
+        match Self::parse(input).finish() {
             Ok(("", op)) => Ok(op),
             Ok((_, _)) => Err(ParseBuildNumberSpecError::ExpectedEOF),
             _ => Err(ParseBuildNumberSpecError::InvalidOperator(
@@ -58,14 +59,14 @@ impl OrdOperator {
 
     pub fn parse(input: &str) -> IResult<&str, Self, ParseBuildNumberSpecError> {
         // Take anything that looks like an operator.
-        let (rest, operator_str) = take_while(Self::is_start_of_operator)(input).map_err(
+        let (rest, operator_str) = take_while1(Self::is_start_of_operator)(input).map_err(
             |_: nom::Err<nom::error::Error<&str>>| {
                 nom::Err::Error(ParseBuildNumberSpecError::ExpectedOperator)
             },
         )?;
 
         let op = match operator_str {
-            "==" | "" => Ok(OrdOperator::Eq),
+            "==" => Ok(OrdOperator::Eq),
             "!=" => Ok(OrdOperator::Ne),
             "<" => Ok(OrdOperator::Lt),
             ">=" => Ok(OrdOperator::Ge),
@@ -81,20 +82,27 @@ impl OrdOperator {
 }
 
 impl BuildNumberSpec {
+    /// parses a spec for a build number, optional operator followed by sequence of digits
+    /// unrecognized operators can result in either `InvalidOperator` of `ExpectedOperator` errors
     pub fn parse(input: &str) -> IResult<&str, Self, ParseBuildNumberSpecError> {
-        tuple((OrdOperator::parse, nom::character::complete::u64))(input)
-            .map(|(rest, (op, elem))| (rest, BuildNumberSpec::new(op, elem)))
-        // something needed to map the u64 error to ParseBuildNumberSpecError::ExpectedNumber
+        match tuple((opt(OrdOperator::parse), nom::character::complete::u64))(input) {
+            Ok((rest, (Some(op), elem))) => Ok((rest, BuildNumberSpec::new(op, elem))),
+            Ok((rest, (None, elem))) => Ok((rest, BuildNumberSpec::new(OrdOperator::Eq, elem))),
+            Err(nom::Err::Error(ParseBuildNumberSpecError::Nom(ErrorKind::Digit))) => Err(
+                nom::Err::Failure(ParseBuildNumberSpecError::ExpectedOperator),
+            ),
+            Err(e) => Err(e),
+        }
     }
 }
 
 impl FromStr for BuildNumberSpec {
     type Err = ParseBuildNumberSpecError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Self::parse(s) {
+        match Self::parse(s).finish() {
             Ok(("", spec)) => Ok(spec),
-            Ok((_, _)) => Err(ParseBuildNumberSpecError::ExpectedEOF),
-            Err(_) => unimplemented!(),
+            Ok(_) => Err(ParseBuildNumberSpecError::ExpectedEOF),
+            Err(e) => Err(e),
         }
     }
 }
