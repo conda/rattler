@@ -1,19 +1,18 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::hash::Hash;
 
 use crate::arena::Arena;
 use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::VersionSet;
+use crate::{PackageName, VersionSet};
 
 /// A pool that stores data related to the available packages
 ///
 /// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
 /// from the original `PackageRecord`s)
-pub struct Pool<VS: VersionSet, Name: Hash + Eq = String> {
+pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
 
@@ -21,10 +20,10 @@ pub struct Pool<VS: VersionSet, Name: Hash + Eq = String> {
     total_repos: u32,
 
     /// Interned package names
-    package_names: Arena<NameId, Name>,
+    package_names: Arena<NameId, N>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: HashMap<Name, NameId>,
+    pub(crate) names_to_ids: HashMap<N, NameId>,
 
     /// Map from interned package names to the solvables that have that name
     pub(crate) packages_by_name: Mapping<NameId, Vec<SolvableId>>,
@@ -42,7 +41,7 @@ pub struct Pool<VS: VersionSet, Name: Hash + Eq = String> {
     pub(crate) match_spec_to_forbidden: Mapping<VersionSetId, Vec<SolvableId>>,
 }
 
-impl<VS: VersionSet, Name: Hash + Eq> Default for Pool<VS, Name> {
+impl<VS: VersionSet, N: PackageName> Default for Pool<VS, N> {
     fn default() -> Self {
         let mut solvables = Arena::new();
         solvables.alloc(Solvable::new_root());
@@ -63,7 +62,7 @@ impl<VS: VersionSet, Name: Hash + Eq> Default for Pool<VS, Name> {
     }
 }
 
-impl<VS: VersionSet, Name: Hash + Eq + Clone> Pool<VS, Name> {
+impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
     /// Creates a new [`Pool`]
     pub fn new() -> Self {
         Self::default()
@@ -136,7 +135,8 @@ impl<VS: VersionSet, Name: Hash + Eq + Clone> Pool<VS, Name> {
     /// Interns a package name into the `Pool`, returning its `NameId`
     pub fn intern_package_name<NValue>(&mut self, name: NValue) -> NameId
     where
-        NValue: Into<Name>,
+        NValue: Into<N>,
+        N: Clone,
     {
         match self.names_to_ids.entry(name.into()) {
             Entry::Occupied(e) => *e.get(),
@@ -153,14 +153,14 @@ impl<VS: VersionSet, Name: Hash + Eq + Clone> Pool<VS, Name> {
     }
 
     /// Lookup the package name id associated to the provided name
-    pub fn lookup_package_name(&self, name: &Name) -> Option<NameId> {
+    pub fn lookup_package_name(&self, name: &N) -> Option<NameId> {
         self.names_to_ids.get(name).copied()
     }
 
     /// Returns the package name associated to the provided id
     ///
     /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &Name {
+    pub fn resolve_package_name(&self, name_id: NameId) -> &N {
         &self.package_names[name_id]
     }
 
@@ -207,12 +207,12 @@ impl<VS: VersionSet, Name: Hash + Eq + Clone> Pool<VS, Name> {
 }
 
 /// A helper struct to visualize a name.
-pub struct NameDisplay<'pool, VS: VersionSet> {
+pub struct NameDisplay<'pool, VS: VersionSet, N: PackageName> {
     id: NameId,
-    pool: &'pool Pool<VS>,
+    pool: &'pool Pool<VS, N>,
 }
 
-impl<'pool, VS: VersionSet> Display for NameDisplay<'pool, VS> {
+impl<'pool, VS: VersionSet, N: PackageName + Display> Display for NameDisplay<'pool, VS, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let name = self.pool.resolve_package_name(self.id);
         write!(f, "{}", name)
@@ -221,7 +221,10 @@ impl<'pool, VS: VersionSet> Display for NameDisplay<'pool, VS> {
 
 impl NameId {
     /// Returns an object that can be used to format the name.
-    pub fn display<VS: VersionSet>(self, pool: &Pool<VS>) -> NameDisplay<'_, VS> {
+    pub fn display<VS: VersionSet, N: PackageName + Display>(
+        self,
+        pool: &Pool<VS, N>,
+    ) -> NameDisplay<'_, VS, N> {
         NameDisplay { id: self, pool }
     }
 }

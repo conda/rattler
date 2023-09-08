@@ -4,10 +4,11 @@ use crate::{
     mapping::Mapping,
     pool::Pool,
     solver::decision_map::DecisionMap,
-    VersionSet,
+    PackageName, VersionSet,
 };
 
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 
 /// Represents a single clause in the SAT problem
 ///
@@ -113,10 +114,10 @@ impl Clause {
     }
 
     /// Visits each literal in the clause
-    pub fn visit_literals<VS: VersionSet>(
+    pub fn visit_literals<VS: VersionSet, N: PackageName>(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool<VS>,
+        pool: &Pool<VS, N>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
@@ -203,7 +204,10 @@ impl ClauseState {
         clause
     }
 
-    pub fn debug<'a, VS: VersionSet>(&self, pool: &'a Pool<VS>) -> ClauseDebug<'a, VS> {
+    pub fn debug<'a, VS: VersionSet, N: PackageName>(
+        &self,
+        pool: &'a Pool<VS, N>,
+    ) -> ClauseDebug<'a, VS, N> {
         ClauseDebug {
             kind: self.kind,
             pool,
@@ -315,9 +319,9 @@ impl ClauseState {
         }
     }
 
-    pub fn next_unwatched_variable<VS: VersionSet>(
+    pub fn next_unwatched_variable<VS: VersionSet, N: PackageName>(
         &self,
-        pool: &Pool<VS>,
+        pool: &Pool<VS, N>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
@@ -395,12 +399,12 @@ impl Literal {
 }
 
 /// A representation of a clause that implements [`Debug`]
-pub(crate) struct ClauseDebug<'pool, VS: VersionSet> {
+pub(crate) struct ClauseDebug<'pool, VS: VersionSet, N: PackageName> {
     kind: Clause,
-    pool: &'pool Pool<VS>,
+    pool: &'pool Pool<VS, N>,
 }
 
-impl<VS: VersionSet> Debug for ClauseDebug<'_, VS> {
+impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.kind {
             Clause::InstallRoot => write!(f, "install root"),

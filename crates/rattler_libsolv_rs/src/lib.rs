@@ -32,6 +32,10 @@ pub use transaction::Transaction;
 
 pub use mapping::Mapping;
 
+/// Blanket trait implementation for something that we consider a package name.
+pub trait PackageName: Eq + Hash {}
+impl<N: Eq + Hash> PackageName for N {}
+
 /// Version is a name and a version specification.
 pub trait VersionTrait: Display {
     /// The version associated with this record.
@@ -52,11 +56,11 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
 }
 
 /// Bla
-pub trait DependencyProvider<VS: VersionSet> {
+pub trait DependencyProvider<VS: VersionSet, N: PackageName = String> {
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
         &mut self,
-        pool: &Pool<VS>,
+        pool: &Pool<VS, N>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
     );
