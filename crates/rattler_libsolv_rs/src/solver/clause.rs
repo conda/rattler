@@ -77,6 +77,30 @@ pub(crate) enum Clause {
 }
 
 impl Clause {
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn new_requires(
+        candidate: SolvableId,
+        requirement: VersionSetId,
+        matches: &[SolvableId],
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Requires(candidate, requirement),
+            Self::initial_watches_requires(candidate, matches),
+        )
+    }
+
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn new_constrains(
+        candidate: SolvableId,
+        constrained_candidate: SolvableId,
+        via: VersionSetId,
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Constrains(candidate, constrained_candidate, via),
+            Self::initial_watches_constrains(candidate, constrained_candidate),
+        )
+    }
+
     /// Returns the ids of the solvables that will be watched right after the clause is created
     fn initial_watches(
         &self,
@@ -86,7 +110,7 @@ impl Clause {
         match self {
             Clause::InstallRoot => None,
             Clause::Constrains(s1, s2, _) | Clause::ForbidMultipleInstances(s1, s2) => {
-                Some([*s1, *s2])
+                Self::initial_watches_constrains(*s1, *s2)
             }
             Clause::Lock(_, s) => Some([SolvableId::root(), *s]),
             &Clause::Learnt(learnt_id) => {
@@ -104,12 +128,28 @@ impl Clause {
             }
             &Clause::Requires(id, match_spec) => {
                 let candidates = &match_spec_to_candidates[match_spec];
-                if candidates.is_empty() {
-                    None
-                } else {
-                    Some([id, candidates[0]])
-                }
+                Self::initial_watches_requires(id, candidates)
             }
+        }
+    }
+
+    /// Returns the initial watches for [`Clause::Constrains`].
+    fn initial_watches_constrains(
+        candidate: SolvableId,
+        constrained_candidate: SolvableId,
+    ) -> Option<[SolvableId; 2]> {
+        Some([candidate, constrained_candidate])
+    }
+
+    /// Returns the initial watches for [`Clause::Requires`].
+    fn initial_watches_requires(
+        candidate: SolvableId,
+        candidates: &[SolvableId],
+    ) -> Option<[SolvableId; 2]> {
+        if candidates.is_empty() {
+            None
+        } else {
+            Some([candidate, candidates[0]])
         }
     }
 
@@ -189,9 +229,39 @@ impl ClauseState {
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
         match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
     ) -> Self {
-        let watched_literals = kind
-            .initial_watches(learnt_clauses, match_spec_to_candidates)
-            .unwrap_or([SolvableId::null(), SolvableId::null()]);
+        let watched_literals = kind.initial_watches(learnt_clauses, match_spec_to_candidates);
+
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    /// Shorthand method to construct a Clause::Requires without requiring complicated arguments.
+    pub fn new_requires(
+        candidate: SolvableId,
+        requirement: VersionSetId,
+        matching_candidates: &[SolvableId],
+    ) -> Self {
+        let (kind, watched_literals) =
+            Clause::new_requires(candidate, requirement, matching_candidates);
+
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn new_constrains(
+        candidate: SolvableId,
+        constrained_package: SolvableId,
+        requirement: VersionSetId,
+    ) -> Self {
+        let (kind, watched_literals) =
+            Clause::new_constrains(candidate, constrained_package, requirement);
+
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    fn from_kind_and_initial_watches(
+        kind: Clause,
+        watched_literals: Option<[SolvableId; 2]>,
+    ) -> Self {
+        let watched_literals = watched_literals.unwrap_or([SolvableId::null(), SolvableId::null()]);
 
         let clause = Self {
             watched_literals,

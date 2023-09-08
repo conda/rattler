@@ -233,10 +233,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Requires
             for &dep in deps {
-                self.clauses.push(ClauseState::new(
-                    Clause::Requires(solvable_id, dep),
-                    &self.learnt_clauses,
-                    &version_set_to_sorted_candidates,
+                self.clauses.push(ClauseState::new_requires(
+                    solvable_id,
+                    dep,
+                    &version_set_to_sorted_candidates[dep],
                 ));
             }
 
@@ -250,11 +250,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 }
 
                 for &solvable_dep in version_set_to_forbidden.get(dep).unwrap_or(&empty_vec) {
-                    self.clauses.push(ClauseState::new(
-                        Clause::Constrains(solvable_id, solvable_dep, dep),
-                        &self.learnt_clauses,
-                        &version_set_to_sorted_candidates,
-                    ));
+                    self.clauses
+                        .push(ClauseState::new_constrains(solvable_id, solvable_dep, dep));
                 }
             }
         }
