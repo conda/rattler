@@ -552,25 +552,30 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     });
 
                     let req = self.pool.resolve_version_set(version_set_id).to_string();
+                    let name = self.pool.resolve_version_set_package_name(version_set_id);
+                    let name = self.pool.resolve_package_name(name);
                     let target_nx = graph.edge_endpoints(edges[0]).unwrap().1;
                     let missing =
                         edges.len() == 1 && graph[target_nx] == ProblemNode::UnresolvedDependency;
                     if missing {
                         // No candidates for requirement
                         if depth == 0 {
-                            writeln!(f, "{indent}No candidates were found for {req}.")?;
+                            writeln!(f, "{indent}No candidates were found for {name} {req}.")?;
                         } else {
-                            writeln!(f, "{indent}{req}, for which no candidates were found.",)?;
+                            writeln!(
+                                f,
+                                "{indent}{name} {req}, for which no candidates were found.",
+                            )?;
                         }
                     } else if installable {
                         // Package can be installed (only mentioned for top-level requirements)
                         if depth == 0 {
                             writeln!(
                                 f,
-                                "{indent}{req} can be installed with any of the following options:"
+                                "{indent}{name} {req} can be installed with any of the following options:"
                             )?;
                         } else {
-                            writeln!(f, "{indent}{req}, which can be installed with any of the following options:")?;
+                            writeln!(f, "{indent}{name} {req}, which can be installed with any of the following options:")?;
                         }
 
                         stack.extend(
@@ -589,9 +594,9 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     } else {
                         // Package cannot be installed (the conflicting requirement is further down the tree)
                         if depth == 0 {
-                            writeln!(f, "{indent}{req} cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{name} {req} cannot be installed because there are no viable options:")?;
                         } else {
-                            writeln!(f, "{indent}{req}, which cannot be installed because there are no viable options:")?;
+                            writeln!(f, "{indent}{name} {req}, which cannot be installed because there are no viable options:")?;
                         }
 
                         stack.extend(edges.iter().map(|&e| {
@@ -610,6 +615,7 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     }
 
                     let solvable = self.pool.resolve_solvable(solvable_id);
+                    let name = self.pool.resolve_package_name(solvable.name);
                     let version = if let Some(merged) = self.merged_candidates.get(&solvable_id) {
                         reported.extend(merged.ids.iter().cloned());
                         merged
@@ -633,9 +639,9 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                     let is_leaf = graph.edges(candidate).next().is_none();
 
                     if is_leaf {
-                        writeln!(f, "{indent}{} {version}", solvable.name.display(self.pool))?;
+                        writeln!(f, "{indent}{name} {version}")?;
                     } else if already_installed {
-                        writeln!(f, "{indent}{} {version}, which conflicts with the versions reported above.", solvable.name.display(self.pool))?;
+                        writeln!(f, "{indent}{name} {version}, which conflicts with the versions reported above.")?;
                     } else if constrains_conflict {
                         let version_sets = graph
                             .edges(candidate)
@@ -647,27 +653,20 @@ impl<'pool, VS: VersionSet> DisplayUnsat<'pool, VS> {
                             })
                             .dedup();
 
-                        writeln!(
-                            f,
-                            "{indent}{} {version} would constrain",
-                            solvable.name.display(self.pool)
-                        )?;
+                        writeln!(f, "{indent}{name} {version} would constrain",)?;
 
                         let indent = Self::get_indent(depth + 1, top_level_indent);
                         for &version_set_id in version_sets {
                             let version_set = self.pool.resolve_version_set(version_set_id);
+                            let name = self.pool.resolve_version_set_package_name(version_set_id);
+                            let name = self.pool.resolve_package_name(name);
                             writeln!(
                                 f,
-                                "{indent}{} , which conflicts with any installable versions previously reported",
-                                version_set
+                                "{indent}{name} {version_set} , which conflicts with any installable versions previously reported",
                             )?;
                         }
                     } else {
-                        writeln!(
-                            f,
-                            "{indent}{} {version} would require",
-                            solvable.name.display(self.pool)
-                        )?;
+                        writeln!(f, "{indent}{name} {version} would require",)?;
                         let requirements = graph
                             .edges(candidate)
                             .group_by(|e| e.weight().requires())
