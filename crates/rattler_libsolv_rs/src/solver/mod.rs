@@ -11,8 +11,9 @@ use std::cell::OnceCell;
 
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 
-use crate::{DependencyProvider, VersionSet, VersionSetId};
+use crate::{DependencyProvider, PackageName, VersionSet, VersionSetId};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -28,9 +29,9 @@ mod watch_map;
 ///
 /// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
 /// comes from the original `PackageRecord`s)
-pub struct Solver<VS: VersionSet, D: DependencyProvider<VS>> {
+pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
-    pool: Pool<VS>,
+    pool: Pool<VS, N>,
 
     pub(crate) clauses: Vec<ClauseState>,
     watches: WatchMap,
@@ -42,9 +43,9 @@ pub struct Solver<VS: VersionSet, D: DependencyProvider<VS>> {
     decision_tracker: DecisionTracker,
 }
 
-impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
+impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool<VS>, provider: D) -> Self {
+    pub fn new(pool: Pool<VS, N>, provider: D) -> Self {
         Self {
             clauses: Vec::new(),
             watches: WatchMap::new(),
@@ -58,10 +59,12 @@ impl<VS: VersionSet, D: DependencyProvider<VS>> Solver<VS, D> {
     }
 
     /// Returns a reference to the pool used by the solver
-    pub fn pool(&self) -> &Pool<VS> {
+    pub fn pool(&self) -> &Pool<VS, N> {
         &self.pool
     }
+}
 
+impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
     /// Solves the provided `jobs` and returns a transaction from the found solution
     ///
     /// Returns a [`Problem`] if no solution was found, which provides ways to inspect the causes
