@@ -18,7 +18,6 @@ use nom::{Finish, IResult};
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
@@ -475,6 +474,7 @@ mod tests {
     use super::{
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
+    use crate::build_spec::ParseBuildNumberSpecError;
     use crate::match_spec::parse::parse_bracket_list;
     use crate::{BuildNumberSpec, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
@@ -600,7 +600,14 @@ mod tests {
         assert_eq!(
             spec.build_number,
             Some(BuildNumberSpec::from_str(">=2").unwrap())
-        )
+        );
+
+        assert_matches!(
+            MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*", build_number="~=2"]"#),
+            Err(ParseMatchSpecError::InvalidBuildNumber(
+                ParseBuildNumberSpecError::ExpectedOperator
+            ))
+        );
     }
 
     #[test]
