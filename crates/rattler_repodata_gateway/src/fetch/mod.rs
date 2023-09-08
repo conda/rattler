@@ -24,6 +24,9 @@ use url::Url;
 mod cache;
 pub mod jlap;
 
+/// Type alias for function to report progress while downloading repodata
+pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
+
 /// RepoData could not be found for given channel and platform
 #[derive(Debug, thiserror::Error)]
 pub enum RepoDataNotFoundError {
@@ -136,14 +139,11 @@ impl Variant {
 }
 
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
     /// server allows it).
     pub cache_action: CacheAction,
-
-    /// A function that is called during downloading of the repodata.json to report progress.
-    pub download_progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
 
     /// Determines which variant to download. See [`Variant`] for more information.
     pub variant: Variant,
@@ -272,6 +272,7 @@ pub async fn fetch_repo_data(
     client: AuthenticatedClient,
     cache_path: &Path,
     options: FetchRepoDataOptions,
+    progress: Option<ProgressFunc>,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     let subdir_url = normalize_subdir_url(subdir_url);
 
@@ -517,7 +518,7 @@ pub async fn fetch_repo_data(
             Encoding::Passthrough
         },
         cache_path,
-        options.download_progress,
+        progress,
     )
     .await?;
 
@@ -578,16 +579,16 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    mut progress: Option<Box<dyn FnMut(DownloadProgress) + Send>>,
+    mut progress_func: Option<ProgressFunc>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
-    if let Some(progress) = progress.as_mut() {
-        progress(DownloadProgress {
+    if let Some(progress_func) = progress_func.as_mut() {
+        progress_func(DownloadProgress {
             bytes: 0,
             total: content_size,
-        })
+        });
     }
 
     // Determine the encoding of the response
@@ -605,11 +606,11 @@ async fn stream_and_decode_to_file(
     let total_bytes_mut = &mut total_bytes;
     let bytes_stream = bytes_stream.inspect_ok(move |bytes| {
         *total_bytes_mut += bytes.len() as u64;
-        if let Some(progress) = progress.as_mut() {
-            progress(DownloadProgress {
+        if let Some(progress_func) = progress_func.as_mut() {
+            progress_func(DownloadProgress {
                 bytes: *total_bytes_mut,
                 total: content_size,
-            })
+            });
         }
     });
 
@@ -1102,6 +1103,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1131,6 +1133,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1143,6 +1146,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1166,6 +1170,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1194,6 +1199,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1235,6 +1241,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1283,6 +1290,7 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1335,6 +1343,7 @@ mod test {
             authenticated_client,
             cache_dir.path(),
             Default::default(),
+            None,
         )
         .await
         .unwrap();
@@ -1367,9 +1376,9 @@ mod test {
             AuthenticatedClient::default(),
             cache_dir.path(),
             FetchRepoDataOptions {
-                download_progress: Some(Box::new(download_progress)),
                 ..Default::default()
             },
+            Some(Box::new(download_progress)),
         )
         .await
         .unwrap();
@@ -1394,6 +1403,7 @@ mod test {
             FetchRepoDataOptions {
                 ..Default::default()
             },
+            None,
         )
         .await;
 
@@ -1417,6 +1427,7 @@ mod test {
             FetchRepoDataOptions {
                 ..Default::default()
             },
+            None,
         )
         .await;
 
