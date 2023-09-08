@@ -149,13 +149,6 @@ pub struct FetchRepoDataOptions {
     pub variant: Variant,
 }
 
-impl FetchRepoDataOptions {
-    /// A function that is called during downloading of the repodata.json to report progress.
-    pub fn report(&self, progress_func: &mut ProgressFunc, progress: DownloadProgress) {
-        progress_func(progress);
-    }
-}
-
 /// A struct that provides information about download progress.
 #[derive(Debug, Clone)]
 pub struct DownloadProgress {
@@ -525,7 +518,6 @@ pub async fn fetch_repo_data(
             Encoding::Passthrough
         },
         cache_path,
-        &options,
         progress,
     )
     .await?;
@@ -587,20 +579,16 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    options: &FetchRepoDataOptions,
     mut progress_func: Option<ProgressFunc>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
     // Determine the length of the response in bytes and notify the listener that a download is
     // starting. The response may be compressed. Decompression happens below.
     let content_size = response.content_length();
     if let Some(progress_func) = progress_func.as_mut() {
-        options.report(
-            progress_func,
-            DownloadProgress {
-                bytes: 0,
-                total: content_size,
-            },
-        );
+        progress_func(DownloadProgress {
+            bytes: 0,
+            total: content_size,
+        });
     }
 
     // Determine the encoding of the response
@@ -619,13 +607,10 @@ async fn stream_and_decode_to_file(
     let bytes_stream = bytes_stream.inspect_ok(move |bytes| {
         *total_bytes_mut += bytes.len() as u64;
         if let Some(progress_func) = progress_func.as_mut() {
-            options.report(
-                progress_func,
-                DownloadProgress {
-                    bytes: *total_bytes_mut,
-                    total: content_size,
-                },
-            )
+            progress_func(DownloadProgress {
+                bytes: *total_bytes_mut,
+                total: content_size,
+            });
         }
     });
 
