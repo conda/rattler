@@ -1,16 +1,5 @@
 use crate::arena::ArenaId;
 
-/// The id associated to a libsolv repo
-#[repr(transparent)]
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
-pub struct RepoId(u32);
-
-impl RepoId {
-    pub(crate) fn new(id: u32) -> Self {
-        Self(id)
-    }
-}
-
 /// The id associated to a package name
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]

@@ -924,7 +924,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 mod test {
     use super::*;
     use crate::solvable::Solvable;
-    use crate::{id::RepoId, VersionTrait};
+    use crate::VersionTrait;
     use std::fmt::{Debug, Display, Formatter};
     use std::ops::Range;
     use std::str::FromStr;
@@ -1102,7 +1102,7 @@ mod test {
         // Add the package
         let version = package_version;
         let name_id = pool.intern_package_name(package_name);
-        let package_id = pool.add_package(RepoId::new(0), name_id, version);
+        let package_id = pool.add_package(name_id, version);
 
         // And its the dependencies
         for dep in dependencies {
