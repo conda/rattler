@@ -485,7 +485,7 @@ mod test {
                 pathdiff::diff_paths(r.url.to_file_path().unwrap(), &test_data_path)
                     .unwrap()
                     .to_string_lossy()
-                    .replace('\\',"/")
+                    .replace('\\', "/")
             })
             .collect::<Vec<_>>();
 
