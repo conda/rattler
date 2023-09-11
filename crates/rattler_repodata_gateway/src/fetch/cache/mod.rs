@@ -43,9 +43,6 @@ pub struct RepoDataState {
     /// Whether or not zst is available for the subdirectory
     pub has_zst: Option<Expiring<bool>>,
 
-    /// Whether a bz2 compressed version is available for the subdirectory
-    pub has_bz2: Option<Expiring<bool>>,
-
     /// Whether or not JLAP is available for the subdirectory
     pub has_jlap: Option<Expiring<bool>>,
 

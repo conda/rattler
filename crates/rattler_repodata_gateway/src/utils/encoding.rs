@@ -8,7 +8,6 @@ use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
 pub enum Encoding {
     Passthrough,
     GZip,
-    Bz2,
     Zst,
 }
 
@@ -58,9 +57,6 @@ impl<T: AsyncBufRead> AsyncEncoding for T {
             Encoding::Passthrough => Decoder::Passthrough { inner: self },
             Encoding::GZip => Decoder::GZip {
                 inner: async_compression::tokio::bufread::GzipDecoder::new(self),
-            },
-            Encoding::Bz2 => Decoder::Bz2 {
-                inner: async_compression::tokio::bufread::BzDecoder::new(self),
             },
             Encoding::Zst => Decoder::Zst {
                 inner: async_compression::tokio::bufread::ZstdDecoder::new(self),
