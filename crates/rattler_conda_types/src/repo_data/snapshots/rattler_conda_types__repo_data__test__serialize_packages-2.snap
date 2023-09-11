@@ -1,10 +1,12 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 460
 expression: json
 ---
 {
   "info": {
-    "subdir": "linux-64"
+    "subdir": "linux-64",
+    "base_url": "../linux-64"
   },
   "packages": {
     "bar-1.0-unix_py36h1af98f8_2.tar.bz2": {
@@ -199,5 +201,5 @@ expression: json
     }
   },
   "packages.conda": {},
-  "repodata_version": 1
+  "repodata_version": 2
 }
