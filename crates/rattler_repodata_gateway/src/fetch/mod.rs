@@ -148,7 +148,7 @@ pub struct FetchRepoDataOptions {
     /// Determines which variant to download. See [`Variant`] for more information.
     pub variant: Variant,
 
-    /// True if repodata can be fetch incrementally using JLAP.
+    /// When enabled repodata can be fetched incrementally using JLAP
     pub jlap_enabled: bool,
 }
 
