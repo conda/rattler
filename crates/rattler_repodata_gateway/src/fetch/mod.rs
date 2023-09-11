@@ -139,7 +139,7 @@ impl Variant {
 }
 
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct FetchRepoDataOptions {
     /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
     /// server allows it).
@@ -147,6 +147,19 @@ pub struct FetchRepoDataOptions {
 
     /// Determines which variant to download. See [`Variant`] for more information.
     pub variant: Variant,
+
+    /// When enabled repodata can be fetched incrementally using JLAP
+    pub jlap_enabled: bool,
+}
+
+impl Default for FetchRepoDataOptions {
+    fn default() -> Self {
+        Self {
+            cache_action: Default::default(),
+            variant: Variant::default(),
+            jlap_enabled: true,
+        }
+    }
 }
 
 /// A struct that provides information about download progress.
@@ -380,7 +393,7 @@ pub async fn fetch_repo_data(
 
     // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
     // a normal request.
-    let jlap_state = if has_jlap && cache_state.is_some() {
+    let jlap_state = if has_jlap && cache_state.is_some() && options.jlap_enabled {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
             &client,
@@ -391,7 +404,7 @@ pub async fn fetch_repo_data(
         .await
         {
             Ok(state) => {
-                tracing::debug!("fetched JLAP patches successfully");
+                tracing::info!("fetched JLAP patches successfully");
                 let cache_state = RepoDataState {
                     blake2_hash: Some(state.footer.latest),
                     has_zst: variant_availability.has_zst,
