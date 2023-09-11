@@ -2,7 +2,7 @@ use pyo3::{pyclass, pymethods};
 use rattler_conda_types::{Channel, ChannelConfig};
 use url::Url;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyclass]
 #[repr(transparent)]
@@ -67,5 +67,9 @@ impl PyChannel {
     #[getter]
     fn base_url(&self) -> String {
         self.inner.base_url.to_string()
+    }
+
+    pub fn platform_url(&self, platform: &PyPlatform) -> String {
+        self.inner.platform_url(platform.clone().into()).into()
     }
 }

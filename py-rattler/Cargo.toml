@@ -9,8 +9,11 @@ name = "rattler"
 crate-type = ["cdylib"]
 
 [dependencies]
+futures = "0.3.28"
+
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false }
+rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 
 pyo3 = { version = "0.19", features = [
@@ -18,6 +21,8 @@ pyo3 = { version = "0.19", features = [
     "extension-module",
     "multiple-pymethods",
 ] }
+pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
+tokio = { version = "1.32" }
 
 thiserror = "1.0.44"
 url = "2.4.1"
