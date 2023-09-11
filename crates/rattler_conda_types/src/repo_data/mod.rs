@@ -463,8 +463,10 @@ mod test {
     #[test]
     fn test_base_url_packages() {
         // load test data
-        let test_data_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_data_path = dunce::canonicalize(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"),
+        )
+        .unwrap();
         let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
         let repodata = RepoData::from_path(&data_path).unwrap();
 
@@ -476,12 +478,15 @@ mod test {
         )
         .unwrap();
 
-        dbg!(&channel);
-
         let file_urls = repodata
             .into_repo_data_records(&channel)
             .into_iter()
-            .map(|r| r.url)
+            .map(|r| {
+                pathdiff::diff_paths(r.url.to_file_path().unwrap(), &test_data_path)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\',"/")
+            })
             .collect::<Vec<_>>();
 
         // serialize to yaml
