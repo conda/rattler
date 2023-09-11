@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use crate::arena::Arena;
-use crate::id::{NameId, RepoId, SolvableId, VersionSetId};
+use crate::id::{NameId, SolvableId, VersionSetId};
 use crate::mapping::Mapping;
 use crate::solvable::{PackageSolvable, Solvable};
 use crate::{PackageName, VersionSet};
@@ -15,9 +15,6 @@ use crate::{PackageName, VersionSet};
 pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
-
-    /// The total amount of registered repos
-    total_repos: u32,
 
     /// Interned package names
     package_names: Arena<NameId, N>,
@@ -48,7 +45,6 @@ impl<VS: VersionSet, N: PackageName> Default for Pool<VS, N> {
 
         Self {
             solvables,
-            total_repos: 0,
 
             names_to_ids: Default::default(),
             package_names: Arena::new(),
@@ -68,20 +64,11 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
         Self::default()
     }
 
-    /// Registers a new repo (i.e. a source of packages)
-    pub fn new_repo(&mut self) -> RepoId {
-        let id = RepoId::new(self.total_repos);
-        self.total_repos += 1;
-        id
-    }
-
     /// Adds a package to a repo and returns it's [`SolvableId`]
-    pub fn add_package(&mut self, repo_id: RepoId, name_id: NameId, record: VS::V) -> SolvableId {
+    pub fn add_package(&mut self, name_id: NameId, record: VS::V) -> SolvableId {
         assert!(self.solvables.len() <= u32::MAX as usize);
 
-        let solvable_id = self
-            .solvables
-            .alloc(Solvable::new_package(repo_id, name_id, record));
+        let solvable_id = self.solvables.alloc(Solvable::new_package(name_id, record));
 
         self.packages_by_name[name_id].push(solvable_id);
 

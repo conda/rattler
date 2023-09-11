@@ -213,8 +213,7 @@ impl super::SolverImpl for Solver {
         let mut parse_match_spec_cache = HashMap::new();
 
         // Add virtual packages
-        let repo_id = pool.new_repo();
-        add_virtual_packages(&mut pool, repo_id, &task.virtual_packages);
+        add_virtual_packages(&mut pool, &task.virtual_packages);
 
         // Create repos for all channel + platform combinations
         for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
@@ -222,29 +221,23 @@ impl super::SolverImpl for Solver {
                 continue;
             }
 
-            let repo_id = pool.new_repo();
             add_repodata_records(
                 &mut pool,
-                repo_id,
                 repodata.records.iter().copied(),
                 &mut parse_match_spec_cache,
             )?;
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo_id = pool.new_repo();
         let installed_solvables = add_repodata_records(
             &mut pool,
-            repo_id,
             &task.locked_packages,
             &mut parse_match_spec_cache,
         )?;
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo_id = pool.new_repo();
         let pinned_solvables = add_repodata_records(
             &mut pool,
-            repo_id,
             &task.pinned_packages,
             &mut parse_match_spec_cache,
         )?;

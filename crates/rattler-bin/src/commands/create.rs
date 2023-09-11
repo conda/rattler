@@ -588,13 +588,11 @@ async fn fetch_repo_data_records_with_progress(
         channel.platform_url(platform),
         client,
         repodata_cache,
-        FetchRepoDataOptions {
-            download_progress: Some(Box::new(move |DownloadProgress { total, bytes }| {
-                download_progress_progress_bar.set_length(total.unwrap_or(bytes));
-                download_progress_progress_bar.set_position(bytes);
-            })),
-            ..Default::default()
-        },
+        FetchRepoDataOptions::default(),
+        Some(Box::new(move |DownloadProgress { total, bytes }| {
+            download_progress_progress_bar.set_length(total.unwrap_or(bytes));
+            download_progress_progress_bar.set_position(bytes);
+        })),
     )
     .await;
 

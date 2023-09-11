@@ -1,5 +1,5 @@
+use crate::id::NameId;
 use crate::id::VersionSetId;
-use crate::id::{NameId, RepoId};
 
 use std::fmt::{Display, Formatter};
 
@@ -8,7 +8,6 @@ use std::fmt::{Display, Formatter};
 /// Contains a reference to the `PackageRecord` that corresponds to the solvable (the `'a` lifetime
 /// comes from the original `PackageRecord`)
 pub struct PackageSolvable<V> {
-    pub(crate) repo_id: RepoId,
     pub(crate) dependencies: Vec<VersionSetId>,
     pub(crate) constrains: Vec<VersionSetId>,
     pub(crate) inner: V,
@@ -16,11 +15,6 @@ pub struct PackageSolvable<V> {
 }
 
 impl<V> PackageSolvable<V> {
-    /// Returns the [`RepoId`] associated to this solvable
-    pub fn repo_id(&self) -> RepoId {
-        self.repo_id
-    }
-
     /// Gets the record associated to this solvable
     pub fn inner(&self) -> &V {
         &self.inner
@@ -60,10 +54,9 @@ impl<V> Solvable<V> {
         }
     }
 
-    pub(crate) fn new_package(repo_id: RepoId, name: NameId, record: V) -> Self {
+    pub(crate) fn new_package(name: NameId, record: V) -> Self {
         Self {
             inner: SolvableInner::Package(PackageSolvable {
-                repo_id,
                 inner: record,
                 name,
                 dependencies: Vec::new(),
