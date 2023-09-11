@@ -400,6 +400,7 @@ pub async fn patch_repo_data(
 
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
+        tracing::info!("The latest hash matches our local data. File up to date.");
         return Ok(jlap.get_state(jlap.new_position, new_iv));
     }
 
@@ -440,11 +441,15 @@ async fn fetch_jlap_with_retry(
     client: &AuthenticatedClient,
     position: u64,
 ) -> Result<(Response, u64), JLAPError> {
-    let range = format!("bytes={}-", position);
+    tracing::info!("fetching JLAP state from {url} (bytes={position}-)");
+    let range = format!("bytes={position}-");
 
     match fetch_jlap(url, client, &range).await {
         Ok(response) => {
             if response.status() == StatusCode::RANGE_NOT_SATISFIABLE && position != 0 {
+                tracing::warn!(
+                    "JLAP range request could not be satisfied, fetching the entire file.."
+                );
                 let range = "bytes=0-";
                 return match fetch_jlap(url, client, range).await {
                     Ok(response) => Ok((response, 0)),
@@ -513,18 +518,25 @@ async fn apply_jlap_patches(
     // All these JSON operations are pretty CPU intensive therefor we move them to a blocking task
     // to ensure any other async operations will continue to purr along.
     let content = match tokio::task::spawn_blocking(move || {
+        tracing::info!("parsing cached repodata.json as JSON");
         let mut doc = match serde_json::from_str(&repo_data_contents) {
             Ok(doc) => doc,
             Err(error) => return Err(JLAPError::JSONParse(error)),
         };
 
+        tracing::info!(
+            "applying patches #{} through #{}",
+            start_index + 1,
+            patches.len()
+        );
         // Apply the patches we current have to it
-        for patch in &patches[start_index..] {
+        for patch in patches[start_index..].iter() {
             if let Err(error) = json_patch::patch(&mut doc, &patch.patch) {
                 return Err(JLAPError::JSONPatch(error));
             }
         }
 
+        tracing::info!("converting patched JSON back to repodata");
         let ordered_doc: OrderedRepoData = match serde_json::from_value(doc) {
             Ok(value) => value,
             Err(error) => return Err(JLAPError::JSONParse(error)),
@@ -552,6 +564,7 @@ async fn apply_jlap_patches(
         }
     };
 
+    tracing::info!("writing patched repodata to disk");
     match tokio::fs::write(repo_data_path, &content).await {
         Ok(_) => Ok(()),
         Err(error) => Err(JLAPError::FileSystem(error)),
