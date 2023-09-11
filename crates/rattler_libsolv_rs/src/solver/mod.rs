@@ -75,11 +75,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
         self.learnt_why = Mapping::empty();
-        self.clauses = vec![ClauseState::new(
-            Clause::InstallRoot,
-            &self.learnt_clauses,
-            &self.pool.match_spec_to_sorted_candidates,
-        )];
+        self.clauses = vec![ClauseState::root()];
 
         // Favored map
         let mut favored_map = HashMap::new();
@@ -101,11 +97,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             // Each candidate gets a clause with each other candidate
             for (i, &candidate) in candidates.iter().enumerate() {
                 for &other_candidate in &candidates[i + 1..] {
-                    self.clauses.push(ClauseState::new(
-                        Clause::ForbidMultipleInstances(candidate, other_candidate),
-                        &self.learnt_clauses,
-                        &self.pool.match_spec_to_sorted_candidates,
-                    ));
+                    self.clauses
+                        .push(ClauseState::forbid_multiple(candidate, other_candidate));
                 }
             }
         }
@@ -116,11 +109,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             let name = self.pool.resolve_solvable(locked_solvable_id).name;
             for &other_candidate in &self.pool.packages_by_name[name] {
                 if other_candidate != locked_solvable_id {
-                    self.clauses.push(ClauseState::new(
-                        Clause::Lock(locked_solvable_id, other_candidate),
-                        &self.learnt_clauses,
-                        &self.pool.match_spec_to_sorted_candidates,
-                    ));
+                    self.clauses
+                        .push(ClauseState::lock(locked_solvable_id, other_candidate));
                 }
             }
         }
@@ -233,7 +223,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Requires
             for &dep in deps {
-                self.clauses.push(ClauseState::new_requires(
+                self.clauses.push(ClauseState::requires(
                     solvable_id,
                     dep,
                     &version_set_to_sorted_candidates[dep],
@@ -251,7 +241,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                 for &solvable_dep in version_set_to_forbidden.get(dep).unwrap_or(&empty_vec) {
                     self.clauses
-                        .push(ClauseState::new_constrains(solvable_id, solvable_dep, dep));
+                        .push(ClauseState::constrains(solvable_id, solvable_dep, dep));
                 }
             }
         }
@@ -870,11 +860,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let learnt_id = self.learnt_clauses.alloc(learnt.clone());
         self.learnt_why.extend(learnt_why);
 
-        let mut clause = ClauseState::new(
-            Clause::Learnt(learnt_id),
-            &self.learnt_clauses,
-            &self.pool.match_spec_to_sorted_candidates,
-        );
+        let mut clause = ClauseState::learnt(learnt_id, &learnt);
 
         if clause.has_watches() {
             self.watches.start_watching(&mut clause, clause_id);

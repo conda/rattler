@@ -1,7 +1,6 @@
 use crate::{
     arena::Arena,
     id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
-    mapping::Mapping,
     pool::Pool,
     solver::decision_map::DecisionMap,
     PackageName, VersionSet,
@@ -78,79 +77,76 @@ pub(crate) enum Clause {
 
 impl Clause {
     /// Returns the ids of the solvables that will be watched as well as the clause itself.
-    fn new_requires(
+    fn requires(
         candidate: SolvableId,
         requirement: VersionSetId,
-        matches: &[SolvableId],
+        candidates: &[SolvableId],
     ) -> (Self, Option<[SolvableId; 2]>) {
         (
             Clause::Requires(candidate, requirement),
-            Self::initial_watches_requires(candidate, matches),
+            if candidates.is_empty() {
+                None
+            } else {
+                Some([candidate, candidates[0]])
+            },
         )
     }
 
     /// Returns the ids of the solvables that will be watched as well as the clause itself.
-    fn new_constrains(
+    fn constrains(
         candidate: SolvableId,
         constrained_candidate: SolvableId,
         via: VersionSetId,
     ) -> (Self, Option<[SolvableId; 2]>) {
         (
             Clause::Constrains(candidate, constrained_candidate, via),
-            Self::initial_watches_constrains(candidate, constrained_candidate),
+            Some([candidate, constrained_candidate]),
         )
     }
 
-    /// Returns the ids of the solvables that will be watched right after the clause is created
-    fn initial_watches(
-        &self,
-        learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
-    ) -> Option<[SolvableId; 2]> {
-        match self {
-            Clause::InstallRoot => None,
-            Clause::Constrains(s1, s2, _) | Clause::ForbidMultipleInstances(s1, s2) => {
-                Self::initial_watches_constrains(*s1, *s2)
-            }
-            Clause::Lock(_, s) => Some([SolvableId::root(), *s]),
-            &Clause::Learnt(learnt_id) => {
-                let literals = &learnt_clauses[learnt_id];
-                debug_assert!(!literals.is_empty());
-                if literals.len() == 1 {
-                    // No need for watches, since we learned an assertion
-                    None
-                } else {
-                    Some([
-                        literals.first().unwrap().solvable_id,
-                        literals.last().unwrap().solvable_id,
-                    ])
-                }
-            }
-            &Clause::Requires(id, match_spec) => {
-                let candidates = &match_spec_to_candidates[match_spec];
-                Self::initial_watches_requires(id, candidates)
-            }
-        }
-    }
-
-    /// Returns the initial watches for [`Clause::Constrains`].
-    fn initial_watches_constrains(
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn forbid_multiple(
         candidate: SolvableId,
         constrained_candidate: SolvableId,
-    ) -> Option<[SolvableId; 2]> {
-        Some([candidate, constrained_candidate])
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::ForbidMultipleInstances(candidate, constrained_candidate),
+            Some([candidate, constrained_candidate]),
+        )
     }
 
-    /// Returns the initial watches for [`Clause::Requires`].
-    fn initial_watches_requires(
-        candidate: SolvableId,
-        candidates: &[SolvableId],
-    ) -> Option<[SolvableId; 2]> {
-        if candidates.is_empty() {
-            None
-        } else {
-            Some([candidate, candidates[0]])
-        }
+    fn root() -> (Self, Option<[SolvableId; 2]>) {
+        (Clause::InstallRoot, None)
+    }
+
+    fn lock(
+        locked_candidate: SolvableId,
+        other_candidate: SolvableId,
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Lock(locked_candidate, other_candidate),
+            Some([SolvableId::root(), other_candidate]),
+        )
+    }
+
+    fn learnt(
+        learnt_clause_id: LearntClauseId,
+        literals: &[Literal],
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        debug_assert!(!literals.is_empty());
+
+        (
+            Clause::Learnt(learnt_clause_id),
+            if literals.len() == 1 {
+                // No need for watches, since we learned an assertion
+                None
+            } else {
+                Some([
+                    literals.first().unwrap().solvable_id,
+                    literals.last().unwrap().solvable_id,
+                ])
+            },
+        )
     }
 
     /// Visits each literal in the clause
@@ -224,36 +220,44 @@ pub(crate) struct ClauseState {
 }
 
 impl ClauseState {
-    pub fn new(
-        kind: Clause,
-        learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
-    ) -> Self {
-        let watched_literals = kind.initial_watches(learnt_clauses, match_spec_to_candidates);
-
+    pub fn root() -> Self {
+        let (kind, watched_literals) = Clause::root();
         Self::from_kind_and_initial_watches(kind, watched_literals)
     }
 
     /// Shorthand method to construct a Clause::Requires without requiring complicated arguments.
-    pub fn new_requires(
+    pub fn requires(
         candidate: SolvableId,
         requirement: VersionSetId,
         matching_candidates: &[SolvableId],
     ) -> Self {
         let (kind, watched_literals) =
-            Clause::new_requires(candidate, requirement, matching_candidates);
-
+            Clause::requires(candidate, requirement, matching_candidates);
         Self::from_kind_and_initial_watches(kind, watched_literals)
     }
 
-    pub fn new_constrains(
+    pub fn constrains(
         candidate: SolvableId,
         constrained_package: SolvableId,
         requirement: VersionSetId,
     ) -> Self {
         let (kind, watched_literals) =
-            Clause::new_constrains(candidate, constrained_package, requirement);
+            Clause::constrains(candidate, constrained_package, requirement);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
 
+    pub fn lock(locked_candidate: SolvableId, other_candidate: SolvableId) -> Self {
+        let (kind, watched_literals) = Clause::lock(locked_candidate, other_candidate);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn forbid_multiple(candidate: SolvableId, other_candidate: SolvableId) -> Self {
+        let (kind, watched_literals) = Clause::forbid_multiple(candidate, other_candidate);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn learnt(learnt_clause_id: LearntClauseId, literals: &[Literal]) -> Self {
+        let (kind, watched_literals) = Clause::learnt(learnt_clause_id, literals);
         Self::from_kind_and_initial_watches(kind, watched_literals)
     }
 
