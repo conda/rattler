@@ -1,39 +1,77 @@
+use std::cell::{Cell, UnsafeCell};
+use std::cmp;
 use std::marker::PhantomData;
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
+
+const CHUNK_SIZE: usize = 128;
 
 /// An `Arena<TValue>` holds a collection of `TValue`s but allocates persistent `TId`s that are used
 /// to refer to an element in the arena. When adding an item to an `Arena` it returns a `TId` that
 /// can be used to index into the arena.
 pub(crate) struct Arena<TId: ArenaId, TValue> {
-    data: Vec<TValue>,
+    chunks: UnsafeCell<Vec<Vec<TValue>>>,
+    len: Cell<usize>,
     phantom: PhantomData<TId>,
 }
 
+struct ChunkList<T> {
+    rest: Vec<Vec<T>>,
+}
+
 impl<TId: ArenaId, TValue> Arena<TId, TValue> {
+    /// Constructs a new arena.
     pub(crate) fn new() -> Self {
-        Self {
-            data: Vec::new(),
-            phantom: PhantomData::default(),
+        Arena::with_capacity(1)
+    }
+
+    /// Clears all entries from the arena. Although the mutable reference ensures that are no
+    /// existing references to internal values the IDs returned from this instance also become
+    /// invalid. Accessing this instance with an old ID will result in undefined behavior.
+    pub fn clear(&mut self) {
+        self.len.set(0);
+        for chunk in self.chunks.get_mut().iter_mut() {
+            chunk.clear();
         }
     }
 
-    pub(crate) fn clear(&mut self) {
-        self.data.clear();
+    /// Constructs a new arena with a capacity for `n` values pre-allocated.
+    pub fn with_capacity(n: usize) -> Self {
+        let n = cmp::max(1, n);
+        let n_chunks = (n + CHUNK_SIZE - 1) / CHUNK_SIZE;
+        let mut chunks = Vec::new();
+        chunks.resize_with(n_chunks, || Vec::with_capacity(CHUNK_SIZE));
+        Self {
+            chunks: UnsafeCell::from(chunks),
+            len: Cell::new(0),
+            phantom: Default::default(),
+        }
     }
 
-    pub(crate) fn alloc(&mut self, value: TValue) -> TId {
-        let id = TId::from_usize(self.data.len());
-        self.data.push(value);
-        id
+    /// Returns the size of the arena
+    ///
+    /// This is useful for using the size of previous typed arenas to build new typed arenas with
+    /// large enough space.
+    pub fn len(&self) -> usize {
+        self.len.get()
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.data.len()
+    /// Allocates a new instance of `TValue` and returns an Id that can be used to reference it.
+    pub fn alloc(&self, value: TValue) -> TId {
+        let id = self.len.get();
+        let (chunk_idx, _) = self.chunk_and_offset(id);
+        let chunks = unsafe { &mut *self.chunks.get() };
+        if chunk_idx >= chunks.len() {
+            chunks.resize_with(chunks.len() + 1, || Vec::with_capacity(CHUNK_SIZE));
+        }
+        chunks[chunk_idx].push(value);
+        self.len.set(id + 1);
+        TId::from_usize(id)
     }
 
-    #[cfg(test)]
-    pub(crate) fn as_slice(&self) -> &[TValue] {
-        &self.data
+    fn chunk_and_offset(&self, index: usize) -> (usize, usize) {
+        let offset = (index % CHUNK_SIZE);
+        let chunk = index / CHUNK_SIZE;
+        (chunk, offset)
     }
 }
 
@@ -41,13 +79,13 @@ impl<TId: ArenaId, TValue> Index<TId> for Arena<TId, TValue> {
     type Output = TValue;
 
     fn index(&self, index: TId) -> &Self::Output {
-        &self.data[index.to_usize()]
-    }
-}
-
-impl<TId: ArenaId, TValue> IndexMut<TId> for Arena<TId, TValue> {
-    fn index_mut(&mut self, index: TId) -> &mut Self::Output {
-        &mut self.data[index.to_usize()]
+        let index = index.to_usize();
+        assert!(index < self.len());
+        let (chunk, offset) = self.chunk_and_offset(index);
+        unsafe {
+            let vec = self.chunks.get();
+            (*vec).get_unchecked(chunk).get_unchecked(offset)
+        }
     }
 }
 

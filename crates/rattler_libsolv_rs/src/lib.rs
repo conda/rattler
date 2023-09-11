@@ -19,10 +19,11 @@ mod solvable;
 mod solve_jobs;
 mod solver;
 mod transaction;
+mod frozen_map;
 
 pub use id::{NameId, SolvableId, VersionSetId};
 pub use pool::Pool;
-pub use solvable::PackageSolvable;
+pub use solvable::{PackageSolvable, PackageRequirements};
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
 use std::cell::OnceCell;
@@ -30,6 +31,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 pub use transaction::Transaction;
 
+pub(crate) use frozen_map::FrozenMap;
 pub use mapping::Mapping;
 
 /// Blanket trait implementation for something that we consider a package name.

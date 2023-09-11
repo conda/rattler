@@ -41,6 +41,8 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
     learnt_why: Mapping<LearntClauseId, Vec<ClauseId>>,
 
     decision_tracker: DecisionTracker,
+
+    root_requirements: Vec<VersionSetId>,
 }
 
 impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
@@ -55,6 +57,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
             decision_tracker: DecisionTracker::new(pool.solvables.len() as u32),
             pool,
             provider,
+            root_requirements: Default::default(),
         }
     }
 
@@ -71,22 +74,18 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// and report them to the user.
     pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Problem> {
         // Clear state
-        self.pool.root_solvable_mut().clear();
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
         self.learnt_why = Mapping::empty();
         self.clauses = vec![ClauseState::root()];
+
+        self.root_requirements = jobs.install.clone();
 
         // Favored map
         let mut favored_map = HashMap::new();
         for &favored_id in &jobs.favor {
             let name_id = self.pool.resolve_solvable_inner(favored_id).package().name;
             favored_map.insert(name_id, favored_id);
-        }
-
-        // Populate the root solvable with the requested packages
-        for match_spec in jobs.install.iter() {
-            self.pool.root_solvable_mut().push(*match_spec);
         }
 
         // Create clauses for root's dependencies, and their dependencies, and so forth
@@ -169,7 +168,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         while let Some(solvable_id) = stack.pop() {
             let (deps, constrains) = match &self.pool.solvables[solvable_id].inner {
-                SolvableInner::Root(deps) => (deps, &[] as &[_]),
+                SolvableInner::Root => (&self.root_requirements, &[] as &[_]),
                 SolvableInner::Package(pkg) => (&pkg.dependencies, pkg.constrains.as_slice()),
             };
 
