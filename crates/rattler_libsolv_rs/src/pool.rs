@@ -1,11 +1,9 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 use crate::arena::Arena;
 use crate::id::{NameId, SolvableId, VersionSetId};
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{FrozenMap, PackageRequirements};
+use crate::{FrozenCopyMap, PackageRequirements};
 use crate::{PackageName, VersionSet};
 
 /// A pool that stores data related to the available packages
@@ -20,21 +18,18 @@ pub struct Pool<VS: VersionSet, N: PackageName = String> {
     package_names: Arena<NameId, N>,
 
     /// Map from package names to the id of their interned counterpart
-    pub(crate) names_to_ids: FrozenMap<N, NameId>,
+    pub(crate) names_to_ids: FrozenCopyMap<N, NameId>,
 
     /// Interned match specs
     pub(crate) version_sets: Arena<VersionSetId, (NameId, VS)>,
 
     /// Map from match spec strings to the id of their interned counterpart
-    version_set_to_id: FrozenMap<(NameId, VS), VersionSetId>,
-
-    pub(crate) match_spec_to_sorted_candidates: elsa::FrozenMap<VersionSetId, Vec<SolvableId>>,
-    pub(crate) match_spec_to_candidates: elsa::FrozenMap<VersionSetId, Vec<SolvableId>>,
+    version_set_to_id: FrozenCopyMap<(NameId, VS), VersionSetId>,
 }
 
 impl<VS: VersionSet, N: PackageName> Default for Pool<VS, N> {
     fn default() -> Self {
-        let mut solvables = Arena::new();
+        let solvables = Arena::new();
         solvables.alloc(Solvable::new_root());
 
         Self {
@@ -44,9 +39,6 @@ impl<VS: VersionSet, N: PackageName> Default for Pool<VS, N> {
             package_names: Arena::new(),
             version_set_to_id: Default::default(),
             version_sets: Arena::new(),
-
-            match_spec_to_candidates: Default::default(),
-            match_spec_to_sorted_candidates: Default::default(),
         }
     }
 }

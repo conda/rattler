@@ -6,6 +6,7 @@ use crate::{
     PackageName, VersionSet,
 };
 
+use elsa::FrozenMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
@@ -134,7 +135,6 @@ impl Clause {
         literals: &[Literal],
     ) -> (Self, Option<[SolvableId; 2]>) {
         debug_assert!(!literals.is_empty());
-
         (
             Clause::Learnt(learnt_clause_id),
             if literals.len() == 1 {
@@ -150,10 +150,10 @@ impl Clause {
     }
 
     /// Visits each literal in the clause
-    pub fn visit_literals<VS: VersionSet, N: PackageName>(
+    pub fn visit_literals(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool<VS, N>,
+        version_set_to_sorted_candidates: &FrozenMap<VersionSetId, Vec<SolvableId>>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
@@ -169,7 +169,7 @@ impl Clause {
                     negate: true,
                 });
 
-                for &solvable_id in &pool.match_spec_to_sorted_candidates[&match_spec_id] {
+                for &solvable_id in &version_set_to_sorted_candidates[&match_spec_id] {
                     visit(Literal {
                         solvable_id,
                         negate: false,
@@ -220,9 +220,10 @@ pub(crate) struct ClauseState {
 }
 
 impl ClauseState {
+    /// Shorthand method to construct a [`Clause::InstallRoot`] without requiring complicated
+    /// arguments.
     pub fn root() -> Self {
-        let (kind, watched_literals) = Clause::root();
-        Self::from_kind_and_initial_watches(kind, watched_literals)
+        Self::from_kind_and_initial_watches(Clause::InstallRoot, None)
     }
 
     /// Shorthand method to construct a Clause::Requires without requiring complicated arguments.
@@ -277,10 +278,6 @@ impl ClauseState {
 
         clause
     }
-
-    pub fn new_requires(
-
-    )
 
     pub fn debug<'a, VS: VersionSet, N: PackageName>(
         &self,
@@ -397,10 +394,10 @@ impl ClauseState {
         }
     }
 
-    pub fn next_unwatched_variable<VS: VersionSet, N: PackageName>(
+    pub fn next_unwatched_variable(
         &self,
-        pool: &Pool<VS, N>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
+        version_set_to_sorted_candidates: &FrozenMap<VersionSetId, Vec<SolvableId>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
         // The next unwatched variable (if available), is a variable that is:
@@ -419,7 +416,7 @@ impl ClauseState {
                 .find(|&l| can_watch(l))
                 .map(|l| l.solvable_id),
             Clause::Constrains(..) | Clause::ForbidMultipleInstances(..) | Clause::Lock(..) => None,
-            Clause::Requires(solvable_id, match_spec_id) => {
+            Clause::Requires(solvable_id, version_set_id) => {
                 // The solvable that added this clause
                 let solvable_lit = Literal {
                     solvable_id,
@@ -430,7 +427,7 @@ impl ClauseState {
                 }
 
                 // The available candidates
-                for &candidate in &pool.match_spec_to_sorted_candidates[&match_spec_id] {
+                for &candidate in &version_set_to_sorted_candidates[&version_set_id] {
                     let lit = Literal {
                         solvable_id: candidate,
                         negate: false,

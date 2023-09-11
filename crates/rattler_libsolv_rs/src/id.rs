@@ -110,3 +110,18 @@ impl ArenaId for LearntClauseId {
         self.0 as usize
     }
 }
+
+/// The id associated to an arena of Candidates
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CandidatesId(u32);
+
+impl ArenaId for CandidatesId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}

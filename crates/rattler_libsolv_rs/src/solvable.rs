@@ -14,6 +14,7 @@ pub struct PackageSolvable<V> {
     pub(crate) requirements: OnceCell<PackageRequirements>,
 }
 
+/// Contains all the requirements of a [`PackageSolvable`].
 pub struct PackageRequirements {
     dependencies: Vec<VersionSetId>,
     constrains: Vec<VersionSetId>,

@@ -19,7 +19,7 @@ mod solvable;
 mod solve_jobs;
 mod solver;
 mod transaction;
-mod frozen_map;
+mod frozen_copy_map;
 
 pub use id::{NameId, SolvableId, VersionSetId};
 pub use pool::Pool;
@@ -31,7 +31,7 @@ use std::fmt::{Debug, Display};
 use std::hash::Hash;
 pub use transaction::Transaction;
 
-pub(crate) use frozen_map::FrozenMap;
+pub(crate) use frozen_copy_map::FrozenCopyMap;
 pub use mapping::Mapping;
 
 /// Blanket trait implementation for something that we consider a package name.
@@ -61,7 +61,7 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
 pub trait DependencyProvider<VS: VersionSet, N: PackageName = String> {
     /// Sort the specified solvables based on which solvable to try first.
     fn sort_candidates(
-        &mut self,
+        &self,
         pool: &Pool<VS, N>,
         solvables: &mut [SolvableId],
         match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
@@ -71,10 +71,10 @@ pub trait DependencyProvider<VS: VersionSet, N: PackageName = String> {
     /// requested.
     ///
     /// Returns `None` if no such package exist.
-    fn get_candidates(&mut self, pool: &mut Pool<VS, N>, name: NameId) -> Option<Candidates>;
+    fn get_candidates(&self, pool: &Pool<VS, N>, name: NameId) -> Option<Candidates>;
 
     /// Returns the dependencies for the specified solvable.
-    fn get_dependencies(&mut self, pool: &mut Pool<VS, N>, solvable: SolvableId) -> Dependencies;
+    fn get_dependencies(&self, pool: &Pool<VS, N>, solvable: SolvableId) -> Dependencies;
 }
 
 /// A list of candidate solvables for a specific package. This is returned from

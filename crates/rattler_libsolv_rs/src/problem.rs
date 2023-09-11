@@ -50,22 +50,22 @@ impl Problem {
         let unresolved_node = graph.add_node(ProblemNode::UnresolvedDependency);
 
         for clause_id in &self.clauses {
-            let clause = &solver.clauses[clause_id.index()];
-            match clause.kind {
+            let clause = solver.clauses[clause_id.index()].kind;
+            match clause {
                 Clause::InstallRoot => (),
                 Clause::Learnt(..) => unreachable!(),
-                Clause::Requires(package_id, match_spec_id) => {
+                Clause::Requires(package_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
-                    let candidates = &solver.pool().match_spec_to_sorted_candidates[&match_spec_id];
+                    let candidates = solver.get_or_cache_sorted_candidates(version_set_id);
                     if candidates.is_empty() {
                         tracing::info!(
-                            "{package_id:?} requires {match_spec_id:?}, which has no candidates"
+                            "{package_id:?} requires {version_set_id:?}, which has no candidates"
                         );
                         graph.add_edge(
                             package_node,
                             unresolved_node,
-                            ProblemEdge::Requires(match_spec_id),
+                            ProblemEdge::Requires(version_set_id),
                         );
                     } else {
                         for &candidate_id in candidates {
@@ -76,7 +76,7 @@ impl Problem {
                             graph.add_edge(
                                 package_node,
                                 candidate_node,
-                                ProblemEdge::Requires(match_spec_id),
+                                ProblemEdge::Requires(version_set_id),
                             );
                         }
                     }

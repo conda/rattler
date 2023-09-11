@@ -69,7 +69,7 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
     }
 
     fn chunk_and_offset(&self, index: usize) -> (usize, usize) {
-        let offset = (index % CHUNK_SIZE);
+        let offset = index % CHUNK_SIZE;
         let chunk = index / CHUNK_SIZE;
         (chunk, offset)
     }
