@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1665
 expression: error
 ---
-No candidates were found for fghj with any version.
+No candidates were found for fghj *.
 

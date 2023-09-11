@@ -555,7 +555,7 @@ mod test {
 
     #[test]
     fn test_literal_eval() {
-        let mut decision_map = DecisionMap::new(10);
+        let mut decision_map = DecisionMap::new();
 
         let literal = Literal {
             solvable_id: SolvableId::root(),

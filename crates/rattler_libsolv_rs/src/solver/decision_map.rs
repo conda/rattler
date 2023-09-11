@@ -1,6 +1,7 @@
 use crate::id::SolvableId;
 use crate::mapping::Mapping;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 /// Represents a decision (i.e. an assignment to a solvable) and the level at which it was made
 ///
@@ -17,7 +18,7 @@ impl DecisionAndLevel {
     }
 
     fn set(&mut self, value: bool, level: u32) {
-        self.0 = if value { level as i64 } else { -(level as i64) };
+        *self = Self::with_value_and_level(value, level);
     }
 
     fn value(self) -> Option<bool> {
@@ -31,37 +32,40 @@ impl DecisionAndLevel {
     fn level(self) -> u32 {
         self.0.unsigned_abs() as u32
     }
+
+    fn with_value_and_level(value: bool, level: u32) -> Self {
+        Self(if value { level as i64 } else { -(level as i64) })
+    }
 }
 
 /// A map of the assignments to all solvables
 pub(crate) struct DecisionMap {
-    map: Mapping<SolvableId, DecisionAndLevel>,
+    map: HashMap<SolvableId, DecisionAndLevel>,
 }
 
 impl DecisionMap {
-    pub(crate) fn new(solvable_count: u32) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            map: Mapping::new(vec![DecisionAndLevel::undecided(); solvable_count as usize]),
+            map: Default::default(),
         }
     }
 
-    pub(crate) fn solvable_count(&self) -> u32 {
-        self.map.len() as u32
-    }
-
     pub(crate) fn reset(&mut self, solvable_id: SolvableId) {
-        self.map[solvable_id] = DecisionAndLevel::undecided();
+        self.map.remove(&solvable_id);
     }
 
     pub(crate) fn set(&mut self, solvable_id: SolvableId, value: bool, level: u32) {
-        self.map[solvable_id].set(value, level);
+        self.map.insert(
+            solvable_id,
+            DecisionAndLevel::with_value_and_level(value, level),
+        );
     }
 
     pub(crate) fn level(&self, solvable_id: SolvableId) -> u32 {
-        self.map[solvable_id].level()
+        self.map.get(&solvable_id).map_or(0, |d| d.level())
     }
 
     pub(crate) fn value(&self, solvable_id: SolvableId) -> Option<bool> {
-        self.map[solvable_id].value()
+        self.map.get(&solvable_id).map_or(None, |d| d.value())
     }
 }

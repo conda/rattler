@@ -1,16 +1,20 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1755
 expression: error
 ---
 The following packages are incompatible
-|-- menu with any version can be installed with any of the following options:
-    |-- menu 10 would require
-        |-- dropdown with versions 1 up to 2, which can be installed with any of the following options:
-            |-- dropdown 1 would require
-                |-- intl with versions 3 up to 4, which can be installed with any of the following options:
-                    |-- intl 3
-|-- icons with versions 1 up to 2 can be installed with any of the following options:
+|-- icons 1..2 can be installed with any of the following options:
     |-- icons 1
-|-- intl with versions 5 up to 6 cannot be installed because there are no viable options:
-    |-- intl 5, which conflicts with the versions reported above.
+|-- intl 5..6 can be installed with any of the following options:
+    |-- intl 5
+|-- menu * cannot be installed because there are no viable options:
+    |-- menu 15 would require
+        |-- dropdown 2..3, which cannot be installed because there are no viable options:
+            |-- dropdown 2 would constrain
+                |-- icons 2..3 , which conflicts with any installable versions previously reported
+    |-- menu 10 would require
+        |-- dropdown 1..2, which cannot be installed because there are no viable options:
+            |-- dropdown 1 would constrain
+                |-- intl 3..4 , which conflicts with any installable versions previously reported
 

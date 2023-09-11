@@ -1,11 +1,12 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1636
 expression: error
 ---
 The following packages are incompatible
-|-- asdf with any version can be installed with any of the following options:
+|-- asdf * can be installed with any of the following options:
     |-- asdf 1 would require
-        |-- c with versions 2 up to 3, which can be installed with any of the following options:
+        |-- c 2..3, which can be installed with any of the following options:
             |-- c 2
 |-- c 1 is locked, but another version is required as reported above
 
