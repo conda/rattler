@@ -4,12 +4,12 @@ assertion_line: 1775
 expression: error
 ---
 The following packages are incompatible
-|-- c 101..104 can be installed with any of the following options:
-    |-- c 103
-    |-- c 101
-|-- a * cannot be installed because there are no viable options:
+|-- a * can be installed with any of the following options:
     |-- a 9 | 10 would require
-        |-- b *, which cannot be installed because there are no viable options:
-            |-- b 42 | 100 would constrain
-                |-- c 0..100 , which conflicts with any installable versions previously reported
+        |-- b *, which can be installed with any of the following options:
+            |-- b 42 | 100 would require
+                |-- c 0..100, which can be installed with any of the following options:
+                    |-- c 99
+|-- c 101..104 cannot be installed because there are no viable options:
+    |-- c 101 | 103, which conflicts with the versions reported above.
 

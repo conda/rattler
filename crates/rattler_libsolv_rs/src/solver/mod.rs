@@ -1301,7 +1301,7 @@ mod test {
                 result.requirements.push(dep_spec);
             }
 
-            for req in &deps.dependencies {
+            for req in &deps.constrains {
                 let dep_name = pool.intern_package_name(&req.name);
                 let dep_spec = pool.intern_version_set(dep_name, req.versions.clone());
                 result.constrains.push(dep_spec);

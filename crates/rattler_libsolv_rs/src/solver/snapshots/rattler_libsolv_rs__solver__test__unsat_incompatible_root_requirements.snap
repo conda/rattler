@@ -4,8 +4,8 @@ assertion_line: 1704
 expression: error
 ---
 The following packages are incompatible
-|-- a 5..10 can be installed with any of the following options:
-    |-- a 5
-|-- a 0..4 cannot be installed because there are no viable options:
-    |-- a 2, which conflicts with the versions reported above.
+|-- a 0..4 can be installed with any of the following options:
+    |-- a 2
+|-- a 5..10 cannot be installed because there are no viable options:
+    |-- a 5, which conflicts with the versions reported above.
 
