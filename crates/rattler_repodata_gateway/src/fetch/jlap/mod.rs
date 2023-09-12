@@ -531,7 +531,7 @@ async fn apply_jlap_patches(
         );
         // Apply the patches we current have to it
         for patch in patches[start_index..].iter() {
-            if let Err(error) = json_patch::patch(&mut doc, &patch.patch) {
+            if let Err(error) = json_patch::patch_unsafe(&mut doc, &patch.patch) {
                 return Err(JLAPError::JSONPatch(error));
             }
         }
