@@ -924,7 +924,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 mod test {
     use super::*;
     use crate::solvable::Solvable;
-    use crate::VersionTrait;
+    use crate::DefaultSolvableDisplay;
     use std::fmt::{Debug, Display, Formatter};
     use std::ops::Range;
     use std::str::FromStr;
@@ -948,7 +948,7 @@ mod test {
         fn name(&self) -> &Self::Name;
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
     /// This is `Pack` which is a unique version and name in our bespoke packaging system
     struct Pack(u32);
 
@@ -966,15 +966,7 @@ mod test {
 
     impl Display for Pack {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self)
-        }
-    }
-
-    impl VersionTrait for Pack {
-        type Version = u32;
-
-        fn version(&self) -> Self::Version {
-            self.0
+            write!(f, "{}", self.0)
         }
     }
 
@@ -1158,7 +1150,9 @@ mod test {
         let mut solver = Solver::new(pool, provider);
         match solver.solve(jobs) {
             Ok(_) => panic!("expected unsat, but a solution was found"),
-            Err(problem) => problem.display_user_friendly(&solver).to_string(),
+            Err(problem) => problem
+                .display_user_friendly(&solver, &DefaultSolvableDisplay)
+                .to_string(),
         }
     }
 
@@ -1177,7 +1171,7 @@ mod test {
             .package();
 
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
-        assert_eq!(solvable.inner.version(), 1);
+        assert_eq!(solvable.inner.0, 1);
     }
 
     /// Test if we can also select a nested version
@@ -1199,14 +1193,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
-        assert_eq!(solvable.inner.version(), 1);
+        assert_eq!(solvable.inner.0, 1);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "efgh");
-        assert_eq!(solvable.inner.version(), 4);
+        assert_eq!(solvable.inner.0, 4);
     }
 
     /// Test if we can resolve multiple versions at once
@@ -1229,14 +1223,14 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
-        assert_eq!(solvable.inner.version(), 2);
+        assert_eq!(solvable.inner.0, 2);
 
         let solvable = solver
             .pool
             .resolve_solvable_inner(solved.steps[1])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "efgh");
-        assert_eq!(solvable.inner.version(), 5);
+        assert_eq!(solvable.inner.0, 5);
     }
 
     /// In case of a conflict the version should not be selected with the conflict
@@ -1255,7 +1249,10 @@ mod test {
         let solved = solver.solve(jobs);
         let solved = match solved {
             Ok(solved) => solved,
-            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+            Err(p) => panic!(
+                "{}",
+                p.display_user_friendly(&solver, &DefaultSolvableDisplay)
+            ),
         };
 
         use std::fmt::Write;
@@ -1287,7 +1284,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
-        assert_eq!(solvable.inner.version(), 3);
+        assert_eq!(solvable.inner.0, 3);
     }
 
     /// Locking a specific package version in this case a lower version namely `3` should result
@@ -1302,7 +1299,7 @@ mod test {
             .iter()
             .position(|s: &Solvable<_>| {
                 if let Some(package) = s.get_package() {
-                    package.inner.version() == 3
+                    package.inner.0 == 3
                 } else {
                     false
                 }
@@ -1325,7 +1322,7 @@ mod test {
                 .resolve_solvable_inner(solvable_id)
                 .package()
                 .inner
-                .version(),
+                .0,
             3
         );
     }
@@ -1345,7 +1342,7 @@ mod test {
             .iter()
             .position(|s| {
                 if let Some(package) = s.get_package() {
-                    package.inner.version() == 1
+                    package.inner.0 == 1
                 } else {
                     false
                 }
@@ -1366,7 +1363,7 @@ mod test {
             .resolve_solvable_inner(solved.steps[0])
             .package();
         assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
-        assert_eq!(solvable.inner.version(), 4);
+        assert_eq!(solvable.inner.0, 4);
     }
 
     /// Test checks if favoring without a conflict results in a package upgrade
@@ -1388,7 +1385,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().inner.version() == 1)
+            .filter(|(_, s)| s.package().inner.0 == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
@@ -1399,13 +1396,16 @@ mod test {
         let solved = solver.solve(jobs);
         let solved = match solved {
             Ok(solved) => solved,
-            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+            Err(p) => panic!(
+                "{}",
+                p.display_user_friendly(&solver, &DefaultSolvableDisplay)
+            ),
         };
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack(2)
-        Pack(1)
+        2
+        1
         "###);
     }
     //
@@ -1429,7 +1429,7 @@ mod test {
             .iter()
             .enumerate()
             .skip(1) // Skip the root solvable
-            .filter(|(_, s)| s.package().inner.version() == 1)
+            .filter(|(_, s)| s.package().inner.0 == 1)
             .map(|(i, _)| SolvableId::from_usize(i));
 
         for solvable_id in already_installed {
@@ -1440,14 +1440,17 @@ mod test {
         let solved = solver.solve(jobs);
         let solved = match solved {
             Ok(solved) => solved,
-            Err(p) => panic!("{}", p.display_user_friendly(&solver)),
+            Err(p) => panic!(
+                "{}",
+                p.display_user_friendly(&solver, &DefaultSolvableDisplay)
+            ),
         };
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack(2)
-        Pack(2)
-        Pack(2)
+        2
+        2
+        2
         "###);
     }
 
@@ -1460,8 +1463,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool, &solved);
         insta::assert_snapshot!(result, @r###"
-        Pack(2)
-        Pack(5)
+        2
+        5
         "###);
     }
 
