@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
   lfs_check_pointers:
-    uses: ppremk/lfs-warning@v3.2
-
+    name: "LFS Warning"
+    steps:
+      uses: ppremk/lfs-warning@v3.2
