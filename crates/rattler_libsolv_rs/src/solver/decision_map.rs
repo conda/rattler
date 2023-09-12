@@ -1,6 +1,5 @@
-use crate::id::SolvableId;
+use crate::{arena::ArenaId, id::SolvableId};
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 /// Represents a decision (i.e. an assignment to a solvable) and the level at which it was made
 ///
@@ -37,35 +36,49 @@ impl DecisionAndLevel {
     }
 }
 
-/// A map of the assignments to all solvables
+/// A map of the assignments to solvables.
 pub(crate) struct DecisionMap {
-    // TODO: (BasZ) instead of a hashmap it might be better to use a Mapping.
-    map: HashMap<SolvableId, DecisionAndLevel>,
+    map: Vec<DecisionAndLevel>,
 }
 
 impl DecisionMap {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             map: Default::default(),
         }
     }
 
-    pub(crate) fn reset(&mut self, solvable_id: SolvableId) {
-        self.map.remove(&solvable_id);
+    pub fn reset(&mut self, solvable_id: SolvableId) {
+        let solvable_id = solvable_id.to_usize();
+        if solvable_id < self.map.len() {
+            // SAFE: because we check that the solvable id is within bounds
+            unsafe { *self.map.get_unchecked_mut(solvable_id) = DecisionAndLevel::undecided() };
+        }
     }
 
-    pub(crate) fn set(&mut self, solvable_id: SolvableId, value: bool, level: u32) {
-        self.map.insert(
-            solvable_id,
-            DecisionAndLevel::with_value_and_level(value, level),
-        );
+    pub fn set(&mut self, solvable_id: SolvableId, value: bool, level: u32) {
+        let solvable_id = solvable_id.to_usize();
+        if solvable_id >= self.map.len() {
+            self.map
+                .resize_with(solvable_id + 1, || DecisionAndLevel::undecided());
+        }
+
+        // SAFE: because we ensured that vec contains at least the correct number of elements.
+        unsafe {
+            *self.map.get_unchecked_mut(solvable_id) =
+                DecisionAndLevel::with_value_and_level(value, level)
+        };
     }
 
-    pub(crate) fn level(&self, solvable_id: SolvableId) -> u32 {
-        self.map.get(&solvable_id).map_or(0, |d| d.level())
+    pub fn level(&self, solvable_id: SolvableId) -> u32 {
+        self.map
+            .get(solvable_id.to_usize())
+            .map_or(0, |d| d.level())
     }
 
-    pub(crate) fn value(&self, solvable_id: SolvableId) -> Option<bool> {
-        self.map.get(&solvable_id).map_or(None, |d| d.value())
+    pub fn value(&self, solvable_id: SolvableId) -> Option<bool> {
+        self.map
+            .get(solvable_id.to_usize())
+            .map_or(None, |d| d.value())
     }
 }
