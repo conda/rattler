@@ -1,21 +1,23 @@
 use crate::arena::{Arena, ArenaId};
-use crate::id::{CandidatesId, ClauseId, SolvableId};
+use crate::id::{CandidatesId, ClauseId, DependenciesId, SolvableId};
 use crate::id::{LearntClauseId, NameId};
 use crate::mapping::Mapping;
 use crate::pool::Pool;
 use crate::problem::Problem;
 use crate::solvable::SolvableInner;
-use crate::solve_jobs::SolveJobs;
 use crate::transaction::Transaction;
-use std::borrow::Cow;
 
 use elsa::{FrozenMap, FrozenVec};
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Display;
+use std::marker::PhantomData;
 
 use crate::frozen_copy_map::FrozenCopyMap;
-use crate::{Candidates, DependencyProvider, PackageName, VersionSet, VersionSetId};
+use crate::{
+    Candidates, Dependencies, DependencyProvider, PackageName, VersionSet,
+    VersionSetId,
+};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -33,7 +35,6 @@ mod watch_map;
 /// comes from the original `PackageRecord`s)
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
-    pool: Pool<VS, N>,
 
     pub(crate) clauses: Vec<ClauseState>,
     watches: WatchMap,
@@ -41,6 +42,10 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
     learnt_clauses_start: ClauseId,
     learnt_clauses: Arena<LearntClauseId, Vec<Literal>>,
     learnt_why: Mapping<LearntClauseId, Vec<ClauseId>>,
+
+    /// A mapping from a solvable to a list of dependencies
+    solvable_dependencies: Arena<DependenciesId, Dependencies>,
+    solvable_to_dependencies: FrozenCopyMap<SolvableId, DependenciesId>,
 
     /// A mapping from package name to a list of candidates.
     candidates: Arena<CandidatesId, Candidates>,
@@ -61,13 +66,17 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
 
     decision_tracker: DecisionTracker,
 
+    /// The version sets that must be installed as part of the solution.
     root_requirements: Vec<VersionSetId>,
+
+    _data: PhantomData<(VS, N)>,
 }
 
 impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
     /// Create a solver, using the provided pool
-    pub fn new(pool: Pool<VS, N>, provider: D) -> Self {
+    pub fn new(provider: D) -> Self {
         Self {
+            provider,
             clauses: Vec::new(),
             watches: WatchMap::new(),
             learnt_clauses: Arena::new(),
@@ -75,25 +84,26 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
             learnt_why: Mapping::empty(),
             decision_tracker: DecisionTracker::new(),
             candidates: Arena::new(),
+            solvable_dependencies: Default::default(),
+            solvable_to_dependencies: Default::default(),
             package_name_to_candidates: Default::default(),
             package_names: Default::default(),
-            pool,
-            provider,
             root_requirements: Default::default(),
             version_set_candidates: Default::default(),
             version_set_inverse_candidates: Default::default(),
             version_set_to_sorted_candidates: Default::default(),
+            _data: Default::default(),
         }
     }
 
     /// Returns a reference to the pool used by the solver
     pub fn pool(&self) -> &Pool<VS, N> {
-        &self.pool
+        &self.provider.pool()
     }
 
     /// Returns the candidates for the package with the given name. This will either ask the
     /// [`DependencyProvide`] for the entries or a cached value.
-    pub(crate) fn get_or_cache_candidates(&self, package_name: NameId) -> &Candidates {
+    pub fn get_or_cache_candidates(&self, package_name: NameId) -> &Candidates {
         // If we already have the candidates for this package cached we can simply return
         let candidates_id = match self.package_name_to_candidates.get_copy(&package_name) {
             Some(id) => id,
@@ -101,7 +111,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                 // Otherwise we have to get them from the DependencyProvider
                 let candidates = self
                     .provider
-                    .get_candidates(&self.pool, package_name)
+                    .get_candidates(package_name)
                     .unwrap_or_default();
 
                 // Allocate an ID so we can refer to the candidates from everywhere
@@ -119,15 +129,12 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
     }
 
     /// Returns the candidates of a package that match the specified version set.
-    pub(crate) fn get_or_cache_matching_candidates(
-        &self,
-        version_set_id: VersionSetId,
-    ) -> &[SolvableId] {
+    pub fn get_or_cache_matching_candidates(&self, version_set_id: VersionSetId) -> &[SolvableId] {
         match self.version_set_candidates.get(&version_set_id) {
             Some(candidates) => candidates,
             None => {
-                let package_name = self.pool.resolve_version_set_package_name(version_set_id);
-                let version_set = self.pool.resolve_version_set(version_set_id);
+                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
+                let version_set = self.pool().resolve_version_set(version_set_id);
                 let candidates = self.get_or_cache_candidates(package_name);
 
                 let matching_candidates = candidates
@@ -135,7 +142,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool.resolve_solvable_inner(p).package().inner();
+                        let version = self.pool().resolve_solvable_inner(p).package().inner();
                         version_set.contains(version)
                     })
                     .collect();
@@ -147,15 +154,15 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
     }
 
     /// Returns the candidates that do *not* match the specified requirement.
-    pub(crate) fn get_or_cache_non_matching_candidates(
+    pub fn get_or_cache_non_matching_candidates(
         &self,
         version_set_id: VersionSetId,
     ) -> &[SolvableId] {
         match self.version_set_inverse_candidates.get(&version_set_id) {
             Some(candidates) => candidates,
             None => {
-                let package_name = self.pool.resolve_version_set_package_name(version_set_id);
-                let version_set = self.pool.resolve_version_set(version_set_id);
+                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
+                let version_set = self.pool().resolve_version_set(version_set_id);
                 let candidates = self.get_or_cache_candidates(package_name);
 
                 let matching_candidates = candidates
@@ -163,7 +170,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool.resolve_solvable_inner(p).package().inner();
+                        let version = self.pool().resolve_solvable_inner(p).package().inner();
                         !version_set.contains(version)
                     })
                     .collect();
@@ -176,14 +183,11 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
 
     /// Returns the candidates for the package with the given name similar to
     /// [`Self::get_or_cache_candidates`] sorted from highest to lowest.
-    pub(crate) fn get_or_cache_sorted_candidates(
-        &self,
-        version_set_id: VersionSetId,
-    ) -> &[SolvableId] {
+    pub fn get_or_cache_sorted_candidates(&self, version_set_id: VersionSetId) -> &[SolvableId] {
         match self.version_set_to_sorted_candidates.get(&version_set_id) {
             Some(canidates) => canidates,
             None => {
-                let package_name = self.pool.resolve_version_set_package_name(version_set_id);
+                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
                 let matching_candidates = self.get_or_cache_matching_candidates(version_set_id);
                 let candidates = self.get_or_cache_candidates(package_name);
 
@@ -191,10 +195,9 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                 let mut sorted_candidates = Vec::new();
                 sorted_candidates.extend_from_slice(matching_candidates);
                 self.provider.sort_candidates(
-                    &self.pool,
                     &mut sorted_candidates,
                     // TODO: FIX THIS
-                    &Mapping::new(Vec::new()),
+                    &self,
                 );
 
                 // If we have a solvable that we favor, we sort that to the front. This ensures
@@ -211,6 +214,23 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
             }
         }
     }
+
+    /// Returns the dependencies of a solvable. Requests the solvables from the
+    /// [`DependencyProvider`] if they are not known yet.
+    pub fn get_or_cache_dependencies(&self, solvable_id: SolvableId) -> &Dependencies {
+        let dependencies_id = match self.solvable_to_dependencies.get_copy(&solvable_id) {
+            Some(id) => id,
+            None => {
+                let dependencies = self.provider.get_dependencies(solvable_id);
+                let dependencies_id = self.solvable_dependencies.alloc(dependencies);
+                self.solvable_to_dependencies
+                    .insert_copy(solvable_id, dependencies_id);
+                dependencies_id
+            }
+        };
+
+        &self.solvable_dependencies[dependencies_id]
+    }
 }
 
 impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
@@ -218,21 +238,13 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///
     /// Returns a [`Problem`] if no solution was found, which provides ways to inspect the causes
     /// and report them to the user.
-    pub fn solve(&mut self, jobs: SolveJobs) -> Result<Transaction, Problem> {
+    pub fn solve(&mut self, root_requirements: Vec<VersionSetId>) -> Result<Transaction, Problem> {
         // Clear state
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
         self.learnt_why = Mapping::empty();
         self.clauses = vec![ClauseState::root()];
-
-        self.root_requirements = jobs.install.clone();
-
-        // Favored map
-        let mut favored_map = HashMap::new();
-        for &favored_id in &jobs.favor {
-            let name_id = self.pool.resolve_solvable_inner(favored_id).package().name;
-            favored_map.insert(name_id, favored_id);
-        }
+        self.root_requirements = root_requirements;
 
         // Create clauses for root's dependencies, and their dependencies, and so forth
         self.add_clauses_for_root_deps();
@@ -285,7 +297,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         self.make_watches();
 
         // Run SAT
-        self.run_sat(&jobs.install, &jobs.lock)?;
+        self.run_sat()?;
 
         let steps = self
             .decision_tracker
@@ -324,23 +336,23 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let empty_version_set_id_vec: Vec<VersionSetId> = Vec::new();
 
         while let Some(solvable_id) = stack.pop() {
+            let solvable = self.pool().resolve_solvable_inner(solvable_id);
+
             // Determine the dependencies of the current solvable. There are two cases here:
             // 1. The solvable is the root solvable which only provides required dependencies.
             // 2. The solvable is a package candidate in which case we request the corresponding
             //    dependencies from the `DependencyProvider`.
-            let (requirements, constrains) = match &self.pool.solvables[solvable_id].inner {
-                SolvableInner::Root => (
-                    Cow::Borrowed(&self.root_requirements),
-                    Cow::Borrowed(&empty_version_set_id_vec),
-                ),
+            let (requirements, constrains) = match solvable.inner {
+                SolvableInner::Root => (&self.root_requirements, &empty_version_set_id_vec),
                 SolvableInner::Package(_) => {
-                    let deps = self.provider.get_dependencies(&mut self.pool, solvable_id);
-                    (Cow::Owned(deps.requirements), Cow::Owned(deps.constrains))
+                    let deps = self.get_or_cache_dependencies(solvable_id);
+                    (&deps.requirements, &deps.constrains)
                 }
             };
 
             // Iterate over all the requirements and create clauses.
-            for &version_set_id in requirements.as_slice() {
+            let mut clauses = Vec::new();
+            for &version_set_id in requirements {
                 // Get the sorted candidates that can fulfill this requirement
                 let candidates = self.get_or_cache_sorted_candidates(version_set_id);
 
@@ -355,8 +367,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     }
                 }
 
-                // Add the requires clauses to the solver
-                self.clauses.push(ClauseState::requires(
+                clauses.push(ClauseState::requires(
                     solvable_id,
                     version_set_id,
                     candidates,
@@ -369,16 +380,17 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 let non_candidates = self
                     .get_or_cache_non_matching_candidates(version_set_id)
                     .iter()
-                    .copied()
-                    .collect_vec();
+                    .copied();
 
                 // Add forbidden clauses for the candidates
                 for forbidden_candidate in non_candidates {
                     let clause =
                         ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
-                    self.clauses.push(clause);
+                    clauses.push(clause);
                 }
             }
+
+            self.clauses.extend(clauses);
         }
     }
 
@@ -403,11 +415,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///    [`Solver::analyze`] for the implementation of this step.
     ///
     /// The solver loop can be found in [`Solver::resolve_dependencies`].
-    fn run_sat(
-        &mut self,
-        top_level_requirements: &[VersionSetId],
-        locked_solvables: &[SolvableId],
-    ) -> Result<(), Problem> {
+    fn run_sat(&mut self) -> Result<(), Problem> {
         assert!(self.decision_tracker.is_empty());
 
         // Assign `true` to the root solvable
@@ -420,7 +428,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             .expect("bug: solvable was already decided!");
 
         // Forbid packages that rely on dependencies without candidates
-        self.decide_requires_without_candidates(level, locked_solvables, top_level_requirements)
+        self.decide_requires_without_candidates(level)
             .map_err(|cause| self.analyze_unsolvable(cause))?;
 
         // Propagate after the assignments above
@@ -437,12 +445,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///
     /// Since a requires clause is represented as (¬A ∨ candidate_1 ∨ ... ∨ candidate_n),
     /// a dependency without candidates becomes (¬A), which means that A should always be false.
-    fn decide_requires_without_candidates(
-        &mut self,
-        level: u32,
-        _locked_solvables: &[SolvableId],
-        _top_level_requirements: &[VersionSetId],
-    ) -> Result<(), ClauseId> {
+    fn decide_requires_without_candidates(&mut self, level: u32) -> Result<(), ClauseId> {
         tracing::info!("=== Deciding assertions for requires without candidates");
 
         for (i, clause) in self.clauses.iter().enumerate() {
@@ -459,7 +462,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     if decided {
                         tracing::info!(
                             "Set {} = false",
-                            self.pool.resolve_solvable_inner(solvable_id)
+                            self.pool().resolve_solvable_inner(solvable_id)
                         );
                     }
                 }
@@ -554,8 +557,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         tracing::info!(
             "=== Install {} at level {level} (required by {})",
-            self.pool.resolve_solvable_inner(solvable),
-            self.pool.resolve_solvable_inner(required_by),
+            self.pool().resolve_solvable_inner(solvable),
+            self.pool().resolve_solvable_inner(required_by),
         );
 
         self.decision_tracker
@@ -573,11 +576,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             {
                 tracing::info!(
                     "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self.pool.resolve_solvable_inner(conflicting_solvable)
+                    solvable = self.pool().resolve_solvable_inner(conflicting_solvable)
                 );
                 tracing::info!(
                     "During unit propagation for clause: {:?}",
-                    self.clauses[conflicting_clause.index()].debug(&self.pool)
+                    self.clauses[conflicting_clause.index()].debug(self.pool())
                 );
 
                 tracing::info!(
@@ -591,7 +594,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         .unwrap()
                         .derived_from
                         .index()]
-                    .debug(&self.pool),
+                    .debug(self.pool()),
                 );
             }
 
@@ -609,8 +612,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool.resolve_solvable_inner(decision.solvable_id),
-                        clause.debug(&self.pool),
+                        self.pool().resolve_solvable_inner(decision.solvable_id),
+                        clause.debug(self.pool()),
                     );
                 }
 
@@ -633,7 +636,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .expect("bug: solvable was already decided!");
             tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
-                self.pool.resolve_solvable_inner(literal.solvable_id)
+                self.pool().resolve_solvable_inner(literal.solvable_id)
             );
         }
 
@@ -678,7 +681,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             if decided {
                 tracing::info!(
                     "Propagate assertion {} = {}",
-                    self.pool.resolve_solvable_inner(literal.solvable_id),
+                    self.pool().resolve_solvable_inner(literal.solvable_id),
                     decision
                 );
             }
@@ -775,10 +778,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                 _ => {
                                     tracing::info!(
                                         "Propagate {} = {}. {:?}",
-                                        self.pool
+                                        self.provider
+                                            .pool()
                                             .resolve_solvable_inner(remaining_watch.solvable_id),
                                         remaining_watch.satisfying_value(),
-                                        clause.debug(&self.pool),
+                                        clause.debug(self.provider.pool()),
                                     );
                                 }
                             }
@@ -1008,7 +1012,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .format_with("\n", |lit, f| f(&format_args!(
                     "- {}{}",
                     if lit.negate { "NOT " } else { "" },
-                    self.pool.resolve_solvable_inner(lit.solvable_id)
+                    self.pool().resolve_solvable_inner(lit.solvable_id)
                 )))
         );
 
@@ -1020,7 +1024,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     }
 
     fn make_watches(&mut self) {
-        self.watches.initialize(self.pool.solvables.len());
+        self.watches.initialize(self.pool().solvables.len());
 
         // Watches are already initialized in the clauses themselves, here we build a linked list for
         // each package (a clause will be linked to other clauses that are watching the same package)
@@ -1039,7 +1043,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 mod test {
     use super::*;
     use crate::{Candidates, Dependencies, VersionTrait};
-    use std::cell::OnceCell;
+    use indexmap::IndexMap;
+    use std::collections::HashMap;
     use std::fmt::{Debug, Display, Formatter};
     use std::ops::Range;
     use std::str::FromStr;
@@ -1175,7 +1180,8 @@ mod test {
     /// This provides sorting functionality for our `BundleBox` packaging system
     #[derive(Default)]
     struct BundleBoxProvider {
-        packages: HashMap<String, HashMap<Pack, BundleBoxPackageDependencies>>,
+        pool: Pool<PackRange>,
+        packages: IndexMap<String, IndexMap<Pack, BundleBoxPackageDependencies>>,
         favored: HashMap<String, Pack>,
         locked: HashMap<String, Pack>,
     }
@@ -1188,6 +1194,18 @@ mod test {
     impl BundleBoxProvider {
         pub fn new() -> Self {
             Default::default()
+        }
+
+        pub fn requirements(&self, requirements: &[&str]) -> Vec<VersionSetId> {
+            requirements
+                .into_iter()
+                .map(|dep| Spec::from_str(dep).unwrap())
+                .map(|spec| {
+                    let dep_name = self.pool.intern_package_name(&spec.name);
+                    self.pool
+                        .intern_version_set(dep_name, spec.versions.clone())
+                })
+                .collect()
         }
 
         pub fn from_packages(packages: &[(&str, u32, Vec<&str>)]) -> Self {
@@ -1239,26 +1257,25 @@ mod test {
     }
 
     impl DependencyProvider<PackRange> for BundleBoxProvider {
+        fn pool(&self) -> &Pool<PackRange> {
+            &self.pool
+        }
+
         fn sort_candidates(
             &self,
-            pool: &Pool<PackRange>,
             solvables: &mut [SolvableId],
-            _match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+            _solver: &Solver<PackRange, String, Self>,
         ) {
             solvables.sort_by(|a, b| {
-                let a = pool.resolve_solvable_inner(*a).package();
-                let b = pool.resolve_solvable_inner(*b).package();
+                let a = self.pool.resolve_solvable_inner(*a).package();
+                let b = self.pool.resolve_solvable_inner(*b).package();
                 // We want to sort with highest version on top
                 b.inner.0.cmp(&a.inner.0)
             });
         }
 
-        fn get_candidates(
-            &self,
-            pool: &Pool<PackRange, String>,
-            name: NameId,
-        ) -> Option<Candidates> {
-            let package_name = pool.resolve_package_name(name);
+        fn get_candidates(&self, name: NameId) -> Option<Candidates> {
+            let package_name = self.pool.resolve_package_name(name);
             let package = self.packages.get(package_name)?;
 
             let mut candidates = Candidates {
@@ -1268,7 +1285,7 @@ mod test {
             let favor = self.favored.get(package_name);
             let locked = self.locked.get(package_name);
             for pack in package.keys() {
-                let solvable = pool.add_package(name, *pack);
+                let solvable = self.pool.add_package(name, *pack);
                 candidates.candidates.push(solvable);
                 if Some(pack) == favor {
                     candidates.favored = Some(solvable);
@@ -1281,13 +1298,9 @@ mod test {
             Some(candidates)
         }
 
-        fn get_dependencies(
-            &self,
-            pool: &Pool<PackRange, String>,
-            solvable: SolvableId,
-        ) -> Dependencies {
-            let candidate = pool.resolve_solvable(solvable);
-            let package_name = pool.resolve_package_name(candidate.name);
+        fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
+            let candidate = self.pool.resolve_solvable(solvable);
+            let package_name = self.pool.resolve_package_name(candidate.name);
             let pack = candidate.inner();
             let Some(deps) = self.packages.get(package_name).and_then(|v| v.get(pack)) else { return Default::default() };
 
@@ -1296,31 +1309,19 @@ mod test {
                 constrains: Vec::with_capacity(deps.constrains.len()),
             };
             for req in &deps.dependencies {
-                let dep_name = pool.intern_package_name(&req.name);
-                let dep_spec = pool.intern_version_set(dep_name, req.versions.clone());
+                let dep_name = self.pool.intern_package_name(&req.name);
+                let dep_spec = self.pool.intern_version_set(dep_name, req.versions.clone());
                 result.requirements.push(dep_spec);
             }
 
             for req in &deps.constrains {
-                let dep_name = pool.intern_package_name(&req.name);
-                let dep_spec = pool.intern_version_set(dep_name, req.versions.clone());
+                let dep_name = self.pool.intern_package_name(&req.name);
+                let dep_spec = self.pool.intern_version_set(dep_name, req.versions.clone());
                 result.constrains.push(dep_spec);
             }
 
             result
         }
-    }
-
-    /// Install the given version sets
-    fn install(pool: &mut Pool<PackRange, String>, version_sets: &[&str]) -> SolveJobs {
-        let mut jobs = SolveJobs::default();
-        for &p in version_sets {
-            let spec = Spec::from_str(p).unwrap();
-            let dep_name = pool.intern_package_name(spec.name.clone());
-            let version_set_id = pool.intern_version_set(dep_name, spec.versions);
-            jobs.install(version_set_id);
-        }
-        jobs
     }
 
     /// Create a string from a [`Transaction`]
@@ -1335,13 +1336,10 @@ mod test {
     }
 
     /// Unsat so that we can view the problem
-    fn solve_unsat<VS: VersionSet, D: DependencyProvider<VS>>(
-        pool: Pool<VS>,
-        jobs: SolveJobs,
-        provider: D,
-    ) -> String {
-        let mut solver = Solver::new(pool, provider);
-        match solver.solve(jobs) {
+    fn solve_unsat(provider: BundleBoxProvider, specs: &[&str]) -> String {
+        let requirements = provider.requirements(specs);
+        let mut solver = Solver::new(provider);
+        match solver.solve(requirements) {
             Ok(_) => panic!("expected unsat, but a solution was found"),
             Err(problem) => problem.display_user_friendly(&solver).to_string(),
         }
@@ -1350,106 +1348,94 @@ mod test {
     /// Test whether we can select a version, this is the most basic operation
     #[test]
     fn test_unit_propagation_1() {
-        let mut pool = Pool::new();
-        let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(
-            pool,
-            BundleBoxProvider::from_packages(&[("asdf", 1, vec![])]),
-        );
-        let solved = solver.solve(jobs).unwrap();
+        let provider = BundleBoxProvider::from_packages(&[("asdf", 1, vec![])]);
+        let root_requirements = provider.requirements(&["asdf"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(root_requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[0])
             .package();
 
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.version(), 1);
     }
 
     /// Test if we can also select a nested version
     #[test]
     fn test_unit_propagation_nested() {
-        let mut pool = Pool::new();
-        let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(
-            pool,
-            BundleBoxProvider::from_packages(&[
-                ("asdf", 1u32, vec!["efgh"]),
-                ("efgh", 4u32, vec![]),
-                ("dummy", 6u32, vec![]),
-            ]),
-        );
-        let solved = solver.solve(jobs).unwrap();
+        let provider = BundleBoxProvider::from_packages(&[
+            ("asdf", 1u32, vec!["efgh"]),
+            ("efgh", 4u32, vec![]),
+            ("dummy", 6u32, vec![]),
+        ]);
+        let requirements = provider.requirements(&["asdf"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
 
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.version(), 1);
 
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "efgh");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
         assert_eq!(solvable.inner.version(), 4);
     }
 
     /// Test if we can resolve multiple versions at once
     #[test]
     fn test_resolve_multiple() {
-        let mut pool = Pool::new();
-        let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(
-            pool,
-            BundleBoxProvider::from_packages(&[
-                ("asdf", 1, vec![]),
-                ("asdf", 2, vec![]),
-                ("efgh", 4, vec![]),
-                ("efgh", 5, vec![]),
-            ]),
-        );
-        let solved = solver.solve(jobs).unwrap();
+        let provider = BundleBoxProvider::from_packages(&[
+            ("asdf", 1, vec![]),
+            ("asdf", 2, vec![]),
+            ("efgh", 4, vec![]),
+            ("efgh", 5, vec![]),
+        ]);
+        let requirements = provider.requirements(&["asdf", "efgh"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 2);
 
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.version(), 2);
 
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[1])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "efgh");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
         assert_eq!(solvable.inner.version(), 5);
     }
 
     /// In case of a conflict the version should not be selected with the conflict
     #[test]
     fn test_resolve_with_conflict() {
-        let mut pool = Pool::new();
-        let jobs = install(&mut pool, &["asdf", "efgh"]);
-        let mut solver = Solver::new(
-            pool,
-            BundleBoxProvider::from_packages(&[
-                ("asdf", 4, vec!["conflicting 1"]),
-                ("asdf", 3, vec!["conflicting 0"]),
-                ("efgh", 7, vec!["conflicting 0"]),
-                ("efgh", 6, vec!["conflicting 0"]),
-                ("conflicting", 1, vec![]),
-                ("conflicting", 0, vec![]),
-            ]),
-        );
-        let solved = solver.solve(jobs);
+        let provider = BundleBoxProvider::from_packages(&[
+            ("asdf", 4, vec!["conflicting 1"]),
+            ("asdf", 3, vec!["conflicting 0"]),
+            ("efgh", 7, vec!["conflicting 0"]),
+            ("efgh", 6, vec!["conflicting 0"]),
+            ("conflicting", 1, vec![]),
+            ("conflicting", 0, vec![]),
+        ]);
+        let requirements = provider.requirements(&["asdf", "efgh"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements);
         let solved = match solved {
             Ok(solved) => solved,
             Err(p) => panic!("{}", p.display_user_friendly(&solver)),
@@ -1468,25 +1454,22 @@ mod test {
     /// The non-existing package should not be selected
     #[test]
     fn test_resolve_with_nonexisting() {
-        let mut pool = Pool::new();
-        let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(
-            pool,
-            BundleBoxProvider::from_packages(&[
-                ("asdf", 4, vec!["b"]),
-                ("asdf", 3, vec![]),
-                ("b", 1, vec!["idontexist"]),
-            ]),
-        );
-        let solved = solver.solve(jobs).unwrap();
+        let provider = BundleBoxProvider::from_packages(&[
+            ("asdf", 4, vec!["b"]),
+            ("asdf", 3, vec![]),
+            ("b", 1, vec!["idontexist"]),
+        ]);
+        let requirements = provider.requirements(&["asdf"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
 
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.version(), 3);
     }
 
@@ -1494,21 +1477,20 @@ mod test {
     /// in the higher package not being considered
     #[test]
     fn test_resolve_locked_top_level() {
-        let mut pool = Pool::new();
         let mut provider =
             BundleBoxProvider::from_packages(&[("asdf", 4, vec![]), ("asdf", 3, vec![])]);
         provider.set_locked("asdf", 3);
 
-        let jobs = install(&mut pool, &["asdf"]);
+        let requirements = provider.requirements(&["asdf"]);
 
-        let mut solver = Solver::new(pool, provider);
-        let solved = solver.solve(jobs).unwrap();
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
         let solvable_id = solved.steps[0];
         assert_eq!(
             solver
-                .pool
+                .pool()
                 .resolve_solvable_inner(solvable_id)
                 .package()
                 .inner
@@ -1520,7 +1502,6 @@ mod test {
     /// Should ignore lock when it is not a top level package and a newer version exists without it
     #[test]
     fn test_resolve_ignored_locked_top_level() {
-        let mut pool = Pool::new();
         let mut provider = BundleBoxProvider::from_packages(&[
             ("asdf", 4, vec![]),
             ("asdf", 3, vec!["fgh"]),
@@ -1529,23 +1510,22 @@ mod test {
 
         provider.set_locked("fgh", 1);
 
-        let jobs = install(&mut pool, &["asdf"]);
-        let mut solver = Solver::new(pool, provider);
-        let solved = solver.solve(jobs).unwrap();
+        let requirements = provider.requirements(&["asdf"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
         assert_eq!(solved.steps.len(), 1);
         let solvable = solver
-            .pool
+            .pool()
             .resolve_solvable_inner(solved.steps[0])
             .package();
-        assert_eq!(solver.pool.resolve_package_name(solvable.name), "asdf");
+        assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.version(), 4);
     }
 
     /// Test checks if favoring without a conflict results in a package upgrade
     #[test]
     fn test_resolve_favor_without_conflict() {
-        let mut pool = Pool::new();
         let mut provider = BundleBoxProvider::from_packages(&[
             ("a", 1, vec![]),
             ("a", 2, vec![]),
@@ -1555,17 +1535,17 @@ mod test {
         provider.set_favored("a", 1);
         provider.set_favored("b", 1);
 
-        let jobs = install(&mut pool, &["a", "b 2"]);
+        let requirements = provider.requirements(&["a", "b 2"]);
 
         // Already installed: A=1; B=1
-        let mut solver = Solver::new(pool, provider);
-        let solved = solver.solve(jobs);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements);
         let solved = match solved {
             Ok(solved) => solved,
             Err(p) => panic!("{}", p.display_user_friendly(&solver)),
         };
 
-        let result = transaction_to_string(&solver.pool, &solved);
+        let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
         Pack(2)
         Pack(1)
@@ -1574,7 +1554,6 @@ mod test {
     //
     #[test]
     fn test_resolve_favor_with_conflict() {
-        let mut pool = Pool::new();
         let mut provider = BundleBoxProvider::from_packages(&[
             ("a", 1, vec!["c 1"]),
             ("a", 2, vec![]),
@@ -1587,16 +1566,16 @@ mod test {
         provider.set_favored("b", 1);
         provider.set_favored("c", 1);
 
-        let jobs = install(&mut pool, &["a", "b 2"]);
+        let requirements = provider.requirements(&["a", "b 2"]);
 
-        let mut solver = Solver::new(pool, provider);
-        let solved = solver.solve(jobs);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements);
         let solved = match solved {
             Ok(solved) => solved,
             Err(p) => panic!("{}", p.display_user_friendly(&solver)),
         };
 
-        let result = transaction_to_string(&solver.pool, &solved);
+        let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
         Pack(2)
         Pack(2)
@@ -1606,16 +1585,15 @@ mod test {
 
     #[test]
     fn test_resolve_cyclic() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[
             ("a", 2, vec!["b 0..10"]),
             ("b", 5, vec!["a 2..4"]),
         ]);
-        let jobs = install(&mut pool, &["a 0..100"]);
-        let mut solver = Solver::new(pool, provider);
-        let solved = solver.solve(jobs).unwrap();
+        let requirements = provider.requirements(&["a 0..100"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
 
-        let result = transaction_to_string(&solver.pool, &solved);
+        let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
         Pack(2)
         Pack(5)
@@ -1624,60 +1602,48 @@ mod test {
 
     #[test]
     fn test_unsat_locked_and_excluded() {
-        let mut pool = Pool::new();
         let mut provider = BundleBoxProvider::from_packages(&[
             ("asdf", 1, vec!["c 2"]),
             ("c", 2, vec![]),
             ("c", 1, vec![]),
         ]);
         provider.set_locked("c", 1);
-        let job = install(&mut pool, &["asdf"]);
-        let error = solve_unsat(pool, job, provider);
+        let error = solve_unsat(provider, &["asdf"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_no_candidates_for_child_1() {
-        let mut pool = Pool::new();
         let provider =
             BundleBoxProvider::from_packages(&[("asdf", 1, vec!["c 2"]), ("c", 1, vec![])]);
-        let jobs = install(&mut pool, &["asdf"]);
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["asdf"]);
         insta::assert_snapshot!(error);
     }
     //
     #[test]
     fn test_unsat_no_candidates_for_child_2() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[("a", 41, vec!["B 0..20"])]);
-        let jobs = install(&mut pool, &["a 0..1000"]);
-
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["a 0..1000"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_missing_top_level_dep_1() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[("asdf", 1, vec![])]);
-        let jobs = install(&mut pool, &["fghj"]);
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["fghj"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_missing_top_level_dep_2() {
-        let mut pool = Pool::new();
         let provider =
             BundleBoxProvider::from_packages(&[("a", 41, vec!["b 15"]), ("b", 15, vec![])]);
-        let jobs = install(&mut pool, &["a 41", "b 14"]);
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["a 41", "b 14"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_after_backtracking() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[
             ("b", 7, vec!["d 1"]),
             ("b", 6, vec!["d 1"]),
@@ -1689,24 +1655,19 @@ mod test {
             ("e", 2, vec![]),
         ]);
 
-        let jobs = install(&mut pool, &["b", "c", "e"]);
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["b", "c", "e"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_incompatible_root_requirements() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[("a", 2, vec![]), ("a", 5, vec![])]);
-        let jobs = install(&mut pool, &["a 0..4", "a 5..10"]);
-
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["a 0..4", "a 5..10"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_bluesky_conflict() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[
             ("suitcase-utils", 54, vec![]),
             ("suitcase-utils", 53, vec![]),
@@ -1724,20 +1685,16 @@ mod test {
             ("numpy", 1, vec![]),
             ("python", 1, vec![]),
         ]);
-
-        let jobs = install(
-            &mut pool,
+        let error = solve_unsat(
+            provider,
             &["bluesky-widgets 0..100", "suitcase-utils 54..100"],
         );
-
-        let error = solve_unsat(pool, jobs, provider);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_pubgrub_article() {
         // Taken from the pubgrub article: https://nex3.medium.com/pubgrub-2fb6470504f
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[
             ("menu", 15, vec!["dropdown 2..3"]),
             ("menu", 10, vec!["dropdown 1..2"]),
@@ -1748,16 +1705,12 @@ mod test {
             ("intl", 5, vec![]),
             ("intl", 3, vec![]),
         ]);
-
-        let jobs = install(&mut pool, &["menu", "icons 1", "intl 5"]);
-
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["menu", "icons 1", "intl 5"]);
         insta::assert_snapshot!(error);
     }
 
     #[test]
     fn test_unsat_applies_graph_compression() {
-        let mut pool = Pool::new();
         let provider = BundleBoxProvider::from_packages(&[
             ("a", 10, vec!["b"]),
             ("a", 9, vec!["b"]),
@@ -1768,16 +1721,12 @@ mod test {
             ("c", 100, vec![]),
             ("c", 99, vec![]),
         ]);
-
-        let jobs = install(&mut pool, &["a", "c 101..104"]);
-
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["a", "c 101..104"]);
         insta::assert_snapshot!(error);
     }
     //
     #[test]
     fn test_unsat_constrains() {
-        let mut pool = Pool::new();
         let mut provider = BundleBoxProvider::from_packages(&[
             ("a", 10, vec!["b 50..100"]),
             ("a", 9, vec!["b 50..100"]),
@@ -1787,10 +1736,7 @@ mod test {
 
         provider.add_package("c", 10.into(), &vec![], &vec!["b 0..50"]);
         provider.add_package("c", 8.into(), &vec![], &vec!["b 0..50"]);
-
-        let jobs = install(&mut pool, &["a", "c"]);
-
-        let error = solve_unsat(pool, jobs, provider);
+        let error = solve_unsat(provider, &["a", "c"]);
         insta::assert_snapshot!(error);
     }
 }

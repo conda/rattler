@@ -11,6 +11,7 @@
 #![deny(missing_docs)]
 
 mod arena;
+mod frozen_copy_map;
 mod id;
 mod mapping;
 mod pool;
@@ -19,14 +20,12 @@ mod solvable;
 mod solve_jobs;
 mod solver;
 mod transaction;
-mod frozen_copy_map;
 
 pub use id::{NameId, SolvableId, VersionSetId};
 pub use pool::Pool;
-pub use solvable::{PackageSolvable, PackageRequirements};
+pub use solvable::PackageSolvable;
 pub use solve_jobs::SolveJobs;
 pub use solver::Solver;
-use std::cell::OnceCell;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 pub use transaction::Transaction;
@@ -58,23 +57,21 @@ pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
 }
 
 /// Bla
-pub trait DependencyProvider<VS: VersionSet, N: PackageName = String> {
+pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
+    /// Returns the [`Pool`] that is used to allocate the Ids returned from this instance
+    fn pool(&self) -> &Pool<VS, N>;
+
     /// Sort the specified solvables based on which solvable to try first.
-    fn sort_candidates(
-        &self,
-        pool: &Pool<VS, N>,
-        solvables: &mut [SolvableId],
-        match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
-    );
+    fn sort_candidates(&self, solvables: &mut [SolvableId], solver: &Solver<VS, N, Self>);
 
     /// Returns a list of solvables that should be considered when a package with the given name is
     /// requested.
     ///
     /// Returns `None` if no such package exist.
-    fn get_candidates(&self, pool: &Pool<VS, N>, name: NameId) -> Option<Candidates>;
+    fn get_candidates(&self, name: NameId) -> Option<Candidates>;
 
     /// Returns the dependencies for the specified solvable.
-    fn get_dependencies(&self, pool: &Pool<VS, N>, solvable: SolvableId) -> Dependencies;
+    fn get_dependencies(&self, solvable: SolvableId) -> Dependencies;
 }
 
 /// A list of candidate solvables for a specific package. This is returned from

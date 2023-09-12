@@ -221,6 +221,24 @@ impl MatchSpec {
 
         true
     }
+
+    /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
+    pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
+        (
+            self.name,
+            NamelessMatchSpec {
+                version: self.version,
+                build: self.build,
+                build_number: self.build_number,
+                file_name: self.file_name,
+                channel: self.channel,
+                subdir: self.subdir,
+                namespace: self.namespace,
+                md5: self.md5,
+                sha256: self.sha256,
+            },
+        )
+    }
 }
 
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places

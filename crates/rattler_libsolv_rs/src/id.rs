@@ -125,3 +125,18 @@ impl ArenaId for CandidatesId {
         self.0 as usize
     }
 }
+
+/// The id associated to an arena of PackageRequirements
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct DependenciesId(u32);
+
+impl ArenaId for DependenciesId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}

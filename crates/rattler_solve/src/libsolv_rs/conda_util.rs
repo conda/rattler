@@ -1,22 +1,22 @@
-use crate::libsolv_rs::SolverMatchSpec;
+use crate::libsolv_rs::{CondaDependencyProvider, SolverMatchSpec};
 use rattler_conda_types::Version;
-use rattler_libsolv_rs::{Mapping, Pool, SolvableId, VersionSetId};
-use std::cell::OnceCell;
+use rattler_libsolv_rs::{SolvableId, Solver, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn compare_candidates(
+pub(super) fn compare_candidates<'a>(
     a: SolvableId,
     b: SolvableId,
-    pool: &Pool<SolverMatchSpec>,
-    match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+    solver: &Solver<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
     >,
 ) -> Ordering {
+    let pool = solver.pool();
+
     let a_solvable = pool.resolve_solvable(a);
     let b_solvable = pool.resolve_solvable(b);
 
@@ -49,12 +49,14 @@ pub(super) fn compare_candidates(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_match_specs = a_solvable
-        .dependencies()
+    let a_match_specs = solver
+        .get_or_cache_dependencies(a)
+        .requirements
         .iter()
         .map(|id| (*id, pool.resolve_version_set(*id)));
-    let b_match_specs = b_solvable
-        .dependencies()
+    let b_match_specs = solver
+        .get_or_cache_dependencies(b)
+        .requirements
         .iter()
         .map(|id| (*id, pool.resolve_version_set(*id)));
 
@@ -73,18 +75,8 @@ pub(super) fn compare_candidates(
             }
 
             // Find which of the two specs selects the highest version
-            let highest_a = find_highest_version(
-                a_spec_id,
-                pool,
-                match_spec_to_candidates,
-                match_spec_highest_version,
-            );
-            let highest_b = find_highest_version(
-                *b_spec_id,
-                pool,
-                match_spec_to_candidates,
-                match_spec_highest_version,
-            );
+            let highest_a = find_highest_version(a_spec_id, solver, match_spec_highest_version);
+            let highest_b = find_highest_version(*b_spec_id, solver, match_spec_highest_version);
 
             // Skip version if no package is selected by either spec
             let (a_version, a_tracked_features, b_version, b_tracked_features) = if let (
@@ -128,10 +120,9 @@ pub(super) fn compare_candidates(
     b_record.timestamp().cmp(&a_record.timestamp())
 }
 
-pub(super) fn find_highest_version(
+pub(super) fn find_highest_version<'a>(
     match_spec_id: VersionSetId,
-    pool: &Pool<SolverMatchSpec>,
-    match_spec_to_candidates: &Mapping<VersionSetId, OnceCell<Vec<SolvableId>>>,
+    solver: &Solver<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
@@ -140,12 +131,10 @@ pub(super) fn find_highest_version(
     match_spec_highest_version
         .entry(match_spec_id)
         .or_insert_with(|| {
-            let candidates = match_spec_to_candidates[match_spec_id]
-                .get_or_init(|| pool.find_matching_solvables(match_spec_id));
-
+            let candidates = solver.get_or_cache_matching_candidates(match_spec_id);
             candidates
                 .iter()
-                .map(|id| pool.resolve_solvable(*id).inner())
+                .map(|id| solver.pool().resolve_solvable(*id).inner())
                 .fold(None, |init, record| {
                     Some(init.map_or_else(
                         || {

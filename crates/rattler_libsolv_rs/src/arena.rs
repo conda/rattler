@@ -14,8 +14,10 @@ pub(crate) struct Arena<TId: ArenaId, TValue> {
     phantom: PhantomData<TId>,
 }
 
-struct ChunkList<T> {
-    rest: Vec<Vec<T>>,
+impl<TId: ArenaId, TValue> Default for Arena<TId, TValue> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<TId: ArenaId, TValue> Arena<TId, TValue> {

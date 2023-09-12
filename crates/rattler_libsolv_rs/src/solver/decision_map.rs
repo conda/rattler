@@ -1,5 +1,4 @@
 use crate::id::SolvableId;
-use crate::mapping::Mapping;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -40,6 +39,7 @@ impl DecisionAndLevel {
 
 /// A map of the assignments to all solvables
 pub(crate) struct DecisionMap {
+    // TODO: (BasZ) instead of a hashmap it might be better to use a Mapping.
     map: HashMap<SolvableId, DecisionAndLevel>,
 }
 

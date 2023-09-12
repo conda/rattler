@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 use crate::arena::Arena;
 use crate::id::{NameId, SolvableId, VersionSetId};
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{FrozenCopyMap, PackageRequirements};
+use crate::{FrozenCopyMap};
 use crate::{PackageName, VersionSet};
 
 /// A pool that stores data related to the available packages
@@ -56,17 +56,6 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
         let solvable_id = self.solvables.alloc(Solvable::new_package(name_id, record));
 
         solvable_id
-    }
-
-    /// Sets the requirements of a specific package. Returns the requirements as an error if the
-    /// requirements for the package have already been set.
-    pub fn set_requirements(
-        &self,
-        solvable_id: SolvableId,
-        requirements: PackageRequirements,
-    ) -> Result<(), PackageRequirements> {
-        let solvable = self.solvables[solvable_id].package();
-        solvable.requirements.set(requirements)
     }
 
     /// Interns a match spec into the [`Pool`], returning its [`VersionSetId`]
