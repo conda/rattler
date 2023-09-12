@@ -47,7 +47,8 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyShellEnum>().unwrap();
     m.add_class::<PyActivator>().unwrap();
 
-    m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap()).unwrap();
+    m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
+        .unwrap();
 
     // Exceptions
     m.add(

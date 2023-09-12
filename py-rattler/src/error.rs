@@ -29,6 +29,8 @@ pub enum PyRattlerError {
     ParseArchError(#[from] ParseArchError),
     #[error(transparent)]
     FetchRepoDataError(#[from] FetchRepoDataError),
+    #[error(transparent)]
+    CacheDirError(#[from] anyhow::Error),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -55,6 +57,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::FetchRepoDataError(err) => {
                 FetchRepoDataException::new_err(err.to_string())
             }
+            PyRattlerError::CacheDirError(err) => CacheDirException::new_err(err.to_string()),
         }
     }
 }
@@ -68,3 +71,4 @@ create_exception!(exceptions, ActivationException, PyException);
 create_exception!(exceptions, ParsePlatformException, PyException);
 create_exception!(exceptions, ParseArchException, PyException);
 create_exception!(exceptions, FetchRepoDataException, PyException);
+create_exception!(exceptions, CacheDirException, PyException);

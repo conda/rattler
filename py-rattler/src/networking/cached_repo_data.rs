@@ -1,10 +1,10 @@
-use pyo3::pyclass;
+use pyo3::{pyclass, pymethods};
 use rattler_repodata_gateway::fetch::CachedRepoData;
 use std::sync::Arc;
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PyCachedRepoData {
     pub(crate) inner: Arc<CachedRepoData>,
 }
@@ -21,5 +21,12 @@ impl From<CachedRepoData> for PyCachedRepoData {
         Self {
             inner: Arc::new(value),
         }
+    }
+}
+
+#[pymethods]
+impl PyCachedRepoData {
+    pub fn as_str(&self) -> String {
+        format!("{self:?}")
     }
 }
