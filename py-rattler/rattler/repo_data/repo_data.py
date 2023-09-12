@@ -1,18 +1,19 @@
 from __future__ import annotations
-import os
+from pathlib import Path
 from typing import Self, Union, List, TYPE_CHECKING
 
+
 if TYPE_CHECKING:
+    from os import PathLike
     from rattler.channel import Channel
     from rattler.repo_data import PatchInstructions, RepoDataRecord
-
 
 from rattler.rattler import PyRepoData
 
 
 class RepoData:
-    def __init__(self, path: Union[str, os.PathLike]) -> None:
-        if not isinstance(path, (str, os.PathLike)):
+    def __init__(self, path: Union[str, PathLike[str]]) -> None:
+        if not isinstance(path, (str, Path)):
             raise TypeError(
                 "RepoData constructor received unsupported type "
                 f" {type(path).__name__!r} for the `path` parameter"
@@ -25,14 +26,21 @@ class RepoData:
         Apply a patch to a repodata file.
         Note that we currently do not handle revoked instructions.
         """
-        self._repo_data.apply_patches(instructions._instructions)
+        self._repo_data.apply_patches(instructions._patch_instructions)
 
     def into_repo_data(self, channel: Channel) -> List[RepoDataRecord]:
         """
         Builds a `List[RepoDataRecord]` from the packages in a
         `RepoData` given the source of the data.
         """
-        return PyRepoData.repo_data_to_records(self._repo_data, channel)
+        from rattler.repo_data import RepoDataRecord
+
+        return [
+            RepoDataRecord._from_py_record(record)
+            for record in PyRepoData.repo_data_to_records(
+                self._repo_data, channel._channel
+            )
+        ]
 
     @classmethod
     def _from_py_repo_data(cls, py_repo_data: PyRepoData) -> Self:
@@ -43,5 +51,5 @@ class RepoData:
         repo_data._repo_data = py_repo_data
         return repo_data
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{type(self).__name__}()"

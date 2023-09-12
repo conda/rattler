@@ -5,6 +5,8 @@ from rattler.rattler import PyPatchInstructions
 
 
 class PatchInstructions:
+    _patch_instructions: PyPatchInstructions
+
     @classmethod
     def _from_py_patch_instructions(
         cls, py_patch_instructions: PyPatchInstructions

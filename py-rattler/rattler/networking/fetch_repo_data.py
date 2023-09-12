@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, List, Generator, Union, TYPE_CHECKING
+from typing import Callable, List, Union, TYPE_CHECKING
 
 
 from rattler.rattler import py_fetch_repo_data
@@ -12,11 +12,12 @@ if TYPE_CHECKING:
 
 
 async def fetch_repo_data(
+    *,
     channels: List[Channel],
     platforms: List[Platform],
-    cache_path: Union[str, os.PathLike],
+    cache_path: Union[str, os.PathLike[str]],
     callback: Callable[[int, int], None],
-) -> Generator[RepoData, None, None]:
+) -> List[RepoData]:
     """
     Returns a list of RepoData for given channels and platform.
     """
@@ -27,4 +28,4 @@ async def fetch_repo_data(
         callback,
     )
 
-    return (RepoData._from_py_repo_data(repo_data) for repo_data in repo_data_list)
+    return [RepoData._from_py_repo_data(repo_data) for repo_data in repo_data_list]
