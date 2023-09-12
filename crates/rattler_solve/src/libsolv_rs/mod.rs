@@ -176,23 +176,30 @@ pub(crate) struct CondaDependencyProvider<'a> {
 }
 
 impl<'a> CondaDependencyProvider<'a> {
-    pub fn from_solver_task<
-        R: IntoRepoData<'a, RepoData<'a>>,
-        TAvailablePackagesIterator: IntoIterator<Item = R>,
-    >(
-        task: SolverTask<TAvailablePackagesIterator>,
-    ) -> (Self, Vec<VersionSetId>) {
+    pub fn from_solver_task(
+        repodata: impl IntoIterator<Item = RepoData<'a>>,
+        virtual_packages: &'a [GenericVirtualPackage],
+    ) -> Self {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
-        for repo_datas in task.available_packages.into_iter() {
+        // Add virtual packages to the records
+        for virtual_package in virtual_packages {
+            let name = pool.intern_package_name(virtual_package.name.as_normalized());
+            let solvable =
+                pool.add_package(name, SolverPackageRecord::VirtualPackage(virtual_package));
+            records.entry(name).or_default().candidates.push(solvable);
+        }
+
+        // Add additional records
+        for repo_datas in repodata {
             // Iterate over all records and dedup records that refer to the same package data but with
             // different archive types. This can happen if you have two variants of the same package but
             // with different extensions. We prefer `.conda` packages over `.tar.bz`.
             let mut package_to_type: HashMap<&str, (ArchiveType, &'a RepoDataRecord)> =
                 HashMap::new();
 
-            for record in repo_datas.into().records {
+            for record in repo_datas.records {
                 let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
                     .unwrap_or((&record.file_name, ArchiveType::TarBz2));
                 match package_to_type.get_mut(file_name) {
@@ -237,30 +244,15 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
 
-        // TODO: Virtual packages
         // TODO: Locked packages
         // TODO: Favored packages
 
-        let root_requirements = task
-            .specs
-            .into_iter()
-            .map(|spec| {
-                let (name, spec) = spec.into_nameless();
-                let name = name.expect("cannot use matchspec without a name");
-                let name_id = pool.intern_package_name(name.as_normalized());
-                pool.intern_version_set(name_id, spec.into())
-            })
-            .collect();
-
-        (
-            Self {
-                pool,
-                records,
-                matchspec_to_highest_version: Default::default(),
-                parse_match_spec_cache: Default::default(),
-            },
-            root_requirements,
-        )
+        Self {
+            pool,
+            records,
+            matchspec_to_highest_version: Default::default(),
+            parse_match_spec_cache: Default::default(),
+        }
     }
 }
 
@@ -323,7 +315,21 @@ impl super::SolverImpl for Solver {
         // Construct a default libsolv pool
         // let mut parse_match_spec_cache = HashMap::new();
 
-        let (provider, root_requirements) = CondaDependencyProvider::from_solver_task(task);
+        let provider = CondaDependencyProvider::from_solver_task(
+            task.available_packages.into_iter().map(|r| r.into()),
+            &task.virtual_packages,
+        );
+
+        let root_requirements = task
+            .specs
+            .into_iter()
+            .map(|spec| {
+                let (name, spec) = spec.into_nameless();
+                let name = name.expect("cannot use matchspec without a name");
+                let name_id = provider.pool.intern_package_name(name.as_normalized());
+                provider.pool.intern_version_set(name_id, spec.into())
+            })
+            .collect();
 
         // Add virtual packages
         // add_virtual_packages(&mut pool, &task.virtual_packages);
