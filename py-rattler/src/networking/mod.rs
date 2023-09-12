@@ -15,6 +15,8 @@ use authenticated_client::PyAuthenticatedClient;
 pub mod authenticated_client;
 pub mod cached_repo_data;
 
+/// High-level function to fetch repodata for all the subdirectory of channels and platform.
+/// Returns a list of `PyRepoData`.
 #[pyfunction]
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
@@ -57,16 +59,17 @@ pub fn py_fetch_repo_data<'a>(
     })
 }
 
+/// Creates a closure to show progress of Download
 fn get_progress_func(callback: Py<PyAny>) -> Box<dyn FnMut(DownloadProgress) + Send + Sync> {
-    let cb = callback;
     Box::new(move |progress: DownloadProgress| {
         Python::with_gil(|py| {
             let args = PyTuple::new(py, [Some(progress.bytes), progress.total]);
-            cb.call1(py, args).expect("Callback failed!");
+            callback.call1(py, args).expect("Callback failed!");
         });
     })
 }
 
+/// Creates a subdir urls out of channels and channels.
 fn get_subdir_urls(channels: Vec<PyChannel>, platforms: Vec<PyPlatform>) -> PyResult<Vec<Url>> {
     let mut urls = Vec::new();
 

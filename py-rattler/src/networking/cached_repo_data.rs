@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PyCachedRepoData {
     pub(crate) inner: Arc<CachedRepoData>,
 }
@@ -26,7 +26,8 @@ impl From<CachedRepoData> for PyCachedRepoData {
 
 #[pymethods]
 impl PyCachedRepoData {
+    /// Returns a string representation of PyCachedRepoData.
     pub fn as_str(&self) -> String {
-        format!("{self:?}")
+        format!("{:?}", self.inner)
     }
 }
