@@ -15,10 +15,6 @@ impl DecisionAndLevel {
         DecisionAndLevel(0)
     }
 
-    fn set(&mut self, value: bool, level: u32) {
-        *self = Self::with_value_and_level(value, level);
-    }
-
     fn value(self) -> Option<bool> {
         match self.0.cmp(&0) {
             Ordering::Less => Some(false),
@@ -60,7 +56,7 @@ impl DecisionMap {
         let solvable_id = solvable_id.to_usize();
         if solvable_id >= self.map.len() {
             self.map
-                .resize_with(solvable_id + 1, || DecisionAndLevel::undecided());
+                .resize_with(solvable_id + 1, DecisionAndLevel::undecided);
         }
 
         // SAFE: because we ensured that vec contains at least the correct number of elements.
@@ -77,8 +73,6 @@ impl DecisionMap {
     }
 
     pub fn value(&self, solvable_id: SolvableId) -> Option<bool> {
-        self.map
-            .get(solvable_id.to_usize())
-            .map_or(None, |d| d.value())
+        self.map.get(solvable_id.to_usize()).and_then(|d| d.value())
     }
 }

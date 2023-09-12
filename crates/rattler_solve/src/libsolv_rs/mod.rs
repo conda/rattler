@@ -228,7 +228,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 let package_name =
                     pool.intern_package_name(record.package_record.name.as_normalized());
                 let solvable_id =
-                    pool.intern_solvable(package_name, SolverPackageRecord::Record(*record));
+                    pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
                 records
                     .entry(package_name)
                     .or_default()

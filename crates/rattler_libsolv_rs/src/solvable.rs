@@ -57,7 +57,6 @@ impl<V> Solvable<V> {
         }
     }
 
-
     pub fn package(&self) -> &PackageSolvable<V> {
         self.get_package().expect("unexpected root solvable")
     }

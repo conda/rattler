@@ -87,9 +87,7 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
     /// Unlike some of the other interning functions this function does *not* deduplicate any of the
     /// inserted elements. A unique Id will be returned everytime this function is called.
     pub fn intern_solvable(&self, name_id: NameId, record: VS::V) -> SolvableId {
-        assert!(self.solvables.len() <= u32::MAX as usize);
-        let solvable_id = self.solvables.alloc(Solvable::new_package(name_id, record));
-        solvable_id
+        self.solvables.alloc(Solvable::new_package(name_id, record))
     }
 
     /// Returns the solvable associated to the provided id

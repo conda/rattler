@@ -1,20 +1,20 @@
-use crate::arena::{Arena, ArenaId};
-use crate::id::{CandidatesId, ClauseId, DependenciesId, SolvableId};
-use crate::id::{LearntClauseId, NameId};
-use crate::mapping::Mapping;
-use crate::pool::Pool;
-use crate::problem::Problem;
-use crate::solvable::SolvableInner;
-use crate::transaction::Transaction;
+use crate::{
+    arena::{Arena, ArenaId},
+    frozen_copy_map::FrozenCopyMap,
+    id::{CandidatesId, ClauseId, DependenciesId, SolvableId},
+    id::{LearntClauseId, NameId},
+    mapping::Mapping,
+    pool::Pool,
+    problem::Problem,
+    solvable::SolvableInner,
+    transaction::Transaction,
+    Candidates, Dependencies, DependencyProvider, PackageName, VersionSet, VersionSetId,
+};
 
 use elsa::{FrozenMap, FrozenVec};
 use itertools::Itertools;
-use std::collections::HashSet;
-use std::fmt::Display;
-use std::marker::PhantomData;
+use std::{collections::HashSet, fmt::Display, marker::PhantomData};
 
-use crate::frozen_copy_map::FrozenCopyMap;
-use crate::{Candidates, Dependencies, DependencyProvider, PackageName, VersionSet, VersionSetId};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -95,7 +95,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
 
     /// Returns a reference to the pool used by the solver
     pub fn pool(&self) -> &Pool<VS, N> {
-        &self.provider.pool()
+        self.provider.pool()
     }
 
     /// Returns the candidates for the package with the given name. This will either ask the
@@ -191,7 +191,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                 // Sort all the candidates in order in which they should betried by the solver.
                 let mut sorted_candidates = Vec::new();
                 sorted_candidates.extend_from_slice(matching_candidates);
-                self.provider.sort_candidates(&self, &mut sorted_candidates);
+                self.provider.sort_candidates(self, &mut sorted_candidates);
 
                 // If we have a solvable that we favor, we sort that to the front. This ensures
                 // that the version that is favored is picked first.
