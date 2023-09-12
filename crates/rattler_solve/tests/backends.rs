@@ -188,9 +188,32 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_solve_favored() {
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                vec![installed_package(
+                    "conda-forge",
+                    "linux-64",
+                    "bors",
+                    "1.0",
+                    "bla_1",
+                    1,
+                )],
+                Vec::new(),
+                Vec::new(),
+                &["bors"],
+            )
+            .unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].package_record.to_string(), "bors=1.0=bla_1");
+        }
+
+        #[test]
         fn test_solve_with_error() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["foobar >=2", "bors >= 2"],
@@ -199,14 +222,14 @@ macro_rules! solver_backend_tests {
             assert!(result.is_err());
 
             let err = result.err().unwrap();
-            println!("{err}");
-            insta::assert_debug_snapshot!(err);
+            insta::assert_display_snapshot!(err);
         }
 
         #[test]
         fn test_solve_dummy_repo_install_non_existent() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["asdfasdf", "foo<4"],
@@ -220,7 +243,13 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_solve_dummy_repo_missing_virtual_package() {
-            let result = solve::<$T>(dummy_channel_json_path(), Vec::new(), Vec::new(), &["bar"]);
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                &["bar"],
+            );
 
             assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
         }
@@ -229,6 +258,7 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_with_virtual_package() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 vec![GenericVirtualPackage {
                     name: rattler_conda_types::PackageName::new_unchecked("__unix"),
@@ -250,6 +280,7 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_install_new() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["foo<4"],
@@ -297,6 +328,7 @@ macro_rules! solver_backend_tests {
                 dummy_channel_json_path(),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
                 &[match_spec],
             )
             .unwrap();
@@ -320,6 +352,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &["foo<4"],
             )
@@ -348,6 +381,7 @@ macro_rules! solver_backend_tests {
                 dummy_channel_json_path(),
                 already_installed,
                 Vec::new(),
+                Vec::new(),
                 &["foo>=4"],
             )
             .unwrap();
@@ -372,6 +406,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &["foo<4"],
             )
@@ -399,6 +434,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &[],
             )
@@ -488,11 +524,33 @@ mod libsolv_rs {
     use super::*;
 
     solver_backend_tests!(rattler_solve::libsolv_rs::Solver);
+
+    #[test]
+    fn test_solve_locked() {
+        let result = solve::<rattler_solve::libsolv_rs::Solver>(
+            dummy_channel_json_path(),
+            Vec::new(),
+            vec![installed_package(
+                "conda-forge",
+                "linux-64",
+                "bors",
+                "1.0",
+                "bla_1",
+                1,
+            )],
+            Vec::new(),
+            &["bors >=2"],
+        );
+
+        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        insta::assert_display_snapshot!(result.unwrap_err());
+    }
 }
 
 fn solve<T: SolverImpl + Default>(
     repo_path: String,
     installed_packages: Vec<RepoDataRecord>,
+    pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     match_specs: &[&str],
 ) -> Result<Vec<RepoDataRecord>, SolveError> {
@@ -508,7 +566,7 @@ fn solve<T: SolverImpl + Default>(
         virtual_packages,
         available_packages: [&repo_data],
         specs,
-        pinned_packages: Vec::new(),
+        pinned_packages,
     };
 
     let pkgs = T::default().solve(task)?;

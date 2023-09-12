@@ -169,6 +169,8 @@ pub(crate) struct CondaDependencyProvider<'a> {
 impl<'a> CondaDependencyProvider<'a> {
     pub fn from_solver_task(
         repodata: impl IntoIterator<Item = RepoData<'a>>,
+        favored_records: &'a [RepoDataRecord],
+        locked_records: &'a [RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
     ) -> Self {
         let pool = Pool::default();
@@ -235,8 +237,22 @@ impl<'a> CondaDependencyProvider<'a> {
             }
         }
 
-        // TODO: Locked packages
-        // TODO: Favored packages
+        // Add favored packages to the records
+        for favored_record in favored_records {
+            let name = pool.intern_package_name(favored_record.package_record.name.as_normalized());
+            let solvable = pool.add_package(name, SolverPackageRecord::Record(favored_record));
+            let mut candidates = records.entry(name).or_default();
+            candidates.candidates.push(solvable);
+            candidates.favored = Some(solvable);
+        }
+
+        for locked_record in locked_records {
+            let name = pool.intern_package_name(locked_record.package_record.name.as_normalized());
+            let solvable = pool.add_package(name, SolverPackageRecord::Record(locked_record));
+            let mut candidates = records.entry(name).or_default();
+            candidates.candidates.push(solvable);
+            candidates.locked = Some(solvable);
+        }
 
         Self {
             pool,
@@ -321,14 +337,15 @@ impl super::SolverImpl for Solver {
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
-        // Construct a default libsolv pool
-        // let mut parse_match_spec_cache = HashMap::new();
-
+        // Construct a provider that can serve the data.
         let provider = CondaDependencyProvider::from_solver_task(
             task.available_packages.into_iter().map(|r| r.into()),
+            &task.locked_packages,
+            &task.pinned_packages,
             &task.virtual_packages,
         );
 
+        // Construct the requirements that the solver needs to satisfy.
         let root_requirements = task
             .specs
             .into_iter()
@@ -340,62 +357,6 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
-        // Add virtual packages
-        // add_virtual_packages(&mut pool, &task.virtual_packages);
-
-        // // Create repos for all channel + platform combinations
-        // for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
-        //     if repodata.records.is_empty() {
-        //         continue;
-        //     }
-        //
-        //     add_repodata_records(
-        //         &mut pool,
-        //         repodata.records.iter().copied(),
-        //         &mut parse_match_spec_cache,
-        //     )?;
-        // }
-        //
-        // // Create a special pool for records that are already installed or locked.
-        // let installed_solvables = add_repodata_records(
-        //     &mut pool,
-        //     &task.locked_packages,
-        //     &mut parse_match_spec_cache,
-        // )?;
-        //
-        // // Create a special pool for records that are pinned and cannot be changed.
-        // let pinned_solvables = add_repodata_records(
-        //     &mut pool,
-        //     &task.pinned_packages,
-        //     &mut parse_match_spec_cache,
-        // )?;
-        //
-        // // Add matchspec to the queue
-        // let mut goal = SolveJobs::default();
-        //
-        // // Favor the currently installed packages
-        // for favor_solvable in installed_solvables {
-        //     goal.favor(favor_solvable);
-        // }
-        //
-        // // Lock the currently pinned packages
-        // for locked_solvable in pinned_solvables {
-        //     goal.lock(locked_solvable);
-        // }
-
-        // // Specify the matchspec requests
-        // for spec in task.specs {
-        //     let dependency_name = pool.intern_package_name(
-        //         spec.name
-        //             .as_ref()
-        //             .expect("match specs without names are not supported")
-        //             .as_normalized(),
-        //     );
-        //     let match_spec_id =
-        //         pool.intern_version_set(dependency_name, NamelessMatchSpec::from(spec).into());
-        //     goal.install(match_spec_id);
-        // }
-
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
         let transaction = solver.solve(root_requirements).map_err(|problem| {
@@ -404,6 +365,7 @@ impl super::SolverImpl for Solver {
                 .to_string()])
         })?;
 
+        // Get the resulting packages from the solver.
         let required_records = transaction
             .steps
             .into_iter()
