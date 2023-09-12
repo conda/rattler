@@ -1054,14 +1054,8 @@ mod test {
     //
     // Lets call the tuples of (Name, Version) a `Pack` and the tuples of (Name, Range<u32>) a `Spec`
     //
-    // We also need to create a custom provider that tells us how to sort the candidates. This is unqiue to each
+    // We also need to create a custom provider that tells us how to sort the candidates. This is unique to each
     // packaging ecosystem. Let's call our ecosystem 'BundleBox' so that how we call the provider as well.
-
-    /// We need this so we can make generic functions that want to retrieve the name
-    trait Nameable {
-        type Name: Clone;
-        fn name(&self) -> &Self::Name;
-    }
 
     /// This is `Pack` which is a unique version and name in our bespoke packaging system
     #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
@@ -1096,13 +1090,6 @@ mod test {
     #[repr(transparent)]
     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     struct PackRange(Option<Range<u32>>);
-
-    impl Nameable for Spec {
-        type Name = String;
-        fn name(&self) -> &String {
-            &self.name
-        }
-    }
 
     impl Display for PackRange {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
