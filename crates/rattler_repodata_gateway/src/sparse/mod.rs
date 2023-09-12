@@ -3,7 +3,9 @@
 
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
-use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
+use rattler_conda_types::{
+    compute_package_url, Channel, ChannelInfo, PackageName, PackageRecord, RepoDataRecord,
+};
 use serde::{
     de::{Error, MapAccess, Visitor},
     Deserialize, Deserializer,
@@ -90,9 +92,11 @@ impl SparseRepoData {
     /// Returns all the records for the specified package name.
     pub fn load_records(&self, package_name: &PackageName) -> io::Result<Vec<RepoDataRecord>> {
         let repo_data = self.inner.borrow_repo_data();
+        let base_url = repo_data.info.as_ref().and_then(|i| i.base_url.as_deref());
         let mut records = parse_records(
             package_name,
             &repo_data.packages,
+            base_url,
             &self.channel,
             &self.subdir,
             self.patch_record_fn,
@@ -100,6 +104,7 @@ impl SparseRepoData {
         let mut conda_records = parse_records(
             package_name,
             &repo_data.conda_packages,
+            base_url,
             &self.channel,
             &self.subdir,
             self.patch_record_fn,
@@ -133,11 +138,16 @@ impl SparseRepoData {
         while let Some(next_package) = pending.pop_front() {
             for (i, repo_data) in repo_data.iter().enumerate() {
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
+                let base_url = repo_data_packages
+                    .info
+                    .as_ref()
+                    .and_then(|i| i.base_url.as_deref());
 
                 // Get all records from the repodata
                 let mut records = parse_records(
                     &next_package,
                     &repo_data_packages.packages,
+                    base_url,
                     &repo_data.channel,
                     &repo_data.subdir,
                     patch_function,
@@ -145,6 +155,7 @@ impl SparseRepoData {
                 let mut conda_records = parse_records(
                     &next_package,
                     &repo_data_packages.conda_packages,
+                    base_url,
                     &repo_data.channel,
                     &repo_data.subdir,
                     patch_function,
@@ -180,6 +191,9 @@ impl SparseRepoData {
 /// A serde compatible struct that only sparsely parses a repodata.json file.
 #[derive(Deserialize)]
 struct LazyRepoData<'i> {
+    /// The channel information contained in the repodata.json file
+    info: Option<ChannelInfo>,
+
     /// The tar.bz2 packages contained in the repodata.json file
     #[serde(borrow)]
     #[serde(deserialize_with = "deserialize_filename_and_raw_record")]
@@ -196,6 +210,7 @@ struct LazyRepoData<'i> {
 fn parse_records<'i>(
     package_name: &PackageName,
     packages: &[(PackageFilename<'i>, &'i RawValue)],
+    base_url: Option<&str>,
     channel: &Channel,
     subdir: &str,
     patch_function: Option<fn(&mut PackageRecord)>,
@@ -212,10 +227,14 @@ fn parse_records<'i>(
             package_record.subdir = subdir.to_owned();
         }
         result.push(RepoDataRecord {
-            url: channel
-                .base_url()
-                .join(&format!("{}/{}", &package_record.subdir, &key.filename))
-                .expect("failed to build a url from channel and package record"),
+            url: compute_package_url(
+                &channel
+                    .base_url
+                    .join(&format!("{}/", &package_record.subdir))
+                    .expect("failed determine repo_base_url"),
+                base_url,
+                key.filename,
+            ),
             channel: channel_name.clone(),
             package_record,
             file_name: key.filename.to_owned(),

@@ -4,6 +4,7 @@
 pub mod patches;
 mod topological_sort;
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
@@ -14,6 +15,7 @@ use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
+use url::Url;
 
 use rattler_macros::sorted;
 
@@ -57,6 +59,10 @@ pub struct RepoData {
 pub struct ChannelInfo {
     /// The channel's subdirectory
     pub subdir: String,
+
+    /// The base_url for all package urls. Can be an absolute or relative url.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
 }
 
 /// A single record in the Conda repodata. A single record refers to a single binary distribution
@@ -173,23 +179,79 @@ impl RepoData {
         Ok(serde_json::from_str(&contents)?)
     }
 
+    /// Returns the `base_url` specified in the repodata.
+    pub fn base_url(&self) -> Option<&str> {
+        self.info.as_ref().and_then(|i| i.base_url.as_deref())
+    }
+
     /// Builds a [`Vec<RepoDataRecord>`] from the packages in a [`RepoData`] given the source of the
     /// data.
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
         let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
         let channel_name = channel.canonical_name();
+        let base_url = self.base_url().map(ToOwned::to_owned);
+
+        // Determine the base_url of the channel
         for (filename, package_record) in self.packages.into_iter().chain(self.conda_packages) {
             records.push(RepoDataRecord {
-                url: channel
-                    .base_url()
-                    .join(&format!("{}/{}", &package_record.subdir, &filename))
-                    .expect("failed to build a url from channel and package record"),
+                url: compute_package_url(
+                    &channel
+                        .base_url()
+                        .join(&package_record.subdir)
+                        .expect("cannot join channel base_url and subdir"),
+                    base_url.as_deref(),
+                    &filename,
+                ),
                 channel: channel_name.clone(),
                 package_record,
                 file_name: filename,
             })
         }
         records
+    }
+}
+
+/// Computes the URL for a package.
+pub fn compute_package_url(
+    repo_data_base_url: &Url,
+    base_url: Option<&str>,
+    filename: &str,
+) -> Url {
+    let mut absolute_url = match base_url {
+        None => repo_data_base_url.clone(),
+        Some(base_url) => match Url::parse(base_url) {
+            Err(url::ParseError::RelativeUrlWithoutBase) if !base_url.starts_with('/') => {
+                add_trailing_slash(repo_data_base_url)
+                    .join(base_url)
+                    .expect("failed to join base_url with channel")
+            }
+            Err(url::ParseError::RelativeUrlWithoutBase) => {
+                let mut url = repo_data_base_url.clone();
+                url.set_path(base_url);
+                url
+            }
+            Err(e) => unreachable!("{e}"),
+            Ok(base_url) => base_url,
+        },
+    };
+
+    let path = absolute_url.path();
+    if !path.ends_with('/') {
+        absolute_url.set_path(&format!("{path}/"))
+    }
+    absolute_url
+        .join(filename)
+        .expect("failed to join base_url and filename")
+}
+
+fn add_trailing_slash(url: &Url) -> Cow<Url> {
+    let path = url.path();
+    if !path.ends_with('/') {
+        let mut url = url.clone();
+        url.set_path(&format!("{path}/"));
+        Cow::Owned(url)
+    } else {
+        Cow::Borrowed(url)
     }
 }
 
@@ -351,10 +413,10 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use crate::repo_data::determine_subdir;
+    use crate::repo_data::{compute_package_url, determine_subdir};
     use fxhash::FxHashSet;
 
-    use crate::RepoData;
+    use crate::{Channel, ChannelConfig, RepoData};
 
     // isl-0.12.2-1.tar.bz2
     // gmp-5.1.2-6.tar.bz2
@@ -371,7 +433,7 @@ mod test {
     #[test]
     fn test_serialize() {
         let repodata = RepoData {
-            version: Some(1),
+            version: Some(2),
             info: Default::default(),
             packages: Default::default(),
             conda_packages: Default::default(),
@@ -396,5 +458,64 @@ mod test {
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    #[test]
+    fn test_base_url_packages() {
+        // load test data
+        let test_data_path = dunce::canonicalize(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"),
+        )
+        .unwrap();
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+
+        let channel = Channel::from_str(
+            url::Url::from_directory_path(data_path.parent().unwrap().parent().unwrap())
+                .unwrap()
+                .as_str(),
+            &ChannelConfig::default(),
+        )
+        .unwrap();
+
+        let file_urls = repodata
+            .into_repo_data_records(&channel)
+            .into_iter()
+            .map(|r| {
+                pathdiff::diff_paths(r.url.to_file_path().unwrap(), &test_data_path)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect::<Vec<_>>();
+
+        // serialize to yaml
+        insta::assert_yaml_snapshot!(file_urls);
+    }
+
+    #[test]
+    fn test_base_url() {
+        let channel = Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap();
+        let base_url = channel.base_url().join("linux-64/").unwrap();
+        assert_eq!(
+            compute_package_url(&base_url, None, "bla.conda").to_string(),
+            "https://conda.anaconda.org/conda-forge/linux-64/bla.conda"
+        );
+        assert_eq!(
+            compute_package_url(&base_url, Some("https://host.some.org"), "bla.conda",).to_string(),
+            "https://host.some.org/bla.conda"
+        );
+        assert_eq!(
+            compute_package_url(&base_url, Some("/root"), "bla.conda").to_string(),
+            "https://conda.anaconda.org/root/bla.conda"
+        );
+        assert_eq!(
+            compute_package_url(&base_url, Some("foo/bar"), "bla.conda").to_string(),
+            "https://conda.anaconda.org/conda-forge/linux-64/foo/bar/bla.conda"
+        );
+        assert_eq!(
+            compute_package_url(&base_url, Some("../../root"), "bla.conda").to_string(),
+            "https://conda.anaconda.org/root/bla.conda"
+        );
     }
 }

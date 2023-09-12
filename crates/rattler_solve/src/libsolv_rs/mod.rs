@@ -7,8 +7,8 @@ use rattler_conda_types::{
     RepoDataRecord,
 };
 use rattler_libsolv_rs::{
-    Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableId,
-    Solver as LibSolvRsSolver, VersionSet, VersionSetId, VersionTrait,
+    Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
+    Solver as LibSolvRsSolver, VersionSet, VersionSetId,
 };
 use std::{
     cell::RefCell,
@@ -19,6 +19,8 @@ use std::{
     ops::Deref,
     str::FromStr,
 };
+
+use itertools::Itertools;
 
 mod conda_util;
 
@@ -101,6 +103,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),
     VirtualPackage(&'a GenericVirtualPackage),
@@ -150,19 +153,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
     }
 }
 
-impl<'a> VersionTrait for SolverPackageRecord<'a> {
-    type Version = rattler_conda_types::Version;
-
-    fn version(&self) -> Self::Version {
-        match self {
-            SolverPackageRecord::Record(rec) => rec.package_record.version.version().clone(),
-            SolverPackageRecord::VirtualPackage(rec) => rec.version.clone(),
-        }
-    }
-}
-
 /// Dependency provider for conda
-
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider<'a> {
     pool: Pool<SolverMatchSpec<'a>, String>,
@@ -297,6 +288,24 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 }
 
+/// Displays the different candidates by their version and sorted by their version
+pub struct CondaSolvableDisplay;
+
+impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
+    fn display_candidates(
+        &self,
+        pool: &Pool<SolverMatchSpec, String>,
+        merged_candidates: &[SolvableId],
+    ) -> String {
+        merged_candidates
+            .iter()
+            .map(|&id| pool.resolve_solvable(id).inner().version())
+            .sorted()
+            .map(|s| s.to_string())
+            .join(" | ")
+    }
+}
+
 /// A [`Solver`] implemented using the `libsolv` library
 #[derive(Default)]
 pub struct Solver;
@@ -390,7 +399,9 @@ impl super::SolverImpl for Solver {
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
         let transaction = solver.solve(root_requirements).map_err(|problem| {
-            SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
+            SolveError::Unsolvable(vec![problem
+                .display_user_friendly(&solver, &CondaSolvableDisplay)
+                .to_string()])
         })?;
 
         let required_records = transaction

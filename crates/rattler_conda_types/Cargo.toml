@@ -43,6 +43,8 @@ rstest = "0.18.2"
 assert_matches = "1.5.0"
 hex-literal = "0.4.1"
 criterion = { version = "0.5", features = ["html_reports"] }
+pathdiff = "0.2.1"
+dunce = "1.0.4"
 
 [[bench]]
 name = "parse"

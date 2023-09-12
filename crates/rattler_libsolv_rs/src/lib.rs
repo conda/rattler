@@ -22,6 +22,7 @@ mod solver;
 mod transaction;
 
 pub use id::{NameId, SolvableId, VersionSetId};
+use itertools::Itertools;
 pub use pool::Pool;
 pub use solvable::PackageSolvable;
 pub use solve_jobs::SolveJobs;
@@ -37,26 +38,17 @@ pub use mapping::Mapping;
 pub trait PackageName: Eq + Hash {}
 impl<N: Eq + Hash> PackageName for N {}
 
-/// Version is a name and a version specification.
-pub trait VersionTrait: Display {
-    /// The version associated with this record.
-    type Version: Display + Ord + Clone;
-
-    /// Returns the version associated with this record
-    // TODO: We could maybe get rid of this, but would need to know what is generic to display and replace sorting in `problem.rs`
-    fn version(&self) -> Self::Version;
-}
-
 /// Trait describing sets of versions.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// Version type associated with the sets manipulated.
-    type V: VersionTrait;
+    type V: Display + Ord;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
 
-/// Bla
+/// Describes how to sort tentative candidates, for a specific dependency provider. E.g conda
+/// pypi, etc.
 pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
     /// Returns the [`Pool`] that is used to allocate the Ids returned from this instance
     fn pool(&self) -> &Pool<VS, N>;
@@ -110,4 +102,32 @@ pub struct Dependencies {
     ///
     /// This is often useful to use for optional dependencies.
     pub constrains: Vec<VersionSetId>,
+}
+/// Defines how merged candidates should be displayed.
+pub trait SolvableDisplay<VS: VersionSet, Name: PackageName = String> {
+    /// A method that is used to display multiple solvables in a user friendly way.
+    /// For example the conda provider should only display the versions (not build strings etc.)
+    /// and merges multiple solvables into one line.
+    fn display_candidates(&self, pool: &Pool<VS, Name>, candidates: &[SolvableId]) -> String;
+}
+
+/// Display merged candidates on single line with `|` as separator.
+pub struct DefaultSolvableDisplay;
+
+impl<VS: VersionSet, Name: Hash + Eq> SolvableDisplay<VS, Name> for DefaultSolvableDisplay
+where
+    VS::V: Ord,
+{
+    fn display_candidates(
+        &self,
+        pool: &Pool<VS, Name>,
+        merged_candidates: &[SolvableId],
+    ) -> String {
+        merged_candidates
+            .iter()
+            .map(|&id| &pool.resolve_solvable(id).inner)
+            .sorted()
+            .map(|s| s.to_string())
+            .join(" | ")
+    }
 }

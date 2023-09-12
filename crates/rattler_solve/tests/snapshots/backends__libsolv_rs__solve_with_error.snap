@@ -1,0 +1,10 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 490
+expression: err
+---
+Unsolvable(
+    [
+        "The following packages are incompatible\n|-- foobar >=2 can be installed with any of the following options:\n    |-- foobar 2.0 | 2.1 would require\n        |-- bors <2.0, which can be installed with any of the following options:\n            |-- bors 1.1\n|-- bors >=2 cannot be installed because there are no viable options:\n    |-- bors 2.1, which conflicts with the versions reported above.\n    |-- bors 2.0, which conflicts with the versions reported above.\n",
+    ],
+)

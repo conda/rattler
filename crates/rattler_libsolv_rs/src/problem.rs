@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
+
 use std::rc::Rc;
 
 use itertools::Itertools;
@@ -16,7 +17,7 @@ use crate::id::{ClauseId, SolvableId, VersionSetId};
 use crate::pool::Pool;
 use crate::solver::clause::Clause;
 use crate::solver::Solver;
-use crate::{DependencyProvider, PackageName, VersionSet, VersionTrait};
+use crate::{DependencyProvider, PackageName, SolvableDisplay, VersionSet};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -148,12 +149,14 @@ impl Problem {
         VS: VersionSet,
         N: PackageName + Display,
         D: DependencyProvider<VS, N>,
+        M: SolvableDisplay<VS, N>,
     >(
         &self,
         solver: &'a Solver<VS, N, D>,
-    ) -> DisplayUnsat<'a, VS, N> {
+        merged_solvable_display: &'a M,
+    ) -> DisplayUnsat<'a, VS, N, M> {
         let graph = self.graph(solver);
-        DisplayUnsat::new(graph, solver.pool())
+        DisplayUnsat::new(graph, solver.pool(), merged_solvable_display)
     }
 }
 
@@ -368,9 +371,8 @@ impl ProblemGraph {
         let mut merged_candidates = HashMap::default();
         // TODO: could probably use `sort_candidates` by the dependency provider directly
         // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
-        for mut m in maybe_merge.into_values() {
+        for m in maybe_merge.into_values() {
             if m.len() > 1 {
-                m.sort_unstable_by_key(|&(_, id)| pool.resolve_solvable(id).inner.version());
                 let m = Rc::new(MergedProblemNode {
                     ids: m.into_iter().map(|(_, snd)| snd).collect(),
                 });
@@ -477,16 +479,24 @@ impl ProblemGraph {
 
 /// A struct implementing [`fmt::Display`] that generates a user-friendly representation of a
 /// problem graph
-pub struct DisplayUnsat<'pool, VS: VersionSet, N: PackageName + Display> {
+pub struct DisplayUnsat<'pool, VS: VersionSet, N: PackageName + Display, M: SolvableDisplay<VS, N>>
+{
     graph: ProblemGraph,
     merged_candidates: HashMap<SolvableId, Rc<MergedProblemNode>>,
     installable_set: HashSet<NodeIndex>,
     missing_set: HashSet<NodeIndex>,
     pool: &'pool Pool<VS, N>,
+    merged_solvable_display: &'pool M,
 }
 
-impl<'pool, VS: VersionSet, N: PackageName + Display> DisplayUnsat<'pool, VS, N> {
-    pub(crate) fn new(graph: ProblemGraph, pool: &'pool Pool<VS, N>) -> Self {
+impl<'pool, VS: VersionSet, N: PackageName + Display, M: SolvableDisplay<VS, N>>
+    DisplayUnsat<'pool, VS, N, M>
+{
+    pub(crate) fn new(
+        graph: ProblemGraph,
+        pool: &'pool Pool<VS, N>,
+        merged_solvable_display: &'pool M,
+    ) -> Self {
         let merged_candidates = graph.simplify(pool);
         let installable_set = graph.get_installable_set();
         let missing_set = graph.get_missing_set();
@@ -497,6 +507,7 @@ impl<'pool, VS: VersionSet, N: PackageName + Display> DisplayUnsat<'pool, VS, N>
             installable_set,
             missing_set,
             pool,
+            merged_solvable_display,
         }
     }
 
@@ -627,13 +638,11 @@ impl<'pool, VS: VersionSet, N: PackageName + Display> DisplayUnsat<'pool, VS, N>
                     let name = self.pool.resolve_package_name(solvable.name);
                     let version = if let Some(merged) = self.merged_candidates.get(&solvable_id) {
                         reported.extend(merged.ids.iter().cloned());
-                        merged
-                            .ids
-                            .iter()
-                            .map(|&id| self.pool.resolve_solvable(id).inner.version().to_string())
-                            .join(" | ")
+                        self.merged_solvable_display
+                            .display_candidates(self.pool, &merged.ids)
                     } else {
-                        solvable.inner.version().to_string()
+                        self.merged_solvable_display
+                            .display_candidates(self.pool, &[solvable_id])
                     };
 
                     let already_installed = graph.edges(candidate).any(|e| {
@@ -704,7 +713,9 @@ impl<'pool, VS: VersionSet, N: PackageName + Display> DisplayUnsat<'pool, VS, N>
     }
 }
 
-impl<VS: VersionSet, N: PackageName + Display> fmt::Display for DisplayUnsat<'_, VS, N> {
+impl<VS: VersionSet, N: PackageName + Display, M: SolvableDisplay<VS, N>> fmt::Display
+    for DisplayUnsat<'_, VS, N, M>
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let (top_level_missing, top_level_conflicts): (Vec<_>, _) = self
             .graph
@@ -741,7 +752,8 @@ impl<VS: VersionSet, N: PackageName + Display> fmt::Display for DisplayUnsat<'_,
                     f,
                     "{indent}{} {} is locked, but another version is required as reported above",
                     locked.name.display(self.pool),
-                    locked.inner.version()
+                    self.merged_solvable_display
+                        .display_candidates(self.pool, &[locked_id])
                 )?;
             }
         }

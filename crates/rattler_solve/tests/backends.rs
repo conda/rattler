@@ -188,6 +188,22 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_solve_with_error() {
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                Vec::new(),
+                Vec::new(),
+                &["foobar >=2", "bors >= 2"],
+            );
+
+            assert!(result.is_err());
+
+            let err = result.err().unwrap();
+            println!("{err}");
+            insta::assert_debug_snapshot!(err);
+        }
+
+        #[test]
         fn test_solve_dummy_repo_install_non_existent() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
