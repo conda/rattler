@@ -283,7 +283,7 @@ async fn repodata_from_file(
 pub async fn fetch_repo_data(
     subdir_url: Url,
     client: AuthenticatedClient,
-    cache_path: &Path,
+    cache_path: PathBuf,
     options: FetchRepoDataOptions,
     progress: Option<ProgressFunc>,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
@@ -321,7 +321,7 @@ pub async fn fetch_repo_data(
     // Validate the current state of the cache
     let cache_state = if cache_action != CacheAction::NoCache {
         let owned_subdir_url = subdir_url.clone();
-        let owned_cache_path = cache_path.to_owned();
+        let owned_cache_path = cache_path.clone();
         let owned_cache_key = cache_key.clone();
         let cache_state = tokio::task::spawn_blocking(move || {
             validate_cached_state(&owned_cache_path, &owned_subdir_url, &owned_cache_key)
@@ -530,7 +530,7 @@ pub async fn fetch_repo_data(
         } else {
             Encoding::Passthrough
         },
-        cache_path,
+        &cache_path,
         progress,
     )
     .await?;
