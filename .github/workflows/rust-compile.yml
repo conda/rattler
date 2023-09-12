@@ -30,9 +30,6 @@ jobs:
             cargo rustdoc -p "$package" --all-features -- -D warnings -W unreachable-pub
           done
 
-  lfs_check_pointers:
-    uses: ppremk/lfs-warning@v3.2
-
   format_and_lint:
     name: Format and Lint
     runs-on: ubuntu-latest
