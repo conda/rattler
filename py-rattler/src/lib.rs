@@ -17,7 +17,10 @@ use error::{
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
-use repo_data::package_record::PyPackageRecord;
+use repo_data::{
+    package_record::PyPackageRecord, patch_instructions::PyPatchInstructions,
+    repo_data_record::PyRepoDataRecord, PyRepoData,
+};
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -46,6 +49,10 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyActivationResult>().unwrap();
     m.add_class::<PyShellEnum>().unwrap();
     m.add_class::<PyActivator>().unwrap();
+
+    m.add_class::<PyRepoData>().unwrap();
+    m.add_class::<PyRepoDataRecord>().unwrap();
+    m.add_class::<PyPatchInstructions>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
         .unwrap();
