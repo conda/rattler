@@ -1,3 +1,5 @@
+use std::io;
+
 use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
 use rattler_conda_types::{
@@ -31,6 +33,8 @@ pub enum PyRattlerError {
     FetchRepoDataError(#[from] FetchRepoDataError),
     #[error(transparent)]
     CacheDirError(#[from] anyhow::Error),
+    #[error(transparent)]
+    IoError(#[from] io::Error),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -58,6 +62,7 @@ impl From<PyRattlerError> for PyErr {
                 FetchRepoDataException::new_err(err.to_string())
             }
             PyRattlerError::CacheDirError(err) => CacheDirException::new_err(err.to_string()),
+            PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
         }
     }
 }
@@ -72,3 +77,4 @@ create_exception!(exceptions, ParsePlatformException, PyException);
 create_exception!(exceptions, ParseArchException, PyException);
 create_exception!(exceptions, FetchRepoDataException, PyException);
 create_exception!(exceptions, CacheDirException, PyException);
+create_exception!(exceptions, IoException, PyException);

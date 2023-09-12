@@ -7,9 +7,10 @@ use url::Url;
 
 use std::{path::PathBuf, str::FromStr};
 
-use crate::{channel::PyChannel, error::PyRattlerError, platform::PyPlatform};
+use crate::{
+    channel::PyChannel, error::PyRattlerError, platform::PyPlatform, repo_data::PyRepoData,
+};
 use authenticated_client::PyAuthenticatedClient;
-use cached_repo_data::PyCachedRepoData;
 
 pub mod authenticated_client;
 pub mod cached_repo_data;
@@ -47,10 +48,10 @@ pub fn py_fetch_repo_data<'a>(
     future_into_py(py, async move {
         // Resolve all the meta_futures together
         match try_join_all(meta_futures).await {
-            Ok(cached_vec) => Ok(cached_vec
+            Ok(cached_vec) => cached_vec
                 .into_iter()
-                .map(Into::into)
-                .collect::<Vec<PyCachedRepoData>>()),
+                .map(|c| PyRepoData::from_path(c.repo_data_json_path))
+                .collect::<Result<Vec<_>, _>>(),
             Err(e) => Err(PyRattlerError::from(e).into()),
         }
     })
