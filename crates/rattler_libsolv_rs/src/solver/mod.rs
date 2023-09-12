@@ -14,10 +14,7 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 
 use crate::frozen_copy_map::FrozenCopyMap;
-use crate::{
-    Candidates, Dependencies, DependencyProvider, PackageName, VersionSet,
-    VersionSetId,
-};
+use crate::{Candidates, Dependencies, DependencyProvider, PackageName, VersionSet, VersionSetId};
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
@@ -142,7 +139,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool().resolve_solvable_inner(p).package().inner();
+                        let version = self.pool().resolve_internal_solvable(p).package().inner();
                         version_set.contains(version)
                     })
                     .collect();
@@ -170,7 +167,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool().resolve_solvable_inner(p).package().inner();
+                        let version = self.pool().resolve_internal_solvable(p).package().inner();
                         !version_set.contains(version)
                     })
                     .collect();
@@ -194,11 +191,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                 // Sort all the candidates in order in which they should betried by the solver.
                 let mut sorted_candidates = Vec::new();
                 sorted_candidates.extend_from_slice(matching_candidates);
-                self.provider.sort_candidates(
-                    &mut sorted_candidates,
-                    // TODO: FIX THIS
-                    &self,
-                );
+                self.provider.sort_candidates(&self, &mut sorted_candidates);
 
                 // If we have a solvable that we favor, we sort that to the front. This ensures
                 // that the version that is favored is picked first.
@@ -336,7 +329,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let empty_version_set_id_vec: Vec<VersionSetId> = Vec::new();
 
         while let Some(solvable_id) = stack.pop() {
-            let solvable = self.pool().resolve_solvable_inner(solvable_id);
+            let solvable = self.pool().resolve_internal_solvable(solvable_id);
 
             // Determine the dependencies of the current solvable. There are two cases here:
             // 1. The solvable is the root solvable which only provides required dependencies.
@@ -462,7 +455,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     if decided {
                         tracing::info!(
                             "Set {} = false",
-                            self.pool().resolve_solvable_inner(solvable_id)
+                            self.pool().resolve_internal_solvable(solvable_id)
                         );
                     }
                 }
@@ -557,8 +550,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         tracing::info!(
             "=== Install {} at level {level} (required by {})",
-            self.pool().resolve_solvable_inner(solvable),
-            self.pool().resolve_solvable_inner(required_by),
+            self.pool().resolve_internal_solvable(solvable),
+            self.pool().resolve_internal_solvable(required_by),
         );
 
         self.decision_tracker
@@ -576,7 +569,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             {
                 tracing::info!(
                     "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self.pool().resolve_solvable_inner(conflicting_solvable)
+                    solvable = self.pool().resolve_internal_solvable(conflicting_solvable)
                 );
                 tracing::info!(
                     "During unit propagation for clause: {:?}",
@@ -612,7 +605,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool().resolve_solvable_inner(decision.solvable_id),
+                        self.pool().resolve_internal_solvable(decision.solvable_id),
                         clause.debug(self.pool()),
                     );
                 }
@@ -636,7 +629,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .expect("bug: solvable was already decided!");
             tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
-                self.pool().resolve_solvable_inner(literal.solvable_id)
+                self.pool().resolve_internal_solvable(literal.solvable_id)
             );
         }
 
@@ -681,7 +674,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             if decided {
                 tracing::info!(
                     "Propagate assertion {} = {}",
-                    self.pool().resolve_solvable_inner(literal.solvable_id),
+                    self.pool().resolve_internal_solvable(literal.solvable_id),
                     decision
                 );
             }
@@ -780,7 +773,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                         "Propagate {} = {}. {:?}",
                                         self.provider
                                             .pool()
-                                            .resolve_solvable_inner(remaining_watch.solvable_id),
+                                            .resolve_internal_solvable(remaining_watch.solvable_id),
                                         remaining_watch.satisfying_value(),
                                         clause.debug(self.provider.pool()),
                                     );
@@ -1012,7 +1005,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .format_with("\n", |lit, f| f(&format_args!(
                     "- {}{}",
                     if lit.negate { "NOT " } else { "" },
-                    self.pool().resolve_solvable_inner(lit.solvable_id)
+                    self.pool().resolve_internal_solvable(lit.solvable_id)
                 )))
         );
 
@@ -1042,18 +1035,13 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        Candidates,
-        Dependencies,
-        solvable::Solvable,
-        DefaultSolvableDisplay
-    };
+    use crate::{Candidates, DefaultSolvableDisplay, Dependencies};
     use indexmap::IndexMap;
     use std::{
         collections::HashMap,
         fmt::{Debug, Display, Formatter},
         ops::Range,
-        str::FromStr
+        str::FromStr,
     };
 
     // Let's define our own packaging version system and dependency specification.
@@ -1262,12 +1250,12 @@ mod test {
 
         fn sort_candidates(
             &self,
-            solvables: &mut [SolvableId],
             _solver: &Solver<PackRange, String, Self>,
+            solvables: &mut [SolvableId],
         ) {
             solvables.sort_by(|a, b| {
-                let a = self.pool.resolve_solvable_inner(*a).package();
-                let b = self.pool.resolve_solvable_inner(*b).package();
+                let a = self.pool.resolve_internal_solvable(*a).package();
+                let b = self.pool.resolve_internal_solvable(*b).package();
                 // We want to sort with highest version on top
                 b.inner.0.cmp(&a.inner.0)
             });
@@ -1284,7 +1272,7 @@ mod test {
             let favor = self.favored.get(package_name);
             let locked = self.locked.get(package_name);
             for pack in package.keys() {
-                let solvable = self.pool.add_package(name, *pack);
+                let solvable = self.pool.intern_solvable(name, *pack);
                 candidates.candidates.push(solvable);
                 if Some(pack) == favor {
                     candidates.favored = Some(solvable);
@@ -1328,7 +1316,7 @@ mod test {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in &transaction.steps {
-            writeln!(buf, "{}", pool.resolve_solvable_inner(solvable_id)).unwrap();
+            writeln!(buf, "{}", pool.resolve_internal_solvable(solvable_id)).unwrap();
         }
 
         buf
@@ -1357,7 +1345,7 @@ mod test {
         assert_eq!(solved.steps.len(), 1);
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[0])
+            .resolve_internal_solvable(solved.steps[0])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
@@ -1380,7 +1368,7 @@ mod test {
 
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[0])
+            .resolve_internal_solvable(solved.steps[0])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
@@ -1388,7 +1376,7 @@ mod test {
 
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[1])
+            .resolve_internal_solvable(solved.steps[1])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
@@ -1412,7 +1400,7 @@ mod test {
 
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[0])
+            .resolve_internal_solvable(solved.steps[0])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
@@ -1420,7 +1408,7 @@ mod test {
 
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[1])
+            .resolve_internal_solvable(solved.steps[1])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
@@ -1452,7 +1440,7 @@ mod test {
         use std::fmt::Write;
         let mut display_result = String::new();
         for &solvable_id in &solved.steps {
-            let solvable = solver.pool().resolve_solvable_inner(solvable_id);
+            let solvable = solver.pool().resolve_internal_solvable(solvable_id);
             writeln!(display_result, "{solvable}").unwrap();
         }
 
@@ -1475,7 +1463,7 @@ mod test {
 
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[0])
+            .resolve_internal_solvable(solved.steps[0])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
@@ -1500,7 +1488,7 @@ mod test {
         assert_eq!(
             solver
                 .pool()
-                .resolve_solvable_inner(solvable_id)
+                .resolve_internal_solvable(solvable_id)
                 .package()
                 .inner
                 .0,
@@ -1526,7 +1514,7 @@ mod test {
         assert_eq!(solved.steps.len(), 1);
         let solvable = solver
             .pool()
-            .resolve_solvable_inner(solved.steps[0])
+            .resolve_internal_solvable(solved.steps[0])
             .package();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");

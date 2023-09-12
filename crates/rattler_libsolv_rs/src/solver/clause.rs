@@ -223,7 +223,8 @@ impl ClauseState {
     /// Shorthand method to construct a [`Clause::InstallRoot`] without requiring complicated
     /// arguments.
     pub fn root() -> Self {
-        Self::from_kind_and_initial_watches(Clause::InstallRoot, None)
+        let (kind, watched_literals) = Clause::root();
+        Self::from_kind_and_initial_watches(kind, watched_literals)
     }
 
     /// Shorthand method to construct a Clause::Requires without requiring complicated arguments.
@@ -489,15 +490,15 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} requires {match_spec}",
-                    self.pool.resolve_solvable_inner(solvable_id)
+                    self.pool.resolve_internal_solvable(solvable_id)
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
                     "{} excludes {} by {}",
-                    self.pool.resolve_solvable_inner(s1),
-                    self.pool.resolve_solvable_inner(s2),
+                    self.pool.resolve_internal_solvable(s1),
+                    self.pool.resolve_internal_solvable(s2),
                     self.pool.resolve_version_set(vset_id)
                 )
             }
@@ -505,14 +506,14 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} is locked, so {} is forbidden",
-                    self.pool.resolve_solvable_inner(locked),
-                    self.pool.resolve_solvable_inner(forbidden)
+                    self.pool.resolve_internal_solvable(locked),
+                    self.pool.resolve_internal_solvable(forbidden)
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {
                 let name = self
                     .pool
-                    .resolve_solvable_inner(s1)
+                    .resolve_internal_solvable(s1)
                     .package()
                     .name
                     .display(self.pool);

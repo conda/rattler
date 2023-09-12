@@ -270,7 +270,7 @@ impl ProblemGraph {
                 }
             }
 
-            let solvable = pool.resolve_solvable_inner(id);
+            let solvable = pool.resolve_internal_solvable(id);
             let mut added_edges = HashSet::new();
             for edge in graph.edges_directed(nx, Direction::Outgoing) {
                 let target = *graph.node_weight(edge.target()).unwrap();
@@ -305,7 +305,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_solvable_inner(solvable_2).to_string()
+                        pool.resolve_internal_solvable(solvable_2).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };

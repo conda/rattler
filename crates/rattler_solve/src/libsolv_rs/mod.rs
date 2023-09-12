@@ -180,7 +180,7 @@ impl<'a> CondaDependencyProvider<'a> {
         for virtual_package in virtual_packages {
             let name = pool.intern_package_name(virtual_package.name.as_normalized());
             let solvable =
-                pool.add_package(name, SolverPackageRecord::VirtualPackage(virtual_package));
+                pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
             records.entry(name).or_default().candidates.push(solvable);
         }
 
@@ -228,7 +228,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 let package_name =
                     pool.intern_package_name(record.package_record.name.as_normalized());
                 let solvable_id =
-                    pool.add_package(package_name, SolverPackageRecord::Record(*record));
+                    pool.intern_solvable(package_name, SolverPackageRecord::Record(*record));
                 records
                     .entry(package_name)
                     .or_default()
@@ -240,7 +240,7 @@ impl<'a> CondaDependencyProvider<'a> {
         // Add favored packages to the records
         for favored_record in favored_records {
             let name = pool.intern_package_name(favored_record.package_record.name.as_normalized());
-            let solvable = pool.add_package(name, SolverPackageRecord::Record(favored_record));
+            let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
             let mut candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.favored = Some(solvable);
@@ -248,7 +248,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         for locked_record in locked_records {
             let name = pool.intern_package_name(locked_record.package_record.name.as_normalized());
-            let solvable = pool.add_package(name, SolverPackageRecord::Record(locked_record));
+            let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
             let mut candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.locked = Some(solvable);
@@ -270,8 +270,8 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
 
     fn sort_candidates(
         &self,
-        solvables: &mut [SolvableId],
         solver: &LibSolvRsSolver<SolverMatchSpec<'a>, String, Self>,
+        solvables: &mut [SolvableId],
     ) {
         let mut highest_version_spec = self.matchspec_to_highest_version.borrow_mut();
         solvables.sort_by(|&p1, &p2| {

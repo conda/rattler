@@ -8,6 +8,13 @@ const CHUNK_SIZE: usize = 128;
 /// An `Arena<TValue>` holds a collection of `TValue`s but allocates persistent `TId`s that are used
 /// to refer to an element in the arena. When adding an item to an `Arena` it returns a `TId` that
 /// can be used to index into the arena.
+///
+/// An arena is "frozen". New elements can be added to the arena but existing elements can never be
+/// modified. This allows the arena to always return stable references even when the arena is being
+/// modified.
+///
+/// Methods that mutable the arena (like clearing it) still require a mutable reference because they
+/// might invalidate existing references.
 pub(crate) struct Arena<TId: ArenaId, TValue> {
     chunks: UnsafeCell<Vec<Vec<TValue>>>,
     len: Cell<usize>,
@@ -60,7 +67,7 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
     /// Allocates a new instance of `TValue` and returns an Id that can be used to reference it.
     pub fn alloc(&self, value: TValue) -> TId {
         let id = self.len.get();
-        let (chunk_idx, _) = self.chunk_and_offset(id);
+        let (chunk_idx, _) = Self::chunk_and_offset(id);
         let chunks = unsafe { &mut *self.chunks.get() };
         if chunk_idx >= chunks.len() {
             chunks.resize_with(chunks.len() + 1, || Vec::with_capacity(CHUNK_SIZE));
@@ -70,7 +77,7 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
         TId::from_usize(id)
     }
 
-    fn chunk_and_offset(&self, index: usize) -> (usize, usize) {
+    fn chunk_and_offset(index: usize) -> (usize, usize) {
         let offset = index % CHUNK_SIZE;
         let chunk = index / CHUNK_SIZE;
         (chunk, offset)
@@ -83,7 +90,7 @@ impl<TId: ArenaId, TValue> Index<TId> for Arena<TId, TValue> {
     fn index(&self, index: TId) -> &Self::Output {
         let index = index.to_usize();
         assert!(index < self.len());
-        let (chunk, offset) = self.chunk_and_offset(index);
+        let (chunk, offset) = Self::chunk_and_offset(index);
         unsafe {
             let vec = self.chunks.get();
             (*vec).get_unchecked(chunk).get_unchecked(offset)

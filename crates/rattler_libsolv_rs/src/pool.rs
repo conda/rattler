@@ -3,13 +3,14 @@ use std::fmt::{Display, Formatter};
 use crate::arena::Arena;
 use crate::id::{NameId, SolvableId, VersionSetId};
 use crate::solvable::{PackageSolvable, Solvable};
-use crate::{FrozenCopyMap};
+use crate::FrozenCopyMap;
 use crate::{PackageName, VersionSet};
 
-/// A pool that stores data related to the available packages
+/// A pool that stores data related to the available packages.
 ///
-/// Because it stores solvables, it contains references to `PackageRecord`s (the `'a` lifetime comes
-/// from the original `PackageRecord`s)
+/// A pool never releases its memory until it is dropped. References returned by the pool will
+/// remain valid for the lifetime of the pool. This allows inserting into the pool without requiring
+/// a mutable reference to the pool.
 pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
@@ -49,45 +50,10 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
         Self::default()
     }
 
-    /// Adds a package to a repo and returns it's [`SolvableId`]
-    pub fn add_package(&self, name_id: NameId, record: VS::V) -> SolvableId {
-        assert!(self.solvables.len() <= u32::MAX as usize);
-
-        let solvable_id = self.solvables.alloc(Solvable::new_package(name_id, record));
-
-        solvable_id
-    }
-
-    /// Interns a match spec into the [`Pool`], returning its [`VersionSetId`]
-    pub fn intern_version_set(&self, package_name: NameId, version_set: VS) -> VersionSetId {
-        if let Some(entry) = self
-            .version_set_to_id
-            .get_copy(&(package_name, version_set.clone()))
-        {
-            entry
-        } else {
-            let id = self.version_sets.alloc((package_name, version_set.clone()));
-            self.version_set_to_id
-                .insert_copy((package_name, version_set), id);
-            id
-        }
-    }
-
-    /// Returns the match spec associated to the provided id
+    /// Interns a package name into the `Pool`, returning its `NameId`. Names are deduplicated. If
+    /// the same name is inserted twice the same `NameId` will be returned.
     ///
-    /// Panics if the version set is not found in the pool
-    pub fn resolve_version_set(&self, id: VersionSetId) -> &VS {
-        &self.version_sets[id].1
-    }
-
-    /// Returns the package name associated with the given version spec id.
-    ///
-    /// Panics if the version set is not found in the pool
-    pub fn resolve_version_set_package_name(&self, id: VersionSetId) -> NameId {
-        self.version_sets[id].0
-    }
-
-    /// Interns a package name into the `Pool`, returning its `NameId`
+    /// The original name can be resolved using the [`Self::resolve_package_name`] function.
     pub fn intern_package_name<NValue>(&self, name: NValue) -> NameId
     where
         NValue: Into<N>,
@@ -103,32 +69,79 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
         next_id
     }
 
-    /// Lookup the package name id associated to the provided name
+    /// Returns the package name associated with the provided [`NameId`].
+    ///
+    /// Panics if the package name is not found in the pool.
+    pub fn resolve_package_name(&self, name_id: NameId) -> &N {
+        &self.package_names[name_id]
+    }
+
+    /// Returns the [`NameId`] associated with the specified name or `None` if the name has not
+    /// previously been interned using [`Self::intern_package_name`].
     pub fn lookup_package_name(&self, name: &N) -> Option<NameId> {
         self.names_to_ids.get_copy(name)
     }
 
-    /// Returns the package name associated to the provided id
+    /// Adds a solvable to a repo and returns it's [`SolvableId`].
     ///
-    /// Panics if the package name is not found in the pool
-    pub fn resolve_package_name(&self, name_id: NameId) -> &N {
-        &self.package_names[name_id]
+    /// Unlike some of the other interning functions this function does *not* deduplicate any of the
+    /// inserted elements. A unique Id will be returned everytime this function is called.
+    pub fn intern_solvable(&self, name_id: NameId, record: VS::V) -> SolvableId {
+        assert!(self.solvables.len() <= u32::MAX as usize);
+        let solvable_id = self.solvables.alloc(Solvable::new_package(name_id, record));
+        solvable_id
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
     pub fn resolve_solvable(&self, id: SolvableId) -> &PackageSolvable<VS::V> {
-        self.resolve_solvable_inner(id).package()
+        self.resolve_internal_solvable(id).package()
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub(crate) fn resolve_solvable_inner(&self, id: SolvableId) -> &Solvable<VS::V> {
+    pub(crate) fn resolve_internal_solvable(&self, id: SolvableId) -> &Solvable<VS::V> {
         &self.solvables[id]
     }
 
+    /// Interns a version set into the [`Pool`], returning its [`VersionSetId`]. The returned
+    /// [`VersionSetId`] can be used to retrieve a reference to the original version set using
+    /// [`Self::resolve_version-set`].
+    ///
+    /// A version set is always associated with a specific package name to which it applies. The
+    /// passed in package name can be retrieved using [`Self::resolve_version_set_package_name`].
+    ///
+    /// Version sets are deduplicated. This means that if the same version set is inserted twice
+    /// they will share the same [`VersionSetId`].
+    pub fn intern_version_set(&self, package_name: NameId, version_set: VS) -> VersionSetId {
+        if let Some(entry) = self
+            .version_set_to_id
+            .get_copy(&(package_name, version_set.clone()))
+        {
+            entry
+        } else {
+            let id = self.version_sets.alloc((package_name, version_set.clone()));
+            self.version_set_to_id
+                .insert_copy((package_name, version_set), id);
+            id
+        }
+    }
+
+    /// Returns the version set associated with the provided id
+    ///
+    /// Panics if the version set is not found in the pool
+    pub fn resolve_version_set(&self, id: VersionSetId) -> &VS {
+        &self.version_sets[id].1
+    }
+
+    /// Returns the package name associated with the provide id.
+    ///
+    /// Panics if the version set is not found in the pool
+    pub fn resolve_version_set_package_name(&self, id: VersionSetId) -> NameId {
+        self.version_sets[id].0
+    }
 }
 
 /// A helper struct to visualize a name.

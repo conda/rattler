@@ -54,7 +54,7 @@ pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
     fn pool(&self) -> &Pool<VS, N>;
 
     /// Sort the specified solvables based on which solvable to try first.
-    fn sort_candidates(&self, solvables: &mut [SolvableId], solver: &Solver<VS, N, Self>);
+    fn sort_candidates(&self, solver: &Solver<VS, N, Self>, solvables: &mut [SolvableId]);
 
     /// Returns a list of solvables that should be considered when a package with the given name is
     /// requested.

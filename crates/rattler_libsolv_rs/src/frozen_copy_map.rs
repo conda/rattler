@@ -10,36 +10,6 @@ pub struct FrozenCopyMap<K, V, S = RandomState> {
     map: UnsafeCell<HashMap<K, V, S>>,
 }
 
-impl<K: Eq + Hash, V> FrozenCopyMap<K, V> {
-    pub fn new() -> Self {
-        Self {
-            map: UnsafeCell::new(Default::default()),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        let len = unsafe {
-            let map = self.map.get();
-            (*map).len()
-        };
-        len
-    }
-
-    /// # Examples
-    ///
-    /// ```
-    /// use elsa::FrozenMap;
-    ///
-    /// let map = FrozenMap::new();
-    /// assert_eq!(map.is_empty(), true);
-    /// map.insert(1, Box::new("a"));
-    /// assert_eq!(map.is_empty(), false);
-    /// ```
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
 impl<K: Eq + Hash, V: Clone, S: BuildHasher> FrozenCopyMap<K, V, S> {
     pub fn insert_copy(&self, k: K, v: V) -> Option<V> {
         unsafe {
