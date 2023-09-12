@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use crate::arena::Arena;
 use crate::id::{NameId, SolvableId, VersionSetId};
-use crate::solvable::{PackageSolvable, Solvable};
+use crate::solvable::{InternalSolvable, Solvable};
 use crate::FrozenCopyMap;
 use crate::{PackageName, VersionSet};
 
@@ -13,7 +13,7 @@ use crate::{PackageName, VersionSet};
 /// a mutable reference to the pool.
 pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// All the solvables that have been registered
-    pub(crate) solvables: Arena<SolvableId, Solvable<VS::V>>,
+    pub(crate) solvables: Arena<SolvableId, InternalSolvable<VS::V>>,
 
     /// Interned package names
     package_names: Arena<NameId, N>,
@@ -31,7 +31,7 @@ pub struct Pool<VS: VersionSet, N: PackageName = String> {
 impl<VS: VersionSet, N: PackageName> Default for Pool<VS, N> {
     fn default() -> Self {
         let solvables = Arena::new();
-        solvables.alloc(Solvable::new_root());
+        solvables.alloc(InternalSolvable::new_root());
 
         Self {
             solvables,
@@ -87,20 +87,21 @@ impl<VS: VersionSet, N: PackageName> Pool<VS, N> {
     /// Unlike some of the other interning functions this function does *not* deduplicate any of the
     /// inserted elements. A unique Id will be returned everytime this function is called.
     pub fn intern_solvable(&self, name_id: NameId, record: VS::V) -> SolvableId {
-        self.solvables.alloc(Solvable::new_package(name_id, record))
+        self.solvables
+            .alloc(InternalSolvable::new_solvable(name_id, record))
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub fn resolve_solvable(&self, id: SolvableId) -> &PackageSolvable<VS::V> {
-        self.resolve_internal_solvable(id).package()
+    pub fn resolve_solvable(&self, id: SolvableId) -> &Solvable<VS::V> {
+        self.resolve_internal_solvable(id).solvable()
     }
 
     /// Returns the solvable associated to the provided id
     ///
     /// Panics if the solvable is not found in the pool
-    pub(crate) fn resolve_internal_solvable(&self, id: SolvableId) -> &Solvable<VS::V> {
+    pub(crate) fn resolve_internal_solvable(&self, id: SolvableId) -> &InternalSolvable<VS::V> {
         &self.solvables[id]
     }
 

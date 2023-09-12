@@ -359,15 +359,14 @@ impl super::SolverImpl for Solver {
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let transaction = solver.solve(root_requirements).map_err(|problem| {
+        let solvables = solver.solve(root_requirements).map_err(|problem| {
             SolveError::Unsolvable(vec![problem
                 .display_user_friendly(&solver, &CondaSolvableDisplay)
                 .to_string()])
         })?;
 
         // Get the resulting packages from the solver.
-        let required_records = transaction
-            .steps
+        let required_records = solvables
             .into_iter()
             .filter_map(|id| match solver.pool().resolve_solvable(id).inner() {
                 SolverPackageRecord::Record(rec) => Some(rec.deref().clone()),

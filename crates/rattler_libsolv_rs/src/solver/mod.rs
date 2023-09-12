@@ -7,7 +7,6 @@ use crate::{
     pool::Pool,
     problem::Problem,
     solvable::SolvableInner,
-    transaction::Transaction,
     Candidates, Dependencies, DependencyProvider, PackageName, VersionSet, VersionSetId,
 };
 
@@ -139,7 +138,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool().resolve_internal_solvable(p).package().inner();
+                        let version = self.pool().resolve_internal_solvable(p).solvable().inner();
                         version_set.contains(version)
                     })
                     .collect();
@@ -167,7 +166,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
                     .iter()
                     .copied()
                     .filter(|&p| {
-                        let version = self.pool().resolve_internal_solvable(p).package().inner();
+                        let version = self.pool().resolve_internal_solvable(p).solvable().inner();
                         !version_set.contains(version)
                     })
                     .collect();
@@ -231,7 +230,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///
     /// Returns a [`Problem`] if no solution was found, which provides ways to inspect the causes
     /// and report them to the user.
-    pub fn solve(&mut self, root_requirements: Vec<VersionSetId>) -> Result<Transaction, Problem> {
+    pub fn solve(
+        &mut self,
+        root_requirements: Vec<VersionSetId>,
+    ) -> Result<Vec<SolvableId>, Problem> {
         // Clear state
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
@@ -305,7 +307,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 }
             })
             .collect();
-        Ok(Transaction { steps })
+
+        Ok(steps)
     }
 
     /// Adds clauses for root's dependencies, their dependencies, and so forth
@@ -1241,8 +1244,8 @@ mod test {
             solvables: &mut [SolvableId],
         ) {
             solvables.sort_by(|a, b| {
-                let a = self.pool.resolve_internal_solvable(*a).package();
-                let b = self.pool.resolve_internal_solvable(*b).package();
+                let a = self.pool.resolve_internal_solvable(*a).solvable();
+                let b = self.pool.resolve_internal_solvable(*b).solvable();
                 // We want to sort with highest version on top
                 b.inner.0.cmp(&a.inner.0)
             });
@@ -1299,10 +1302,13 @@ mod test {
     }
 
     /// Create a string from a [`Transaction`]
-    fn transaction_to_string<VS: VersionSet>(pool: &Pool<VS>, transaction: &Transaction) -> String {
+    fn transaction_to_string<VS: VersionSet>(
+        pool: &Pool<VS>,
+        solvables: &Vec<SolvableId>,
+    ) -> String {
         use std::fmt::Write;
         let mut buf = String::new();
-        for &solvable_id in &transaction.steps {
+        for &solvable_id in solvables {
             writeln!(buf, "{}", pool.resolve_internal_solvable(solvable_id)).unwrap();
         }
 
@@ -1329,11 +1335,11 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(root_requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 1);
+        assert_eq!(solved.len(), 1);
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[0])
-            .package();
+            .resolve_internal_solvable(solved[0])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.0, 1);
@@ -1351,20 +1357,20 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 2);
+        assert_eq!(solved.len(), 2);
 
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[0])
-            .package();
+            .resolve_internal_solvable(solved[0])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.0, 1);
 
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[1])
-            .package();
+            .resolve_internal_solvable(solved[1])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
         assert_eq!(solvable.inner.0, 4);
@@ -1383,20 +1389,20 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 2);
+        assert_eq!(solved.len(), 2);
 
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[0])
-            .package();
+            .resolve_internal_solvable(solved[0])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.0, 2);
 
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[1])
-            .package();
+            .resolve_internal_solvable(solved[1])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "efgh");
         assert_eq!(solvable.inner.0, 5);
@@ -1426,7 +1432,7 @@ mod test {
 
         use std::fmt::Write;
         let mut display_result = String::new();
-        for &solvable_id in &solved.steps {
+        for &solvable_id in &solved {
             let solvable = solver.pool().resolve_internal_solvable(solvable_id);
             writeln!(display_result, "{solvable}").unwrap();
         }
@@ -1446,12 +1452,12 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 1);
+        assert_eq!(solved.len(), 1);
 
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[0])
-            .package();
+            .resolve_internal_solvable(solved[0])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.0, 3);
@@ -1470,13 +1476,13 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 1);
-        let solvable_id = solved.steps[0];
+        assert_eq!(solved.len(), 1);
+        let solvable_id = solved[0];
         assert_eq!(
             solver
                 .pool()
                 .resolve_internal_solvable(solvable_id)
-                .package()
+                .solvable()
                 .inner
                 .0,
             3
@@ -1498,11 +1504,11 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements).unwrap();
 
-        assert_eq!(solved.steps.len(), 1);
+        assert_eq!(solved.len(), 1);
         let solvable = solver
             .pool()
-            .resolve_internal_solvable(solved.steps[0])
-            .package();
+            .resolve_internal_solvable(solved[0])
+            .solvable();
 
         assert_eq!(solver.pool().resolve_package_name(solvable.name), "asdf");
         assert_eq!(solvable.inner.0, 4);

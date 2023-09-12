@@ -17,43 +17,52 @@ mod mapping;
 mod pool;
 pub mod problem;
 mod solvable;
-mod solve_jobs;
 mod solver;
-mod transaction;
 
 pub use id::{NameId, SolvableId, VersionSetId};
 use itertools::Itertools;
 pub use pool::Pool;
-pub use solvable::PackageSolvable;
-pub use solve_jobs::SolveJobs;
+pub use solvable::Solvable;
 pub use solver::Solver;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-pub use transaction::Transaction;
 
 pub(crate) use frozen_copy_map::FrozenCopyMap;
 pub use mapping::Mapping;
 
-/// Blanket trait implementation for something that we consider a package name.
+/// The solver is based around the fact that for for every package name we are trying to find a
+/// single variant. Variants are grouped by their respective package name. A package name is
+/// anything that we can compare and hash for uniqueness checks.
+///
+/// For most implementations a package name can simply be a string. But in some more advanced cases
+/// like when a single package can have additive features it can make sense to create a custom type.
+///
+/// A blanket trait implementation is provided for any type that implements [`Eq`] and [`Hash`].
 pub trait PackageName: Eq + Hash {}
 impl<N: Eq + Hash> PackageName for N {}
 
-/// Trait describing sets of versions.
+/// A [`VersionSet`] is describes a set of "versions". The trait defines whether a given version
+/// is part of the set or not.
+///
+/// One could implement [`VersionSet`] for [`std::range::Range<u32>`] where the implementation
+/// returns `true` if a given `u32` is part of the range or not.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
-    /// Version type associated with the sets manipulated.
+    /// The element type that is included in the set.
     type V: Display + Ord;
 
     /// Evaluate membership of a version in this set.
     fn contains(&self, v: &Self::V) -> bool;
 }
 
-/// Describes how to sort tentative candidates, for a specific dependency provider. E.g conda
-/// pypi, etc.
+/// Defines implementation specific behavior for the solver and a way for the solver to access the
+/// packages that are available in the system.
 pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
     /// Returns the [`Pool`] that is used to allocate the Ids returned from this instance
     fn pool(&self) -> &Pool<VS, N>;
 
-    /// Sort the specified solvables based on which solvable to try first.
+    /// Sort the specified solvables based on which solvable to try first. The solver will
+    /// iteratively try to select the highest version. If a conflict is found with the highest
+    /// version the next version is tried. This continues until a solution is found.
     fn sort_candidates(&self, solver: &Solver<VS, N, Self>, solvables: &mut [SolvableId]);
 
     /// Returns a list of solvables that should be considered when a package with the given name is
@@ -103,6 +112,7 @@ pub struct Dependencies {
     /// This is often useful to use for optional dependencies.
     pub constrains: Vec<VersionSetId>,
 }
+
 /// Defines how merged candidates should be displayed.
 pub trait SolvableDisplay<VS: VersionSet, Name: PackageName = String> {
     /// A method that is used to display multiple solvables in a user friendly way.

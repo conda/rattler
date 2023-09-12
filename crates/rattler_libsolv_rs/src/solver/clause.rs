@@ -514,7 +514,7 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 let name = self
                     .pool
                     .resolve_internal_solvable(s1)
-                    .package()
+                    .solvable()
                     .name
                     .display(self.pool);
                 write!(f, "only one {name} allowed")
