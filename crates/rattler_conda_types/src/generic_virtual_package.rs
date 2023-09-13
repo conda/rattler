@@ -3,7 +3,7 @@ use std::fmt::{Display, Formatter};
 
 /// A `GenericVirtualPackage` is a Conda package description that contains a `name` and a
 /// `version` and a `build_string`.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct GenericVirtualPackage {
     /// The name of the package
     pub name: PackageName,

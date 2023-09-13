@@ -1,0 +1,9 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: err
+---
+Unsolvable(
+    [
+        "package foobar-2.0-bla_1 requires bors <2.0, but none of the providers can be installed",
+    ],
+)

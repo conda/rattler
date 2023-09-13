@@ -275,7 +275,8 @@ impl Archspec {
     pub fn from_platform(platform: Platform) -> Option<Self> {
         let archspec = match platform {
             Platform::NoArch | Platform::Unknown => return None,
-            Platform::Emscripten32 | Platform::Win32 | Platform::Linux32 => "x86",
+            Platform::EmscriptenWasm32 | Platform::WasiWasm32 => "wasm32",
+            Platform::Win32 | Platform::Linux32 => "x86",
             Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
             Platform::LinuxAarch64 => "aarch64",
             Platform::LinuxArmV6l => "armv6l",

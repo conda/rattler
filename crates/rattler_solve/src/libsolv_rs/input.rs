@@ -16,35 +16,48 @@ use std::str::FromStr;
 /// Adds [`RepoDataRecord`] to `repo`
 ///
 /// Panics if the repo does not belong to the pool
-pub(super) fn add_repodata_records<'a>(
+pub(super) fn add_repodata_records<'a, I: IntoIterator<Item = &'a RepoDataRecord>>(
     pool: &mut Pool<SolverMatchSpec<'a>>,
-    repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
+    repo_datas: I,
     parse_match_spec_cache: &mut HashMap<String, VersionSetId>,
-) -> Result<Vec<SolvableId>, ParseMatchSpecError> {
+) -> Result<Vec<SolvableId>, ParseMatchSpecError>
+where
+    I::IntoIter: ExactSizeIterator,
+{
     // Iterate over all records and dedup records that refer to the same package data but with
     // different archive types. This can happen if you have two variants of the same package but
     // with different extensions. We prefer `.conda` packages over `.tar.bz`.
-    let mut package_to_type: HashMap<&str, (ArchiveType, &'a RepoDataRecord)> = HashMap::new();
-    for record in repo_datas.into_iter() {
+    //
+    // Its important to insert the records in the same same order as how they were presented to this
+    // function to ensure that each solve is deterministic. Iterating over HashMaps is not
+    // deterministic at runtime so instead we store the values in a Vec as we iterate over the
+    // records. This guarentees that the order of records remains the same over runs.
+    let repo_datas = repo_datas.into_iter();
+    let mut ordered_repodata = Vec::with_capacity(repo_datas.len());
+    let mut package_to_type: HashMap<&str, (ArchiveType, usize)> =
+        HashMap::with_capacity(repo_datas.len());
+    for record in repo_datas {
         let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
             .unwrap_or((&record.file_name, ArchiveType::TarBz2));
         match package_to_type.get_mut(file_name) {
             None => {
-                package_to_type.insert(file_name, (archive_type, record));
+                let idx = ordered_repodata.len();
+                ordered_repodata.push(record);
+                package_to_type.insert(file_name, (archive_type, idx));
             }
-            Some((prev_archive_type, prev_record)) => match archive_type.cmp(prev_archive_type) {
+            Some((prev_archive_type, idx)) => match archive_type.cmp(prev_archive_type) {
                 Ordering::Greater => {
                     // A previous package has a worse package "type", we'll use the current record
                     // instead.
                     *prev_archive_type = archive_type;
-                    *prev_record = record;
+                    ordered_repodata[*idx] = record;
                 }
                 Ordering::Less => {
                     // A previous package that we already stored is actually a package of a better
                     // "type" so we'll just use that instead (.conda > .tar.bz)
                 }
                 Ordering::Equal => {
-                    if record != *prev_record {
+                    if record != ordered_repodata[*idx] {
                         unreachable!(
                             "found duplicate record with different values for {}",
                             &record.file_name
@@ -55,8 +68,8 @@ pub(super) fn add_repodata_records<'a>(
         }
     }
 
-    let solvable_ids = Vec::new();
-    for (_archive_type, repo_data) in package_to_type.into_values() {
+    let mut solvable_ids = Vec::new();
+    for repo_data in ordered_repodata.into_iter() {
         let record = &repo_data.package_record;
 
         // Add the package to the pool
@@ -74,6 +87,8 @@ pub(super) fn add_repodata_records<'a>(
             let version_set_id = parse_match_spec(pool, match_spec_str, parse_match_spec_cache)?;
             pool.add_constrains(solvable_id, version_set_id);
         }
+
+        solvable_ids.push(solvable_id)
     }
 
     Ok(solvable_ids)

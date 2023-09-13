@@ -6,8 +6,8 @@ use rattler_conda_types::{
     GenericVirtualPackage, NamelessMatchSpec, PackageRecord, RepoDataRecord,
 };
 use rattler_libsolv_rs::{
-    DependencyProvider, Mapping, Pool, SolvableId, SolveJobs, Solver as LibSolvRsSolver,
-    VersionSet, VersionSetId, VersionTrait,
+    DependencyProvider, Mapping, Pool, SolvableDisplay, SolvableId, SolveJobs,
+    Solver as LibSolvRsSolver, VersionSet, VersionSetId,
 };
 use std::{
     cell::OnceCell,
@@ -16,6 +16,8 @@ use std::{
     marker::PhantomData,
     ops::Deref,
 };
+
+use itertools::Itertools;
 
 mod conda_util;
 mod input;
@@ -99,6 +101,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+#[derive(Ord, PartialOrd, Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),
     VirtualPackage(&'a GenericVirtualPackage),
@@ -148,19 +151,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
     }
 }
 
-impl<'a> VersionTrait for SolverPackageRecord<'a> {
-    type Version = rattler_conda_types::Version;
-
-    fn version(&self) -> Self::Version {
-        match self {
-            SolverPackageRecord::Record(rec) => rec.package_record.version.version().clone(),
-            SolverPackageRecord::VirtualPackage(rec) => rec.version.clone(),
-        }
-    }
-}
-
 /// Dependency provider for conda
-
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider {
     // TODO: cache is dangerous as it is now because it is not invalidated when the pool changes
@@ -190,6 +181,24 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider {
                 &mut self.matchspec_to_highest_version,
             )
         });
+    }
+}
+
+/// Displays the different candidates by their version and sorted by their version
+pub struct CondaSolvableDisplay;
+
+impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
+    fn display_candidates(
+        &self,
+        pool: &Pool<SolverMatchSpec, String>,
+        merged_candidates: &[SolvableId],
+    ) -> String {
+        merged_candidates
+            .iter()
+            .map(|&id| pool.resolve_solvable(id).inner().version())
+            .sorted()
+            .map(|s| s.to_string())
+            .join(" | ")
     }
 }
 
@@ -271,7 +280,9 @@ impl super::SolverImpl for Solver {
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(pool, CondaDependencyProvider::default());
         let transaction = solver.solve(goal).map_err(|problem| {
-            SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
+            SolveError::Unsolvable(vec![problem
+                .display_user_friendly(&solver, &CondaSolvableDisplay)
+                .to_string()])
         })?;
 
         let required_records = transaction
