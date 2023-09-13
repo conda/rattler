@@ -50,11 +50,11 @@ impl Problem {
         let unresolved_node = graph.add_node(ProblemNode::UnresolvedDependency);
 
         for clause_id in &self.clauses {
-            let clause = solver.clauses[clause_id.index()].kind;
+            let clause = &solver.clauses[*clause_id].kind;
             match clause {
                 Clause::InstallRoot => (),
                 Clause::Learnt(..) => unreachable!(),
-                Clause::Requires(package_id, version_set_id) => {
+                &Clause::Requires(package_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
                     let candidates = solver.get_or_cache_sorted_candidates(version_set_id);
@@ -81,19 +81,19 @@ impl Problem {
                         }
                     }
                 }
-                Clause::Lock(locked, forbidden) => {
+                &Clause::Lock(locked, forbidden) => {
                     let node2_id = Self::add_node(&mut graph, &mut nodes, forbidden);
                     let conflict = ConflictCause::Locked(locked);
                     graph.add_edge(root_node, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                Clause::ForbidMultipleInstances(instance1_id, instance2_id) => {
+                &Clause::ForbidMultipleInstances(instance1_id, instance2_id) => {
                     let node1_id = Self::add_node(&mut graph, &mut nodes, instance1_id);
                     let node2_id = Self::add_node(&mut graph, &mut nodes, instance2_id);
 
                     let conflict = ConflictCause::ForbidMultipleInstances;
                     graph.add_edge(node1_id, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                Clause::Constrains(package_id, dep_id, version_set_id) => {
+                &Clause::Constrains(package_id, dep_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
                     let dep_node = Self::add_node(&mut graph, &mut nodes, dep_id);
 

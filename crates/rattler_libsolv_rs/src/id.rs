@@ -74,19 +74,10 @@ impl From<SolvableId> for u32 {
 pub(crate) struct ClauseId(u32);
 
 impl ClauseId {
-    pub(crate) fn new(index: usize) -> Self {
-        debug_assert_ne!(index, 0);
-        debug_assert_ne!(index, u32::MAX as usize);
-
-        Self(index as u32)
-    }
-
+    /// There is a guarentee that ClauseId(0) will always be "Clause::InstallRoot". This assumption
+    /// is verified by the solver.
     pub(crate) fn install_root() -> Self {
         Self(0)
-    }
-
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
     }
 
     pub(crate) fn is_null(self) -> bool {
@@ -95,6 +86,17 @@ impl ClauseId {
 
     pub(crate) fn null() -> ClauseId {
         ClauseId(u32::MAX)
+    }
+}
+
+impl ArenaId for ClauseId {
+    fn from_usize(x: usize) -> Self {
+        assert!(x < u32::MAX as usize, "clause id too big");
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
     }
 }
 

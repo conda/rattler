@@ -1,7 +1,7 @@
 use std::cell::{Cell, UnsafeCell};
 use std::cmp;
 use std::marker::PhantomData;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 const CHUNK_SIZE: usize = 128;
 
@@ -77,10 +77,52 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
         TId::from_usize(id)
     }
 
+    /// Returns an iterator over the elements of the arena.
+    pub fn iter(&self) -> ArenaIter<TId, TValue> {
+        ArenaIter {
+            arena: self,
+            index: 0,
+        }
+    }
+
+    /// Returns an mutable iterator over the elements of the arena.
+    pub fn iter_mut(&mut self) -> ArenaIterMut<TId, TValue> {
+        ArenaIterMut {
+            arena: self,
+            index: 0,
+        }
+    }
+
     fn chunk_and_offset(index: usize) -> (usize, usize) {
         let offset = index % CHUNK_SIZE;
         let chunk = index / CHUNK_SIZE;
         (chunk, offset)
+    }
+
+    /// Returns mutable references to the two values references by the two distinct indices.
+    ///
+    /// Panics if one of the Ids is invalid or when the two ids are the same.
+    pub fn get_two_mut(&mut self, a: TId, b: TId) -> (&mut TValue, &mut TValue) {
+        let a_index = a.to_usize();
+        let b_index = b.to_usize();
+        assert!(a_index < self.len());
+        assert!(b_index < self.len());
+        assert_ne!(a_index, b_index);
+        let (a_chunk, a_offset) = Self::chunk_and_offset(a_index);
+        let (b_chunk, b_offset) = Self::chunk_and_offset(b_index);
+        // SAFE: because we check that the indices are less than the length and that both indices do
+        // not refer to the same item.
+        unsafe {
+            let chunks = self.chunks.get();
+            (
+                (*chunks)
+                    .get_unchecked_mut(a_chunk)
+                    .get_unchecked_mut(a_offset),
+                (*chunks)
+                    .get_unchecked_mut(b_chunk)
+                    .get_unchecked_mut(b_offset),
+            )
+        }
     }
 }
 
@@ -98,8 +140,78 @@ impl<TId: ArenaId, TValue> Index<TId> for Arena<TId, TValue> {
     }
 }
 
+impl<TId: ArenaId, TValue> IndexMut<TId> for Arena<TId, TValue> {
+    fn index_mut(&mut self, index: TId) -> &mut Self::Output {
+        let index = index.to_usize();
+        assert!(index < self.len());
+        let (chunk, offset) = Self::chunk_and_offset(index);
+        // SAFE: because we check that the index is less than the length
+        unsafe {
+            self.chunks
+                .get_mut()
+                .get_unchecked_mut(chunk)
+                .get_unchecked_mut(offset)
+        }
+    }
+}
+
 /// A trait indicating that the type can be transformed to `usize` and back
 pub trait ArenaId {
     fn from_usize(x: usize) -> Self;
     fn to_usize(self) -> usize;
+}
+
+/// An iterator over the elements of an [`Arena`].
+pub struct ArenaIter<'a, TId: ArenaId, TValue> {
+    arena: &'a Arena<TId, TValue>,
+    index: usize,
+}
+
+impl<'a, TId: ArenaId, TValue> Iterator for ArenaIter<'a, TId, TValue> {
+    type Item = (TId, &'a TValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.arena.len.get() {
+            let (chunk, offset) = Arena::<TId, TValue>::chunk_and_offset(self.index);
+            let element = unsafe {
+                let vec = self.arena.chunks.get();
+                Some((
+                    TId::from_usize(self.index),
+                    (*vec).get_unchecked(chunk).get_unchecked(offset),
+                ))
+            };
+
+            self.index += 1;
+            element
+        } else {
+            None
+        }
+    }
+}
+
+/// An mutable iterator over the elements of an [`Arena`].
+pub struct ArenaIterMut<'a, TId: ArenaId, TValue> {
+    arena: &'a mut Arena<TId, TValue>,
+    index: usize,
+}
+
+impl<'a, TId: ArenaId, TValue> Iterator for ArenaIterMut<'a, TId, TValue> {
+    type Item = (TId, &'a mut TValue);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.arena.len.get() {
+            let (chunk, offset) = Arena::<TId, TValue>::chunk_and_offset(self.index);
+            let element = unsafe {
+                let vec = self.arena.chunks.get();
+                Some((
+                    TId::from_usize(self.index),
+                    (*vec).get_unchecked_mut(chunk).get_unchecked_mut(offset),
+                ))
+            };
+            self.index += 1;
+            element
+        } else {
+            None
+        }
+    }
 }
