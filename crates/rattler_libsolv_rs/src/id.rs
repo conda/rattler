@@ -15,7 +15,7 @@ impl ArenaId for NameId {
     }
 }
 
-/// The id associated to a match spec
+/// The id associated with a VersionSet.
 #[repr(transparent)]
 #[derive(Clone, Default, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct VersionSetId(u32);

@@ -98,7 +98,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
     }
 
     /// Returns the candidates for the package with the given name. This will either ask the
-    /// [`DependencyProvide`] for the entries or a cached value.
+    /// [`DependencyProvider`] for the entries or a cached value.
     pub fn get_or_cache_candidates(&self, package_name: NameId) -> &Candidates {
         // If we already have the candidates for this package cached we can simply return
         let candidates_id = match self.package_name_to_candidates.get_copy(&package_name) {

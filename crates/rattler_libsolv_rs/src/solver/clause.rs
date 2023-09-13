@@ -39,10 +39,10 @@ pub(crate) enum Clause {
     ///
     /// In SAT terms: (root)
     InstallRoot,
-    /// The solvable requires the candidates associated to the match spec
+    /// The solvable requires the candidates associated with the version set
     ///
     /// In SAT terms: (¬A ∨ B1 ∨ B2 ∨ ... ∨ B99), where B1 to B99 represent the possible candidates
-    /// for the provided match spec
+    /// for the provided version set
     Requires(SolvableId, VersionSetId),
     /// Ensures only a single version of a package is installed
     ///

@@ -44,7 +44,7 @@ impl<N: Eq + Hash> PackageName for N {}
 /// A [`VersionSet`] is describes a set of "versions". The trait defines whether a given version
 /// is part of the set or not.
 ///
-/// One could implement [`VersionSet`] for [`std::range::Range<u32>`] where the implementation
+/// One could implement [`VersionSet`] for [`std::ops::Range<u32>`] where the implementation
 /// returns `true` if a given `u32` is part of the range or not.
 pub trait VersionSet: Debug + Display + Clone + Eq + Hash {
     /// The element type that is included in the set.

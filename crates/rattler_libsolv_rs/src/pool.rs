@@ -24,7 +24,7 @@ pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// Interned match specs
     pub(crate) version_sets: Arena<VersionSetId, (NameId, VS)>,
 
-    /// Map from match spec strings to the id of their interned counterpart
+    /// Map from version set to the id of their interned counterpart
     version_set_to_id: FrozenCopyMap<(NameId, VS), VersionSetId>,
 }
 

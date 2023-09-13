@@ -1,5 +1,4 @@
-//! Types to examine why a given [`crate::SolveJobs`] was unsatisfiable, and to report the causes
-//! to the user
+//! Types to examine why a problem was unsatisfiable, and to report the causes to the user.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -183,7 +182,7 @@ impl ProblemNode {
 /// An edge in the graph representation of a [`Problem`]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ProblemEdge {
-    /// The target node is a candidate for the dependency specified by the match spec
+    /// The target node is a candidate for the dependency specified by the version set
     Requires(VersionSetId),
     /// The target node is involved in a conflict, caused by `ConflictCause`
     Conflict(ConflictCause),
@@ -210,7 +209,7 @@ impl ProblemEdge {
 pub enum ConflictCause {
     /// The solvable is locked
     Locked(SolvableId),
-    /// The target node is constrained by the specified match spec
+    /// The target node is constrained by the specified version set
     Constrains(VersionSetId),
     /// It is forbidden to install multiple instances of the same dependency
     ForbidMultipleInstances,
