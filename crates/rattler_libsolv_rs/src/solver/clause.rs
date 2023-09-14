@@ -1,6 +1,8 @@
 use crate::{
-    arena::Arena,
-    id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
+    internal::{
+        arena::Arena,
+        id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
+    },
     pool::Pool,
     solver::decision_map::DecisionMap,
     PackageName, VersionSet,
@@ -526,7 +528,7 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::ArenaId;
+    use crate::internal::arena::ArenaId;
 
     fn clause(next_clauses: [ClauseId; 2], watched_solvables: [SolvableId; 2]) -> ClauseState {
         ClauseState {

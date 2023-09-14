@@ -1,4 +1,4 @@
-use crate::id::NameId;
+use crate::internal::id::NameId;
 
 use std::fmt::{Display, Formatter};
 

@@ -1,4 +1,4 @@
-use crate::arena::ArenaId;
+use crate::internal::arena::ArenaId;
 
 /// The id associated to a package name
 #[repr(transparent)]

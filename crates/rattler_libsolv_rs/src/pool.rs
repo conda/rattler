@@ -1,10 +1,14 @@
 use std::fmt::{Display, Formatter};
 
-use crate::arena::Arena;
-use crate::id::{NameId, SolvableId, VersionSetId};
-use crate::solvable::{InternalSolvable, Solvable};
-use crate::FrozenCopyMap;
-use crate::{PackageName, VersionSet};
+use crate::{
+    internal::{
+        arena::Arena,
+        frozen_copy_map::FrozenCopyMap,
+        id::{NameId, SolvableId, VersionSetId},
+    },
+    solvable::{InternalSolvable, Solvable},
+    PackageName, VersionSet,
+};
 
 /// A pool that stores data related to the available packages.
 ///

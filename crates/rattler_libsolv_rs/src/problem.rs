@@ -12,11 +12,12 @@ use petgraph::graph::{DiGraph, EdgeIndex, EdgeReference, NodeIndex};
 use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
-use crate::id::{ClauseId, SolvableId, VersionSetId};
-use crate::pool::Pool;
-use crate::solver::clause::Clause;
-use crate::solver::Solver;
-use crate::{DependencyProvider, PackageName, SolvableDisplay, VersionSet};
+use crate::{
+    internal::id::{ClauseId, SolvableId, VersionSetId},
+    pool::Pool,
+    solver::{clause::Clause, Solver},
+    DependencyProvider, PackageName, SolvableDisplay, VersionSet,
+};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]

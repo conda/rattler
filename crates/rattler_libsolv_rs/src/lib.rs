@@ -9,26 +9,23 @@
 //! comments.
 
 #![deny(missing_docs)]
-
-mod arena;
-mod frozen_copy_map;
-mod id;
-mod mapping;
+pub(crate) mod internal;
 mod pool;
 pub mod problem;
+pub mod range;
 mod solvable;
 mod solver;
 
-pub use id::{NameId, SolvableId, VersionSetId};
 use itertools::Itertools;
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
+
+pub use internal::id::{NameId, SolvableId, VersionSetId};
 pub use pool::Pool;
 pub use solvable::Solvable;
 pub use solver::Solver;
-use std::fmt::{Debug, Display};
-use std::hash::Hash;
-
-pub(crate) use frozen_copy_map::FrozenCopyMap;
-pub use mapping::Mapping;
 
 /// The solver is based around the fact that for for every package name we are trying to find a
 /// single variant. Variants are grouped by their respective package name. A package name is

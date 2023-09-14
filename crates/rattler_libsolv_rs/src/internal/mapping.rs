@@ -1,12 +1,14 @@
-use crate::arena::ArenaId;
-use std::marker::PhantomData;
-use std::ops::{Index, IndexMut};
+use crate::internal::arena::ArenaId;
+use std::{
+    marker::PhantomData,
+    ops::{Index, IndexMut},
+};
 
 /// A `Mapping<TValue>` holds a collection of `TValue`s that can be addressed by `TId`s. You can
 /// think of it as a HashMap<TId, TValue>, optimized for the case in which we know the `TId`s are
 /// contiguous.
 #[derive(Default)]
-pub struct Mapping<TId: ArenaId, TValue> {
+pub struct Mapping<TId, TValue> {
     data: Vec<TValue>,
     phantom: PhantomData<TId>,
 }
