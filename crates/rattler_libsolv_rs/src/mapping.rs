@@ -54,9 +54,7 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
         // Resize to fit if needed
         if chunk >= self.chunks.len() {
             self.chunks
-                .resize_with(chunk + 1, || {
-                    std::array::from_fn(|_| None)
-                });
+                .resize_with(chunk + 1, || std::array::from_fn(|_| None));
         }
         self.chunks[chunk][offset] = Some(value);
         self.len += 1;

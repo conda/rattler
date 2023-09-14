@@ -802,7 +802,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     return;
                 }
 
-                for &cause in learnt_why.get(learnt_clause_id).expect("no cause for learnt clause available") {
+                for &cause in learnt_why
+                    .get(learnt_clause_id)
+                    .expect("no cause for learnt clause available")
+                {
                     Self::analyze_unsolvable_clause(clauses, learnt_why, cause, problem, seen);
                 }
             }
@@ -970,7 +973,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         // Add the clause
         let learnt_id = self.learnt_clauses.alloc(learnt.clone());
-        self.learnt_why.insert(learnt_id,learnt_why);
+        self.learnt_why.insert(learnt_id, learnt_why);
 
         let clause_id = self.clauses.alloc(ClauseState::learnt(learnt_id, &learnt));
         self.learnt_clause_ids.push(clause_id);

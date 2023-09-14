@@ -61,7 +61,10 @@ impl WatchMap {
         &mut self,
         watched_solvable: SolvableId,
     ) -> ClauseId {
-        self.map.get(watched_solvable).copied().unwrap_or(ClauseId::null())
+        self.map
+            .get(watched_solvable)
+            .copied()
+            .unwrap_or(ClauseId::null())
     }
 
     pub(crate) fn watch_solvable(&mut self, watched_solvable: SolvableId, id: ClauseId) {
