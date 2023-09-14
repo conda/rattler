@@ -27,9 +27,6 @@ mod decision_tracker;
 mod watch_map;
 
 /// Drives the SAT solving process
-///
-/// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
-/// comes from the original `PackageRecord`s)
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
 
