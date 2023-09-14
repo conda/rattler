@@ -32,12 +32,12 @@ mod watch_map;
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
 
-    pub(crate) clauses: Vec<ClauseState>,
+    pub(crate) clauses: Arena<ClauseId, ClauseState>,
     watches: WatchMap,
 
-    learnt_clauses_start: ClauseId,
     learnt_clauses: Arena<LearntClauseId, Vec<Literal>>,
     learnt_why: Mapping<LearntClauseId, Vec<ClauseId>>,
+    learnt_clause_ids: Vec<ClauseId>,
 
     /// A mapping from a solvable to a list of dependencies
     solvable_dependencies: Arena<DependenciesId, Dependencies>,
@@ -73,11 +73,11 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
     pub fn new(provider: D) -> Self {
         Self {
             provider,
-            clauses: Vec::new(),
+            clauses: Arena::new(),
             watches: WatchMap::new(),
             learnt_clauses: Arena::new(),
-            learnt_clauses_start: ClauseId::null(),
             learnt_why: Mapping::empty(),
+            learnt_clause_ids: Vec::new(),
             decision_tracker: DecisionTracker::new(),
             candidates: Arena::new(),
             solvable_dependencies: Default::default(),
@@ -238,8 +238,13 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
         self.learnt_why = Mapping::empty();
-        self.clauses = vec![ClauseState::root()];
+        self.clauses = Default::default();
         self.root_requirements = root_requirements;
+
+        // The first clause will always be the install root clause. Here we verify that this is
+        // indeed the case.
+        let root_clause = self.clauses.alloc(ClauseState::root());
+        assert_eq!(root_clause, ClauseId::install_root());
 
         // Create clauses for root's dependencies, and their dependencies, and so forth
         self.add_clauses_for_root_deps();
@@ -260,7 +265,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             for (i, &candidate) in candidates.iter().enumerate() {
                 for &other_candidate in &candidates[i + 1..] {
                     self.clauses
-                        .push(ClauseState::forbid_multiple(candidate, other_candidate));
+                        .alloc(ClauseState::forbid_multiple(candidate, other_candidate));
                 }
             }
         }
@@ -280,13 +285,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             for &other_candidate in &candidates.candidates {
                 if other_candidate != locked_solvable_id {
                     self.clauses
-                        .push(ClauseState::lock(locked_solvable_id, other_candidate));
+                        .alloc(ClauseState::lock(locked_solvable_id, other_candidate));
                 }
             }
         }
-
-        // All new clauses are learnt after this point
-        self.learnt_clauses_start = ClauseId::new(self.clauses.len());
 
         // Create watches chains
         self.make_watches();
@@ -347,7 +349,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             };
 
             // Iterate over all the requirements and create clauses.
-            let mut clauses = Vec::new();
             for &version_set_id in requirements {
                 // Get the sorted candidates that can fulfill this requirement
                 let candidates = self.get_or_cache_sorted_candidates(version_set_id);
@@ -363,7 +364,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     }
                 }
 
-                clauses.push(ClauseState::requires(
+                self.clauses.alloc(ClauseState::requires(
                     solvable_id,
                     version_set_id,
                     candidates,
@@ -382,11 +383,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 for forbidden_candidate in non_candidates {
                     let clause =
                         ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
-                    clauses.push(clause);
+                    self.clauses.alloc(clause);
                 }
             }
-
-            self.clauses.extend(clauses);
         }
     }
 
@@ -444,12 +443,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     fn decide_requires_without_candidates(&mut self, level: u32) -> Result<(), ClauseId> {
         tracing::info!("=== Deciding assertions for requires without candidates");
 
-        for (i, clause) in self.clauses.iter().enumerate() {
+        for (clause_id, clause) in self.clauses.iter() {
             if let Clause::Requires(solvable_id, _) = clause.kind {
                 if !clause.has_watches() {
                     // A requires clause without watches means it has a single literal (i.e.
                     // there are no candidates)
-                    let clause_id = ClauseId::new(i);
                     let decided = self
                         .decision_tracker
                         .try_add_decision(Decision::new(solvable_id, false, clause_id), level)
@@ -484,8 +482,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 break;
             }
 
+            let clause_id = ClauseId::from_usize(i);
+
             let (required_by, candidate) = {
-                let clause = &self.clauses[i];
+                let clause = &self.clauses[clause_id];
                 i += 1;
 
                 // We are only interested in requires clauses
@@ -521,7 +521,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 )
             };
 
-            level = self.set_propagate_learn(level, candidate, required_by, ClauseId::new(i))?;
+            level = self.set_propagate_learn(level, candidate, required_by, clause_id)?;
 
             // We have made progress, and should look at all clauses in the next iteration
             i = 0;
@@ -576,7 +576,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 );
                 tracing::info!(
                     "During unit propagation for clause: {:?}",
-                    self.clauses[conflicting_clause.index()].debug(self.pool())
+                    self.clauses[conflicting_clause].debug(self.pool())
                 );
 
                 tracing::info!(
@@ -588,16 +588,15 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         .iter()
                         .find(|d| d.solvable_id == conflicting_solvable)
                         .unwrap()
-                        .derived_from
-                        .index()]
-                    .debug(self.pool()),
+                        .derived_from]
+                        .debug(self.pool()),
                 );
             }
 
             if level == 1 {
                 tracing::info!("=== UNSOLVABLE");
                 for decision in self.decision_tracker.stack() {
-                    let clause = &self.clauses[decision.derived_from.index()];
+                    let clause = &self.clauses[decision.derived_from];
                     let level = self.decision_tracker.level(decision.solvable_id);
                     let action = if decision.value { "install" } else { "forbid" };
 
@@ -649,8 +648,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     fn propagate(&mut self, level: u32) -> Result<(), (SolvableId, bool, ClauseId)> {
         // Learnt assertions (assertions are clauses that consist of a single literal, and therefore
         // do not have watches)
-        let learnt_clauses_start = self.learnt_clauses_start.index();
-        for (i, clause) in self.clauses[learnt_clauses_start..].iter().enumerate() {
+        for &clause_id in self.learnt_clause_ids.iter() {
+            let clause = &self.clauses[clause_id];
             let Clause::Learnt(learnt_index) = clause.kind else {
                 unreachable!();
             };
@@ -664,7 +663,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             let literal = literals[0];
             let decision = literal.satisfying_value();
-            let clause_id = ClauseId::new(learnt_clauses_start + i);
 
             let decided = self
                 .decision_tracker
@@ -696,19 +694,14 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     panic!("Linked list is circular!");
                 }
 
-                // This is a convoluted way of getting mutable access to the current and the previous clause,
-                // which is necessary when we have to remove the current clause from the list
+                // Get mutable access to both clauses.
                 let (predecessor_clause, clause) =
                     if let Some(prev_clause_id) = predecessor_clause_id {
-                        if prev_clause_id < clause_id {
-                            let (prev, current) = self.clauses.split_at_mut(clause_id.index());
-                            (Some(&mut prev[prev_clause_id.index()]), &mut current[0])
-                        } else {
-                            let (current, prev) = self.clauses.split_at_mut(prev_clause_id.index());
-                            (Some(&mut prev[0]), &mut current[clause_id.index()])
-                        }
+                        let (predecessor_clause, clause) =
+                            self.clauses.get_two_mut(prev_clause_id, clause_id);
+                        (Some(predecessor_clause), clause)
                     } else {
-                        (None, &mut self.clauses[clause_id.index()])
+                        (None, &mut self.clauses[clause_id])
                     };
 
                 // Update the prev_clause_id for the next run
@@ -796,31 +789,21 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// Because learnt clauses are not relevant for the user, they are not added to the `Problem`.
     /// Instead, we report the clauses that caused them.
     fn analyze_unsolvable_clause(
-        clauses: &[ClauseState],
+        clauses: &Arena<ClauseId, ClauseState>,
         learnt_why: &Mapping<LearntClauseId, Vec<ClauseId>>,
-        learnt_clauses_start: ClauseId,
         clause_id: ClauseId,
         problem: &mut Problem,
         seen: &mut HashSet<ClauseId>,
     ) {
-        let clause = &clauses[clause_id.index()];
+        let clause = &clauses[clause_id];
         match clause.kind {
-            Clause::Learnt(..) => {
+            Clause::Learnt(learnt_clause_id) => {
                 if !seen.insert(clause_id) {
                     return;
                 }
 
-                let clause_id =
-                    LearntClauseId::from_usize(clause_id.index() - learnt_clauses_start.index());
-                for &cause in &learnt_why[clause_id] {
-                    Self::analyze_unsolvable_clause(
-                        clauses,
-                        learnt_why,
-                        learnt_clauses_start,
-                        cause,
-                        problem,
-                        seen,
-                    );
+                for &cause in &learnt_why[learnt_clause_id] {
+                    Self::analyze_unsolvable_clause(clauses, learnt_why, cause, problem, seen);
                 }
             }
             _ => problem.add_clause(clause_id),
@@ -838,7 +821,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         tracing::info!("=== ANALYZE UNSOLVABLE");
 
         let mut involved = HashSet::new();
-        self.clauses[clause_id.index()].kind.visit_literals(
+        self.clauses[clause_id].kind.visit_literals(
             &self.learnt_clauses,
             &self.version_set_to_sorted_candidates,
             |literal| {
@@ -850,7 +833,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         Self::analyze_unsolvable_clause(
             &self.clauses,
             &self.learnt_why,
-            self.learnt_clauses_start,
             clause_id,
             &mut problem,
             &mut seen,
@@ -872,13 +854,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             Self::analyze_unsolvable_clause(
                 &self.clauses,
                 &self.learnt_why,
-                self.learnt_clauses_start,
                 why,
                 &mut problem,
                 &mut seen,
             );
 
-            self.clauses[why.index()].kind.visit_literals(
+            self.clauses[why].kind.visit_literals(
                 &self.learnt_clauses,
                 &self.version_set_to_sorted_candidates,
                 |literal| {
@@ -922,7 +903,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         loop {
             learnt_why.push(clause_id);
 
-            self.clauses[clause_id.index()].kind.visit_literals(
+            self.clauses[clause_id].kind.visit_literals(
                 &self.learnt_clauses,
                 &self.version_set_to_sorted_candidates,
                 |literal| {
@@ -988,18 +969,16 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         learnt.push(last_literal);
 
         // Add the clause
-        let clause_id = ClauseId::new(self.clauses.len());
         let learnt_id = self.learnt_clauses.alloc(learnt.clone());
         self.learnt_why.extend(learnt_why);
 
-        let mut clause = ClauseState::learnt(learnt_id, &learnt);
+        let clause_id = self.clauses.alloc(ClauseState::learnt(learnt_id, &learnt));
+        self.learnt_clause_ids.push(clause_id);
 
+        let clause = &mut self.clauses[clause_id];
         if clause.has_watches() {
-            self.watches.start_watching(&mut clause, clause_id);
+            self.watches.start_watching(clause, clause_id);
         }
-
-        // Store it
-        self.clauses.push(clause);
 
         tracing::info!(
             "Learnt disjunction:\n{}",
@@ -1024,13 +1003,13 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         // Watches are already initialized in the clauses themselves, here we build a linked list for
         // each package (a clause will be linked to other clauses that are watching the same package)
-        for (i, clause) in self.clauses.iter_mut().enumerate() {
+        for (clause_id, clause) in self.clauses.iter_mut() {
             if !clause.has_watches() {
                 // Skip clauses without watches
                 continue;
             }
 
-            self.watches.start_watching(clause, ClauseId::new(i));
+            self.watches.start_watching(clause, clause_id);
         }
     }
 }

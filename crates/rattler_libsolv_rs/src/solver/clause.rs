@@ -584,11 +584,11 @@ mod test {
     #[test]
     fn test_unlink_clause_different() {
         let clause1 = clause(
-            [ClauseId::new(2), ClauseId::new(3)],
+            [ClauseId::from_usize(2), ClauseId::from_usize(3)],
             [SolvableId::from_usize(1596), SolvableId::from_usize(1211)],
         );
         let clause2 = clause(
-            [ClauseId::null(), ClauseId::new(3)],
+            [ClauseId::null(), ClauseId::from_usize(3)],
             [SolvableId::from_usize(1596), SolvableId::from_usize(1208)],
         );
         let clause3 = clause(
@@ -604,7 +604,10 @@ mod test {
                 clause1.watched_literals,
                 [SolvableId::from_usize(1596), SolvableId::from_usize(1211)]
             );
-            assert_eq!(clause1.next_watches, [ClauseId::null(), ClauseId::new(3)])
+            assert_eq!(
+                clause1.next_watches,
+                [ClauseId::null(), ClauseId::from_usize(3)]
+            )
         }
 
         // Unlink 1
@@ -615,14 +618,17 @@ mod test {
                 clause1.watched_literals,
                 [SolvableId::from_usize(1596), SolvableId::from_usize(1211)]
             );
-            assert_eq!(clause1.next_watches, [ClauseId::new(2), ClauseId::null()])
+            assert_eq!(
+                clause1.next_watches,
+                [ClauseId::from_usize(2), ClauseId::null()]
+            )
         }
     }
 
     #[test]
     fn test_unlink_clause_same() {
         let clause1 = clause(
-            [ClauseId::new(2), ClauseId::new(2)],
+            [ClauseId::from_usize(2), ClauseId::from_usize(2)],
             [SolvableId::from_usize(1596), SolvableId::from_usize(1211)],
         );
         let clause2 = clause(
@@ -638,7 +644,10 @@ mod test {
                 clause1.watched_literals,
                 [SolvableId::from_usize(1596), SolvableId::from_usize(1211)]
             );
-            assert_eq!(clause1.next_watches, [ClauseId::null(), ClauseId::new(2)])
+            assert_eq!(
+                clause1.next_watches,
+                [ClauseId::null(), ClauseId::from_usize(2)]
+            )
         }
 
         // Unlink 1
@@ -649,7 +658,10 @@ mod test {
                 clause1.watched_literals,
                 [SolvableId::from_usize(1596), SolvableId::from_usize(1211)]
             );
-            assert_eq!(clause1.next_watches, [ClauseId::new(2), ClauseId::null()])
+            assert_eq!(
+                clause1.next_watches,
+                [ClauseId::from_usize(2), ClauseId::null()]
+            )
         }
     }
 
