@@ -93,6 +93,9 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     }
 
     /// Get a specific value in the mapping without bound checks
+    ///
+    /// # Safety
+    /// The caller must uphold most of the safety requirements for `get_unchecked`. i.e. the id having been inserted into the Mapping before.
     pub unsafe fn get_unchecked(&self, id: TId) -> &TValue {
         let (chunk, offset) = Self::chunk_and_offset(id.to_usize());
         self.chunks
@@ -103,6 +106,9 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     }
 
     /// Get a specific value in the mapping without bound checks
+    ///
+    /// # Safety
+    /// The caller must uphold most of the safety requirements for `get_unchecked_mut`. i.e. the id having been inserted into the Mapping before.
     pub unsafe fn get_unchecked_mut(&mut self, id: TId) -> &mut TValue {
         let (chunk, offset) = Self::chunk_and_offset(id.to_usize());
         self.chunks
@@ -115,6 +121,11 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     /// Returns the number of mapped items
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    /// Returns true if the Mapping is empty
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Defines the number of slots that can be used
