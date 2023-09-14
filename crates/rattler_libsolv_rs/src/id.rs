@@ -15,7 +15,7 @@ impl ArenaId for NameId {
     }
 }
 
-/// The id associated to a match spec
+/// The id associated with a VersionSet.
 #[repr(transparent)]
 #[derive(Clone, Default, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct VersionSetId(u32);
@@ -102,6 +102,36 @@ impl ClauseId {
 pub(crate) struct LearntClauseId(u32);
 
 impl ArenaId for LearntClauseId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// The id associated to an arena of Candidates
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CandidatesId(u32);
+
+impl ArenaId for CandidatesId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// The id associated to an arena of PackageRequirements
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct DependenciesId(u32);
+
+impl ArenaId for DependenciesId {
     fn from_usize(x: usize) -> Self {
         Self(x as u32)
     }

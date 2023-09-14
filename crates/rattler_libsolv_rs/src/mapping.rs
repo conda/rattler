@@ -11,6 +11,7 @@ pub struct Mapping<TId: ArenaId, TValue> {
     phantom: PhantomData<TId>,
 }
 
+#[allow(unused)]
 impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     pub(crate) fn empty() -> Self {
         Self::new(Vec::new())

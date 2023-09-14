@@ -1,14 +1,15 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1720
 expression: error
 ---
 The following packages are incompatible
-|-- a with any version can be installed with any of the following options:
+|-- a * can be installed with any of the following options:
     |-- a 9 | 10 would require
-        |-- b with any version, which can be installed with any of the following options:
+        |-- b *, which can be installed with any of the following options:
             |-- b 42 | 100 would require
-                |-- c with versions 0 up to 100, which can be installed with any of the following options:
+                |-- c 0..100, which can be installed with any of the following options:
                     |-- c 99
-|-- c with versions 101 up to 104 cannot be installed because there are no viable options:
+|-- c 101..104 cannot be installed because there are no viable options:
     |-- c 101 | 103, which conflicts with the versions reported above.
 

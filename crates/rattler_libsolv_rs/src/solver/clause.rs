@@ -1,12 +1,12 @@
 use crate::{
     arena::Arena,
     id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
-    mapping::Mapping,
     pool::Pool,
     solver::decision_map::DecisionMap,
     PackageName, VersionSet,
 };
 
+use elsa::FrozenMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 
@@ -39,10 +39,10 @@ pub(crate) enum Clause {
     ///
     /// In SAT terms: (root)
     InstallRoot,
-    /// The solvable requires the candidates associated to the match spec
+    /// The solvable requires the candidates associated with the version set
     ///
     /// In SAT terms: (¬A ∨ B1 ∨ B2 ∨ ... ∨ B99), where B1 to B99 represent the possible candidates
-    /// for the provided match spec
+    /// for the provided version set
     Requires(SolvableId, VersionSetId),
     /// Ensures only a single version of a package is installed
     ///
@@ -77,47 +77,83 @@ pub(crate) enum Clause {
 }
 
 impl Clause {
-    /// Returns the ids of the solvables that will be watched right after the clause is created
-    fn initial_watches(
-        &self,
-        learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
-    ) -> Option<[SolvableId; 2]> {
-        match self {
-            Clause::InstallRoot => None,
-            Clause::Constrains(s1, s2, _) | Clause::ForbidMultipleInstances(s1, s2) => {
-                Some([*s1, *s2])
-            }
-            Clause::Lock(_, s) => Some([SolvableId::root(), *s]),
-            &Clause::Learnt(learnt_id) => {
-                let literals = &learnt_clauses[learnt_id];
-                debug_assert!(!literals.is_empty());
-                if literals.len() == 1 {
-                    // No need for watches, since we learned an assertion
-                    None
-                } else {
-                    Some([
-                        literals.first().unwrap().solvable_id,
-                        literals.last().unwrap().solvable_id,
-                    ])
-                }
-            }
-            &Clause::Requires(id, match_spec) => {
-                let candidates = &match_spec_to_candidates[match_spec];
-                if candidates.is_empty() {
-                    None
-                } else {
-                    Some([id, candidates[0]])
-                }
-            }
-        }
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn requires(
+        candidate: SolvableId,
+        requirement: VersionSetId,
+        candidates: &[SolvableId],
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Requires(candidate, requirement),
+            if candidates.is_empty() {
+                None
+            } else {
+                Some([candidate, candidates[0]])
+            },
+        )
+    }
+
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn constrains(
+        candidate: SolvableId,
+        constrained_candidate: SolvableId,
+        via: VersionSetId,
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Constrains(candidate, constrained_candidate, via),
+            Some([candidate, constrained_candidate]),
+        )
+    }
+
+    /// Returns the ids of the solvables that will be watched as well as the clause itself.
+    fn forbid_multiple(
+        candidate: SolvableId,
+        constrained_candidate: SolvableId,
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::ForbidMultipleInstances(candidate, constrained_candidate),
+            Some([candidate, constrained_candidate]),
+        )
+    }
+
+    fn root() -> (Self, Option<[SolvableId; 2]>) {
+        (Clause::InstallRoot, None)
+    }
+
+    fn lock(
+        locked_candidate: SolvableId,
+        other_candidate: SolvableId,
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        (
+            Clause::Lock(locked_candidate, other_candidate),
+            Some([SolvableId::root(), other_candidate]),
+        )
+    }
+
+    fn learnt(
+        learnt_clause_id: LearntClauseId,
+        literals: &[Literal],
+    ) -> (Self, Option<[SolvableId; 2]>) {
+        debug_assert!(!literals.is_empty());
+        (
+            Clause::Learnt(learnt_clause_id),
+            if literals.len() == 1 {
+                // No need for watches, since we learned an assertion
+                None
+            } else {
+                Some([
+                    literals.first().unwrap().solvable_id,
+                    literals.last().unwrap().solvable_id,
+                ])
+            },
+        )
     }
 
     /// Visits each literal in the clause
-    pub fn visit_literals<VS: VersionSet, N: PackageName>(
+    pub fn visit_literals(
         &self,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        pool: &Pool<VS, N>,
+        version_set_to_sorted_candidates: &FrozenMap<VersionSetId, Vec<SolvableId>>,
         mut visit: impl FnMut(Literal),
     ) {
         match *self {
@@ -133,7 +169,7 @@ impl Clause {
                     negate: true,
                 });
 
-                for &solvable_id in &pool.match_spec_to_sorted_candidates[match_spec_id] {
+                for &solvable_id in &version_set_to_sorted_candidates[&match_spec_id] {
                     visit(Literal {
                         solvable_id,
                         negate: false,
@@ -184,14 +220,54 @@ pub(crate) struct ClauseState {
 }
 
 impl ClauseState {
-    pub fn new(
-        kind: Clause,
-        learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
-        match_spec_to_candidates: &Mapping<VersionSetId, Vec<SolvableId>>,
+    /// Shorthand method to construct a [`Clause::InstallRoot`] without requiring complicated
+    /// arguments.
+    pub fn root() -> Self {
+        let (kind, watched_literals) = Clause::root();
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    /// Shorthand method to construct a Clause::Requires without requiring complicated arguments.
+    pub fn requires(
+        candidate: SolvableId,
+        requirement: VersionSetId,
+        matching_candidates: &[SolvableId],
     ) -> Self {
-        let watched_literals = kind
-            .initial_watches(learnt_clauses, match_spec_to_candidates)
-            .unwrap_or([SolvableId::null(), SolvableId::null()]);
+        let (kind, watched_literals) =
+            Clause::requires(candidate, requirement, matching_candidates);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn constrains(
+        candidate: SolvableId,
+        constrained_package: SolvableId,
+        requirement: VersionSetId,
+    ) -> Self {
+        let (kind, watched_literals) =
+            Clause::constrains(candidate, constrained_package, requirement);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn lock(locked_candidate: SolvableId, other_candidate: SolvableId) -> Self {
+        let (kind, watched_literals) = Clause::lock(locked_candidate, other_candidate);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn forbid_multiple(candidate: SolvableId, other_candidate: SolvableId) -> Self {
+        let (kind, watched_literals) = Clause::forbid_multiple(candidate, other_candidate);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    pub fn learnt(learnt_clause_id: LearntClauseId, literals: &[Literal]) -> Self {
+        let (kind, watched_literals) = Clause::learnt(learnt_clause_id, literals);
+        Self::from_kind_and_initial_watches(kind, watched_literals)
+    }
+
+    fn from_kind_and_initial_watches(
+        kind: Clause,
+        watched_literals: Option<[SolvableId; 2]>,
+    ) -> Self {
+        let watched_literals = watched_literals.unwrap_or([SolvableId::null(), SolvableId::null()]);
 
         let clause = Self {
             watched_literals,
@@ -319,10 +395,10 @@ impl ClauseState {
         }
     }
 
-    pub fn next_unwatched_variable<VS: VersionSet, N: PackageName>(
+    pub fn next_unwatched_variable(
         &self,
-        pool: &Pool<VS, N>,
         learnt_clauses: &Arena<LearntClauseId, Vec<Literal>>,
+        version_set_to_sorted_candidates: &FrozenMap<VersionSetId, Vec<SolvableId>>,
         decision_map: &DecisionMap,
     ) -> Option<SolvableId> {
         // The next unwatched variable (if available), is a variable that is:
@@ -341,7 +417,7 @@ impl ClauseState {
                 .find(|&l| can_watch(l))
                 .map(|l| l.solvable_id),
             Clause::Constrains(..) | Clause::ForbidMultipleInstances(..) | Clause::Lock(..) => None,
-            Clause::Requires(solvable_id, match_spec_id) => {
+            Clause::Requires(solvable_id, version_set_id) => {
                 // The solvable that added this clause
                 let solvable_lit = Literal {
                     solvable_id,
@@ -352,7 +428,7 @@ impl ClauseState {
                 }
 
                 // The available candidates
-                for &candidate in &pool.match_spec_to_sorted_candidates[match_spec_id] {
+                for &candidate in &version_set_to_sorted_candidates[&version_set_id] {
                     let lit = Literal {
                         solvable_id: candidate,
                         negate: false,
@@ -414,15 +490,15 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} requires {match_spec}",
-                    self.pool.resolve_solvable_inner(solvable_id)
+                    self.pool.resolve_internal_solvable(solvable_id)
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
                     "{} excludes {} by {}",
-                    self.pool.resolve_solvable_inner(s1),
-                    self.pool.resolve_solvable_inner(s2),
+                    self.pool.resolve_internal_solvable(s1),
+                    self.pool.resolve_internal_solvable(s2),
                     self.pool.resolve_version_set(vset_id)
                 )
             }
@@ -430,15 +506,15 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} is locked, so {} is forbidden",
-                    self.pool.resolve_solvable_inner(locked),
-                    self.pool.resolve_solvable_inner(forbidden)
+                    self.pool.resolve_internal_solvable(locked),
+                    self.pool.resolve_internal_solvable(forbidden)
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {
                 let name = self
                     .pool
-                    .resolve_solvable_inner(s1)
-                    .package()
+                    .resolve_internal_solvable(s1)
+                    .solvable()
                     .name
                     .display(self.pool);
                 write!(f, "only one {name} allowed")
@@ -480,7 +556,7 @@ mod test {
 
     #[test]
     fn test_literal_eval() {
-        let mut decision_map = DecisionMap::new(10);
+        let mut decision_map = DecisionMap::new();
 
         let literal = Literal {
             solvable_id: SolvableId::root(),

@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
+assertion_line: 1675
 expression: error
 ---
-No candidates were found for b with versions 14 up to 15.
+No candidates were found for b 14..15.
 

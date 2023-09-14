@@ -1,5 +1,4 @@
-//! Types to examine why a given [`crate::SolveJobs`] was unsatisfiable, and to report the causes
-//! to the user
+//! Types to examine why a problem was unsatisfiable, and to report the causes to the user.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -51,22 +50,22 @@ impl Problem {
         let unresolved_node = graph.add_node(ProblemNode::UnresolvedDependency);
 
         for clause_id in &self.clauses {
-            let clause = &solver.clauses[clause_id.index()];
-            match clause.kind {
+            let clause = solver.clauses[clause_id.index()].kind;
+            match clause {
                 Clause::InstallRoot => (),
                 Clause::Learnt(..) => unreachable!(),
-                Clause::Requires(package_id, match_spec_id) => {
+                Clause::Requires(package_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
-                    let candidates = &solver.pool().match_spec_to_sorted_candidates[match_spec_id];
+                    let candidates = solver.get_or_cache_sorted_candidates(version_set_id);
                     if candidates.is_empty() {
                         tracing::info!(
-                            "{package_id:?} requires {match_spec_id:?}, which has no candidates"
+                            "{package_id:?} requires {version_set_id:?}, which has no candidates"
                         );
                         graph.add_edge(
                             package_node,
                             unresolved_node,
-                            ProblemEdge::Requires(match_spec_id),
+                            ProblemEdge::Requires(version_set_id),
                         );
                     } else {
                         for &candidate_id in candidates {
@@ -77,7 +76,7 @@ impl Problem {
                             graph.add_edge(
                                 package_node,
                                 candidate_node,
-                                ProblemEdge::Requires(match_spec_id),
+                                ProblemEdge::Requires(version_set_id),
                             );
                         }
                     }
@@ -183,7 +182,7 @@ impl ProblemNode {
 /// An edge in the graph representation of a [`Problem`]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ProblemEdge {
-    /// The target node is a candidate for the dependency specified by the match spec
+    /// The target node is a candidate for the dependency specified by the version set
     Requires(VersionSetId),
     /// The target node is involved in a conflict, caused by `ConflictCause`
     Conflict(ConflictCause),
@@ -210,7 +209,7 @@ impl ProblemEdge {
 pub enum ConflictCause {
     /// The solvable is locked
     Locked(SolvableId),
-    /// The target node is constrained by the specified match spec
+    /// The target node is constrained by the specified version set
     Constrains(VersionSetId),
     /// It is forbidden to install multiple instances of the same dependency
     ForbidMultipleInstances,
@@ -270,7 +269,7 @@ impl ProblemGraph {
                 }
             }
 
-            let solvable = pool.resolve_solvable_inner(id);
+            let solvable = pool.resolve_internal_solvable(id);
             let mut added_edges = HashSet::new();
             for edge in graph.edges_directed(nx, Direction::Outgoing) {
                 let target = *graph.node_weight(edge.target()).unwrap();
@@ -305,7 +304,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_solvable_inner(solvable_2).to_string()
+                        pool.resolve_internal_solvable(solvable_2).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
