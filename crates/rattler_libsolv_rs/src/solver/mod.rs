@@ -76,7 +76,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N,
             clauses: Arena::new(),
             watches: WatchMap::new(),
             learnt_clauses: Arena::new(),
-            learnt_why: Mapping::empty(),
+            learnt_why: Mapping::new(),
             learnt_clause_ids: Vec::new(),
             decision_tracker: DecisionTracker::new(),
             candidates: Arena::new(),
@@ -237,7 +237,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         // Clear state
         self.decision_tracker.clear();
         self.learnt_clauses.clear();
-        self.learnt_why = Mapping::empty();
+        self.learnt_why = Mapping::new();
         self.clauses = Default::default();
         self.root_requirements = root_requirements;
 
@@ -802,7 +802,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     return;
                 }
 
-                for &cause in &learnt_why[learnt_clause_id] {
+                for &cause in learnt_why
+                    .get(learnt_clause_id)
+                    .expect("no cause for learnt clause available")
+                {
                     Self::analyze_unsolvable_clause(clauses, learnt_why, cause, problem, seen);
                 }
             }
@@ -970,7 +973,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         // Add the clause
         let learnt_id = self.learnt_clauses.alloc(learnt.clone());
-        self.learnt_why.extend(learnt_why);
+        self.learnt_why.insert(learnt_id, learnt_why);
 
         let clause_id = self.clauses.alloc(ClauseState::learnt(learnt_id, &learnt));
         self.learnt_clause_ids.push(clause_id);
@@ -999,8 +1002,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     }
 
     fn make_watches(&mut self) {
-        self.watches.initialize(self.pool().solvables.len());
-
         // Watches are already initialized in the clauses themselves, here we build a linked list for
         // each package (a clause will be linked to other clauses that are watching the same package)
         for (clause_id, clause) in self.clauses.iter_mut() {
