@@ -802,8 +802,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     return;
                 }
 
-                // let clause_id =
-                //     LearntClauseId::from_usize(clause_id.index() - learnt_clauses_start.index());
                 for &cause in &learnt_why[learnt_clause_id] {
                     Self::analyze_unsolvable_clause(clauses, learnt_why, cause, problem, seen);
                 }
