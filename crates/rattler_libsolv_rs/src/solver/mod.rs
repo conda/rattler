@@ -999,8 +999,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     }
 
     fn make_watches(&mut self) {
-        self.watches.initialize(self.pool().solvables.len());
-
         // Watches are already initialized in the clauses themselves, here we build a linked list for
         // each package (a clause will be linked to other clauses that are watching the same package)
         for (clause_id, clause) in self.clauses.iter_mut() {

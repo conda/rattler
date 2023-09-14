@@ -17,10 +17,6 @@ impl WatchMap {
         }
     }
 
-    pub(crate) fn initialize(&mut self, solvable_count: usize) {
-        self.map = Mapping::with_capacity(solvable_count);
-    }
-
     pub(crate) fn start_watching(&mut self, clause: &mut ClauseState, clause_id: ClauseId) {
         for (watch_index, watched_solvable) in clause.watched_literals.into_iter().enumerate() {
             let already_watching = self.first_clause_watching_solvable(watched_solvable);
@@ -65,7 +61,7 @@ impl WatchMap {
         &mut self,
         watched_solvable: SolvableId,
     ) -> ClauseId {
-        *self.map.get(watched_solvable).expect("unknown solvable")
+        self.map.get(watched_solvable).copied().unwrap_or(ClauseId::null())
     }
 
     pub(crate) fn watch_solvable(&mut self, watched_solvable: SolvableId, id: ClauseId) {

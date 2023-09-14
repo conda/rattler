@@ -65,7 +65,7 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     /// Get a specific value in the mapping with bound checks
     pub fn get(&self, id: TId) -> Option<&TValue> {
         let (chunk, offset) = Self::chunk_and_offset(id.to_usize());
-        if chunk > self.chunks.len() {
+        if chunk >= self.chunks.len() {
             return None;
         }
 
@@ -81,7 +81,7 @@ impl<TId: ArenaId, TValue> Mapping<TId, TValue> {
     /// Get a mutable specific value in the mapping with bound checks
     pub fn get_mut(&mut self, id: TId) -> Option<&mut TValue> {
         let (chunk, offset) = Self::chunk_and_offset(id.to_usize());
-        if chunk > self.chunks.len() {
+        if chunk >= self.chunks.len() {
             return None;
         }
 
