@@ -1,6 +1,12 @@
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::ops::Deref;
+// This file was originally taken from:
+// <https://raw.githubusercontent.com/pubgrub-rs/pubgrub/dev/src/internal/small_vec.rs>
+// SPDX-License-Identifier: MPL-2.0
+
+use std::{
+    fmt,
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
 
 #[derive(Clone)]
 pub enum SmallVec<T> {
