@@ -179,7 +179,7 @@ impl Platform {
 
     /// Returns true if the platform is a unix based platform.
     pub const fn is_unix(self) -> bool {
-        self.is_linux() || self.is_osx()
+        self.is_linux() || self.is_osx() || matches!(self, Platform::EmscriptenWasm32)
     }
 
     /// Returns true if the platform is a linux based platform.
