@@ -990,11 +990,6 @@ mod test {
                 tokio::io::copy(&mut input, &mut encoder).await?;
                 encoder.shutdown().await?;
             }
-            Encoding::Bz2 => {
-                let mut encoder = async_compression::tokio::write::BzEncoder::new(file);
-                tokio::io::copy(&mut input, &mut encoder).await?;
-                encoder.shutdown().await?;
-            }
             Encoding::Zst => {
                 let mut encoder = async_compression::tokio::write::ZstdEncoder::new(file);
                 tokio::io::copy(&mut input, &mut encoder).await?;
@@ -1177,57 +1172,8 @@ mod test {
 
     #[tracing_test::traced_test]
     #[tokio::test]
-    pub async fn test_bz2_works() {
-        let subdir_path = TempDir::new().unwrap();
-        write_encoded(
-            FAKE_REPO_DATA.as_bytes(),
-            &subdir_path.path().join("repodata.json.bz2"),
-            Encoding::Bz2,
-        )
-        .await
-        .unwrap();
-
-        let server = SimpleChannelServer::new(subdir_path.path());
-
-        // Download the data from the channel with an empty cache.
-        let cache_dir = TempDir::new().unwrap();
-        let result = fetch_repo_data(
-            server.url(),
-            AuthenticatedClient::default(),
-            cache_dir.path(),
-            Default::default(),
-            None,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(
-            std::fs::read_to_string(result.repo_data_json_path).unwrap(),
-            FAKE_REPO_DATA
-        );
-        assert_matches!(
-            result.cache_state.has_zst, Some(super::Expiring {
-                value, ..
-            }) if !value
-        );
-        assert_matches!(
-            result.cache_state.has_bz2, Some(super::Expiring {
-                value, ..
-            }) if value
-        );
-    }
-
-    #[tracing_test::traced_test]
-    #[tokio::test]
     pub async fn test_zst_is_preferred() {
         let subdir_path = TempDir::new().unwrap();
-        write_encoded(
-            FAKE_REPO_DATA.as_bytes(),
-            &subdir_path.path().join("repodata.json.bz2"),
-            Encoding::Bz2,
-        )
-        .await
-        .unwrap();
         write_encoded(
             FAKE_REPO_DATA.as_bytes(),
             &subdir_path.path().join("repodata.json.zst"),
@@ -1257,11 +1203,6 @@ mod test {
         assert!(result.cache_state.url.path().ends_with("repodata.json.zst"));
         assert_matches!(
             result.cache_state.has_zst, Some(super::Expiring {
-                value, ..
-            }) if value
-        );
-        assert_matches!(
-            result.cache_state.has_bz2, Some(super::Expiring {
                 value, ..
             }) if value
         );
