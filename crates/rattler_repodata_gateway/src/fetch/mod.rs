@@ -738,10 +738,7 @@ pub async fn check_variant_availability(
     // the cache is still valid.
     let (has_zst, has_jlap) = futures::join!(zst_future, jlap_future);
 
-    VariantAvailability {
-        has_zst,
-        has_jlap,
-    }
+    VariantAvailability { has_zst, has_jlap }
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
