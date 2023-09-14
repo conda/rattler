@@ -1,6 +1,6 @@
 use crate::libsolv_rs::{CondaDependencyProvider, SolverMatchSpec};
 use rattler_conda_types::Version;
-use rattler_libsolv_rs::{SolvableId, Solver, VersionSetId};
+use rattler_libsolv_rs::{SolvableId, SolverCache, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 pub(super) fn compare_candidates<'a>(
     a: SolvableId,
     b: SolvableId,
-    solver: &Solver<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
+    solver: &SolverCache<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
@@ -122,7 +122,7 @@ pub(super) fn compare_candidates<'a>(
 
 pub(super) fn find_highest_version<'a>(
     match_spec_id: VersionSetId,
-    solver: &Solver<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
+    solver: &SolverCache<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,

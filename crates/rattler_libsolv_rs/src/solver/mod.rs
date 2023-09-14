@@ -1,24 +1,24 @@
 use crate::{
     arena::{Arena, ArenaId},
-    frozen_copy_map::FrozenCopyMap,
-    id::{CandidatesId, ClauseId, DependenciesId, SolvableId},
+    id::{ClauseId, SolvableId},
     id::{LearntClauseId, NameId},
     mapping::Mapping,
     pool::Pool,
     problem::Problem,
     solvable::SolvableInner,
-    Candidates, Dependencies, DependencyProvider, PackageName, VersionSet, VersionSetId,
+    DependencyProvider, PackageName, VersionSet, VersionSetId,
 };
 
-use elsa::{FrozenMap, FrozenVec};
 use itertools::Itertools;
-use std::{collections::HashSet, fmt::Display, marker::PhantomData};
+use std::{collections::HashSet, fmt::Display};
 
+pub use cache::SolverCache;
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
 use decision_tracker::DecisionTracker;
 use watch_map::WatchMap;
 
+mod cache;
 pub(crate) mod clause;
 mod decision;
 mod decision_map;
@@ -30,7 +30,7 @@ mod watch_map;
 /// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
 /// comes from the original `PackageRecord`s)
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
-    provider: D,
+    pub(crate) cache: SolverCache<VS, N, D>,
 
     pub(crate) clauses: Arena<ClauseId, ClauseState>,
     watches: WatchMap,
@@ -39,193 +39,38 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
     learnt_why: Mapping<LearntClauseId, Vec<ClauseId>>,
     learnt_clause_ids: Vec<ClauseId>,
 
-    /// A mapping from a solvable to a list of dependencies
-    solvable_dependencies: Arena<DependenciesId, Dependencies>,
-    solvable_to_dependencies: FrozenCopyMap<SolvableId, DependenciesId>,
-
-    /// A mapping from package name to a list of candidates.
-    candidates: Arena<CandidatesId, Candidates>,
-    package_name_to_candidates: FrozenCopyMap<NameId, CandidatesId>,
-
-    // HACK: Since we are not allowed to iterate over the `package_name_to_candidates` field, we
-    // store the keys in a seperate vec.
-    package_names: FrozenVec<NameId>,
-
-    /// A mapping of `VersionSetId` to the candidates that match that set.
-    version_set_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
-
-    /// A mapping of `VersionSetId` to the candidates that do not match that set.
-    version_set_inverse_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
-
-    /// A mapping of `VersionSetId` to a sorted list of canidates that match that set.
-    version_set_to_sorted_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
+    // TODO: Can we use a better datastructure for this?
+    clauses_added_for_package: HashSet<NameId>,
+    clauses_added_for_solvable: HashSet<SolvableId>,
 
     decision_tracker: DecisionTracker,
 
     /// The version sets that must be installed as part of the solution.
     root_requirements: Vec<VersionSetId>,
-
-    _data: PhantomData<(VS, N)>,
 }
 
-impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
+impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
     /// Create a solver, using the provided pool
     pub fn new(provider: D) -> Self {
         Self {
-            provider,
+            cache: SolverCache::new(provider),
             clauses: Arena::new(),
             watches: WatchMap::new(),
             learnt_clauses: Arena::new(),
             learnt_why: Mapping::new(),
             learnt_clause_ids: Vec::new(),
             decision_tracker: DecisionTracker::new(),
-            candidates: Arena::new(),
-            solvable_dependencies: Default::default(),
-            solvable_to_dependencies: Default::default(),
-            package_name_to_candidates: Default::default(),
-            package_names: Default::default(),
             root_requirements: Default::default(),
-            version_set_candidates: Default::default(),
-            version_set_inverse_candidates: Default::default(),
-            version_set_to_sorted_candidates: Default::default(),
-            _data: Default::default(),
+            clauses_added_for_package: Default::default(),
+            clauses_added_for_solvable: Default::default(),
         }
     }
 
     /// Returns a reference to the pool used by the solver
     pub fn pool(&self) -> &Pool<VS, N> {
-        self.provider.pool()
+        self.cache.pool()
     }
 
-    /// Returns the candidates for the package with the given name. This will either ask the
-    /// [`DependencyProvider`] for the entries or a cached value.
-    pub fn get_or_cache_candidates(&self, package_name: NameId) -> &Candidates {
-        // If we already have the candidates for this package cached we can simply return
-        let candidates_id = match self.package_name_to_candidates.get_copy(&package_name) {
-            Some(id) => id,
-            None => {
-                // Otherwise we have to get them from the DependencyProvider
-                let candidates = self
-                    .provider
-                    .get_candidates(package_name)
-                    .unwrap_or_default();
-
-                // Allocate an ID so we can refer to the candidates from everywhere
-                let candidates_id = self.candidates.alloc(candidates);
-                self.package_name_to_candidates
-                    .insert_copy(package_name, candidates_id);
-                self.package_names.push(package_name);
-
-                candidates_id
-            }
-        };
-
-        // Returns a reference from the arena
-        &self.candidates[candidates_id]
-    }
-
-    /// Returns the candidates of a package that match the specified version set.
-    pub fn get_or_cache_matching_candidates(&self, version_set_id: VersionSetId) -> &[SolvableId] {
-        match self.version_set_candidates.get(&version_set_id) {
-            Some(candidates) => candidates,
-            None => {
-                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
-                let version_set = self.pool().resolve_version_set(version_set_id);
-                let candidates = self.get_or_cache_candidates(package_name);
-
-                let matching_candidates = candidates
-                    .candidates
-                    .iter()
-                    .copied()
-                    .filter(|&p| {
-                        let version = self.pool().resolve_internal_solvable(p).solvable().inner();
-                        version_set.contains(version)
-                    })
-                    .collect();
-
-                self.version_set_candidates
-                    .insert(version_set_id, matching_candidates)
-            }
-        }
-    }
-
-    /// Returns the candidates that do *not* match the specified requirement.
-    pub fn get_or_cache_non_matching_candidates(
-        &self,
-        version_set_id: VersionSetId,
-    ) -> &[SolvableId] {
-        match self.version_set_inverse_candidates.get(&version_set_id) {
-            Some(candidates) => candidates,
-            None => {
-                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
-                let version_set = self.pool().resolve_version_set(version_set_id);
-                let candidates = self.get_or_cache_candidates(package_name);
-
-                let matching_candidates = candidates
-                    .candidates
-                    .iter()
-                    .copied()
-                    .filter(|&p| {
-                        let version = self.pool().resolve_internal_solvable(p).solvable().inner();
-                        !version_set.contains(version)
-                    })
-                    .collect();
-
-                self.version_set_inverse_candidates
-                    .insert(version_set_id, matching_candidates)
-            }
-        }
-    }
-
-    /// Returns the candidates for the package with the given name similar to
-    /// [`Self::get_or_cache_candidates`] sorted from highest to lowest.
-    pub fn get_or_cache_sorted_candidates(&self, version_set_id: VersionSetId) -> &[SolvableId] {
-        match self.version_set_to_sorted_candidates.get(&version_set_id) {
-            Some(canidates) => canidates,
-            None => {
-                let package_name = self.pool().resolve_version_set_package_name(version_set_id);
-                let matching_candidates = self.get_or_cache_matching_candidates(version_set_id);
-                let candidates = self.get_or_cache_candidates(package_name);
-
-                // Sort all the candidates in order in which they should betried by the solver.
-                let mut sorted_candidates = Vec::new();
-                sorted_candidates.extend_from_slice(matching_candidates);
-                self.provider.sort_candidates(self, &mut sorted_candidates);
-
-                // If we have a solvable that we favor, we sort that to the front. This ensures
-                // that the version that is favored is picked first.
-                if let Some(favored_id) = candidates.favored {
-                    if let Some(pos) = sorted_candidates.iter().position(|&s| s == favored_id) {
-                        // Move the element at `pos` to the front of the array
-                        sorted_candidates[0..=pos].rotate_right(1);
-                    }
-                }
-
-                self.version_set_to_sorted_candidates
-                    .insert(version_set_id, sorted_candidates)
-            }
-        }
-    }
-
-    /// Returns the dependencies of a solvable. Requests the solvables from the
-    /// [`DependencyProvider`] if they are not known yet.
-    pub fn get_or_cache_dependencies(&self, solvable_id: SolvableId) -> &Dependencies {
-        let dependencies_id = match self.solvable_to_dependencies.get_copy(&solvable_id) {
-            Some(id) => id,
-            None => {
-                let dependencies = self.provider.get_dependencies(solvable_id);
-                let dependencies_id = self.solvable_dependencies.alloc(dependencies);
-                self.solvable_to_dependencies
-                    .insert_copy(solvable_id, dependencies_id);
-                dependencies_id
-            }
-        };
-
-        &self.solvable_dependencies[dependencies_id]
-    }
-}
-
-impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Solver<VS, N, D> {
     /// Solves the provided `jobs` and returns a transaction from the found solution
     ///
     /// Returns a [`Problem`] if no solution was found, which provides ways to inspect the causes
@@ -246,52 +91,49 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let root_clause = self.clauses.alloc(ClauseState::root());
         assert_eq!(root_clause, ClauseId::install_root());
 
-        // Create clauses for root's dependencies, and their dependencies, and so forth
-        self.add_clauses_for_root_deps();
-
-        // Add clauses ensuring only a single candidate per package name is installed
-        // TODO: (BasZ) Im pretty sure there is a better way to formulate this. Maybe take a look
-        //   at pubgrub?
-        // TODO: Can we move this to where a package is added?
-        for package_name in
-            (0..self.package_names.len()).map(|idx| self.package_names.get_copy(idx).unwrap())
-        {
-            let candidates_id = self
-                .package_name_to_candidates
-                .get_copy(&package_name)
-                .unwrap();
-            let candidates = &self.candidates[candidates_id].candidates;
-            // Each candidate gets a clause with each other candidate
-            for (i, &candidate) in candidates.iter().enumerate() {
-                for &other_candidate in &candidates[i + 1..] {
-                    self.clauses
-                        .alloc(ClauseState::forbid_multiple(candidate, other_candidate));
-                }
-            }
-        }
-
-        // Add clauses for the locked solvable
-        // TODO: Can we somehow move this to where a package is added?
-        for package_name in
-            (0..self.package_names.len()).map(|idx| self.package_names.get_copy(idx).unwrap())
-        {
-            let candidates_id = self
-                .package_name_to_candidates
-                .get_copy(&package_name)
-                .unwrap();
-            let candidates = &self.candidates[candidates_id];
-            let Some(locked_solvable_id) = candidates.locked else { continue };
-            // For each locked solvable, forbid other solvables with the same name
-            for &other_candidate in &candidates.candidates {
-                if other_candidate != locked_solvable_id {
-                    self.clauses
-                        .alloc(ClauseState::lock(locked_solvable_id, other_candidate));
-                }
-            }
-        }
+        // // Add clauses ensuring only a single candidate per package name is installed
+        // // TODO: (BasZ) Im pretty sure there is a better way to formulate this. Maybe take a look
+        // //   at pubgrub?
+        // // TODO: Can we move this to where a package is added?
+        // for package_name in
+        //     (0..self.package_names.len()).map(|idx| self.package_names.get_copy(idx).unwrap())
+        // {
+        //     let candidates_id = self
+        //         .package_name_to_candidates
+        //         .get_copy(&package_name)
+        //         .unwrap();
+        //     let candidates = &self.candidates[candidates_id].candidates;
+        //     // Each candidate gets a clause with each other candidate
+        //     for (i, &candidate) in candidates.iter().enumerate() {
+        //         for &other_candidate in &candidates[i + 1..] {
+        //             self.clauses
+        //                 .alloc(ClauseState::forbid_multiple(candidate, other_candidate));
+        //         }
+        //     }
+        // }
+        //
+        // // Add clauses for the locked solvable
+        // // TODO: Can we somehow move this to where a package is added?
+        // for package_name in
+        //     (0..self.package_names.len()).map(|idx| self.package_names.get_copy(idx).unwrap())
+        // {
+        //     let candidates_id = self
+        //         .package_name_to_candidates
+        //         .get_copy(&package_name)
+        //         .unwrap();
+        //     let candidates = &self.candidates[candidates_id];
+        //     let Some(locked_solvable_id) = candidates.locked else { continue };
+        //     // For each locked solvable, forbid other solvables with the same name
+        //     for &other_candidate in &candidates.candidates {
+        //         if other_candidate != locked_solvable_id {
+        //             self.clauses
+        //                 .alloc(ClauseState::lock(locked_solvable_id, other_candidate));
+        //         }
+        //     }
+        // }
 
         // Create watches chains
-        self.make_watches();
+        // self.make_watches();
 
         // Run SAT
         self.run_sat()?;
@@ -313,6 +155,99 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         Ok(steps)
     }
 
+    /// Add all clauses to the problem to ensure the specified requirement is met.
+    fn add_clauses_for_requirement(
+        &mut self,
+        solvable_id: SolvableId,
+        version_set_id: VersionSetId,
+    ) -> ClauseId {
+        let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
+
+        // Make sure we have added all the clauses for the package
+        if !self.clauses_added_for_package.contains(&dependency_name) {
+            self.add_clauses_to_forbid_multiple_candidates(dependency_name);
+            self.add_clauses_to_select_locked_candidate(dependency_name);
+            self.clauses_added_for_package.insert(dependency_name);
+        }
+
+        // Find all the solvables that match for the given version set
+        let candidates = self.cache.get_or_cache_sorted_candidates(version_set_id);
+
+        // Add the requires clause
+        self.add_and_watch_clause(ClauseState::requires(
+            solvable_id,
+            version_set_id,
+            candidates,
+        ))
+    }
+
+    /// Add all clauses to the problem to ensure the specified requirement is met.
+    fn add_clauses_for_constrains(
+        &mut self,
+        solvable_id: SolvableId,
+        version_set_id: VersionSetId,
+    ) {
+        let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
+
+        // Make sure we have added all the clauses for the package
+        if !self.clauses_added_for_package.contains(&dependency_name) {
+            self.add_clauses_to_forbid_multiple_candidates(dependency_name);
+            self.add_clauses_to_select_locked_candidate(dependency_name);
+            self.clauses_added_for_package.insert(dependency_name);
+        }
+
+        // Find all the solvables that match for the given version set
+        let constrained_candidates = self
+            .cache
+            .get_or_cache_non_matching_candidates(version_set_id);
+
+        // Add forbidden clauses for the candidates
+        for forbidden_candidate in constrained_candidates.iter().copied().collect_vec() {
+            let clause = ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
+            self.add_and_watch_clause(clause);
+        }
+    }
+
+    fn add_clauses_to_forbid_multiple_candidates(&mut self, package_name: NameId) {
+        let candidates = self
+            .cache
+            .get_or_cache_candidates(package_name)
+            .candidates
+            .clone();
+
+        // Each candidate gets a clause with each other candidate
+        for (i, &candidate) in candidates.iter().enumerate() {
+            for &other_candidate in &candidates[i + 1..] {
+                self.add_and_watch_clause(ClauseState::forbid_multiple(candidate, other_candidate));
+            }
+        }
+    }
+
+    fn add_clauses_to_select_locked_candidate(&mut self, package_name: NameId) {
+        let candidates = self.cache.get_or_cache_candidates(package_name);
+        let Some(locked_solvable_id) = candidates.locked else { return };
+
+        // For each locked solvable, forbid other solvables.
+        for other_candidate in candidates.candidates.to_vec() {
+            if other_candidate != locked_solvable_id {
+                self.add_and_watch_clause(ClauseState::lock(locked_solvable_id, other_candidate));
+            }
+        }
+    }
+
+    /// Adds a clause to the solver and immediately starts watching its literals.
+    fn add_and_watch_clause(&mut self, clause: ClauseState) -> ClauseId {
+        let clause_id = self.clauses.alloc(clause);
+
+        // Start watching the literals of the clause
+        let clause = &mut self.clauses[clause_id];
+        if clause.has_watches() {
+            self.watches.start_watching(clause, clause_id);
+        }
+
+        clause_id
+    }
+
     /// Adds clauses for root's dependencies, their dependencies, and so forth
     ///
     /// This function makes sure we only generate clauses for the solvables involved in the problem,
@@ -324,69 +259,114 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// use. The `favored_map` parameter influences the order in which the candidates for a
     /// dependency are sorted, giving preference to the favored package (i.e. placing it at the
     /// front).
-    fn add_clauses_for_root_deps(&mut self) {
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
+    fn add_clauses_for_solvable(&mut self, solvable_id: SolvableId) -> Result<(), ClauseId> {
+        if self.clauses_added_for_solvable.contains(&solvable_id) {
+            return Ok(());
+        }
 
-        stack.push(SolvableId::root());
+        let solvable = self.pool().resolve_internal_solvable(solvable_id);
 
-        let mut seen_requires = HashSet::new();
-        let empty_version_set_id_vec: Vec<VersionSetId> = Vec::new();
-
-        while let Some(solvable_id) = stack.pop() {
-            let solvable = self.pool().resolve_internal_solvable(solvable_id);
-
-            // Determine the dependencies of the current solvable. There are two cases here:
-            // 1. The solvable is the root solvable which only provides required dependencies.
-            // 2. The solvable is a package candidate in which case we request the corresponding
-            //    dependencies from the `DependencyProvider`.
-            let (requirements, constrains) = match solvable.inner {
-                SolvableInner::Root => (&self.root_requirements, &empty_version_set_id_vec),
-                SolvableInner::Package(_) => {
-                    let deps = self.get_or_cache_dependencies(solvable_id);
-                    (&deps.requirements, &deps.constrains)
-                }
-            };
-
-            // Iterate over all the requirements and create clauses.
-            for &version_set_id in requirements {
-                // Get the sorted candidates that can fulfill this requirement
-                let candidates = self.get_or_cache_sorted_candidates(version_set_id);
-
-                // Add any of the candidates to the stack of solvables that we need to visit. Only
-                // do this if we didnt visit the requirement before. Multiple solvables can share
-                // the same [`VersionSetId`] if they specify the exact same requirement.
-                if seen_requires.insert(version_set_id) {
-                    for &candidate in candidates.iter() {
-                        if visited.insert(candidate) {
-                            stack.push(candidate);
-                        }
-                    }
-                }
-
-                self.clauses.alloc(ClauseState::requires(
-                    solvable_id,
-                    version_set_id,
-                    candidates,
-                ));
+        // Determine the dependencies of the current solvable. There are two cases here:
+        // 1. The solvable is the root solvable which only provides required dependencies.
+        // 2. The solvable is a package candidate in which case we request the corresponding
+        //    dependencies from the `DependencyProvider`.
+        let (requirements, constrains) = match solvable.inner {
+            SolvableInner::Root => (self.root_requirements.clone(), Vec::new()),
+            SolvableInner::Package(_) => {
+                let deps = self.cache.get_or_cache_dependencies(solvable_id);
+                (deps.requirements.clone(), deps.constrains.clone())
             }
+        };
 
-            // Iterate over all constrains and add clauses
-            for &version_set_id in constrains.as_slice() {
-                // Get the candidates that do-not match the specified requirement.
-                let non_candidates = self
-                    .get_or_cache_non_matching_candidates(version_set_id)
-                    .iter()
-                    .copied();
-
-                // Add forbidden clauses for the candidates
-                for forbidden_candidate in non_candidates {
-                    let clause =
-                        ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
-                    self.clauses.alloc(clause);
-                }
+        // Add clauses for the requirements
+        let mut errornous_clause_id = None;
+        for requirement in requirements {
+            let clause_id = self.add_clauses_for_requirement(solvable_id, requirement);
+            if errornous_clause_id.is_none()
+                && self
+                    .cache
+                    .get_or_cache_matching_candidates(requirement)
+                    .is_empty()
+            {
+                errornous_clause_id = Some(clause_id);
             }
         }
+
+        // Add clauses for the constraints
+        for constraint in constrains {
+            self.add_clauses_for_constrains(solvable_id, constraint);
+        }
+
+        self.clauses_added_for_solvable.insert(solvable_id);
+
+        match errornous_clause_id {
+            Some(clause_id) => Err(clause_id),
+            None => Ok(()),
+        }
+
+        //
+        // let mut visited = HashSet::new();
+        // let mut stack = Vec::new();
+        //
+        // stack.push(SolvableId::root());
+        //
+        // let mut seen_requires = HashSet::new();
+        // let empty_version_set_id_vec: Vec<VersionSetId> = Vec::new();
+        //
+        // while let Some(solvable_id) = stack.pop() {
+        //     let solvable = self.pool().resolve_internal_solvable(solvable_id);
+        //
+        //     // Determine the dependencies of the current solvable. There are two cases here:
+        //     // 1. The solvable is the root solvable which only provides required dependencies.
+        //     // 2. The solvable is a package candidate in which case we request the corresponding
+        //     //    dependencies from the `DependencyProvider`.
+        //     let (requirements, constrains) = match solvable.inner {
+        //         SolvableInner::Root => (&self.root_requirements, &empty_version_set_id_vec),
+        //         SolvableInner::Package(_) => {
+        //             let deps = self.get_or_cache_dependencies(solvable_id);
+        //             (&deps.requirements, &deps.constrains)
+        //         }
+        //     };
+        //
+        //     // Iterate over all the requirements and create clauses.
+        //     for &version_set_id in requirements {
+        //         // Get the sorted candidates that can fulfill this requirement
+        //         let candidates = self.get_or_cache_sorted_candidates(version_set_id);
+        //
+        //         // Add any of the candidates to the stack of solvables that we need to visit. Only
+        //         // do this if we didnt visit the requirement before. Multiple solvables can share
+        //         // the same [`VersionSetId`] if they specify the exact same requirement.
+        //         if seen_requires.insert(version_set_id) {
+        //             for &candidate in candidates.iter() {
+        //                 if visited.insert(candidate) {
+        //                     stack.push(candidate);
+        //                 }
+        //             }
+        //         }
+        //
+        //         self.clauses.alloc(ClauseState::requires(
+        //             solvable_id,
+        //             version_set_id,
+        //             candidates,
+        //         ));
+        //     }
+        //
+        //     // Iterate over all constrains and add clauses
+        //     for &version_set_id in constrains.as_slice() {
+        //         // Get the candidates that do-not match the specified requirement.
+        //         let non_candidates = self
+        //             .get_or_cache_non_matching_candidates(version_set_id)
+        //             .iter()
+        //             .copied();
+        //
+        //         // Add forbidden clauses for the candidates
+        //         for forbidden_candidate in non_candidates {
+        //             let clause =
+        //                 ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
+        //             self.clauses.alloc(clause);
+        //         }
+        //     }
+        // }
     }
 
     /// Run the CDCL algorithm to solve the SAT problem
@@ -411,20 +391,25 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///
     /// The solver loop can be found in [`Solver::resolve_dependencies`].
     fn run_sat(&mut self) -> Result<(), Problem> {
-        assert!(self.decision_tracker.is_empty());
+        // assert!(self.decision_tracker.is_empty());
 
         // Assign `true` to the root solvable
         let level = 1;
         self.decision_tracker
             .try_add_decision(
                 Decision::new(SolvableId::root(), true, ClauseId::install_root()),
-                1,
+                level,
             )
-            .expect("bug: solvable was already decided!");
+            .expect("already decided");
 
-        // Forbid packages that rely on dependencies without candidates
-        self.decide_requires_without_candidates(level)
+        // Add additional clauses for the root solvable
+        self.add_clauses_for_solvable(SolvableId::root())
             .map_err(|cause| self.analyze_unsolvable(cause))?;
+
+        // TODO: Bring this in in the correct place.
+        // Forbid packages that rely on dependencies without candidates
+        // self.decide_requires_without_candidates(level)
+        //     .map_err(|cause| self.analyze_unsolvable(cause))?;
 
         // Propagate after the assignments above
         self.propagate(level)
@@ -441,29 +426,53 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// Since a requires clause is represented as (¬A ∨ candidate_1 ∨ ... ∨ candidate_n),
     /// a dependency without candidates becomes (¬A), which means that A should always be false.
     fn decide_requires_without_candidates(&mut self, level: u32) -> Result<(), ClauseId> {
-        tracing::info!("=== Deciding assertions for requires without candidates");
+        // tracing::info!("=== Deciding assertions for requires without candidates");
+        //
+        // for (clause_id, clause) in self.clauses.iter() {
+        //     if let Clause::Requires(solvable_id, _) = clause.kind {
+        //         if !clause.has_watches() {
+        //             // A requires clause without watches means it has a single literal (i.e.
+        //             // there are no candidates)
+        //             // let decided = self
+        //             //     .decision_tracker
+        //             //     .try_add_decision(Decision::new(solvable_id, false, clause_id), level)
+        //             //     .map_err(|_| clause_id)?;
+        //             let decided = self
+        //                 .lazy_add_decision(solvable_id, false, clause_id, level)
+        //                 .map_err(|_| clause_id)?;
+        //
+        //             if decided {
+        //                 tracing::info!(
+        //                     "Set {} = false",
+        //                     self.pool().resolve_internal_solvable(solvable_id)
+        //                 );
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // Ok(())
 
-        for (clause_id, clause) in self.clauses.iter() {
-            if let Clause::Requires(solvable_id, _) = clause.kind {
-                if !clause.has_watches() {
-                    // A requires clause without watches means it has a single literal (i.e.
-                    // there are no candidates)
-                    let decided = self
-                        .decision_tracker
-                        .try_add_decision(Decision::new(solvable_id, false, clause_id), level)
-                        .map_err(|_| clause_id)?;
+        unreachable!()
+    }
 
-                    if decided {
-                        tracing::info!(
-                            "Set {} = false",
-                            self.pool().resolve_internal_solvable(solvable_id)
-                        );
-                    }
-                }
-            }
+    fn lazy_add_decision(
+        &mut self,
+        solvable_id: SolvableId,
+        value: bool,
+        derived_from: ClauseId,
+        level: u32,
+    ) -> Result<bool, ()> {
+        // If the decision is made to select a specific solvable we have to make sure that all
+        // clauses for that solvable are up to date
+        if value {
+            self.add_clauses_for_solvable(solvable_id)
+                .expect("handle this");
         }
 
-        Ok(())
+        // Add the decision to the tracker
+        self.decision_tracker
+            .try_add_decision(Decision::new(solvable_id, value, derived_from), level)
     }
 
     /// Resolves all dependencies
@@ -499,7 +508,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 }
 
                 // Consider only clauses in which no candidates have been installed
-                let candidates = &self.version_set_to_sorted_candidates[&deps];
+                let candidates = &self.cache.version_set_to_sorted_candidates[&deps];
                 if candidates
                     .iter()
                     .any(|&c| self.decision_tracker.assigned_value(c) == Some(true))
@@ -557,9 +566,14 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             self.pool().resolve_internal_solvable(required_by),
         );
 
+        // Add the decision to the tracker
         self.decision_tracker
             .try_add_decision(Decision::new(solvable, true, clause_id), level)
             .expect("bug: solvable was already decided!");
+
+        // Add clauses for the solvable if that was not already done.
+        self.add_clauses_for_solvable(solvable)
+            .map_err(|clause| self.analyze_unsolvable(clause))?;
 
         loop {
             let r = self.propagate(level);
@@ -623,11 +637,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Optimization: propagate right now, since we know that the clause is a unit clause
             let decision = literal.satisfying_value();
-            self.decision_tracker
-                .try_add_decision(
-                    Decision::new(literal.solvable_id, decision, learned_clause_id),
-                    level,
-                )
+            // self.decision_tracker
+            //     .try_add_decision(
+            //         Decision::new(literal.solvable_id, decision, learned_clause_id),
+            //         level,
+            //     )
+            self.lazy_add_decision(literal.solvable_id, decision, learned_clause_id, level)
                 .expect("bug: solvable was already decided!");
             tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
@@ -648,7 +663,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     fn propagate(&mut self, level: u32) -> Result<(), (SolvableId, bool, ClauseId)> {
         // Learnt assertions (assertions are clauses that consist of a single literal, and therefore
         // do not have watches)
-        for &clause_id in self.learnt_clause_ids.iter() {
+        for learn_clause_idx in 0..self.learnt_clause_ids.len() {
+            let clause_id = self.learnt_clause_ids[learn_clause_idx];
             let clause = &self.clauses[clause_id];
             let Clause::Learnt(learnt_index) = clause.kind else {
                 unreachable!();
@@ -663,6 +679,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             let literal = literals[0];
             let decision = literal.satisfying_value();
+
+            if decision {
+                self.add_clauses_for_solvable(literal.solvable_id)
+                    .expect("handle this");
+            }
 
             let decided = self
                 .decision_tracker
@@ -720,7 +741,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     // One of the watched literals is now false
                     if let Some(variable) = clause.next_unwatched_variable(
                         &self.learnt_clauses,
-                        &self.version_set_to_sorted_candidates,
+                        &self.cache.version_set_to_sorted_candidates,
                         self.decision_tracker.map(),
                     ) {
                         debug_assert!(!clause.watched_literals.contains(&variable));
@@ -760,22 +781,28 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                             )
                             .map_err(|_| (remaining_watch.solvable_id, true, this_clause_id))?;
 
-                        if decided {
-                            match clause.kind {
-                                // Skip logging for ForbidMultipleInstances, which is so noisy
-                                Clause::ForbidMultipleInstances(..) => {}
-                                _ => {
-                                    tracing::info!(
-                                        "Propagate {} = {}. {:?}",
-                                        self.provider
-                                            .pool()
-                                            .resolve_internal_solvable(remaining_watch.solvable_id),
-                                        remaining_watch.satisfying_value(),
-                                        clause.debug(self.provider.pool()),
-                                    );
-                                }
-                            }
+                        if remaining_watch.satisfying_value() {
+                            self.add_clauses_for_solvable(remaining_watch.solvable_id)
+                                .map_err(|cause| (remaining_watch.solvable_id, false, cause))?;
                         }
+
+                        // TODO: This is causing a lifetime issue. Can we solve that somehow?
+                        // if decided {
+                        //     match clause.kind {
+                        //         // Skip logging for ForbidMultipleInstances, which is so noisy
+                        //         Clause::ForbidMultipleInstances(..) => {}
+                        //         _ => {
+                        //             tracing::info!(
+                        //                 "Propagate {} = {}. {:?}",
+                        //                 self.cache
+                        //                     .pool()
+                        //                     .resolve_internal_solvable(remaining_watch.solvable_id),
+                        //                 remaining_watch.satisfying_value(),
+                        //                 clause.debug(self.cache.pool()),
+                        //             );
+                        //         }
+                        //     }
+                        // }
                     }
                 }
             }
@@ -826,7 +853,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let mut involved = HashSet::new();
         self.clauses[clause_id].kind.visit_literals(
             &self.learnt_clauses,
-            &self.version_set_to_sorted_candidates,
+            &self.cache.version_set_to_sorted_candidates,
             |literal| {
                 involved.insert(literal.solvable_id);
             },
@@ -864,7 +891,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             self.clauses[why].kind.visit_literals(
                 &self.learnt_clauses,
-                &self.version_set_to_sorted_candidates,
+                &self.cache.version_set_to_sorted_candidates,
                 |literal| {
                     if literal.eval(self.decision_tracker.map()) == Some(true) {
                         assert_eq!(literal.solvable_id, decision.solvable_id);
@@ -908,7 +935,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             self.clauses[clause_id].kind.visit_literals(
                 &self.learnt_clauses,
-                &self.version_set_to_sorted_candidates,
+                &self.cache.version_set_to_sorted_candidates,
                 |literal| {
                     if !first_iteration && literal.solvable_id == conflicting_solvable {
                         // We are only interested in the causes of the conflict, so we ignore the
@@ -1220,7 +1247,7 @@ mod test {
 
         fn sort_candidates(
             &self,
-            _solver: &Solver<PackRange, String, Self>,
+            _solver: &SolverCache<PackRange, String, Self>,
             solvables: &mut [SolvableId],
         ) {
             solvables.sort_by(|a, b| {

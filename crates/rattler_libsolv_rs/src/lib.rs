@@ -23,7 +23,10 @@ pub use id::{NameId, SolvableId, VersionSetId};
 use itertools::Itertools;
 pub use pool::Pool;
 pub use solvable::Solvable;
-pub use solver::Solver;
+pub use solver::{
+    Solver,
+    SolverCache
+};
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 
@@ -63,7 +66,7 @@ pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
     /// Sort the specified solvables based on which solvable to try first. The solver will
     /// iteratively try to select the highest version. If a conflict is found with the highest
     /// version the next version is tried. This continues until a solution is found.
-    fn sort_candidates(&self, solver: &Solver<VS, N, Self>, solvables: &mut [SolvableId]);
+    fn sort_candidates(&self, solver: &SolverCache<VS, N, Self>, solvables: &mut [SolvableId]);
 
     /// Returns a list of solvables that should be considered when a package with the given name is
     /// requested.

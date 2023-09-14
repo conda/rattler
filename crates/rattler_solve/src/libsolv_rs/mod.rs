@@ -8,7 +8,7 @@ use rattler_conda_types::{
 };
 use rattler_libsolv_rs::{
     Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
-    Solver as LibSolvRsSolver, VersionSet, VersionSetId,
+    Solver as LibSolvRsSolver, VersionSet, VersionSetId, SolverCache
 };
 use std::{
     cell::RefCell,
@@ -276,7 +276,7 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
 
     fn sort_candidates(
         &self,
-        solver: &LibSolvRsSolver<SolverMatchSpec<'a>, String, Self>,
+        solver: &SolverCache<SolverMatchSpec<'a>, String, Self>,
         solvables: &mut [SolvableId],
     ) {
         let mut highest_version_spec = self.matchspec_to_highest_version.borrow_mut();
