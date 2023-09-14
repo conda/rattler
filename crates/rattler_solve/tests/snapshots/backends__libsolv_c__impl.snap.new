@@ -1,0 +1,10 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 457
+expression: err
+---
+Unsolvable(
+    [
+        "nothing provides requested asdfasdf",
+    ],
+)

@@ -119,7 +119,10 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         virtual_packages: Default::default(),
     };
 
-    let pkgs1 = T::default().solve(solver_task).unwrap();
+    let pkgs1 = match T::default().solve(solver_task) {
+        Ok(result) => result,
+        Err(e) => panic!("{e}"),
+    };
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -449,6 +452,7 @@ macro_rules! solver_backend_tests {
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
     use super::*;
+    use test_log::test;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 

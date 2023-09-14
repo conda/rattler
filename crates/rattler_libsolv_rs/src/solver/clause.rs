@@ -489,16 +489,21 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 let match_spec = self.pool.resolve_version_set(match_spec_id).to_string();
                 write!(
                     f,
-                    "{} requires {match_spec}",
-                    self.pool.resolve_internal_solvable(solvable_id)
+                    "{} requires {} {match_spec}",
+                    self.pool
+                        .resolve_internal_solvable(solvable_id)
+                        .display(self.pool),
+                    self.pool
+                        .resolve_version_set_package_name(match_spec_id)
+                        .display(self.pool)
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
                     "{} excludes {} by {}",
-                    self.pool.resolve_internal_solvable(s1),
-                    self.pool.resolve_internal_solvable(s2),
+                    self.pool.resolve_internal_solvable(s1).display(self.pool),
+                    self.pool.resolve_internal_solvable(s2).display(self.pool),
                     self.pool.resolve_version_set(vset_id)
                 )
             }
@@ -506,8 +511,12 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} is locked, so {} is forbidden",
-                    self.pool.resolve_internal_solvable(locked),
-                    self.pool.resolve_internal_solvable(forbidden)
+                    self.pool
+                        .resolve_internal_solvable(locked)
+                        .display(self.pool),
+                    self.pool
+                        .resolve_internal_solvable(forbidden)
+                        .display(self.pool)
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {

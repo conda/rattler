@@ -35,6 +35,8 @@ url = "2.4.1"
 similar-asserts = "1.5.0"
 once_cell = "1.18.0"
 criterion = "0.5.1"
+test-log = { version = "0.2.12", default-features = false, features = ["trace"] }
+tracing-subscriber = {version = "0.3", default-features = false, features = ["env-filter", "fmt"] }
 
 [features]
 default = ["libsolv_c"]

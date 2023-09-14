@@ -1,0 +1,6 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 457
+expression: err
+---
+Cannot solve the request because of: package foobar-2.0-bla_1 requires bors <2.0, but none of the providers can be installed

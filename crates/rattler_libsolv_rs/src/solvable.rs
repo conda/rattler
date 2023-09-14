@@ -1,5 +1,6 @@
 use crate::id::NameId;
 
+use crate::{PackageName, Pool, SolvableId, VersionSet};
 use std::fmt::{Display, Formatter};
 
 /// A solvable represents a single candidate of a package.
@@ -57,13 +58,30 @@ impl<V> InternalSolvable<V> {
     pub fn solvable(&self) -> &Solvable<V> {
         self.get_solvable().expect("unexpected root solvable")
     }
+
+    pub fn display<'a, VS: VersionSet<V = V>, N: PackageName + Display>(
+        &'a self,
+        pool: &'a Pool<VS, N>,
+    ) -> SolvableDisplay<VS, N> {
+        SolvableDisplay {
+            pool,
+            solvable_id: self,
+        }
+    }
 }
 
-impl<V: Display> Display for InternalSolvable<V> {
+pub struct SolvableDisplay<'pool, VS: VersionSet, N: PackageName + Display> {
+    pool: &'pool Pool<VS, N>,
+    solvable_id: &'pool InternalSolvable<VS::V>,
+}
+
+impl<'pool, VS: VersionSet, N: PackageName + Display> Display for SolvableDisplay<'pool, VS, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.inner {
+        match &self.solvable_id.inner {
             SolvableInner::Root => write!(f, "<root>"),
-            SolvableInner::Package(p) => write!(f, "{}", &p.inner),
+            SolvableInner::Package(p) => {
+                write!(f, "{}={}", self.pool.resolve_package_name(p.name), &p.inner)
+            }
         }
     }
 }

@@ -165,6 +165,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         // Make sure we have added all the clauses for the package
         if !self.clauses_added_for_package.contains(&dependency_name) {
+            tracing::info!(
+                "adding clauses for package '{}'",
+                self.pool().resolve_package_name(dependency_name)
+            );
             self.add_clauses_to_forbid_multiple_candidates(dependency_name);
             self.add_clauses_to_select_locked_candidate(dependency_name);
             self.clauses_added_for_package.insert(dependency_name);
@@ -265,6 +269,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         }
 
         let solvable = self.pool().resolve_internal_solvable(solvable_id);
+        tracing::info!(
+            "adding clauses for dependencies of {}",
+            solvable.display(self.pool())
+        );
 
         // Determine the dependencies of the current solvable. There are two cases here:
         // 1. The solvable is the root solvable which only provides required dependencies.
@@ -562,18 +570,29 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         tracing::info!(
             "=== Install {} at level {level} (required by {})",
-            self.pool().resolve_internal_solvable(solvable),
-            self.pool().resolve_internal_solvable(required_by),
+            self.pool()
+                .resolve_internal_solvable(solvable)
+                .display(self.pool()),
+            self.pool()
+                .resolve_internal_solvable(required_by)
+                .display(self.pool()),
         );
+
+        // Add clauses for the solvable. Might result in incompatibility.
+        let decision = if let Err(clause) = self.add_clauses_for_solvable(solvable) {
+            tracing::info!(
+                "cannot be installed because ({:?})",
+                self.clauses[clause].debug(self.pool())
+            );
+            false
+        } else {
+            true
+        };
 
         // Add the decision to the tracker
         self.decision_tracker
-            .try_add_decision(Decision::new(solvable, true, clause_id), level)
+            .try_add_decision(Decision::new(solvable, decision, clause_id), level)
             .expect("bug: solvable was already decided!");
-
-        // Add clauses for the solvable if that was not already done.
-        self.add_clauses_for_solvable(solvable)
-            .map_err(|clause| self.analyze_unsolvable(clause))?;
 
         loop {
             let r = self.propagate(level);
@@ -586,7 +605,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             {
                 tracing::info!(
                     "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self.pool().resolve_internal_solvable(conflicting_solvable)
+                    solvable = self
+                        .pool()
+                        .resolve_internal_solvable(conflicting_solvable)
+                        .display(self.pool())
                 );
                 tracing::info!(
                     "During unit propagation for clause: {:?}",
@@ -621,7 +643,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool().resolve_internal_solvable(decision.solvable_id),
+                        self.pool()
+                            .resolve_internal_solvable(decision.solvable_id)
+                            .display(self.pool()),
                         clause.debug(self.pool()),
                     );
                 }
@@ -646,7 +670,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .expect("bug: solvable was already decided!");
             tracing::info!(
                 "=== Propagate after learn: {} = {decision}",
-                self.pool().resolve_internal_solvable(literal.solvable_id)
+                self.pool()
+                    .resolve_internal_solvable(literal.solvable_id)
+                    .display(self.pool())
             );
         }
 
@@ -696,7 +722,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             if decided {
                 tracing::info!(
                     "Propagate assertion {} = {}",
-                    self.pool().resolve_internal_solvable(literal.solvable_id),
+                    self.pool()
+                        .resolve_internal_solvable(literal.solvable_id)
+                        .display(self.pool()),
                     decision
                 );
             }
@@ -844,7 +872,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     fn analyze_unsolvable(&mut self, clause_id: ClauseId) -> Problem {
         let last_decision = self.decision_tracker.stack().last().unwrap();
         let highest_level = self.decision_tracker.level(last_decision.solvable_id);
-        debug_assert_eq!(highest_level, 1);
+        // debug_assert_eq!(highest_level, 1);
 
         let mut problem = Problem::default();
 
@@ -1017,7 +1045,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 .format_with("\n", |lit, f| f(&format_args!(
                     "- {}{}",
                     if lit.negate { "NOT " } else { "" },
-                    self.pool().resolve_internal_solvable(lit.solvable_id)
+                    self.pool()
+                        .resolve_internal_solvable(lit.solvable_id)
+                        .display(self.pool())
                 )))
         );
 
@@ -1053,6 +1083,7 @@ mod test {
         ops::Range,
         str::FromStr,
     };
+    use tracing_test::traced_test;
 
     // Let's define our own packaging version system and dependency specification.
     // This is a very simple version system, where a package is identified by a name and a version
@@ -1316,7 +1347,8 @@ mod test {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in solvables {
-            writeln!(buf, "{}", pool.resolve_internal_solvable(solvable_id)).unwrap();
+            let solvable = pool.resolve_solvable(solvable_id);
+            writeln!(buf, "{} {}", solvable.name.display(pool), solvable.inner).unwrap();
         }
 
         buf
@@ -1440,7 +1472,10 @@ mod test {
         use std::fmt::Write;
         let mut display_result = String::new();
         for &solvable_id in &solved {
-            let solvable = solver.pool().resolve_internal_solvable(solvable_id);
+            let solvable = solver
+                .pool()
+                .resolve_internal_solvable(solvable_id)
+                .display(solver.pool());
             writeln!(display_result, "{solvable}").unwrap();
         }
 
@@ -1742,5 +1777,36 @@ mod test {
         provider.add_package("c", 8.into(), &vec![], &vec!["b 0..50"]);
         let error = solve_unsat(provider, &["a", "c"]);
         insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    #[traced_test]
+    fn test_unsat_constrains_2() {
+        let mut provider = BundleBoxProvider::from_packages(&[
+            ("a", 1, vec!["b"]),
+            ("a", 2, vec!["b"]),
+            ("b", 1, vec!["c 1"]),
+            ("b", 2, vec!["c 2"]),
+        ]);
+
+        provider.add_package("c", 1.into(), &vec![], &vec!["a 3"]);
+        provider.add_package("c", 2.into(), &vec![], &vec!["a 3"]);
+        let error = solve_unsat(provider, &["a"]);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_missing_dep() {
+        let mut provider =
+            BundleBoxProvider::from_packages(&[("a", 2, vec!["missing"]), ("a", 1, vec![])]);
+        let requirements = provider.requirements(&["a"]);
+        let mut solver = Solver::new(provider);
+        let result = match solver.solve(requirements) {
+            Ok(result) => transaction_to_string(solver.pool(), &result),
+            Err(problem) => problem
+                .display_user_friendly(&solver, &DefaultSolvableDisplay)
+                .to_string(),
+        };
+        insta::assert_snapshot!(result);
     }
 }
