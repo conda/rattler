@@ -452,7 +452,6 @@ macro_rules! solver_backend_tests {
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
     use super::*;
-    use test_log::test;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 

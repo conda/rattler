@@ -1,8 +1,8 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
-expression: display_result
+expression: solved
 ---
-0
-3
-7
+conflicting=0
+asdf=3
+efgh=7
 

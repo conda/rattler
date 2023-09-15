@@ -1348,7 +1348,7 @@ mod test {
         let mut buf = String::new();
         for &solvable_id in solvables {
             let solvable = pool.resolve_solvable(solvable_id);
-            writeln!(buf, "{} {}", solvable.name.display(pool), solvable.inner).unwrap();
+            writeln!(buf, "{}={}", solvable.name.display(pool), solvable.inner).unwrap();
         }
 
         buf
@@ -1462,24 +1462,13 @@ mod test {
         let mut solver = Solver::new(provider);
         let solved = solver.solve(requirements);
         let solved = match solved {
-            Ok(solved) => solved,
+            Ok(solved) => transaction_to_string(solver.pool(), &solved),
             Err(p) => panic!(
                 "{}",
                 p.display_user_friendly(&solver, &DefaultSolvableDisplay)
             ),
         };
-
-        use std::fmt::Write;
-        let mut display_result = String::new();
-        for &solvable_id in &solved {
-            let solvable = solver
-                .pool()
-                .resolve_internal_solvable(solvable_id)
-                .display(solver.pool());
-            writeln!(display_result, "{solvable}").unwrap();
-        }
-
-        insta::assert_snapshot!(display_result);
+        insta::assert_snapshot!(solved);
     }
 
     /// The non-existing package should not be selected
@@ -1583,8 +1572,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        1
+        b=2
+        a=1
         "###);
     }
     //
@@ -1616,9 +1605,9 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        2
-        2
+        b=2
+        c=2
+        a=2
         "###);
     }
 
@@ -1634,8 +1623,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        5
+        a=2
+        b=5
         "###);
     }
 
