@@ -1114,7 +1114,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1144,7 +1144,7 @@ mod test {
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.path().to_owned(),
             Default::default(),
             None,
         )
@@ -1157,7 +1157,7 @@ mod test {
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.path().to_owned(),
             Default::default(),
             None,
         )
@@ -1181,7 +1181,7 @@ mod test {
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1210,7 +1210,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1252,7 +1252,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1301,7 +1301,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1354,7 +1354,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,
-            cache_dir.path(),
+            cache_dir.into_path(),
             Default::default(),
             None,
         )
@@ -1387,7 +1387,7 @@ mod test {
         let _result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             FetchRepoDataOptions {
                 ..Default::default()
             },
@@ -1412,7 +1412,7 @@ mod test {
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             FetchRepoDataOptions {
                 ..Default::default()
             },
@@ -1436,7 +1436,7 @@ mod test {
         let result = fetch_repo_data(
             server.url(),
             AuthenticatedClient::default(),
-            cache_dir.path(),
+            cache_dir.into_path(),
             FetchRepoDataOptions {
                 ..Default::default()
             },
