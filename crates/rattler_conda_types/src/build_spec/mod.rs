@@ -3,6 +3,7 @@
 
 pub mod parse;
 
+pub use parse::ParseBuildNumberSpecError;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -26,7 +27,7 @@ pub enum OrdOperator {
 /// Ideally we could have some kind of type constraint to guarantee that
 /// there's function relating the operator and element into a function that returns bool
 /// possible TODO: create `Operator<Element>` trait
-#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct OperatorConstraint<Operator, Element> {
     op: Operator,
     rhs: Element,
@@ -62,9 +63,6 @@ impl Display for BuildNumberSpec {
 }
 
 impl BuildNumberSpec {
-    // for PR #340 will allow this pass CI
-    // expect following PR where `matches` will be provided with an impl of publicly declared trait
-    #[allow(unused)]
     /// Returns whether the number matches the specification.
     /// Expected use is within match_spec::MatchSpec::matches
     pub fn matches(&self, build_num: &BuildNumber) -> bool {

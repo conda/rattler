@@ -1,5 +1,6 @@
 use super::matcher::{StringMatcher, StringMatcherParseError};
 use super::MatchSpec;
+use crate::build_spec::{BuildNumberSpec, ParseBuildNumberSpecError};
 use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
@@ -17,7 +18,6 @@ use nom::{Finish, IResult};
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use std::borrow::Cow;
-use std::num::ParseIntError;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
@@ -66,9 +66,9 @@ pub enum ParseMatchSpecError {
     #[error(transparent)]
     InvalidStringMatcher(#[from] StringMatcherParseError),
 
-    /// Invalid build number
-    #[error("invalid build number: {0}")]
-    InvalidBuildNumber(#[from] ParseIntError),
+    /// Invalid build number spec
+    #[error("invalid build number spec: {0}")]
+    InvalidBuildNumber(#[from] ParseBuildNumberSpecError),
 
     /// Unable to parse hash digest from hex
     #[error("Unable to parse hash digest from hex")]
@@ -205,7 +205,7 @@ fn parse_bracket_vec_into_components(
         match key {
             "version" => match_spec.version = Some(VersionSpec::from_str(value)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
-            "build_number" => match_spec.build_number = Some(value.parse()?),
+            "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "sha256" => {
                 match_spec.sha256 = Some(
                     parse_digest_from_hex::<Sha256>(value)
@@ -473,7 +473,7 @@ mod tests {
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::match_spec::parse::parse_bracket_list;
-    use crate::{NamelessMatchSpec, VersionSpec};
+    use crate::{BuildNumberSpec, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
@@ -579,6 +579,16 @@ mod tests {
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(spec.channel, Some("conda-forge".to_string()));
+
+        let spec =
+            MatchSpec::from_str(r#"conda-forge::foo[version=1.0.*, build_number=">6"]"#).unwrap();
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(spec.channel, Some("conda-forge".to_string()));
+        assert_eq!(
+            spec.build_number,
+            Some(BuildNumberSpec::from_str(">6").unwrap())
+        );
     }
 
     #[test]
