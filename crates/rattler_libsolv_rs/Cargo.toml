@@ -19,3 +19,4 @@ elsa = "1.9.0"
 [dev-dependencies]
 insta = "1.31.0"
 indexmap = "2.0.0"
+tracing-test = "0.2.4"

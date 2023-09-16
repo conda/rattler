@@ -1,4 +1,7 @@
 use crate::arena::ArenaId;
+use crate::solvable::DisplaySolvable;
+use crate::{PackageName, Pool, VersionSet};
+use std::fmt::Display;
 
 /// The id associated to a package name
 #[repr(transparent)]
@@ -50,6 +53,14 @@ impl SolvableId {
 
     pub(crate) fn is_null(self) -> bool {
         self.0 == u32::MAX
+    }
+
+    /// Returns an object that enables formatting the solvable.
+    pub fn display<VS: VersionSet, N: PackageName + Display>(
+        self,
+        pool: &Pool<VS, N>,
+    ) -> DisplaySolvable<VS, N> {
+        pool.resolve_internal_solvable(self).display(pool)
     }
 }
 
