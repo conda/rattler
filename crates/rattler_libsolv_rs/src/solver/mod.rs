@@ -11,7 +11,6 @@ use crate::{
 };
 
 use elsa::{FrozenMap, FrozenVec};
-use itertools::Itertools;
 use std::{collections::HashSet, fmt::Display, marker::PhantomData};
 
 use clause::{Clause, ClauseState, Literal};
@@ -454,10 +453,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         .map_err(|_| clause_id)?;
 
                     if decided {
-                        tracing::info!(
-                            "Set {} = false",
-                            self.pool().resolve_internal_solvable(solvable_id)
-                        );
+                        tracing::info!("Set {} = false", solvable_id.display(self.pool()));
                     }
                 }
             }
@@ -552,9 +548,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         level += 1;
 
         tracing::info!(
-            "=== Install {} at level {level} (required by {})",
-            self.pool().resolve_internal_solvable(solvable),
-            self.pool().resolve_internal_solvable(required_by),
+            "╤══ Install {} at level {level} (required by {})",
+            solvable.display(self.pool()),
+            required_by.display(self.pool()),
         );
 
         self.decision_tracker
@@ -565,22 +561,22 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             let r = self.propagate(level);
             let Err((conflicting_solvable, attempted_value, conflicting_clause)) = r else {
                 // Propagation succeeded
-                tracing::info!("=== Propagation succeeded");
+                tracing::info!("╘══ Propagation succeeded");
                 break;
             };
 
             {
                 tracing::info!(
-                    "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self.pool().resolve_internal_solvable(conflicting_solvable)
+                    "├─ Propagation conflicted: could not set {solvable} to {attempted_value}",
+                    solvable = solvable.display(self.pool())
                 );
                 tracing::info!(
-                    "During unit propagation for clause: {:?}",
+                    "│  During unit propagation for clause: {:?}",
                     self.clauses[conflicting_clause].debug(self.pool())
                 );
 
                 tracing::info!(
-                    "Previously decided value: {}. Derived from: {:?}",
+                    "│  Previously decided value: {}. Derived from: {:?}",
                     !attempted_value,
                     self.clauses[self
                         .decision_tracker
@@ -594,7 +590,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             }
 
             if level == 1 {
-                tracing::info!("=== UNSOLVABLE");
+                tracing::info!("╘══ UNSOLVABLE");
                 for decision in self.decision_tracker.stack() {
                     let clause = &self.clauses[decision.derived_from];
                     let level = self.decision_tracker.level(decision.solvable_id);
@@ -607,7 +603,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool().resolve_internal_solvable(decision.solvable_id),
+                        decision.solvable_id.display(self.pool()),
                         clause.debug(self.pool()),
                     );
                 }
@@ -619,7 +615,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 self.analyze(level, conflicting_solvable, conflicting_clause);
             level = new_level;
 
-            tracing::info!("=== Backtracked to level {level}");
+            tracing::info!("├─ Backtracked to level {level}");
 
             // Optimization: propagate right now, since we know that the clause is a unit clause
             let decision = literal.satisfying_value();
@@ -630,8 +626,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 )
                 .expect("bug: solvable was already decided!");
             tracing::info!(
-                "=== Propagate after learn: {} = {decision}",
-                self.pool().resolve_internal_solvable(literal.solvable_id)
+                "├─ Propagate after learn: {} = {decision}",
+                literal.solvable_id.display(self.pool())
             );
         }
 
@@ -674,8 +670,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             if decided {
                 tracing::info!(
-                    "Propagate assertion {} = {}",
-                    self.pool().resolve_internal_solvable(literal.solvable_id),
+                    "├─ Propagate assertion {} = {}",
+                    literal.solvable_id.display(self.pool()),
                     decision
                 );
             }
@@ -766,10 +762,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                 Clause::ForbidMultipleInstances(..) => {}
                                 _ => {
                                     tracing::info!(
-                                        "Propagate {} = {}. {:?}",
-                                        self.provider
-                                            .pool()
-                                            .resolve_internal_solvable(remaining_watch.solvable_id),
+                                        "├─ Propagate {} = {}. {:?}",
+                                        remaining_watch.solvable_id.display(self.provider.pool()),
                                         remaining_watch.satisfying_value(),
                                         clause.debug(self.provider.pool()),
                                     );
@@ -983,16 +977,14 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             self.watches.start_watching(clause, clause_id);
         }
 
-        tracing::info!(
-            "Learnt disjunction:\n{}",
-            learnt
-                .into_iter()
-                .format_with("\n", |lit, f| f(&format_args!(
-                    "- {}{}",
-                    if lit.negate { "NOT " } else { "" },
-                    self.pool().resolve_internal_solvable(lit.solvable_id)
-                )))
-        );
+        tracing::info!("├─ Learnt disjunction:",);
+        for lit in learnt {
+            tracing::info!(
+                "│  - {}{}",
+                if lit.negate { "NOT " } else { "" },
+                lit.solvable_id.display(self.pool())
+            );
+        }
 
         // Should revert at most to the root level
         let target_level = back_track_to.max(1);
@@ -1289,7 +1281,7 @@ mod test {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in solvables {
-            writeln!(buf, "{}", pool.resolve_internal_solvable(solvable_id)).unwrap();
+            writeln!(buf, "{}", solvable_id.display(pool)).unwrap();
         }
 
         buf
@@ -1413,8 +1405,12 @@ mod test {
         use std::fmt::Write;
         let mut display_result = String::new();
         for &solvable_id in &solved {
-            let solvable = solver.pool().resolve_internal_solvable(solvable_id);
-            writeln!(display_result, "{solvable}").unwrap();
+            writeln!(
+                display_result,
+                "{solvable}",
+                solvable = solvable_id.display(solver.pool())
+            )
+            .unwrap();
         }
 
         insta::assert_snapshot!(display_result);
@@ -1521,8 +1517,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        1
+        b=2
+        a=1
         "###);
     }
     //
@@ -1554,9 +1550,9 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        2
-        2
+        b=2
+        c=2
+        a=2
         "###);
     }
 
@@ -1572,8 +1568,8 @@ mod test {
 
         let result = transaction_to_string(&solver.pool(), &solved);
         insta::assert_snapshot!(result, @r###"
-        2
-        5
+        a=2
+        b=5
         "###);
     }
 
@@ -1715,5 +1711,63 @@ mod test {
         provider.add_package("c", 8.into(), &vec![], &vec!["b 0..50"]);
         let error = solve_unsat(provider, &["a", "c"]);
         insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_unsat_constrains_2() {
+        let mut provider = BundleBoxProvider::from_packages(&[
+            ("a", 1, vec!["b"]),
+            ("a", 2, vec!["b"]),
+            ("b", 1, vec!["c 1"]),
+            ("b", 2, vec!["c 2"]),
+        ]);
+
+        provider.add_package("c", 1.into(), &vec![], &vec!["a 3"]);
+        provider.add_package("c", 2.into(), &vec![], &vec!["a 3"]);
+        let error = solve_unsat(provider, &["a"]);
+        insta::assert_snapshot!(error);
+    }
+
+    #[test]
+    fn test_missing_dep() {
+        let provider =
+            BundleBoxProvider::from_packages(&[("a", 2, vec!["missing"]), ("a", 1, vec![])]);
+        let requirements = provider.requirements(&["a"]);
+        let mut solver = Solver::new(provider);
+        let result = match solver.solve(requirements) {
+            Ok(result) => transaction_to_string(solver.pool(), &result),
+            Err(problem) => problem
+                .display_user_friendly(&solver, &DefaultSolvableDisplay)
+                .to_string(),
+        };
+        insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_no_backtracking() {
+        let provider = BundleBoxProvider::from_packages(&[
+            ("quetz-server", 2, vec!["pydantic 10..20"]),
+            ("quetz-server", 1, vec!["pydantic 0..10"]),
+            ("pydantic", 1, vec![]),
+            ("pydantic", 2, vec![]),
+            ("pydantic", 3, vec![]),
+            ("pydantic", 4, vec![]),
+            ("pydantic", 5, vec![]),
+            ("pydantic", 6, vec![]),
+            ("pydantic", 7, vec![]),
+            ("pydantic", 8, vec![]),
+            ("pydantic", 9, vec![]),
+            ("pydantic", 10, vec![]),
+            ("pydantic", 11, vec![]),
+            ("pydantic", 12, vec![]),
+            ("pydantic", 13, vec![]),
+            ("pydantic", 14, vec![]),
+        ]);
+        let requirements = provider.requirements(&["quetz-server", "pydantic 0..10"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
+        insta::assert_snapshot!(transaction_to_string(solver.pool(), &solved));
     }
 }
