@@ -189,7 +189,7 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
 }
 
 /// Parses a version constraint.
-pub(crate) fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
+pub fn constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
     alt((
         regex_constraint_parser,
         any_constraint_parser,

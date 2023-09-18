@@ -13,12 +13,8 @@ pub(crate) struct WatchMap {
 impl WatchMap {
     pub(crate) fn new() -> Self {
         Self {
-            map: Mapping::empty(),
+            map: Mapping::new(),
         }
-    }
-
-    pub(crate) fn initialize(&mut self, solvable_count: usize) {
-        self.map = Mapping::new(vec![ClauseId::null(); solvable_count]);
     }
 
     pub(crate) fn start_watching(&mut self, clause: &mut ClauseState, clause_id: ClauseId) {
@@ -45,23 +41,33 @@ impl WatchMap {
             predecessor_clause.unlink_clause(clause, previous_watch, watch_index);
         } else {
             // This was the first clause in the chain
-            self.map[previous_watch] = clause.get_linked_clause(watch_index);
+            self.map
+                .insert(previous_watch, clause.get_linked_clause(watch_index));
         }
 
         // Set the new watch
         clause.watched_literals[watch_index] = new_watch;
-        clause.link_to_clause(watch_index, self.map[new_watch]);
-        self.map[new_watch] = clause_id;
+        clause.link_to_clause(
+            watch_index,
+            *self
+                .map
+                .get(new_watch)
+                .expect("linking to unknown solvable"),
+        );
+        self.map.insert(new_watch, clause_id);
     }
 
     pub(crate) fn first_clause_watching_solvable(
         &mut self,
         watched_solvable: SolvableId,
     ) -> ClauseId {
-        self.map[watched_solvable]
+        self.map
+            .get(watched_solvable)
+            .copied()
+            .unwrap_or(ClauseId::null())
     }
 
     pub(crate) fn watch_solvable(&mut self, watched_solvable: SolvableId, id: ClauseId) {
-        self.map[watched_solvable] = id;
+        self.map.insert(watched_solvable, id);
     }
 }

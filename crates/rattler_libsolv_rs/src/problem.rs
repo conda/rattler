@@ -305,7 +305,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_internal_solvable(solvable_2).to_string()
+                        solvable_2.display(pool).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
@@ -313,7 +313,8 @@ impl ProblemGraph {
                 write!(
                     f,
                     "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
-                    solvable, target
+                    solvable.display(pool),
+                    target
                 )?;
             }
         }
