@@ -321,6 +321,7 @@ impl ProblemGraph {
         write!(f, "}}")
     }
 
+    /// Simplifies and collapses nodes so that these can be considered the same candidate
     fn simplify<VS: VersionSet, N: PackageName>(
         &self,
         pool: &Pool<VS, N>,
@@ -370,8 +371,6 @@ impl ProblemGraph {
         }
 
         let mut merged_candidates = HashMap::default();
-        // TODO: could probably use `sort_candidates` by the dependency provider directly
-        // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
         for m in maybe_merge.into_values() {
             if m.len() > 1 {
                 let m = Rc::new(MergedProblemNode {

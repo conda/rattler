@@ -31,7 +31,7 @@ pub use solver::Solver;
 /// single variant. Variants are grouped by their respective package name. A package name is
 /// anything that we can compare and hash for uniqueness checks.
 ///
-/// For most implementations a package name can simply be a string. But in some more advanced cases
+/// For most implementations a package name can simply be a String. But in some more advanced cases
 /// like when a single package can have additive features it can make sense to create a custom type.
 ///
 /// A blanket trait implementation is provided for any type that implements [`Eq`] and [`Hash`].
