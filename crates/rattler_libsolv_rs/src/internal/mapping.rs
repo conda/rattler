@@ -1,9 +1,7 @@
 use crate::internal::arena::ArenaId;
-use std::{
-    marker::PhantomData,
-};
 use std::cmp;
 use std::iter::FusedIterator;
+use std::marker::PhantomData;
 
 const VALUES_PER_CHUNK: usize = 128;
 
