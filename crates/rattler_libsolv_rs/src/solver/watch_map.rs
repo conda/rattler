@@ -1,7 +1,7 @@
-use crate::id::ClauseId;
-use crate::id::SolvableId;
-use crate::mapping::Mapping;
-use crate::solver::clause::ClauseState;
+use crate::{
+    internal::{id::ClauseId, id::SolvableId, mapping::Mapping},
+    solver::clause::ClauseState,
+};
 
 /// A map from solvables to the clauses that are watching them
 pub(crate) struct WatchMap {

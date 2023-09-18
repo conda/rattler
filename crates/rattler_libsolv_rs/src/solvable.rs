@@ -1,9 +1,12 @@
-use crate::id::NameId;
+use crate::internal::id::NameId;
 
 use crate::{PackageName, Pool, VersionSet};
 use std::fmt::{Display, Formatter};
 
 /// A solvable represents a single candidate of a package.
+/// This is type is generic on `V` which can be supplied by the user. In most cases this is going
+/// to be something like a record that contains the version of the package and other metadata.
+/// A solvable is always associated with a [`NameId`], which is an interned name in the [`Pool`].
 pub struct Solvable<V> {
     pub(crate) inner: V,
     pub(crate) name: NameId,

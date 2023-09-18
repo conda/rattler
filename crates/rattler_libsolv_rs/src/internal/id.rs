@@ -1,4 +1,4 @@
-use crate::arena::ArenaId;
+use crate::internal::arena::ArenaId;
 use crate::solvable::DisplaySolvable;
 use crate::{PackageName, Pool, VersionSet};
 use std::fmt::Display;

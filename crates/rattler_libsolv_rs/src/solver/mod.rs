@@ -1,9 +1,10 @@
 use crate::{
-    arena::{Arena, ArenaId},
-    frozen_copy_map::FrozenCopyMap,
-    id::{CandidatesId, ClauseId, DependenciesId, SolvableId},
-    id::{LearntClauseId, NameId},
-    mapping::Mapping,
+    internal::{
+        arena::{Arena, ArenaId},
+        frozen_copy_map::FrozenCopyMap,
+        id::{CandidatesId, ClauseId, DependenciesId, LearntClauseId, NameId, SolvableId},
+        mapping::Mapping,
+    },
     pool::Pool,
     problem::Problem,
     solvable::SolvableInner,
@@ -25,9 +26,6 @@ mod decision_tracker;
 mod watch_map;
 
 /// Drives the SAT solving process
-///
-/// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
-/// comes from the original `PackageRecord`s)
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
 
@@ -1010,12 +1008,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Candidates, DefaultSolvableDisplay, Dependencies};
+    use crate::{range::Range, Candidates, DefaultSolvableDisplay, Dependencies};
     use indexmap::IndexMap;
+    use std::num::ParseIntError;
     use std::{
         collections::HashMap,
         fmt::{Debug, Display, Formatter},
-        ops::Range,
         str::FromStr,
     };
 
@@ -1055,29 +1053,23 @@ mod test {
         }
     }
 
+    impl FromStr for Pack {
+        type Err = ParseIntError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            u32::from_str(s).map(Self)
+        }
+    }
+
     /// We can use this to see if a `Pack` is contained in a range of package versions or a `Spec`
     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     struct Spec {
         name: String,
-        versions: PackRange,
-    }
-
-    #[repr(transparent)]
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    struct PackRange(Option<Range<u32>>);
-
-    impl Display for PackRange {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            if let Some(versions) = &self.0 {
-                write!(f, "{}..{}", versions.start, versions.end)
-            } else {
-                write!(f, "*")
-            }
-        }
+        versions: Range<Pack>,
     }
 
     impl Spec {
-        pub fn new(name: String, versions: PackRange) -> Self {
+        pub fn new(name: String, versions: Range<Pack>) -> Self {
             Self { name, versions }
         }
     }
@@ -1092,19 +1084,20 @@ mod test {
                 .expect("spec does not have a name")
                 .to_string();
 
-            fn version_range(s: Option<&&str>) -> PackRange {
+            fn version_range(s: Option<&&str>) -> Range<Pack> {
                 if let Some(s) = s {
-                    let split = s.split("..").collect::<Vec<_>>();
-                    let start = split[0].parse().unwrap();
-                    PackRange(Some(Range {
-                        start,
-                        end: split
-                            .get(1)
-                            .map(|s| s.parse().unwrap())
-                            .unwrap_or_else(|| start + 1),
-                    }))
+                    let (start, end) = s
+                        .split_once("..")
+                        .map_or((*s, None), |(start, end)| (start, Some(end)));
+                    let start: Pack = start.parse().unwrap();
+                    let end = end
+                        .map(FromStr::from_str)
+                        .transpose()
+                        .unwrap()
+                        .unwrap_or(Pack(start.0 + 1));
+                    Range::between(start, end)
                 } else {
-                    PackRange(None)
+                    Range::full()
                 }
             }
 
@@ -1114,22 +1107,10 @@ mod test {
         }
     }
 
-    impl VersionSet for PackRange {
-        type V = Pack;
-
-        fn contains(&self, v: &Self::V) -> bool {
-            if let Some(versions) = &self.0 {
-                versions.contains(&v.0)
-            } else {
-                true
-            }
-        }
-    }
-
     /// This provides sorting functionality for our `BundleBox` packaging system
     #[derive(Default)]
     struct BundleBoxProvider {
-        pool: Pool<PackRange>,
+        pool: Pool<Range<Pack>>,
         packages: IndexMap<String, IndexMap<Pack, BundleBoxPackageDependencies>>,
         favored: HashMap<String, Pack>,
         locked: HashMap<String, Pack>,
@@ -1205,14 +1186,14 @@ mod test {
         }
     }
 
-    impl DependencyProvider<PackRange> for BundleBoxProvider {
-        fn pool(&self) -> &Pool<PackRange> {
+    impl DependencyProvider<Range<Pack>> for BundleBoxProvider {
+        fn pool(&self) -> &Pool<Range<Pack>> {
             &self.pool
         }
 
         fn sort_candidates(
             &self,
-            _solver: &Solver<PackRange, String, Self>,
+            _solver: &Solver<Range<Pack>, String, Self>,
             solvables: &mut [SolvableId],
         ) {
             solvables.sort_by(|a, b| {

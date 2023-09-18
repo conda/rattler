@@ -1,9 +1,9 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1646
+assertion_line: 1579
 expression: error
 ---
 asdf * cannot be installed because there are no viable options:
 |-- asdf 1 would require
-    |-- c 2..3, for which no candidates were found.
+    |-- c >=2, <3, for which no candidates were found.
 
