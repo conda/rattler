@@ -5,6 +5,10 @@ use std::{
     str::FromStr,
 };
 
+pub trait Matcher<Element: ?Sized> {
+    fn matches(&self, other: &Element) -> bool;
+}
+
 /// Match a given string either by exact match, glob or regex
 #[derive(Debug, Clone)]
 pub enum StringMatcher {
@@ -41,9 +45,9 @@ impl PartialEq for StringMatcher {
     }
 }
 
-impl StringMatcher {
+impl Matcher<str> for StringMatcher {
     /// Match string against [`StringMatcher`].
-    pub fn matches(&self, other: &str) -> bool {
+    fn matches(&self, other: &str) -> bool {
         match self {
             StringMatcher::Exact(s) => s == other,
             StringMatcher::Glob(glob) => glob.matches(other),

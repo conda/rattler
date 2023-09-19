@@ -8,7 +8,7 @@ use std::hash::Hash;
 pub mod matcher;
 pub mod parse;
 
-use matcher::StringMatcher;
+use matcher::{Matcher, StringMatcher};
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
