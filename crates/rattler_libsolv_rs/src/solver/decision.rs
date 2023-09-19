@@ -1,4 +1,4 @@
-use crate::id::{ClauseId, SolvableId};
+use crate::internal::id::{ClauseId, SolvableId};
 
 /// Represents an assignment to a variable
 #[derive(Copy, Clone, Eq, PartialEq)]

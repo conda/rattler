@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1720
+assertion_line: 1684
 expression: error
 ---
 The following packages are incompatible
@@ -8,8 +8,8 @@ The following packages are incompatible
     |-- a 9 | 10 would require
         |-- b *, which can be installed with any of the following options:
             |-- b 42 | 100 would require
-                |-- c 0..100, which can be installed with any of the following options:
+                |-- c >=0, <100, which can be installed with any of the following options:
                     |-- c 99
-|-- c 101..104 cannot be installed because there are no viable options:
+|-- c >=101, <104 cannot be installed because there are no viable options:
     |-- c 101 | 103, which conflicts with the versions reported above.
 

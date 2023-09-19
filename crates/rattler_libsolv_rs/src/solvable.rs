@@ -1,9 +1,12 @@
-use crate::id::NameId;
+use crate::internal::id::NameId;
 
-use crate::{PackageName, Pool, SolvableId, VersionSet};
+use crate::{PackageName, Pool, VersionSet};
 use std::fmt::{Display, Formatter};
 
 /// A solvable represents a single candidate of a package.
+/// This is type is generic on `V` which can be supplied by the user. In most cases this is going
+/// to be something like a record that contains the version of the package and other metadata.
+/// A solvable is always associated with a [`NameId`], which is an interned name in the [`Pool`].
 pub struct Solvable<V> {
     pub(crate) inner: V,
     pub(crate) name: NameId,
@@ -59,25 +62,25 @@ impl<V> InternalSolvable<V> {
         self.get_solvable().expect("unexpected root solvable")
     }
 
-    pub fn display<'a, VS: VersionSet<V = V>, N: PackageName + Display>(
-        &'a self,
-        pool: &'a Pool<VS, N>,
-    ) -> SolvableDisplay<VS, N> {
-        SolvableDisplay {
+    pub fn display<'pool, VS: VersionSet<V = V>, N: PackageName + Display>(
+        &'pool self,
+        pool: &'pool Pool<VS, N>,
+    ) -> DisplaySolvable<'pool, VS, N> {
+        DisplaySolvable {
             pool,
-            solvable_id: self,
+            solvable: self,
         }
     }
 }
 
-pub struct SolvableDisplay<'pool, VS: VersionSet, N: PackageName + Display> {
+pub struct DisplaySolvable<'pool, VS: VersionSet, N: PackageName> {
     pool: &'pool Pool<VS, N>,
-    solvable_id: &'pool InternalSolvable<VS::V>,
+    solvable: &'pool InternalSolvable<VS::V>,
 }
 
-impl<'pool, VS: VersionSet, N: PackageName + Display> Display for SolvableDisplay<'pool, VS, N> {
+impl<'pool, VS: VersionSet, N: PackageName + Display> Display for DisplaySolvable<'pool, VS, N> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match &self.solvable_id.inner {
+        match &self.solvable.inner {
             SolvableInner::Root => write!(f, "<root>"),
             SolvableInner::Package(p) => {
                 write!(f, "{}={}", self.pool.resolve_package_name(p.name), &p.inner)

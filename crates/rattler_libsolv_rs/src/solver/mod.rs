@@ -1,16 +1,18 @@
 use crate::{
-    arena::{Arena, ArenaId},
-    id::{ClauseId, SolvableId},
-    id::{LearntClauseId, NameId},
-    mapping::Mapping,
+    internal::{
+        arena::{Arena, ArenaId},
+        id::{ClauseId, LearntClauseId, NameId, SolvableId},
+        mapping::Mapping,
+    },
     pool::Pool,
     problem::Problem,
     solvable::SolvableInner,
     DependencyProvider, PackageName, VersionSet, VersionSetId,
 };
+use std::collections::HashSet;
+use std::fmt::Display;
 
 use itertools::Itertools;
-use std::{collections::HashSet, fmt::Display};
 
 pub use cache::SolverCache;
 use clause::{Clause, ClauseState, Literal};
@@ -26,9 +28,6 @@ mod decision_tracker;
 mod watch_map;
 
 /// Drives the SAT solving process
-///
-/// Keeps solvables in a `Pool`, which contains references to `PackageRecord`s (the `'a` lifetime
-/// comes from the original `PackageRecord`s)
 pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     pub(crate) cache: SolverCache<VS, N, D>,
 
@@ -569,13 +568,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         level += 1;
 
         tracing::info!(
-            "=== Install {} at level {level} (required by {})",
-            self.pool()
-                .resolve_internal_solvable(solvable)
-                .display(self.pool()),
-            self.pool()
-                .resolve_internal_solvable(required_by)
-                .display(self.pool()),
+            "╤══ Install {} at level {level} (required by {})",
+            solvable.display(self.pool()),
+            required_by.display(self.pool()),
         );
 
         // Add clauses for the solvable. Might result in incompatibility.
@@ -598,25 +593,22 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             let r = self.propagate(level);
             let Err((conflicting_solvable, attempted_value, conflicting_clause)) = r else {
                 // Propagation succeeded
-                tracing::info!("=== Propagation succeeded");
+                tracing::info!("╘══ Propagation succeeded");
                 break;
             };
 
             {
                 tracing::info!(
-                    "=== Propagation conflicted: could not set {solvable} to {attempted_value}",
-                    solvable = self
-                        .pool()
-                        .resolve_internal_solvable(conflicting_solvable)
-                        .display(self.pool())
+                    "├─ Propagation conflicted: could not set {solvable} to {attempted_value}",
+                    solvable = solvable.display(self.pool())
                 );
                 tracing::info!(
-                    "During unit propagation for clause: {:?}",
+                    "│  During unit propagation for clause: {:?}",
                     self.clauses[conflicting_clause].debug(self.pool())
                 );
 
                 tracing::info!(
-                    "Previously decided value: {}. Derived from: {:?}",
+                    "│  Previously decided value: {}. Derived from: {:?}",
                     !attempted_value,
                     self.clauses[self
                         .decision_tracker
@@ -630,7 +622,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             }
 
             if level == 1 {
-                tracing::info!("=== UNSOLVABLE");
+                tracing::info!("╘══ UNSOLVABLE");
                 for decision in self.decision_tracker.stack() {
                     let clause = &self.clauses[decision.derived_from];
                     let level = self.decision_tracker.level(decision.solvable_id);
@@ -643,9 +635,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
                     tracing::info!(
                         "* ({level}) {action} {}. Reason: {:?}",
-                        self.pool()
-                            .resolve_internal_solvable(decision.solvable_id)
-                            .display(self.pool()),
+                        decision.solvable_id.display(self.pool()),
                         clause.debug(self.pool()),
                     );
                 }
@@ -657,7 +647,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 self.analyze(level, conflicting_solvable, conflicting_clause);
             level = new_level;
 
-            tracing::info!("=== Backtracked to level {level}");
+            tracing::info!("├─ Backtracked to level {level}");
 
             // Optimization: propagate right now, since we know that the clause is a unit clause
             let decision = literal.satisfying_value();
@@ -669,10 +659,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             self.lazy_add_decision(literal.solvable_id, decision, learned_clause_id, level)
                 .expect("bug: solvable was already decided!");
             tracing::info!(
-                "=== Propagate after learn: {} = {decision}",
-                self.pool()
-                    .resolve_internal_solvable(literal.solvable_id)
-                    .display(self.pool())
+                "├─ Propagate after learn: {} = {decision}",
+                literal.solvable_id.display(self.pool())
             );
         }
 
@@ -721,10 +709,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             if decided {
                 tracing::info!(
-                    "Propagate assertion {} = {}",
-                    self.pool()
-                        .resolve_internal_solvable(literal.solvable_id)
-                        .display(self.pool()),
+                    "├─ Propagate assertion {} = {}",
+                    literal.solvable_id.display(self.pool()),
                     decision
                 );
             }
@@ -821,12 +807,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         //         Clause::ForbidMultipleInstances(..) => {}
                         //         _ => {
                         //             tracing::info!(
-                        //                 "Propagate {} = {}. {:?}",
-                        //                 self.cache
-                        //                     .pool()
-                        //                     .resolve_internal_solvable(remaining_watch.solvable_id),
+                        //                 "├─ Propagate {} = {}. {:?}",
+                        //                 remaining_watch.solvable_id.display(self.provider.pool()),
                         //                 remaining_watch.satisfying_value(),
-                        //                 clause.debug(self.cache.pool()),
+                        //                 clause.debug(self.provider.pool()),
                         //             );
                         //         }
                         //     }
@@ -1038,18 +1022,14 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             self.watches.start_watching(clause, clause_id);
         }
 
-        tracing::info!(
-            "Learnt disjunction:\n{}",
-            learnt
-                .into_iter()
-                .format_with("\n", |lit, f| f(&format_args!(
-                    "- {}{}",
-                    if lit.negate { "NOT " } else { "" },
-                    self.pool()
-                        .resolve_internal_solvable(lit.solvable_id)
-                        .display(self.pool())
-                )))
-        );
+        tracing::info!("├─ Learnt disjunction:",);
+        for lit in learnt {
+            tracing::info!(
+                "│  - {}{}",
+                if lit.negate { "NOT " } else { "" },
+                lit.solvable_id.display(self.pool())
+            );
+        }
 
         // Should revert at most to the root level
         let target_level = back_track_to.max(1);
@@ -1075,12 +1055,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{Candidates, DefaultSolvableDisplay, Dependencies};
+    use crate::{range::Range, Candidates, DefaultSolvableDisplay, Dependencies};
     use indexmap::IndexMap;
+    use std::num::ParseIntError;
     use std::{
         collections::HashMap,
         fmt::{Debug, Display, Formatter},
-        ops::Range,
         str::FromStr,
     };
     use tracing_test::traced_test;
@@ -1121,29 +1101,23 @@ mod test {
         }
     }
 
+    impl FromStr for Pack {
+        type Err = ParseIntError;
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            u32::from_str(s).map(Self)
+        }
+    }
+
     /// We can use this to see if a `Pack` is contained in a range of package versions or a `Spec`
     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     struct Spec {
         name: String,
-        versions: PackRange,
-    }
-
-    #[repr(transparent)]
-    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-    struct PackRange(Option<Range<u32>>);
-
-    impl Display for PackRange {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            if let Some(versions) = &self.0 {
-                write!(f, "{}..{}", versions.start, versions.end)
-            } else {
-                write!(f, "*")
-            }
-        }
+        versions: Range<Pack>,
     }
 
     impl Spec {
-        pub fn new(name: String, versions: PackRange) -> Self {
+        pub fn new(name: String, versions: Range<Pack>) -> Self {
             Self { name, versions }
         }
     }
@@ -1158,19 +1132,20 @@ mod test {
                 .expect("spec does not have a name")
                 .to_string();
 
-            fn version_range(s: Option<&&str>) -> PackRange {
+            fn version_range(s: Option<&&str>) -> Range<Pack> {
                 if let Some(s) = s {
-                    let split = s.split("..").collect::<Vec<_>>();
-                    let start = split[0].parse().unwrap();
-                    PackRange(Some(Range {
-                        start,
-                        end: split
-                            .get(1)
-                            .map(|s| s.parse().unwrap())
-                            .unwrap_or_else(|| start + 1),
-                    }))
+                    let (start, end) = s
+                        .split_once("..")
+                        .map_or((*s, None), |(start, end)| (start, Some(end)));
+                    let start: Pack = start.parse().unwrap();
+                    let end = end
+                        .map(FromStr::from_str)
+                        .transpose()
+                        .unwrap()
+                        .unwrap_or(Pack(start.0 + 1));
+                    Range::between(start, end)
                 } else {
-                    PackRange(None)
+                    Range::full()
                 }
             }
 
@@ -1180,22 +1155,10 @@ mod test {
         }
     }
 
-    impl VersionSet for PackRange {
-        type V = Pack;
-
-        fn contains(&self, v: &Self::V) -> bool {
-            if let Some(versions) = &self.0 {
-                versions.contains(&v.0)
-            } else {
-                true
-            }
-        }
-    }
-
     /// This provides sorting functionality for our `BundleBox` packaging system
     #[derive(Default)]
     struct BundleBoxProvider {
-        pool: Pool<PackRange>,
+        pool: Pool<Range<Pack>>,
         packages: IndexMap<String, IndexMap<Pack, BundleBoxPackageDependencies>>,
         favored: HashMap<String, Pack>,
         locked: HashMap<String, Pack>,
@@ -1271,14 +1234,14 @@ mod test {
         }
     }
 
-    impl DependencyProvider<PackRange> for BundleBoxProvider {
-        fn pool(&self) -> &Pool<PackRange> {
+    impl DependencyProvider<Range<Pack>> for BundleBoxProvider {
+        fn pool(&self) -> &Pool<Range<Pack>> {
             &self.pool
         }
 
         fn sort_candidates(
             &self,
-            _solver: &SolverCache<PackRange, String, Self>,
+            _solver: &SolverCache<Range<Pack>, String, Self>,
             solvables: &mut [SolvableId],
         ) {
             solvables.sort_by(|a, b| {
@@ -1347,8 +1310,7 @@ mod test {
         use std::fmt::Write;
         let mut buf = String::new();
         for &solvable_id in solvables {
-            let solvable = pool.resolve_solvable(solvable_id);
-            writeln!(buf, "{}={}", solvable.name.display(pool), solvable.inner).unwrap();
+            writeln!(buf, "{}", solvable_id.display(pool)).unwrap();
         }
 
         buf
@@ -1769,7 +1731,7 @@ mod test {
     }
 
     #[test]
-    #[traced_test]
+    #[tracing_test::traced_test]
     fn test_unsat_constrains_2() {
         let mut provider = BundleBoxProvider::from_packages(&[
             ("a", 1, vec!["b"]),
@@ -1797,5 +1759,32 @@ mod test {
                 .to_string(),
         };
         insta::assert_snapshot!(result);
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_no_backtracking() {
+        let provider = BundleBoxProvider::from_packages(&[
+            ("quetz-server", 2, vec!["pydantic 10..20"]),
+            ("quetz-server", 1, vec!["pydantic 0..10"]),
+            ("pydantic", 1, vec![]),
+            ("pydantic", 2, vec![]),
+            ("pydantic", 3, vec![]),
+            ("pydantic", 4, vec![]),
+            ("pydantic", 5, vec![]),
+            ("pydantic", 6, vec![]),
+            ("pydantic", 7, vec![]),
+            ("pydantic", 8, vec![]),
+            ("pydantic", 9, vec![]),
+            ("pydantic", 10, vec![]),
+            ("pydantic", 11, vec![]),
+            ("pydantic", 12, vec![]),
+            ("pydantic", 13, vec![]),
+            ("pydantic", 14, vec![]),
+        ]);
+        let requirements = provider.requirements(&["quetz-server", "pydantic 0..10"]);
+        let mut solver = Solver::new(provider);
+        let solved = solver.solve(requirements).unwrap();
+        insta::assert_snapshot!(transaction_to_string(solver.pool(), &solved));
     }
 }

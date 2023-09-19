@@ -1,7 +1,9 @@
-use crate::arena::Arena;
-use crate::frozen_copy_map::FrozenCopyMap;
-use crate::id::{CandidatesId, DependenciesId};
 use crate::{
+    internal::{
+        arena::Arena,
+        frozen_copy_map::FrozenCopyMap,
+        id::{CandidatesId, DependenciesId},
+    },
     Candidates, Dependencies, DependencyProvider, NameId, PackageName, Pool, SolvableId,
     VersionSet, VersionSetId,
 };

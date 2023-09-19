@@ -12,11 +12,12 @@ use petgraph::graph::{DiGraph, EdgeIndex, EdgeReference, NodeIndex};
 use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
-use crate::id::{ClauseId, SolvableId, VersionSetId};
-use crate::pool::Pool;
-use crate::solver::clause::Clause;
-use crate::solver::Solver;
-use crate::{DependencyProvider, PackageName, SolvableDisplay, VersionSet};
+use crate::{
+    internal::id::{ClauseId, SolvableId, VersionSetId},
+    pool::Pool,
+    solver::{clause::Clause, Solver},
+    DependencyProvider, PackageName, SolvableDisplay, VersionSet,
+};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -304,9 +305,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_internal_solvable(solvable_2)
-                            .display(pool)
-                            .to_string()
+                        solvable_2.display(pool).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
@@ -314,13 +313,15 @@ impl ProblemGraph {
                 write!(
                     f,
                     "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
-                    solvable.display(pool), target
+                    solvable.display(pool),
+                    target
                 )?;
             }
         }
         write!(f, "}}")
     }
 
+    /// Simplifies and collapses nodes so that these can be considered the same candidate
     fn simplify<VS: VersionSet, N: PackageName>(
         &self,
         pool: &Pool<VS, N>,
@@ -370,8 +371,6 @@ impl ProblemGraph {
         }
 
         let mut merged_candidates = HashMap::default();
-        // TODO: could probably use `sort_candidates` by the dependency provider directly
-        // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
         for m in maybe_merge.into_values() {
             if m.len() > 1 {
                 let m = Rc::new(MergedProblemNode {

@@ -1,4 +1,4 @@
-use crate::arena::ArenaId;
+use crate::internal::arena::ArenaId;
 use std::cmp;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
@@ -179,7 +179,7 @@ impl<'a, TId: ArenaId, TValue> FusedIterator for MappingIter<'a, TId, TValue> {}
 
 #[cfg(test)]
 mod tests {
-    use crate::arena::ArenaId;
+    use crate::internal::arena::ArenaId;
 
     struct Id {
         id: usize,
