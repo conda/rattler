@@ -5,7 +5,7 @@ use std::{
     str::FromStr,
 };
 
-pub trait Matcher<Element: ?Sized> {
+pub trait Matchable<Element: ?Sized> {
     fn matches(&self, other: &Element) -> bool;
 }
 
@@ -45,7 +45,7 @@ impl PartialEq for StringMatcher {
     }
 }
 
-impl Matcher<str> for StringMatcher {
+impl Matchable<str> for StringMatcher {
     /// Match string against [`StringMatcher`].
     fn matches(&self, other: &str) -> bool {
         match self {
