@@ -795,26 +795,25 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                             )
                             .map_err(|_| (remaining_watch.solvable_id, true, this_clause_id))?;
 
+                        if decided {
+                            match clause.kind {
+                                // Skip logging for ForbidMultipleInstances, which is so noisy
+                                Clause::ForbidMultipleInstances(..) => {}
+                                _ => {
+                                    tracing::info!(
+                                        "├─ Propagate {} = {}. {:?}",
+                                        remaining_watch.solvable_id.display(self.cache.pool()),
+                                        remaining_watch.satisfying_value(),
+                                        clause.debug(self.cache.pool()),
+                                    );
+                                }
+                            }
+                        }
+
                         if remaining_watch.satisfying_value() {
                             self.add_clauses_for_solvable(remaining_watch.solvable_id)
                                 .map_err(|cause| (remaining_watch.solvable_id, false, cause))?;
                         }
-
-                        // TODO: This is causing a lifetime issue. Can we solve that somehow?
-                        // if decided {
-                        //     match clause.kind {
-                        //         // Skip logging for ForbidMultipleInstances, which is so noisy
-                        //         Clause::ForbidMultipleInstances(..) => {}
-                        //         _ => {
-                        //             tracing::info!(
-                        //                 "├─ Propagate {} = {}. {:?}",
-                        //                 remaining_watch.solvable_id.display(self.provider.pool()),
-                        //                 remaining_watch.satisfying_value(),
-                        //                 clause.debug(self.provider.pool()),
-                        //             );
-                        //         }
-                        //     }
-                        // }
                     }
                 }
             }
