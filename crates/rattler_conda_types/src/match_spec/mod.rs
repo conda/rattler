@@ -8,7 +8,8 @@ use std::hash::Hash;
 pub mod matcher;
 pub mod parse;
 
-use matcher::{Matcher, StringMatcher};
+pub use matcher::Matchable;
+use matcher::StringMatcher;
 
 /// A [`MatchSpec`] is, fundamentally, a query language for conda packages. Any of the fields that
 /// comprise a [`crate::PackageRecord`] can be used to compose a [`MatchSpec`].
@@ -186,9 +187,9 @@ impl Display for MatchSpec {
     }
 }
 
-impl MatchSpec {
+impl Matchable<PackageRecord> for MatchSpec {
     /// Match a MatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PackageRecord) -> bool {
+    fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
             if name != &record.name {
                 return false;
@@ -221,7 +222,9 @@ impl MatchSpec {
 
         true
     }
+}
 
+impl MatchSpec {
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
     pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
         (
@@ -271,9 +274,9 @@ pub struct NamelessMatchSpec {
     pub sha256: Option<Sha256Hash>,
 }
 
-impl NamelessMatchSpec {
+impl Matchable<PackageRecord> for NamelessMatchSpec {
     /// Match a MatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PackageRecord) -> bool {
+    fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(spec) = self.version.as_ref() {
             if !spec.matches(&record.version) {
                 return false;
@@ -371,6 +374,7 @@ mod tests {
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
+    use super::matcher::Matchable;
     use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
     use std::hash::{Hash, Hasher};
 
