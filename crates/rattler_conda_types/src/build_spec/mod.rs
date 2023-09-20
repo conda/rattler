@@ -62,6 +62,9 @@ impl Display for BuildNumberSpec {
 }
 
 impl BuildNumberSpec {
+    // for PR #340 will allow this pass CI
+    // expect following PR where `matches` will be provided with an impl of publicly declared trait
+    #[allow(unused)]
     /// Returns whether the number matches the specification.
     /// Expected use is within match_spec::MatchSpec::matches
     pub fn matches(&self, build_num: &BuildNumber) -> bool {
