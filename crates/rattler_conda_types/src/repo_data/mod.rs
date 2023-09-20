@@ -20,8 +20,8 @@ use url::Url;
 use rattler_macros::sorted;
 
 use crate::{
-    package::IndexJson, utils::serde::DeserializeFromStrUnchecked, Channel, NoArchType,
-    PackageName, Platform, RepoDataRecord, VersionWithSource,
+    build_spec::BuildNumber, package::IndexJson, utils::serde::DeserializeFromStrUnchecked,
+    Channel, NoArchType, PackageName, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
@@ -79,7 +79,7 @@ pub struct PackageRecord {
     pub build: String,
 
     /// The build number of the package
-    pub build_number: u64,
+    pub build_number: BuildNumber,
 
     /// Additional constraints on packages. `constrains` are different from `depends` in that packages
     /// specified in `depends` must be installed next to this package, whereas packages specified in
