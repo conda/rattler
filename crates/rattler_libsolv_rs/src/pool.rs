@@ -1,16 +1,21 @@
 use std::fmt::{Display, Formatter};
 
-use crate::arena::Arena;
-use crate::id::{NameId, SolvableId, VersionSetId};
-use crate::solvable::{InternalSolvable, Solvable};
-use crate::FrozenCopyMap;
-use crate::{PackageName, VersionSet};
+use crate::{
+    internal::{
+        arena::Arena,
+        frozen_copy_map::FrozenCopyMap,
+        id::{NameId, SolvableId, VersionSetId},
+    },
+    solvable::{InternalSolvable, Solvable},
+    PackageName, VersionSet,
+};
 
 /// A pool that stores data related to the available packages.
 ///
 /// A pool never releases its memory until it is dropped. References returned by the pool will
 /// remain valid for the lifetime of the pool. This allows inserting into the pool without requiring
 /// a mutable reference to the pool.
+/// This is what we refer to as `Frozen` data can be added but old data can never be removed or mutated.
 pub struct Pool<VS: VersionSet, N: PackageName = String> {
     /// All the solvables that have been registered
     pub(crate) solvables: Arena<SolvableId, InternalSolvable<VS::V>>,

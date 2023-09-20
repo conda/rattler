@@ -1,4 +1,4 @@
-use crate::{arena::ArenaId, id::SolvableId};
+use crate::internal::{arena::ArenaId, id::SolvableId};
 use std::cmp::Ordering;
 
 /// Represents a decision (i.e. an assignment to a solvable) and the level at which it was made

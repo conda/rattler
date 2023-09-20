@@ -1,6 +1,8 @@
 use crate::{
-    arena::Arena,
-    id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
+    internal::{
+        arena::Arena,
+        id::{ClauseId, LearntClauseId, SolvableId, VersionSetId},
+    },
     pool::Pool,
     solver::decision_map::DecisionMap,
     PackageName, VersionSet,
@@ -490,15 +492,15 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} requires {match_spec}",
-                    self.pool.resolve_internal_solvable(solvable_id)
+                    solvable_id.display(self.pool),
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {
                 write!(
                     f,
                     "{} excludes {} by {}",
-                    self.pool.resolve_internal_solvable(s1),
-                    self.pool.resolve_internal_solvable(s2),
+                    s1.display(self.pool),
+                    s2.display(self.pool),
                     self.pool.resolve_version_set(vset_id)
                 )
             }
@@ -506,8 +508,8 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 write!(
                     f,
                     "{} is locked, so {} is forbidden",
-                    self.pool.resolve_internal_solvable(locked),
-                    self.pool.resolve_internal_solvable(forbidden)
+                    locked.display(self.pool),
+                    forbidden.display(self.pool)
                 )
             }
             Clause::ForbidMultipleInstances(s1, _) => {
@@ -526,7 +528,7 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arena::ArenaId;
+    use crate::internal::arena::ArenaId;
 
     fn clause(next_clauses: [ClauseId; 2], watched_solvables: [SolvableId; 2]) -> ClauseState {
         ClauseState {
