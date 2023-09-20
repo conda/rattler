@@ -28,7 +28,7 @@ impl BuildNumberSpec {
             ) => {
                 return Err(nom::Err::Failure(
                     ParseBuildNumberSpecError::InvalidOperator(
-                        ParseOrdOperatorError::InvalidOperator(op.to_owned()),
+                        ParseOrdOperatorError::InvalidOperator(op),
                     ),
                 ))
             }
