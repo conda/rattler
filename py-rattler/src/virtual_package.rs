@@ -29,11 +29,7 @@ impl PyVirtualPackage {
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {
         Ok(VirtualPackage::current()
-            .map(|vp| {
-                vp.iter()
-                    .map(|v| v.to_owned().into())
-                    .collect::<Vec<_>>()
-            })
+            .map(|vp| vp.iter().map(|v| v.to_owned().into()).collect::<Vec<_>>())
             .map_err(PyRattlerError::from)?)
     }
 }
