@@ -69,7 +69,6 @@ impl FallbackStorage {
         let file = std::fs::File::open(&self.path)?;
         let reader = std::io::BufReader::new(file);
         let dict = serde_json::from_reader(reader)?;
-        tracing::info!("read dict {:?}", dict);
         Ok(dict)
     }
 
