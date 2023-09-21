@@ -1,12 +1,16 @@
 mod channel;
 mod error;
+mod generic_virtual_package;
 mod match_spec;
 mod nameless_match_spec;
 mod networking;
+mod package_name;
 mod platform;
+mod prefix_record;
 mod repo_data;
 mod shell;
 mod version;
+mod virtual_package;
 
 use channel::{PyChannel, PyChannelConfig};
 use error::{
@@ -14,9 +18,12 @@ use error::{
     InvalidPackageNameException, InvalidUrlException, InvalidVersionException, ParseArchException,
     ParsePlatformException, PyRattlerError,
 };
+use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::PyAuthenticatedClient;
+use package_name::PyPackageName;
+use prefix_record::{PyPrefixPaths, PyPrefixRecord};
 use repo_data::package_record::PyPackageRecord;
 use version::PyVersion;
 
@@ -24,6 +31,7 @@ use pyo3::prelude::*;
 
 use platform::{PyArch, PyPlatform};
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
+use virtual_package::PyVirtualPackage;
 
 #[pymodule]
 fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
@@ -33,6 +41,7 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyNamelessMatchSpec>().unwrap();
 
     m.add_class::<PyPackageRecord>().unwrap();
+    m.add_class::<PyPackageName>().unwrap();
 
     m.add_class::<PyChannel>().unwrap();
     m.add_class::<PyChannelConfig>().unwrap();
@@ -46,6 +55,11 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyActivationResult>().unwrap();
     m.add_class::<PyShellEnum>().unwrap();
     m.add_class::<PyActivator>().unwrap();
+
+    m.add_class::<PyGenericVirtualPackage>().unwrap();
+    m.add_class::<PyVirtualPackage>().unwrap();
+    m.add_class::<PyPrefixRecord>().unwrap();
+    m.add_class::<PyPrefixPaths>().unwrap();
 
     // Exceptions
     m.add(
