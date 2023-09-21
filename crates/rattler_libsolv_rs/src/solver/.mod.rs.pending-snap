@@ -1,0 +1,15 @@
+{"run_id":"1695305259-894425000","line":1601,"new":{"module_name":"rattler_libsolv_rs__solver__test","snapshot_name":"resolve_cyclic","metadata":{"source":"crates/rattler_libsolv_rs/src/solver/mod.rs","assertion_line":1601,"expression":"result"},"snapshot":""},"old":{"module_name":"rattler_libsolv_rs__solver__test","metadata":{},"snapshot":"a=2\nb=5"}}
+{"run_id":"1695305259-894425000","line":1550,"new":{"module_name":"rattler_libsolv_rs__solver__test","snapshot_name":"resolve_favor_without_conflict","metadata":{"source":"crates/rattler_libsolv_rs/src/solver/mod.rs","assertion_line":1550,"expression":"result"},"snapshot":""},"old":{"module_name":"rattler_libsolv_rs__solver__test","metadata":{},"snapshot":"a=1\nb=2"}}
+{"run_id":"1695305259-894425000","line":1583,"new":{"module_name":"rattler_libsolv_rs__solver__test","snapshot_name":"resolve_favor_with_conflict","metadata":{"source":"crates/rattler_libsolv_rs/src/solver/mod.rs","assertion_line":1583,"expression":"result"},"snapshot":""},"old":{"module_name":"rattler_libsolv_rs__solver__test","metadata":{},"snapshot":"a=2\nb=2\nc=2"}}
+{"run_id":"1695305281-963717600","line":1550,"new":null,"old":null}
+{"run_id":"1695305281-963717600","line":1601,"new":null,"old":null}
+{"run_id":"1695305281-963717600","line":1583,"new":null,"old":null}
+{"run_id":"1695306712-514445200","line":1583,"new":null,"old":null}
+{"run_id":"1695306712-514445200","line":1601,"new":null,"old":null}
+{"run_id":"1695306712-514445200","line":1550,"new":null,"old":null}
+{"run_id":"1695306756-227148600","line":1582,"new":null,"old":null}
+{"run_id":"1695306756-227148600","line":1549,"new":null,"old":null}
+{"run_id":"1695306756-227148600","line":1600,"new":null,"old":null}
+{"run_id":"1695306788-851300200","line":1590,"new":null,"old":null}
+{"run_id":"1695306788-851300200","line":1572,"new":null,"old":null}
+{"run_id":"1695306788-851300200","line":1539,"new":null,"old":null}
