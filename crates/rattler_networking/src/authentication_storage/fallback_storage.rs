@@ -63,11 +63,13 @@ impl FallbackStorage {
     /// does not exist
     fn read_json(&self) -> Result<std::collections::HashMap<String, String>, FallbackStorageError> {
         if !self.path.exists() {
+            tracing::warn!("Cant find path for fall back storage on {}", self.path.to_string_lossy());
             return Ok(std::collections::HashMap::new());
         }
         let file = std::fs::File::open(&self.path)?;
         let reader = std::io::BufReader::new(file);
         let dict = serde_json::from_reader(reader)?;
+        tracing::info!("read dict {:?}", dict);
         Ok(dict)
     }
 
