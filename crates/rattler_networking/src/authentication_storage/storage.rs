@@ -19,8 +19,8 @@ pub struct AuthenticationStorage {
     /// in a global dictionary in the operating system
     pub store_key: String,
 
-    /// Fallback Storage
-    fallback_storage: fallback_storage::FallbackStorage,
+    /// Fallback Storage that will be used if the is no key store application available.
+    pub fallback_storage: fallback_storage::FallbackStorage,
 
     /// A cache so that we don't have to access the keyring all the time
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,

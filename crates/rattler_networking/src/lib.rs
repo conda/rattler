@@ -20,11 +20,21 @@ pub struct AuthenticatedClient {
     auth_storage: AuthenticationStorage,
 }
 
+/// Default location for fallback authentication storage.
+pub fn get_default_auth_store_location() -> PathBuf {
+    dirs::home_dir().unwrap().join(".rattler")
+}
+
+/// Setup default authentication storage
+pub fn default_authentication_storage() -> AuthenticationStorage {
+    AuthenticationStorage::new("rattler", &get_default_auth_store_location())
+}
+
 impl Default for AuthenticatedClient {
     fn default() -> Self {
         AuthenticatedClient {
             client: Client::default(),
-            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
+            auth_storage: default_authentication_storage(),
         }
     }
 }
@@ -140,7 +150,7 @@ impl Default for AuthenticatedClientBlocking {
     fn default() -> Self {
         AuthenticatedClientBlocking {
             client: Default::default(),
-            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
+            auth_storage: default_authentication_storage(),
         }
     }
 }
