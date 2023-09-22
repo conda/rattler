@@ -284,7 +284,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         assert!(self.decision_tracker.is_empty());
         let mut level = 0;
 
+        let mut new_clauses = Vec::new();
         loop {
+            // If the decision loop has been completely reset we want to
             if level == 0 {
                 level = 1;
                 // Assign `true` to the root solvable. This must be installed to satisfy the solution.
@@ -303,21 +305,25 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                     .expect("already decided");
 
                 // Add the clauses for the root solvable.
-                self.add_clauses_for_solvable(SolvableId::root());
+                new_clauses.append(&mut self.add_clauses_for_solvable(SolvableId::root()));
             }
 
-            // Add decisions for requirements that have become unassignable.
-            self.decide_requires_without_candidates()
-                .map_err(|clause_id| {
-                    dbg!("requires without candidates failed");
-                    self.analyze_unsolvable(clause_id)
-                })?;
+            // Add decisions for Require clauses that form unit clauses. E.g. require clauses that
+            // have no matching candidates.
+            self.decide_requires_without_candidates(&std::mem::replace(
+                &mut new_clauses,
+                Vec::new(),
+            ))
+            .map_err(|clause_id| {
+                dbg!("requires without candidates failed");
+                self.analyze_unsolvable(clause_id)
+            })?;
 
-            self.propagate(level)
-                .map_err(|(_, _, clause_id)| {
-                    dbg!("propagation failed");
-                    self.analyze_unsolvable(clause_id)
-                })?;
+            // Propagate any decisions from assignments above.
+            self.propagate(level).map_err(|(_, _, clause_id)| {
+                dbg!("propagation failed");
+                self.analyze_unsolvable(clause_id)
+            })?;
 
             // Enter the solver loop, return immediately if no new assignments have been made.
             level = self.resolve_dependencies(level)?;
@@ -352,11 +358,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             for solvable in new_solvables {
                 // Add the clauses for this particular solvable.
-                let clauses_for_solvable = self.add_clauses_for_solvable(solvable);
+                let mut clauses_for_solvable = self.add_clauses_for_solvable(solvable);
 
                 // Immediately assign unit clauses. If clause is found that is a unit clause we
                 // permanently fix that assignment to false and an error is returned.
-                for clause_id in clauses_for_solvable {
+                for clause_id in clauses_for_solvable.iter().copied() {
                     let clause = &self.clauses[clause_id];
 
                     let solvable_is_assigned =
@@ -384,13 +390,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                     clause = self.clauses[clause_id].debug(self.pool())
                                 );
 
-                                // let why = self
-                                //     .decision_tracker
-                                //     .find_clause_for_assignment(solvable)
-                                //     .expect("a decision must have been made");
-                                //
-                                // level = self.learn_from_conflict(level, solvable, true, why)?;
-                                // level = self.propagate_and_learn(level)?;
                                 self.decision_tracker.clear();
                                 level = 0;
 
@@ -400,24 +399,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                     clause=self.clauses[clause_id].debug(self.pool()));
 
                                 if solvable_is_assigned {
-                                    // let why = self
-                                    //     .decision_tracker
-                                    //     .find_clause_for_assignment(solvable)
-                                    //     .expect("a decision must have been made");
-                                    //
-                                    // level = self.learn_from_conflict(level, solvable, true, why)?;
-                                    // level = self.propagate_and_learn(level)?;
                                     self.decision_tracker.clear();
                                     level = 0;
                                 }
-
-                                // // Permanently disable this solvable. We expect an error here
-                                // // because we overwrite true with false.
-                                // let _ = self.decision_tracker.try_add_decision(
-                                //     Decision::new(solvable, false, clause_id),
-                                //     level,
-                                // );
-
                                 break;
                             }
                         }
@@ -433,9 +417,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                     "├─ {clause:?} which was already set to true",
                                     clause = self.clauses[clause_id].debug(self.pool())
                                 );
-                                // level =
-                                //     self.learn_from_conflict(level, solvable, true, clause_id)?;
-                                // level = self.propagate_and_learn(level)?;
                                 self.decision_tracker.clear();
                                 level = 0;
                                 break;
@@ -444,6 +425,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         _ => unreachable!(),
                     }
                 }
+
+                new_clauses.append(&mut clauses_for_solvable);
             }
         }
     }
@@ -452,12 +435,16 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     ///
     /// Since a requires clause is represented as (¬A ∨ candidate_1 ∨ ... ∨ candidate_n),
     /// a dependency without candidates becomes (¬A), which means that A should always be false.
-    fn decide_requires_without_candidates(&mut self) -> Result<bool, ClauseId> {
+    fn decide_requires_without_candidates(
+        &mut self,
+        clauses: &[ClauseId],
+    ) -> Result<bool, ClauseId> {
         tracing::info!("=== Deciding assertions for requires without candidates");
 
         let mut conflicting_clause = None;
         let mut made_a_decision = false;
-        for (clause_id, clause) in self.clauses.iter() {
+        for &clause_id in clauses.iter() {
+            let clause = &self.clauses[clause_id];
             if let Clause::Requires(solvable_id, _) = clause.kind {
                 if !clause.has_watches() {
                     // A requires clause without watches means it has a single literal (i.e.
