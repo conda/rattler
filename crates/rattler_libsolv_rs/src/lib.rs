@@ -95,6 +95,15 @@ pub struct Candidates {
     /// also be possible to simply return a single candidate using this field provides better error
     /// messages to the user.
     pub locked: Option<SolvableId>,
+
+    /// A hint to the solver that the dependencies of some of the solvables are also directly
+    /// available. This allows the solver to request the dependencies of these solvables
+    /// immediately. Having the dependency information available might make the solver much faster
+    /// because it has more information available up-front which provides the solver with a more
+    /// complete picture of the entire problem space. However, it might also be the case that the
+    /// solver doesnt actually need this information to form a solution. In general though, if the
+    /// dependencies can easily be provided one should provide them up-front.
+    pub hint_dependencies_available: Vec<SolvableId>,
 }
 
 /// Holds information about the dependencies of a package.

@@ -1,3 +1,4 @@
+use crate::internal::arena::ArenaId;
 use crate::{
     internal::{
         arena::Arena,
@@ -7,7 +8,9 @@ use crate::{
     Candidates, Dependencies, DependencyProvider, NameId, PackageName, Pool, SolvableId,
     VersionSet, VersionSetId,
 };
+use bitvec::vec::BitVec;
 use elsa::{FrozenMap, FrozenVec};
+use std::cell::RefCell;
 use std::marker::PhantomData;
 
 /// TODO: Bla
@@ -35,6 +38,11 @@ pub struct SolverCache<VS: VersionSet, N: PackageName, D: DependencyProvider<VS,
     solvable_dependencies: Arena<DependenciesId, Dependencies>,
     solvable_to_dependencies: FrozenCopyMap<SolvableId, DependenciesId>,
 
+    /// A mapping that indicates that the dependencies for a particular solvable can cheaply be
+    /// retrieved from the dependency provider. This information is provided by the
+    /// DependencyProvider when the candidates for a package are requested.
+    hint_dependencies_available: RefCell<BitVec>,
+
     _data: PhantomData<(VS, N)>,
 }
 
@@ -52,6 +60,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
             version_set_to_sorted_candidates: Default::default(),
             solvable_dependencies: Default::default(),
             solvable_to_dependencies: Default::default(),
+            hint_dependencies_available: Default::default(),
 
             _data: Default::default(),
         }
@@ -74,6 +83,20 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
                     .provider
                     .get_candidates(package_name)
                     .unwrap_or_default();
+
+                // Store information about which solvables dependency information is easy to
+                // retrieve.
+                {
+                    let mut hint_dependencies_available =
+                        self.hint_dependencies_available.borrow_mut();
+                    for hint_candidate in candidates.hint_dependencies_available.iter() {
+                        let idx = hint_candidate.to_usize();
+                        if hint_dependencies_available.len() <= idx {
+                            hint_dependencies_available.resize(idx + 1, false);
+                        }
+                        hint_dependencies_available.insert(idx, true)
+                    }
+                }
 
                 // Allocate an ID so we can refer to the candidates from everywhere
                 let candidates_id = self.candidates.alloc(candidates);
@@ -187,5 +210,22 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
         };
 
         &self.solvable_dependencies[dependencies_id]
+    }
+
+    /// Returns true if the dependencies for the given solvable are "cheaply" available. This means
+    /// either the dependency provider indicated that the dependencies for a solvable are available
+    /// or the dependencies have already been requested.
+    pub fn are_dependencies_available_for(&self, solvable: SolvableId) -> bool {
+        if self.solvable_to_dependencies.get_copy(&solvable).is_some() {
+            true
+        } else {
+            let solvable_idx = solvable.to_usize();
+            let hint_dependencies_available = self.hint_dependencies_available.borrow();
+            let value = hint_dependencies_available
+                .get(solvable_idx)
+                .as_deref()
+                .copied();
+            value.unwrap_or(false)
+        }
     }
 }

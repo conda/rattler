@@ -8,7 +8,7 @@ use rattler_conda_types::{
 };
 use rattler_libsolv_rs::{
     Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
-    Solver as LibSolvRsSolver, VersionSet, VersionSetId, SolverCache
+    Solver as LibSolvRsSolver, SolverCache, VersionSet, VersionSetId,
 };
 use std::{
     cell::RefCell,
@@ -235,11 +235,9 @@ impl<'a> CondaDependencyProvider<'a> {
                     pool.intern_package_name(record.package_record.name.as_normalized());
                 let solvable_id =
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
-                records
-                    .entry(package_name)
-                    .or_default()
-                    .candidates
-                    .push(solvable_id);
+                let candidates = records.entry(package_name).or_default();
+                candidates.candidates.push(solvable_id);
+                candidates.hint_dependencies_available.push(solvable_id);
             }
         }
 

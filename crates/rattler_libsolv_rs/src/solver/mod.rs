@@ -129,64 +129,83 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             return Vec::new();
         }
 
-        let solvable = self.pool().resolve_internal_solvable(solvable_id);
-        tracing::info!(
-            "┝━ adding clauses for dependencies of {}",
-            solvable.display(self.pool())
-        );
-
-        // Determine the dependencies of the current solvable. There are two cases here:
-        // 1. The solvable is the root solvable which only provides required dependencies.
-        // 2. The solvable is a package candidate in which case we request the corresponding
-        //    dependencies from the `DependencyProvider`.
-        let (requirements, constrains) = match solvable.inner {
-            SolvableInner::Root => (self.root_requirements.clone(), Vec::new()),
-            SolvableInner::Package(_) => {
-                let deps = self.cache.get_or_cache_dependencies(solvable_id);
-                (deps.requirements.clone(), deps.constrains.clone())
-            }
-        };
-
-        // Add clauses for the requirements
         let mut new_clauses = Vec::new();
-        for version_set_id in requirements {
-            //self.add_clauses_for_requirement(solvable_id, requirement);
-            let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
-            self.add_clauses_for_package(dependency_name);
+        let mut queue = vec![solvable_id];
+        let mut seen = HashSet::new();
+        seen.insert(solvable_id);
 
-            // Find all the solvables that match for the given version set
-            let candidates = self.cache.get_or_cache_sorted_candidates(version_set_id);
+        while let Some(solvable_id) = queue.pop() {
+            let solvable = self.pool().resolve_internal_solvable(solvable_id);
+            tracing::info!(
+                "┝━ adding clauses for dependencies of {}",
+                solvable.display(self.pool())
+            );
 
-            // Add the requires clause
-            let clause_id = self.add_and_watch_clause(ClauseState::requires(
-                solvable_id,
-                version_set_id,
-                candidates,
-            ));
+            // Determine the dependencies of the current solvable. There are two cases here:
+            // 1. The solvable is the root solvable which only provides required dependencies.
+            // 2. The solvable is a package candidate in which case we request the corresponding
+            //    dependencies from the `DependencyProvider`.
+            let (requirements, constrains) = match solvable.inner {
+                SolvableInner::Root => (self.root_requirements.clone(), Vec::new()),
+                SolvableInner::Package(_) => {
+                    let deps = self.cache.get_or_cache_dependencies(solvable_id);
+                    (deps.requirements.clone(), deps.constrains.clone())
+                }
+            };
 
-            new_clauses.push(clause_id);
-        }
+            // Add clauses for the requirements
+            for version_set_id in requirements {
+                //self.add_clauses_for_requirement(solvable_id, requirement);
+                let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
+                self.add_clauses_for_package(dependency_name);
 
-        // Add clauses for the constraints
-        for version_set_id in constrains {
-            let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
-            self.add_clauses_for_package(dependency_name);
+                // Find all the solvables that match for the given version set
+                let candidates = self.cache.get_or_cache_sorted_candidates(version_set_id);
 
-            // Find all the solvables that match for the given version set
-            let constrained_candidates = self
-                .cache
-                .get_or_cache_non_matching_candidates(version_set_id);
+                // Queue requesting the dependencies of the candidates as well if they are cheaply
+                // available from the dependency provider.
+                for &candidate in candidates {
+                    if !self.clauses_added_for_solvable.contains(&candidate)
+                        && !seen.contains(&candidate)
+                        && self.cache.are_dependencies_available_for(candidate)
+                    {
+                        queue.push(candidate);
+                        seen.insert(candidate);
+                    }
+                }
 
-            // Add forbidden clauses for the candidates
-            for forbidden_candidate in constrained_candidates.iter().copied().collect_vec() {
-                let clause =
-                    ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
-                let clause_id = self.add_and_watch_clause(clause);
-                new_clauses.push(clause_id)
+                // Add the requires clause
+                let clause_id = self.add_and_watch_clause(ClauseState::requires(
+                    solvable_id,
+                    version_set_id,
+                    candidates,
+                ));
+
+                new_clauses.push(clause_id);
             }
-        }
 
-        self.clauses_added_for_solvable.insert(solvable_id);
+            // Add clauses for the constraints
+            for version_set_id in constrains {
+                let dependency_name = self.pool().resolve_version_set_package_name(version_set_id);
+                self.add_clauses_for_package(dependency_name);
+
+                // Find all the solvables that match for the given version set
+                let constrained_candidates = self
+                    .cache
+                    .get_or_cache_non_matching_candidates(version_set_id);
+
+                // Add forbidden clauses for the candidates
+                for forbidden_candidate in constrained_candidates.iter().copied().collect_vec() {
+                    let clause =
+                        ClauseState::constrains(solvable_id, forbidden_candidate, version_set_id);
+                    let clause_id = self.add_and_watch_clause(clause);
+                    new_clauses.push(clause_id)
+                }
+            }
+
+            // Start by stating the clauses have been added.
+            self.clauses_added_for_solvable.insert(solvable_id);
+        }
 
         new_clauses
     }
@@ -365,53 +384,46 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 for clause_id in clauses_for_solvable.iter().copied() {
                     let clause = &self.clauses[clause_id];
 
-                    let solvable_is_assigned =
-                        self.decision_tracker.assigned_value(solvable) == Some(true);
-
                     match clause.kind {
                         Clause::Requires(dependent, requirement) => {
-                            debug_assert_eq!(
-                                dependent, solvable,
-                                "the clause must have been added for the assigned solvable"
-                            );
-                            let candidates =
-                                self.cache.get_or_cache_matching_candidates(requirement);
-                            let is_conflicting = candidates
-                                .iter()
-                                .all(|&s| self.decision_tracker.assigned_value(s) == Some(false));
-                            let is_empty = candidates.is_empty();
+                            let solvable_is_assigned =
+                                self.decision_tracker.assigned_value(dependent) == Some(true);
+                            if solvable_is_assigned {
+                                let candidates =
+                                    self.cache.get_or_cache_matching_candidates(requirement);
+                                let is_conflicting = candidates.iter().all(|&s| {
+                                    self.decision_tracker.assigned_value(s) == Some(false)
+                                });
+                                let is_empty = candidates.is_empty();
 
-                            // If none of the candidates is selectable this clause will cause a
-                            // conflict. We have to backtrack to the point where we made the
-                            // decision to select
-                            if is_conflicting && solvable_is_assigned {
-                                tracing::info!(
-                                    "├─ there are no selectable candidates for {clause:?}",
-                                    clause = self.clauses[clause_id].debug(self.pool())
-                                );
+                                // If none of the candidates is selectable this clause will cause a
+                                // conflict. We have to backtrack to the point where we made the
+                                // decision to select
+                                if is_conflicting {
+                                    tracing::info!(
+                                        "├─ there are no selectable candidates for {clause:?}",
+                                        clause = self.clauses[clause_id].debug(self.pool())
+                                    );
 
-                                self.decision_tracker.clear();
-                                level = 0;
-
-                                break;
-                            } else if is_empty {
-                                tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
-                                    clause=self.clauses[clause_id].debug(self.pool()));
-
-                                if solvable_is_assigned {
                                     self.decision_tracker.clear();
                                     level = 0;
+
+                                    break;
+                                } else if is_empty {
+                                    tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
+                                    clause=self.clauses[clause_id].debug(self.pool()));
+
+                                    if solvable_is_assigned {
+                                        self.decision_tracker.clear();
+                                        level = 0;
+                                    }
+                                    break;
                                 }
-                                break;
                             }
                         }
                         Clause::Constrains(dependent, forbidden, _) => {
-                            debug_assert_eq!(
-                                dependent, solvable,
-                                "the clause must have been added for the assigned solvable"
-                            );
                             if self.decision_tracker.assigned_value(forbidden) == Some(true)
-                                && solvable_is_assigned
+                                && self.decision_tracker.assigned_value(dependent) == Some(true)
                             {
                                 tracing::info!(
                                     "├─ {clause:?} which was already set to true",
