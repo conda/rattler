@@ -11,6 +11,7 @@ use crate::{
 };
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::ops::ControlFlow;
 
 use itertools::Itertools;
 
@@ -32,6 +33,7 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
     pub(crate) cache: SolverCache<VS, N, D>,
 
     pub(crate) clauses: Arena<ClauseId, ClauseState>,
+    requires_clauses: Vec<(SolvableId, VersionSetId, ClauseId)>,
     watches: WatchMap,
 
     learnt_clauses: Arena<LearntClauseId, Vec<Literal>>,
@@ -54,6 +56,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         Self {
             cache: SolverCache::new(provider),
             clauses: Arena::new(),
+            requires_clauses: Default::default(),
             watches: WatchMap::new(),
             learnt_clauses: Arena::new(),
             learnt_why: Mapping::new(),
@@ -112,6 +115,13 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// Adds a clause to the solver and immediately starts watching its literals.
     fn add_and_watch_clause(&mut self, clause: ClauseState) -> ClauseId {
         let clause_id = self.clauses.alloc(clause);
+        let clause = &self.clauses[clause_id];
+
+        // Add in requires clause lookup
+        if let &Clause::Requires(solvable_id, version_set_id) = &clause.kind {
+            self.requires_clauses
+                .push((solvable_id, version_set_id, clause_id));
+        }
 
         // Start watching the literals of the clause
         let clause = &mut self.clauses[clause_id];
@@ -496,61 +506,53 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     /// package has been picked yet. Then we pick the highest possible version for that package, or
     /// the favored version if it was provided by the user, and set its value to true.
     fn resolve_dependencies(&mut self, mut level: u32) -> Result<u32, Problem> {
-        let mut i = 0;
         loop {
-            if i >= self.clauses.len() {
-                break;
-            }
+            // Make a decision. If no decision could be made it means the problem is satisfyable.
+            let Some((candidate, required_by, clause_id)) = self.decide() else {break};
 
-            let clause_id = ClauseId::from_usize(i);
-            let (required_by, candidate) = {
-                let clause = &self.clauses[clause_id];
-                i += 1;
-
-                // We are only interested in requires clauses
-                let Clause::Requires(solvable_id, deps) = clause.kind else {
-                    continue;
-                };
-
-                // Consider only clauses in which we have decided to install the solvable
-                if self.decision_tracker.assigned_value(solvable_id) != Some(true) {
-                    continue;
-                }
-
-                // Consider only clauses in which no candidates have been installed
-                let candidates = &self.cache.version_set_to_sorted_candidates[&deps];
-                if candidates
-                    .iter()
-                    .any(|&c| self.decision_tracker.assigned_value(c) == Some(true))
-                {
-                    continue;
-                }
-
-                // Get the first candidate that is undecided and should be installed
-                //
-                // This assumes that the packages have been provided in the right order when the solvables were created
-                // (most recent packages first)
-                (
-                    solvable_id,
-                    candidates
-                        .iter()
-                        .cloned()
-                        .find(|&c| self.decision_tracker.assigned_value(c).is_none())
-                        .expect(&format!(
-                            "there are no viable solvables for {}",
-                            solvable_id.display(self.pool())
-                        )),
-                )
-            };
-
+            // Propagate the decision
             level = self.set_propagate_learn(level, candidate, required_by, clause_id)?;
-
-            // We have made progress, and should look at all clauses in the next iteration
-            i = 0;
         }
 
         // We just went through all clauses and there are no choices left to be made
         Ok(level)
+    }
+
+    fn decide(&mut self) -> Option<(SolvableId, SolvableId, ClauseId)> {
+        for &(solvable_id, deps, clause_id) in self.requires_clauses.iter() {
+            // Consider only clauses in which we have decided to install the solvable
+            if self.decision_tracker.assigned_value(solvable_id) != Some(true) {
+                continue;
+            }
+
+            // Consider only clauses in which no candidates have been installed
+            let candidates = &self.cache.version_set_to_sorted_candidates[&deps];
+
+            // Either find the first assignable candidate or determine that one of the candidates is
+            // already assigned in which case the clause has already been satisfied.
+            let candidate =
+                candidates
+                    .iter()
+                    .try_fold(None, |first_selectable_candidate, &candidate| {
+                        let assigned_value = self.decision_tracker.assigned_value(candidate);
+                        match assigned_value {
+                            Some(true) => ControlFlow::Break(()),
+                            Some(false) => ControlFlow::Continue(first_selectable_candidate),
+                            None => ControlFlow::Continue(
+                                first_selectable_candidate.or(Some(candidate)),
+                            ),
+                        }
+                    });
+
+            match candidate {
+                ControlFlow::Continue(Some(candidate)) => return Some((candidate, solvable_id, clause_id)),
+                ControlFlow::Break(_) => continue,
+                ControlFlow::Continue(None) => unreachable!("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well."),
+            }
+        }
+
+        // Could not find a requirement that needs satisfying.
+        None
     }
 
     /// Executes one iteration of the CDCL loop

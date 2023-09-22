@@ -35,7 +35,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     let mut group = c.benchmark_group(format!("solve {name}"));
 
     group.sampling_mode(SamplingMode::Flat);
-    group.sample_size(10);
+    group.sample_size(20);
 
     let specs = specs
         .iter()
