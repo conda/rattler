@@ -9,12 +9,11 @@ use crate::{
     solvable::SolvableInner,
     DependencyProvider, PackageName, VersionSet, VersionSetId,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use itertools::Itertools;
 
-use crate::problem::ProblemNode::Solvable;
 pub use cache::SolverCache;
 use clause::{Clause, ClauseState, Literal};
 use decision::Decision;
@@ -97,7 +96,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         let steps = self
             .decision_tracker
             .stack()
-            .iter()
             .flat_map(|d| {
                 if d.value && d.solvable_id != SolvableId::root() {
                     Some(d.solvable_id)
@@ -310,10 +308,16 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Add decisions for requirements that have become unassignable.
             self.decide_requires_without_candidates()
-                .map_err(|clause_id| self.analyze_unsolvable(clause_id))?;
+                .map_err(|clause_id| {
+                    dbg!("requires without candidates failed");
+                    self.analyze_unsolvable(clause_id)
+                })?;
 
             self.propagate(level)
-                .map_err(|(_, _, clause_id)| self.analyze_unsolvable(clause_id))?;
+                .map_err(|(_, _, clause_id)| {
+                    dbg!("propagation failed");
+                    self.analyze_unsolvable(clause_id)
+                })?;
 
             // Enter the solver loop, return immediately if no new assignments have been made.
             level = self.resolve_dependencies(level)?;
@@ -323,7 +327,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Determine which literals where selected since the last level
             let mut new_solvables = Vec::new();
-            for decision in self.decision_tracker.stack().iter() {
+            for decision in self.decision_tracker.stack() {
                 if decision.value
                     && !self
                         .clauses_added_for_solvable
@@ -422,7 +426,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                 dependent, solvable,
                                 "the clause must have been added for the assigned solvable"
                             );
-                            if self.decision_tracker.assigned_value(forbidden) == Some(true) && solvable_is_assigned {
+                            if self.decision_tracker.assigned_value(forbidden) == Some(true)
+                                && solvable_is_assigned
+                            {
                                 tracing::info!(
                                     "├─ {clause:?} which was already set to true",
                                     clause = self.clauses[clause_id].debug(self.pool())
@@ -624,12 +630,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 !attempted_value,
                 self.clauses[self
                     .decision_tracker
-                    .stack()
-                    .iter()
-                    .find(|d| d.solvable_id == conflicting_solvable)
-                    .unwrap()
-                    .derived_from]
-                    .debug(self.pool()),
+                    .find_clause_for_assignment(conflicting_solvable)
+                    .unwrap()]
+                .debug(self.pool()),
             );
         }
 
@@ -663,10 +666,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
         // Optimization: propagate right now, since we know that the clause is a unit clause
         let decision = literal.satisfying_value();
-        self.decision_tracker.try_add_decision(
-            Decision::new(literal.solvable_id, decision, learned_clause_id),
-            level,
-        );
+        self.decision_tracker
+            .try_add_decision(
+                Decision::new(literal.solvable_id, decision, learned_clause_id),
+                level,
+            )
+            .expect("bug: solvable was already decided!");
         tracing::info!(
             "├─ Propagate after learn: {} = {decision}",
             literal.solvable_id.display(self.pool())
@@ -877,9 +882,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             &mut seen,
         );
 
-        for decision in self.decision_tracker.stack()[1..].iter().rev() {
+        for decision in self.decision_tracker.stack().rev() {
             if decision.solvable_id == SolvableId::root() {
-                panic!("unexpected root solvable")
+                continue;
             }
 
             let why = decision.derived_from;
@@ -1033,19 +1038,6 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         self.decision_tracker.undo_until(target_level);
 
         (target_level, clause_id, last_literal)
-    }
-
-    fn make_watches(&mut self) {
-        // Watches are already initialized in the clauses themselves, here we build a linked list for
-        // each package (a clause will be linked to other clauses that are watching the same package)
-        for (clause_id, clause) in self.clauses.iter_mut() {
-            if !clause.has_watches() {
-                // Skip clauses without watches
-                continue;
-            }
-
-            self.watches.start_watching(clause, clause_id);
-        }
     }
 }
 
@@ -1753,7 +1745,7 @@ mod test {
 
     #[test]
     fn test_missing_dep() {
-        let mut provider =
+        let provider =
             BundleBoxProvider::from_packages(&[("a", 2, vec!["missing"]), ("a", 1, vec![])]);
         let requirements = provider.requirements(&["a"]);
         let mut solver = Solver::new(provider);

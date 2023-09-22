@@ -1,9 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1621
-expression: error
----
-The following packages are incompatible
-|-- a >=0, <1000 can be installed with any of the following options:
-    |-- a 41
-

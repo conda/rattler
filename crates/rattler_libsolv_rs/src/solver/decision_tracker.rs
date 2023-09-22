@@ -27,7 +27,13 @@ impl DecisionTracker {
     }
 
     pub(crate) fn clear(&mut self) {
-        *self = Self::new();
+        self.map = DecisionMap::new();
+        self.stack = Vec::new();
+        self.propagate_index = 0;
+
+        // The fixed assignment decisions are kept but the propagation index is. This assures that
+        // during the next propagation all fixed assignment decisions are repropagated.
+        self.fixed_assignment_index = 0;
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -42,14 +48,19 @@ impl DecisionTracker {
         &self.map
     }
 
-    pub(crate) fn stack(&self) -> &[Decision] {
-        &self.stack
+    pub(crate) fn stack(&self) -> impl Iterator<Item = Decision> + DoubleEndedIterator + '_ {
+        self.fixed_assignments
+            .iter()
+            .copied()
+            .chain(self.stack.iter().copied())
     }
 
     pub(crate) fn level(&self, solvable_id: SolvableId) -> u32 {
         self.map.level(solvable_id)
     }
 
+    // Find the clause that caused the assignment of the specified solvable. If no assignment has
+    // been made to the solvable than `None` is returned.
     pub(crate) fn find_clause_for_assignment(&self, solvable_id: SolvableId) -> Option<ClauseId> {
         self.stack
             .iter()
