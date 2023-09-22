@@ -30,7 +30,7 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
         dirs::home_dir()
             .map(|home| home.join(".rattler/"))
             .unwrap_or_else(|| {
-                tracing::warn!("Home directory could not be found, using '/rattler'");
+                tracing::warn!("using '/rattler' to store fallback authentication credentials because the home directory could not be found");
                 // This can only happen if the dirs lib can't find a home directory this is very unlikely.
                 PathBuf::from("/rattler/")
             })
