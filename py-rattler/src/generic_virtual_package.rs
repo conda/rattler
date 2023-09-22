@@ -3,6 +3,7 @@ use rattler_conda_types::GenericVirtualPackage;
 
 use crate::package_name::PyPackageName;
 use crate::version::PyVersion;
+use crate::virtual_package::PyVirtualPackage;
 
 #[pyclass]
 #[repr(transparent)]
@@ -19,6 +20,14 @@ impl From<PyGenericVirtualPackage> for GenericVirtualPackage {
 impl From<GenericVirtualPackage> for PyGenericVirtualPackage {
     fn from(value: GenericVirtualPackage) -> Self {
         Self { inner: value }
+    }
+}
+
+impl From<PyVirtualPackage> for PyGenericVirtualPackage {
+    fn from(value: PyVirtualPackage) -> Self {
+        Self {
+            inner: value.inner.into(),
+        }
     }
 }
 

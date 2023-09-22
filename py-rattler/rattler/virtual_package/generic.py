@@ -1,9 +1,8 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
-if TYPE_CHECKING:
-    from rattler.version import Version
-    from rattler.package import PackageName
+from rattler.version import Version
+from rattler.package import PackageName
 
 from rattler.rattler import PyGenericVirtualPackage
 
@@ -72,5 +71,5 @@ class GenericVirtualPackage:
         return self._generic_virtual_package.as_str()
 
     def __repr__(self) -> str:
-        """Returns a representation of the version"""
+        """Returns a representation of the GenericVirtualPackage"""
         return f"GenericVirtualPackage({self._generic_virtual_package.as_str()})"

@@ -1,7 +1,7 @@
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_virtual_packages::VirtualPackage;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage};
 
 #[pyclass]
 #[repr(transparent)]
@@ -31,5 +31,14 @@ impl PyVirtualPackage {
         Ok(VirtualPackage::current()
             .map(|vp| vp.iter().map(|v| v.to_owned().into()).collect::<Vec<_>>())
             .map_err(PyRattlerError::from)?)
+    }
+
+    pub fn as_generic(&self) -> PyGenericVirtualPackage {
+        self.to_owned().into()
+    }
+
+    /// Returns string representation of virtual package.
+    pub fn as_str(&self) -> String {
+        format!("{:?}", self.inner)
     }
 }

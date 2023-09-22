@@ -3,6 +3,8 @@ from __future__ import annotations
 from rattler.rattler import PyVirtualPackage
 from typing import List, Self
 
+from rattler.virtual_package.generic import GenericVirtualPackage
+
 
 class VirtualPackage:
     _virtual_package: PyVirtualPackage
@@ -19,8 +21,33 @@ class VirtualPackage:
         """
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
+
+        Examples
+        --------
+        >>> v = VirtualPackage.current()
         """
         return [
             VirtualPackage._from_py_virtual_package(vp)
             for vp in PyVirtualPackage.current()
         ]
+
+    def into_generic(self) -> GenericVirtualPackage:
+        """
+        Returns a GenericVirtualPackage from VirtualPackage.
+        """
+        # subclass from Generic instead.
+        return GenericVirtualPackage._from_py_generic_virtual_package(
+            self._virtual_package.as_generic()
+        )
+
+    def __str__(self) -> str:
+        """
+        Returns string representation of the VirtualPackage.
+        """
+        return self._virtual_package.as_str()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the VirtualPackage.
+        """
+        return f"VirtualPackage({self._virtual_package.as_str()})"
