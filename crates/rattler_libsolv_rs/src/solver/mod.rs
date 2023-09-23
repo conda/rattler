@@ -1,6 +1,6 @@
 use crate::{
     internal::{
-        arena::{Arena, ArenaId},
+        arena::{Arena},
         id::{ClauseId, LearntClauseId, NameId, SolvableId},
         mapping::Mapping,
     },
@@ -519,6 +519,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
     }
 
     fn decide(&mut self) -> Option<(SolvableId, SolvableId, ClauseId)> {
+        let mut best_decision = None;
         for &(solvable_id, deps, clause_id) in self.requires_clauses.iter() {
             // Consider only clauses in which we have decided to install the solvable
             if self.decision_tracker.assigned_value(solvable_id) != Some(true) {
@@ -530,29 +531,42 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Either find the first assignable candidate or determine that one of the candidates is
             // already assigned in which case the clause has already been satisfied.
-            let candidate =
-                candidates
-                    .iter()
-                    .try_fold(None, |first_selectable_candidate, &candidate| {
-                        let assigned_value = self.decision_tracker.assigned_value(candidate);
-                        match assigned_value {
-                            Some(true) => ControlFlow::Break(()),
-                            Some(false) => ControlFlow::Continue(first_selectable_candidate),
-                            None => ControlFlow::Continue(
-                                first_selectable_candidate.or(Some(candidate)),
-                            ),
-                        }
-                    });
+            let candidate = candidates.iter().try_fold(
+                (None, 0),
+                |(first_selectable_candidate, selectable_candidates), &candidate| {
+                    let assigned_value = self.decision_tracker.assigned_value(candidate);
+                    match assigned_value {
+                        Some(true) => ControlFlow::Break(()),
+                        Some(false) => ControlFlow::Continue((
+                            first_selectable_candidate,
+                            selectable_candidates,
+                        )),
+                        None => ControlFlow::Continue((
+                            first_selectable_candidate.or(Some(candidate)),
+                            selectable_candidates + 1,
+                        )),
+                    }
+                },
+            );
 
             match candidate {
-                ControlFlow::Continue(Some(candidate)) => return Some((candidate, solvable_id, clause_id)),
+                ControlFlow::Continue((Some(candidate), count)) => {
+                    let possible_decision = (candidate, solvable_id, clause_id);
+                    best_decision = Some(match best_decision {
+                        None => (count, possible_decision),
+                        Some((best_count, _)) if count < best_count => {
+                            (count, possible_decision)
+                        },
+                        Some(best_decision) => best_decision,
+                    })
+                },
                 ControlFlow::Break(_) => continue,
-                ControlFlow::Continue(None) => unreachable!("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well."),
+                ControlFlow::Continue((None, _)) => unreachable!("when we get here it means that all candidates have been assigned false. This should not be able to happen at this point because during propagation the solvable should have been assigned false as well."),
             }
         }
 
         // Could not find a requirement that needs satisfying.
-        None
+        best_decision.map(|d| d.1)
     }
 
     /// Executes one iteration of the CDCL loop

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use std::cell::{Cell, UnsafeCell};
 use std::cmp;
 use std::marker::PhantomData;
