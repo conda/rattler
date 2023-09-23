@@ -94,7 +94,7 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
                         if hint_dependencies_available.len() <= idx {
                             hint_dependencies_available.resize(idx + 1, false);
                         }
-                        hint_dependencies_available.insert(idx, true)
+                        hint_dependencies_available.set(idx, true)
                     }
                 }
 

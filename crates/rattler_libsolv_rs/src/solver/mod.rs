@@ -1,6 +1,6 @@
 use crate::{
     internal::{
-        arena::{Arena},
+        arena::Arena,
         id::{ClauseId, LearntClauseId, NameId, SolvableId},
         mapping::Mapping,
     },
@@ -175,12 +175,11 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                 // Queue requesting the dependencies of the candidates as well if they are cheaply
                 // available from the dependency provider.
                 for &candidate in candidates {
-                    if !self.clauses_added_for_solvable.contains(&candidate)
-                        && !seen.contains(&candidate)
+                    if seen.insert(candidate)
                         && self.cache.are_dependencies_available_for(candidate)
+                        && !self.clauses_added_for_solvable.contains(&candidate)
                     {
                         queue.push(candidate);
-                        seen.insert(candidate);
                     }
                 }
 
@@ -339,9 +338,8 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Add decisions for Require clauses that form unit clauses. E.g. require clauses that
             // have no matching candidates.
-            self.decide_requires_without_candidates(&std::mem::replace(
+            self.decide_requires_without_candidates(&std::mem::take(
                 &mut new_clauses,
-                Vec::new(),
             ))
             .map_err(|clause_id| {
                 dbg!("requires without candidates failed");
@@ -368,7 +366,7 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         .clauses_added_for_solvable
                         .contains(&decision.solvable_id)
                 {
-                    new_solvables.push(decision.solvable_id);
+                    new_solvables.push((decision.solvable_id, decision.derived_from));
                 }
             }
 
@@ -378,14 +376,18 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             }
 
             tracing::info!(
-                "==== Found newly selected solvables ({}) ====",
+                "====\n==Found newly selected solvables\n- {}\n====",
                 new_solvables
                     .iter()
                     .copied()
-                    .format_with(", ", |id, f| f(&id.display(self.pool())))
+                    .format_with("\n- ", |(id, derived_from), f| f(&format_args!(
+                        "{} (derived from {:?})",
+                        id.display(self.pool()),
+                        self.clauses[derived_from].debug(self.pool()),
+                    )))
             );
 
-            for solvable in new_solvables {
+            for (solvable, _) in new_solvables {
                 // Add the clauses for this particular solvable.
                 let mut clauses_for_solvable = self.add_clauses_for_solvable(solvable);
 
