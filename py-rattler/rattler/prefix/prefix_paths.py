@@ -51,7 +51,7 @@ class PrefixPaths:
 
     def __repr__(self) -> str:
         """
-        Returns a representation of the version.
+        Returns a representation of the PrefixPaths.
 
         Examples
         --------

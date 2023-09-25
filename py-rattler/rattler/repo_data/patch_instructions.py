@@ -19,4 +19,7 @@ class PatchInstructions:
         return patch_instructions
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the PatchInstructions.
+        """
         return f"{type(self).__name__}()"

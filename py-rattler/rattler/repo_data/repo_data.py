@@ -52,4 +52,7 @@ class RepoData:
         return repo_data
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the RepoData.
+        """
         return f"{type(self).__name__}()"

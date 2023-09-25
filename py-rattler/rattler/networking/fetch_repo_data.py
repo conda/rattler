@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Callable, List, Union, TYPE_CHECKING
+from typing import Callable, List, Optional, Union, TYPE_CHECKING
 
 
 from rattler.rattler import py_fetch_repo_data
@@ -16,7 +16,7 @@ async def fetch_repo_data(
     channels: List[Channel],
     platforms: List[Platform],
     cache_path: Union[str, os.PathLike[str]],
-    callback: Callable[[int, int], None],
+    callback: Optional[Callable[[int, int], None]],
 ) -> List[RepoData]:
     """
     Returns a list of RepoData for given channels and platform.

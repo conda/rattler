@@ -24,7 +24,13 @@ class PackageRecord:
         return package_record
 
     def __str__(self) -> str:
+        """
+        Returns the string representation of the PackageRecord.
+        """
         return self._package_record.as_str()
 
     def __repr__(self) -> str:
-        return self.__str__()
+        """
+        Returns a representation of the PackageRecord.
+        """
+        return f'PackageRecord("{self.__str__()}")'

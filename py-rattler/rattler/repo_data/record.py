@@ -48,4 +48,7 @@ class RepoDataRecord:
         return record
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the RepoDataRecord.
+        """
         return f"{type(self).__name__}()"

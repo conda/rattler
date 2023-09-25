@@ -121,7 +121,13 @@ class MatchSpec:
         )
 
     def __str__(self) -> str:
+        """
+        Returns a string representation of the MatchSpec.
+        """
         return self._match_spec.as_str()
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the MatchSpec.
+        """
         return f'MatchSpec("{self._match_spec.as_str()}")'
