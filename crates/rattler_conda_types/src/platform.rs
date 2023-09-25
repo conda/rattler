@@ -31,7 +31,8 @@ pub enum Platform {
     Win64,
     WinArm64,
 
-    Emscripten32,
+    EmscriptenWasm32,
+    WasiWasm32,
 }
 
 impl PartialOrd for Platform {
@@ -60,6 +61,7 @@ pub enum Arch {
     S390X,
     Riscv32,
     Riscv64,
+    Wasm32,
 }
 
 impl Platform {
@@ -139,13 +141,20 @@ impl Platform {
         #[cfg(target_os = "emscripten")]
         {
             #[cfg(target_arch = "wasm32")]
-            return Platform::Emscripten32;
+            return Platform::EmscriptenWasm32;
+        }
+
+        #[cfg(target_os = "wasi")]
+        {
+            #[cfg(target_arch = "wasm32")]
+            return Platform::WasiWasm32;
         }
 
         #[cfg(not(any(
             target_os = "linux",
             target_os = "macos",
             target_os = "emscripten",
+            target_os = "wasi",
             windows
         )))]
         {
@@ -170,7 +179,7 @@ impl Platform {
 
     /// Returns true if the platform is a unix based platform.
     pub const fn is_unix(self) -> bool {
-        self.is_linux() || self.is_osx()
+        self.is_linux() || self.is_osx() || matches!(self, Platform::EmscriptenWasm32)
     }
 
     /// Returns true if the platform is a linux based platform.
@@ -211,7 +220,8 @@ impl Platform {
             | Platform::LinuxRiscv64 => Some("linux"),
             Platform::Osx64 | Platform::OsxArm64 => Some("osx"),
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
-            Platform::Emscripten32 => Some("emscripten"),
+            Platform::EmscriptenWasm32 => Some("emscripten"),
+            Platform::WasiWasm32 => Some("wasi"),
         }
     }
 }
@@ -255,7 +265,8 @@ impl FromStr for Platform {
             "win-32" => Platform::Win32,
             "win-64" => Platform::Win64,
             "win-arm64" => Platform::WinArm64,
-            "emscripten-32" => Platform::Emscripten32,
+            "emscripten-wasm32" => Platform::EmscriptenWasm32,
+            "wasi-wasm32" => Platform::WasiWasm32,
             string => {
                 return Err(ParsePlatformError {
                     string: string.to_owned(),
@@ -284,7 +295,8 @@ impl From<Platform> for &'static str {
             Platform::Win32 => "win-32",
             Platform::Win64 => "win-64",
             Platform::WinArm64 => "win-arm64",
-            Platform::Emscripten32 => "emscripten-32",
+            Platform::EmscriptenWasm32 => "emscripten-wasm32",
+            Platform::WasiWasm32 => "wasi-wasm32",
             Platform::Unknown => "unknown",
         }
     }
@@ -313,7 +325,8 @@ impl Platform {
             Platform::Win32 => Some(Arch::X86),
             Platform::Win64 => Some(Arch::X86_64),
             Platform::WinArm64 => Some(Arch::Aarch64),
-            Platform::Emscripten32 => Some(Arch::X86),
+            Platform::EmscriptenWasm32 => Some(Arch::Wasm32),
+            Platform::WasiWasm32 => Some(Arch::Wasm32),
         }
     }
 }
@@ -380,6 +393,7 @@ impl FromStr for Arch {
             "s390x" => Arch::S390X,
             "riscv32" => Arch::Riscv32,
             "riscv64" => Arch::Riscv64,
+            "wasm32" => Arch::Wasm32,
             string => {
                 return Err(ParseArchError {
                     string: string.to_owned(),
@@ -402,6 +416,7 @@ impl From<Arch> for &'static str {
             Arch::S390X => "s390x",
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
+            Arch::Wasm32 => "wasm32",
         }
     }
 }
@@ -450,8 +465,12 @@ mod tests {
         );
         assert_eq!("win-arm64".parse::<Platform>().unwrap(), Platform::WinArm64);
         assert_eq!(
-            "emscripten-32".parse::<Platform>().unwrap(),
-            Platform::Emscripten32
+            "emscripten-wasm32".parse::<Platform>().unwrap(),
+            Platform::EmscriptenWasm32
+        );
+        assert_eq!(
+            "wasi-wasm32".parse::<Platform>().unwrap(),
+            Platform::WasiWasm32
         );
         assert_eq!("noarch".parse::<Platform>().unwrap(), Platform::NoArch);
     }
@@ -486,7 +505,8 @@ mod tests {
         assert_eq!(Platform::Win32.arch(), Some(Arch::X86));
         assert_eq!(Platform::Win64.arch(), Some(Arch::X86_64));
         assert_eq!(Platform::WinArm64.arch(), Some(Arch::Aarch64));
-        assert_eq!(Platform::Emscripten32.arch(), Some(Arch::X86));
+        assert_eq!(Platform::EmscriptenWasm32.arch(), Some(Arch::Wasm32));
+        assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
     }
 }

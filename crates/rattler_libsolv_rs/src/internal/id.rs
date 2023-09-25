@@ -1,4 +1,7 @@
-use crate::arena::ArenaId;
+use crate::internal::arena::ArenaId;
+use crate::solvable::DisplaySolvable;
+use crate::{PackageName, Pool, VersionSet};
+use std::fmt::Display;
 
 /// The id associated to a package name
 #[repr(transparent)]
@@ -15,7 +18,7 @@ impl ArenaId for NameId {
     }
 }
 
-/// The id associated to a match spec
+/// The id associated with a VersionSet.
 #[repr(transparent)]
 #[derive(Clone, Default, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct VersionSetId(u32);
@@ -51,6 +54,14 @@ impl SolvableId {
     pub(crate) fn is_null(self) -> bool {
         self.0 == u32::MAX
     }
+
+    /// Returns an object that enables formatting the solvable.
+    pub fn display<VS: VersionSet, N: PackageName + Display>(
+        self,
+        pool: &Pool<VS, N>,
+    ) -> DisplaySolvable<VS, N> {
+        pool.resolve_internal_solvable(self).display(pool)
+    }
 }
 
 impl ArenaId for SolvableId {
@@ -74,19 +85,10 @@ impl From<SolvableId> for u32 {
 pub(crate) struct ClauseId(u32);
 
 impl ClauseId {
-    pub(crate) fn new(index: usize) -> Self {
-        debug_assert_ne!(index, 0);
-        debug_assert_ne!(index, u32::MAX as usize);
-
-        Self(index as u32)
-    }
-
+    /// There is a guarentee that ClauseId(0) will always be "Clause::InstallRoot". This assumption
+    /// is verified by the solver.
     pub(crate) fn install_root() -> Self {
         Self(0)
-    }
-
-    pub(crate) fn index(self) -> usize {
-        self.0 as usize
     }
 
     pub(crate) fn is_null(self) -> bool {
@@ -98,10 +100,51 @@ impl ClauseId {
     }
 }
 
+impl ArenaId for ClauseId {
+    fn from_usize(x: usize) -> Self {
+        assert!(x < u32::MAX as usize, "clause id too big");
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub(crate) struct LearntClauseId(u32);
 
 impl ArenaId for LearntClauseId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// The id associated to an arena of Candidates
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct CandidatesId(u32);
+
+impl ArenaId for CandidatesId {
+    fn from_usize(x: usize) -> Self {
+        Self(x as u32)
+    }
+
+    fn to_usize(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// The id associated to an arena of PackageRequirements
+#[repr(transparent)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct DependenciesId(u32);
+
+impl ArenaId for DependenciesId {
     fn from_usize(x: usize) -> Self {
         Self(x as u32)
     }

@@ -1,4 +1,4 @@
-use crate::{PackageName, PackageRecord, VersionSpec};
+use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
@@ -121,7 +121,7 @@ pub struct MatchSpec {
     /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
     pub build: Option<StringMatcher>,
     /// The build number of the package
-    pub build_number: Option<u64>,
+    pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
@@ -207,6 +207,12 @@ impl MatchSpec {
             }
         }
 
+        if let Some(build_number) = self.build_number.as_ref() {
+            if !build_number.matches(&record.build_number) {
+                return false;
+            }
+        }
+
         if let Some(md5_spec) = self.md5.as_ref() {
             if Some(md5_spec) != record.md5.as_ref() {
                 return false;
@@ -220,6 +226,24 @@ impl MatchSpec {
         }
 
         true
+    }
+
+    /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
+    pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
+        (
+            self.name,
+            NamelessMatchSpec {
+                version: self.version,
+                build: self.build,
+                build_number: self.build_number,
+                file_name: self.file_name,
+                channel: self.channel,
+                subdir: self.subdir,
+                namespace: self.namespace,
+                md5: self.md5,
+                sha256: self.sha256,
+            },
+        )
     }
 }
 
@@ -236,7 +260,7 @@ pub struct NamelessMatchSpec {
     #[serde_as(as = "Option<DisplayFromStr>")]
     pub build: Option<StringMatcher>,
     /// The build number of the package
-    pub build_number: Option<u64>,
+    pub build_number: Option<BuildNumberSpec>,
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package

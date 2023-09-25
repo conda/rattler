@@ -8,7 +8,7 @@ use std::str::FromStr;
 /// A single version constraint (e.g. `>3.4.5` or `1.2.*`)
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub(crate) enum Constraint {
+pub enum Constraint {
     /// Matches anything (`*`)
     Any,
 

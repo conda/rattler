@@ -1,5 +1,4 @@
-//! Types to examine why a given [`crate::SolveJobs`] was unsatisfiable, and to report the causes
-//! to the user
+//! Types to examine why a problem was unsatisfiable, and to report the causes to the user.
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -13,11 +12,12 @@ use petgraph::graph::{DiGraph, EdgeIndex, EdgeReference, NodeIndex};
 use petgraph::visit::{Bfs, DfsPostOrder, EdgeRef};
 use petgraph::Direction;
 
-use crate::id::{ClauseId, SolvableId, VersionSetId};
-use crate::pool::Pool;
-use crate::solver::clause::Clause;
-use crate::solver::Solver;
-use crate::{DependencyProvider, PackageName, SolvableDisplay, VersionSet};
+use crate::{
+    internal::id::{ClauseId, SolvableId, VersionSetId},
+    pool::Pool,
+    solver::{clause::Clause, Solver},
+    DependencyProvider, PackageName, SolvableDisplay, VersionSet,
+};
 
 /// Represents the cause of the solver being unable to find a solution
 #[derive(Debug)]
@@ -51,22 +51,22 @@ impl Problem {
         let unresolved_node = graph.add_node(ProblemNode::UnresolvedDependency);
 
         for clause_id in &self.clauses {
-            let clause = &solver.clauses[clause_id.index()];
-            match clause.kind {
+            let clause = &solver.clauses[*clause_id].kind;
+            match clause {
                 Clause::InstallRoot => (),
                 Clause::Learnt(..) => unreachable!(),
-                Clause::Requires(package_id, match_spec_id) => {
+                &Clause::Requires(package_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
-                    let candidates = &solver.pool().match_spec_to_sorted_candidates[match_spec_id];
+                    let candidates = solver.cache.get_or_cache_sorted_candidates(version_set_id);
                     if candidates.is_empty() {
                         tracing::info!(
-                            "{package_id:?} requires {match_spec_id:?}, which has no candidates"
+                            "{package_id:?} requires {version_set_id:?}, which has no candidates"
                         );
                         graph.add_edge(
                             package_node,
                             unresolved_node,
-                            ProblemEdge::Requires(match_spec_id),
+                            ProblemEdge::Requires(version_set_id),
                         );
                     } else {
                         for &candidate_id in candidates {
@@ -77,24 +77,24 @@ impl Problem {
                             graph.add_edge(
                                 package_node,
                                 candidate_node,
-                                ProblemEdge::Requires(match_spec_id),
+                                ProblemEdge::Requires(version_set_id),
                             );
                         }
                     }
                 }
-                Clause::Lock(locked, forbidden) => {
+                &Clause::Lock(locked, forbidden) => {
                     let node2_id = Self::add_node(&mut graph, &mut nodes, forbidden);
                     let conflict = ConflictCause::Locked(locked);
                     graph.add_edge(root_node, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                Clause::ForbidMultipleInstances(instance1_id, instance2_id) => {
+                &Clause::ForbidMultipleInstances(instance1_id, instance2_id) => {
                     let node1_id = Self::add_node(&mut graph, &mut nodes, instance1_id);
                     let node2_id = Self::add_node(&mut graph, &mut nodes, instance2_id);
 
                     let conflict = ConflictCause::ForbidMultipleInstances;
                     graph.add_edge(node1_id, node2_id, ProblemEdge::Conflict(conflict));
                 }
-                Clause::Constrains(package_id, dep_id, version_set_id) => {
+                &Clause::Constrains(package_id, dep_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
                     let dep_node = Self::add_node(&mut graph, &mut nodes, dep_id);
 
@@ -183,7 +183,7 @@ impl ProblemNode {
 /// An edge in the graph representation of a [`Problem`]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub enum ProblemEdge {
-    /// The target node is a candidate for the dependency specified by the match spec
+    /// The target node is a candidate for the dependency specified by the version set
     Requires(VersionSetId),
     /// The target node is involved in a conflict, caused by `ConflictCause`
     Conflict(ConflictCause),
@@ -210,7 +210,7 @@ impl ProblemEdge {
 pub enum ConflictCause {
     /// The solvable is locked
     Locked(SolvableId),
-    /// The target node is constrained by the specified match spec
+    /// The target node is constrained by the specified version set
     Constrains(VersionSetId),
     /// It is forbidden to install multiple instances of the same dependency
     ForbidMultipleInstances,
@@ -270,7 +270,7 @@ impl ProblemGraph {
                 }
             }
 
-            let solvable = pool.resolve_solvable_inner(id);
+            let solvable = pool.resolve_internal_solvable(id);
             let mut added_edges = HashSet::new();
             for edge in graph.edges_directed(nx, Direction::Outgoing) {
                 let target = *graph.node_weight(edge.target()).unwrap();
@@ -305,7 +305,7 @@ impl ProblemGraph {
                             }
                         }
 
-                        pool.resolve_solvable_inner(solvable_2).to_string()
+                        solvable_2.display(pool).to_string()
                     }
                     ProblemNode::UnresolvedDependency => "unresolved".to_string(),
                 };
@@ -313,13 +313,15 @@ impl ProblemGraph {
                 write!(
                     f,
                     "\"{}\" -> \"{}\"[color={color}, label=\"{label}\"];",
-                    solvable, target
+                    solvable.display(pool),
+                    target
                 )?;
             }
         }
         write!(f, "}}")
     }
 
+    /// Simplifies and collapses nodes so that these can be considered the same candidate
     fn simplify<VS: VersionSet, N: PackageName>(
         &self,
         pool: &Pool<VS, N>,
@@ -369,8 +371,6 @@ impl ProblemGraph {
         }
 
         let mut merged_candidates = HashMap::default();
-        // TODO: could probably use `sort_candidates` by the dependency provider directly
-        // but we need to mantain the mapping in `m` which goes from `NodeIndex` to `SolvableId`
         for m in maybe_merge.into_values() {
             if m.len() > 1 {
                 let m = Rc::new(MergedProblemNode {

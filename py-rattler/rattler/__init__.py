@@ -3,6 +3,9 @@ from rattler.match_spec import MatchSpec, NamelessMatchSpec
 from rattler.repo_data import PackageRecord, RepoData, RepoDataRecord, PatchInstructions
 from rattler.channel import Channel, ChannelConfig
 from rattler.networking import AuthenticatedClient, fetch_repo_data
+from rattler.virtual_package import GenericVirtualPackage, VirtualPackage
+from rattler.package import PackageName
+from rattler.prefix import PrefixRecord, PrefixPaths
 
 __all__ = [
     "Version",
@@ -17,4 +20,9 @@ __all__ = [
     "RepoDataRecord",
     "RepoData",
     "fetch_repo_data",
+    "GenericVirtualPackage",
+    "VirtualPackage",
+    "PackageName",
+    "PrefixRecord",
+    "PrefixPaths",
 ]

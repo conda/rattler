@@ -1,7 +1,6 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 474
-expression: "solve_real_world::<rattler_solve::libsolv_rs::Solver>(vec![\"tensorflow\"])"
+expression: "solve_real_world::<rattler_solve::libsolv_c::Solver>(vec![\"tensorflow\"])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu

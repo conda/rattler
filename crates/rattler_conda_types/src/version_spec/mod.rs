@@ -7,7 +7,7 @@ pub(crate) mod version_tree;
 
 use crate::version_spec::version_tree::ParseVersionTreeError;
 use crate::{ParseVersionError, Version};
-pub(crate) use constraint::Constraint;
+use constraint::Constraint;
 use serde::{Deserialize, Serialize, Serializer};
 use std::convert::TryFrom;
 use std::fmt::{Display, Formatter};
@@ -17,7 +17,7 @@ use version_tree::VersionTree;
 
 use crate::version::StrictVersion;
 pub(crate) use constraint::is_start_of_version_constraint;
-pub(crate) use parse::ParseConstraintError;
+use parse::ParseConstraintError;
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]
@@ -143,6 +143,19 @@ pub enum ParseVersionSpecError {
     InvalidConstraint(#[source] ParseConstraintError),
 }
 
+impl From<Constraint> for VersionSpec {
+    fn from(constraint: Constraint) -> Self {
+        match constraint {
+            Constraint::Any => VersionSpec::Any,
+            Constraint::Comparison(op, ver) => VersionSpec::Range(op, ver),
+            Constraint::StrictComparison(op, ver) => {
+                VersionSpec::StrictRange(op, StrictVersion(ver))
+            }
+            Constraint::Exact(e, ver) => VersionSpec::Exact(e, ver),
+        }
+    }
+}
+
 impl FromStr for VersionSpec {
     type Err = ParseVersionSpecError;
 
@@ -152,18 +165,9 @@ impl FromStr for VersionSpec {
 
         fn parse_tree(tree: VersionTree) -> Result<VersionSpec, ParseVersionSpecError> {
             match tree {
-                VersionTree::Term(str) => {
-                    let constraint = Constraint::from_str(str)
-                        .map_err(ParseVersionSpecError::InvalidConstraint)?;
-                    Ok(match constraint {
-                        Constraint::Any => VersionSpec::Any,
-                        Constraint::Comparison(op, ver) => VersionSpec::Range(op, ver),
-                        Constraint::StrictComparison(op, ver) => {
-                            VersionSpec::StrictRange(op, StrictVersion(ver))
-                        }
-                        Constraint::Exact(e, ver) => VersionSpec::Exact(e, ver),
-                    })
-                }
+                VersionTree::Term(str) => Ok(Constraint::from_str(str)
+                    .map_err(ParseVersionSpecError::InvalidConstraint)?
+                    .into()),
                 VersionTree::Group(op, groups) => Ok(VersionSpec::Group(
                     op,
                     groups

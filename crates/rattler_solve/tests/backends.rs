@@ -6,6 +6,7 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use std::str::FromStr;
+use std::time::Instant;
 use url::Url;
 
 fn conda_json_path() -> String {
@@ -119,7 +120,10 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         virtual_packages: Default::default(),
     };
 
-    let pkgs1 = T::default().solve(solver_task).unwrap();
+    let pkgs1 = match T::default().solve(solver_task) {
+        Ok(result) => result,
+        Err(e) => panic!("{e}"),
+    };
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -169,7 +173,7 @@ macro_rules! solver_backend_tests {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["xtensor", "xsimd",]));
         }
 
-        #[test]
+        #[test_log::test]
         fn test_solve_tensorflow() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["tensorflow"]));
         }
@@ -188,9 +192,32 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_solve_favored() {
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                vec![installed_package(
+                    "conda-forge",
+                    "linux-64",
+                    "bors",
+                    "1.0",
+                    "bla_1",
+                    1,
+                )],
+                Vec::new(),
+                Vec::new(),
+                &["bors"],
+            )
+            .unwrap();
+
+            assert_eq!(result.len(), 1);
+            assert_eq!(result[0].package_record.to_string(), "bors=1.0=bla_1");
+        }
+
+        #[test]
         fn test_solve_with_error() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["foobar >=2", "bors >= 2"],
@@ -199,13 +226,14 @@ macro_rules! solver_backend_tests {
             assert!(result.is_err());
 
             let err = result.err().unwrap();
-            insta::assert_debug_snapshot!(err);
+            insta::assert_display_snapshot!(err);
         }
 
         #[test]
         fn test_solve_dummy_repo_install_non_existent() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["asdfasdf", "foo<4"],
@@ -219,7 +247,13 @@ macro_rules! solver_backend_tests {
 
         #[test]
         fn test_solve_dummy_repo_missing_virtual_package() {
-            let result = solve::<$T>(dummy_channel_json_path(), Vec::new(), Vec::new(), &["bar"]);
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                &["bar"],
+            );
 
             assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
         }
@@ -228,6 +262,7 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_with_virtual_package() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 vec![GenericVirtualPackage {
                     name: rattler_conda_types::PackageName::new_unchecked("__unix"),
@@ -249,6 +284,7 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_install_new() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
+                Vec::new(),
                 Vec::new(),
                 Vec::new(),
                 &["foo<4"],
@@ -296,6 +332,7 @@ macro_rules! solver_backend_tests {
                 dummy_channel_json_path(),
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
                 &[match_spec],
             )
             .unwrap();
@@ -319,6 +356,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &["foo<4"],
             )
@@ -347,6 +385,7 @@ macro_rules! solver_backend_tests {
                 dummy_channel_json_path(),
                 already_installed,
                 Vec::new(),
+                Vec::new(),
                 &["foo>=4"],
             )
             .unwrap();
@@ -371,6 +410,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &["foo<4"],
             )
@@ -398,6 +438,7 @@ macro_rules! solver_backend_tests {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
                 already_installed,
+                Vec::new(),
                 Vec::new(),
                 &[],
             )
@@ -487,11 +528,33 @@ mod libsolv_rs {
     use super::*;
 
     solver_backend_tests!(rattler_solve::libsolv_rs::Solver);
+
+    #[test]
+    fn test_solve_locked() {
+        let result = solve::<rattler_solve::libsolv_rs::Solver>(
+            dummy_channel_json_path(),
+            Vec::new(),
+            vec![installed_package(
+                "conda-forge",
+                "linux-64",
+                "bors",
+                "1.0",
+                "bla_1",
+                1,
+            )],
+            Vec::new(),
+            &["bors >=2"],
+        );
+
+        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        insta::assert_display_snapshot!(result.unwrap_err());
+    }
 }
 
 fn solve<T: SolverImpl + Default>(
     repo_path: String,
     installed_packages: Vec<RepoDataRecord>,
+    pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     match_specs: &[&str],
 ) -> Result<Vec<RepoDataRecord>, SolveError> {
@@ -507,7 +570,7 @@ fn solve<T: SolverImpl + Default>(
         virtual_packages,
         available_packages: [&repo_data],
         specs,
-        pinned_packages: Vec::new(),
+        pinned_packages,
     };
 
     let pkgs = T::default().solve(task)?;
@@ -553,36 +616,49 @@ fn compare_solve(specs: Vec<&str>) {
     let mut results = Vec::new();
 
     #[cfg(feature = "libsolv_c")]
-    results.push((
-        "libsolv_c",
-        extract_pkgs(
-            rattler_solve::libsolv_c::Solver
-                .solve(SolverTask {
-                    available_packages: &available_packages,
-                    specs: specs.clone(),
-                    locked_packages: Default::default(),
-                    pinned_packages: Default::default(),
-                    virtual_packages: Default::default(),
-                })
-                .unwrap(),
-        ),
-    ));
+    {
+        let start_solve = Instant::now();
+        results.push((
+            "libsolv_c",
+            extract_pkgs(
+                rattler_solve::libsolv_c::Solver
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Default::default(),
+                        pinned_packages: Default::default(),
+                        virtual_packages: Default::default(),
+                    })
+                    .unwrap(),
+            ),
+        ));
+        let end_solve = Instant::now();
+        println!("libsolv_c took {}ms", (end_solve - start_solve).as_millis())
+    }
 
     #[cfg(feature = "libsolv_rs")]
-    results.push((
-        "libsolv_rs",
-        extract_pkgs(
-            rattler_solve::libsolv_rs::Solver
-                .solve(SolverTask {
-                    available_packages: &available_packages,
-                    specs: specs.clone(),
-                    locked_packages: Default::default(),
-                    pinned_packages: Default::default(),
-                    virtual_packages: Default::default(),
-                })
-                .unwrap(),
-        ),
-    ));
+    {
+        let start_solve = Instant::now();
+        results.push((
+            "libsolv_rs",
+            extract_pkgs(
+                rattler_solve::libsolv_rs::Solver
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Default::default(),
+                        pinned_packages: Default::default(),
+                        virtual_packages: Default::default(),
+                    })
+                    .unwrap(),
+            ),
+        ));
+        let end_solve = Instant::now();
+        println!(
+            "libsolv_rs took {}ms",
+            (end_solve - start_solve).as_millis()
+        )
+    }
 
     results.into_iter().fold(None, |previous, current| {
         let previous = match previous {
