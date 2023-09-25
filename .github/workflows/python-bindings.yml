@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          lfs: true
       - run: |
           curl -fsSL https://pixi.sh/install.sh | bash
           echo "/home/runner/.pixi/bin" >> $GITHUB_PATH
