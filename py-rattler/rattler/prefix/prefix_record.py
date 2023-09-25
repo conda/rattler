@@ -162,6 +162,6 @@ class PrefixRecord:
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r
-        PrefixRecord(name=PackageName("requests"), version=VersionWithSource("2.28.2"))
+        PrefixRecord(name="requests", version="2.28.2")
         """
         return f'PrefixRecord(name="{self.name.normalized}", version="{self.version}")'

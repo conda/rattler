@@ -44,7 +44,7 @@ class GenericVirtualPackage:
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> gvp.name
-        PackageName()
+        PackageName("__archspec")
         >>> gvp.name.source
         '__archspec'
         >>> gvp.name.normalized
