@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2023-09-22
+
+### ✨ Highlights
+
+This is a pretty substantial release which includes many refactors to the solver (which we will pull out of this repository at some point), initial work on Python bindings, and many many fixes.  
+
+### 📃 Details
+
+#### Added
+* [pixi](https://github.com/prefix-dev/pixi) project to make contributing easier by @YeungOnion in [#283](https://github.com/mamba-org/rattler/pull/283), [#342](https://github.com/mamba-org/rattler/pull/342)
+* make rattler-package-streaming compile with wasm by @wolfv in [#287](https://github.com/mamba-org/rattler/pull/287)
+* implement base_url cep by @baszalmstra in [#322](https://github.com/mamba-org/rattler/pull/322)
+* use emscripten-wasm32 and wasi-wasm32 by @wolfv in [#333](https://github.com/mamba-org/rattler/pull/333)
+* add build_spec module by @YeungOnion in [#340](https://github.com/mamba-org/rattler/pull/340), [#346](https://github.com/mamba-org/rattler/pull/346)
+
+#### Changed
+
+* use normalized package names where applicable by @baszalmstra in [#285](https://github.com/mamba-org/rattler/pull/285)
+* new `StrictVersion` type for VersionSpec ranges. by @tdejager in [#296](https://github.com/mamba-org/rattler/pull/296)
+* refactored ratter_libsolv_rs to be conda agnostic by @tdejager & @baszalmstra in [#316](https://github.com/mamba-org/rattler/pull/316), [#309](https://github.com/mamba-org/rattler/pull/309), [#317](https://github.com/mamba-org/rattler/pull/317), [#320](https://github.com/mamba-org/rattler/pull/320), [#319](https://github.com/mamba-org/rattler/pull/319), [#323](https://github.com/mamba-org/rattler/pull/323), [#324](https://github.com/mamba-org/rattler/pull/324), [#328](https://github.com/mamba-org/rattler/pull/328), [#325](https://github.com/mamba-org/rattler/pull/325), [#326](https://github.com/mamba-org/rattler/pull/326), [#335](https://github.com/mamba-org/rattler/pull/335), [#336](https://github.com/mamba-org/rattler/pull/336), [#338](https://github.com/mamba-org/rattler/pull/338), [#343](https://github.com/mamba-org/rattler/pull/343), [#337](https://github.com/mamba-org/rattler/pull/337)
+* feat: allow disabling jlap by @baszalmstra in [#327](https://github.com/mamba-org/rattler/pull/327)
+* test: added job to check for lfs links by @tdejager in [#331](https://github.com/mamba-org/rattler/pull/331)
+* hide implementation detail, version_spec::Constraint by @YeungOnion in [#341](https://github.com/mamba-org/rattler/pull/341)
+
+#### Fixed
+
+* typo in solver error message by @baszalmstra in [#284](https://github.com/mamba-org/rattler/pull/284)
+* expose ParseMatchSpecError in rattler_conda_types by @Wackyator in [#286](https://github.com/mamba-org/rattler/pull/286)
+* use nvidia-smi on musl targets to detect Cuda by @baszalmstra in [#290](https://github.com/mamba-org/rattler/pull/290)
+* typo in snap file by @wolfv in [#291](https://github.com/mamba-org/rattler/pull/291)
+* Version::is_dev returning false for dev version (fix #289) by @Wackyator in [#293](https://github.com/mamba-org/rattler/pull/293)
+* workaround for `PIP_REQUIRE_VIRTUALENV` env variable by @tusharsadhwani in [#294](https://github.com/mamba-org/rattler/pull/294)
+* ensure consistent sorting of locked packages by @baszalmstra in [#295](https://github.com/mamba-org/rattler/pull/295)
+* updates to `NamelessMatchSpec` to allow deserializing by @travishathaway in [#299](https://github.com/mamba-org/rattler/pull/299)
+* update all dependencies and fix chrono deprecation by @wolfv in [#302](https://github.com/mamba-org/rattler/pull/302)
+* shell improvements for powershell env-var escaping and xonsh detection by @wolfv in [#307](https://github.com/mamba-org/rattler/pull/307)
+* also export strict version by @wolfv in [#312](https://github.com/mamba-org/rattler/pull/312)
+* make FetchRepoDataOptions clonable by @Wackyator in [#321](https://github.com/mamba-org/rattler/pull/321)
+* bump json-patch 1.1.0 to fix stack overflow by @baszalmstra in [#332](https://github.com/mamba-org/rattler/pull/332)
+* emscripten is a unix variant by @wolfv in [#339](https://github.com/mamba-org/rattler/pull/339)
+* authentication fallback storage location by @ruben-arts in [#347](https://github.com/mamba-org/rattler/pull/347)
+
+### 🐍 Python
+
+Although this release doesn't include a formal release of the python bindings yet, a lot of work has been done to work towards a first version. 
+
+* initial version of rattler python bindings by @baszalmstra in [#279](https://github.com/mamba-org/rattler/pull/279)
+* bind `Version`, `MatchSpec`, `NamelessMatchSpec` by @Wackyator in [#292](https://github.com/mamba-org/rattler/pull/292)
+* add more tests, hash and repr changes by @baszalmstra in [#300](https://github.com/mamba-org/rattler/pull/300)
+* add license by @Wackyator in [#301](https://github.com/mamba-org/rattler/pull/301)
+* bind channel types to py-rattler by @wolfv in [#313](https://github.com/mamba-org/rattler/pull/313)
+* bind everything necessary for shell activation by @wolfv in [#298](https://github.com/mamba-org/rattler/pull/298)
+* add mypy checks by @baszalmstra in [#314](https://github.com/mamba-org/rattler/pull/314)
+* bind `AuthenticatedClient` by @Wackyator in [#315](https://github.com/mamba-org/rattler/pull/315)
+* add `py.typed` file by @baszalmstra in [#318](https://github.com/mamba-org/rattler/pull/318)
+* bind `VersionWithSource` by @Wackyator in [#304](https://github.com/mamba-org/rattler/pull/304)
+
+### 🤗 New Contributors
+* @Wackyator made their first contribution in [#286](https://github.com/mamba-org/rattler/pull/286)
+* @YeungOnion made their first contribution in [#283](https://github.com/mamba-org/rattler/pull/283)
+* @tusharsadhwani made their first contribution in [#294](https://github.com/mamba-org/rattler/pull/294)
+
+To all contributors, thank you for your amazing work on Rattler. This project wouldn't exist without you! 🙏
+
 ## [0.8.0] - 2023-08-22
 
 ### Highlights

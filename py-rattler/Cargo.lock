@@ -1511,7 +1511,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "blake2",
  "digest",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "quote",
  "syn 2.0.31",
@@ -1572,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1590,7 +1590,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.0.0",
