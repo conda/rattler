@@ -40,7 +40,6 @@ pub struct Solver<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> 
     learnt_why: Mapping<LearntClauseId, Vec<ClauseId>>,
     learnt_clause_ids: Vec<ClauseId>,
 
-    // TODO: Can we use a better datastructure for this?
     clauses_added_for_package: HashSet<NameId>,
     clauses_added_for_solvable: HashSet<SolvableId>,
 
@@ -351,17 +350,18 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
             // We have a partial solution. E.g. there is a solution that satisfies all the clauses
             // that have been added so far.
 
-            // Determine which literals where selected since the last level
-            let mut new_solvables = Vec::new();
-            for decision in self.decision_tracker.stack() {
-                if decision.value
-                    && !self
-                        .clauses_added_for_solvable
-                        .contains(&decision.solvable_id)
-                {
-                    new_solvables.push((decision.solvable_id, decision.derived_from));
-                }
-            }
+            // Determine which solvables are part of the solution for which we did not yet get any
+            // dependencies. If we find any such solvable it means we did not arrive at the full
+            // solution yet.
+            let new_solvables: Vec<_> = self
+                .decision_tracker
+                .stack()
+                // Filter only decisions that led to a positive assignment
+                .filter(|d| d.value)
+                // Select solvables for which we do not yet have dependencies
+                .filter(|d| !self.clauses_added_for_solvable.contains(&d.solvable_id))
+                .map(|d| (d.solvable_id, d.derived_from))
+                .collect();
 
             if new_solvables.is_empty() {
                 // If no new literals were selected this solution is complete and we can return.

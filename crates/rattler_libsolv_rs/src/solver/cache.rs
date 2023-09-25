@@ -9,7 +9,7 @@ use crate::{
     VersionSet, VersionSetId,
 };
 use bitvec::vec::BitVec;
-use elsa::{FrozenMap};
+use elsa::FrozenMap;
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
