@@ -396,9 +396,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                             if solvable_is_assigned {
                                 let candidates =
                                     self.cache.get_or_cache_matching_candidates(requirement);
-                                let all_candidates_assigned_false = candidates
-                                    .iter()
-                                    .all(|&s| self.decision_tracker.assigned_value(s) == Some(false));
+                                let all_candidates_assigned_false = candidates.iter().all(|&s| {
+                                    self.decision_tracker.assigned_value(s) == Some(false)
+                                });
                                 let is_empty = candidates.is_empty();
 
                                 // If none of the candidates is selectable this clause will cause a
@@ -406,9 +406,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                                 // decision to select
                                 if all_candidates_assigned_false {
                                     tracing::info!(
-                                    "├─ there are no selectable candidates for {clause:?}",
-                                    clause = self.clauses[clause_id].debug(self.pool())
-                                );
+                                        "├─ there are no selectable candidates for {clause:?}",
+                                        clause = self.clauses[clause_id].debug(self.pool())
+                                    );
 
                                     self.decision_tracker.clear();
                                     level = 0;
