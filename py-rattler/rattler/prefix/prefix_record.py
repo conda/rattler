@@ -124,12 +124,32 @@ class PrefixRecord:
 
     @property
     def name(self) -> PackageName:
-        """ """
+        """
+        Package name of the PrefixRecord.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.name
+        PackageName("requests")
+        """
         return PackageName._from_py_package_name(self._record.name)
 
     @property
     def version(self) -> VersionWithSource:
-        """ """
+        """
+        Version of the PrefixRecord.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.version
+        VersionWithSource("2.28.2")
+        """
         return VersionWithSource(self._record.version)
 
     def __repr__(self) -> str:
