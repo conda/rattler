@@ -10,7 +10,7 @@ from rattler.repo_data.record import RepoDataRecord
 
 @pytest.fixture(scope="session")
 def serve_repo_data() -> None:
-    port, repo_name = 8989, "test-repo"
+    port, repo_name = 8912, "test-repo"
 
     with subprocess.Popen(
         [
