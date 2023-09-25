@@ -1,3 +1,5 @@
+use std::io;
+
 use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
 use rattler_conda_types::{
@@ -5,6 +7,7 @@ use rattler_conda_types::{
     ParsePlatformError, ParseVersionError,
 };
 use rattler_shell::activation::ActivationError;
+use rattler_virtual_packages::DetectVirtualPackageError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -26,6 +29,10 @@ pub enum PyRattlerError {
     ParsePlatformError(#[from] ParsePlatformError),
     #[error(transparent)]
     ParseArchError(#[from] ParseArchError),
+    #[error(transparent)]
+    DetectVirtualPackageError(#[from] DetectVirtualPackageError),
+    #[error(transparent)]
+    IoError(#[from] io::Error),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -49,6 +56,11 @@ impl From<PyRattlerError> for PyErr {
                 ParsePlatformException::new_err(err.to_string())
             }
             PyRattlerError::ParseArchError(err) => ParseArchException::new_err(err.to_string()),
+
+            PyRattlerError::DetectVirtualPackageError(err) => {
+                DetectVirtualPackageException::new_err(err.to_string())
+            }
+            PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
         }
     }
 }
@@ -61,3 +73,5 @@ create_exception!(exceptions, InvalidChannelException, PyException);
 create_exception!(exceptions, ActivationException, PyException);
 create_exception!(exceptions, ParsePlatformException, PyException);
 create_exception!(exceptions, ParseArchException, PyException);
+create_exception!(exceptions, DetectVirtualPackageException, PyException);
+create_exception!(exceptions, IoException, PyException);
