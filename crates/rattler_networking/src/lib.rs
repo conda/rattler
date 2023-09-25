@@ -2,7 +2,8 @@
 
 //! Networking utilities for Rattler, specifically authenticating requests
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 pub use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 use reqwest::{Client, IntoUrl, Method, Url};
@@ -10,8 +11,9 @@ use reqwest::{Client, IntoUrl, Method, Url};
 pub mod authentication_storage;
 pub mod retry_policies;
 
-/// A client that can be used to make authenticated requests, based on the [`reqwest::Client`]
-#[derive(Clone)]
+/// A client that can be used to make authenticated requests, based on the [`reqwest::Client`].
+/// By default it uses the fallback storage in the default [`default_auth_store_fallback_directory`].
+#[derive(Clone, Default)]
 pub struct AuthenticatedClient {
     /// The underlying client
     client: Client,
@@ -20,12 +22,24 @@ pub struct AuthenticatedClient {
     auth_storage: AuthenticationStorage,
 }
 
-impl Default for AuthenticatedClient {
+/// Returns the default auth storage directory used by rattler.
+/// Would be placed in $HOME/.rattler, except when there is no home then it will be put in '/rattler/'
+pub fn default_auth_store_fallback_directory() -> &'static Path {
+    static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
+    FALLBACK_AUTH_DIR.get_or_init(|| {
+        dirs::home_dir()
+            .map(|home| home.join(".rattler/"))
+            .unwrap_or_else(|| {
+                tracing::warn!("using '/rattler' to store fallback authentication credentials because the home directory could not be found");
+                // This can only happen if the dirs lib can't find a home directory this is very unlikely.
+                PathBuf::from("/rattler/")
+            })
+    })
+}
+
+impl Default for AuthenticationStorage {
     fn default() -> Self {
-        AuthenticatedClient {
-            client: Client::default(),
-            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
-        }
+        AuthenticationStorage::new("rattler", default_auth_store_fallback_directory())
     }
 }
 
@@ -113,6 +127,8 @@ impl AuthenticatedClient {
 
 #[cfg(feature = "blocking")]
 /// A blocking client that can be used to make authenticated requests, based on the [`reqwest::blocking::Client`]
+/// By default it uses the fallback storage in the default [`default_auth_store_fallback_directory`].
+#[derive(Default)]
 pub struct AuthenticatedClientBlocking {
     /// The underlying client
     client: reqwest::blocking::Client,
@@ -131,16 +147,6 @@ impl AuthenticatedClientBlocking {
         AuthenticatedClientBlocking {
             client,
             auth_storage,
-        }
-    }
-}
-
-#[cfg(feature = "blocking")]
-impl Default for AuthenticatedClientBlocking {
-    fn default() -> Self {
-        AuthenticatedClientBlocking {
-            client: Default::default(),
-            auth_storage: AuthenticationStorage::new("rattler", &PathBuf::from("~/.rattler")),
         }
     }
 }
