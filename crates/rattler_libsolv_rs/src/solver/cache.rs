@@ -9,11 +9,12 @@ use crate::{
     VersionSet, VersionSetId,
 };
 use bitvec::vec::BitVec;
-use elsa::{FrozenMap, FrozenVec};
+use elsa::{FrozenMap};
 use std::cell::RefCell;
 use std::marker::PhantomData;
 
-/// TODO: Bla
+/// Keeps a cache of previously computed and/or requested information about solvables and version
+/// sets.
 pub struct SolverCache<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> {
     provider: D,
 
@@ -21,17 +22,14 @@ pub struct SolverCache<VS: VersionSet, N: PackageName, D: DependencyProvider<VS,
     candidates: Arena<CandidatesId, Candidates>,
     package_name_to_candidates: FrozenCopyMap<NameId, CandidatesId>,
 
-    // HACK: Since we are not allowed to iterate over the `package_name_to_candidates` field, we
-    // store the keys in a seperate vec.
-    package_names: FrozenVec<NameId>,
-
     /// A mapping of `VersionSetId` to the candidates that match that set.
     version_set_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
 
-    /// A mapping of `VersionSetId` to the candidates that do not match that set.
+    /// A mapping of `VersionSetId` to the candidates that do not match that set (only candidates
+    /// of the package indicated by the version set are included).
     version_set_inverse_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
 
-    /// A mapping of `VersionSetId` to a sorted list of canidates that match that set.
+    /// A mapping of `VersionSetId` to a sorted list of candidates that match that set.
     pub(crate) version_set_to_sorted_candidates: FrozenMap<VersionSetId, Vec<SolvableId>>,
 
     /// A mapping from a solvable to a list of dependencies
@@ -54,7 +52,6 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
 
             candidates: Default::default(),
             package_name_to_candidates: Default::default(),
-            package_names: Default::default(),
             version_set_candidates: Default::default(),
             version_set_inverse_candidates: Default::default(),
             version_set_to_sorted_candidates: Default::default(),
@@ -102,7 +99,6 @@ impl<VS: VersionSet, N: PackageName, D: DependencyProvider<VS, N>> SolverCache<V
                 let candidates_id = self.candidates.alloc(candidates);
                 self.package_name_to_candidates
                     .insert_copy(package_name, candidates_id);
-                self.package_names.push(package_name);
 
                 candidates_id
             }

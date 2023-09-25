@@ -11,6 +11,8 @@ pub(crate) struct DecisionTracker {
     stack: Vec<Decision>,
     propagate_index: usize,
 
+    // Fixed assignments are decisions that are true regardless of previous decisions. These
+    // assignments are not cleared after backtracked.
     fixed_assignments: Vec<Decision>,
     fixed_assignment_index: usize,
 }

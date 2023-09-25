@@ -87,6 +87,14 @@ impl<TId: ArenaId, TValue> Arena<TId, TValue> {
         }
     }
 
+    /// Returns an mutable iterator over the elements of the arena.
+    pub fn iter_mut(&mut self) -> ArenaIterMut<TId, TValue> {
+        ArenaIterMut {
+            arena: self,
+            index: 0,
+        }
+    }
+
     fn chunk_and_offset(index: usize) -> (usize, usize) {
         let offset = index % CHUNK_SIZE;
         let chunk = index / CHUNK_SIZE;
