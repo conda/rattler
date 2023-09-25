@@ -393,35 +393,35 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         Clause::Requires(dependent, requirement) => {
                             let solvable_is_assigned =
                                 self.decision_tracker.assigned_value(dependent) == Some(true);
-                            let candidates =
-                                self.cache.get_or_cache_matching_candidates(requirement);
-                            let all_candidates_assigned_false = candidates
-                                .iter()
-                                .all(|&s| self.decision_tracker.assigned_value(s) == Some(false));
-                            let is_empty = candidates.is_empty();
+                            if solvable_is_assigned {
+                                let candidates =
+                                    self.cache.get_or_cache_matching_candidates(requirement);
+                                let all_candidates_assigned_false = candidates
+                                    .iter()
+                                    .all(|&s| self.decision_tracker.assigned_value(s) == Some(false));
+                                let is_empty = candidates.is_empty();
 
-                            // If none of the candidates is selectable this clause will cause a
-                            // conflict. We have to backtrack to the point where we made the
-                            // decision to select
-                            if all_candidates_assigned_false {
-                                tracing::info!(
+                                // If none of the candidates is selectable this clause will cause a
+                                // conflict. We have to backtrack to the point where we made the
+                                // decision to select
+                                if all_candidates_assigned_false {
+                                    tracing::info!(
                                     "├─ there are no selectable candidates for {clause:?}",
                                     clause = self.clauses[clause_id].debug(self.pool())
                                 );
 
-                                self.decision_tracker.clear();
-                                level = 0;
-
-                                break;
-                            } else if is_empty {
-                                tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
-                                    clause=self.clauses[clause_id].debug(self.pool()));
-
-                                if solvable_is_assigned {
                                     self.decision_tracker.clear();
                                     level = 0;
+
+                                    break;
+                                } else if is_empty {
+                                    tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
+                                    clause=self.clauses[clause_id].debug(self.pool()));
+
+                                    self.decision_tracker.clear();
+                                    level = 0;
+                                    break;
                                 }
-                                break;
                             }
                         }
                         Clause::Constrains(dependent, forbidden, _) => {
