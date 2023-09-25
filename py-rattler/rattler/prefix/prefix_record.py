@@ -130,4 +130,4 @@ class PrefixRecord:
         >>> r
         PrefixRecord()
         """
-        return f"PrefixRecord()"
+        return "PrefixRecord()"

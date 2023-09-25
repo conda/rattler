@@ -50,4 +50,4 @@ class PrefixPaths:
         return self._paths.paths
 
     def __repr__(self) -> str:
-        return f"PrefixPaths()"
+        return "PrefixPaths()"
