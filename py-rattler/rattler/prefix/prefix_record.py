@@ -24,27 +24,110 @@ class PrefixRecord:
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> PrefixRecord:
+        """
+        Parses a `paths.json` file from a file.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        """
         return PrefixRecord._from_py_prefix_record(PyPrefixRecord.from_path(path))
 
     def write_to_path(self, path: os.PathLike[str], pretty: bool) -> None:
+        """
+        Writes the contents of this instance to the file at the specified location.
+        """
         self._record.write_to_path(path, pretty)
 
     @property
     def package_tarball_full_path(self) -> Optional[os.PathLike[str]]:
+        """
+        The path to where the archive of the package was stored on disk.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.package_tarball_full_path
+        'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2'
+        """
         return self._record.package_tarball_full_path
 
     @property
     def extracted_package_dir(self) -> Optional[os.PathLike[str]]:
+        """
+        The path that contains the extracted package content.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.extracted_package_dir
+        'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0'
+        """
         return self._record.extracted_package_dir
 
     @property
     def files(self) -> List[os.PathLike[str]]:
+        """
+        A sorted list of all files included in this package
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.files # doctest:+ELLIPSIS
+        [...]
+        """
         return self._record.files
 
     @property
     def paths_data(self) -> PrefixPaths:
+        """
+        Information about how files have been linked when installing the package.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.paths_data
+        PrefixPaths()
+        """
         return PrefixPaths._from_py_prefix_paths(self._record.paths_data)
 
     @property
     def requested_spec(self) -> Optional[str]:
+        """
+        The spec that was used when this package was installed.
+        Note that this field is not updated if the currently another
+        spec was used.
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.requested_spec
+        ''
+        """
         return self._record.requested_spec
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the version
+
+        Examples
+        --------
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r
+        PrefixRecord()
+        """
+        return f"PrefixRecord()"

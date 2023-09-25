@@ -87,6 +87,10 @@ impl PyPrefixRecord {
     pub fn requested_spec(&self) -> Option<String> {
         self.inner.requested_spec.clone()
     }
+
+    pub fn as_str(&self) -> String {
+        format!("{:?}", self.inner)
+    }
 }
 
 #[pyclass]
@@ -105,5 +109,29 @@ impl From<PyPrefixPaths> for PrefixPaths {
 impl From<PrefixPaths> for PyPrefixPaths {
     fn from(value: PrefixPaths) -> Self {
         Self { inner: value }
+    }
+}
+
+#[pymethods]
+impl PyPrefixPaths {
+    pub fn as_str(&self) -> String {
+        format!("{:?}", self.inner)
+    }
+
+    /// The version of the file
+    #[getter]
+    pub fn paths_version(&self) -> u64 {
+        self.inner.paths_version
+    }
+
+    /// All entries included in the package.
+    #[getter]
+    pub fn paths(&self) -> Vec<PathBuf> {
+        self.inner
+            .paths
+            .clone()
+            .into_iter()
+            .map(|pe| pe.relative_path)
+            .collect::<Vec<_>>()
     }
 }

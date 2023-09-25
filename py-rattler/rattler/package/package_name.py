@@ -45,7 +45,7 @@ class PackageName:
         --------
         >>> p = PackageName("test_xyz")
         >>> p.source
-        "test_xyz"
+        'test_xyz'
         """
         return self._name.source
 
@@ -59,7 +59,7 @@ class PackageName:
         --------
         >>> p = PackageName("test_xyz")
         >>> p.normalized
-        "test_xyz"
+        'test_xyz'
         """
         return self._name.normalized
 
