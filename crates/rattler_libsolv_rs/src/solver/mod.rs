@@ -511,6 +511,10 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
         Ok(level)
     }
 
+    /// Pick a solvable that we are going to assign true. This function uses a heuristic to
+    /// determine to best decision to make. The function selects the requirement that has the least
+    /// amount of working available candidates and selects the best candidate from that list. This
+    /// ensures that if there are conflicts they are delt with as early as possible.
     fn decide(&mut self) -> Option<(SolvableId, SolvableId, ClauseId)> {
         let mut best_decision = None;
         for &(solvable_id, deps, clause_id) in self.requires_clauses.iter() {
