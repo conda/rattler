@@ -868,9 +868,9 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
     /// Create a [`Problem`] based on the id of the clause that triggered an unrecoverable conflict
     fn analyze_unsolvable(&mut self, clause_id: ClauseId) -> Problem {
-        // let last_decision = self.decision_tracker.stack().last().unwrap();
-        // let highest_level = self.decision_tracker.level(last_decision.solvable_id);
-        // debug_assert_eq!(highest_level, 1);
+        let last_decision = self.decision_tracker.stack().last().unwrap();
+        let highest_level = self.decision_tracker.level(last_decision.solvable_id);
+        debug_assert_eq!(highest_level, 1);
 
         let mut problem = Problem::default();
 
