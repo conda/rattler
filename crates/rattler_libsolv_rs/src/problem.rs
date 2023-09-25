@@ -58,7 +58,7 @@ impl Problem {
                 &Clause::Requires(package_id, version_set_id) => {
                     let package_node = Self::add_node(&mut graph, &mut nodes, package_id);
 
-                    let candidates = solver.get_or_cache_sorted_candidates(version_set_id);
+                    let candidates = solver.cache.get_or_cache_sorted_candidates(version_set_id);
                     if candidates.is_empty() {
                         tracing::info!(
                             "{package_id:?} requires {version_set_id:?}, which has no candidates"

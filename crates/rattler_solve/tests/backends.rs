@@ -6,6 +6,7 @@ use rattler_conda_types::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use std::str::FromStr;
+use std::time::Instant;
 use url::Url;
 
 fn conda_json_path() -> String {
@@ -119,7 +120,10 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         virtual_packages: Default::default(),
     };
 
-    let pkgs1 = T::default().solve(solver_task).unwrap();
+    let pkgs1 = match T::default().solve(solver_task) {
+        Ok(result) => result,
+        Err(e) => panic!("{e}"),
+    };
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -169,7 +173,7 @@ macro_rules! solver_backend_tests {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["xtensor", "xsimd",]));
         }
 
-        #[test]
+        #[test_log::test]
         fn test_solve_tensorflow() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["tensorflow"]));
         }
@@ -612,36 +616,49 @@ fn compare_solve(specs: Vec<&str>) {
     let mut results = Vec::new();
 
     #[cfg(feature = "libsolv_c")]
-    results.push((
-        "libsolv_c",
-        extract_pkgs(
-            rattler_solve::libsolv_c::Solver
-                .solve(SolverTask {
-                    available_packages: &available_packages,
-                    specs: specs.clone(),
-                    locked_packages: Default::default(),
-                    pinned_packages: Default::default(),
-                    virtual_packages: Default::default(),
-                })
-                .unwrap(),
-        ),
-    ));
+    {
+        let start_solve = Instant::now();
+        results.push((
+            "libsolv_c",
+            extract_pkgs(
+                rattler_solve::libsolv_c::Solver
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Default::default(),
+                        pinned_packages: Default::default(),
+                        virtual_packages: Default::default(),
+                    })
+                    .unwrap(),
+            ),
+        ));
+        let end_solve = Instant::now();
+        println!("libsolv_c took {}ms", (end_solve - start_solve).as_millis())
+    }
 
     #[cfg(feature = "libsolv_rs")]
-    results.push((
-        "libsolv_rs",
-        extract_pkgs(
-            rattler_solve::libsolv_rs::Solver
-                .solve(SolverTask {
-                    available_packages: &available_packages,
-                    specs: specs.clone(),
-                    locked_packages: Default::default(),
-                    pinned_packages: Default::default(),
-                    virtual_packages: Default::default(),
-                })
-                .unwrap(),
-        ),
-    ));
+    {
+        let start_solve = Instant::now();
+        results.push((
+            "libsolv_rs",
+            extract_pkgs(
+                rattler_solve::libsolv_rs::Solver
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Default::default(),
+                        pinned_packages: Default::default(),
+                        virtual_packages: Default::default(),
+                    })
+                    .unwrap(),
+            ),
+        ));
+        let end_solve = Instant::now();
+        println!(
+            "libsolv_rs took {}ms",
+            (end_solve - start_solve).as_millis()
+        )
+    }
 
     results.into_iter().fold(None, |previous, current| {
         let previous = match previous {

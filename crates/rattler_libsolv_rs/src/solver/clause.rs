@@ -491,8 +491,11 @@ impl<VS: VersionSet, N: PackageName + Display> Debug for ClauseDebug<'_, VS, N> 
                 let match_spec = self.pool.resolve_version_set(match_spec_id).to_string();
                 write!(
                     f,
-                    "{} requires {match_spec}",
+                    "{} requires {} {match_spec}",
                     solvable_id.display(self.pool),
+                    self.pool
+                        .resolve_version_set_package_name(match_spec_id)
+                        .display(self.pool)
                 )
             }
             Clause::Constrains(s1, s2, vset_id) => {

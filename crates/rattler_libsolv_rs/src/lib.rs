@@ -17,15 +17,18 @@ mod solvable;
 mod solver;
 
 use itertools::Itertools;
+
+pub use internal::{
+    id::{NameId, SolvableId, VersionSetId},
+    mapping::Mapping,
+};
+pub use pool::Pool;
+pub use solvable::Solvable;
+pub use solver::{Solver, SolverCache};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
-
-pub use internal::id::{NameId, SolvableId, VersionSetId};
-pub use pool::Pool;
-pub use solvable::Solvable;
-pub use solver::Solver;
 
 /// The solver is based around the fact that for for every package name we are trying to find a
 /// single variant. Variants are grouped by their respective package name. A package name is
@@ -60,7 +63,7 @@ pub trait DependencyProvider<VS: VersionSet, N: PackageName = String>: Sized {
     /// Sort the specified solvables based on which solvable to try first. The solver will
     /// iteratively try to select the highest version. If a conflict is found with the highest
     /// version the next version is tried. This continues until a solution is found.
-    fn sort_candidates(&self, solver: &Solver<VS, N, Self>, solvables: &mut [SolvableId]);
+    fn sort_candidates(&self, solver: &SolverCache<VS, N, Self>, solvables: &mut [SolvableId]);
 
     /// Returns a list of solvables that should be considered when a package with the given name is
     /// requested.
@@ -92,6 +95,15 @@ pub struct Candidates {
     /// also be possible to simply return a single candidate using this field provides better error
     /// messages to the user.
     pub locked: Option<SolvableId>,
+
+    /// A hint to the solver that the dependencies of some of the solvables are also directly
+    /// available. This allows the solver to request the dependencies of these solvables
+    /// immediately. Having the dependency information available might make the solver much faster
+    /// because it has more information available up-front which provides the solver with a more
+    /// complete picture of the entire problem space. However, it might also be the case that the
+    /// solver doesnt actually need this information to form a solution. In general though, if the
+    /// dependencies can easily be provided one should provide them up-front.
+    pub hint_dependencies_available: Vec<SolvableId>,
 }
 
 /// Holds information about the dependencies of a package.
