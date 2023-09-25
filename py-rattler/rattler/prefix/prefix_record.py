@@ -1,9 +1,11 @@
 from __future__ import annotations
 import os
 from typing import List, Optional, Self
+from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyPrefixRecord
 from rattler.prefix.prefix_paths import PrefixPaths
+from rattler.version.with_source import VersionWithSource
 
 
 class PrefixRecord:
@@ -25,7 +27,7 @@ class PrefixRecord:
     @staticmethod
     def from_path(path: os.PathLike[str]) -> PrefixRecord:
         """
-        Parses a `paths.json` file from a file.
+        Parses a PrefixRecord from a file.
 
         Examples
         --------
@@ -105,8 +107,10 @@ class PrefixRecord:
     def requested_spec(self) -> Optional[str]:
         """
         The spec that was used when this package was installed.
-        Note that this field is not updated if the currently another
-        spec was used.
+        Note that this field is not currently updated if another
+        spec was used. If this package was not directly requested by the
+        user but was instead installed as a dependency of another package
+        `None` will be returned.
 
         Examples
         --------
@@ -118,6 +122,16 @@ class PrefixRecord:
         """
         return self._record.requested_spec
 
+    @property
+    def name(self) -> PackageName:
+        """ """
+        return PackageName._from_py_package_name(self._record.name)
+
+    @property
+    def version(self) -> VersionWithSource:
+        """ """
+        return VersionWithSource(self._record.version)
+
     def __repr__(self) -> str:
         """
         Returns a representation of the version
@@ -128,6 +142,6 @@ class PrefixRecord:
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r
-        PrefixRecord()
+        PrefixRecord(name=PackageName("requests"), version=VersionWithSource("2.28.2"))
         """
-        return "PrefixRecord()"
+        return f'PrefixRecord(name="{self.name.normalized}", version="{self.version}")'

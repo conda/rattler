@@ -50,4 +50,16 @@ class PrefixPaths:
         return self._paths.paths
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the version.
+
+        Examples
+        --------
+        >>> from rattler.prefix.prefix_record import PrefixRecord
+        >>> r = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ... )
+        >>> r.paths_data
+        PrefixPaths()
+        """
         return "PrefixPaths()"

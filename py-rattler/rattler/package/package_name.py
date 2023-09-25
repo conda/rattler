@@ -43,9 +43,9 @@ class PackageName:
 
         Examples
         --------
-        >>> p = PackageName("test_xyz")
+        >>> p = PackageName("test-xyz")
         >>> p.source
-        'test_xyz'
+        'test-xyz'
         """
         return self._name.source
 
@@ -57,11 +57,20 @@ class PackageName:
 
         Examples
         --------
-        >>> p = PackageName("test_xyz")
+        >>> p = PackageName("test-xyz")
         >>> p.normalized
-        'test_xyz'
+        'test-xyz'
         """
         return self._name.normalized
 
     def __repr__(self) -> str:
-        return "PackageName()"
+        """
+        Returns a representation of the version.
+
+        Examples
+        --------
+        >>> p = PackageName("test-xyz")
+        >>> p
+        PackageName("test-xyz")
+        """
+        return f'PackageName("{self.source}")'

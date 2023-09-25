@@ -2,7 +2,7 @@ use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::{prefix_record::PrefixPaths, PrefixRecord};
 use std::{path::PathBuf, str::FromStr};
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, package_name::PyPackageName};
 
 #[pyclass]
 #[repr(transparent)]
@@ -27,13 +27,13 @@ impl From<PyPrefixRecord> for PrefixRecord {
 impl PyPrefixRecord {
     /// Creates a new `PrefixRecord` from string.
     #[new]
-    pub fn new(source: String) -> PyResult<Self> {
-        Ok(PrefixRecord::from_str(source.as_ref())
+    pub fn new(source: &str) -> PyResult<Self> {
+        Ok(PrefixRecord::from_str(source)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
     }
 
-    /// Parses a `paths.json` file from a file.
+    /// Parses a PrefixRecord from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(PrefixRecord::from_path(path)
@@ -56,6 +56,23 @@ impl PyPrefixRecord {
     // pub fn repodata_record(&self) -> PyRepoDataRecord {
     //     self.inner.repodata_record.clone().into()
     // }
+
+    /// Package name of the PrefixRecord.
+    #[getter]
+    pub fn name(&self) -> PyPackageName {
+        self.inner
+            .repodata_record
+            .package_record
+            .name
+            .clone()
+            .into()
+    }
+
+    /// Version of the PrefixRecord.
+    #[getter]
+    pub fn version(&self) -> String {
+        format!("{}", self.inner.repodata_record.package_record.version)
+    }
 
     /// The path to where the archive of the package was stored on disk.
     #[getter]
