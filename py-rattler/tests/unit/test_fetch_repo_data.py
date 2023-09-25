@@ -1,5 +1,5 @@
 # type: ignore
-
+import os.path
 import subprocess
 
 import pytest
@@ -12,12 +12,14 @@ from rattler.repo_data.record import RepoDataRecord
 def serve_repo_data() -> None:
     port, repo_name = 8912, "test-repo"
 
+    test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data")
+
     with subprocess.Popen(
         [
             "python",
-            "../test-data/reposerver.py",
+            os.path.join(test_data_dir, "reposerver.py"),
             "-d",
-            "../test-data/repo/",
+            os.path.join(test_data_dir, "repo"),
             "-n",
             repo_name,
             "-p",
