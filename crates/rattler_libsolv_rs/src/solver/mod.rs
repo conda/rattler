@@ -338,19 +338,12 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
 
             // Add decisions for Require clauses that form unit clauses. E.g. require clauses that
             // have no matching candidates.
-            self.decide_requires_without_candidates(&std::mem::take(
-                &mut new_clauses,
-            ))
-            .map_err(|clause_id| {
-                dbg!("requires without candidates failed");
-                self.analyze_unsolvable(clause_id)
-            })?;
+            self.decide_requires_without_candidates(&std::mem::take(&mut new_clauses))
+                .map_err(|clause_id| self.analyze_unsolvable(clause_id))?;
 
             // Propagate any decisions from assignments above.
-            self.propagate(level).map_err(|(_, _, clause_id)| {
-                dbg!("propagation failed");
-                self.analyze_unsolvable(clause_id)
-            })?;
+            self.propagate(level)
+                .map_err(|(_, _, clause_id)| self.analyze_unsolvable(clause_id))?;
 
             // Enter the solver loop, return immediately if no new assignments have been made.
             level = self.resolve_dependencies(level)?;
@@ -400,37 +393,35 @@ impl<VS: VersionSet, N: PackageName + Display, D: DependencyProvider<VS, N>> Sol
                         Clause::Requires(dependent, requirement) => {
                             let solvable_is_assigned =
                                 self.decision_tracker.assigned_value(dependent) == Some(true);
-                            if solvable_is_assigned {
-                                let candidates =
-                                    self.cache.get_or_cache_matching_candidates(requirement);
-                                let is_conflicting = candidates.iter().all(|&s| {
-                                    self.decision_tracker.assigned_value(s) == Some(false)
-                                });
-                                let is_empty = candidates.is_empty();
+                            let candidates =
+                                self.cache.get_or_cache_matching_candidates(requirement);
+                            let all_candidates_assigned_false = candidates
+                                .iter()
+                                .all(|&s| self.decision_tracker.assigned_value(s) == Some(false));
+                            let is_empty = candidates.is_empty();
 
-                                // If none of the candidates is selectable this clause will cause a
-                                // conflict. We have to backtrack to the point where we made the
-                                // decision to select
-                                if is_conflicting {
-                                    tracing::info!(
-                                        "├─ there are no selectable candidates for {clause:?}",
-                                        clause = self.clauses[clause_id].debug(self.pool())
-                                    );
+                            // If none of the candidates is selectable this clause will cause a
+                            // conflict. We have to backtrack to the point where we made the
+                            // decision to select
+                            if all_candidates_assigned_false {
+                                tracing::info!(
+                                    "├─ there are no selectable candidates for {clause:?}",
+                                    clause = self.clauses[clause_id].debug(self.pool())
+                                );
 
-                                    self.decision_tracker.clear();
-                                    level = 0;
+                                self.decision_tracker.clear();
+                                level = 0;
 
-                                    break;
-                                } else if is_empty {
-                                    tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
+                                break;
+                            } else if is_empty {
+                                tracing::info!("├─ added clause {clause:?} has no candidates which invalidates the partial solution",
                                     clause=self.clauses[clause_id].debug(self.pool()));
 
-                                    if solvable_is_assigned {
-                                        self.decision_tracker.clear();
-                                        level = 0;
-                                    }
-                                    break;
+                                if solvable_is_assigned {
+                                    self.decision_tracker.clear();
+                                    level = 0;
                                 }
+                                break;
                             }
                         }
                         Clause::Constrains(dependent, forbidden, _) => {
@@ -1339,6 +1330,18 @@ mod test {
         }
     }
 
+    /// Solve the problem and returns either a solution represented as a string or an error string.
+    fn solve_snapshot(provider: BundleBoxProvider, specs: &[&str]) -> String {
+        let requirements = provider.requirements(specs);
+        let mut solver = Solver::new(provider);
+        match solver.solve(requirements) {
+            Ok(solvables) => transaction_to_string(solver.pool(), &solvables),
+            Err(problem) => problem
+                .display_user_friendly(&solver, &DefaultSolvableDisplay)
+                .to_string(),
+        }
+    }
+
     /// Test whether we can select a version, this is the most basic operation
     #[test]
     fn test_unit_propagation_1() {
@@ -1764,15 +1767,7 @@ mod test {
     fn test_missing_dep() {
         let provider =
             BundleBoxProvider::from_packages(&[("a", 2, vec!["missing"]), ("a", 1, vec![])]);
-        let requirements = provider.requirements(&["a"]);
-        let mut solver = Solver::new(provider);
-        let result = match solver.solve(requirements) {
-            Ok(result) => transaction_to_string(solver.pool(), &result),
-            Err(problem) => problem
-                .display_user_friendly(&solver, &DefaultSolvableDisplay)
-                .to_string(),
-        };
-        insta::assert_snapshot!(result);
+        insta::assert_snapshot!(solve_snapshot(provider, &["a"]));
     }
 
     #[test]
@@ -1796,9 +1791,22 @@ mod test {
             ("pydantic", 13, vec![]),
             ("pydantic", 14, vec![]),
         ]);
-        let requirements = provider.requirements(&["quetz-server", "pydantic 0..10"]);
-        let mut solver = Solver::new(provider);
-        let solved = solver.solve(requirements).unwrap();
-        insta::assert_snapshot!(transaction_to_string(solver.pool(), &solved));
+        insta::assert_snapshot!(solve_snapshot(
+            provider,
+            &["quetz-server", "pydantic 0..10"]
+        ));
+    }
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn test_incremental_crash() {
+        let provider = BundleBoxProvider::from_packages(&[
+            ("a", 3, vec!["missing"]),
+            ("a", 2, vec!["missing"]),
+            ("a", 1, vec!["b"]),
+            ("b", 2, vec!["a 2..4"]),
+            ("b", 1, vec![]),
+        ]);
+        insta::assert_snapshot!(solve_snapshot(provider, &["a"]));
     }
 }

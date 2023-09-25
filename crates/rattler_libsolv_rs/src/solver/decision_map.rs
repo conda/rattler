@@ -1,5 +1,7 @@
 use crate::internal::{arena::ArenaId, id::SolvableId};
+use crate::{PackageName, Pool, VersionSet};
 use std::cmp::Ordering;
+use std::fmt::{Display, Formatter};
 
 /// Represents a decision (i.e. an assignment to a solvable) and the level at which it was made
 ///
@@ -74,5 +76,38 @@ impl DecisionMap {
 
     pub fn value(&self, solvable_id: SolvableId) -> Option<bool> {
         self.map.get(solvable_id.to_usize()).and_then(|d| d.value())
+    }
+
+    /// Returns an object that can be used to display the contents of the decision map in a human readable fashion.
+    #[allow(unused)]
+    pub fn display<'a, VS: VersionSet, N: PackageName + Display>(
+        &'a self,
+        pool: &'a Pool<VS, N>,
+    ) -> DecisionMapDisplay<'a, VS, N> {
+        DecisionMapDisplay { map: self, pool }
+    }
+}
+
+pub struct DecisionMapDisplay<'a, VS: VersionSet, N: PackageName + Display> {
+    map: &'a DecisionMap,
+    pool: &'a Pool<VS, N>,
+}
+
+impl<'a, VS: VersionSet, N: PackageName + Display> Display for DecisionMapDisplay<'a, VS, N> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        for (id, solvable) in self.pool.solvables.iter() {
+            write!(f, "{} := ", solvable.display(self.pool))?;
+            if let Some(value) = self.map.value(id) {
+                writeln!(
+                    f,
+                    "{} (level: {})",
+                    if value { "true " } else { "false" },
+                    self.map.level(id)
+                )?;
+            } else {
+                writeln!(f, "<undecided>")?;
+            }
+        }
+        Ok(())
     }
 }

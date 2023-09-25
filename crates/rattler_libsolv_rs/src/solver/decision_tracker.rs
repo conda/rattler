@@ -34,6 +34,11 @@ impl DecisionTracker {
         // The fixed assignment decisions are kept but the propagation index is. This assures that
         // during the next propagation all fixed assignment decisions are repropagated.
         self.fixed_assignment_index = 0;
+
+        // Reapply all the fixed decisions
+        for decision in self.fixed_assignments.iter() {
+            self.map.set(decision.solvable_id, decision.value, 1);
+        }
     }
 
     pub(crate) fn is_empty(&self) -> bool {
