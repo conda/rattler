@@ -1,7 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1601
-expression: error
----
-No candidates were found for b >=14, <15.
-

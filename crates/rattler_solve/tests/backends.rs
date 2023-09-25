@@ -523,15 +523,15 @@ mod libsolv_c {
     }
 }
 
-#[cfg(feature = "libsolv_rs")]
-mod libsolv_rs {
+#[cfg(feature = "resolvo")]
+mod resolvo {
     use super::*;
 
-    solver_backend_tests!(rattler_solve::libsolv_rs::Solver);
+    solver_backend_tests!(rattler_solve::resolvo::Solver);
 
     #[test]
     fn test_solve_locked() {
-        let result = solve::<rattler_solve::libsolv_rs::Solver>(
+        let result = solve::<rattler_solve::resolvo::Solver>(
             dummy_channel_json_path(),
             Vec::new(),
             vec![installed_package(
@@ -636,13 +636,13 @@ fn compare_solve(specs: Vec<&str>) {
         println!("libsolv_c took {}ms", (end_solve - start_solve).as_millis())
     }
 
-    #[cfg(feature = "libsolv_rs")]
+    #[cfg(feature = "resolvo")]
     {
         let start_solve = Instant::now();
         results.push((
-            "libsolv_rs",
+            "resolvo",
             extract_pkgs(
-                rattler_solve::libsolv_rs::Solver
+                rattler_solve::resolvo::Solver
                     .solve(SolverTask {
                         available_packages: &available_packages,
                         specs: specs.clone(),
@@ -654,10 +654,7 @@ fn compare_solve(specs: Vec<&str>) {
             ),
         ));
         let end_solve = Instant::now();
-        println!(
-            "libsolv_rs took {}ms",
-            (end_solve - start_solve).as_millis()
-        )
+        println!("resolvo took {}ms", (end_solve - start_solve).as_millis())
     }
 
     results.into_iter().fold(None, |previous, current| {

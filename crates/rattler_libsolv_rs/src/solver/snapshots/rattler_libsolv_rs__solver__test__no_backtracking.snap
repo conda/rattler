@@ -1,8 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1798
-expression: "transaction_to_string(solver.pool(), &solved)"
----
-pydantic=9
-quetz-server=1
-

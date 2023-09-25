@@ -5,8 +5,8 @@
 
 #[cfg(feature = "libsolv_c")]
 pub mod libsolv_c;
-#[cfg(feature = "libsolv_rs")]
-pub mod libsolv_rs;
+#[cfg(feature = "resolvo")]
+pub mod resolvo;
 
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;

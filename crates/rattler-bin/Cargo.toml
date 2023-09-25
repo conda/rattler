@@ -33,7 +33,7 @@ rattler = { version = "0.9.0", path = "../rattler", default-features = false }
 rattler_networking = { version = "0.9.0", path = "../rattler_networking", default-features = false }
 rattler_conda_types = { version = "0.9.0", path = "../rattler_conda_types" }
 rattler_repodata_gateway = { version = "0.9.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
-rattler_solve = { version = "0.9.0", path = "../rattler_solve", features = ["libsolv_rs", "libsolv_c"] }
+rattler_solve = { version = "0.9.0", path = "../rattler_solve", features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { version = "0.9.0", path = "../rattler_virtual_packages" }
 reqwest = { version = "0.11.20", default-features = false }
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }

@@ -1,6 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-expression: result
----
-a=1
-

@@ -1,9 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1442
-expression: solved
----
-asdf=3
-conflicting=0
-efgh=7
-

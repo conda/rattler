@@ -1,7 +1,7 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 474
-expression: "solve_real_world::<rattler_solve::libsolv_rs::Solver>(vec![\"xtensor\",\n        \"xsimd\",])"
+assertion_line: 530
+expression: "solve_real_world::<rattler_solve::resolvo::Solver>(vec![\"xtensor\", \"xsimd\",])"
 ---
 - _libgcc_mutex 0.1 conda_forge
 - _openmp_mutex 4.5 2_gnu
