@@ -1,6 +1,5 @@
 # type: ignore
 
-import asyncio
 import subprocess
 
 import pytest
@@ -29,7 +28,8 @@ def serve_repo_data() -> None:
         proc.terminate()
 
 
-def test_fetch_repo_data(
+@pytest.mark.asyncio
+async def test_fetch_repo_data(
     tmp_path,
     serve_repo_data,
 ):
@@ -38,13 +38,11 @@ def test_fetch_repo_data(
     chan = Channel(repo, ChannelConfig(f"http://localhost:{port}/"))
     plat = Platform("noarch")
 
-    result = asyncio.run(
-        fetch_repo_data(
-            channels=[chan],
-            platforms=[plat],
-            cache_path=cache_dir,
-            callback=None,
-        )
+    result = await fetch_repo_data(
+        channels=[chan],
+        platforms=[plat],
+        cache_path=cache_dir,
+        callback=None,
     )
     assert isinstance(result, list)
 
