@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: py-rattler
+  PACKAGE_NAME: py_rattler
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
