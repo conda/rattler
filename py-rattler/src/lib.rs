@@ -21,10 +21,13 @@ use error::{
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
-use networking::PyAuthenticatedClient;
+use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
 use prefix_record::{PyPrefixPaths, PyPrefixRecord};
-use repo_data::package_record::PyPackageRecord;
+use repo_data::{
+    package_record::PyPackageRecord, patch_instructions::PyPatchInstructions,
+    repo_data_record::PyRepoDataRecord, PyRepoData,
+};
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -56,6 +59,12 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyShellEnum>().unwrap();
     m.add_class::<PyActivator>().unwrap();
 
+    m.add_class::<PyRepoData>().unwrap();
+    m.add_class::<PyRepoDataRecord>().unwrap();
+    m.add_class::<PyPatchInstructions>().unwrap();
+
+    m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
+        .unwrap();
     m.add_class::<PyGenericVirtualPackage>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
     m.add_class::<PyPrefixRecord>().unwrap();

@@ -2331,6 +2331,98 @@ package:
   noarch: python
   size: 243695
   timestamp: 1687692277221
+- name: pytest-asyncio
+  version: 0.21.1
+  manager: conda
+  platform: linux-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.7'
+    typing_extensions: '>=3.7.2'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.21.1-pyhd8ed1ab_0.conda
+  hash:
+    md5: c8fd31da9b1059c4440f31f6ab4d620c
+    sha256: f061bd0f8a41886331d852f7b3c4b395ac40bc404283fd061dcf992f197e3bb1
+  optional: false
+  category: main
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: linux-64
+  build_number: 0
+  license: Apache-2.0
+  license_family: APACHE
+  noarch: python
+  size: 26068
+  timestamp: 1689174411610
+- name: pytest-asyncio
+  version: 0.21.1
+  manager: conda
+  platform: osx-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.7'
+    typing_extensions: '>=3.7.2'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.21.1-pyhd8ed1ab_0.conda
+  hash:
+    md5: c8fd31da9b1059c4440f31f6ab4d620c
+    sha256: f061bd0f8a41886331d852f7b3c4b395ac40bc404283fd061dcf992f197e3bb1
+  optional: false
+  category: main
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: osx-64
+  build_number: 0
+  license: Apache-2.0
+  license_family: APACHE
+  noarch: python
+  size: 26068
+  timestamp: 1689174411610
+- name: pytest-asyncio
+  version: 0.21.1
+  manager: conda
+  platform: osx-arm64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.7'
+    typing_extensions: '>=3.7.2'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.21.1-pyhd8ed1ab_0.conda
+  hash:
+    md5: c8fd31da9b1059c4440f31f6ab4d620c
+    sha256: f061bd0f8a41886331d852f7b3c4b395ac40bc404283fd061dcf992f197e3bb1
+  optional: false
+  category: main
+  build: pyhd8ed1ab_0
+  arch: aarch64
+  subdir: osx-arm64
+  build_number: 0
+  license: Apache-2.0
+  license_family: APACHE
+  noarch: python
+  size: 26068
+  timestamp: 1689174411610
+- name: pytest-asyncio
+  version: 0.21.1
+  manager: conda
+  platform: win-64
+  dependencies:
+    pytest: '>=7.0.0'
+    python: '>=3.7'
+    typing_extensions: '>=3.7.2'
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-asyncio-0.21.1-pyhd8ed1ab_0.conda
+  hash:
+    md5: c8fd31da9b1059c4440f31f6ab4d620c
+    sha256: f061bd0f8a41886331d852f7b3c4b395ac40bc404283fd061dcf992f197e3bb1
+  optional: false
+  category: main
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: win-64
+  build_number: 0
+  license: Apache-2.0
+  license_family: APACHE
+  noarch: python
+  size: 26068
+  timestamp: 1689174411610
 - name: python
   version: 3.11.4
   manager: conda

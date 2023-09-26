@@ -26,7 +26,7 @@
 //! using the [`fetch::fetch_repo_data`] function:
 //!
 //! ```no_run
-//! use std::{path::Path, default::Default};
+//! use std::{path::PathBuf, default::Default};
 //! use rattler_networking::AuthenticatedClient;
 //! use url::Url;
 //! use rattler_repodata_gateway::fetch;
@@ -35,7 +35,7 @@
 //! async fn main() {
 //!     let repodata_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
 //!     let client = AuthenticatedClient::default();
-//!     let cache = Path::new("./cache");
+//!     let cache = PathBuf::from("./cache");
 //!
 //!     let result = fetch::fetch_repo_data(
 //!         repodata_url,

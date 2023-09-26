@@ -52,7 +52,13 @@ class NamelessMatchSpec:
         )
 
     def __str__(self) -> str:
+        """
+        Returns a string representation of the NamelessMatchSpec.
+        """
         return self._nameless_match_spec.as_str()
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the NamelessMatchSpec.
+        """
         return f'NamelessMatchSpec("{self._nameless_match_spec.as_str()}")'

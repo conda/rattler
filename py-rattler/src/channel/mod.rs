@@ -2,7 +2,7 @@ use pyo3::{pyclass, pymethods};
 use rattler_conda_types::{Channel, ChannelConfig};
 use url::Url;
 
-use crate::error::PyRattlerError;
+use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyclass]
 #[repr(transparent)]
@@ -22,7 +22,7 @@ impl PyChannelConfig {
         })
     }
 
-    /// Return the channel alias that is configured
+    /// Returns the channel alias that is configured
     #[getter]
     fn channel_alias(&self) -> String {
         self.inner.channel_alias.to_string()
@@ -57,15 +57,20 @@ impl PyChannel {
             .map_err(PyRattlerError::from)?)
     }
 
-    /// Return the name of the channel
+    /// Returns the name of the channel.
     #[getter]
     fn name(&self) -> Option<String> {
         self.inner.name.clone()
     }
 
-    /// Return the base url of the channel
+    /// Returns the base url of the channel.
     #[getter]
     fn base_url(&self) -> String {
         self.inner.base_url.to_string()
+    }
+
+    /// Returns the Urls for the given platform.
+    pub fn platform_url(&self, platform: &PyPlatform) -> String {
+        self.inner.platform_url(platform.clone().into()).into()
     }
 }

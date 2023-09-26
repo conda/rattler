@@ -6,6 +6,7 @@ use rattler_conda_types::{
     InvalidPackageNameError, ParseArchError, ParseChannelError, ParseMatchSpecError,
     ParsePlatformError, ParseVersionError,
 };
+use rattler_repodata_gateway::fetch::FetchRepoDataError;
 use rattler_shell::activation::ActivationError;
 use rattler_virtual_packages::DetectVirtualPackageError;
 use thiserror::Error;
@@ -29,6 +30,10 @@ pub enum PyRattlerError {
     ParsePlatformError(#[from] ParsePlatformError),
     #[error(transparent)]
     ParseArchError(#[from] ParseArchError),
+    #[error(transparent)]
+    FetchRepoDataError(#[from] FetchRepoDataError),
+    #[error(transparent)]
+    CacheDirError(#[from] anyhow::Error),
     #[error(transparent)]
     DetectVirtualPackageError(#[from] DetectVirtualPackageError),
     #[error(transparent)]
@@ -56,7 +61,10 @@ impl From<PyRattlerError> for PyErr {
                 ParsePlatformException::new_err(err.to_string())
             }
             PyRattlerError::ParseArchError(err) => ParseArchException::new_err(err.to_string()),
-
+            PyRattlerError::FetchRepoDataError(err) => {
+                FetchRepoDataException::new_err(err.to_string())
+            }
+            PyRattlerError::CacheDirError(err) => CacheDirException::new_err(err.to_string()),
             PyRattlerError::DetectVirtualPackageError(err) => {
                 DetectVirtualPackageException::new_err(err.to_string())
             }
@@ -73,5 +81,7 @@ create_exception!(exceptions, InvalidChannelException, PyException);
 create_exception!(exceptions, ActivationException, PyException);
 create_exception!(exceptions, ParsePlatformException, PyException);
 create_exception!(exceptions, ParseArchException, PyException);
+create_exception!(exceptions, FetchRepoDataException, PyException);
+create_exception!(exceptions, CacheDirException, PyException);
 create_exception!(exceptions, DetectVirtualPackageException, PyException);
 create_exception!(exceptions, IoException, PyException);
