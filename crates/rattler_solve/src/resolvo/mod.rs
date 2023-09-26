@@ -1,4 +1,4 @@
-//! Provides an solver implementation based on the [`rattler_libsolv_rs`] crate.
+//! Provides an solver implementation based on the [`resolvo`] crate.
 
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
@@ -6,7 +6,7 @@ use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
     RepoDataRecord,
 };
-use rattler_libsolv_rs::{
+use resolvo::{
     Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
     Solver as LibSolvRsSolver, SolverCache, VersionSet, VersionSetId,
 };
@@ -42,7 +42,7 @@ impl<'a> FromIterator<&'a RepoDataRecord> for RepoData<'a> {
 
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
-/// Wrapper around `MatchSpec` so that we can use it in the `libsolv_rs` pool
+/// Wrapper around `MatchSpec` so that we can use it in the `resolvo` pool
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 struct SolverMatchSpec<'a> {
@@ -102,7 +102,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
     }
 }
 
-/// Wrapper around [`PackageRecord`] so that we can use it in libsolv_rs pool
+/// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
 #[derive(Ord, PartialOrd, Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),

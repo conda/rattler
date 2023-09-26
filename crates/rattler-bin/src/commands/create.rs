@@ -18,7 +18,7 @@ use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{libsolv_c, libsolv_rs, SolverImpl, SolverTask};
+use rattler_solve::{libsolv_c, resolvo, SolverImpl, SolverTask};
 use reqwest::Client;
 use std::{
     borrow::Cow,
@@ -225,7 +225,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let use_libsolv_rs = opt.use_experimental_libsolv_rs;
     let required_packages = wrap_in_progress("solving", move || {
         if use_libsolv_rs {
-            libsolv_rs::Solver.solve(solver_task)
+            resolvo::Solver.solve(solver_task)
         } else {
             libsolv_c::Solver.solve(solver_task)
         }

@@ -1,8 +1,0 @@
----
-source: crates/rattler_libsolv_rs/src/solver/mod.rs
-assertion_line: 1810
-expression: "solve_snapshot(provider, &[\"a\"])"
----
-a=1
-b=1
-

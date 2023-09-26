@@ -69,10 +69,10 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         })
     });
 
-    #[cfg(feature = "libsolv_rs")]
-    group.bench_function("libsolv_rs", |b| {
+    #[cfg(feature = "resolvo")]
+    group.bench_function("resolvo", |b| {
         b.iter(|| {
-            rattler_solve::libsolv_rs::Solver
+            rattler_solve::resolvo::Solver
                 .solve(black_box(SolverTask {
                     available_packages: &available_packages,
                     locked_packages: vec![],
