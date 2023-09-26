@@ -73,7 +73,7 @@ jobs:
           cache: true
           manifest-path: py-rattler/pixi.toml
       - name: "Build wheel"
-        run: pixi run --manifest-path py-rattler/pixi.toml generate-sdist --target ${{ matrix.platform.target }}
+        run: pixi run --manifest-path py-rattler/pixi.toml generate-wheel --target ${{ matrix.platform.target }}
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
         shell: pixi run --manifest-path py-rattler/pixi.toml bash {0}
