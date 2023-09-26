@@ -326,7 +326,7 @@ impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
     }
 }
 
-/// A [`Solver`] implemented using the `libsolv` library
+/// A [`Solver`] implemented using the `resolvo` library
 #[derive(Default)]
 pub struct Solver;
 
