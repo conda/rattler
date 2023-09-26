@@ -12,7 +12,7 @@ from rattler.repo_data.record import RepoDataRecord
 def serve_repo_data() -> None:
     port, repo_name = 8912, "test-repo"
 
-    test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data")
+    test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/test-server")
 
     with subprocess.Popen(
         [
