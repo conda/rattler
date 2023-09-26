@@ -3,7 +3,7 @@ requires = ["maturin~=1.2.1"]
 build-backend = "maturin"
 
 [project]
-name = "rattler"
+name = "py-rattler"
 requires-python = ">=3.8"
 authors = [
     { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" },

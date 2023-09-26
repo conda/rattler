@@ -1,0 +1,99 @@
+name: "Python Release"
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The version to tag, without the leading 'v'. If omitted, will initiate a dry run (no uploads)."
+        type: string
+      sha:
+        description: "The full sha of the commit to be released. If omitted, the latest commit on the default branch will be used."
+        default: ""
+        type: string
+  pull_request:
+    paths:
+      # When we change pyproject.toml, we want to ensure that the maturin builds still work
+      - py-rattler/pyproject.toml
+      # And when we change this workflow itself...
+      - .github/workflows/python-release.yaml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PACKAGE_NAME: py-rattler
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: prefix-dev/setup-pixi@v0.2.1
+        with:
+          pixi-version: v0.3.0
+          cache: true
+          manifest-path: py-rattler/pixi.toml
+      - name: "Build sdist"
+        run: pixi run --manifest-path py-rattler/pixi.toml generate-sdist
+      - name: "Test sdist"
+        run: pixi run --manifest-path py-rattler/pixi.toml pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
+      - name: "Upload sdist"
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+
+  windows:
+    runs-on: windows-latest
+    name: Build ${{ matrix.platform.target }}
+    strategy:
+      matrix:
+        platform:
+          - target: x86_64-pc-windows-msvc
+            arch: x64
+          - target: i686-pc-windows-msvc
+            arch: x86
+          - target: aarch64-pc-windows-msvc
+            arch: x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: prefix-dev/setup-pixi@v0.2.1
+        with:
+          pixi-version: v0.3.0
+          cache: true
+          manifest-path: py-rattler/pixi.toml
+      - name: "Build wheel"
+        run: pixi run --manifest-path py-rattler/pixi.toml generate-sdist --target ${{ matrix.platform.target }}
+      - name: "Test wheel"
+        if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
+        shell: pixi run --manifest-path py-rattler/pixi.toml bash {0}
+        run: |
+          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+      - name: "Upload wheels"
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: dist
+      - name: "Archive binary"
+        shell: bash
+        run: |
+          ARCHIVE_FILE=ruff-${{ matrix.platform.target }}.zip
+          7z a $ARCHIVE_FILE ./target/${{ matrix.platform.target }}/release/ruff.exe
+          sha256sum $ARCHIVE_FILE > $ARCHIVE_FILE.sha256
+      - name: "Upload binary"
+        uses: actions/upload-artifact@v3
+        with:
+          name: binaries
+          path: |
+            *.zip
+            *.sha256

@@ -27,6 +27,10 @@ fmt-rust-check = "cargo fmt --all --check"
 fmt-python-check = "black . --check"
 fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 
+# tasks to generate artifacts
+generate-sdist = "maturin sdist --out dist"
+generate-wheel = "maturin build --release --out dist"
+
 [dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
