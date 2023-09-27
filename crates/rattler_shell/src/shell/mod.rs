@@ -428,7 +428,7 @@ pub struct NuShell;
 
 impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "let-env {} = \"{}\"", env_var, value)
+        writeln!(f, "$env.{} = \"{}\"", env_var, value)
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
