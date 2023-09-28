@@ -26,7 +26,7 @@ use package_name::PyPackageName;
 use prefix_record::{PyPrefixPaths, PyPrefixRecord};
 use repo_data::{
     package_record::PyPackageRecord, patch_instructions::PyPatchInstructions,
-    repo_data_record::PyRepoDataRecord, PyRepoData,
+    repo_data_record::PyRepoDataRecord, sparse::PySparseRepoData, PyRepoData,
 };
 use version::PyVersion;
 
@@ -59,6 +59,7 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyShellEnum>().unwrap();
     m.add_class::<PyActivator>().unwrap();
 
+    m.add_class::<PySparseRepoData>().unwrap();
     m.add_class::<PyRepoData>().unwrap();
     m.add_class::<PyRepoDataRecord>().unwrap();
     m.add_class::<PyPatchInstructions>().unwrap();

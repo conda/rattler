@@ -3,7 +3,7 @@ import os.path
 import subprocess
 
 import pytest
-from rattler import Channel, ChannelConfig, fetch_repo_data, RepoData
+from rattler import Channel, ChannelConfig, fetch_repo_data, SparseRepoData, PackageName
 from rattler.platform import Platform
 from rattler.repo_data.record import RepoDataRecord
 
@@ -51,9 +51,10 @@ async def test_fetch_repo_data(
     assert isinstance(result, list)
 
     repodata = result[0]
-    assert isinstance(repodata, RepoData)
+    assert isinstance(repodata, SparseRepoData)
 
-    repodata_record = repodata.into_repo_data(chan)[0]
+    package = PackageName(repodata.package_names()[0])
+    repodata_record = repodata.load_records(package)[0]
     assert isinstance(repodata_record, RepoDataRecord)
 
     assert repodata_record.channel == f"http://localhost:{port}/{repo}/"
