@@ -463,10 +463,10 @@ impl Shell for NuShell {
                 self.set_env_var(f, "PATH", &format!("[{}]", path))
             }
             PathModificationBehaviour::Prepend => {
-                writeln!(f, "let-env PATH = ($env.PATH | prepend [{}])", path)
+                writeln!(f, "$env.PATH = ($env.PATH | prepend [{}])", path)
             }
             PathModificationBehaviour::Append => {
-                writeln!(f, "let-env PATH = ($env.PATH | append [{}])", path)
+                writeln!(f, "$env.PATH = ($env.PATH | append [{}])", path)
             }
         }
     }
