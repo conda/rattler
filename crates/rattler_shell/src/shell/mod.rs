@@ -428,6 +428,12 @@ pub struct NuShell;
 
 impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
+        // escape backslashes for Windows (make them double backslashes)
+        let value = if cfg!(windows) {
+            value.replace("\\", "\\\\")
+        } else {
+            value.to_string()
+        };
         writeln!(f, "$env.{} = \"{}\"", env_var, value)
     }
 
