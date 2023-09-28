@@ -31,4 +31,5 @@ __all__ = [
     "PackageName",
     "PrefixRecord",
     "PrefixPaths",
+    "SparseRepoData",
 ]

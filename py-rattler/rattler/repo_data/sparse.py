@@ -106,7 +106,7 @@ class SparseRepoData:
     @staticmethod
     def load_records_recursive(
         repo_data: List[SparseRepoData],
-        package_names: [PackageName],
+        package_names: List[PackageName],
         patch_func: Optional[Callable[[], None]],
     ) -> List[List[RepoDataRecord]]:
         """
@@ -117,11 +117,10 @@ class SparseRepoData:
         depend on.
         """
         return [
-            RepoDataRecord._from_py_record(record)
-            for list_of_record in PySparseRepoData.load_records_recursive(
+            [RepoDataRecord._from_py_record(record) for record in list_of_records]
+            for list_of_records in PySparseRepoData.load_records_recursive(
                 repo_data, package_names, patch_func
             )
-            for record in list_of_record
         ]
 
     @classmethod
@@ -133,7 +132,7 @@ class SparseRepoData:
         sparse_repo_data._sparse = py_sparse_repo_data
         return sparse_repo_data
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         Returns a representation of the SparseRepoData.
 
