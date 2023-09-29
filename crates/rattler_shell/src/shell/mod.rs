@@ -460,7 +460,7 @@ impl Shell for NuShell {
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
             PathModificationBehavior::Replace => {
-                self.set_env_var(f, "PATH", &format!("[{}]", path))
+                writeln!(f, "$env.PATH = [{}]", path)
             }
             PathModificationBehavior::Prepend => {
                 writeln!(f, "$env.PATH = ($env.PATH | prepend [{}])", path)
