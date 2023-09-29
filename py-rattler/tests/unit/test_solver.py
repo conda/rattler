@@ -16,7 +16,7 @@ from rattler import (
 
 @pytest.fixture(scope="session")
 def noarch_repo_data() -> None:
-    port, repo_name = 8912, "test-repo-1"
+    port, repo_name = 8812, "test-repo-1"
 
     test_data_dir = os.path.join(
         os.path.dirname(__file__), "../../../test-data/test-server"
@@ -40,7 +40,7 @@ def noarch_repo_data() -> None:
 
 @pytest.fixture(scope="session")
 def linux64_repo_data() -> None:
-    port, repo_name = 8913, "test-repo-2"
+    port, repo_name = 8813, "test-repo-2"
 
     test_data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
 
