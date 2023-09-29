@@ -26,11 +26,7 @@ impl From<SparseRepoData> for PySparseRepoData {
 #[pymethods]
 impl PySparseRepoData {
     #[new]
-    pub fn new(
-        channel: PyChannel,
-        subdir: String,
-        path: PathBuf,
-    ) -> PyResult<Self> {
+    pub fn new(channel: PyChannel, subdir: String, path: PathBuf) -> PyResult<Self> {
         Ok(SparseRepoData::new(channel.into(), subdir, path, None)?.into())
     }
 
@@ -75,4 +71,3 @@ impl PySparseRepoData {
         })
     }
 }
-
