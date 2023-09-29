@@ -13,7 +13,9 @@ anyhow = "1.0.75"
 futures = "0.3.28"
 
 rattler = { path = "../crates/rattler" }
-rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway" }
+rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", features = [
+    "sparse",
+] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }

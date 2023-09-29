@@ -3,7 +3,7 @@ from typing import Callable, List, Optional, Union, TYPE_CHECKING
 
 
 from rattler.rattler import py_fetch_repo_data
-from rattler.repo_data import RepoData
+from rattler.repo_data.sparse import SparseRepoData
 
 if TYPE_CHECKING:
     import os
@@ -17,7 +17,7 @@ async def fetch_repo_data(
     platforms: List[Platform],
     cache_path: Union[str, os.PathLike[str]],
     callback: Optional[Callable[[int, int], None]],
-) -> List[RepoData]:
+) -> List[SparseRepoData]:
     """
     Returns a list of RepoData for given channels and platform.
     """
@@ -28,4 +28,7 @@ async def fetch_repo_data(
         callback,
     )
 
-    return [RepoData._from_py_repo_data(repo_data) for repo_data in repo_data_list]
+    return [
+        SparseRepoData._from_py_sparse_repo_data(repo_data)
+        for repo_data in repo_data_list
+    ]

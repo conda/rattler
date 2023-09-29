@@ -11,6 +11,7 @@ use repo_data_record::PyRepoDataRecord;
 pub mod package_record;
 pub mod patch_instructions;
 pub mod repo_data_record;
+pub mod sparse;
 
 #[pyclass]
 #[repr(transparent)]
