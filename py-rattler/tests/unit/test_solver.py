@@ -92,10 +92,9 @@ async def test_solve(
         callback=None,
     )
 
-    available_packages = [
-        package.into_repo_data(noarch_chan) for package in noarch_data
-    ] + [package.into_repo_data(linux64_chan) for package in linux64_data]
-
+    available_packages = [(data, noarch_chan) for data in noarch_data] + [
+        (data, linux64_chan) for data in linux64_data
+    ]
     solved_data = solve(
         [MatchSpec("test-package"), MatchSpec("foobar"), MatchSpec("baz")],
         available_packages,
