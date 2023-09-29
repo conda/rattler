@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc};
 
-use pyo3::{pyclass, pymethods, PyAny, PyResult, Python};
+use pyo3::{pyclass, pymethods, PyResult, Python};
 
 use rattler_repodata_gateway::sparse::SparseRepoData;
 
@@ -30,22 +30,7 @@ impl PySparseRepoData {
         channel: PyChannel,
         subdir: String,
         path: PathBuf,
-        patch_func: Option<&PyAny>,
     ) -> PyResult<Self> {
-        // TODO: implement a way to pass patch function from python
-        let _ = patch_func;
-        // let patch_func = if let Some(func) = patch_func {
-        //     Some(move |package: &mut PackageRecord| {
-        //         Python::with_gil(|py| {
-        //             let args = PyTuple::new(py, []);
-        //             func.to_object(py)
-        //                 .call1(py, args)
-        //                 .expect("Callback failed!");
-        //         });
-        //     })
-        // } else {
-        //     None
-        // };
         Ok(SparseRepoData::new(channel.into(), subdir, path, None)?.into())
     }
 
@@ -75,13 +60,9 @@ impl PySparseRepoData {
         py: Python<'_>,
         repo_data: Vec<PySparseRepoData>,
         package_names: Vec<PyPackageName>,
-        patch_func: Option<&PyAny>,
     ) -> PyResult<Vec<Vec<PyRepoDataRecord>>> {
         let repo_data = repo_data.iter().map(|r| r.inner.as_ref());
-
         let package_names = package_names.into_iter().map(Into::into);
-        // TODO: implement a way to pass patch function from python
-        let _ = patch_func;
 
         // release gil to allow other threads to progress
         py.allow_threads(move || {
@@ -95,8 +76,3 @@ impl PySparseRepoData {
     }
 }
 
-/*
-    data = fetch(cache_path, [channel], [platform], progress_func) -> [RepoData] -> Repodata { inner: SparseRepoData }
-    records = solve_from_data(data, [match_spec], [generic_virtual_packages])
-    records = solve_from_path(cache_path, [match_spec], [channel], [platform])
-*/

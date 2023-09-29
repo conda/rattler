@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import Callable, List, Optional, Self
+from typing import List, Self
 from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
 
@@ -21,7 +21,6 @@ class SparseRepoData:
         channel: Channel,
         subdir: str,
         path: os.PathLike[str],
-        patch_func: Optional[Callable[[], None]],
     ) -> None:
         if not isinstance(channel, Channel):
             raise TypeError(
@@ -38,7 +37,7 @@ class SparseRepoData:
                 "SparseRepoData constructor received unsupported type "
                 f" {type(path).__name__!r} for the `path` parameter"
             )
-        self._sparse = PySparseRepoData(channel._channel, subdir, path, patch_func)
+        self._sparse = PySparseRepoData(channel._channel, subdir, path)
 
     def package_names(self) -> List[str]:
         """
@@ -53,7 +52,7 @@ class SparseRepoData:
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
         >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path, None)
+        >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> package_names = sparse_data.package_names()
         >>> package_names
         [...]
@@ -72,7 +71,7 @@ class SparseRepoData:
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
         >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path, None)
+        >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> package_name = PackageName(sparse_data.package_names()[0])
         >>> records = sparse_data.load_records(package_name)
         >>> records
@@ -97,7 +96,7 @@ class SparseRepoData:
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
         >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path, None)
+        >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data.subdir
         'test-data/conda-forge/noarch'
         """
@@ -107,7 +106,6 @@ class SparseRepoData:
     def load_records_recursive(
         repo_data: List[SparseRepoData],
         package_names: List[PackageName],
-        patch_func: Optional[Callable[[], None]],
     ) -> List[List[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records
@@ -119,7 +117,7 @@ class SparseRepoData:
         return [
             [RepoDataRecord._from_py_record(record) for record in list_of_records]
             for list_of_records in PySparseRepoData.load_records_recursive(
-                repo_data, package_names, patch_func
+                repo_data, package_names
             )
         ]
 
@@ -142,7 +140,7 @@ class SparseRepoData:
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
         >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
-        >>> sparse_data = SparseRepoData(channel, subdir, path, None)
+        >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data
         SparseRepoData(subdir="test-data/conda-forge/noarch")
         """
