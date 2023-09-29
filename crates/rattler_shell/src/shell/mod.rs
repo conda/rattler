@@ -422,6 +422,10 @@ impl Shell for Fish {
     }
 }
 
+fn escape_backslashes(s: &str) -> String {
+    s.replace('\\', "\\\\")
+}
+
 /// A [`Shell`] implementation for the Bash shell.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NuShell;
@@ -430,7 +434,7 @@ impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
         // escape backslashes for Windows (make them double backslashes)
         let value = if cfg!(windows) {
-            value.replace('\\', "\\\\")
+            escape_backslashes(value)
         } else {
             value.to_string()
         };
@@ -454,7 +458,7 @@ impl Shell for NuShell {
     ) -> std::fmt::Result {
         let path = paths
             .iter()
-            .map(|path| format!("\"{}\"", path.to_string_lossy().into_owned()))
+            .map(|path| escape_backslashes(&format!("\"{}\"", path.to_string_lossy().into_owned())))
             .join(", ");
 
         // Replace, Append, or Prepend the path variable to the paths.
