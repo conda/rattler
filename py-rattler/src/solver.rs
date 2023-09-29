@@ -1,28 +1,25 @@
 use pyo3::{pyfunction, PyResult};
-use rattler_conda_types::RepoDataRecord;
 use rattler_solve::{resolvo::Solver, SolverImpl, SolverTask};
 
 use crate::{
-    error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage,
-    match_spec::PyMatchSpec, repo_data::repo_data_record::PyRepoDataRecord,
+    channel::PyChannel,
+    error::PyRattlerError,
+    generic_virtual_package::PyGenericVirtualPackage,
+    match_spec::PyMatchSpec,
+    repo_data::{repo_data_record::PyRepoDataRecord, PyRepoData},
 };
 
 #[pyfunction]
 pub fn py_solve(
     specs: Vec<PyMatchSpec>,
-    available_packages: Vec<Vec<PyRepoDataRecord>>,
+    available_packages: Vec<(PyRepoData, PyChannel)>,
     locked_packages: Vec<PyRepoDataRecord>,
     pinned_packages: Vec<PyRepoDataRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
 ) -> PyResult<Vec<PyRepoDataRecord>> {
     let available_packages = available_packages
         .into_iter()
-        .map(|records| {
-            records
-                .into_iter()
-                .map(Into::<RepoDataRecord>::into)
-                .collect::<Vec<_>>()
-        })
+        .map(|(records, channel)| records.inner.into_repo_data_records(&channel.inner))
         .collect::<Vec<_>>();
 
     let task = SolverTask {

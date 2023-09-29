@@ -1,15 +1,17 @@
 from __future__ import annotations
-from typing import List
+from typing import List, Tuple
 from rattler.match_spec.match_spec import MatchSpec
 
 from rattler.rattler import py_solve
 from rattler.repo_data.record import RepoDataRecord
 from rattler.virtual_package.generic import GenericVirtualPackage
+from rattler.repo_data.repo_data import RepoData
+from rattler.channel import Channel
 
 
 def solve(
     specs: List[MatchSpec],
-    available_packages: List[List[RepoDataRecord]],
+    available_packages: List[Tuple[RepoData, Channel]],
     locked_packages: List[RepoDataRecord],
     pinned_packages: List[RepoDataRecord],
     virtual_packages: List[GenericVirtualPackage],
@@ -23,8 +25,8 @@ def solve(
         for solved_package in py_solve(
             [spec._match_spec for spec in specs],
             [
-                [package._record for package in list_of_packages]
-                for list_of_packages in available_packages
+                (repo_data._repo_data, channel._channel)
+                for (repo_data, channel) in available_packages
             ],
             [package._record for package in locked_packages],
             [package._record for package in pinned_packages],
