@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2023-10-02
+
+### ✨ Highlights
+
+The solver has been renamed and moved to its own repository: [resolvo](https://github.com/mamba-org/resolvo).
+With the latest changes to the python bindings you can now download repodata and solve environments! 
+Still no official release of the bindings though, but getting closer every day.
+
+### 📃 Details
+
+#### Added
+
+* add initial nushell support by @wolfv in [#271](https://github.com/mamba-org/rattler/pull/271)
+
+#### Changed
+
+* the solver has been extracted in its own package: resolvo by @baszalmstra in [#349](https://github.com/mamba-org/rattler/pull/349) & [#350](https://github.com/mamba-org/rattler/pull/350)
+
+#### Fixed
+
+* Change solver implementation doc comment by @nichmor in [#352](https://github.com/mamba-org/rattler/pull/352)
+
+### 🐍 Python
+
+* add more py-rattler types by @Wackyator in [#348](https://github.com/mamba-org/rattler/pull/348)
+* add fetch repo data to py-rattler by @Wackyator in [#334](https://github.com/mamba-org/rattler/pull/334)
+* use SparseRepoData in fetch_repo_data by @Wackyator in [#359](https://github.com/mamba-org/rattler/pull/359)
+* add solver by @Wackyator in [#361](https://github.com/mamba-org/rattler/pull/361)
+
+### 🤗 New Contributors
+* @nichmor made their first contribution in [#352](https://github.com/mamba-org/rattler/pull/352)
+
+**Full Changelog**: https://github.com/mamba-org/rattler/compare/v0.9.0...v0.10.0
+
+
 ## [0.9.0] - 2023-09-22
 
 ### ✨ Highlights
