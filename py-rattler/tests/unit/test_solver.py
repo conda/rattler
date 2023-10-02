@@ -5,7 +5,6 @@ import pytest
 from rattler import (
     solve,
     Channel,
-    ChannelConfig,
     MatchSpec,
     RepoDataRecord,
     SparseRepoData,
@@ -14,7 +13,7 @@ from rattler import (
 
 @pytest.mark.asyncio
 async def test_solve():
-    linux64_chan = Channel("conda-forge", ChannelConfig(f"http://localhost:{8813}/"))
+    linux64_chan = Channel("conda-forge")
     data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
     linux64_path = os.path.join(data_dir, "channels/conda-forge/linux-64/repodata.json")
     linux64_data = SparseRepoData(
