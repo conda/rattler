@@ -43,22 +43,16 @@ def solve(
         Resolved list of `RepoDataRecord`s.
     """
 
-    if not locked_packages:
-        locked_packages = list()
-
-    if not pinned_packages:
-        pinned_packages = list()
-
-    if not virtual_packages:
-        virtual_packages = list()
-
     return [
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in py_solve(
             [spec._match_spec for spec in specs],
             [package._sparse for package in available_packages],
-            [package._record for package in locked_packages],
-            [package._record for package in pinned_packages],
-            [v_package._generic_virtual_package for v_package in virtual_packages],
+            [package._record for package in locked_packages or []],
+            [package._record for package in pinned_packages or []],
+            [
+                v_package._generic_virtual_package
+                for v_package in virtual_packages or []
+            ],
         )
     ]
