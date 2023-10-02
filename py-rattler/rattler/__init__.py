@@ -12,6 +12,8 @@ from rattler.networking import AuthenticatedClient, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage
 from rattler.package import PackageName
 from rattler.prefix import PrefixRecord, PrefixPaths
+from rattler.solver import solve
+from rattler.platform import Platform
 
 __all__ = [
     "Version",
@@ -32,4 +34,6 @@ __all__ = [
     "PrefixRecord",
     "PrefixPaths",
     "SparseRepoData",
+    "solve",
+    "Platform",
 ]

@@ -9,6 +9,7 @@ mod platform;
 mod prefix_record;
 mod repo_data;
 mod shell;
+mod solver;
 mod version;
 mod virtual_package;
 
@@ -34,6 +35,7 @@ use pyo3::prelude::*;
 
 use platform::{PyArch, PyPlatform};
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
+use solver::py_solve;
 use virtual_package::PyVirtualPackage;
 
 #[pymodule]
@@ -70,6 +72,9 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVirtualPackage>().unwrap();
     m.add_class::<PyPrefixRecord>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
+
+    m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
+        .unwrap();
 
     // Exceptions
     m.add(

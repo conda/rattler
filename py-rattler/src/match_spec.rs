@@ -11,7 +11,7 @@ use crate::{
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyMatchSpec {
-    inner: MatchSpec,
+    pub(crate) inner: MatchSpec,
 }
 
 impl From<MatchSpec> for PyMatchSpec {

@@ -12,6 +12,7 @@ license = "BSD-3-Clause"
 
 [tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
+build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "black ."
 fmt-rust = "cargo fmt --all"
@@ -34,3 +35,6 @@ black = "~=23.7.0"
 ruff = "~=0.0.285"
 mypy = "~=1.5.1"
 pytest-asyncio = "0.21.1.*"
+
+[target.linux-64.dependencies]
+patchelf = "~=0.17.2"

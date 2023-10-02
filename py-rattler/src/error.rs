@@ -8,6 +8,7 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::fetch::FetchRepoDataError;
 use rattler_shell::activation::ActivationError;
+use rattler_solve::SolveError;
 use rattler_virtual_packages::DetectVirtualPackageError;
 use thiserror::Error;
 
@@ -38,6 +39,10 @@ pub enum PyRattlerError {
     DetectVirtualPackageError(#[from] DetectVirtualPackageError),
     #[error(transparent)]
     IoError(#[from] io::Error),
+    #[error(transparent)]
+    SolverError(#[from] SolveError),
+    #[error("invalid 'SparseRepoData' object found")]
+    InvalidSparseDataError,
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -69,6 +74,10 @@ impl From<PyRattlerError> for PyErr {
                 DetectVirtualPackageException::new_err(err.to_string())
             }
             PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
+            PyRattlerError::SolverError(err) => SolverException::new_err(err.to_string()),
+            PyRattlerError::InvalidSparseDataError => InvalidSparseDataException::new_err(
+                PyRattlerError::InvalidSparseDataError.to_string(),
+            ),
         }
     }
 }
@@ -85,3 +94,5 @@ create_exception!(exceptions, FetchRepoDataException, PyException);
 create_exception!(exceptions, CacheDirException, PyException);
 create_exception!(exceptions, DetectVirtualPackageException, PyException);
 create_exception!(exceptions, IoException, PyException);
+create_exception!(exceptions, SolverException, PyException);
+create_exception!(exceptions, InvalidSparseDataException, PyException);

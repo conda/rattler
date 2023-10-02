@@ -23,6 +23,12 @@ impl From<SparseRepoData> for PySparseRepoData {
     }
 }
 
+impl<'a> From<&'a PySparseRepoData> for &'a SparseRepoData {
+    fn from(value: &'a PySparseRepoData) -> Self {
+        value.inner.as_ref()
+    }
+}
+
 #[pymethods]
 impl PySparseRepoData {
     #[new]
@@ -57,11 +63,9 @@ impl PySparseRepoData {
         repo_data: Vec<PySparseRepoData>,
         package_names: Vec<PyPackageName>,
     ) -> PyResult<Vec<Vec<PyRepoDataRecord>>> {
-        let repo_data = repo_data.iter().map(|r| r.inner.as_ref());
-        let package_names = package_names.into_iter().map(Into::into);
-
-        // release gil to allow other threads to progress
         py.allow_threads(move || {
+            let repo_data = repo_data.iter().map(Into::into);
+            let package_names = package_names.into_iter().map(Into::into);
             Ok(
                 SparseRepoData::load_records_recursive(repo_data, package_names, None)?
                     .into_iter()
