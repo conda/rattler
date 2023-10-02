@@ -6,7 +6,9 @@ from rattler.channel.channel_config import ChannelConfig
 
 
 class Channel:
-    def __init__(self, name: str, channel_configuration: ChannelConfig) -> None:
+    def __init__(
+        self, name: str, channel_configuration: ChannelConfig = ChannelConfig()
+    ) -> None:
         """
         Create a new channel.
 
