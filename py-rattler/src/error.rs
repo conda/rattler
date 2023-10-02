@@ -41,6 +41,8 @@ pub enum PyRattlerError {
     IoError(#[from] io::Error),
     #[error(transparent)]
     SolverError(#[from] SolveError),
+    #[error("invalid 'SparseRepoData' object found")]
+    InvalidSparseDataError,
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -73,6 +75,9 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
             PyRattlerError::SolverError(err) => SolverException::new_err(err.to_string()),
+            PyRattlerError::InvalidSparseDataError => InvalidSparseDataException::new_err(
+                PyRattlerError::InvalidSparseDataError.to_string(),
+            ),
         }
     }
 }
@@ -90,3 +95,4 @@ create_exception!(exceptions, CacheDirException, PyException);
 create_exception!(exceptions, DetectVirtualPackageException, PyException);
 create_exception!(exceptions, IoException, PyException);
 create_exception!(exceptions, SolverException, PyException);
+create_exception!(exceptions, InvalidSparseDataException, PyException);
