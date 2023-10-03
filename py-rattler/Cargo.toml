@@ -20,7 +20,7 @@ rattler_conda_types = { path = "../crates/rattler_conda_types", default-features
 rattler_networking = { path = "../crates/rattler_networking", default-features = false }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages" }
-rattler_solve = { path = "../crates/rattler_solve", features = ["resolvo"] }
+rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
 
 pyo3 = { version = "0.19", features = [
     "abi3-py38",
