@@ -60,6 +60,7 @@ jobs:
     runs-on: windows-latest
     name: Build ${{ matrix.platform.target }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - target: x86_64-pc-windows-msvc
@@ -97,6 +98,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build ${{ matrix.target }}
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-gnu
@@ -130,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build ${{ matrix.platform.target }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - target: aarch64-unknown-linux-gnu
@@ -181,6 +184,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build ${{ matrix.target }}
     strategy:
+      fail-fast: false
       matrix:
         target:
           - x86_64-unknown-linux-musl
@@ -219,6 +223,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Build ${{ matrix.platform.target }}
     strategy:
+      fail-fast: false
       matrix:
         platform:
           - target: aarch64-unknown-linux-musl
