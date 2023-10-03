@@ -4,6 +4,7 @@ use crate::install::python::PythonInfoError;
 use crate::install::PythonInfo;
 use rattler_conda_types::{PackageRecord, Platform};
 
+/// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionError {
     /// An error that happens if the python version could not be parsed.
