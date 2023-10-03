@@ -12,5 +12,6 @@ concurrency:
 jobs:
   lfs_check_pointers:
     name: "LFS Warning"
+    runs-on: ubuntu-latest
     steps:
-      uses: ppremk/lfs-warning@v3.2
+      - uses: ppremk/lfs-warning@v3.2

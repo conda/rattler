@@ -23,6 +23,7 @@ concurrency:
 
 env:
   PACKAGE_NAME: py_rattler
+  PYTHON_VERSION: "3.11"
   CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   CARGO_TERM_COLOR: always
@@ -36,15 +37,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.sha }}
-      - uses: prefix-dev/setup-pixi@v0.2.1
+      - uses: actions/setup-python@v4
         with:
-          pixi-version: v0.3.0
-          cache: true
-          manifest-path: py-rattler/pixi.toml
+          python-version: ${{ env.PYTHON_VERSION }}
       - name: "Build sdist"
-        run: pixi run --manifest-path py-rattler/pixi.toml generate-sdist
+        uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: --out dist
       - name: "Test sdist"
-        run: pixi run --manifest-path py-rattler/pixi.toml pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
+        run: |
+          rustup default $(cat rust-toolchain)
+          pip install dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
       - name: "Upload sdist"
         uses: actions/upload-artifact@v3
         with:
@@ -59,26 +63,29 @@ jobs:
         platform:
           - target: x86_64-pc-windows-msvc
             arch: x64
-#          - target: i686-pc-windows-msvc
-#            arch: x86
+          - target: i686-pc-windows-msvc
+            arch: x86
           - target: aarch64-pc-windows-msvc
             arch: x64
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.sha }}
-      - uses: prefix-dev/setup-pixi@v0.2.1
+      - uses: actions/setup-python@v4
         with:
-          pixi-version: v0.3.0
-          cache: true
-          manifest-path: py-rattler/pixi.toml
-      - name: "Build wheel"
-        run: pixi run --manifest-path py-rattler/pixi.toml generate-wheel --target ${{ matrix.platform.target }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          architecture: ${{ matrix.platform.arch }}
+      - name: "Build wheels"
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: py-rattler
+          target: ${{ matrix.platform.target }}
+          args: --release --out dist
       - name: "Test wheel"
         if: ${{ !startsWith(matrix.platform.target, 'aarch64') }}
-        shell: pixi run --manifest-path py-rattler/pixi.toml bash {0}
+        shell: bash
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python -m pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
