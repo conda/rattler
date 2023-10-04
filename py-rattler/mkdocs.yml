@@ -1,0 +1,10 @@
+site_name: "py-rattler"
+
+theme:
+  name: "readthedocs"
+
+repo_url: https://github.com/mamba-org/rattler/
+
+plugins:
+- search
+- mkdocstrings

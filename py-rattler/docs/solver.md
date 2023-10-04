@@ -1,0 +1,3 @@
+# Solver
+
+::: rattler.shell.shell
