@@ -111,9 +111,9 @@ impl AuthenticationStorage {
                     e,
                     self.fallback_storage.path.display()
                 );
-                match self.fallback_storage.get_password(host)?{
-                    None => { return Ok(None) }
-                    Some(password) => {password}
+                match self.fallback_storage.get_password(host)? {
+                    None => return Ok(None),
+                    Some(password) => password,
                 }
             }
         };
