@@ -21,10 +21,10 @@ use crate::{
 pub fn py_link<'a>(
     py: Python<'a>,
     dependencies: Vec<&'a PyAny>,
-    installed_packages: Vec<&'a PyAny>,
-    platform: &PyPlatform,
     target_prefix: PathBuf,
     cache_dir: PathBuf,
+    installed_packages: Vec<&'a PyAny>,
+    platform: &PyPlatform,
     client: PyAuthenticatedClient,
 ) -> PyResult<&'a PyAny> {
     let dependencies = dependencies
