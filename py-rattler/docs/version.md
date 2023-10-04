@@ -1,0 +1,3 @@
+# Version
+
+::: rattler.version.version

@@ -1,0 +1,3 @@
+# Arch
+
+::: rattler.platform.arch

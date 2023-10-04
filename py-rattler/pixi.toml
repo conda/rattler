@@ -35,6 +35,9 @@ black = "~=23.7.0"
 ruff = "~=0.0.285"
 mypy = "~=1.5.1"
 pytest-asyncio = "0.21.1.*"
+mkdocs = "1.5.3.*"
+mkdocstrings-python = "1.7.1.*"
+mkdocstrings = "0.23.0.*"
 
 [target.linux-64.dependencies]
 patchelf = "~=0.17.2"
