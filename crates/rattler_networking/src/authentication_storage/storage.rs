@@ -105,17 +105,16 @@ impl AuthenticationStorage {
                 return Ok(None);
             }
             Err(e) => {
-                tracing::warn!(
-                    "Error retrieving credentials for {}: {}, using fallback storage at {}",
+                tracing::debug!(
+                    "Unable to retrieve credentials for {}: {}, using fallback credential storage at {}",
                     host,
                     e,
                     self.fallback_storage.path.display()
                 );
-                let fb_pw = self.fallback_storage.get_password(host)?;
-                if fb_pw.is_none() {
-                    return Ok(None);
+                match self.fallback_storage.get_password(host)? {
+                    None => return Ok(None),
+                    Some(password) => password,
                 }
-                fb_pw.unwrap()
             }
         };
 
