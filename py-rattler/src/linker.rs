@@ -16,6 +16,7 @@ use crate::{
     repo_data::repo_data_record::PyRepoDataRecord,
 };
 
+// TODO: Accept functions to report progress
 #[pyfunction]
 pub fn py_link<'a>(
     py: Python<'a>,
@@ -108,7 +109,7 @@ pub async fn execute_operation(
 
     let cached_package_dir_fut = if let Some(install_record) = install_record {
         async {
-            let result = package_cache
+            package_cache
                 .get_or_fetch_from_url_with_retry(
                     &install_record.package_record,
                     install_record.url.clone(),
@@ -117,9 +118,7 @@ pub async fn execute_operation(
                 )
                 .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
                 .map_err(|e| PyRattlerError::LinkError(e.to_string()))
-                .await;
-
-            result
+                .await
         }
         .left_future()
     } else {
@@ -142,6 +141,7 @@ pub async fn execute_operation(
     Ok(())
 }
 
+// TODO: expose as python seperate function
 pub async fn install_package_to_environment(
     target_prefix: PathBuf,
     package_dir: PathBuf,
@@ -200,6 +200,7 @@ pub async fn install_package_to_environment(
     }
 }
 
+// TODO: expose as python seperate function
 async fn remove_package_from_environment(
     target_prefix: PathBuf,
     package: &PrefixRecord,
