@@ -18,7 +18,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
-version = "0.1.0"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
