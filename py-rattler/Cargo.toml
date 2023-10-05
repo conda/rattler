@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 default = ["native-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
+vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
 anyhow = "1.0.75"
@@ -37,6 +38,8 @@ tokio = { version = "1.32" }
 
 thiserror = "1.0.44"
 url = "2.4.1"
+
+openssl = { version = "0.10", optional = true }
 
 # Prevent package from thinking it's in the workspace
 [workspace]
