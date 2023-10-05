@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List, Self
+from typing import List
 from rattler.channel.channel import Channel
 from rattler.package.package_name import PackageName
 
@@ -122,7 +122,9 @@ class SparseRepoData:
         ]
 
     @classmethod
-    def _from_py_sparse_repo_data(cls, py_sparse_repo_data: PySparseRepoData) -> Self:
+    def _from_py_sparse_repo_data(
+        cls, py_sparse_repo_data: PySparseRepoData
+    ) -> SparseRepoData:
         """
         Construct Rattler SparseRepoData from FFI PySparseRepoData object.
         """

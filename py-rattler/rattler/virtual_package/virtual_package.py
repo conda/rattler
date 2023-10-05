@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from rattler.rattler import PyVirtualPackage
-from typing import List, Self
+from typing import List
 
 from rattler.virtual_package.generic import GenericVirtualPackage
 
@@ -10,7 +10,9 @@ class VirtualPackage:
     _virtual_package: PyVirtualPackage
 
     @classmethod
-    def _from_py_virtual_package(cls, py_virtual_package: PyVirtualPackage) -> Self:
+    def _from_py_virtual_package(
+        cls, py_virtual_package: PyVirtualPackage
+    ) -> VirtualPackage:
         """Construct Rattler VirtualPackage from FFI PyVirtualPackage object."""
         virtual_package = cls.__new__(cls)
         virtual_package._virtual_package = py_virtual_package
