@@ -1,6 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
-from typing import Self, Union, List, TYPE_CHECKING
+from typing import Union, List, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ class RepoData:
         ]
 
     @classmethod
-    def _from_py_repo_data(cls, py_repo_data: PyRepoData) -> Self:
+    def _from_py_repo_data(cls, py_repo_data: PyRepoData) -> RepoData:
         """
         Construct Rattler RepoData from FFI PyRepoData object.
         """

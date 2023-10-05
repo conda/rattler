@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 
 from rattler.version import Version
 from rattler.package import PackageName
@@ -85,7 +84,7 @@ class GenericVirtualPackage:
     @classmethod
     def _from_py_generic_virtual_package(
         cls, py_generic_virtual_package: PyGenericVirtualPackage
-    ) -> Self:
+    ) -> GenericVirtualPackage:
         """
         Construct Rattler GenericVirtualPackage from FFI
         PyGenericVirtualPackage object.
