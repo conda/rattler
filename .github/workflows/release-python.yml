@@ -402,7 +402,7 @@ jobs:
         run: |
           # Switch to the commit we want to release
           git checkout ${{ inputs.sha }}
-          version=$(grep "version = " pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
+          version=$(grep "version = " py-rattler/pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
           if [ "${{ inputs.tag }}" != "${version}" ]; then
             echo "The input tag does not match the version from pyproject.toml:" >&2
             echo "${{ inputs.tag }}" >&2
@@ -411,7 +411,7 @@ jobs:
           else
             echo "Releasing ${version}"
           fi
-          
+  
 
   upload-release:
     name: Upload to PyPI
@@ -463,7 +463,7 @@ jobs:
         run: |
           git config user.email "hi@prefix.dev"
           git config user.name "Prefix.dev Release CI"
-          git tag -m "v${{ inputs.tag }}" "v${{ inputs.tag }}"
+          git tag -m "py-rattler-v${{ inputs.tag }}" "py-rattler-v${{ inputs.tag }}"
           # If there is duplicate tag, this will fail. The publish to pypi action will have been a noop (due to skip
           # existing), so we make a non-destructive exit here
           git push --tags
