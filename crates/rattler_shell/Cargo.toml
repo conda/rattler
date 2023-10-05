@@ -12,16 +12,16 @@ readme.workspace = true
 
 [dependencies]
 enum_dispatch = "0.3.12"
-indexmap = "2.0.0"
+indexmap = "2.0.2"
 itertools = "0.11.0"
 rattler_conda_types = { version = "0.10.0", path = "../rattler_conda_types" }
-serde_json = { version = "1.0.105", features = ["preserve_order"] }
-shlex = "1.1.0"
-sysinfo = { version = "0.29.9", optional = true }
+serde_json = { version = "1.0.107", features = ["preserve_order"] }
+shlex = "1.2.0"
+sysinfo = { version = "0.29.10", optional = true }
 tempfile = "3.8.0"
-thiserror = "1.0.47"
+thiserror = "1.0.49"
 tracing = "0.1.37"
 
 [dev-dependencies]
-insta = { version = "1.31.0", features = ["yaml"] }
+insta = { version = "1.33.0", features = ["yaml"] }
 tempdir = "0.3.7"
