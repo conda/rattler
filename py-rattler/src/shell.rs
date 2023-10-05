@@ -2,7 +2,7 @@ use crate::error::PyRattlerError;
 use crate::platform::PyPlatform;
 use pyo3::{exceptions::PyValueError, pyclass, pymethods, FromPyObject, PyAny, PyResult};
 use rattler_shell::{
-    activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehaviour},
+    activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
     shell::{Bash, CmdExe, Fish, PowerShell, Xonsh, Zsh},
 };
 use std::path::{Path, PathBuf};
@@ -23,12 +23,12 @@ impl From<ActivationVariables> for PyActivationVariables {
 #[repr(transparent)]
 pub struct Wrap<T>(pub T);
 
-impl FromPyObject<'_> for Wrap<PathModificationBehaviour> {
+impl FromPyObject<'_> for Wrap<PathModificationBehavior> {
     fn extract(ob: &PyAny) -> PyResult<Self> {
         let parsed = match ob.extract::<&str>()? {
-            "prepend" => PathModificationBehaviour::Prepend,
-            "append" => PathModificationBehaviour::Append,
-            "replace" => PathModificationBehaviour::Replace,
+            "prepend" => PathModificationBehavior::Prepend,
+            "append" => PathModificationBehavior::Append,
+            "replace" => PathModificationBehavior::Replace,
             v => {
                 return Err(PyValueError::new_err(format!(
                     "keep must be one of {{'prepend', 'append', 'replace'}}, got {v}",
@@ -46,7 +46,7 @@ impl PyActivationVariables {
     pub fn __init__(
         conda_prefix: Option<PathBuf>,
         path: Option<Vec<PathBuf>>,
-        path_modification_behaviour: Wrap<PathModificationBehaviour>,
+        path_modification_behaviour: Wrap<PathModificationBehavior>,
     ) -> Self {
         let activation_vars = ActivationVariables {
             conda_prefix,
