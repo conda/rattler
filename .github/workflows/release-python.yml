@@ -50,6 +50,8 @@ jobs:
         run: |
           rustup default $(cat rust-toolchain)
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
+          python -c "import ratter; print(rattler.__version__)"
+
       - name: "Upload sdist"
         uses: actions/upload-artifact@v3
         with:
@@ -97,6 +99,7 @@ jobs:
         shell: bash
         run: |
           python -m pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -131,6 +134,7 @@ jobs:
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -184,6 +188,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
+            python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -232,6 +237,7 @@ jobs:
             pip3 install -U pip
           run: |
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
+            python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -280,6 +286,7 @@ jobs:
           run: |
             apk add py3-pip
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -323,6 +330,7 @@ jobs:
             apk add py3-pip
           run: |
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
+            python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -349,6 +357,7 @@ jobs:
       - name: "Test wheel - x86_64"
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -374,6 +383,7 @@ jobs:
       - name: "Test wheel - universal2"
         run: |
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          python -c "import ratter; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -411,7 +421,6 @@ jobs:
           else
             echo "Releasing ${version}"
           fi
-  
 
   upload-release:
     name: Upload to PyPI
