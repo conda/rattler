@@ -37,3 +37,5 @@ __all__ = [
     "solve",
     "Platform",
 ]
+
+__version__ = Version("0.1.0")

@@ -50,6 +50,13 @@ jobs:
         run: |
           rustup default $(cat rust-toolchain)
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
+          actual_version=$(python -c "import ratter; print(rattler.__version__)")
+          expected_version="0.1.0"
+
+          if [ "$actual_version" != "$expected_version" ]; then
+            echo "Assertion failed: Version of the library did not match the expected version"
+            exit 1
+          fi
       - name: "Upload sdist"
         uses: actions/upload-artifact@v3
         with:
@@ -411,7 +418,6 @@ jobs:
           else
             echo "Releasing ${version}"
           fi
-  
 
   upload-release:
     name: Upload to PyPI
