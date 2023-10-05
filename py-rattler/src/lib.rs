@@ -80,6 +80,7 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
     m.add_function(wrap_pyfunction!(get_rattler_version, m).unwrap())
+        .unwrap();
     m.add_function(wrap_pyfunction!(py_link, m).unwrap())
         .unwrap();
 
