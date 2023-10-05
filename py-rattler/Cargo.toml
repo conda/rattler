@@ -8,14 +8,14 @@ license = "BSD-3-Clause"
 name = "rattler"
 crate-type = ["cdylib"]
 
-[dependencies]
-anyhow = "1.0.75"
-futures = "0.3.28"
-
 [features]
 default = ["native-tls"]
 native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
+
+[dependencies]
+anyhow = "1.0.75"
+futures = "0.3.28"
 
 rattler = { path = "../crates/rattler", default-features = false }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
