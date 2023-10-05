@@ -1,6 +1,6 @@
 //! This module contains the [`Shell`] trait and implementations for various shells.
 
-use crate::activation::PathModificationBehaviour;
+use crate::activation::PathModificationBehavior;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
@@ -55,7 +55,7 @@ pub trait Shell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehaviour,
+        modification_behaviour: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         let mut paths_vec = paths
@@ -64,9 +64,9 @@ pub trait Shell {
             .collect_vec();
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
-            PathModificationBehaviour::Replace => (),
-            PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
-            PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
+            PathModificationBehavior::Replace => (),
+            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
         }
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_seperator(platform));
@@ -167,7 +167,7 @@ impl Shell for Bash {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehaviour,
+        modification_behaviour: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         // Put paths in a vector of the correct format.
@@ -193,9 +193,9 @@ impl Shell for Bash {
 
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
-            PathModificationBehaviour::Replace => (),
-            PathModificationBehaviour::Prepend => paths_vec.push(self.format_env_var("PATH")),
-            PathModificationBehaviour::Append => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehavior::Replace => (),
+            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
+            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
         }
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_seperator(platform));
@@ -422,13 +422,18 @@ impl Shell for Fish {
     }
 }
 
+fn escape_backslashes(s: &str) -> String {
+    s.replace('\\', "\\\\")
+}
+
 /// A [`Shell`] implementation for the Bash shell.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NuShell;
 
 impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "$env.{} = \"{}\"", env_var, value)
+        // escape backslashes for Windows (make them double backslashes)
+        writeln!(f, "$env.{} = \"{}\"", env_var, escape_backslashes(value))
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
@@ -443,24 +448,24 @@ impl Shell for NuShell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehaviour,
+        modification_behaviour: PathModificationBehavior,
         _platform: &Platform,
     ) -> std::fmt::Result {
         let path = paths
             .iter()
-            .map(|path| format!("\"{}\"", path.to_string_lossy().into_owned()))
+            .map(|path| escape_backslashes(&format!("\"{}\"", path.to_string_lossy().into_owned())))
             .join(", ");
 
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behaviour {
-            PathModificationBehaviour::Replace => {
-                self.set_env_var(f, "PATH", &format!("[{}]", path))
+            PathModificationBehavior::Replace => {
+                writeln!(f, "$env.PATH = [{}]", path)
             }
-            PathModificationBehaviour::Prepend => {
-                writeln!(f, "let-env PATH = ($env.PATH | prepend [{}])", path)
+            PathModificationBehavior::Prepend => {
+                writeln!(f, "$env.PATH = ($env.PATH | prepend [{}])", path)
             }
-            PathModificationBehaviour::Append => {
-                writeln!(f, "let-env PATH = ($env.PATH | append [{}])", path)
+            PathModificationBehavior::Append => {
+                writeln!(f, "$env.PATH = ($env.PATH | append [{}])", path)
             }
         }
     }
@@ -654,12 +659,16 @@ impl<T: Shell> ShellScript<T> {
     }
 
     /// Set the PATH environment variable to the given paths.
-    pub fn set_path(&mut self, paths: &[PathBuf]) -> &mut Self {
+    pub fn set_path(
+        &mut self,
+        paths: &[PathBuf],
+        path_modification_behavior: PathModificationBehavior,
+    ) -> &mut Self {
         self.shell
             .set_path(
                 &mut self.contents,
                 paths,
-                PathModificationBehaviour::Prepend,
+                path_modification_behavior,
                 &self.platform,
             )
             .unwrap();
@@ -719,11 +728,17 @@ mod tests {
     #[test]
     fn test_path_seperator() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
-        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        script.set_path(
+            &[PathBuf::from("/foo"), PathBuf::from("/bar")],
+            PathModificationBehavior::Prepend,
+        );
         assert!(script.contents.contains("/foo:/bar"));
 
         let mut script = ShellScript::new(Bash, Platform::Win64);
-        script.set_path(&[PathBuf::from("/foo"), PathBuf::from("/bar")]);
+        script.set_path(
+            &[PathBuf::from("/foo"), PathBuf::from("/bar")],
+            PathModificationBehavior::Prepend,
+        );
         assert!(script.contents.contains("/foo;/bar"));
     }
 }
