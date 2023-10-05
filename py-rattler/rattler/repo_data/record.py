@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 
 from rattler.rattler import PyRepoDataRecord
 from rattler.repo_data import PackageRecord
@@ -39,7 +38,7 @@ class RepoDataRecord:
         return self._record.file_name
 
     @classmethod
-    def _from_py_record(cls, py_record: PyRepoDataRecord) -> Self:
+    def _from_py_record(cls, py_record: PyRepoDataRecord) -> RepoDataRecord:
         """
         Construct Rattler RepoDataRecord from FFI PyRepoDataRecord object.
         """

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 
 from rattler.rattler import PyPackageRecord
 
@@ -15,7 +14,9 @@ class PackageRecord:
         self._package_record = PyPackageRecord()
 
     @classmethod
-    def _from_py_package_record(cls, py_package_record: PyPackageRecord) -> Self:
+    def _from_py_package_record(
+        cls, py_package_record: PyPackageRecord
+    ) -> PackageRecord:
         """
         Construct Rattler PackageRecord from FFI PyPackageRecord object.
         """
