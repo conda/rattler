@@ -40,3 +40,4 @@ __all__ = [
 ]
 
 __version__ = _get_rattler_version()
+del _get_rattler_version
