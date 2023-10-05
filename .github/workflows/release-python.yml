@@ -121,7 +121,7 @@ jobs:
       - name: "Test wheel"
         if: ${{ startsWith(matrix.target, 'x86_64') }}
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -173,7 +173,7 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip
             pip3 install -U pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -255,7 +255,7 @@ jobs:
           install: |
             apk add py3-pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links dist/ --force-reinstall
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -281,7 +281,7 @@ jobs:
           args: --release --out dist
       - name: "Test wheel - x86_64"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
@@ -306,7 +306,7 @@ jobs:
           working-directory: py-rattler
       - name: "Test wheel - universal2"
         run: |
-          pip install dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
+          pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
       - name: "Upload wheels"
         uses: actions/upload-artifact@v3
         with:
