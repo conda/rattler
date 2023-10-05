@@ -21,7 +21,7 @@ jobs:
         with:
           submodules: recursive
           lfs: true
-      - uses: prefix-dev/setup-pixi@v0.2.1
+      - uses: prefix-dev/setup-pixi@v0.3.0
         with:
           pixi-version: v0.3.0
           cache: true
