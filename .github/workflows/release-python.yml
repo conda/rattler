@@ -412,9 +412,9 @@ jobs:
         run: |
           # Switch to the commit we want to release
           git checkout ${{ inputs.sha }}
-          version=$(grep "version = " py-rattler/pyproject.toml | sed -e 's/version = "\(.*\)"/\1/g')
+          version=$(grep -m 1 "version = " py-rattler/Cargo.toml | sed -e 's/version = "\(.*\)"/\1/g')
           if [ "${{ inputs.tag }}" != "${version}" ]; then
-            echo "The input tag does not match the version from pyproject.toml:" >&2
+            echo "The input tag does not match the version from Cargo.toml:" >&2
             echo "${{ inputs.tag }}" >&2
             echo "${version}" >&2
             exit 1
