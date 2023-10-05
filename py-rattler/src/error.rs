@@ -2,6 +2,7 @@ use std::io;
 
 use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
+use rattler::install::TransactionError;
 use rattler_conda_types::{
     InvalidPackageNameError, ParseArchError, ParseChannelError, ParseMatchSpecError,
     ParsePlatformError, ParseVersionError,
@@ -41,8 +42,10 @@ pub enum PyRattlerError {
     IoError(#[from] io::Error),
     #[error(transparent)]
     SolverError(#[from] SolveError),
-    #[error("invalid 'SparseRepoData' object found")]
-    InvalidSparseDataError,
+    #[error(transparent)]
+    TransactionError(#[from] TransactionError),
+    #[error("{0}")]
+    LinkError(String),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -75,9 +78,8 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
             PyRattlerError::SolverError(err) => SolverException::new_err(err.to_string()),
-            PyRattlerError::InvalidSparseDataError => InvalidSparseDataException::new_err(
-                PyRattlerError::InvalidSparseDataError.to_string(),
-            ),
+            PyRattlerError::TransactionError(err) => TransactionException::new_err(err.to_string()),
+            PyRattlerError::LinkError(err) => LinkException::new_err(err),
         }
     }
 }
@@ -95,4 +97,5 @@ create_exception!(exceptions, CacheDirException, PyException);
 create_exception!(exceptions, DetectVirtualPackageException, PyException);
 create_exception!(exceptions, IoException, PyException);
 create_exception!(exceptions, SolverException, PyException);
-create_exception!(exceptions, InvalidSparseDataException, PyException);
+create_exception!(exceptions, TransactionException, PyException);
+create_exception!(exceptions, LinkException, PyException);
