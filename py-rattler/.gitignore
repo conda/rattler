@@ -74,3 +74,4 @@ site/
 
 # Pyenv
 .python-version
+.ruff_cache

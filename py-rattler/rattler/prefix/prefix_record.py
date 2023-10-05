@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional, Self
+from typing import List, Optional
 from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyPrefixRecord
@@ -18,7 +18,7 @@ class PrefixRecord:
         self._record = PyPrefixRecord(source)
 
     @classmethod
-    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> Self:
+    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> PrefixRecord:
         """Construct Rattler PrefixRecord from FFI PyPrefixRecord object."""
         record = cls.__new__(cls)
         record._record = py_prefix_record
