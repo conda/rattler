@@ -14,6 +14,7 @@ from rattler.package import PackageName
 from rattler.prefix import PrefixRecord, PrefixPaths
 from rattler.solver import solve
 from rattler.platform import Platform
+from rattler.linker import link
 
 __all__ = [
     "Version",
@@ -36,4 +37,5 @@ __all__ = [
     "SparseRepoData",
     "solve",
     "Platform",
+    "link",
 ]

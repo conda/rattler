@@ -1,8 +1,13 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{
+    exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr, PyResult,
+};
 use rattler_conda_types::{prefix_record::PrefixPaths, PrefixRecord};
 use std::{path::PathBuf, str::FromStr};
 
-use crate::{error::PyRattlerError, package_name::PyPackageName};
+use crate::{
+    error::PyRattlerError, package_name::PyPackageName,
+    repo_data::repo_data_record::PyRepoDataRecord,
+};
 
 #[pyclass]
 #[repr(transparent)]
@@ -20,6 +25,25 @@ impl From<PrefixRecord> for PyPrefixRecord {
 impl From<PyPrefixRecord> for PrefixRecord {
     fn from(value: PyPrefixRecord) -> Self {
         value.inner
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PyPrefixRecord {
+    type Error = PyErr;
+    fn try_from(value: &'a PyAny) -> Result<Self, Self::Error> {
+        let intern_val = intern!(value.py(), "_record");
+        if !value.hasattr(intern_val)? {
+            return Err(PyTypeError::new_err(
+                "object is not an instance of 'PrefixRecord'",
+            ));
+        }
+
+        let inner = value.getattr(intern_val)?;
+        if !inner.is_instance_of::<Self>() {
+            return Err(PyTypeError::new_err("'_record' is invalid"));
+        }
+
+        PyPrefixRecord::extract(inner)
     }
 }
 
@@ -51,11 +75,11 @@ impl PyPrefixRecord {
     }
 
     // TODO: uncomment after merging fetch_repo_data
-    // /// The data from the repodata
-    // #[getter]
-    // pub fn repodata_record(&self) -> PyRepoDataRecord {
-    //     self.inner.repodata_record.clone().into()
-    // }
+    /// The data from the repodata
+    #[getter]
+    pub fn repodata_record(&self) -> PyRepoDataRecord {
+        self.inner.repodata_record.clone().into()
+    }
 
     /// Package name of the PrefixRecord.
     #[getter]
