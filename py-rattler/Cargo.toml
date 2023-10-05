@@ -12,12 +12,17 @@ crate-type = ["cdylib"]
 anyhow = "1.0.75"
 futures = "0.3.28"
 
+[features]
+default = ["native-tls"]
+native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
+
 rattler = { path = "../crates/rattler", default-features = false }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
-rattler_networking = { path = "../crates/rattler_networking", default-features = false, features = ["rustls-tls"] }
+rattler_networking = { path = "../crates/rattler_networking", default-features = false }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = ["resolvo"] }
