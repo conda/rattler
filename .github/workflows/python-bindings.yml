@@ -23,7 +23,7 @@ jobs:
           lfs: true
       - uses: prefix-dev/setup-pixi@v0.3.0
         with:
-          pixi-version: v0.3.0
+          pixi-version: v0.5.0
           cache: true
           manifest-path: py-rattler/pixi.toml
       - uses: actions-rust-lang/setup-rust-toolchain@v1
