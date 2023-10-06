@@ -12,9 +12,11 @@ class Channel:
         """
         Create a new channel.
 
+        ```python
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> channel
         Channel(name="conda-forge", base_url="https://conda.anaconda.org/conda-forge/")
+        ```
         """
         self._channel = PyChannel(name, channel_configuration._channel_configuration)
 
@@ -23,9 +25,13 @@ class Channel:
         """
         Return the name of this channel.
 
+        Examples
+        --------
+        ```python
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> channel.name
         'conda-forge'
+        ```
         """
         return self._channel.name
 
@@ -34,9 +40,13 @@ class Channel:
         """
         Return the base URL of this channel.
 
+        Examples
+        --------
+        ```python
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> channel.base_url
         'https://conda.anaconda.org/conda-forge/'
+        ```
         """
         return self._channel.base_url
 
