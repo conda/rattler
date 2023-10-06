@@ -45,6 +45,7 @@ class Platform:
         ```python
         >>> str(Platform("linux-64"))
         'linux-64'
+        >>>
         ```
         """
         return self._inner.name
@@ -58,6 +59,7 @@ class Platform:
         ```python
         >>> Platform("linux-64")
         Platform(linux-64)
+        >>>
         ```
         """
         return f"Platform({self._inner.name})"
@@ -81,6 +83,7 @@ class Platform:
         True
         >>> Platform("osx-64").is_linux
         False
+        >>>
         ```
         """
         return self._inner.is_linux
@@ -97,6 +100,7 @@ class Platform:
         True
         >>> Platform("linux-64").is_osx
         False
+        >>>
         ```
         """
         return self._inner.is_osx
@@ -113,6 +117,7 @@ class Platform:
         True
         >>> Platform("linux-64").is_windows
         False
+        >>>
         ```
         """
         return self._inner.is_windows
@@ -129,6 +134,7 @@ class Platform:
         True
         >>> Platform("win-64").is_unix
         False
+        >>>
         ```
         """
         return self._inner.is_unix
@@ -145,6 +151,7 @@ class Platform:
         Arch(x86_64)
         >>> Platform("linux-aarch64").arch
         Arch(aarch64)
+        >>>
         ```
         """
         return Arch._from_py_arch(self._inner.arch())

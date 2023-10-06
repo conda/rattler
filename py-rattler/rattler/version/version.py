@@ -44,6 +44,7 @@ class Version:
         >>> v = Version('2!1.0')
         >>> v.epoch
         2
+        >>>
         ```
         """
         return self._version.epoch()
@@ -59,6 +60,7 @@ class Version:
         >>> v = Version('1.0')
         >>> v.bump()
         Version("1.1")
+        >>>
         ```
         """
         return Version._from_py_version(self._version.bump())
@@ -78,6 +80,7 @@ class Version:
         >>> v2 = Version('1.0')
         >>> v2.has_local
         False
+        >>>
         ```
         """
         return self._version.has_local()
@@ -93,6 +96,7 @@ class Version:
         >>> v = Version("1.2dev.3-alpha4.5+6.8")
         >>> v.segments()
         [[1], [2, 'dev'], [3], [0, 'alpha', 4], [5]]
+        >>>
         ```
         """
         return self._version.segments()
@@ -108,6 +112,7 @@ class Version:
         >>> v = Version("1.2dev.3-alpha4.5+6.8")
         >>> v.local_segments()
         [[6], [8]]
+        >>>
         ```
         """
         return self._version.local_segments()
@@ -124,6 +129,7 @@ class Version:
         >>> v = Version('1.0')
         >>> v.as_major_minor()
         (1, 0)
+        >>>
         ```
         """
         return self._version.as_major_minor()
@@ -143,6 +149,7 @@ class Version:
         >>> v_non_dev = Version('1.0.1')
         >>> v_non_dev >= v
         True
+        >>>
         ```
         """
         return self._version.is_dev()
@@ -159,6 +166,7 @@ class Version:
         >>> v2 = Version('1.0')
         >>> v1.starts_with(v2)
         True
+        >>>
         ```
         """
         return self._version.starts_with(other._version)
@@ -183,6 +191,7 @@ class Version:
         False
         >>> v2.compatible_with(v_major)
         False
+        >>>
         ```
         """
         return self._version.compatible_with(other._version)
@@ -205,6 +214,7 @@ class Version:
         Traceback (most recent call last):
         exceptions.InvalidVersionException: new Version must have atleast 1 valid
         segment
+        >>>
         ```
         """
         new_py_version = self._version.pop_segments(n)
@@ -225,6 +235,7 @@ class Version:
         >>> v = Version('2!1.2.3')
         >>> v.with_segments(0, 2)
         Version("2!1.2")
+        >>>
         ```
         """
         new_py_version = self._version.with_segments(start, stop)
@@ -245,6 +256,7 @@ class Version:
         >>> v = Version('2!1.2.3')
         >>> v.segment_count
         3
+        >>>
         ```
         """
         return self._version.segment_count()
@@ -259,6 +271,7 @@ class Version:
         >>> v = Version('1.2.3+4.alpha-5')
         >>> v.strip_local()
         Version("1.2.3")
+        >>>
         ```
         """
         return self._from_py_version(self._version.strip_local())
@@ -272,6 +285,7 @@ class Version:
         ```python
         >>> str(Version("1.2.3"))
         '1.2.3'
+        >>>
         ```
         """
         return self._version.as_str()
@@ -285,6 +299,7 @@ class Version:
         ```python
         >>> Version("1.2.3")
         Version("1.2.3")
+        >>>
         ```
         """
         return f'Version("{self._version.as_str()}")'
@@ -302,6 +317,7 @@ class Version:
         False
         >>> hash(Version("1")) == hash(Version("1.0.0"))
         True
+        >>>
         ```
         """
         return self._version.__hash__()
@@ -319,6 +335,7 @@ class Version:
         False
         >>> Version("1") == Version("1.0.0")
         True
+        >>>
         ```
         """
         return self._version == other._version
@@ -336,6 +353,7 @@ class Version:
         True
         >>> Version("1") != Version("1.0.0")
         False
+        >>>
         ```
         """
         return self._version != other._version
@@ -357,6 +375,7 @@ class Version:
         True
         >>> Version("1") > Version("1.0.0")
         False
+        >>>
         ```
         """
         return self._version > other._version
@@ -378,6 +397,7 @@ class Version:
         False
         >>> Version("1") < Version("1.0.0")
         False
+        >>>
         ```
         """
         return self._version < other._version
@@ -402,6 +422,7 @@ class Version:
         False
         >>> Version("1") >= Version("1.0.0")
         True
+        >>>
         ```
         """
         return self._version >= other._version
@@ -424,6 +445,7 @@ class Version:
         False
         >>> Version("1") <= Version("1.0.0")
         True
+        >>>
         ```
         """
         return self._version <= other._version

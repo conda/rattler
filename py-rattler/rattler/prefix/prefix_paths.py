@@ -30,6 +30,7 @@ class PrefixPaths:
         >>> paths = r.paths_data
         >>> paths.paths_version
         1
+        >>>
         ```
         """
         return self._paths.paths_version
@@ -49,6 +50,7 @@ class PrefixPaths:
         >>> paths = r.paths_data
         >>> paths.paths # doctest:+ELLIPSIS
         [...]
+        >>>
         ```
         """
         return self._paths.paths
@@ -66,6 +68,7 @@ class PrefixPaths:
         ... )
         >>> r.paths_data
         PrefixPaths()
+        >>>
         ```
         """
         return "PrefixPaths()"

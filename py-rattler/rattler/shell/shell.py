@@ -124,6 +124,7 @@ def activate(
     >>> a = activate(p, actvars, Shell.xonsh)
     >>> print(a)
     <rattler.shell.shell.ActivationResult object at ...>
+    >>>
     ```
     """
     platform = (

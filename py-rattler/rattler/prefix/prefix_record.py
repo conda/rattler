@@ -35,6 +35,7 @@ class PrefixRecord:
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
+        >>>
         ```
         """
         return PrefixRecord._from_py_prefix_record(PyPrefixRecord.from_path(path))
@@ -58,6 +59,7 @@ class PrefixRecord:
         ... )
         >>> r.package_tarball_full_path
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2'
+        >>>
         ```
         """
         return self._record.package_tarball_full_path
@@ -75,6 +77,7 @@ class PrefixRecord:
         ... )
         >>> r.extracted_package_dir
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0'
+        >>>
         ```
         """
         return self._record.extracted_package_dir
@@ -92,6 +95,7 @@ class PrefixRecord:
         ... )
         >>> r.files # doctest:+ELLIPSIS
         [...]
+        >>>
         ```
         """
         return self._record.files
@@ -109,6 +113,7 @@ class PrefixRecord:
         ... )
         >>> r.paths_data
         PrefixPaths()
+        >>>
         ```
         """
         return PrefixPaths._from_py_prefix_paths(self._record.paths_data)
@@ -130,6 +135,7 @@ class PrefixRecord:
         ... )
         >>> r.requested_spec
         ''
+        >>>
         ```
         """
         return self._record.requested_spec
@@ -147,6 +153,7 @@ class PrefixRecord:
         ... )
         >>> r.name
         PackageName("requests")
+        >>>
         ```
         """
         return PackageName._from_py_package_name(self._record.name)
@@ -164,6 +171,7 @@ class PrefixRecord:
         ... )
         >>> r.version
         VersionWithSource("2.28.2")
+        >>>
         ```
         """
         return VersionWithSource(self._record.version)
@@ -180,6 +188,7 @@ class PrefixRecord:
         ... )
         >>> r
         PrefixRecord(name="requests", version="2.28.2")
+        >>>
         ```
         """
         return f'PrefixRecord(name="{self.name.normalized}", version="{self.version}")'

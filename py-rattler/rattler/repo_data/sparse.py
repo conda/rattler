@@ -59,6 +59,7 @@ class SparseRepoData:
         [...]
         >>> isinstance(package_names[0], str)
         True
+        >>>
         ```
         """
         return self._sparse.package_names()
@@ -81,6 +82,7 @@ class SparseRepoData:
         [...]
         >>> isinstance(records[0], RepoDataRecord)
         True
+        >>>
         ```
         """
         # maybe change package_name to Union[str, PackageName]
@@ -104,6 +106,7 @@ class SparseRepoData:
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data.subdir
         'test-data/conda-forge/noarch'
+        >>>
         ```
         """
         return self._sparse.subdir
@@ -131,6 +134,7 @@ class SparseRepoData:
         >>> package_name = PackageName("python")
         >>> SparseRepoData.load_records_recursive([sparse_data], [package_name])
         [...]
+        >>>
         ```
         """
         return [
@@ -166,6 +170,7 @@ class SparseRepoData:
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data
         SparseRepoData(subdir="test-data/conda-forge/noarch")
+        >>>
         ```
         """
         return f'SparseRepoData(subdir="{self.subdir}")'
