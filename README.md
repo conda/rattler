@@ -35,7 +35,7 @@ Rattler is actively used within the https://prefix.dev backend.
 This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
-![Installing an environment](/assets/showcase_create.gif)
+![Installing an environment](https://github.com/mamba-org/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
 
 ## Give it a try!
 
