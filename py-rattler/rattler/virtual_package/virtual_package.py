@@ -23,10 +23,6 @@ class VirtualPackage:
         """
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
-
-        Examples
-        --------
-        >>> v = VirtualPackage.current()
         """
         return [
             VirtualPackage._from_py_virtual_package(vp)
