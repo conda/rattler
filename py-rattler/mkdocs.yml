@@ -6,5 +6,10 @@ theme:
 repo_url: https://github.com/mamba-org/rattler/
 
 plugins:
-- search
-- mkdocstrings
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+
+  - search
