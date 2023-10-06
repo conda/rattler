@@ -1,9 +1,16 @@
 site_name: "py-rattler"
 
 theme:
-  name: "readthedocs"
+  name: material
 
 repo_url: https://github.com/mamba-org/rattler/
+
+nav:
+  - Home: index.md
+  - References:
+      - channel:
+          - ChannelConfig: channel_config.md
+          - Channel: channel.md
 
 plugins:
   - mkdocstrings:
