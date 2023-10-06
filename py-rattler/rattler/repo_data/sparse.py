@@ -48,6 +48,7 @@ class SparseRepoData:
 
         Examples
         --------
+        ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
@@ -58,6 +59,7 @@ class SparseRepoData:
         [...]
         >>> isinstance(package_names[0], str)
         True
+        ```
         """
         return self._sparse.package_names()
 
@@ -67,6 +69,7 @@ class SparseRepoData:
 
         Examples
         --------
+        ```python
         >>> from rattler import Channel, ChannelConfig, RepoDataRecord, PackageName
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
@@ -78,6 +81,7 @@ class SparseRepoData:
         [...]
         >>> isinstance(records[0], RepoDataRecord)
         True
+        ```
         """
         # maybe change package_name to Union[str, PackageName]
         return [
@@ -92,6 +96,7 @@ class SparseRepoData:
 
         Examples
         --------
+        ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
@@ -99,6 +104,7 @@ class SparseRepoData:
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data.subdir
         'test-data/conda-forge/noarch'
+        ```
         """
         return self._sparse.subdir
 
@@ -113,11 +119,24 @@ class SparseRepoData:
         these records depend on. This will parse the records for the
         specified packages as well as all the packages these records
         depend on.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel, ChannelConfig, PackageName
+        >>> channel = Channel("conda-forge")
+        >>> subdir = "test-data/conda-forge/linux-64"
+        >>> path = "../test-data/channels/conda-forge/linux-64/repodata.json"
+        >>> sparse_data = SparseRepoData(channel, subdir, path)
+        >>> package_name = PackageName("python")
+        >>> SparseRepoData.load_records_recursive([sparse_data], [package_name])
+        [...]
         """
         return [
             [RepoDataRecord._from_py_record(record) for record in list_of_records]
             for list_of_records in PySparseRepoData.load_records_recursive(
-                repo_data, package_names
+                [r._sparse for r in repo_data],
+                [p._name for p in package_names],
             )
         ]
 
@@ -138,6 +157,7 @@ class SparseRepoData:
 
         Examples
         --------
+        ```python
         >>> from rattler import Channel, ChannelConfig
         >>> channel = Channel("conda-forge", ChannelConfig())
         >>> subdir = "test-data/conda-forge/noarch"
@@ -145,5 +165,6 @@ class SparseRepoData:
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data
         SparseRepoData(subdir="test-data/conda-forge/noarch")
+        ```
         """
         return f'SparseRepoData(subdir="{self.subdir}")'
