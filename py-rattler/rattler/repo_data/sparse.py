@@ -131,6 +131,7 @@ class SparseRepoData:
         >>> package_name = PackageName("python")
         >>> SparseRepoData.load_records_recursive([sparse_data], [package_name])
         [...]
+        ```
         """
         return [
             [RepoDataRecord._from_py_record(record) for record in list_of_records]
