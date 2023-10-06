@@ -1,3 +1,3 @@
 # Shell
 
-::: rattler.shell.shell
+::: rattler.shell.shell.Shell

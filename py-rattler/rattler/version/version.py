@@ -39,8 +39,8 @@ class Version:
         Gets the epoch of the version or `None` if the epoch was not defined.
 
         Examples
-        ```python
         --------
+        ```python
         >>> v = Version('2!1.0')
         >>> v.epoch
         2

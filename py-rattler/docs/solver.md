@@ -1,3 +1,3 @@
-# Solver
+# solve
 
-::: rattler.shell.shell
+::: rattler.solver.solver
