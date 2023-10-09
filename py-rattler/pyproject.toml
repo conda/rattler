@@ -21,6 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
+Documentation = "https://mamba-org.github.io/rattler/py-rattler/"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
@@ -33,19 +34,11 @@ target-version = "py38"
 python_version = "3.8"
 files = ["rattler", "tests"]
 strict = true
-enable_error_code = [
-    "redundant-expr",
-    "truthy-bool",
-    "ignore-without-code",
-]
-disable_error_code = [
-    "empty-body",
-]
+enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
+disable_error_code = ["empty-body"]
 
 [[tool.mypy.overrides]]
-module = [
-    "rattler.rattler",
-]
+module = ["rattler.rattler"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
