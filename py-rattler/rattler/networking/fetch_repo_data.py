@@ -29,6 +29,9 @@ async def fetch_repo_data(
                     be downloaded.
         callback: A `Callable[[int, int], None]` to report the download
                   progress of repo data.
+
+    Returns:
+        A list of `SparseRepoData` for requested channels and platforms.
     """
     repo_data_list = await py_fetch_repo_data(
         [channel._channel for channel in channels],

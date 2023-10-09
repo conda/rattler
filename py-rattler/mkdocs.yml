@@ -6,7 +6,7 @@ theme:
 repo_url: https://github.com/mamba-org/rattler/
 
 nav:
-  - Home: index.md
+  - First Steps: index.md
   - References:
       - core:
           - fetch: fetch_repo_data.md
