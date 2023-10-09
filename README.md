@@ -1,4 +1,10 @@
-![An image of a snake in a box](assets/rattler-readme-image.png)
+<a href="https://github.com/mamba-org/rattler/">
+    <picture>
+      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
+      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
+      <img src="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
+    </picture>
+</a>
 
 # Rattler: Rust crates for fast handling of conda packages
 
@@ -29,7 +35,7 @@ Rattler is actively used within the https://prefix.dev backend.
 This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
-![Installing an environment](/assets/showcase_create.gif)
+![Installing an environment](https://github.com/mamba-org/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
 
 ## Give it a try!
 
