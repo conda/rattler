@@ -1,6 +1,6 @@
 [project]
 name = "py-rattler"
-version = "0.1.0"
+version = "0.1.1"
 description = "Add a short description here"
 authors = [
     "Bas Zalmstra <bas@prefix.dev>",
