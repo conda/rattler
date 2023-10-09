@@ -47,6 +47,12 @@ if you haven't already. Alternatively, you can use can get via conda.
 $ python3 -m pip install --upgrade py-rattler
 ```
 
+### Pixi
+
+```shell
+$ pixi add py-rattler
+```
+
 ### Conda
 
 ```shell
@@ -57,12 +63,6 @@ $ conda install py-rattler
 
 ```shell
 $ mamba install py-rattler -c conda-forge
-```
-
-### Pixi
-
-```shell
-$ pixi add py-rattler
 ```
 
 ## Quick-Start
@@ -82,13 +82,19 @@ def download_callback(done, total):
         print()
 
 async def main():
+    # channel to use to get the dependencies
     channel = Channel("conda-forge")
+
+    # list of dependencies to install in the env
     match_spec = [
         MatchSpec("python ~=3.12.*"),
         MatchSpec("pip"),
         MatchSpec("requests 2.31.0")
     ]
+
+    # list of platforms to get the repo data
     platforms = [Platform.current(), Platform("noarch")]
+
     cache_path = "/tmp/py-rattler-cache/"
     env_path = "/tmp/env-path/env"
 
@@ -141,5 +147,4 @@ Next, we will see a quick reference summary of all the methods and properties th
 ## Contributing 😍
 
 We would love to have you contribute!
-See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our discord server.
-You can [join our discord server via this link][https://discord.gg/kKV8ZxyzY4].
+See the CONTRIBUTION.md for more info. For questions, requests or a casual chat, we are very active on our [discord server](https://discord.gg/kKV8ZxyzY4).
