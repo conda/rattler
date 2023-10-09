@@ -1,5 +1,4 @@
-use crate::package::paths::FileMode;
-use crate::package::PackageFile;
+use crate::{package::paths::FileMode, package::PackageFile};
 use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_till1},
@@ -10,8 +9,10 @@ use nom::{
 };
 use std::{
     borrow::Cow,
+    hint::black_box,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::OnceLock,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +44,24 @@ impl PackageFile for HasPrefix {
     }
 }
 
+/// Returns the default placeholder path. Although this is just a constant it is constructed at
+/// runtime. This ensures that the string itself is not present in the binary when compiled. The
+/// reason we want that is that conda-build (and friends) tries to replace this placeholder in the
+/// binary to point to the actual path in the installed conda environment. In this case we don't
+/// want to that so we deliberately break up the string and reconstruct it at runtime.
+fn placeholder_string() -> &'static str {
+    static PLACEHOLDER: OnceLock<String> = OnceLock::new();
+    PLACEHOLDER
+        .get_or_init(|| {
+            let mut result = black_box(String::from("/opt/"));
+            for i in 1..=3 {
+                result.push_str(&format!("anaconda{i}"))
+            }
+            result
+        })
+        .as_str()
+}
+
 impl FromStr for HasPrefixEntry {
     type Err = std::io::Error;
 
@@ -72,7 +91,7 @@ impl FromStr for HasPrefixEntry {
         /// Parses "<path>" and fails if there is more input.
         fn only_path(buf: &str) -> IResult<&str, HasPrefixEntry> {
             all_consuming(map(possibly_quoted_string, |path| HasPrefixEntry {
-                prefix: Cow::Borrowed("/opt/anaconda1anaconda2anaconda3"),
+                prefix: Cow::Borrowed(placeholder_string()),
                 file_mode: FileMode::Text,
                 relative_path: PathBuf::from(path.as_ref()),
             }))(buf)
@@ -120,10 +139,14 @@ impl FromStr for HasPrefixEntry {
 
 #[cfg(test)]
 mod test {
-    use super::HasPrefixEntry;
+    use super::*;
     use crate::package::FileMode;
-    use std::str::FromStr;
-    use std::{borrow::Cow, path::PathBuf};
+    use std::{borrow::Cow, path::PathBuf, str::FromStr};
+
+    #[test]
+    fn test_placeholder() {
+        assert_eq!(placeholder_string(), "/opt/anaconda1anaconda2anaconda3");
+    }
 
     #[test]
     pub fn test_parse_has_prefix() {
