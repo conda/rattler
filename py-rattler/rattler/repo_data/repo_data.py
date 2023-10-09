@@ -32,6 +32,16 @@ class RepoData:
         """
         Builds a `List[RepoDataRecord]` from the packages in a
         `RepoData` given the source of the data.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import Channel
+        >>> repo_data = RepoData("../test-data/test-server/repo/noarch/repodata.json")
+        >>> repo_data.into_repo_data(Channel("test"))
+        [...]
+        >>>
+        ```
         """
         from rattler.repo_data import RepoDataRecord
 
@@ -54,5 +64,14 @@ class RepoData:
     def __repr__(self) -> str:
         """
         Returns a representation of the RepoData.
+
+        Examples
+        --------
+        ```python
+        >>> repo_data = RepoData("../test-data/test-server/repo/noarch/repodata.json")
+        >>> repo_data
+        RepoData()
+        >>>
+        ```
         """
         return f"{type(self).__name__}()"

@@ -25,7 +25,10 @@ class AuthenticatedClient:
 
         Examples
         --------
+        ```python
         >>> AuthenticatedClient()
         AuthenticatedClient()
+        >>>
+        ```
         """
         return f"{type(self).__name__}()"

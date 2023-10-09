@@ -27,11 +27,41 @@ class PackageRecord:
     def __str__(self) -> str:
         """
         Returns the string representation of the PackageRecord.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import RepoData, Channel
+        >>> repo_data = RepoData(
+        ...     "../test-data/test-server/repo/noarch/repodata.json"
+        ... )
+        >>> record_list = repo_data.into_repo_data(Channel("test"))
+        >>> record = record_list[0]
+        >>> package_record = record.package_record
+        >>> str(package_record)
+        'test-package=0.1=0'
+        >>>
+        ```
         """
         return self._package_record.as_str()
 
     def __repr__(self) -> str:
         """
         Returns a representation of the PackageRecord.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import RepoData, Channel
+        >>> repo_data = RepoData(
+        ...     "../test-data/test-server/repo/noarch/repodata.json"
+        ... )
+        >>> record_list = repo_data.into_repo_data(Channel("test"))
+        >>> record = record_list[0]
+        >>> package_record = record.package_record
+        >>> package_record
+        PackageRecord("test-package=0.1=0")
+        >>>
+        ```
         """
         return f'PackageRecord("{self.__str__()}")'

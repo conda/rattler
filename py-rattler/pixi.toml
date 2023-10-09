@@ -21,6 +21,8 @@ lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
 type-check = { cmd = "mypy", depends_on = ["build"] }
+docs = { cmd = "mkdocs serve" }
+build-docs = { cmd = "mkdocs build" }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
@@ -35,6 +37,10 @@ black = "~=23.7.0"
 ruff = "~=0.0.285"
 mypy = "~=1.5.1"
 pytest-asyncio = "0.21.1.*"
+mkdocs = "1.5.3.*"
+mkdocstrings-python = "1.7.1.*"
+mkdocstrings = "0.23.0.*"
+mkdocs-material = "9.4.4.*"
 
 [target.linux-64.dependencies]
 patchelf = "~=0.17.2"

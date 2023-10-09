@@ -40,8 +40,13 @@ class Platform:
         """
         Returns a string representation of the platform.
 
+        Examples
+        --------
+        ```python
         >>> str(Platform("linux-64"))
         'linux-64'
+        >>>
+        ```
         """
         return self._inner.name
 
@@ -49,8 +54,13 @@ class Platform:
         """
         Returnrs a representation of the platform.
 
+        Examples
+        --------
+        ```python
         >>> Platform("linux-64")
         Platform(linux-64)
+        >>>
+        ```
         """
         return f"Platform({self._inner.name})"
 
@@ -58,9 +68,6 @@ class Platform:
     def current(cls) -> Platform:
         """
         Returns the current platform.
-
-        # >>> Platform.current()
-        # Platform(linux-64)
         """
         return Platform._from_py_platform(PyPlatform.current())
 
@@ -69,10 +76,15 @@ class Platform:
         """
         Return True if the platform is linux.
 
+        Examples
+        --------
+        ```python
         >>> Platform("linux-64").is_linux
         True
         >>> Platform("osx-64").is_linux
         False
+        >>>
+        ```
         """
         return self._inner.is_linux
 
@@ -81,10 +93,15 @@ class Platform:
         """
         Return True if the platform is osx.
 
+        Examples
+        --------
+        ```python
         >>> Platform("osx-64").is_osx
         True
         >>> Platform("linux-64").is_osx
         False
+        >>>
+        ```
         """
         return self._inner.is_osx
 
@@ -93,10 +110,15 @@ class Platform:
         """
         Return True if the platform is win.
 
+        Examples
+        --------
+        ```python
         >>> Platform("win-64").is_windows
         True
         >>> Platform("linux-64").is_windows
         False
+        >>>
+        ```
         """
         return self._inner.is_windows
 
@@ -105,10 +127,15 @@ class Platform:
         """
         Return True if the platform is unix.
 
+        Examples
+        --------
+        ```python
         >>> Platform("linux-64").is_unix
         True
         >>> Platform("win-64").is_unix
         False
+        >>>
+        ```
         """
         return self._inner.is_unix
 
@@ -117,9 +144,14 @@ class Platform:
         """
         Return the architecture of the platform.
 
+        Examples
+        --------
+        ```python
         >>> Platform("linux-64").arch
         Arch(x86_64)
         >>> Platform("linux-aarch64").arch
         Arch(aarch64)
+        >>>
+        ```
         """
         return Arch._from_py_arch(self._inner.arch())
