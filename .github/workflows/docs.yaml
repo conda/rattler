@@ -55,7 +55,7 @@ jobs:
         run: cargo doc --workspace --no-deps --all-features --lib
 
       - name: Build Py-rattler Documentation
-        run: pixi run build-docs
+        run: pixi run --manifest-path py-rattler/pixi.toml build-docs
 
       #  This adds the following:
       #   - A top level redirect to the rattler crate documentation
