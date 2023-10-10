@@ -87,13 +87,15 @@ async def main():
 
     # list of dependencies to install in the env
     match_specs = [
-        MatchSpec("python ~=3.10"),
+        MatchSpec("python ~=3.12.*"),
         MatchSpec("pip"),
         MatchSpec("requests 2.31.0")
     ]
 
     # list of platforms to get the repo data
     platforms = [Platform.current(), Platform("noarch")]
+
+    virtual_packages = [p.into_generic() for p in VirtualPackage.current()]
 
     cache_path = "/tmp/py-rattler-cache/"
     env_path = "/tmp/env-path/env"
@@ -110,6 +112,7 @@ async def main():
     solved_dependencies = solve(
         specs = match_specs,
         available_packages = repo_data,
+        virtual_packages = virtual_packages,
     )
     print("solved required dependencies")
 
