@@ -86,8 +86,8 @@ async def main():
     channel = Channel("conda-forge")
 
     # list of dependencies to install in the env
-    match_spec = [
-        MatchSpec("python"),
+    match_specs = [
+        MatchSpec("python ~=3.10"),
         MatchSpec("pip"),
         MatchSpec("requests 2.31.0")
     ]
@@ -108,7 +108,7 @@ async def main():
     print("finished fetching repo_data")
 
     solved_dependencies = solve(
-        specs = match_spec,
+        specs = match_specs,
         available_packages = repo_data,
     )
     print("solved required dependencies")
