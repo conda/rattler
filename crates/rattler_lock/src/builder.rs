@@ -1,15 +1,13 @@
 //! Builder for the creation of lock files. Currently,
 //!
-use super::ConversionError;
-use crate::conda_lock::content_hash::CalculateContentHashError;
-use crate::conda_lock::{
-    content_hash, Channel, CondaLock, GitMeta, LockMeta, LockedDependency, Manager, PackageHashes,
-    TimeMeta,
+use crate::conda::ConversionError;
+use crate::{
+    content_hash, content_hash::CalculateContentHashError, Channel, CondaLock,
+    CondaLockedDependency, GitMeta, LockMeta, LockedDependency, MatchSpec, NoArchType,
+    PackageHashes, PackageName, Platform, RepoDataRecord, TimeMeta,
 };
-use crate::{MatchSpec, NamelessMatchSpec, NoArchType, PackageName, Platform, RepoDataRecord};
-use fxhash::{FxBuildHasher, FxHashMap, FxHashSet};
-use indexmap::IndexMap;
-use std::str::FromStr;
+use fxhash::{FxHashMap, FxHashSet};
+use rattler_conda_types::NamelessMatchSpec;
 use url::Url;
 
 /// Struct used to build a conda-lock file
@@ -129,37 +127,30 @@ impl LockedPackages {
             .into_iter()
             .map(|locked_package| {
                 LockedDependency {
-                    name: locked_package.name,
-                    version: locked_package.version,
-                    /// Use conda as default manager for now
-                    manager: Manager::Conda,
                     platform: self.platform,
-                    dependencies: locked_package.dependency_list,
-                    url: locked_package.url,
-                    hash: locked_package.package_hashes,
-                    optional: locked_package.optional.unwrap_or(false),
+                    version: locked_package.version,
+                    name: locked_package.name.as_normalized().to_string(),
                     category: super::default_category(),
-                    source: None,
-                    build: Some(locked_package.build_string),
-                    arch: self.platform.arch().map(|arch| arch.to_string()),
-                    subdir: Some(self.platform.to_string()),
-                    build_number: locked_package.build_number,
-                    constrains: if locked_package.constrains.is_empty() {
-                        None
-                    } else {
-                        Some(locked_package.constrains)
-                    },
-                    features: locked_package.features,
-                    track_features: if locked_package.track_features.is_empty() {
-                        None
-                    } else {
-                        Some(locked_package.track_features)
-                    },
-                    license: locked_package.license,
-                    license_family: locked_package.license_family,
-                    noarch: locked_package.noarch,
-                    size: locked_package.size,
-                    timestamp: locked_package.timestamp,
+                    specific: CondaLockedDependency {
+                        /// Use conda as default manager for now
+                        dependencies: locked_package.dependency_list,
+                        url: locked_package.url,
+                        hash: locked_package.package_hashes,
+                        source: None,
+                        build: Some(locked_package.build),
+                        arch: self.platform.arch().map(|arch| arch.to_string()),
+                        subdir: Some(self.platform.to_string()),
+                        build_number: Some(locked_package.build_number),
+                        constrains: locked_package.constrains,
+                        features: locked_package.features,
+                        track_features: locked_package.track_features,
+                        license: locked_package.license,
+                        license_family: locked_package.license_family,
+                        noarch: locked_package.noarch,
+                        size: locked_package.size,
+                        timestamp: locked_package.timestamp,
+                    }
+                    .into(),
                 }
             })
             .collect()
@@ -173,13 +164,13 @@ pub struct LockedPackage {
     /// Package version
     pub version: String,
     /// Package build string
-    pub build_string: String,
+    pub build: String,
     /// Url where the package is hosted
     pub url: Url,
     /// Collection of package hash fields
     pub package_hashes: PackageHashes,
     /// List of dependencies for this package
-    pub dependency_list: IndexMap<PackageName, NamelessMatchSpec, FxBuildHasher>,
+    pub dependency_list: Vec<String>,
     /// Check if package is optional
     pub optional: Option<bool>,
 
@@ -190,7 +181,7 @@ pub struct LockedPackage {
     pub subdir: Option<String>,
 
     /// Experimental: conda build number of the package
-    pub build_number: Option<u64>,
+    pub build_number: u64,
 
     /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
     pub constrains: Vec<String>,
@@ -235,32 +226,17 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
             PackageHashes::from_hashes(record.package_record.md5, record.package_record.sha256);
         let hashes = hashes.ok_or_else(|| ConversionError::Missing("md5 or sha265".to_string()))?;
 
-        // Convert dependencies
-        let mut dependencies = IndexMap::default();
-        for match_spec_str in record.package_record.depends.iter() {
-            let matchspec = MatchSpec::from_str(match_spec_str)?;
-            let name = matchspec
-                .name
-                .as_ref()
-                .ok_or_else(|| {
-                    ConversionError::Missing(format!("dependency name for {}", match_spec_str))
-                })?
-                .clone();
-            let version_constraint = NamelessMatchSpec::from(matchspec);
-            dependencies.insert(name.clone(), version_constraint);
-        }
-
         Ok(Self {
             name: record.package_record.name,
             version: record.package_record.version.to_string(),
-            build_string: record.package_record.build,
+            build: record.package_record.build,
             url: record.url,
             package_hashes: hashes,
-            dependency_list: dependencies,
+            dependency_list: record.package_record.depends,
             optional: None,
             arch: record.package_record.arch,
             subdir: Some(record.package_record.subdir),
-            build_number: Some(record.package_record.build_number),
+            build_number: record.package_record.build_number,
             constrains: record.package_record.constrains,
             features: record.package_record.features,
             track_features: record.package_record.track_features,
@@ -286,7 +262,8 @@ impl LockedPackage {
         key: PackageName,
         version_constraint: NamelessMatchSpec,
     ) -> Self {
-        self.dependency_list.insert(key, version_constraint);
+        self.dependency_list
+            .push(MatchSpec::from_nameless(version_constraint, Some(key)).to_string());
         self
     }
 
@@ -295,7 +272,11 @@ impl LockedPackage {
         mut self,
         value: impl IntoIterator<Item = (PackageName, NamelessMatchSpec)>,
     ) -> Self {
-        self.dependency_list.extend(value);
+        self.dependency_list.extend(
+            value
+                .into_iter()
+                .map(|(n, spec)| MatchSpec::from_nameless(spec, Some(n)).to_string()),
+        );
         self
     }
 
@@ -313,7 +294,7 @@ impl LockedPackage {
 
     /// Set the subdir for for the package
     pub fn set_build_number<S: AsRef<str>>(mut self, build_number: u64) -> Self {
-        self.build_number = Some(build_number);
+        self.build_number = build_number;
         self
     }
 
@@ -386,11 +367,10 @@ mod tests {
     use chrono::Utc;
     use std::str::FromStr;
 
-    use crate::conda_lock::builder::{LockFileBuilder, LockedPackage, LockedPackages};
-    use crate::conda_lock::PackageHashes;
-    use crate::{
-        ChannelConfig, MatchSpec, NamelessMatchSpec, NoArchType, PackageName, Platform,
-        RepoDataRecord,
+    use crate::builder::{LockFileBuilder, LockedPackage, LockedPackages};
+    use crate::PackageHashes;
+    use rattler_conda_types::{
+        ChannelConfig, MatchSpec, NoArchType, PackageName, Platform, RepoDataRecord,
     };
     use rattler_digest::parse_digest_from_hex;
 
@@ -406,15 +386,15 @@ mod tests {
                 .add_locked_package(LockedPackage {
                     name: PackageName::new_unchecked("python"),
                     version: "3.11.0".to_string(),
-                    build_string: "h4150a38_1_cpython".to_string(),
+                    build: "h4150a38_1_cpython".to_string(),
                     url: "https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda".parse().unwrap(),
                     package_hashes:  PackageHashes::Md5Sha256(parse_digest_from_hex::<rattler_digest::Md5>("c6f4b87020c72e2700e3e94c1fc93b70").unwrap(),
                                                                parse_digest_from_hex::<rattler_digest::Sha256>("7c58de8c7d98b341bd9be117feec64782e704fec5c30f6e14713ebccaab9b5d8").unwrap()),
-                    dependency_list: FromIterator::from_iter([(PackageName::new_unchecked("python"), NamelessMatchSpec::from_str("3.11.0.*").unwrap())]),
+                    dependency_list: vec![String::from("python 3.11.0.*")],
                     optional: None,
                     arch: Some("x86_64".to_string()),
                     subdir: Some("noarch".to_string()),
-                    build_number: Some(12),
+                    build_number: 12,
                     constrains: vec!["bla".to_string()],
                     features: Some("foobar".to_string()),
                     track_features: vec!["dont-track".to_string()],
@@ -430,7 +410,10 @@ mod tests {
         let locked_dep = lock.package.first().unwrap();
         let record = RepoDataRecord::try_from(locked_dep).unwrap();
 
-        assert_eq!(record.package_record.name, locked_dep.name);
+        assert_eq!(
+            record.package_record.name.as_source(),
+            locked_dep.name.as_str()
+        );
         assert_eq!(
             record.channel,
             "https://conda.anaconda.org/conda-forge".to_string()
@@ -444,38 +427,53 @@ mod tests {
             locked_dep.version
         );
         assert_eq!(
-            record.package_record.build,
-            locked_dep.build.clone().unwrap_or_default()
+            Some(&record.package_record.build),
+            locked_dep.as_conda().unwrap().build.as_ref()
         );
         assert_eq!(
             record.package_record.platform.clone().unwrap(),
             locked_dep.platform.only_platform().unwrap()
         );
-        assert_eq!(record.package_record.arch, locked_dep.arch);
         assert_eq!(
-            record.package_record.subdir,
-            locked_dep.subdir.clone().unwrap_or_default()
+            record.package_record.arch,
+            locked_dep.as_conda().unwrap().arch
         );
         assert_eq!(
-            record.package_record.build_number,
-            locked_dep.build_number.unwrap_or_default()
+            Some(&record.package_record.subdir),
+            locked_dep.as_conda().unwrap().subdir.as_ref()
+        );
+        assert_eq!(
+            Some(record.package_record.build_number),
+            locked_dep.as_conda().unwrap().build_number
         );
         assert_eq!(
             record.package_record.constrains,
-            locked_dep.constrains.clone().unwrap_or_default()
+            locked_dep.as_conda().unwrap().constrains.clone()
         );
-        assert_eq!(record.package_record.features, locked_dep.features);
+        assert_eq!(
+            record.package_record.features,
+            locked_dep.as_conda().unwrap().features
+        );
         assert_eq!(
             record.package_record.track_features,
-            locked_dep.track_features.clone().unwrap_or_default()
+            locked_dep.as_conda().unwrap().track_features
         );
         assert_eq!(
             record.package_record.license_family,
-            locked_dep.license_family
+            locked_dep.as_conda().unwrap().license_family
         );
-        assert_eq!(record.package_record.noarch, locked_dep.noarch);
-        assert_eq!(record.package_record.size, locked_dep.size);
-        assert_eq!(record.package_record.timestamp, locked_dep.timestamp);
+        assert_eq!(
+            record.package_record.noarch,
+            locked_dep.as_conda().unwrap().noarch
+        );
+        assert_eq!(
+            record.package_record.size,
+            locked_dep.as_conda().unwrap().size
+        );
+        assert_eq!(
+            record.package_record.timestamp,
+            locked_dep.as_conda().unwrap().timestamp
+        );
 
         // Convert to LockedDependency
         let locked_package = LockedPackage::try_from(record.clone()).unwrap();
@@ -484,10 +482,7 @@ mod tests {
             record.package_record.version.to_string(),
             locked_package.version
         );
-        assert_eq!(
-            record.package_record.build,
-            locked_package.build_string.clone()
-        );
+        assert_eq!(&record.package_record.build, &locked_package.build);
         assert_eq!(record.package_record.arch, locked_package.arch);
         assert_eq!(
             record.package_record.subdir,
@@ -495,7 +490,7 @@ mod tests {
         );
         assert_eq!(
             record.package_record.build_number,
-            locked_package.build_number.unwrap_or_default()
+            locked_package.build_number
         );
         assert_eq!(record.package_record.constrains, locked_package.constrains);
         assert_eq!(record.package_record.features, locked_package.features);

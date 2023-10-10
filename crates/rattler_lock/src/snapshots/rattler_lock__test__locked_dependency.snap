@@ -1,5 +1,6 @@
 ---
-source: crates/rattler_conda_types/src/conda_lock/mod.rs
+source: crates/rattler_lock/src/lib.rs
+assertion_line: 713
 expression: repodata_record
 ---
 arch: x86_64
