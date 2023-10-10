@@ -87,7 +87,7 @@ async def main():
 
     # list of dependencies to install in the env
     match_spec = [
-        MatchSpec("python ~=3.12.*"),
+        MatchSpec("python"),
         MatchSpec("pip"),
         MatchSpec("requests 2.31.0")
     ]
@@ -108,7 +108,7 @@ async def main():
     print("finished fetching repo_data")
 
     solved_dependencies = solve(
-        specs = [match_spec],
+        specs = match_spec,
         available_packages = repo_data,
     )
     print("solved required dependencies")
