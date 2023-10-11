@@ -3,7 +3,6 @@
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::process::ExitStatus;
 use std::{
     fs,
@@ -109,8 +108,7 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
         .filter_map(|r| r.ok())
         .map(|r| r.path())
         .filter(|path| {
-            path.is_file()
-                && path.extension().and_then(OsStr::to_str) == Some(shell_type.extension())
+            shell_type.can_run_script(path)
         })
         .collect::<Vec<_>>();
 

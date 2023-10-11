@@ -5,6 +5,7 @@ use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::process::Command;
 use std::str::FromStr;
 use std::{
@@ -39,6 +40,13 @@ pub trait Shell {
 
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
+
+    /// Test to see if the path can be executed by the shell, based on the extension of the path.
+    fn can_run_script(&self, path: &Path) -> bool{
+        path.is_file() && path.extension()
+            .and_then(OsStr::to_str)
+            .map_or(false, |ext| ext == self.extension())
+    }
 
     /// Executes a command in the current shell. Use [`Self::run_script`] when you want to run
     /// another shell script.
@@ -271,11 +279,22 @@ impl Shell for Xonsh {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source-bash \"{}\"", path.to_string_lossy())
+        let ext = path.extension().and_then(OsStr::to_str);
+        let cmd = match ext {
+            Some("sh") => "source-bash",
+            _ => "source",
+        };
+        writeln!(f, "{} \"{}\"", cmd, path.to_string_lossy())
+    }
+
+    fn can_run_script(&self, path: &Path) -> bool{
+        path.is_file() && path.extension()
+            .and_then(OsStr::to_str)
+            .map_or(false, |ext| ext == "xsh"|| ext == "sh")
     }
 
     fn extension(&self) -> &str {
-        "sh"
+        "xsh"
     }
 
     fn executable(&self) -> &str {
@@ -708,6 +727,26 @@ mod tests {
             .set_env_var("FOO", "bar")
             .unset_env_var("FOO")
             .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
+
+        insta::assert_snapshot!(script.contents);
+    }
+
+    #[test]
+    fn test_xonsh_bash() {
+        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+
+        script.run_script(&PathBuf::from_str("foo.sh").unwrap());
+
+        insta::assert_snapshot!(script.contents);
+    }
+
+    #[test]
+    fn test_xonsh_xsh() {
+        let mut script = ShellScript::new(Xonsh, Platform::Linux64);
+        script
+            .set_env_var("FOO", "bar")
+            .unset_env_var("FOO")
+            .run_script(&PathBuf::from_str("foo.xsh").unwrap());
 
         insta::assert_snapshot!(script.contents);
     }
