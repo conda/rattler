@@ -275,7 +275,7 @@ impl Shell for Xonsh {
     }
 
     fn extension(&self) -> &str {
-        "sh"
+        "xsh"
     }
 
     fn executable(&self) -> &str {
