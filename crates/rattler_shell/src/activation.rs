@@ -107,9 +107,7 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
         .into_iter()
         .filter_map(|r| r.ok())
         .map(|r| r.path())
-        .filter(|path| {
-            shell_type.can_run_script(path)
-        })
+        .filter(|path| shell_type.can_run_script(path))
         .collect::<Vec<_>>();
 
     scripts.sort();
