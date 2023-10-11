@@ -3,7 +3,6 @@
 //! This crate provides helper functions to activate and deactivate virtual environments.
 
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::process::ExitStatus;
 use std::{
     fs,
@@ -109,14 +108,7 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
         .filter_map(|r| r.ok())
         .map(|r| r.path())
         .filter(|path| {
-            let ext = path.extension().and_then(OsStr::to_str);
-            // Xonsh can run bash with a special source command, build into Xonsh::run_script
-            let target_ext = if shell_type.executable() == "xonsh" {
-                "sh"
-            } else {
-                shell_type.extension()
-            };
-            path.is_file() && ext == Some(target_ext)
+            shell_type.can_run_script(path)
         })
         .collect::<Vec<_>>();
 
