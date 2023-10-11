@@ -1,0 +1,8 @@
+---
+source: crates/rattler_shell/src/shell/mod.rs
+expression: script.contents
+---
+$FOO = "bar"
+del $FOO
+source "foo.xsh"
+

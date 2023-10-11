@@ -109,8 +109,14 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
         .filter_map(|r| r.ok())
         .map(|r| r.path())
         .filter(|path| {
-            path.is_file()
-                && path.extension().and_then(OsStr::to_str) == Some(shell_type.extension())
+            let ext = path.extension().and_then(OsStr::to_str);
+            // Xonsh can run bash with a special source command, build into Xonsh::run_script
+            let target_ext = if shell_type.executable() == "xonsh" {
+                "sh"
+            } else {
+                shell_type.extension()
+            };
+            path.is_file() && ext == Some(target_ext)
         })
         .collect::<Vec<_>>();
 
