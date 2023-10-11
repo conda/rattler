@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 
 from rattler.rattler import PyPatchInstructions
 
@@ -10,7 +9,7 @@ class PatchInstructions:
     @classmethod
     def _from_py_patch_instructions(
         cls, py_patch_instructions: PyPatchInstructions
-    ) -> Self:
+    ) -> PatchInstructions:
         """
         Construct Rattler PatchInstructions from FFI PyPatchInstructions object.
         """

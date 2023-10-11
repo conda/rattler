@@ -63,6 +63,9 @@ coverage.xml
 # Sphinx documentation
 docs/_build/
 
+# MkDocs build
+site/
+
 # PyCharm
 .idea/
 
@@ -71,3 +74,4 @@ docs/_build/
 
 # Pyenv
 .python-version
+.ruff_cache

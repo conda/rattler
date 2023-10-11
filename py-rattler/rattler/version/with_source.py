@@ -41,12 +41,15 @@ class VersionWithSource:
 
         Examples
         --------
+        ```python
         >>> v = VersionWithSource("1.01")
         >>> v.version
         Version("1.1")
         >>> v2 = VersionWithSource(v.version)
         >>> v2.version
         Version("1.1")
+        >>>
+        ```
         """
         return self._version
 
@@ -57,9 +60,12 @@ class VersionWithSource:
 
         Examples
         --------
+        ```python
         >>> v = VersionWithSource("1.01.01")
         >>> v.source
         '1.01.01'
+        >>>
+        ```
         """
         return self._source
 
@@ -69,8 +75,11 @@ class VersionWithSource:
 
         Examples
         --------
+        ```python
         >>> str(VersionWithSource("1.02.3"))
         '1.02.3'
+        >>>
+        ```
         """
         return self._source
 
@@ -80,7 +89,10 @@ class VersionWithSource:
 
         Examples
         --------
+        ```python
         >>> VersionWithSource("1.02.3")
         VersionWithSource("1.02.3")
+        >>>
+        ```
         """
         return f'{type(self).__name__}("{self.__str__()}")'

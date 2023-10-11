@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional, Self
+from typing import List, Optional
 from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyPrefixRecord
@@ -18,7 +18,7 @@ class PrefixRecord:
         self._record = PyPrefixRecord(source)
 
     @classmethod
-    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> Self:
+    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> PrefixRecord:
         """Construct Rattler PrefixRecord from FFI PyPrefixRecord object."""
         record = cls.__new__(cls)
         record._record = py_prefix_record
@@ -31,9 +31,12 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
+        >>>
+        ```
         """
         return PrefixRecord._from_py_prefix_record(PyPrefixRecord.from_path(path))
 
@@ -50,11 +53,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.package_tarball_full_path
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0.tar.bz2'
+        >>>
+        ```
         """
         return self._record.package_tarball_full_path
 
@@ -65,11 +71,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.extracted_package_dir
         'C:\\\\Users\\\\bas\\\\micromamba\\\\pkgs\\\\requests-2.28.2-pyhd8ed1ab_0'
+        >>>
+        ```
         """
         return self._record.extracted_package_dir
 
@@ -80,11 +89,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.files # doctest:+ELLIPSIS
         [...]
+        >>>
+        ```
         """
         return self._record.files
 
@@ -95,11 +107,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.paths_data
         PrefixPaths()
+        >>>
+        ```
         """
         return PrefixPaths._from_py_prefix_paths(self._record.paths_data)
 
@@ -114,11 +129,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.requested_spec
         ''
+        >>>
+        ```
         """
         return self._record.requested_spec
 
@@ -129,11 +147,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.name
         PackageName("requests")
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(self._record.name)
 
@@ -144,11 +165,14 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.version
         VersionWithSource("2.28.2")
+        >>>
+        ```
         """
         return VersionWithSource(self._record.version)
 
@@ -158,10 +182,13 @@ class PrefixRecord:
 
         Examples
         --------
+        ```python
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r
         PrefixRecord(name="requests", version="2.28.2")
+        >>>
+        ```
         """
         return f'PrefixRecord(name="{self.name.normalized}", version="{self.version}")'

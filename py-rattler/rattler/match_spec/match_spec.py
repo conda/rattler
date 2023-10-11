@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Self, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from rattler.rattler import PyMatchSpec
 
@@ -87,7 +87,7 @@ class MatchSpec:
             )
 
     @classmethod
-    def _from_py_match_spec(cls, py_match_spec: PyMatchSpec) -> Self:
+    def _from_py_match_spec(cls, py_match_spec: PyMatchSpec) -> MatchSpec:
         """
         Construct py-rattler MatchSpec from PyMatchSpec FFI object.
         """
@@ -101,13 +101,14 @@ class MatchSpec:
         return self._match_spec.matches(record._package_record)
 
     @classmethod
-    def from_nameless(cls, spec: NamelessMatchSpec, name: str) -> Self:
+    def from_nameless(cls, spec: NamelessMatchSpec, name: str) -> MatchSpec:
         """
         Constructs a MatchSpec from a NamelessMatchSpec
         and a name.
 
         Examples
         --------
+        ```python
         >>> from rattler import NamelessMatchSpec
         >>> spec = NamelessMatchSpec('3.4')
         >>> MatchSpec.from_nameless(spec, "foo")
@@ -115,6 +116,8 @@ class MatchSpec:
         >>> MatchSpec.from_nameless(spec, "$foo") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         exceptions.InvalidPackageNameException
+        >>>
+        ```
         """
         return cls._from_py_match_spec(
             PyMatchSpec.from_nameless(spec._nameless_match_spec, name)
@@ -123,11 +126,31 @@ class MatchSpec:
     def __str__(self) -> str:
         """
         Returns a string representation of the MatchSpec.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import NamelessMatchSpec
+        >>> spec = NamelessMatchSpec('3.4')
+        >>> str(MatchSpec.from_nameless(spec, "foo"))
+        'foo ==3.4'
+        >>>
+        ```
         """
         return self._match_spec.as_str()
 
     def __repr__(self) -> str:
         """
         Returns a representation of the MatchSpec.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import NamelessMatchSpec
+        >>> spec = NamelessMatchSpec('3.4')
+        >>> MatchSpec.from_nameless(spec, "foo")
+        MatchSpec("foo ==3.4")
+        >>>
+        ```
         """
         return f'MatchSpec("{self._match_spec.as_str()}")'

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Self, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from rattler.rattler import PyNamelessMatchSpec
 
@@ -33,7 +33,7 @@ class NamelessMatchSpec:
     @classmethod
     def _from_py_nameless_match_spec(
         cls, py_nameless_match_spec: PyNamelessMatchSpec
-    ) -> Self:
+    ) -> NamelessMatchSpec:
         """
         Construct py-rattler NamelessMatchSpec from PyNamelessMatchSpec FFI object.
         """
@@ -43,9 +43,18 @@ class NamelessMatchSpec:
         return nameless_match_spec
 
     @classmethod
-    def from_match_spec(cls, spec: MatchSpec) -> Self:
+    def from_match_spec(cls, spec: MatchSpec) -> NamelessMatchSpec:
         """
         Constructs a NamelessMatchSpec from a MatchSpec.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import MatchSpec
+        >>> NamelessMatchSpec.from_match_spec(MatchSpec("foo ==3.4"))
+        NamelessMatchSpec("==3.4")
+        >>>
+        ```
         """
         return cls._from_py_nameless_match_spec(
             PyNamelessMatchSpec.from_match_spec(spec._match_spec)
@@ -54,11 +63,27 @@ class NamelessMatchSpec:
     def __str__(self) -> str:
         """
         Returns a string representation of the NamelessMatchSpec.
+
+        Examples
+        --------
+        ```python
+        >>> str(NamelessMatchSpec("3.4"))
+        '==3.4'
+        >>>
+        ```
         """
         return self._nameless_match_spec.as_str()
 
     def __repr__(self) -> str:
         """
         Returns a representation of the NamelessMatchSpec.
+
+        Examples
+        --------
+        ```python
+        >>> NamelessMatchSpec("3.4")
+        NamelessMatchSpec("==3.4")
+        >>>
+        ```
         """
         return f'NamelessMatchSpec("{self._nameless_match_spec.as_str()}")'

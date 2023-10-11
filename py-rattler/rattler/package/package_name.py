@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 
 from rattler.rattler import PyPackageName
 
@@ -22,14 +21,17 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName.unchecked("test_xyz")
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(
             PyPackageName.new_unchecked(normalized)
         )
 
     @classmethod
-    def _from_py_package_name(cls, py_package_name: PyPackageName) -> Self:
+    def _from_py_package_name(cls, py_package_name: PyPackageName) -> PackageName:
         """Construct Rattler PackageName from FFI PyPackageName object."""
         package_name = cls.__new__(cls)
         package_name._name = py_package_name
@@ -43,9 +45,12 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p.source
         'test-xyz'
+        >>>
+        ```
         """
         return self._name.source
 
@@ -57,9 +62,12 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p.normalized
         'test-xyz'
+        >>>
+        ```
         """
         return self._name.normalized
 
@@ -69,8 +77,11 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p
         PackageName("test-xyz")
+        >>>
+        ```
         """
         return f'PackageName("{self.source}")'

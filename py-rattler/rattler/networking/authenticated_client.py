@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Self
 from rattler.rattler import PyAuthenticatedClient
 
 
@@ -12,7 +11,7 @@ class AuthenticatedClient:
         self._client = PyAuthenticatedClient()
 
     @classmethod
-    def _from_ffi_object(cls, client: PyAuthenticatedClient) -> Self:
+    def _from_ffi_object(cls, client: PyAuthenticatedClient) -> AuthenticatedClient:
         """
         Construct py-rattler AuthenticatedClient from PyAutheticatedClient FFI object.
         """
@@ -26,7 +25,10 @@ class AuthenticatedClient:
 
         Examples
         --------
+        ```python
         >>> AuthenticatedClient()
         AuthenticatedClient()
+        >>>
+        ```
         """
         return f"{type(self).__name__}()"
