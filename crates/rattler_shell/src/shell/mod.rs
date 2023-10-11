@@ -42,10 +42,12 @@ pub trait Shell {
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
     /// Test to see if the path can be executed by the shell, based on the extension of the path.
-    fn can_run_script(&self, path: &Path) -> bool{
-        path.is_file() && path.extension()
-            .and_then(OsStr::to_str)
-            .map_or(false, |ext| ext == self.extension())
+    fn can_run_script(&self, path: &Path) -> bool {
+        path.is_file()
+            && path
+                .extension()
+                .and_then(OsStr::to_str)
+                .map_or(false, |ext| ext == self.extension())
     }
 
     /// Executes a command in the current shell. Use [`Self::run_script`] when you want to run
@@ -287,10 +289,12 @@ impl Shell for Xonsh {
         writeln!(f, "{} \"{}\"", cmd, path.to_string_lossy())
     }
 
-    fn can_run_script(&self, path: &Path) -> bool{
-        path.is_file() && path.extension()
-            .and_then(OsStr::to_str)
-            .map_or(false, |ext| ext == "xsh"|| ext == "sh")
+    fn can_run_script(&self, path: &Path) -> bool {
+        path.is_file()
+            && path
+                .extension()
+                .and_then(OsStr::to_str)
+                .map_or(false, |ext| ext == "xsh" || ext == "sh")
     }
 
     fn extension(&self) -> &str {
