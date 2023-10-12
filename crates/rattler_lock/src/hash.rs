@@ -29,6 +29,22 @@ impl PackageHashes {
             (None, None) => None,
         }
     }
+
+    /// Returns the Sha256 hash
+    pub fn sha256(&self) -> Option<&Sha256Hash> {
+        match self {
+            PackageHashes::Md5(_) => None,
+            PackageHashes::Sha256(sha256) | PackageHashes::Md5Sha256(_, sha256) => Some(sha256),
+        }
+    }
+
+    /// Returns the MD5 hash
+    pub fn md5(&self) -> Option<&Md5Hash> {
+        match self {
+            PackageHashes::Sha256(_) => None,
+            PackageHashes::Md5(md5) | PackageHashes::Md5Sha256(md5, _) => Some(md5),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

@@ -1,14 +1,14 @@
 use crate::{
     LockedDependency, PackageHashes,
     PackageHashes::{Md5, Md5Sha256, Sha256},
-    SpecificLockedDependency,
+    LockedDependencyKind,
 };
 use rattler_conda_types::{
     InvalidPackageNameError, NoArchType, PackageName, PackageRecord, ParseMatchSpecError,
     ParseVersionError, RepoDataRecord,
 };
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none, DisplayFromStr, OneOrMany};
+use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use url::Url;
 
 /// A locked conda dependency. This represents a [`rattler_conda_types::RepoDataRecord`].
@@ -85,11 +85,11 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
         let LockedDependency {
             name,
             version,
-            specific,
+            kind: specific,
             platform,
             ..
         } = value;
-        let SpecificLockedDependency::Conda(value) = specific else {
+        let LockedDependencyKind::Conda(value) = specific else {
             return Err(ConversionError::NotACondaRecord)
         };
 

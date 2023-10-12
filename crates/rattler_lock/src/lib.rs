@@ -6,7 +6,7 @@ use indexmap::IndexMap;
 use rattler_conda_types::{MatchSpec, PackageName};
 use rattler_conda_types::{NoArchType, ParsePlatformError, Platform, RepoDataRecord};
 use serde::{Deserialize, Serialize, Serializer};
-use serde_with::{serde_as, skip_serializing_none};
+use serde_with::serde_as;
 use std::cmp::Ordering;
 use std::{collections::BTreeMap, fs::File, io::Read, path::Path, str::FromStr};
 use url::Url;
@@ -15,10 +15,13 @@ pub mod builder;
 mod conda;
 mod content_hash;
 mod hash;
+mod pip;
 mod utils;
 
+use crate::conda::ConversionError;
 pub use conda::CondaLockedDependency;
 pub use hash::PackageHashes;
+pub use pip::PipLockedDependency;
 
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
@@ -139,7 +142,7 @@ pub struct LockedDependency {
     /// this actually represents the _full_ subdir (incl. arch))
     pub platform: Platform,
 
-    /// Package name of dependency
+    /// Normalized package name of dependency
     pub name: String,
 
     /// Locked version
@@ -151,61 +154,56 @@ pub struct LockedDependency {
 
     /// Defines ecosystem specific information.
     #[serde(flatten)]
-    pub specific: SpecificLockedDependency,
+    pub kind: LockedDependencyKind,
 }
 
 impl LockedDependency {
+    /// Returns a reference to the internal [`CondaLockedDependency`] if this instance represents
+    /// a conda package.
     pub fn as_conda(&self) -> Option<&CondaLockedDependency> {
-        match &self.specific {
-            SpecificLockedDependency::Conda(conda) => Some(conda),
-            SpecificLockedDependency::Pip(_) => None,
+        match &self.kind {
+            LockedDependencyKind::Conda(conda) => Some(conda),
+            LockedDependencyKind::Pip(_) => None,
         }
     }
 
+    /// Returns a reference to the internal [`PipLockedDependency`] if this instance represents
+    /// a pip package.
     pub fn as_pip(&self) -> Option<&PipLockedDependency> {
-        match &self.specific {
-            SpecificLockedDependency::Conda(_) => None,
-            SpecificLockedDependency::Pip(pip) => Some(pip),
+        match &self.kind {
+            LockedDependencyKind::Conda(_) => None,
+            LockedDependencyKind::Pip(pip) => Some(pip),
         }
+    }
+
+    /// Returns true if this instance represents a conda package.
+    pub fn is_conda(&self) -> bool {
+        matches!(self.kind, LockedDependencyKind::Conda(_))
+    }
+
+    /// Returns true if this instance represents a pip package.
+    pub fn is_pip(&self) -> bool {
+        matches!(self.kind, LockedDependencyKind::Pip(_))
     }
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
 #[serde(tag = "manager", rename_all = "snake_case")]
-pub enum SpecificLockedDependency {
+pub enum LockedDependencyKind {
     Conda(CondaLockedDependency),
     Pip(PipLockedDependency),
 }
 
-impl From<CondaLockedDependency> for SpecificLockedDependency {
+impl From<CondaLockedDependency> for LockedDependencyKind {
     fn from(value: CondaLockedDependency) -> Self {
-        SpecificLockedDependency::Conda(value)
+        LockedDependencyKind::Conda(value)
     }
 }
 
-impl From<PipLockedDependency> for SpecificLockedDependency {
+impl From<PipLockedDependency> for LockedDependencyKind {
     fn from(value: PipLockedDependency) -> Self {
-        SpecificLockedDependency::Pip(value)
+        LockedDependencyKind::Pip(value)
     }
-}
-
-/// A locked single dependency / package
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug)]
-pub struct PipLockedDependency {
-    /// What are its own dependencies mapping name to version constraint
-    #[serde(default)]
-    #[serde_as(deserialize_as = "utils::serde::Pep440MapOrVec")]
-    pub dependencies: Vec<String>,
-    /// The URL that points to where the artifact can be downloaded from.
-    pub url: Url,
-    /// Hashes of the package
-    pub hash: PackageHashes,
-    /// ???
-    pub source: Option<Url>,
-    /// Build string
-    pub build: Option<String>,
 }
 
 /// The URL for the dependency (currently only used for pip packages)
@@ -270,15 +268,13 @@ impl Serialize for CondaLock {
                 .cmp(&b.name)
                 .then_with(|| a.platform.cmp(&b.platform))
                 .then_with(|| a.version.cmp(&b.version))
-                .then_with(|| match (&a.specific, &b.specific) {
-                    (SpecificLockedDependency::Conda(a), SpecificLockedDependency::Conda(b)) => {
+                .then_with(|| match (&a.kind, &b.kind) {
+                    (LockedDependencyKind::Conda(a), LockedDependencyKind::Conda(b)) => {
                         a.build.cmp(&b.build)
                     }
-                    (SpecificLockedDependency::Pip(_), SpecificLockedDependency::Pip(_)) => {
-                        Ordering::Equal
-                    }
-                    (SpecificLockedDependency::Pip(_), _) => Ordering::Less,
-                    (_, SpecificLockedDependency::Pip(_)) => Ordering::Greater,
+                    (LockedDependencyKind::Pip(_), LockedDependencyKind::Pip(_)) => Ordering::Equal,
+                    (LockedDependencyKind::Pip(_), _) => Ordering::Less,
+                    (_, LockedDependencyKind::Pip(_)) => Ordering::Greater,
                 })
         });
 
@@ -289,6 +285,27 @@ impl Serialize for CondaLock {
         };
 
         raw.serialize(serializer)
+    }
+}
+
+impl CondaLock {
+    /// Returns all the packages in the lock-file for a certain platform.
+    pub fn get_packages_by_platform(
+        &self,
+        platform: Platform,
+    ) -> impl Iterator<Item = &'_ LockedDependency> + '_ {
+        self.package.iter().filter(move |pkg| pkg.platform == platform)
+    }
+
+    /// Returns all conda packages in the lock-file for a certain platform.
+    pub fn get_conda_packages_by_platform(
+        &self,
+        platform: Platform,
+    ) -> Result<Vec<RepoDataRecord>, ConversionError> {
+        self.get_packages_by_platform(platform)
+            .filter(|pkg| pkg.is_conda())
+            .map(|pkg| pkg.try_into())
+            .collect()
     }
 }
 

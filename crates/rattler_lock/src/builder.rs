@@ -4,10 +4,11 @@ use crate::conda::ConversionError;
 use crate::{
     content_hash, content_hash::CalculateContentHashError, Channel, CondaLock,
     CondaLockedDependency, GitMeta, LockMeta, LockedDependency, MatchSpec, NoArchType,
-    PackageHashes, PackageName, Platform, RepoDataRecord, TimeMeta,
+    PackageHashes, PackageName, PipLockedDependency, Platform, RepoDataRecord, TimeMeta,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use rattler_conda_types::NamelessMatchSpec;
+use std::collections::HashSet;
 use url::Url;
 
 /// Struct used to build a conda-lock file
@@ -25,7 +26,7 @@ pub struct LockFileBuilder {
     pub git_metadata: Option<GitMeta>,
 
     /// Keep track of locked packages per platform
-    pub locked_packages: FxHashMap<Platform, LockedPackages>,
+    pub locked_packages: FxHashMap<Platform, LockedPackagesBuilder>,
 
     /// MatchSpecs input
     /// This is only used to calculate the content_hash
@@ -53,7 +54,7 @@ impl LockFileBuilder {
     }
 
     /// Add locked packages per platform
-    pub fn add_locked_packages(mut self, locked_packages: LockedPackages) -> Self {
+    pub fn add_locked_packages(mut self, locked_packages: LockedPackagesBuilder) -> Self {
         let platform = &locked_packages.platform;
         if self.locked_packages.contains_key(platform) {
             panic!("Tried to insert packages for {platform} twice")
@@ -99,14 +100,31 @@ impl LockFileBuilder {
 }
 
 /// Shorthand for creating packages per platform
-pub struct LockedPackages {
+pub struct LockedPackagesBuilder {
     /// The number of locked packages
-    pub locked_packages: Vec<LockedPackage>,
+    pub locked_packages: Vec<LockedDependencyBuilder>,
     /// The to lock the packages to
     pub platform: Platform,
 }
 
-impl LockedPackages {
+pub enum LockedDependencyBuilder {
+    Conda(CondaLockedDependencyBuilder),
+    Pip(PipLockedDependencyBuilder),
+}
+
+impl From<CondaLockedDependencyBuilder> for LockedDependencyBuilder {
+    fn from(value: CondaLockedDependencyBuilder) -> Self {
+        LockedDependencyBuilder::Conda(value)
+    }
+}
+
+impl From<PipLockedDependencyBuilder> for LockedDependencyBuilder {
+    fn from(value: PipLockedDependencyBuilder) -> Self {
+        LockedDependencyBuilder::Pip(value)
+    }
+}
+
+impl LockedPackagesBuilder {
     /// Create a list of locked packages per platform
     pub fn new(platform: Platform) -> Self {
         Self {
@@ -116,8 +134,16 @@ impl LockedPackages {
     }
 
     /// Add a locked package
-    pub fn add_locked_package(mut self, locked_package: LockedPackage) -> Self {
-        self.locked_packages.push(locked_package);
+    pub fn add_locked_package(&mut self, locked_package: impl Into<LockedDependencyBuilder>) {
+        self.locked_packages.push(locked_package.into());
+    }
+
+    /// Adds a package and returns self
+    pub fn with_locked_package(
+        mut self,
+        locked_package: impl Into<LockedDependencyBuilder>,
+    ) -> Self {
+        self.add_locked_package(locked_package);
         self
     }
 
@@ -125,14 +151,13 @@ impl LockedPackages {
     pub fn build(self) -> Vec<LockedDependency> {
         self.locked_packages
             .into_iter()
-            .map(|locked_package| {
-                LockedDependency {
+            .map(|locked_package| match locked_package {
+                LockedDependencyBuilder::Conda(locked_package) => LockedDependency {
                     platform: self.platform,
                     version: locked_package.version,
                     name: locked_package.name.as_normalized().to_string(),
                     category: super::default_category(),
-                    specific: CondaLockedDependency {
-                        /// Use conda as default manager for now
+                    kind: CondaLockedDependency {
                         dependencies: locked_package.dependency_list,
                         url: locked_package.url,
                         hash: locked_package.package_hashes,
@@ -151,14 +176,30 @@ impl LockedPackages {
                         timestamp: locked_package.timestamp,
                     }
                     .into(),
-                }
+                },
+                LockedDependencyBuilder::Pip(locked_package) => LockedDependency {
+                    platform: self.platform,
+                    version: locked_package.version,
+                    name: locked_package.name.to_string(),
+                    category: super::default_category(),
+                    kind: PipLockedDependency {
+                        requires_dist: locked_package.requires_dist,
+                        requires_python: locked_package.requires_python,
+                        extras: locked_package.extras,
+                        url: locked_package.url,
+                        hash: locked_package.hash,
+                        source: locked_package.source,
+                        build: locked_package.build,
+                    }
+                    .into(),
+                },
             })
             .collect()
     }
 }
 
 /// Short-hand for creating a LockedPackage that transforms into a [`LockedDependency`]
-pub struct LockedPackage {
+pub struct CondaLockedDependencyBuilder {
     /// Name of the locked package
     pub name: PackageName,
     /// Package version
@@ -209,7 +250,7 @@ pub struct LockedPackage {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl TryFrom<&RepoDataRecord> for LockedPackage {
+impl TryFrom<&RepoDataRecord> for CondaLockedDependencyBuilder {
     type Error = ConversionError;
 
     fn try_from(value: &RepoDataRecord) -> Result<Self, Self::Error> {
@@ -217,7 +258,7 @@ impl TryFrom<&RepoDataRecord> for LockedPackage {
     }
 }
 
-impl TryFrom<RepoDataRecord> for LockedPackage {
+impl TryFrom<RepoDataRecord> for CondaLockedDependencyBuilder {
     type Error = ConversionError;
 
     fn try_from(record: RepoDataRecord) -> Result<Self, Self::Error> {
@@ -249,7 +290,7 @@ impl TryFrom<RepoDataRecord> for LockedPackage {
     }
 }
 
-impl LockedPackage {
+impl CondaLockedDependencyBuilder {
     /// Set if the package should be optional
     pub fn set_optional(mut self, optional: bool) -> Self {
         self.optional = Some(optional);
@@ -362,12 +403,40 @@ impl LockedPackage {
     }
 }
 
+pub struct PipLockedDependencyBuilder {
+    /// Name of the locked package
+    pub name: String,
+    /// Package version
+    pub version: String,
+
+    /// A list of dependencies on other packages that the wheel listed.
+    pub requires_dist: Vec<String>,
+
+    /// The python version that this package requires.
+    pub requires_python: Option<String>,
+
+    /// A list of extras that are selected
+    pub extras: HashSet<String>,
+
+    /// The URL that points to where the artifact can be downloaded from.
+    pub url: Url,
+
+    /// Hashes of the file pointed to by `url`.
+    pub hash: Option<PackageHashes>,
+
+    /// ???
+    pub source: Option<Url>,
+
+    /// Build string
+    pub build: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
     use std::str::FromStr;
 
-    use crate::builder::{LockFileBuilder, LockedPackage, LockedPackages};
+    use crate::builder::{CondaLockedDependencyBuilder, LockFileBuilder, LockedPackagesBuilder};
     use crate::PackageHashes;
     use rattler_conda_types::{
         ChannelConfig, MatchSpec, NoArchType, PackageName, Platform, RepoDataRecord,
@@ -382,8 +451,8 @@ mod tests {
             [Platform::Osx64],
             [MatchSpec::from_str("python =3.11.0").unwrap()]
         )
-            .add_locked_packages(LockedPackages::new(Platform::Osx64)
-                .add_locked_package(LockedPackage {
+            .add_locked_packages(LockedPackagesBuilder::new(Platform::Osx64)
+                .with_locked_package(CondaLockedDependencyBuilder {
                     name: PackageName::new_unchecked("python"),
                     version: "3.11.0".to_string(),
                     build: "h4150a38_1_cpython".to_string(),
@@ -476,7 +545,7 @@ mod tests {
         );
 
         // Convert to LockedDependency
-        let locked_package = LockedPackage::try_from(record.clone()).unwrap();
+        let locked_package = CondaLockedDependencyBuilder::try_from(record.clone()).unwrap();
         assert_eq!(record.package_record.name, locked_package.name);
         assert_eq!(
             record.package_record.version.to_string(),
