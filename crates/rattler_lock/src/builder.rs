@@ -224,13 +224,13 @@ pub struct CondaLockedDependencyBuilder {
     /// Experimental: conda build number of the package
     pub build_number: u64,
 
-    /// Experimental: see: [Constrains](crate::repo_data::PackageRecord::constrains)
+    /// Experimental: see: [Constrains](rattler_conda_types::PackageRecord::constrains)
     pub constrains: Vec<String>,
 
-    /// Experimental: see: [Features](crate::repo_data::PackageRecord::features)
+    /// Experimental: see: [Features](rattler_conda_types::PackageRecord::features)
     pub features: Option<String>,
 
-    /// Experimental: see: [Track features](crate::repo_data::PackageRecord::track_features)
+    /// Experimental: see: [Track features](rattler_conda_types::PackageRecord::track_features)
     pub track_features: Vec<String>,
 
     /// Experimental: the specific license of the package
