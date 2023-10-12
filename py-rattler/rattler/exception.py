@@ -8,6 +8,12 @@ try:
         ActivationError,
         ParsePlatformError,
         ParseArchError,
+        TransactionError,
+        LinkError,
+        IoError,
+        DetectVirtualPackageError,
+        CacheDirError,
+        FetchRepoDataError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -37,14 +43,38 @@ except ImportError:
     class ParseArchError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing an arch from a string."""
 
+    class TransactionError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when executing a transaction"""
+
+    class LinkError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when linking a package"""
+
+    class IoError(Exception):  # type: ignore[no-redef]
+        """An error that can occur during io operations"""
+
+    class DetectVirtualPackageError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when trying to detect virtual packages"""
+
+    class CacheDirError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when querying the cache directory"""
+
+    class FetchRepoDataError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when fetching repo data"""
+
 
 __all__ = [
-    "InvalidVersionError",
+    "ActivationError",
+    "CacheDirError",
+    "DetectVirtualPackageError",
+    "FetchRepoDataError",
+    "InvalidChannelError",
     "InvalidMatchSpecError",
     "InvalidPackageNameError",
     "InvalidUrlError",
-    "InvalidChannelError",
-    "ActivationError",
-    "ParsePlatformError",
+    "InvalidVersionError",
+    "IoError",
+    "LinkError",
     "ParseArchError",
+    "ParsePlatformError",
+    "TransactionError",
 ]

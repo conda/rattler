@@ -17,9 +17,10 @@ mod virtual_package;
 
 use channel::{PyChannel, PyChannelConfig};
 use error::{
-    ActivationException, InvalidChannelException, InvalidMatchSpecException,
-    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, ParseArchException,
-    ParsePlatformException, PyRattlerError,
+    ActivationException, CacheDirException, DetectVirtualPackageException, FetchRepoDataException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
+    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
@@ -116,6 +117,23 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     .unwrap();
     m.add("ParseArchError", py.get_type::<ParseArchException>())
         .unwrap();
-
+    m.add("SolverError", py.get_type::<SolverException>())
+        .unwrap();
+    m.add("TransactionError", py.get_type::<TransactionException>())
+        .unwrap();
+    m.add("LinkError", py.get_type::<LinkException>()).unwrap();
+    m.add("IoError", py.get_type::<IoException>()).unwrap();
+    m.add(
+        "DetectVirtualPackageError",
+        py.get_type::<DetectVirtualPackageException>(),
+    )
+    .unwrap();
+    m.add("CacheDirError", py.get_type::<CacheDirException>())
+        .unwrap();
+    m.add(
+        "FetchRepoDataError",
+        py.get_type::<FetchRepoDataException>(),
+    )
+    .unwrap();
     Ok(())
 }
