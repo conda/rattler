@@ -14,6 +14,7 @@ try:
         DetectVirtualPackageError,
         CacheDirError,
         FetchRepoDataError,
+        SolverError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -61,6 +62,9 @@ except ImportError:
     class FetchRepoDataError(Exception):  # type: ignore[no-redef]
         """An error that can occur when fetching repo data"""
 
+    class SolverError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when trying to solve an environment"""
+
 
 __all__ = [
     "ActivationError",
@@ -76,5 +80,6 @@ __all__ = [
     "LinkError",
     "ParseArchError",
     "ParsePlatformError",
+    "SolverError",
     "TransactionError",
 ]
