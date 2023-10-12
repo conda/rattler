@@ -7,7 +7,7 @@ use serde_with::serde_as;
 use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
 use url::Url;
 
-/// Representation of the `.state.json` file alongside a `repodata.json` file.
+/// Representation of the `.info.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepoDataState {
     /// The URL from where the repodata was downloaded. This is the URL of the `repodata.json`,
