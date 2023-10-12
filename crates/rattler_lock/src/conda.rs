@@ -1,7 +1,6 @@
 use crate::{
-    LockedDependency, PackageHashes,
+    LockedDependency, LockedDependencyKind, PackageHashes,
     PackageHashes::{Md5, Md5Sha256, Sha256},
-    LockedDependencyKind,
 };
 use rattler_conda_types::{
     InvalidPackageNameError, NoArchType, PackageName, PackageRecord, ParseMatchSpecError,
@@ -118,7 +117,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
         Ok(Self {
             package_record: PackageRecord {
                 arch: value.arch,
-                build: build,
+                build,
                 build_number: value.build_number.unwrap_or(0),
                 constrains: value.constrains,
                 depends: value.dependencies,

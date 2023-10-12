@@ -294,7 +294,9 @@ impl CondaLock {
         &self,
         platform: Platform,
     ) -> impl Iterator<Item = &'_ LockedDependency> + '_ {
-        self.package.iter().filter(move |pkg| pkg.platform == platform)
+        self.package
+            .iter()
+            .filter(move |pkg| pkg.platform == platform)
     }
 
     /// Returns all conda packages in the lock-file for a certain platform.
