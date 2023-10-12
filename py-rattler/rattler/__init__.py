@@ -16,11 +16,31 @@ from rattler.solver import solve
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.linker import link
+from rattler.exception import (
+    InvalidVersionError,
+    InvalidMatchSpecError,
+    InvalidPackageNameError,
+    InvalidUrlError,
+    InvalidChannelError,
+    ActivationError,
+    ParsePlatformError,
+    ParseArchError,
+)
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
 
 __all__ = [
+    # exceptions
+    "InvalidVersionError",
+    "InvalidMatchSpecError",
+    "InvalidPackageNameError",
+    "InvalidUrlError",
+    "InvalidChannelError",
+    "ActivationError",
+    "ParsePlatformError",
+    "ParseArchError",
+    # core
     "Version",
     "VersionWithSource",
     "MatchSpec",
