@@ -112,16 +112,20 @@ def activate(
         An ActivationResult object containing the new PATH environment variable
         and the script to run to activate the environment.
 
-    Examples:
-        >>> from rattler.shell.shell import Shell, activate, ActivationVariables
-        >>> from rattler.platform import Platform
-        >>> from pathlib import Path
-        >>> import sys
-        >>> p = Path("/path/to/conda/prefix")
-        >>> actvars = ActivationVariables(None, sys.path)
-        >>> a = activate(p, actvars, Shell.xonsh)
-        >>> print(a)
-        <rattler.shell.shell.ActivationResult object at ...>
+    Examples
+    --------
+    ```python
+    >>> from rattler.shell.shell import Shell, activate, ActivationVariables
+    >>> from rattler.platform import Platform
+    >>> from pathlib import Path
+    >>> import sys
+    >>> p = Path("/path/to/conda/prefix")
+    >>> actvars = ActivationVariables(None, sys.path)
+    >>> a = activate(p, actvars, Shell.xonsh)
+    >>> print(a)
+    <rattler.shell.shell.ActivationResult object at ...>
+    >>>
+    ```
     """
     platform = (
         Platform(platform)

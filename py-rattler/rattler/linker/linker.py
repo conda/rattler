@@ -27,12 +27,12 @@ async def link(
                        be created.
         cache_dir: Path to directory where the dependencies will be
                    downloaded and cached.
-        installed_packages(optional): A list of `PrefixRecord`s which are
+        installed_packages: A list of `PrefixRecord`s which are
                                       already installed in the
                                       `target_prefix`. This can be obtained
                                       by loading `PrefixRecord`s from
                                       `{target_prefix}/conda-meta/`.
-        platform(optional): Target platform to create and link the
+        platform: Target platform to create and link the
                             environment. Defaults to current platform.
     """
     platform = platform or Platform.current()

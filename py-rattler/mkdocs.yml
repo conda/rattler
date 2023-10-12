@@ -1,0 +1,71 @@
+site_name: "py-rattler"
+
+theme:
+  name: material
+  palette:
+    primary: custom
+
+extra_css:
+  - stylesheets/extra.css
+
+repo_url: https://github.com/mamba-org/rattler/
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+
+nav:
+  - First Steps: index.md
+  - References:
+      - core:
+          - fetch: fetch_repo_data.md
+          - solve: solver.md
+          - link: linker.md
+      - channel:
+          - ChannelConfig: channel_config.md
+          - Channel: channel.md
+      - match_spec:
+          - MatchSpec: match_spec.md
+          - NamelessMatchSpec: nameless_match_spec.md
+      - networking:
+          - AuthenticatedClient: authenticated_client.md
+      - package:
+          - PackageName: package_name.md
+      - platform:
+          - Arch: arch.md
+          - Platform: platform.md
+      - prefix:
+          - PrefixPaths: prefix_paths.md
+          - PrefixRecord: prefix_record.md
+      - repo_data:
+          - PackageRecord: package_record.md
+          - PatchInstructions: patch_instructions.md
+          - RepoDataRecord: repo_data_record.md
+          - Repodata: repo_data.md
+          - SparseRepoData: sparse_repo_data.md
+      - version:
+          - Version: version.md
+          - VersionWithSource: version_with_source.md
+      - virtual_package:
+          - VirtualPackage: virtual_package.md
+          - GenericVirtualPackage: generic_virtual_package.md
+      - shell:
+          - activate: activate.md
+          - ActivationResult: activation_result.md
+          - ActivationVariables: activation_variables.md
+          - Shell: shell.md
+          - PathModificationBehavior: path_modification_behavior.md
+
+plugins:
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+
+  - search

@@ -1,0 +1,6 @@
+---
+source: crates/rattler_shell/src/shell/mod.rs
+expression: script.contents
+---
+source-bash "foo.sh"
+

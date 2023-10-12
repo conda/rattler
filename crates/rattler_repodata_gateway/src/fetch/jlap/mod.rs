@@ -70,7 +70,7 @@
 //!         &current_repo_data
 //!     ).await.unwrap();
 //!
-//!     // Now we can use the `updated_jlap_state` object to update our `.state.json` file
+//!     // Now we can use the `updated_jlap_state` object to update our `.info.json` file
 //! }
 //! ```
 //!

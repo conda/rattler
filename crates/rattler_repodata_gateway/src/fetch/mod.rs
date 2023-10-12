@@ -296,7 +296,7 @@ pub async fn fetch_repo_data(
             .expect("file name is valid"),
     );
     let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.state.json", cache_key));
+    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
 
     // Lock all files that have to do with that cache key
     let lock_file_path = cache_path.join(format!("{}.lock", &cache_key));
@@ -867,7 +867,7 @@ fn validate_cached_state(
     cache_key: &str,
 ) -> ValidatedCacheState {
     let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.state.json", cache_key));
+    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
 
     // Check if we have cached repodata.json file
     let json_metadata = match std::fs::metadata(&repo_data_json_path) {

@@ -5,11 +5,14 @@ build-backend = "maturin"
 [project]
 name = "py-rattler"
 requires-python = ">=3.8"
+description = "A blazing fast library to work with the conda ecosystem"
+readme = "README.md"
 authors = [
     { name = "Bas Zalmstra", email = "zalmstra.bas@gmail.com" },
     { name = "Tarun Pratap Singh", email = "pratapsinghtarun9@gmail.com" },
 ]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: BSD License",
     "Programming Language :: Rust",
@@ -18,6 +21,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
+documentation = "https://mamba-org.github.io/rattler/py-rattler/"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
@@ -30,19 +34,11 @@ target-version = "py38"
 python_version = "3.8"
 files = ["rattler", "tests"]
 strict = true
-enable_error_code = [
-    "redundant-expr",
-    "truthy-bool",
-    "ignore-without-code",
-]
-disable_error_code = [
-    "empty-body",
-]
+enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
+disable_error_code = ["empty-body"]
 
 [[tool.mypy.overrides]]
-module = [
-    "rattler.rattler",
-]
+module = ["rattler.rattler"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

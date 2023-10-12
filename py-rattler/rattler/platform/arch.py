@@ -33,8 +33,13 @@ class Arch:
         """
         Returns a string representation of the architecture.
 
+        Examples
+        --------
+        ```python
         >>> str(Arch("x86_64"))
         'x86_64'
+        >>>
+        ```
         """
         return self._inner.as_str()
 
@@ -42,7 +47,12 @@ class Arch:
         """
         Returns a representation of the architecture.
 
+        Examples
+        --------
+        ```python
         >>> Arch("aarch64")
         Arch(aarch64)
+        >>>
+        ```
         """
         return f"Arch({self._inner.as_str()})"

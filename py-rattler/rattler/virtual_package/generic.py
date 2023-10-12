@@ -39,6 +39,7 @@ class GenericVirtualPackage:
 
         Examples
         --------
+        ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
@@ -48,6 +49,8 @@ class GenericVirtualPackage:
         '__archspec'
         >>> gvp.name.normalized
         '__archspec'
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(self._generic_virtual_package.name)
 
@@ -58,11 +61,14 @@ class GenericVirtualPackage:
 
         Examples
         --------
+        ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> gvp.version
         Version("1")
+        >>>
+        ```
         """
         return Version._from_py_version(self._generic_virtual_package.version)
 
@@ -73,11 +79,14 @@ class GenericVirtualPackage:
 
         Examples
         --------
+        ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> gvp.build_string
         'x86_64'
+        >>>
+        ```
         """
         return self._generic_virtual_package.build_string
 
@@ -99,11 +108,14 @@ class GenericVirtualPackage:
 
         Examples
         --------
+        ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> str(gvp)
         '__archspec=1=x86_64'
+        >>>
+        ```
         """
 
         return self._generic_virtual_package.as_str()
@@ -114,10 +126,13 @@ class GenericVirtualPackage:
 
         Examples
         --------
+        ```python
         >>> from rattler.package.package_name import PackageName
         >>> from rattler.version.version import Version
         >>> gvp = GenericVirtualPackage(PackageName("__archspec"), Version("1"), "x86_64")
         >>> gvp
         GenericVirtualPackage("__archspec=1=x86_64")
+        >>>
+        ```
         """
         return f'GenericVirtualPackage("{self._generic_virtual_package.as_str()}")'

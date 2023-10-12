@@ -21,7 +21,10 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName.unchecked("test_xyz")
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(
             PyPackageName.new_unchecked(normalized)
@@ -42,9 +45,12 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p.source
         'test-xyz'
+        >>>
+        ```
         """
         return self._name.source
 
@@ -56,9 +62,12 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p.normalized
         'test-xyz'
+        >>>
+        ```
         """
         return self._name.normalized
 
@@ -68,8 +77,11 @@ class PackageName:
 
         Examples
         --------
+        ```python
         >>> p = PackageName("test-xyz")
         >>> p
         PackageName("test-xyz")
+        >>>
+        ```
         """
         return f'PackageName("{self.source}")'
