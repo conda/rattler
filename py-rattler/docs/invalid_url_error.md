@@ -1,0 +1,4 @@
+# InvalidUrlError
+
+::: rattler.exceptions.InvalidUrlError
+

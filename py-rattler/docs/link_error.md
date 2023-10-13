@@ -1,0 +1,4 @@
+# LinkError
+
+::: rattler.exceptions.LinkError
+

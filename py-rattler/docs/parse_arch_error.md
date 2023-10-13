@@ -1,0 +1,4 @@
+# ParseArchError
+
+::: rattler.exceptions.ParseArchError
+

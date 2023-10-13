@@ -1,0 +1,3 @@
+# CacheDirError
+
+::: rattler.exceptions.CacheDirError
