@@ -60,6 +60,22 @@ nav:
           - ActivationVariables: activation_variables.md
           - Shell: shell.md
           - PathModificationBehavior: path_modification_behavior.md
+      - exceptions: 
+          - ActivationError: activation_error.md
+          - CacheDirError: cache_dir_error.md
+          - DetectVirtualPackageError: detect_virtual_package_error.md
+          - FetchRepoDataError: fetch_repo_data_error.md
+          - InvalidChannelError: invalid_channel_error.md
+          - InvalidMatchSpecError: invalid_match_spec_error.md
+          - InvalidPackageNameError: invalid_package_name_error.md
+          - InvalidUrlError: invalid_url_error.md
+          - InvalidVersionError: invalid_version_error.md
+          - IoError: io_error.md
+          - LinkError: link_error.md
+          - ParseArchError: parse_arch_error.md
+          - ParsePlatformError: parse_platform_error.md
+          - SolverError: solver_error.md
+          - TransactionError: transaction_error.md
 
 plugins:
   - mkdocstrings:

@@ -1,0 +1,4 @@
+# ParsePlatformError
+
+::: rattler.exceptions.ParsePlatformError
+

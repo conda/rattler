@@ -1,0 +1,3 @@
+# ActivationError
+
+::: rattler.exceptions.ActivationError

@@ -1,0 +1,4 @@
+# InvalidChannelError
+
+::: rattler.exceptions.InvalidChannelError
+

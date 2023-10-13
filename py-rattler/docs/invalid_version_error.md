@@ -1,0 +1,4 @@
+# InvalidVersionError
+
+::: rattler.exceptions.InvalidVersionError
+

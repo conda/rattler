@@ -1,0 +1,4 @@
+# InvalidMatchSpecError
+
+::: rattler.exceptions.InvalidMatchSpecError
+
