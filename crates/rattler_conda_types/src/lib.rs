@@ -16,7 +16,6 @@ mod utils;
 mod version;
 pub mod version_spec;
 
-pub mod conda_lock;
 mod generic_virtual_package;
 pub mod package;
 mod package_name;

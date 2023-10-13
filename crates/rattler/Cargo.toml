@@ -56,6 +56,7 @@ rand = "0.8.5"
 rstest = "0.18.2"
 tracing-test = { version = "0.2.4" }
 insta = { version = "1.33.0", features = ["yaml"] }
+rattler_lock = { path="../rattler_lock"}
 
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
 axum = "0.6.20"

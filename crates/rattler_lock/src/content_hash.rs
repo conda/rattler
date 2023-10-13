@@ -1,5 +1,6 @@
-use crate::conda_lock::Channel;
+use crate::Channel;
 use crate::{MatchSpec, Platform};
+use rattler_conda_types::StringMatcher;
 use serde::Serialize;
 use serde_json_python_formatter::PythonFormatter;
 use std::string::FromUtf8Error;
@@ -79,9 +80,9 @@ pub fn calculate_content_data(
                         CalculateContentHashError::RequiredAttributeMissing("version".to_string())
                     })?,
                 build: spec.build.clone().map(|b| match b {
-                    crate::StringMatcher::Exact(s) => s,
-                    crate::StringMatcher::Glob(g) => format!("{}", g),
-                    crate::StringMatcher::Regex(r) => format!("{}", r),
+                    StringMatcher::Exact(s) => s,
+                    StringMatcher::Glob(g) => format!("{}", g),
+                    StringMatcher::Regex(r) => format!("{}", r),
                 }),
                 conda_channel: None,
             })
@@ -121,8 +122,8 @@ pub fn calculate_content_hash(
 mod tests {
     use std::str::FromStr;
 
-    use crate::conda_lock::content_hash;
-    use crate::{MatchSpec, Platform};
+    use crate::content_hash;
+    use rattler_conda_types::{MatchSpec, Platform};
 
     #[test]
     fn test_content_data() {

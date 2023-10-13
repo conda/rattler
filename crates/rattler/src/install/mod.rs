@@ -599,9 +599,9 @@ mod test {
     };
     use futures::{stream, StreamExt};
     use itertools::Itertools;
-    use rattler_conda_types::conda_lock::CondaLock;
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
+    use rattler_lock::CondaLock;
     use rattler_networking::AuthenticatedClient;
 
     use std::env::temp_dir;
@@ -640,7 +640,8 @@ mod test {
         assert!(lock.metadata.platforms.iter().contains(&current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
         test_install_python(
-            lock.packages_for_platform(current_platform).map(|p| &p.url),
+            lock.get_packages_by_platform(current_platform)
+                .filter_map(|p| Some(&p.as_conda()?.url)),
             "conda-lock",
             current_platform,
         )
