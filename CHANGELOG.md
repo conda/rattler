@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2023-10-17
+
+### ✨ Highlights
+
+Lock file support has been moved into its own crate (rattler_lock) and support for pip packages has been added.
+
+### 📃 Details
+
+#### Changed
+
+* change authentication fallback warnings to debug by @ruben-arts in https://github.com/mamba-org/rattler/pull/365
+* repodata cache now uses `.info.json` instead of `.state.json` by @dholth in https://github.com/mamba-org/rattler/pull/377
+* lock file now lives in its own crate with pip support by @baszalmstra in https://github.com/mamba-org/rattler/pull/378
+
+#### Fixed
+* Nushell fixes by @wolfv in https://github.com/mamba-org/rattler/pull/360
+* Construct placeholder string at runtime to work around invalid conda prefix replacement by @baszalmstra in https://github.com/mamba-org/rattler/pull/371
+* xonsh extension by @ruben-arts in https://github.com/mamba-org/rattler/pull/375
+
+## New Contributors
+* @dholth made their first contribution in https://github.com/mamba-org/rattler/pull/377
+
+**Full Changelog**: https://github.com/mamba-org/rattler/compare/v0.10.0...v0.11.0
+
 ## [0.10.0] - 2023-10-02
 
 ### ✨ Highlights
