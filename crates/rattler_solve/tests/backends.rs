@@ -173,7 +173,7 @@ macro_rules! solver_backend_tests {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["xtensor", "xsimd",]));
         }
 
-        #[test_log::test]
+        #[test]
         fn test_solve_tensorflow() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["tensorflow"]));
         }
