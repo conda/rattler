@@ -69,6 +69,10 @@ pub struct Transaction<Old, New> {
     /// The python version of the target state, or None if python doesnt exist in the environment.
     pub python_info: Option<PythonInfo>,
 
+    /// The python version of the current state, or None if python didnt exist in the previous
+    /// environment.
+    pub current_python_info: Option<PythonInfo>,
+
     /// The target platform of the transaction
     pub platform: Platform,
 }
@@ -147,6 +151,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         Ok(Self {
             operations,
             python_info: desired_python_info,
+            current_python_info,
             platform,
         })
     }
