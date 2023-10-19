@@ -122,6 +122,7 @@ impl SparseRepoData {
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
         patch_function: Option<fn(&mut PackageRecord)>,
+        strict_channel_priority: bool,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
@@ -136,8 +137,13 @@ impl SparseRepoData {
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
+            let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
+                if strict_channel_priority && repo_data_packages.info == found_in_channel {
+                    continue;
+                }
+
                 let base_url = repo_data_packages
                     .info
                     .as_ref()
@@ -161,6 +167,10 @@ impl SparseRepoData {
                     patch_function,
                 )?;
                 records.append(&mut conda_records);
+
+                if strict_channel_priority && !records.is_empty() {
+                    found_in_channel = repo_data_packages.info.clone();
+                }
 
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
@@ -259,6 +269,7 @@ pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
+    strict_channel_priority: bool,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
     let lazy_repo_data = stream::iter(repo_data_paths)
@@ -277,7 +288,12 @@ pub async fn load_repo_data_recursively(
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
+    SparseRepoData::load_records_recursive(
+        &lazy_repo_data,
+        package_names,
+        patch_function,
+        strict_channel_priority,
+    )
 }
 
 fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
@@ -390,6 +406,7 @@ mod test {
 
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
+        strict_channel_priority: bool,
     ) -> Vec<Vec<RepoDataRecord>> {
         load_repo_data_recursively(
             [
@@ -403,11 +420,17 @@ mod test {
                     "linux-64",
                     test_dir().join("channels/conda-forge/linux-64/repodata.json"),
                 ),
+                (
+                    Channel::from_str("pytorch", &ChannelConfig::default()).unwrap(),
+                    "linux-64",
+                    test_dir().join("channels/pytorch/linux-64/repodata.json"),
+                ),
             ],
             package_names
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
             None,
+            strict_channel_priority,
         )
         .await
         .unwrap()
@@ -415,13 +438,13 @@ mod test {
 
     #[tokio::test]
     async fn test_empty_sparse_load() {
-        let sparse_empty_data = load_sparse(Vec::<String>::new()).await;
-        assert_eq!(sparse_empty_data, vec![vec![], vec![]]);
+        let sparse_empty_data = load_sparse(Vec::<String>::new(), false).await;
+        assert_eq!(sparse_empty_data, vec![vec![], vec![], vec![]]);
     }
 
     #[tokio::test]
     async fn test_sparse_single() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex"]).await;
+        let sparse_empty_data = load_sparse(["_libgcc_mutex"], false).await;
         let total_records = sparse_empty_data
             .iter()
             .map(|repo| repo.len())
@@ -431,8 +454,31 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_sparse_strict() {
+        let strict_sparse_data = load_sparse(["pytorch-cpu"], true).await;
+        let total_records = strict_sparse_data
+            .iter()
+            .filter(|repo| {
+                repo.into_iter()
+                    .any(|package| package.file_name.contains("pytorch-cpu"))
+            })
+            .count();
+        assert_eq!(total_records, 1);
+
+        let sparse_data = load_sparse(["pytorch-cpu"], false).await;
+        let total_records = sparse_data
+            .iter()
+            .filter(|repo| {
+                repo.into_iter()
+                    .any(|package| package.file_name.contains("pytorch-cpu"))
+            })
+            .count();
+        assert_eq!(total_records, 2);
+    }
+
+    #[tokio::test]
     async fn test_parse_duplicate() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
+        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"], false).await;
         let total_records = sparse_empty_data
             .iter()
             .map(|repo| repo.len())
@@ -444,7 +490,7 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_jupyterlab_detectron2() {
-        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"]).await;
+        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"], true).await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -456,30 +502,33 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_numpy_dev() {
-        let sparse_empty_data = load_sparse([
-            "python",
-            "cython",
-            "compilers",
-            "openblas",
-            "nomkl",
-            "pytest",
-            "pytest-cov",
-            "pytest-xdist",
-            "hypothesis",
-            "mypy",
-            "typing_extensions",
-            "sphinx",
-            "numpydoc",
-            "ipython",
-            "scipy",
-            "pandas",
-            "matplotlib",
-            "pydata-sphinx-theme",
-            "pycodestyle",
-            "gitpython",
-            "cffi",
-            "pytz",
-        ])
+        let sparse_empty_data = load_sparse(
+            [
+                "python",
+                "cython",
+                "compilers",
+                "openblas",
+                "nomkl",
+                "pytest",
+                "pytest-cov",
+                "pytest-xdist",
+                "hypothesis",
+                "mypy",
+                "typing_extensions",
+                "sphinx",
+                "numpydoc",
+                "ipython",
+                "scipy",
+                "pandas",
+                "matplotlib",
+                "pydata-sphinx-theme",
+                "pycodestyle",
+                "gitpython",
+                "cffi",
+                "pytz",
+            ],
+            false,
+        )
         .await;
 
         let total_records = sparse_empty_data
