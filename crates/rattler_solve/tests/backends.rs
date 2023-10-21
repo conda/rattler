@@ -110,7 +110,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None, true).unwrap();
 
     let solver_task = SolverTask {
         available_packages: &available_packages,
@@ -592,7 +592,7 @@ fn compare_solve(specs: Vec<&str>) {
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None, true).unwrap();
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
