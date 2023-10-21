@@ -67,12 +67,15 @@ impl PySparseRepoData {
         py.allow_threads(move || {
             let repo_data = repo_data.iter().map(Into::into);
             let package_names = package_names.into_iter().map(Into::into);
-            Ok(
-                SparseRepoData::load_records_recursive(repo_data, package_names, None, strict_channel_priority)?
-                    .into_iter()
-                    .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
-                    .collect::<Vec<_>>(),
-            )
+            Ok(SparseRepoData::load_records_recursive(
+                repo_data,
+                package_names,
+                None,
+                strict_channel_priority,
+            )?
+            .into_iter()
+            .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())
+            .collect::<Vec<_>>())
         })
     }
 }
