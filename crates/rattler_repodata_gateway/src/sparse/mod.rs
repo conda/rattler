@@ -460,25 +460,38 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_strict() {
-        let strict_sparse_data = load_sparse(["pytorch-cpu"], true).await;
-        let total_records = strict_sparse_data
-            .iter()
-            .filter(|repo| {
-                repo.into_iter()
-                    .any(|package| package.file_name.contains("pytorch-cpu"))
-            })
-            .count();
-        assert_eq!(total_records, 1);
-
+        // If we load pytorch-cpy from all channels (non-strict) we expect records from both
+        // conda-forge and pthe pytorch channels.
         let sparse_data = load_sparse(["pytorch-cpu"], false).await;
-        let total_records = sparse_data
-            .iter()
-            .filter(|repo| {
-                repo.into_iter()
-                    .any(|package| package.file_name.contains("pytorch-cpu"))
-            })
-            .count();
-        assert_eq!(total_records, 2);
+        let channels = sparse_data
+            .into_iter()
+            .flatten()
+            .filter(|record| record.package_record.name.as_normalized() == "pytorch-cpu")
+            .map(|record| record.channel)
+            .unique()
+            .collect_vec();
+        assert_eq!(
+            channels,
+            vec![
+                String::from("https://conda.anaconda.org/conda-forge/"),
+                String::from("https://conda.anaconda.org/pytorch/")
+            ]
+        );
+
+        // If we load pytorch-cpy from strict channels we expect records only from the first channel
+        // that contains the package. In this case we expect records only from conda-forge.
+        let strict_sparse_data = load_sparse(["pytorch-cpu"], true).await;
+        let channels = strict_sparse_data
+            .into_iter()
+            .flatten()
+            .filter(|record| record.package_record.name.as_normalized() == "pytorch-cpu")
+            .map(|record| record.channel)
+            .unique()
+            .collect_vec();
+        assert_eq!(
+            channels,
+            vec![String::from("https://conda.anaconda.org/conda-forge/")]
+        );
     }
 
     #[tokio::test]
