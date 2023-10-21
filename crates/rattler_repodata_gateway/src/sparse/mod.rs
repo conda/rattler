@@ -144,7 +144,7 @@ impl SparseRepoData {
             let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
                 // If package was found in other channel, skip this repodata
-                if found_in_channel.map_or(false, |c| c != &repo_data.channel.base_url){
+                if found_in_channel.map_or(false, |c| c != &repo_data.channel.base_url) {
                     continue;
                 }
 
@@ -401,10 +401,10 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 #[cfg(test)]
 mod test {
     use super::{load_repo_data_recursively, PackageFilename};
+    use itertools::Itertools;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
     use std::path::{Path, PathBuf};
-    use itertools::Itertools;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
