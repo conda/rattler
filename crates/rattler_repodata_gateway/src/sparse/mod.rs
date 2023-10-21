@@ -139,11 +139,16 @@ impl SparseRepoData {
         while let Some(next_package) = pending.pop_front() {
             let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
-                let repo_data_packages = repo_data.inner.borrow_repo_data();
-                if strict_channel_priority && repo_data_packages.info == found_in_channel {
-                    continue;
+                // If package was found in other channel, skip this repodata
+                if strict_channel_priority {
+                    if let Some(url) = found_in_channel.clone() {
+                        if repo_data.channel.base_url != url {
+                            continue;
+                        }
+                    }
                 }
 
+                let repo_data_packages = repo_data.inner.borrow_repo_data();
                 let base_url = repo_data_packages
                     .info
                     .as_ref()
@@ -169,7 +174,7 @@ impl SparseRepoData {
                 records.append(&mut conda_records);
 
                 if strict_channel_priority && !records.is_empty() {
-                    found_in_channel = repo_data_packages.info.clone();
+                    found_in_channel = Some(repo_data.channel.base_url.clone());
                 }
 
                 // Iterate over all packages to find recursive dependencies.
