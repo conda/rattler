@@ -118,6 +118,10 @@ impl SparseRepoData {
     ///
     /// This will parse the records for the specified packages as well as all the packages these records
     /// depend on.
+    ///
+    /// When strict_channel_priority is true, the channel where a package is found first will be
+    /// the only channel used for that package. Make it false to search in all channels for all packages.
+    ///
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
@@ -140,12 +144,8 @@ impl SparseRepoData {
             let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
                 // If package was found in other channel, skip this repodata
-                if strict_channel_priority {
-                    if let Some(url) = found_in_channel.clone() {
-                        if repo_data.channel.base_url != url {
-                            continue;
-                        }
-                    }
+                if found_in_channel.map_or(false, |c| c != &repo_data.channel.base_url){
+                    continue;
                 }
 
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
@@ -174,7 +174,7 @@ impl SparseRepoData {
                 records.append(&mut conda_records);
 
                 if strict_channel_priority && !records.is_empty() {
-                    found_in_channel = Some(repo_data.channel.base_url.clone());
+                    found_in_channel = Some(&repo_data.channel.base_url);
                 }
 
                 // Iterate over all packages to find recursive dependencies.
@@ -404,6 +404,7 @@ mod test {
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
     use std::path::{Path, PathBuf};
+    use itertools::Itertools;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -461,7 +462,7 @@ mod test {
     #[tokio::test]
     async fn test_sparse_strict() {
         // If we load pytorch-cpy from all channels (non-strict) we expect records from both
-        // conda-forge and pthe pytorch channels.
+        // conda-forge and the pytorch channels.
         let sparse_data = load_sparse(["pytorch-cpu"], false).await;
         let channels = sparse_data
             .into_iter()
