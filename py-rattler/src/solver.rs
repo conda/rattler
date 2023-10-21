@@ -17,6 +17,7 @@ pub fn py_solve(
     locked_packages: Vec<PyRepoDataRecord>,
     pinned_packages: Vec<PyRepoDataRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
+    strict_channel_priority: bool,
 ) -> PyResult<Vec<PyRepoDataRecord>> {
     py.allow_threads(move || {
         let package_names = specs
@@ -27,6 +28,7 @@ pub fn py_solve(
             available_packages.iter().map(Into::into),
             package_names,
             None,
+            strict_channel_priority,
         )?;
 
         let task = SolverTask {
