@@ -1,0 +1,47 @@
+[package]
+name = "async_http_range_reader"
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+description = "A library for streaming reading of files over HTTP using range requests"
+license = "MIT"
+repository = "https://github.com/baszalmstra/async_http_range_reader"
+exclude = ["test-data/*"]
+
+[dependencies]
+futures = "0.3.28"
+http-content-range = "0.1.2"
+itertools = "0.11.0"
+bisection = "0.1.0"
+memmap2 = "0.9.0"
+reqwest = { version = "0.11.22", default-features = false, features = ["stream"] }
+tokio = { version = "1.33.0", default-features = false }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
+tokio-util = "0.7.9"
+thiserror = "1.0.50"
+tracing = "0.1.40"
+
+[dev-dependencies]
+axum = { version = "0.6.20", default-features = false, features = ["tokio"] }
+tokio = { version = "1.33.0", default-features = false, features = ["macros", "test-util"] }
+tower-http = { version = "0.4.4", default-features = false, features = ["fs"] }
+async_zip = { version = "0.0.15", default-features = false, features = ["tokio"] }
+assert_matches = "1.5.0"
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+# Config for 'cargo dist'
+[workspace.metadata.dist]
+# The preferred cargo-dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.3.1"
+# CI backends to support
+ci = ["github"]
+# The installers to generate for each app
+installers = []
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
+# Publish jobs to run in CI
+pr-run-mode = "plan"
