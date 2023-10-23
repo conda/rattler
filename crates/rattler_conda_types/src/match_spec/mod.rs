@@ -77,7 +77,7 @@ use matcher::StringMatcher;
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0").unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
-/// let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
+/// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
 /// assert_eq!(spec.channel, Some("conda-forge".to_string()));
@@ -94,7 +94,7 @@ use matcher::StringMatcher;
 /// assert_eq!(spec.channel, Some("*".to_string()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// let spec = MatchSpec::from_str("foo[build=\"py2*\"]").unwrap();
+/// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
