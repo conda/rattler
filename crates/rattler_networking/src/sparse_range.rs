@@ -34,11 +34,6 @@ impl Debug for SparseRange {
 }
 
 impl SparseRange {
-    /// Construct a new sparse range
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     // Construct a new SparseRange from an initial covered range.
     pub fn from_range(range: Range<u64>) -> Self {
         Self {
@@ -158,7 +153,7 @@ mod test {
 
     #[test]
     fn test_sparse_range() {
-        let range = SparseRange::new();
+        let range = SparseRange::default();
         assert!(range.covered_ranges().next().is_none());
         assert_eq!(
             range.cover(5..10).unwrap().0,

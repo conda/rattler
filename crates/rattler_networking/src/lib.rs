@@ -1,9 +1,28 @@
+//! This library provides the [`AsyncHttpRangeReader`] type.
+//!
+//! It allows streaming a file over HTTP while also allow random access. The type implements both
+//! [`AsyncRead`] as well as [`AsyncSeek`]. This is supported through the use of range requests.
+//! Each individual read will request a portion of the file using an HTTP range request.
+//!
+//! Requesting numerous small reads might turn out to be relatively slow because each reads needs to
+//! perform an HTTP request. To alleviate this issue [`AsyncHttpRangeReader::prefetch`] is provided.
+//! Using this method you can *prefect* a number of bytes which will be streamed in on the
+//! background. If a read operation is reading from already (pre)fetched ranges it will stream from
+//! the internal cache instead.
+//!
+//! Internally the [`AsyncHttpRangeReader`] stores a memory map which allows sparsely reading the
+//! data into memory without actually requiring all memory for file to be resident in memory.
+//!
+//! The primary use-case for this library is to be able to sparsely stream a zip archive over HTTP
+//! but its designed in a generic fashion.
+
 mod sparse_range;
 
+mod error;
 #[cfg(test)]
 mod static_directory_server;
 
-use futures::{Stream, StreamExt};
+use futures::{FutureExt, Stream, StreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes};
 use memmap2::MmapMut;
 use reqwest::{Client, Response, Url};
@@ -24,43 +43,22 @@ use tokio_stream::wrappers::WatchStream;
 use tokio_util::sync::PollSender;
 use tracing::{info_span, Instrument};
 
+pub use error::AsyncHttpRangeReaderError;
+
 /// An `AsyncRangeReader` enables reading from a file over HTTP using range requests.
+///
+/// See the [`crate`] level documentation for more information.
 #[derive(Debug)]
 pub struct AsyncHttpRangeReader {
     inner: Mutex<Inner>,
+    len: u64,
 }
 
-#[derive(Clone, Debug, thiserror::Error)]
-pub enum AsyncHttpRangeReaderError {
-    #[error("range requests are not supported")]
-    HttpRangeRequestUnsupported,
-
-    #[error(transparent)]
-    HttpError(#[from] Arc<reqwest::Error>),
-
-    #[error("an error occurred during transport: {0}")]
-    TransportError(#[source] Arc<reqwest::Error>),
-
-    #[error("io error occurred: {0}")]
-    IoError(#[source] Arc<std::io::Error>),
-
-    #[error("content-range header is missing from response")]
-    ContentRangeMissing,
-
-    #[error("memory mapping the file failed")]
-    MemoryMapError(#[source] Arc<std::io::Error>),
-}
-
-impl From<std::io::Error> for AsyncHttpRangeReaderError {
-    fn from(err: std::io::Error) -> Self {
-        AsyncHttpRangeReaderError::IoError(Arc::new(err))
-    }
-}
-
-impl From<reqwest::Error> for AsyncHttpRangeReaderError {
-    fn from(err: reqwest::Error) -> Self {
-        AsyncHttpRangeReaderError::TransportError(Arc::new(err))
-    }
+#[derive(Default, Clone, Debug)]
+struct StreamerState {
+    resident_range: SparseRange,
+    requested_ranges: Vec<Range<u64>>,
+    error: Option<AsyncHttpRangeReaderError>,
 }
 
 #[derive(Debug)]
@@ -76,11 +74,11 @@ struct Inner {
     requested_range: SparseRange,
 
     /// The range of bytes that have actually been downloaded to `data`.
-    downloaded_range: Result<SparseRange, AsyncHttpRangeReaderError>,
+    streamer_state: StreamerState,
 
     /// A channel receiver that holds the last downloaded range (or an error) from the background
     /// task.
-    state_rx: WatchStream<Result<SparseRange, AsyncHttpRangeReaderError>>,
+    streamer_state_rx: WatchStream<StreamerState>,
 
     /// A channel sender to send range requests to the background task
     request_tx: tokio::sync::mpsc::Sender<Range<u64>>,
@@ -92,17 +90,21 @@ struct Inner {
 
 impl AsyncHttpRangeReader {
     /// Construct a new `AsyncHttpRangeReader`.
+    ///
+    /// An initial range request is performed to the server to determine if the remote accepts range
+    /// requests. This will return a number of bytes from the end of the stream. Use the
+    /// `initial_chunk_size` paramter to define how many bytes should be requested from the end.
     pub async fn new(
         client: reqwest::Client,
         url: reqwest::Url,
+        initial_chunk_size: u64,
     ) -> Result<Self, AsyncHttpRangeReaderError> {
         // Perform an initial range request to get the size of the file
-        const INITIAL_CHUNK_SIZE: usize = 16384;
         let tail_request_response = client
             .get(url.clone())
             .header(
                 reqwest::header::RANGE,
-                format!("bytes=-{INITIAL_CHUNK_SIZE}"),
+                format!("bytes=-{initial_chunk_size}"),
             )
             .header(reqwest::header::CACHE_CONTROL, "no-cache")
             .send()
@@ -110,11 +112,6 @@ impl AsyncHttpRangeReader {
             .and_then(Response::error_for_status)
             .map_err(Arc::new)
             .map_err(AsyncHttpRangeReaderError::HttpError)?;
-        let tail_request_response = if tail_request_response.status() != 206 {
-            return Err(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported);
-        } else {
-            tail_request_response.error_for_status()?
-        };
 
         // Get the size of the file from this initial request
         let content_range = ContentRange::parse(
@@ -154,7 +151,7 @@ impl AsyncHttpRangeReader {
         // AsyncRead implementation. Any extra would simply have to wait for one of these to
         // succeed. I eventually used 10 because who cares.
         let (request_tx, request_rx) = tokio::sync::mpsc::channel(10);
-        let (state_tx, state_rx) = watch::channel(Ok(SparseRange::new()));
+        let (state_tx, state_rx) = watch::channel(StreamerState::default());
         tokio::spawn(run_streamer(
             client,
             url,
@@ -165,17 +162,33 @@ impl AsyncHttpRangeReader {
             request_rx,
         ));
 
+        // Configure the initial state of the streamer.
+        let mut streamer_state = StreamerState::default();
+        streamer_state
+            .requested_ranges
+            .push(complete_length - (finish - start)..complete_length);
+
         Ok(Self {
+            len: memory_map_slice.len() as u64,
             inner: Mutex::new(Inner {
                 data: memory_map_slice,
                 pos: 0,
                 requested_range,
-                downloaded_range: Ok(SparseRange::new()),
-                state_rx: WatchStream::new(state_rx),
+                streamer_state,
+                streamer_state_rx: WatchStream::new(state_rx),
                 request_tx,
                 poll_request_tx: None,
             }),
         })
+    }
+
+    /// Returns the ranges that this instance actually performed HTTP requests for.
+    pub async fn requested_ranges(&self) -> Vec<Range<u64>> {
+        let mut inner = self.inner.lock().await;
+        if let Some(Some(new_state)) = inner.streamer_state_rx.next().now_or_never() {
+            inner.streamer_state = new_state;
+        }
+        inner.streamer_state.requested_ranges.clone()
     }
 
     // Prefetches a range of bytes from the remote. When specifying a large range this can
@@ -196,6 +209,12 @@ impl AsyncHttpRangeReader {
             inner.requested_range = new_range;
         }
     }
+
+    /// Returns the length of the stream in bytes
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self) -> u64 {
+        self.len
+    }
 }
 
 /// A task that will download parts from the remote archive and "send" them to the frontend as they
@@ -207,10 +226,15 @@ async fn run_streamer(
     response: Response,
     response_start: u64,
     mut memory_map: MmapMut,
-    mut state_tx: Sender<Result<SparseRange, AsyncHttpRangeReaderError>>,
+    mut state_tx: Sender<StreamerState>,
     mut request_rx: tokio::sync::mpsc::Receiver<Range<u64>>,
 ) {
-    let mut downloaded_range = SparseRange::new();
+    let mut state = StreamerState::default();
+
+    // Add the initial range to the state
+    state
+        .requested_ranges
+        .push(response_start..memory_map.len() as u64);
 
     // Stream the initial data in memory
     if !stream_response(
@@ -218,7 +242,7 @@ async fn run_streamer(
         response_start,
         &mut memory_map,
         &mut state_tx,
-        &mut downloaded_range,
+        &mut state,
     )
     .await
     {
@@ -235,13 +259,19 @@ async fn run_streamer(
         };
 
         // Determine the range that we need to cover
-        let uncovered_ranges = match downloaded_range.cover(range) {
+        let uncovered_ranges = match state.resident_range.cover(range) {
             None => continue,
             Some((_, uncovered_ranges)) => uncovered_ranges,
         };
 
         // Download and stream each range.
         for range in uncovered_ranges {
+            // Update the requested ranges
+            state
+                .requested_ranges
+                .push(*range.start()..*range.end() + 1);
+
+            // Execute the request
             let range_string = format!("bytes={}-{}", range.start(), range.end());
             let span = info_span!("fetch_range", range = range_string.as_str());
             let response = match client
@@ -255,7 +285,8 @@ async fn run_streamer(
                 .map_err(|e| std::io::Error::new(ErrorKind::Other, e))
             {
                 Err(e) => {
-                    let _ = state_tx.send(Err(e.into()));
+                    state.error = Some(e.into());
+                    let _ = state_tx.send(state);
                     break 'outer;
                 }
                 Ok(response) => response,
@@ -266,7 +297,7 @@ async fn run_streamer(
                 *range.start(),
                 &mut memory_map,
                 &mut state_tx,
-                &mut downloaded_range,
+                &mut state,
             )
             .await
             {
@@ -283,14 +314,15 @@ async fn stream_response(
     tail_request_response: Response,
     mut offset: u64,
     memory_map: &mut MmapMut,
-    state_tx: &mut Sender<Result<SparseRange, AsyncHttpRangeReaderError>>,
-    downloaded_range: &mut SparseRange,
+    state_tx: &mut Sender<StreamerState>,
+    state: &mut StreamerState,
 ) -> bool {
     let mut byte_stream = tail_request_response.bytes_stream();
     while let Some(bytes) = byte_stream.next().await {
         let bytes = match bytes {
             Err(e) => {
-                let _ = state_tx.send(Err(e.into()));
+                state.error = Some(e.into());
+                let _ = state_tx.send(state.clone());
                 return false;
             }
             Ok(bytes) => bytes,
@@ -307,10 +339,10 @@ async fn stream_response(
             .copy_from_slice(bytes.as_ref());
 
         // Update the range of bytes that have been downloaded
-        downloaded_range.update(byte_range);
+        state.resident_range.update(byte_range);
 
         // Notify anyone that's listening that we have downloaded some extra data
-        if state_tx.send(Ok(downloaded_range.clone())).is_err() {
+        if state_tx.send(state.clone()).is_err() {
             // If we failed to set the state it means there is no receiver. In that case we should
             // just exit.
             return false;
@@ -350,7 +382,7 @@ impl AsyncRead for AsyncHttpRangeReader {
         let inner = me.inner.get_mut();
 
         // If a previous error occurred we return that.
-        if let Err(e) = &inner.downloaded_range {
+        if let Some(e) = inner.streamer_state.error.as_ref() {
             return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e.clone())));
         }
 
@@ -389,9 +421,8 @@ impl AsyncRead for AsyncHttpRangeReader {
         loop {
             // Is the range already available?
             if inner
-                .downloaded_range
-                .as_ref()
-                .unwrap()
+                .streamer_state
+                .resident_range
                 .is_covered(range.clone())
             {
                 let len = (range.end - range.start) as usize;
@@ -403,14 +434,13 @@ impl AsyncRead for AsyncHttpRangeReader {
             }
 
             // Otherwise wait for new data to come in
-            match ready!(Pin::new(&mut inner.state_rx).poll_next(cx)) {
+            match ready!(Pin::new(&mut inner.streamer_state_rx).poll_next(cx)) {
                 None => unreachable!(),
-                Some(Err(e)) => {
-                    inner.downloaded_range = Err(e.clone());
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e)));
-                }
-                Some(Ok(range)) => {
-                    inner.downloaded_range = Ok(range);
+                Some(state) => {
+                    inner.streamer_state = state;
+                    if let Some(e) = inner.streamer_state.error.as_ref() {
+                        return Poll::Ready(Err(io::Error::new(io::ErrorKind::Other, e.clone())));
+                    }
                 }
             }
         }
@@ -451,9 +481,12 @@ mod test {
         let range = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
+            8192,
         )
         .await
         .expect("Could not download range - did you run `git lfs pull`?");
+
+        assert_eq!(range.len(), file_size);
 
         let mut reader = ZipFileReader::new(range.compat()).await.unwrap();
 
@@ -467,8 +500,21 @@ mod test {
             vec![
                 "metadata.json",
                 "info-andes-1.8.3-pyhd8ed1ab_0.tar.zst",
-                "pkg-andes-1.8.3-pyhd8ed1ab_0.tar.zst"
+                "pkg-andes-1.8.3-pyhd8ed1ab_0.tar.zst",
             ]
+        );
+
+        // Get the number of performed requests so far
+        let request_ranges = reader.inner_mut().get_mut().requested_ranges().await;
+        assert_eq!(request_ranges.len(), 1);
+        assert_eq!(
+            request_ranges[0].end - request_ranges[0].start,
+            8192,
+            "first request should be the size of the initial chunk size"
+        );
+        assert_eq!(
+            request_ranges[0].end, file_size,
+            "first request should be at the end"
         );
 
         // Prefetch the data for the metadata.json file
@@ -478,6 +524,13 @@ mod test {
         // include bytes for the extra fields but we don't have that information.
         let size =
             entry.entry().compressed_size() + 30 + entry.entry().filename().as_bytes().len() as u64;
+
+        // The zip archive uses as BufReader which reads in chunks of 8192. To ensure we prefetch
+        // enough data we round the size up to the nearest multiple of the buffer size.
+        let buffer_size = 8192;
+        let size = ((size + buffer_size - 1) / buffer_size) * buffer_size;
+
+        // Fetch the bytes from the zip archive that contain the requested file.
         reader
             .inner_mut()
             .get_mut()
@@ -494,7 +547,16 @@ mod test {
             .await
             .unwrap();
 
+        // Get the number of performed requests
+        let request_ranges = reader.inner_mut().get_mut().requested_ranges().await;
+
         assert_eq!(contents, r#"{"conda_pkg_format_version": 2}"#);
+        assert_eq!(request_ranges.len(), 2);
+        assert_eq!(
+            request_ranges[1],
+            0..size,
+            "expected only two range requests"
+        );
     }
 
     #[tokio::test]
@@ -507,6 +569,7 @@ mod test {
         let mut range = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
+            8192,
         )
         .await
         .expect("bla");
@@ -544,9 +607,10 @@ mod test {
     #[tokio::test]
     async fn test_not_found() {
         let server = StaticDirectoryServer::new(Path::new(env!("CARGO_MANIFEST_DIR")));
-        let err = AsyncHttpRangeReader::new(Client::new(), server.url().join("not-found").unwrap())
-            .await
-            .expect_err("expected an error");
+        let err =
+            AsyncHttpRangeReader::new(Client::new(), server.url().join("not-found").unwrap(), 8192)
+                .await
+                .expect_err("expected an error");
 
         assert_matches!(
             err, AsyncHttpRangeReaderError::HttpError(err) if err.status() == Some(StatusCode::NOT_FOUND)
