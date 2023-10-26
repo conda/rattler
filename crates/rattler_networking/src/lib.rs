@@ -88,13 +88,36 @@ struct Inner {
     poll_request_tx: Option<PollSender<Range<u64>>>,
 }
 
+pub enum CheckSupportMethod {
+    // Perform a range request with a negative byte range. This will return the N bytes from the
+    // *end* of the file as well as the file-size. This is especially useful to also immediately
+    // get some bytes from the end of the file.
+    NegativeRangeRequest(u64),
+
+    // Perform a head request to get the length of the file and check if the server supports range
+    // requests.
+    Head,
+}
+
 impl AsyncHttpRangeReader {
     /// Construct a new `AsyncHttpRangeReader`.
-    ///
+    pub async fn new(
+        client: reqwest::Client,
+        url: reqwest::Url,
+        check_method: CheckSupportMethod,
+    ) -> Result<Self, AsyncHttpRangeReaderError> {
+        match check_method {
+            CheckSupportMethod::NegativeRangeRequest(initial_chunk_size) => {
+                Self::new_tail_request(client, url, initial_chunk_size).await
+            }
+            CheckSupportMethod::Head => Self::new_head(client, url).await,
+        }
+    }
+
     /// An initial range request is performed to the server to determine if the remote accepts range
     /// requests. This will return a number of bytes from the end of the stream. Use the
     /// `initial_chunk_size` paramter to define how many bytes should be requested from the end.
-    pub async fn new(
+    pub async fn new_tail_request(
         client: reqwest::Client,
         url: reqwest::Url,
         initial_chunk_size: u64,
@@ -155,8 +178,7 @@ impl AsyncHttpRangeReader {
         tokio::spawn(run_streamer(
             client,
             url,
-            tail_request_response,
-            start,
+            Some((tail_request_response, start)),
             memory_map,
             state_tx,
             request_rx,
@@ -167,6 +189,80 @@ impl AsyncHttpRangeReader {
         streamer_state
             .requested_ranges
             .push(complete_length - (finish - start)..complete_length);
+
+        Ok(Self {
+            len: memory_map_slice.len() as u64,
+            inner: Mutex::new(Inner {
+                data: memory_map_slice,
+                pos: 0,
+                requested_range,
+                streamer_state,
+                streamer_state_rx: WatchStream::new(state_rx),
+                request_tx,
+                poll_request_tx: None,
+            }),
+        })
+    }
+
+    async fn new_head(
+        client: reqwest::Client,
+        url: reqwest::Url,
+    ) -> Result<Self, AsyncHttpRangeReaderError> {
+        // Perform a HEAD request to get the content-length.
+        let head_response = client
+            .head(url.clone())
+            .header(reqwest::header::CACHE_CONTROL, "no-cache")
+            .send()
+            .await
+            .and_then(Response::error_for_status)
+            .map_err(Arc::new)
+            .map_err(AsyncHttpRangeReaderError::HttpError)?;
+
+        // Are range requests supported?
+        if head_response
+            .headers()
+            .get(reqwest::header::ACCEPT_RANGES)
+            .and_then(|h| h.to_str().ok())
+            != Some("bytes")
+        {
+            return Err(AsyncHttpRangeReaderError::HttpRangeRequestUnsupported);
+        }
+
+        let content_length: u64 = head_response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .ok_or(AsyncHttpRangeReaderError::ContentLengthMissing)?
+            .to_str()
+            .map_err(|_| AsyncHttpRangeReaderError::ContentLengthMissing)?
+            .parse()
+            .map_err(|_| AsyncHttpRangeReaderError::ContentLengthMissing)?;
+
+        // Allocate a memory map to hold the data
+        let memory_map = memmap2::MmapOptions::new()
+            .len(content_length as _)
+            .map_anon()
+            .map_err(Arc::new)
+            .map_err(AsyncHttpRangeReaderError::MemoryMapError)?;
+
+        // SAFETY: Get a read-only slice to the memory. This is safe because the memory map is never
+        // reallocated and we keep track of the initialized part.
+        let memory_map_slice =
+            unsafe { std::slice::from_raw_parts(memory_map.as_ptr(), memory_map.len()) };
+
+        let requested_range = SparseRange::default();
+
+        // adding more than 2 entries to the channel would block the sender. I assumed two would
+        // suffice because I would want to 1) prefetch a certain range and 2) read stuff via the
+        // AsyncRead implementation. Any extra would simply have to wait for one of these to
+        // succeed. I eventually used 10 because who cares.
+        let (request_tx, request_rx) = tokio::sync::mpsc::channel(10);
+        let (state_tx, state_rx) = watch::channel(StreamerState::default());
+        tokio::spawn(run_streamer(
+            client, url, None, memory_map, state_tx, request_rx,
+        ));
+
+        // Configure the initial state of the streamer.
+        let streamer_state = StreamerState::default();
 
         Ok(Self {
             len: memory_map_slice.len() as u64,
@@ -223,30 +319,31 @@ impl AsyncHttpRangeReader {
 async fn run_streamer(
     client: Client,
     url: Url,
-    response: Response,
-    response_start: u64,
+    initial_tail_response: Option<(Response, u64)>,
     mut memory_map: MmapMut,
     mut state_tx: Sender<StreamerState>,
     mut request_rx: tokio::sync::mpsc::Receiver<Range<u64>>,
 ) {
     let mut state = StreamerState::default();
 
-    // Add the initial range to the state
-    state
-        .requested_ranges
-        .push(response_start..memory_map.len() as u64);
+    if let Some((response, response_start)) = initial_tail_response {
+        // Add the initial range to the state
+        state
+            .requested_ranges
+            .push(response_start..memory_map.len() as u64);
 
-    // Stream the initial data in memory
-    if !stream_response(
-        response,
-        response_start,
-        &mut memory_map,
-        &mut state_tx,
-        &mut state,
-    )
-    .await
-    {
-        return;
+        // Stream the initial data in memory
+        if !stream_response(
+            response,
+            response_start,
+            &mut memory_map,
+            &mut state_tx,
+            &mut state,
+        )
+        .await
+        {
+            return;
+        }
     }
 
     // Listen for any new incoming requests
@@ -455,12 +552,16 @@ mod test {
     use async_zip::tokio::read::seek::ZipFileReader;
     use futures::AsyncReadExt;
     use reqwest::{Client, StatusCode};
+    use rstest::*;
     use std::path::Path;
     use tokio::io::AsyncReadExt as _;
     use tokio_util::compat::TokioAsyncReadCompatExt;
 
+    #[rstest]
+    #[case(CheckSupportMethod::Head)]
+    #[case(CheckSupportMethod::NegativeRangeRequest(8192))]
     #[tokio::test]
-    async fn async_range_reader_zip() {
+    async fn async_range_reader_zip(#[case] check_method: CheckSupportMethod) {
         // Spawn a static file server
         let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("test-data");
         let server = StaticDirectoryServer::new(&path);
@@ -478,13 +579,16 @@ mod test {
         );
 
         // Construct an AsyncRangeReader
-        let range = AsyncHttpRangeReader::new(
+        let mut range = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
-            8192,
+            check_method,
         )
         .await
         .expect("Could not download range - did you run `git lfs pull`?");
+
+        // Make sure we have read the last couple of bytes
+        range.prefetch(range.len() - 8192..range.len()).await;
 
         assert_eq!(range.len(), file_size);
 
@@ -559,8 +663,11 @@ mod test {
         );
     }
 
+    #[rstest]
+    #[case(CheckSupportMethod::Head)]
+    #[case(CheckSupportMethod::NegativeRangeRequest(8192))]
     #[tokio::test]
-    async fn async_range_reader() {
+    async fn async_range_reader(#[case] check_method: CheckSupportMethod) {
         // Spawn a static file server
         let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("test-data");
         let server = StaticDirectoryServer::new(&path);
@@ -569,7 +676,7 @@ mod test {
         let mut range = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
-            8192,
+            check_method,
         )
         .await
         .expect("bla");
@@ -607,10 +714,13 @@ mod test {
     #[tokio::test]
     async fn test_not_found() {
         let server = StaticDirectoryServer::new(Path::new(env!("CARGO_MANIFEST_DIR")));
-        let err =
-            AsyncHttpRangeReader::new(Client::new(), server.url().join("not-found").unwrap(), 8192)
-                .await
-                .expect_err("expected an error");
+        let err = AsyncHttpRangeReader::new(
+            Client::new(),
+            server.url().join("not-found").unwrap(),
+            CheckSupportMethod::Head,
+        )
+        .await
+        .expect_err("expected an error");
 
         assert_matches!(
             err, AsyncHttpRangeReaderError::HttpError(err) if err.status() == Some(StatusCode::NOT_FOUND)

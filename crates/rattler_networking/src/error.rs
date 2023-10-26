@@ -17,6 +17,9 @@ pub enum AsyncHttpRangeReaderError {
     #[error("content-range header is missing from response")]
     ContentRangeMissing,
 
+    #[error("content-length header is missing from response")]
+    ContentLengthMissing,
+
     #[error("memory mapping the file failed")]
     MemoryMapError(#[source] Arc<std::io::Error>),
 }
