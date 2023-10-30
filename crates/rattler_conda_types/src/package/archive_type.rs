@@ -38,3 +38,20 @@ impl ArchiveType {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::ArchiveType;
+
+    /// test snapshot for archive type serialization
+    #[test]
+    fn test_archive_type_serialization() {
+        let archive_type = ArchiveType::TarBz2;
+        let serialized = serde_json::to_string(&archive_type).unwrap();
+        assert_eq!(serialized, "\"TarBz2\"");
+
+        let archive_type = ArchiveType::Conda;
+        let serialized = serde_json::to_string(&archive_type).unwrap();
+        assert_eq!(serialized, "\"Conda\"");
+    }
+}
