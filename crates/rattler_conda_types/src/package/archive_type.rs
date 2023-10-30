@@ -1,7 +1,8 @@
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 /// Describes the type of package archive. This can be derived from the file extension of a package.
-#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum ArchiveType {
     /// A file with the `.tar.bz2` extension.
     TarBz2,
