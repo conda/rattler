@@ -237,6 +237,7 @@ async fn repodata_from_file(
         },
         cache_last_modified: SystemTime::now(),
         blake2_hash: None,
+        blake2_hash_nominal: None,
         has_zst: None,
         has_bz2: None,
         has_jlap: None,
@@ -403,10 +404,11 @@ pub async fn fetch_repo_data(
         )
         .await
         {
-            Ok(state) => {
+            Ok((state, disk_hash)) => {
                 tracing::info!("fetched JLAP patches successfully");
                 let cache_state = RepoDataState {
-                    blake2_hash: Some(state.footer.latest),
+                    blake2_hash: Some(disk_hash),
+                    blake2_hash_nominal: Some(state.footer.latest),
                     has_zst: variant_availability.has_zst,
                     has_bz2: variant_availability.has_bz2,
                     has_jlap: variant_availability.has_jlap,
@@ -559,6 +561,7 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
+        blake2_hash_nominal: None,
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         has_jlap: variant_availability.has_jlap,
