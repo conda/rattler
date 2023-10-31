@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 606
+assertion_line: 300
 expression: conda_lock
 ---
+version: 2
 metadata:
   content_hash:
     linux-64: db07b15e6c03c3be1c2b06b6b6c916d625f68bba2d5911b013b31970eaa2e5c3
@@ -12281,5 +12282,4 @@ package:
     platform: osx-arm64
     url: "https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.2-hf913c23_6.conda"
     version: 1.5.2
-version: 1
 

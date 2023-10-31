@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 616
+assertion_line: 310
 expression: conda_lock
 ---
+version: 2
 metadata:
   content_hash:
     linux-64: 63fe6f5b3868946659fb21a6f0a5871c672c00ce5846fe67e044d5d3fa7c2b3b
@@ -1331,5 +1332,4 @@ package:
     platform: win-64
     url: "https://conda.anaconda.org/conda-forge/win-64/xz-5.2.6-h8d14728_0.tar.bz2"
     version: 5.2.6
-version: 1
 

@@ -2,13 +2,12 @@
 //! It is modeled on the definitions found at: [conda-lock models](https://github.com/conda/conda-lock/blob/main/conda_lock/lockfile/models.py)
 //! Most names were kept the same as in the models file. So you can refer to those exactly.
 //! However, some types were added to enforce a bit more type safety.
+use ::serde::{Deserialize, Serialize};
 use indexmap::IndexMap;
 use rattler_conda_types::{MatchSpec, PackageName};
-use rattler_conda_types::{NoArchType, ParsePlatformError, Platform, RepoDataRecord};
-use serde::{Deserialize, Serialize, Serializer};
+use rattler_conda_types::{NoArchType, Platform, RepoDataRecord};
 use serde_with::serde_as;
-use std::cmp::Ordering;
-use std::{collections::BTreeMap, fs::File, io::Read, path::Path, str::FromStr};
+use std::{collections::BTreeMap, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 pub mod builder;
@@ -16,6 +15,7 @@ mod conda;
 mod content_hash;
 mod hash;
 mod pip;
+mod serde;
 mod utils;
 
 use crate::conda::ConversionError;
@@ -26,7 +26,7 @@ pub use pip::PipLockedDependency;
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
 /// also the locked packages
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct CondaLock {
     /// Metadata for the lock file
     pub metadata: LockMeta,
@@ -38,10 +38,6 @@ pub struct CondaLock {
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum ParseCondaLockError {
-    /// The platform could not be parsed
-    #[error(transparent)]
-    InvalidPlatform(#[from] ParsePlatformError),
-
     #[error(transparent)]
     IoError(#[from] std::io::Error),
 
@@ -77,7 +73,8 @@ impl CondaLock {
 
     /// Parses an conda-lock file from a file.
     pub fn from_path(path: &Path) -> Result<Self, ParseCondaLockError> {
-        Self::from_reader(File::open(path)?)
+        let source = std::fs::read_to_string(path)?;
+        Self::from_str(&source)
     }
 
     /// Writes the conda lock to a file
@@ -243,48 +240,6 @@ impl From<&str> for Channel {
             url: url.to_string(),
             used_env_vars: Default::default(),
         }
-    }
-}
-
-impl Serialize for CondaLock {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        #[derive(Serialize)]
-        struct Raw<'a> {
-            metadata: &'a LockMeta,
-            package: Vec<&'a LockedDependency>,
-            version: u32,
-        }
-
-        // Sort all packages in alphabetical order. We choose to use alphabetic order instead of
-        // topological because the alphabetic order will create smaller diffs when packages change
-        // or are added.
-        // See: https://github.com/conda/conda-lock/issues/491
-        let mut sorted_deps = self.package.iter().collect::<Vec<_>>();
-        sorted_deps.sort_by(|&a, &b| {
-            a.name
-                .cmp(&b.name)
-                .then_with(|| a.platform.cmp(&b.platform))
-                .then_with(|| a.version.cmp(&b.version))
-                .then_with(|| match (&a.kind, &b.kind) {
-                    (LockedDependencyKind::Conda(a), LockedDependencyKind::Conda(b)) => {
-                        a.build.cmp(&b.build)
-                    }
-                    (LockedDependencyKind::Pip(_), LockedDependencyKind::Pip(_)) => Ordering::Equal,
-                    (LockedDependencyKind::Pip(_), _) => Ordering::Less,
-                    (_, LockedDependencyKind::Pip(_)) => Ordering::Greater,
-                })
-        });
-
-        let raw = Raw {
-            metadata: &self.metadata,
-            package: sorted_deps,
-            version: 1,
-        };
-
-        raw.serialize(serializer)
     }
 }
 
