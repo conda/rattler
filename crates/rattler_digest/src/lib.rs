@@ -64,8 +64,14 @@ pub type Md5Hash = md5::digest::Output<Md5>;
 /// A type for a 32 bit length blake2b digest.
 pub type Blake2b256 = Blake2b<U32>;
 
+/// A type alias for the output of a [`Blake2b256`] hash.
+pub type Blake2b256Hash = blake2::digest::Output<Blake2b256>;
+
 /// A type alias for the output of a blake2b256 hash.
 pub type Blake2bMac256 = Blake2bMac<U32>;
+
+/// A type alias for the output of a [`Blake2bMac256`] hash.
+pub type Blake2bMac256Hash = blake2::digest::Output<Blake2bMac256>;
 
 /// Compute a hash of the file at the specified location.
 pub fn compute_file_digest<D: Digest + Default + Write>(

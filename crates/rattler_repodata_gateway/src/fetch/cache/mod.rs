@@ -40,6 +40,16 @@ pub struct RepoDataState {
     )]
     pub blake2_hash: Option<blake2::digest::Output<Blake2b256>>,
 
+    /// Upstream hash represented by the on-disk file. Used for jlap which reformats the cached json
+    /// but knows equivalent remote repodata.json hashes.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_blake2_hash",
+        serialize_with = "serialize_blake2_hash"
+    )]
+    pub blake2_hash_nominal: Option<blake2::digest::Output<Blake2b256>>,
+
     /// Whether or not zst is available for the subdirectory
     pub has_zst: Option<Expiring<bool>>,
 

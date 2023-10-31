@@ -77,7 +77,9 @@
 
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
-use rattler_digest::{parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2bMac256};
+use rattler_digest::{
+    parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
+};
 use rattler_networking::AuthenticatedClient;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -86,11 +88,14 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
 use std::iter::Iterator;
 use std::path::Path;
 use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
+use tempfile::NamedTempFile;
+use tokio::task::JoinError;
 use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
@@ -149,6 +154,10 @@ pub enum JLAPError {
     /// Error return if we cannot find anything inside the actual JLAP response.
     /// This indicates that we need to reset the values for JLAP in our cache.
     InvalidResponse,
+
+    /// The operation was cancelled
+    #[error("the operation was cancelled")]
+    Cancelled,
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -279,14 +288,26 @@ impl<'a> JLAPResponse<'a> {
         &self,
         repo_data_json_path: &Path,
         hash: Output<Blake2b256>,
-    ) -> Result<(), JLAPError> {
+    ) -> Result<Blake2b256Hash, JLAPError> {
         // We use the current hash to find which patches we need to apply
         let current_idx = self.patches.iter().position(|patch| patch.from == hash);
+        let Some(idx) = current_idx else {
+            return Err(JLAPError::NoHashFound);
+        };
 
-        if let Some(idx) = current_idx {
-            apply_jlap_patches(self.patches.clone(), idx, repo_data_json_path).await
-        } else {
-            Err(JLAPError::NoHashFound)
+        // Apply the patches on a blocking thread. Applying the patches is a relatively CPU intense
+        // operation and we don't want to block the tokio runtime.
+        let patches = self.patches.clone();
+        let repo_data_json_path = repo_data_json_path.to_path_buf();
+        match tokio::task::spawn_blocking(move || {
+            apply_jlap_patches(patches, idx, &repo_data_json_path)
+        })
+        .await
+        .map_err(JoinError::try_into_panic)
+        {
+            Ok(hash) => hash,
+            Err(Ok(reason)) => std::panic::resume_unwind(reason),
+            Err(_) => Err(JLAPError::Cancelled),
         }
     }
 
@@ -367,13 +388,13 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 /// At the end, we compare the new `blake2b` hash with what was listed in the JLAP metadata to
 /// ensure the file is correct.
 ///
-/// The return value is the updated [`JLAPState`]
+/// The return value is the updated [`JLAPState`] and the Blake2b256 hash of the new file.
 pub async fn patch_repo_data(
     client: &AuthenticatedClient,
     subdir_url: Url,
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
-) -> Result<JLAPState, JLAPError> {
+) -> Result<(JLAPState, Blake2b256Hash), JLAPError> {
     // Determine what we should use as our starting state
     let mut jlap_state = get_jlap_state(repo_data_state.jlap);
 
@@ -392,7 +413,7 @@ pub async fn patch_repo_data(
     jlap_state.position = position;
 
     let jlap = JLAPResponse::new(&response_text, &jlap_state)?;
-    let hash = repo_data_state.blake2_hash.unwrap_or_default();
+    let hash = repo_data_state.blake2_hash_nominal.unwrap_or_default();
     let latest_hash = jlap.footer.latest;
     let new_iv = jlap
         .validate_checksum()?
@@ -401,14 +422,17 @@ pub async fn patch_repo_data(
     // We already have the latest version; return early because there's nothing to do
     if latest_hash == hash {
         tracing::info!("The latest hash matches our local data. File up to date.");
-        return Ok(jlap.get_state(jlap.new_position, new_iv));
+        return Ok((
+            jlap.get_state(jlap.new_position, new_iv),
+            repo_data_state.blake2_hash.unwrap_or_default(),
+        ));
     }
 
     // Applies patches and returns early if an error is encountered
-    jlap.apply(repo_data_json_path, hash).await?;
+    let hash = jlap.apply(repo_data_json_path, hash).await?;
 
     // Patches were applied successfully, so we need to update the position
-    Ok(jlap.get_state(jlap.new_position, new_iv))
+    Ok((jlap.get_state(jlap.new_position, new_iv), hash))
 }
 
 /// Fetches a JLAP response from server
@@ -504,71 +528,58 @@ where
 /// 2. Applying patches to this repodata file
 /// 3. Re-ordering the repo data
 /// 4. Saving this repodata file to disk
-async fn apply_jlap_patches(
+fn apply_jlap_patches(
     patches: Arc<[Patch]>,
     start_index: usize,
     repo_data_path: &Path,
-) -> Result<(), JLAPError> {
-    // Open and read the current repodata into a JSON doc
-    let repo_data_contents = match tokio::fs::read_to_string(repo_data_path).await {
-        Ok(contents) => contents,
-        Err(error) => return Err(JLAPError::FileSystem(error)),
-    };
+) -> Result<Blake2b256Hash, JLAPError> {
+    // Read the contents of the current repodata to a string
+    let repo_data_contents =
+        std::fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
 
-    // All these JSON operations are pretty CPU intensive therefor we move them to a blocking task
-    // to ensure any other async operations will continue to purr along.
-    let content = match tokio::task::spawn_blocking(move || {
-        tracing::info!("parsing cached repodata.json as JSON");
-        let mut doc = match serde_json::from_str(&repo_data_contents) {
-            Ok(doc) => doc,
-            Err(error) => return Err(JLAPError::JSONParse(error)),
-        };
+    // Parse the JSON so we can manipulate it
+    tracing::info!("parsing cached repodata.json as JSON");
+    let mut doc = serde_json::from_str(&repo_data_contents).map_err(JLAPError::JSONParse)?;
 
-        tracing::info!(
-            "applying patches #{} through #{}",
-            start_index + 1,
-            patches.len()
-        );
-        // Apply the patches we current have to it
-        for patch in patches[start_index..].iter() {
-            if let Err(error) = json_patch::patch_unsafe(&mut doc, &patch.patch) {
-                return Err(JLAPError::JSONPatch(error));
-            }
+    // Apply any patches that we have not already applied
+    tracing::info!(
+        "applying patches #{} through #{}",
+        start_index + 1,
+        patches.len()
+    );
+    for patch in patches[start_index..].iter() {
+        if let Err(error) = json_patch::patch_unsafe(&mut doc, &patch.patch) {
+            return Err(JLAPError::JSONPatch(error));
         }
-
-        tracing::info!("converting patched JSON back to repodata");
-        let ordered_doc: OrderedRepoData = match serde_json::from_value(doc) {
-            Ok(value) => value,
-            Err(error) => return Err(JLAPError::JSONParse(error)),
-        };
-
-        let mut updated_json = match serde_json::to_string_pretty(&ordered_doc) {
-            Ok(value) => value,
-            Err(error) => return Err(JLAPError::JSONParse(error)),
-        };
-
-        // We need to add an extra newline character to the end of our string so the hashes match
-        updated_json.insert(updated_json.len(), '\n');
-        Ok(updated_json.into_bytes())
-    })
-    .await
-    {
-        Ok(content) => content?,
-        Err(err) => {
-            if let Ok(reason) = err.try_into_panic() {
-                std::panic::resume_unwind(reason);
-            }
-
-            // Cancelled, do nothing..
-            return Ok(());
-        }
-    };
-
-    tracing::info!("writing patched repodata to disk");
-    match tokio::fs::write(repo_data_path, &content).await {
-        Ok(_) => Ok(()),
-        Err(error) => Err(JLAPError::FileSystem(error)),
     }
+
+    // Order the json
+    tracing::info!("converting patched JSON back to repodata");
+    let ordered_doc: OrderedRepoData = serde_json::from_value(doc).map_err(JLAPError::JSONParse)?;
+
+    // Convert the json to bytes, but we don't really care about formatting.
+    let mut updated_json = serde_json::to_string(&ordered_doc).map_err(JLAPError::JSONParse)?;
+
+    // We need to add an extra newline character to the end of our string so the hashes match
+    updated_json.insert(updated_json.len(), '\n');
+
+    // Write the content to disk and immediately compute the hash of the file contents.
+    tracing::info!("writing patched repodata to disk");
+    let mut hashing_writer = NamedTempFile::new_in(
+        repo_data_path
+            .parent()
+            .expect("the repodata.json file must reside in a directory"),
+    )
+    .map_err(JLAPError::FileSystem)
+    .map(rattler_digest::HashingWriter::<_, Blake2b256>::new)?;
+    hashing_writer
+        .write_all(&updated_json.into_bytes())
+        .map_err(JLAPError::FileSystem)?;
+    let (file, hash) = hashing_writer.finalize();
+    file.persist(repo_data_path)
+        .map_err(|e| JLAPError::FileSystem(e.error))?;
+
+    Ok(hash)
 }
 
 /// Retrieves the correct values for `position` and `initialization_vector` from a JLAPState object
@@ -619,7 +630,7 @@ mod test {
   "cache_control": "public, max-age=30",
   "mtime_ns": 1685509481332236078,
   "size": 38317593,
-  "blake2_hash": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6",
+  "blake2_hash_nominal": "580100cb35459305eaaa31feeebacb06aad6422257754226d832e504666fc1c6",
   "has_zst": {
     "value": true,
     "last_checked": "2023-05-21T12:14:21.904003Z"
@@ -641,7 +652,7 @@ mod test {
   "cache_control": "public, max-age=30",
   "mtime_ns": 1685509481332236078,
   "size": 38317593,
-  "blake2_hash": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9",
+  "blake2_hash_nominal": "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9",
   "has_zst": {
     "value": true,
     "last_checked": "2023-05-21T12:14:21.904003Z"
@@ -671,7 +682,7 @@ mod test {
   "cache_control": "public, max-age=30",
   "mtime_ns": 1685509481332236078,
   "size": 38317593,
-  "blake2_hash": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
+  "blake2_hash_nominal": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
   "has_zst": {
     "value": true,
     "last_checked": "2023-05-21T12:14:21.904003Z"
@@ -701,7 +712,7 @@ mod test {
   "cache_control": "public, max-age=30",
   "mtime_ns": 1685509481332236078,
   "size": 38317593,
-  "blake2_hash": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
+  "blake2_hash_nominal": "160b529c5f72b9755f951c1b282705d49d319a5f2f80b33fb1a670d02ddeacf9",
   "has_zst": {
     "value": true,
     "last_checked": "2023-05-21T12:14:21.904003Z"
@@ -755,121 +766,9 @@ mod test {
 }
 "#;
 
-    const FAKE_REPO_DATA_UPDATE_ONE: &str = r#"{
-  "info": {
-    "subdir": "osx-64"
-  },
-  "packages": {},
-  "packages.conda": {
-    "zstd-1.5.4-hc035e20_0.conda": {
-      "build": "hc035e20_0",
-      "build_number": 0,
-      "depends": [
-        "libcxx >=14.0.6",
-        "lz4-c >=1.9.4,<1.10.0a0",
-        "xz >=5.2.10,<6.0a0",
-        "zlib >=1.2.13,<1.3.0a0"
-      ],
-      "license": "BSD-3-Clause AND GPL-2.0-or-later",
-      "license_family": "BSD",
-      "md5": "f284fea068c51b1a0eaea3ac58c300c0",
-      "name": "zstd",
-      "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
-      "size": 605550,
-      "subdir": "osx-64",
-      "timestamp": 1680034665911,
-      "version": "1.5.4"
-    },
-    "zstd-1.5.5-hc035e20_0.conda": {
-      "build": "hc035e20_0",
-      "build_number": 0,
-      "depends": [
-        "libcxx >=14.0.6",
-        "lz4-c >=1.9.4,<1.10.0a0",
-        "xz >=5.2.10,<6.0a0",
-        "zlib >=1.2.13,<1.3.0a0"
-      ],
-      "license": "BSD-3-Clause AND GPL-2.0-or-later",
-      "license_family": "BSD",
-      "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
-      "name": "zstd",
-      "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
-      "size": 622467,
-      "subdir": "osx-64",
-      "timestamp": 1681304595869,
-      "version": "1.5.5"
-    }
-  },
-  "removed": [],
-  "repodata_version": 1
-}
-"#;
+    const FAKE_REPO_DATA_UPDATE_ONE: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"}},\"removed\":[],\"repodata_version\":1}\n";
 
-    const FAKE_REPO_DATA_UPDATE_TWO: &str = r#"{
-  "info": {
-    "subdir": "osx-64"
-  },
-  "packages": {},
-  "packages.conda": {
-    "zstd-1.5.4-hc035e20_0.conda": {
-      "build": "hc035e20_0",
-      "build_number": 0,
-      "depends": [
-        "libcxx >=14.0.6",
-        "lz4-c >=1.9.4,<1.10.0a0",
-        "xz >=5.2.10,<6.0a0",
-        "zlib >=1.2.13,<1.3.0a0"
-      ],
-      "license": "BSD-3-Clause AND GPL-2.0-or-later",
-      "license_family": "BSD",
-      "md5": "f284fea068c51b1a0eaea3ac58c300c0",
-      "name": "zstd",
-      "sha256": "0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d",
-      "size": 605550,
-      "subdir": "osx-64",
-      "timestamp": 1680034665911,
-      "version": "1.5.4"
-    },
-    "zstd-1.5.5-hc035e20_0.conda": {
-      "build": "hc035e20_0",
-      "build_number": 0,
-      "depends": [
-        "libcxx >=14.0.6",
-        "lz4-c >=1.9.4,<1.10.0a0",
-        "xz >=5.2.10,<6.0a0",
-        "zlib >=1.2.13,<1.3.0a0"
-      ],
-      "license": "BSD-3-Clause AND GPL-2.0-or-later",
-      "license_family": "BSD",
-      "md5": "5e0b7ddb1b7dc6b630e1f9a03499c19c",
-      "name": "zstd",
-      "sha256": "5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038",
-      "size": 622467,
-      "subdir": "osx-64",
-      "timestamp": 1681304595869,
-      "version": "1.5.5"
-    },
-    "zstd-static-1.4.5-hb1e8313_0.conda": {
-      "build": "hb1e8313_0",
-      "build_number": 0,
-      "depends": [
-        "libcxx >=10.0.0",
-        "zstd 1.4.5 h41d2c2f_0"
-      ],
-      "license": "BSD 3-Clause",
-      "md5": "5447986040e0b73d6c681a4d8f615d6c",
-      "name": "zstd-static",
-      "sha256": "3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658",
-      "size": 13930,
-      "subdir": "osx-64",
-      "timestamp": 1595965109852,
-      "version": "1.4.5"
-    }
-  },
-  "removed": [],
-  "repodata_version": 1
-}
-"#;
+    const FAKE_REPO_DATA_UPDATE_TWO: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"},\"zstd-static-1.4.5-hb1e8313_0.conda\":{\"build\":\"hb1e8313_0\",\"build_number\":0,\"depends\":[\"libcxx >=10.0.0\",\"zstd 1.4.5 h41d2c2f_0\"],\"license\":\"BSD 3-Clause\",\"md5\":\"5447986040e0b73d6c681a4d8f615d6c\",\"name\":\"zstd-static\",\"sha256\":\"3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658\",\"size\":13930,\"subdir\":\"osx-64\",\"timestamp\":1595965109852,\"version\":\"1.4.5\"}},\"removed\":[],\"repodata_version\":1}\n";
 
     const FAKE_REPO_DATA_UPDATE_ONE_HASH: &str =
         "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9";
@@ -1031,7 +930,7 @@ mod test {
     ) {
         let test_env = TestEnvironment::new(repo_data, jlap_data, repo_data_state).await;
 
-        let updated_jlap_state = patch_repo_data(
+        let (updated_jlap_state, _hash) = patch_repo_data(
             &test_env.client,
             test_env.server_url,
             test_env.repo_data_state,
