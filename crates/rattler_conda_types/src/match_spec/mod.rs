@@ -279,7 +279,7 @@ pub struct NamelessMatchSpec {
 
 impl NamelessMatchSpec {
     /// Match a MatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PackageRecord) -> bool {
+    pub fn matches(&self, record: &PackageRecord, channel: &String) -> bool {
         if let Some(spec) = self.version.as_ref() {
             if !spec.matches(&record.version) {
                 return false;
@@ -300,6 +300,15 @@ impl NamelessMatchSpec {
 
         if let Some(sha256_spec) = self.sha256.as_ref() {
             if Some(sha256_spec) != record.sha256.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(required_channel) = self.channel.as_ref() {
+            // TODO: Find a better compare function.
+            // Using contains as the channels might not be formatted the same.
+            // This worked for the local channels.
+            if !channel.contains(required_channel) {
                 return false;
             }
         }

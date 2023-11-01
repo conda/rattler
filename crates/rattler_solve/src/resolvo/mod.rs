@@ -78,7 +78,9 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 
     fn contains(&self, v: &Self::V) -> bool {
         match v {
-            SolverPackageRecord::Record(rec) => self.inner.matches(&rec.package_record),
+            SolverPackageRecord::Record(rec) => {
+                self.inner.matches(&rec.package_record, &rec.channel)
+            }
             SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                 version,
                 build_string,
