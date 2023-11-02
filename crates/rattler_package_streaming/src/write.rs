@@ -239,6 +239,8 @@ fn prepare_header(
 
     if let Some(timestamp) = timestamp {
         header.set_mtime(timestamp.timestamp().unsigned_abs());
+    } else {
+        header.set_mtime(1153704088);
     }
 
     // let file_size = stat.len();
@@ -259,6 +261,10 @@ fn append_path_to_archive(
     path: &Path,
     timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
+
+    // set header mode to deterministic for _now_
+    archive.mode(tar::HeaderMode::Deterministic);
+
     // create a tar header
     let mut header = prepare_header(&base_path.join(path), timestamp)
         .map_err(|err| trace_file_error(&base_path.join(path), err))?;
