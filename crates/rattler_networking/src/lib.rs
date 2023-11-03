@@ -25,6 +25,7 @@ mod static_directory_server;
 use futures::{FutureExt, Stream, StreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes};
 use memmap2::MmapMut;
+use reqwest::header::HeaderMap;
 use reqwest::{Client, Response, Url};
 use sparse_range::SparseRange;
 use std::{
@@ -105,12 +106,12 @@ impl AsyncHttpRangeReader {
         client: reqwest::Client,
         url: reqwest::Url,
         check_method: CheckSupportMethod,
-    ) -> Result<Self, AsyncHttpRangeReaderError> {
+    ) -> Result<(Self, HeaderMap), AsyncHttpRangeReaderError> {
         match check_method {
             CheckSupportMethod::NegativeRangeRequest(initial_chunk_size) => {
                 Self::new_tail_request(client, url, initial_chunk_size).await
             }
-            CheckSupportMethod::Head => Ok(Self::new_head(client, url).await?.0),
+            CheckSupportMethod::Head => Self::new_head(client, url).await,
         }
     }
 
@@ -121,7 +122,7 @@ impl AsyncHttpRangeReader {
         client: reqwest::Client,
         url: reqwest::Url,
         initial_chunk_size: u64,
-    ) -> Result<Self, AsyncHttpRangeReaderError> {
+    ) -> Result<(Self, HeaderMap), AsyncHttpRangeReaderError> {
         // Perform an initial range request to get the size of the file
         let tail_request_response = client
             .get(url.clone())
@@ -135,6 +136,7 @@ impl AsyncHttpRangeReader {
             .and_then(Response::error_for_status)
             .map_err(Arc::new)
             .map_err(AsyncHttpRangeReaderError::HttpError)?;
+        let response_header = tail_request_response.headers().clone();
 
         // Get the size of the file from this initial request
         let content_range = ContentRange::parse(
@@ -190,7 +192,7 @@ impl AsyncHttpRangeReader {
             .requested_ranges
             .push(complete_length - (finish - start)..complete_length);
 
-        Ok(Self {
+        let reader = Self {
             len: memory_map_slice.len() as u64,
             inner: Mutex::new(Inner {
                 data: memory_map_slice,
@@ -201,13 +203,14 @@ impl AsyncHttpRangeReader {
                 request_tx,
                 poll_request_tx: None,
             }),
-        })
+        };
+        Ok((reader, response_header))
     }
 
-    pub async fn new_head(
+    async fn new_head(
         client: reqwest::Client,
         url: reqwest::Url,
-    ) -> Result<(Self, reqwest::Response), AsyncHttpRangeReaderError> {
+    ) -> Result<(Self, HeaderMap), AsyncHttpRangeReaderError> {
         // Perform a HEAD request to get the content-length.
         let head_response = client
             .head(url.clone())
@@ -276,7 +279,7 @@ impl AsyncHttpRangeReader {
                 poll_request_tx: None,
             }),
         };
-        Ok((reader, head_response))
+        Ok((reader, head_response.headers().clone()))
     }
 
     /// Returns the ranges that this instance actually performed HTTP requests for.
@@ -580,7 +583,7 @@ mod test {
         );
 
         // Construct an AsyncRangeReader
-        let mut range = AsyncHttpRangeReader::new(
+        let (mut range, _) = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
             check_method,
@@ -674,7 +677,7 @@ mod test {
         let server = StaticDirectoryServer::new(&path);
 
         // Construct an AsyncRangeReader
-        let mut range = AsyncHttpRangeReader::new(
+        let (mut range, _) = AsyncHttpRangeReader::new(
             Client::new(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
             check_method,
