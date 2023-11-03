@@ -110,7 +110,7 @@ impl AsyncHttpRangeReader {
             CheckSupportMethod::NegativeRangeRequest(initial_chunk_size) => {
                 Self::new_tail_request(client, url, initial_chunk_size).await
             }
-            CheckSupportMethod::Head => Self::new_head(client, url).await,
+            CheckSupportMethod::Head => Ok(Self::new_head(client, url).await?.0),
         }
     }
 
@@ -204,10 +204,10 @@ impl AsyncHttpRangeReader {
         })
     }
 
-    async fn new_head(
+    pub async fn new_head(
         client: reqwest::Client,
         url: reqwest::Url,
-    ) -> Result<Self, AsyncHttpRangeReaderError> {
+    ) -> Result<(Self, reqwest::Response), AsyncHttpRangeReaderError> {
         // Perform a HEAD request to get the content-length.
         let head_response = client
             .head(url.clone())
@@ -264,7 +264,7 @@ impl AsyncHttpRangeReader {
         // Configure the initial state of the streamer.
         let streamer_state = StreamerState::default();
 
-        Ok(Self {
+        let reader = Self {
             len: memory_map_slice.len() as u64,
             inner: Mutex::new(Inner {
                 data: memory_map_slice,
@@ -275,7 +275,8 @@ impl AsyncHttpRangeReader {
                 request_tx,
                 poll_request_tx: None,
             }),
-        })
+        };
+        Ok((reader, head_response))
     }
 
     /// Returns the ranges that this instance actually performed HTTP requests for.
