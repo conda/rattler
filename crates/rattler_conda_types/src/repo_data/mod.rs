@@ -413,7 +413,7 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use crate::repo_data::{compute_package_url, determine_subdir};
+    use crate::{repo_data::{compute_package_url, determine_subdir}, RepoDataRecord, PackageRecord};
     use fxhash::FxHashSet;
 
     use crate::{Channel, ChannelConfig, RepoData};
@@ -459,6 +459,30 @@ mod test {
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
     }
+
+    #[test]
+    fn test_deserialize_repodata_yaml() {
+        // load test data
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+        let config = ChannelConfig::default();
+
+        let channel = Channel::from_str(
+            format!("https://conda.anaconda.org/dummy/"),
+            &config,
+        );
+
+        let records = repodata.into_repo_data_records(&channel.unwrap());
+        let pkg = &records[0];
+
+        let yaml = serde_yaml::to_string(&pkg).unwrap();
+        insta::assert_snapshot!(&yaml);
+        let pkg_2 : RepoDataRecord = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(pkg, &pkg_2);
+    }
+
 
     #[test]
     fn test_base_url_packages() {

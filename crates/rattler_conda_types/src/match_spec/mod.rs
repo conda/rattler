@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::str::FromStr;
 
 pub mod matcher;
 pub mod parse;
@@ -110,9 +111,7 @@ use matcher::StringMatcher;
 /// In the future, the namespace field might be added to this list.
 ///
 /// Alternatively, an exact spec is given by `*[sha256=01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b]`.
-#[skip_serializing_none]
-#[serde_as]
-#[derive(Debug, Default, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Default, Clone, Eq, PartialEq, Hash)]
 pub struct MatchSpec {
     /// The name of the package
     pub name: Option<PackageName>,
@@ -131,10 +130,10 @@ pub struct MatchSpec {
     /// The namespace of the package (currently not used)
     pub namespace: Option<String>,
     /// The md5 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    // #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     /// The sha256 hash of the package
-    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    // #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
 }
 
@@ -244,6 +243,20 @@ impl MatchSpec {
                 sha256: self.sha256,
             },
         )
+    }
+}
+
+impl Serialize for MatchSpec {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let s = self.to_string();
+        serializer.serialize_str(&s)
+    }
+}
+
+impl <'de> Deserialize<'de> for MatchSpec {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        MatchSpec::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

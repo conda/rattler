@@ -104,6 +104,18 @@ impl Serialize for StringMatcher {
     }
 }
 
+// Deserialize implementation for StringMatcher
+impl <'de> serde::de::Deserialize<'de> for StringMatcher {
+    fn deserialize<D>(deserializer: D) -> Result<StringMatcher, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        StringMatcher::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,29 +1,11 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 629
 expression: evaluated
 ---
-blas *.* mkl:
-  name: blas
-  version: "*"
-  build: mkl
-foo=1.0=py27_0:
-  name: foo
-  version: "==1.0"
-  build: py27_0
-foo==1.0=py27_0:
-  name: foo
-  version: "==1.0"
-  build: py27_0
-python 3.8.* *_cpython:
-  name: python
-  version: 3.8.*
-  build: "*_cpython"
-pytorch=*=cuda*:
-  name: pytorch
-  version: "*"
-  build: cuda*
-"x264 >=1!164.3095,<1!165":
-  name: x264
-  version: ">=1!164.3095,<1!165"
+blas *.* mkl: blas * mkl
+foo=1.0=py27_0: foo ==1.0 py27_0
+foo==1.0=py27_0: foo ==1.0 py27_0
+python 3.8.* *_cpython: python 3.8.* *_cpython
+pytorch=*=cuda*: pytorch * cuda*
+"x264 >=1!164.3095,<1!165": "x264 >=1!164.3095,<1!165"
 
