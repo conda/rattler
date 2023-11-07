@@ -279,11 +279,7 @@ pub async fn load_repo_data_recursively(
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records_recursive(
-        &lazy_repo_data,
-        package_names,
-        patch_function,
-    )
+    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
 }
 
 fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
