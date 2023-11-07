@@ -229,24 +229,15 @@ fn prepare_header(
     header.as_gnu_mut().unwrap().name[..name.len()].clone_from_slice(&name[..]);
 
     let stat = fs::symlink_metadata(path)?;
-    header.set_metadata(&stat);
-
-    // erase some fields
-    header.set_uid(0);
-    header.set_gid(0);
-    header.set_device_minor(0)?;
-    header.set_device_major(0)?;
+    header.set_metadata_in_mode(&stat, tar::HeaderMode::Deterministic);
 
     if let Some(timestamp) = timestamp {
         header.set_mtime(timestamp.timestamp().unsigned_abs());
     } else {
-        header.set_mtime(1153704088);
+        // 1-1-2023 00:00:00 (Fixed date in the past for reproducible builds)
+        header.set_mtime(1672531200);
     }
 
-    // let file_size = stat.len();
-    // TODO do we need this
-    //  + 1 to be compliant with GNU tar
-    // header.set_size(file_size + 1);
     Ok(header)
 }
 
@@ -261,19 +252,15 @@ fn append_path_to_archive(
     path: &Path,
     timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
-
-    // set header mode to deterministic for _now_
-    archive.mode(tar::HeaderMode::Deterministic);
-
     // create a tar header
     let mut header = prepare_header(&base_path.join(path), timestamp)
         .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
     if header.entry_type().is_file() {
-        let mut file = fs::File::open(base_path.join(path))
+        let file = fs::File::open(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
-        archive.append_file(path, &mut file)?;
+        archive.append_data(&mut header, path, &file)?;
     } else if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
         let target = fs::read_link(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
