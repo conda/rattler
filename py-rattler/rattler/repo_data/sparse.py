@@ -115,7 +115,6 @@ class SparseRepoData:
     def load_records_recursive(
         repo_data: List[SparseRepoData],
         package_names: List[PackageName],
-        strict_channel_priority: bool = True,
     ) -> List[List[RepoDataRecord]]:
         """
         Given a set of [`SparseRepoData`]s load all the records
@@ -143,7 +142,6 @@ class SparseRepoData:
             for list_of_records in PySparseRepoData.load_records_recursive(
                 [r._sparse for r in repo_data],
                 [p._name for p in package_names],
-                strict_channel_priority,
             )
         ]
 

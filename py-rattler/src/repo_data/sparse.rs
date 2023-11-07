@@ -62,7 +62,6 @@ impl PySparseRepoData {
         py: Python<'_>,
         repo_data: Vec<PySparseRepoData>,
         package_names: Vec<PyPackageName>,
-        strict_channel_priority: bool,
     ) -> PyResult<Vec<Vec<PyRepoDataRecord>>> {
         py.allow_threads(move || {
             let repo_data = repo_data.iter().map(Into::into);
@@ -71,7 +70,6 @@ impl PySparseRepoData {
                 repo_data,
                 package_names,
                 None,
-                strict_channel_priority,
             )?
             .into_iter()
             .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>())

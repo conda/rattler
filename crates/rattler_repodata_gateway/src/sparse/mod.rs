@@ -119,14 +119,10 @@ impl SparseRepoData {
     /// This will parse the records for the specified packages as well as all the packages these records
     /// depend on.
     ///
-    /// When strict_channel_priority is true, the channel where a package is found first will be
-    /// the only channel used for that package. Make it false to search in all channels for all packages.
-    ///
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
         patch_function: Option<fn(&mut PackageRecord)>,
-        strict_channel_priority: bool,
     ) -> io::Result<Vec<Vec<RepoDataRecord>>> {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
@@ -141,13 +137,8 @@ impl SparseRepoData {
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
-            let mut found_in_channel = None;
+            // let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
-                // If package was found in other channel, skip this repodata
-                if found_in_channel.map_or(false, |c| c != &repo_data.channel.base_url) {
-                    continue;
-                }
-
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
                 let base_url = repo_data_packages
                     .info
@@ -172,10 +163,6 @@ impl SparseRepoData {
                     patch_function,
                 )?;
                 records.append(&mut conda_records);
-
-                if strict_channel_priority && !records.is_empty() {
-                    found_in_channel = Some(&repo_data.channel.base_url);
-                }
 
                 // Iterate over all packages to find recursive dependencies.
                 for record in records.iter() {
@@ -274,7 +261,6 @@ pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
-    strict_channel_priority: bool,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
     let lazy_repo_data = stream::iter(repo_data_paths)
@@ -297,7 +283,6 @@ pub async fn load_repo_data_recursively(
         &lazy_repo_data,
         package_names,
         patch_function,
-        strict_channel_priority,
     )
 }
 
@@ -412,7 +397,6 @@ mod test {
 
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
-        strict_channel_priority: bool,
     ) -> Vec<Vec<RepoDataRecord>> {
         load_repo_data_recursively(
             [
@@ -436,7 +420,6 @@ mod test {
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
             None,
-            strict_channel_priority,
         )
         .await
         .unwrap()
