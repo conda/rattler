@@ -157,7 +157,6 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Linux {
     /// The version of linux
-    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -194,7 +193,6 @@ pub struct LibC {
     pub family: String,
 
     /// The version of the libc distribution.
-    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -230,7 +228,6 @@ impl From<LibC> for VirtualPackage {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Cuda {
     /// The maximum supported Cuda version.
-    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
@@ -316,7 +313,6 @@ impl From<Archspec> for VirtualPackage {
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Osx {
     /// The OSX version
-    /// #[serde(deserialize_with = "from_str")]
     pub version: Version,
 }
 
