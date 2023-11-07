@@ -9,8 +9,8 @@ use std::{
 use keyring::Entry;
 use reqwest::{IntoUrl, Url};
 
-use super::{authentication::Authentication, fallback_storage};
 use super::netrc_storage;
+use super::{authentication::Authentication, fallback_storage};
 
 /// A struct that implements storage and access of authentication
 /// information
