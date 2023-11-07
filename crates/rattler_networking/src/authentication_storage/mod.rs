@@ -2,3 +2,4 @@
 pub mod authentication;
 pub mod fallback_storage;
 pub mod storage;
+pub mod netrc_storage;

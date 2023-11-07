@@ -10,6 +10,7 @@ use keyring::Entry;
 use reqwest::{IntoUrl, Url};
 
 use super::{authentication::Authentication, fallback_storage};
+use super::netrc_storage;
 
 /// A struct that implements storage and access of authentication
 /// information
@@ -24,16 +25,21 @@ pub struct AuthenticationStorage {
 
     /// A cache so that we don't have to access the keyring all the time
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
+
+    /// Netrc Storage that will be used if the is no key store application available.
+    pub netrc_storage: netrc_storage::NetRcStorage,
 }
 
 impl AuthenticationStorage {
     /// Create a new authentication storage with the given store key
     pub fn new(store_key: &str, fallback_folder: &Path) -> AuthenticationStorage {
         let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
+
         AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
             cache: Arc::new(Mutex::new(HashMap::new())),
+            netrc_storage: netrc_storage::NetRcStorage::new(),
         }
     }
 }
@@ -112,7 +118,19 @@ impl AuthenticationStorage {
                     self.fallback_storage.path.display()
                 );
                 match self.fallback_storage.get_password(host)? {
-                    None => return Ok(None),
+                    None => {
+                        // Fallback to netrc file
+                        tracing::debug!(
+                            "Unable to retrieve credentials for from fallback {}: {}, using netrc credential storage",
+                            host,
+                            e,
+                        );
+                        match self.netrc_storage.get_password(host) {
+                            Ok(None) => return Ok(None),
+                            Ok(Some(password)) => password,
+                            Err(_) => return Ok(None),
+                        }
+                    }
                     Some(password) => password,
                 }
             }
