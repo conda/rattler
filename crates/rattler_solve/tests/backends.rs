@@ -25,6 +25,14 @@ fn conda_json_path_noarch() -> String {
     )
 }
 
+fn pytorch_json_path() -> String {
+    format!(
+        "{}/{}",
+        env!("CARGO_MANIFEST_DIR"),
+        "../../test-data/channels/pytorch/linux-64/repodata.json"
+    )
+}
+
 fn dummy_channel_json_path() -> String {
     format!(
         "{}/{}",
@@ -110,7 +118,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None, true).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
     let solver_task = SolverTask {
         available_packages: &available_packages,
@@ -161,6 +169,34 @@ fn read_real_world_repo_data() -> &'static Vec<SparseRepoData> {
     &REPO_DATA
 }
 
+fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
+    static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
+        let pytorch = pytorch_json_path();
+        SparseRepoData::new(
+            Channel::from_str("pytorch", &ChannelConfig::default()).unwrap(),
+            "pytorch".to_string(),
+            pytorch,
+            None,
+        )
+        .unwrap()
+    });
+
+    &REPO_DATA
+}
+
+fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
+    static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
+        let conda_forge = conda_json_path();
+        SparseRepoData::new(
+            Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+            "conda-forge".to_string(),
+            conda_forge,
+            None,
+        )
+        .unwrap()
+    });
+    &REPO_DATA
+}
 macro_rules! solver_backend_tests {
     ($T:path) => {
         #[test]
@@ -592,7 +628,7 @@ fn compare_solve(specs: Vec<&str>) {
 
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
     let available_packages =
-        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None, true).unwrap();
+        SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
     let extract_pkgs = |records: Vec<RepoDataRecord>| {
         let mut pkgs = records
@@ -698,4 +734,75 @@ fn compare_solve_quetz() {
 #[test]
 fn compare_solve_xtensor_xsimd() {
     compare_solve(vec!["xtensor", "xsimd"]);
+}
+
+fn solve_to_get_channel_of_spec(
+    spec_str: &str,
+    expected_channel: &str,
+    repo_data: Vec<&SparseRepoData>,
+) {
+    let spec = MatchSpec::from_str(spec_str).unwrap();
+    let specs = vec![spec.clone()];
+    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
+
+    let available_packages =
+        SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
+
+    let result = rattler_solve::resolvo::Solver
+        .solve(SolverTask {
+            available_packages: &available_packages,
+            specs: specs.clone(),
+            locked_packages: Default::default(),
+            pinned_packages: Default::default(),
+            virtual_packages: Default::default(),
+        })
+        .unwrap();
+
+    let record = result.iter().find(|record| {
+        record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
+    });
+    assert_eq!(record.unwrap().channel, expected_channel.to_string());
+}
+
+#[test]
+fn channel_specific_requirement() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec(
+        "conda-forge::pytorch-cpu",
+        "https://conda.anaconda.org/conda-forge/",
+        repodata.clone(),
+    );
+    solve_to_get_channel_of_spec(
+        "pytorch::pytorch-cpu",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+    );
+}
+
+#[test]
+fn channel_order_strict() {
+    // Solve with conda-forge as the first channel
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu",
+        "https://conda.anaconda.org/conda-forge/",
+        repodata,
+    );
+
+    // Solve with pytorch as the first channel
+    let repodata = vec![
+        read_pytorch_sparse_repo_data(),
+        read_conda_forge_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+    );
 }
