@@ -406,11 +406,6 @@ mod test {
                     "linux-64",
                     test_dir().join("channels/conda-forge/linux-64/repodata.json"),
                 ),
-                (
-                    Channel::from_str("pytorch", &ChannelConfig::default()).unwrap(),
-                    "linux-64",
-                    test_dir().join("channels/pytorch/linux-64/repodata.json"),
-                ),
             ],
             package_names
                 .into_iter()
@@ -423,13 +418,13 @@ mod test {
 
     #[tokio::test]
     async fn test_empty_sparse_load() {
-        let sparse_empty_data = load_sparse(Vec::<String>::new(), false).await;
-        assert_eq!(sparse_empty_data, vec![vec![], vec![], vec![]]);
+        let sparse_empty_data = load_sparse(Vec::<String>::new()).await;
+        assert_eq!(sparse_empty_data, vec![vec![], vec![]]);
     }
 
     #[tokio::test]
     async fn test_sparse_single() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex"], false).await;
+        let sparse_empty_data = load_sparse(["_libgcc_mutex"]).await;
         let total_records = sparse_empty_data
             .iter()
             .map(|repo| repo.len())
@@ -439,44 +434,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_sparse_strict() {
-        // If we load pytorch-cpy from all channels (non-strict) we expect records from both
-        // conda-forge and the pytorch channels.
-        let sparse_data = load_sparse(["pytorch-cpu"], false).await;
-        let channels = sparse_data
-            .into_iter()
-            .flatten()
-            .filter(|record| record.package_record.name.as_normalized() == "pytorch-cpu")
-            .map(|record| record.channel)
-            .unique()
-            .collect_vec();
-        assert_eq!(
-            channels,
-            vec![
-                String::from("https://conda.anaconda.org/conda-forge/"),
-                String::from("https://conda.anaconda.org/pytorch/")
-            ]
-        );
-
-        // If we load pytorch-cpy from strict channels we expect records only from the first channel
-        // that contains the package. In this case we expect records only from conda-forge.
-        let strict_sparse_data = load_sparse(["pytorch-cpu"], true).await;
-        let channels = strict_sparse_data
-            .into_iter()
-            .flatten()
-            .filter(|record| record.package_record.name.as_normalized() == "pytorch-cpu")
-            .map(|record| record.channel)
-            .unique()
-            .collect_vec();
-        assert_eq!(
-            channels,
-            vec![String::from("https://conda.anaconda.org/conda-forge/")]
-        );
-    }
-
-    #[tokio::test]
     async fn test_parse_duplicate() {
-        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"], false).await;
+        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
         let total_records = sparse_empty_data
             .iter()
             .map(|repo| repo.len())
@@ -488,7 +447,7 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_jupyterlab_detectron2() {
-        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"], true).await;
+        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"]).await;
 
         let total_records = sparse_empty_data
             .iter()
@@ -500,33 +459,30 @@ mod test {
 
     #[tokio::test]
     async fn test_sparse_numpy_dev() {
-        let sparse_empty_data = load_sparse(
-            [
-                "python",
-                "cython",
-                "compilers",
-                "openblas",
-                "nomkl",
-                "pytest",
-                "pytest-cov",
-                "pytest-xdist",
-                "hypothesis",
-                "mypy",
-                "typing_extensions",
-                "sphinx",
-                "numpydoc",
-                "ipython",
-                "scipy",
-                "pandas",
-                "matplotlib",
-                "pydata-sphinx-theme",
-                "pycodestyle",
-                "gitpython",
-                "cffi",
-                "pytz",
-            ],
-            false,
-        )
+        let sparse_empty_data = load_sparse([
+            "python",
+            "cython",
+            "compilers",
+            "openblas",
+            "nomkl",
+            "pytest",
+            "pytest-cov",
+            "pytest-xdist",
+            "hypothesis",
+            "mypy",
+            "typing_extensions",
+            "sphinx",
+            "numpydoc",
+            "ipython",
+            "scipy",
+            "pandas",
+            "matplotlib",
+            "pydata-sphinx-theme",
+            "pycodestyle",
+            "gitpython",
+            "cffi",
+            "pytz",
+        ])
         .await;
 
         let total_records = sparse_empty_data

@@ -304,7 +304,7 @@ impl<'a> CondaDependencyProvider<'a> {
         for favored_record in favored_records {
             let name = pool.intern_package_name(favored_record.package_record.name.as_normalized());
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(favored_record));
-            let mut candidates = records.entry(name).or_default();
+            let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.favored = Some(solvable);
         }
@@ -312,7 +312,7 @@ impl<'a> CondaDependencyProvider<'a> {
         for locked_record in locked_records {
             let name = pool.intern_package_name(locked_record.package_record.name.as_normalized());
             let solvable = pool.intern_solvable(name, SolverPackageRecord::Record(locked_record));
-            let mut candidates = records.entry(name).or_default();
+            let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.locked = Some(solvable);
         }
