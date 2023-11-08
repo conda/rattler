@@ -187,7 +187,7 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
         let channel_specific_specs = match_specs
-            .into_iter()
+            .iter()
             .filter(|spec| spec.channel.is_some())
             .collect::<Vec<_>>();
 
@@ -412,9 +412,9 @@ impl super::SolverImpl for Solver {
         // Construct the requirements that the solver needs to satisfy.
         let root_requirements = task
             .specs
-            .into_iter()
+            .iter()
             .map(|spec| {
-                let (name, spec) = spec.into_nameless();
+                let (name, spec) = spec.clone().into_nameless();
                 let name = name.expect("cannot use matchspec without a name");
                 let name_id = provider.pool.intern_package_name(name.as_normalized());
                 provider.pool.intern_version_set(name_id, spec.into())
