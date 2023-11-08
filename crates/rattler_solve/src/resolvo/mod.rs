@@ -286,7 +286,13 @@ impl<'a> CondaDependencyProvider<'a> {
                             &record.package_record.name.as_normalized(),
                             &record.channel
                         );
-                        candidates.excluded.push((solvable_id, pool.intern_string(format!("due to strict channel priority not using this option from: '{first_channel}'", ))));
+                        candidates.excluded.push((
+                            solvable_id,
+                            pool.intern_string(format!(
+                                "due to strict channel priority not using this option from: '{}'",
+                                &record.channel
+                            )),
+                        ));
                         continue;
                     }
                 } else {
