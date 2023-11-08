@@ -137,7 +137,6 @@ impl SparseRepoData {
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
-            // let mut found_in_channel = None;
             for (i, repo_data) in repo_data.iter().enumerate() {
                 let repo_data_packages = repo_data.inner.borrow_repo_data();
                 let base_url = repo_data_packages
