@@ -120,7 +120,11 @@ pub trait Shell {
     /// Parses environment variables emitted by the `Shell::env` command.
     fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
         env.lines()
-            .filter_map(|line| line.split_once('='))
+            .filter_map(|line| {
+                line.split_once('=')
+                    // Trim " as CmdExe could add this to its variables.
+                    .map(|(key, value)| (key, value.trim_matches('"')))
+            })
             .collect()
     }
 }
@@ -783,5 +787,19 @@ mod tests {
             PathModificationBehavior::Prepend,
         );
         assert!(script.contents.contains("/foo;/bar"));
+    }
+
+    #[test]
+    fn test_parse_env() {
+        let script = ShellScript::new(CmdExe, Platform::Win64);
+        let input = "VAR1=\"value1\"\nNUM=1\nNUM2=\"2\"";
+        let parsed_env = script.shell.parse_env(input);
+
+        let expected_env: HashMap<&str, &str> =
+            vec![("VAR1", "value1"), ("NUM", "1"), ("NUM2", "2")]
+                .into_iter()
+                .collect();
+
+        assert_eq!(parsed_env, expected_env);
     }
 }
