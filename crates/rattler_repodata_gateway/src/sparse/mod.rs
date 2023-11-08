@@ -382,7 +382,6 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 #[cfg(test)]
 mod test {
     use super::{load_repo_data_recursively, PackageFilename};
-    use itertools::Itertools;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
     use std::path::{Path, PathBuf};
