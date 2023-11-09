@@ -38,21 +38,22 @@ pub struct Payload {
 }
 
 impl Payload {
+    pub fn canonical_serialize(&self) -> Result<Vec<u8>, serde_json::Error> {
+        // Serialize the object to a pretty JSON string with an indentation of 2 spaces
+        let pretty_json = serde_json::to_string_pretty(&self)?;
+        // Convert the JSON string to a utf-8 encoded vector of bytes
+        Ok(pretty_json.into_bytes())
+    }
+
     pub fn hash(&self) -> String {
-        let serialized =
-            crate::serialize::canonserialize(&serde_json::to_value(self).unwrap()).unwrap();
+        let serialized = self.canonical_serialize().unwrap();
+
         // compute sha256 hash of the serialized payload
         let mut hasher = Sha256::new();
-
-        // Write input message
         hasher.update(serialized);
-
-        // Read hash digest and consume hasher
         let result = hasher.finalize();
-        // convert the hash to a hex string
-        let hex_string = format!("{:x}", result);
 
-        hex_string
+        format!("{:x}", result)
     }
 }
 
@@ -67,8 +68,7 @@ impl PublicKey {
         let signature_bytes = hex::decode(&signature.signature).unwrap();
         let ed_signature = Ed25519Signature::try_from(signature_bytes.as_slice()).unwrap();
 
-        let serialized =
-            crate::serialize::canonserialize(&serde_json::to_value(payload).unwrap()).unwrap();
+        let serialized = payload.canonical_serialize().unwrap();
 
         if let Some(other_headers) = &signature.other_headers {
             // in this case we need to hash the payload with the additional header data
@@ -110,7 +110,7 @@ impl Root {
 
     pub fn verify_signatures(&self) -> Result<(), std::io::Error> {
         for (pubkey, sig) in &self.signatures {
-            if !pubkey.verify(&self.signed, &sig) {
+            if !pubkey.verify(&self.signed, sig) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     "Bad signature",
@@ -179,8 +179,7 @@ mod test {
         let root_str = std::fs::read_to_string(root_path).unwrap();
         let root: super::Root = serde_json::from_str(&root_str).unwrap();
 
-        let serialized =
-            crate::serialize::canonserialize(&serde_json::to_value(&root.signed).unwrap()).unwrap();
+        let serialized = root.signed.canonical_serialize().unwrap();
         let serialized_str = std::str::from_utf8(&serialized).unwrap();
         insta::assert_snapshot!(serialized_str);
     }
