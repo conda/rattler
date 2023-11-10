@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Deserializer};
 use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
@@ -38,7 +38,7 @@ impl Default for ChannelConfig {
 }
 
 /// `Channel`s are the primary source of package information.
-#[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
     /// specified.
@@ -193,6 +193,25 @@ impl Channel {
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
         self.base_url.to_string()
+    }
+
+    ///  Deserialize channel from string
+    pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+        where
+            D: Deserializer<'de>,
+    {
+        let s: Option<String> = Option::deserialize(deserializer)?;
+
+        match s {
+            Some(str_val) => {
+                let config = ChannelConfig::default();
+
+                Channel::from_str(&str_val, &config)
+                    .map(Some)
+                    .map_err(serde::de::Error::custom)
+            }
+            None => Ok(None),
+        }
     }
 }
 
