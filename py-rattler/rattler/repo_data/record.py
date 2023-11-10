@@ -1,11 +1,16 @@
 from __future__ import annotations
+from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyRepoDataRecord
 from rattler.repo_data import PackageRecord
+from rattler.repo_data.package_record import PackageRecordProps
+from rattler.version import Version
 
 
-class RepoDataRecord:
-    _record: PyRepoDataRecord
+class RepoDataRecordProps(PackageRecordProps):
+    def __init__(self, record: PyRepoDataRecord) -> None:
+        self._record = record
+        PackageRecordProps.__init__(self._record.package_record)
 
     @property
     def package_record(self) -> PackageRecord:
@@ -92,6 +97,22 @@ class RepoDataRecord:
         ```
         """
         return self._record.file_name
+
+
+class RepoDataRecord(RepoDataRecordProps):
+    _record: PyRepoDataRecord
+
+    def __init__(
+        self,
+        package_record: PackageRecord,
+        file_name: str,
+        url: str,
+        channel: str,
+    ) -> None:
+        self._record = PyRepoDataRecord(
+            package_record._package_record, file_name, url, channel
+        )
+        PackageRecordProps.__init__(self._record.package_record)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRepoDataRecord) -> RepoDataRecord:

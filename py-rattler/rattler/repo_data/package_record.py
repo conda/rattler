@@ -1,17 +1,118 @@
 from __future__ import annotations
+import os
+from typing import List, Optional
 
 from rattler.rattler import PyPackageRecord
 
+from rattler.version import Version
+from rattler.package import PackageName
 
-class PackageRecord:
+
+class PackageRecordProps:
+    def __init__(self, package_record: PyPackageRecord) -> None:
+        self._record = package_record
+
+    @property
+    def arch(self) -> Optional[str]:
+        return self._record.arch
+
+    @property
+    def build(self) -> str:
+        return self._record.build
+
+    @property
+    def build_number(self) -> int:
+        return self._record.build_number
+
+    @property
+    def constrains(self) -> List[str]:
+        return self._record.constrains
+
+    @property
+    def depends(self) -> List[str]:
+        return self._record.depends
+
+    @property
+    def features(self) -> Optional[str]:
+        return self._record.features
+
+    @property
+    def legacy_bz2_md5(self) -> Optional[str]:
+        return self._record.legacy_bz2_md5
+
+    @property
+    def legacy_bz2_size(self) -> Optional[int]:
+        return self._record.legacy_bz2_size
+
+    @property
+    def license(self) -> Optional[str]:
+        return self._record.license
+
+    @property
+    def license_family(self) -> Optional[str]:
+        return self._record.license_family
+
+    @property
+    def md5(self) -> Optional[str]:
+        return self._record.md5
+
+    @property
+    def name(self) -> PackageName:
+        return PackageName._from_py_package_name(self._record.name)
+
+    @property
+    def platform(self) -> Optional[str]:
+        return self._record.platform
+
+    @property
+    def sha256(self) -> Optional[str]:
+        return self._record.sha256
+
+    @property
+    def size(self) -> Optional[int]:
+        return self._record.size
+
+    @property
+    def subdir(self) -> str:
+        return self._record.subdir
+
+    @property
+    def timestamp(self) -> Optional[int]:
+        return self._record.timestamp
+
+    @property
+    def track_features(self) -> List[str]:
+        return self._record.track_features
+
+    @property
+    def timestamp(self) -> Version:
+        return Version._from_py_version(self._record.version)
+
+
+class PackageRecord(PackageRecordProps):
     """
     A single record in the Conda repodata. A single
     record refers to a single binary distribution
     of a package on a Conda channel.
     """
 
-    def __init__(self) -> None:
-        self._package_record = PyPackageRecord()
+    def __init__(self, name: PackageName, version: Version, build: str) -> None:
+        self._package_record = PyPackageRecord(name._name, version._version, build)
+        super().__init__(self._package_record)
+
+    @staticmethod
+    def from_index_json(path: os.PathLike[str]) -> PackageRecord:
+        return PackageRecord._from_py_package_record(
+            PyPackageRecord.from_index_json(path)
+        )
+
+    @staticmethod
+    def sort_topologically(records: List[PackageRecord]) -> List[PackageRecord]:
+        # TODO: accept `PyObject` in FFI lib
+        return [
+            PackageRecord._from_py_package_record(p)
+            for p in PyPackageRecord.sort_topologically(records)
+        ]
 
     @classmethod
     def _from_py_package_record(

@@ -4,10 +4,7 @@ use pyo3::{
 use rattler_conda_types::{prefix_record::PrefixPaths, PrefixRecord};
 use std::{path::PathBuf, str::FromStr};
 
-use crate::{
-    error::PyRattlerError, package_name::PyPackageName,
-    repo_data::repo_data_record::PyRepoDataRecord,
-};
+use crate::{error::PyRattlerError, repo_data::repo_data_record::PyRepoDataRecord};
 
 #[pyclass]
 #[repr(transparent)]
@@ -79,23 +76,6 @@ impl PyPrefixRecord {
     #[getter]
     pub fn repodata_record(&self) -> PyRepoDataRecord {
         self.inner.repodata_record.clone().into()
-    }
-
-    /// Package name of the PrefixRecord.
-    #[getter]
-    pub fn name(&self) -> PyPackageName {
-        self.inner
-            .repodata_record
-            .package_record
-            .name
-            .clone()
-            .into()
-    }
-
-    /// Version of the PrefixRecord.
-    #[getter]
-    pub fn version(&self) -> String {
-        format!("{}", self.inner.repodata_record.package_record.version)
     }
 
     /// The path to where the archive of the package was stored on disk.
