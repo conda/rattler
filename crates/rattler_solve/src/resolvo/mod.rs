@@ -3,8 +3,8 @@
 use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord,
-    ParseMatchSpecError, RepoDataRecord,
+    GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
+    RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
@@ -264,12 +264,14 @@ impl<'a> CondaDependencyProvider<'a> {
                                 // Add record to the excluded with reason of being in the non requested channel.
                                 let message = format!(
                                     "candidate not in requested channel: '{}'",
-                                    spec_channel.name.clone().map(|s| s.to_string()).unwrap_or(spec_channel.base_url.to_string())
+                                    spec_channel
+                                        .name
+                                        .clone()
+                                        .unwrap_or(spec_channel.base_url.to_string())
                                 );
-                                candidates.excluded.push((
-                                    solvable_id,
-                                    pool.intern_string(message),
-                                ));
+                                candidates
+                                    .excluded
+                                    .push((solvable_id, pool.intern_string(message)));
                                 continue;
                             }
                         }

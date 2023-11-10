@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
-use serde::{Deserialize, Serialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
@@ -197,8 +197,8 @@ impl Channel {
 
     ///  Deserialize channel from string
     pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         let s: Option<String> = Option::deserialize(deserializer)?;
 

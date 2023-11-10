@@ -4,7 +4,10 @@ use crate::build_spec::{BuildNumberSpec, ParseBuildNumberSpecError};
 use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{Channel, InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError, VersionSpec};
+use crate::{
+    Channel, InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError,
+    VersionSpec,
+};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
@@ -398,7 +401,8 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
             nameless_match_spec.channel = Some(Channel::from_str(channel, &Default::default())?);
             nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
-            nameless_match_spec.channel = Some(Channel::from_str(channel_str, &Default::default())?);
+            nameless_match_spec.channel =
+                Some(Channel::from_str(channel_str, &Default::default())?);
         }
     }
 
@@ -571,18 +575,27 @@ mod tests {
         let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-        assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).unwrap()));
+        assert_eq!(
+            spec.channel,
+            Some(Channel::from_str("conda-forge", &Default::default()).unwrap())
+        );
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-        assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).unwrap()));
+        assert_eq!(
+            spec.channel,
+            Some(Channel::from_str("conda-forge", &Default::default()).unwrap())
+        );
 
         let spec =
             MatchSpec::from_str(r#"conda-forge::foo[version=1.0.*, build_number=">6"]"#).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-        assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).unwrap()));
+        assert_eq!(
+            spec.channel,
+            Some(Channel::from_str("conda-forge", &Default::default()).unwrap())
+        );
         assert_eq!(
             spec.build_number,
             Some(BuildNumberSpec::from_str(">6").unwrap())
