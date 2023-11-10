@@ -206,7 +206,7 @@ impl Channel {
             Some(str_val) => {
                 let config = ChannelConfig::default();
 
-                Channel::from_str(&str_val, &config)
+                Channel::from_str(str_val, &config)
                     .map(Some)
                     .map_err(serde::de::Error::custom)
             }
