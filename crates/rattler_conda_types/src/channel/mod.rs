@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use serde::{Deserialize, Deserializer, Serialize};
 use smallvec::SmallVec;
@@ -196,7 +197,7 @@ impl Channel {
     }
 
     ///  Deserialize channel from string
-    pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+    pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<Arc<Self>>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -207,7 +208,7 @@ impl Channel {
                 let config = ChannelConfig::default();
 
                 Channel::from_str(str_val, &config)
-                    .map(Some)
+                    .map(|channel|Some(Arc::new(channel)))
                     .map_err(serde::de::Error::custom)
             }
             None => Ok(None),

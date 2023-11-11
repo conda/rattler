@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
 
 use crate::Channel;
 pub mod matcher;
@@ -67,6 +68,7 @@ use matcher::StringMatcher;
 /// ```rust
 /// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel};
 /// use std::str::FromStr;
+/// use std::sync::Arc;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
@@ -81,18 +83,18 @@ use matcher::StringMatcher;
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("*", &Default::default()).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("*", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#).unwrap();
@@ -126,8 +128,7 @@ pub struct MatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    #[serde(deserialize_with = "Channel::deserialize_optional")]
-    pub channel: Option<Channel>,
+    pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
@@ -269,7 +270,7 @@ pub struct NamelessMatchSpec {
     pub file_name: Option<String>,
     /// The channel of the package
     #[serde(deserialize_with = "Channel::deserialize_optional")]
-    pub channel: Option<Channel>,
+    pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
