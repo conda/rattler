@@ -398,7 +398,8 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
     if let Some(channel_str) = channel_str {
         if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            nameless_match_spec.channel = Some(Channel::from_str(channel, &Default::default())?.into());
+            nameless_match_spec.channel =
+                Some(Channel::from_str(channel, &Default::default())?.into());
             nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
             nameless_match_spec.channel =
@@ -578,7 +579,11 @@ mod tests {
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(
             spec.channel,
-            Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap())
+            Some(
+                Channel::from_str("conda-forge", &Default::default())
+                    .map(|channel| Arc::new(channel))
+                    .unwrap()
+            )
         );
 
         let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
@@ -586,7 +591,11 @@ mod tests {
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(
             spec.channel,
-            Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap())
+            Some(
+                Channel::from_str("conda-forge", &Default::default())
+                    .map(|channel| Arc::new(channel))
+                    .unwrap()
+            )
         );
 
         let spec =
@@ -595,7 +604,11 @@ mod tests {
         assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
         assert_eq!(
             spec.channel,
-            Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap())
+            Some(
+                Channel::from_str("conda-forge", &Default::default())
+                    .map(|channel| Arc::new(channel))
+                    .unwrap()
+            )
         );
         assert_eq!(
             spec.build_number,

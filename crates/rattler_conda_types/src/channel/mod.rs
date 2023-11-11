@@ -208,7 +208,7 @@ impl Channel {
                 let config = ChannelConfig::default();
 
                 Channel::from_str(str_val, &config)
-                    .map(|channel|Some(Arc::new(channel)))
+                    .map(|channel| Some(Arc::new(channel)))
                     .map_err(serde::de::Error::custom)
             }
             None => Ok(None),
