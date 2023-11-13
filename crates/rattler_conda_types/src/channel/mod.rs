@@ -195,25 +195,6 @@ impl Channel {
     pub fn canonical_name(&self) -> String {
         self.base_url.to_string()
     }
-
-    ///  Deserialize channel from string
-    pub fn deserialize_optional<'de, D>(deserializer: D) -> Result<Option<Arc<Self>>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s: Option<String> = Option::deserialize(deserializer)?;
-
-        match s {
-            Some(str_val) => {
-                let config = ChannelConfig::default();
-
-                Channel::from_str(str_val, &config)
-                    .map(|channel| Some(Arc::new(channel)))
-                    .map_err(serde::de::Error::custom)
-            }
-            None => Ok(None),
-        }
-    }
 }
 
 #[derive(Debug, Error, Clone, Eq, PartialEq)]
