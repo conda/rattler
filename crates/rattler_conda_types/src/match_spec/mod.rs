@@ -383,8 +383,8 @@ impl MatchSpec {
 /// TODO: This should be refactored so that the front ends are the one setting the channel config,
 /// and rattler only takes care of the url.
 fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let s: Option<String> = Option::deserialize(deserializer)?;
 
