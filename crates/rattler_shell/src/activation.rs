@@ -762,26 +762,26 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash::default().into())
+        test_run_activation(crate::shell::Bash.into())
     }
 
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
-        test_run_activation(crate::shell::Zsh::default().into())
+        test_run_activation(crate::shell::Zsh.into())
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_fish() {
-        test_run_activation(crate::shell::Fish::default().into())
+        test_run_activation(crate::shell::Fish.into())
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_xonsh() {
-        test_run_activation(crate::shell::Xonsh::default().into())
+        test_run_activation(crate::shell::Xonsh.into())
     }
 }

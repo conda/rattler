@@ -353,7 +353,9 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 
     fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
-        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else { return Dependencies::default() };
+        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
+            return Dependencies::default();
+        };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
         let mut dependencies = Dependencies::default();

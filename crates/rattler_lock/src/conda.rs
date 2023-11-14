@@ -89,7 +89,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
             ..
         } = value;
         let LockedDependencyKind::Conda(value) = specific else {
-            return Err(ConversionError::NotACondaRecord)
+            return Err(ConversionError::NotACondaRecord);
         };
 
         let version = version.parse()?;

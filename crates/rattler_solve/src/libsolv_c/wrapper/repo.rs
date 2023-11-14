@@ -34,7 +34,7 @@ impl<'pool> Repo<'pool> {
         unsafe {
             let repo_ptr = ffi::repo_create(pool.raw_ptr(), c_url.as_ptr());
             let non_null_ptr = NonNull::new(repo_ptr).expect("repo ptr was null");
-            Repo(non_null_ptr, PhantomData::default())
+            Repo(non_null_ptr, PhantomData)
         }
     }
 
