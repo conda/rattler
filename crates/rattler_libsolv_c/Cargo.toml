@@ -17,7 +17,8 @@ cfg-if = "1.0.0"
 
 [build-dependencies]
 anyhow = "1.0.75"
-cc = "1.0.83"
+# pin this because the jobserver introduced in 1.0.84 seems to not work on macOS / CI
+cc = "=1.0.83"
 cmake = "0.1.50"
 
 [package.metadata.cargo-udeps.ignore]
