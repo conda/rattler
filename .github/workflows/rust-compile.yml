@@ -81,6 +81,8 @@ jobs:
 
           - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
           # - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
+    env:
+      VERBOSE: "1"
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
