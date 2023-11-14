@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2023-11-14
+
+### ✨ Highlights
+
+Adds support for strict priority channel ordering, channel-specific selectors, 
+
+### 📃 Details
+
+#### Added
+
+* Add strict channel priority option ([#385](https://github.com/mamba-org/rattler/pull/385))
+* Add lock-file forward compatibility error ([#389](https://github.com/mamba-org/rattler/pull/389))
+* Add channel priority and channel-specific selectors to solver info ([#394](https://github.com/mamba-org/rattler/pull/394))
+
+#### Changed
+
+* Channel in the `MatchSpec` struct changed to `Channel` type  ([#401](https://github.com/mamba-org/rattler/pull/401))
+
+#### Fixed
+
+* Expose previous python version information in transaction ([#384](https://github.com/mamba-org/rattler/pull/384))
+* Avoid use of \ in doctest strings, for ide integration ([#387](https://github.com/mamba-org/rattler/pull/387))
+* Issue with JLAP using the wrong hash ([#390](https://github.com/mamba-org/rattler/pull/390))
+* Use the correct channel in the reason for exclude ([#397](https://github.com/mamba-org/rattler/pull/397))
+* Environment activation for windows ([#398](https://github.com/mamba-org/rattler/pull/398))
+
 ## [0.11.0] - 2023-10-17
 
 ### ✨ Highlights
