@@ -2,7 +2,7 @@ name: Python bindings CI
 
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [ main ]
     paths:
       - 'py-rattler/**/*'
       - '.github/workflows/python-bindings.yml'
