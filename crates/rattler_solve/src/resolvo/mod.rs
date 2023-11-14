@@ -259,15 +259,19 @@ impl<'a> CondaDependencyProvider<'a> {
                     }) {
                         // Check if the spec has a channel, and compare it to the repodata channel
                         if let Some(spec_channel) = &spec.channel {
-                            if !&record.channel.contains(spec_channel) {
+                            if record.channel != spec_channel.base_url.to_string() {
                                 tracing::debug!("Ignoring {} from {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), &record.channel);
                                 // Add record to the excluded with reason of being in the non requested channel.
-                                candidates.excluded.push((
-                                    solvable_id,
-                                    pool.intern_string(format!(
-                                        "candidate not in requested channel: '{spec_channel}'"
-                                    )),
-                                ));
+                                let message = format!(
+                                    "candidate not in requested channel: '{}'",
+                                    spec_channel
+                                        .name
+                                        .clone()
+                                        .unwrap_or(spec_channel.base_url.to_string())
+                                );
+                                candidates
+                                    .excluded
+                                    .push((solvable_id, pool.intern_string(message)));
                                 continue;
                             }
                         }

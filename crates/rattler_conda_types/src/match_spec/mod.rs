@@ -1,9 +1,13 @@
 use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::sync::Arc;
+
+use crate::Channel;
+use crate::ChannelConfig;
 
 pub mod matcher;
 pub mod parse;
@@ -64,8 +68,9 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel};
 /// use std::str::FromStr;
+/// use std::sync::Arc;
 ///
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
@@ -80,18 +85,18 @@ use matcher::StringMatcher;
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// assert_eq!(spec.channel, Some("conda-forge".to_string()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some("conda-forge".to_string()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some("*".to_string()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("*", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#).unwrap();
@@ -125,7 +130,7 @@ pub struct MatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    pub channel: Option<String>,
+    pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
@@ -141,8 +146,10 @@ pub struct MatchSpec {
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
-            // TODO: namespace
-            write!(f, "{}", channel)?;
+            if let Some(name) = &channel.name {
+                // TODO: namespace
+                write!(f, "{}", name)?;
+            }
         }
 
         if let Some(subdir) = &self.subdir {
@@ -264,7 +271,8 @@ pub struct NamelessMatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    pub channel: Option<String>,
+    #[serde(deserialize_with = "deserialize_channel")]
+    pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,
     /// The namespace of the package (currently not used)
@@ -368,6 +376,27 @@ impl MatchSpec {
             md5: spec.md5,
             sha256: spec.sha256,
         }
+    }
+}
+
+/// Deserialize channel from string
+/// TODO: This should be refactored so that the front ends are the one setting the channel config,
+/// and rattler only takes care of the url.
+fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: Option<String> = Option::deserialize(deserializer)?;
+
+    match s {
+        Some(str_val) => {
+            let config = ChannelConfig::default();
+
+            Channel::from_str(str_val, &config)
+                .map(|channel| Some(Arc::new(channel)))
+                .map_err(serde::de::Error::custom)
+        }
+        None => Ok(None),
     }
 }
 
