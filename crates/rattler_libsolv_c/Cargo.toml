@@ -17,7 +17,9 @@ cfg-if = "1.0.0"
 
 [build-dependencies]
 anyhow = "1.0.75"
-cc = "1.0.83"
+# 1.0.84 would fail to compile this library specifically on macOS. 
+# For now we just pin an older version.
+cc = "=1.0.83"
 cmake = "0.1.50"
 
 [package.metadata.cargo-udeps.ignore]
