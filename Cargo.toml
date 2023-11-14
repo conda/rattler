@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 # See: https://docs.rs/insta/latest/insta/#optional-faster-runs
 [profile.dev.package.insta]

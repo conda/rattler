@@ -441,7 +441,7 @@ impl super::SolverImpl for Solver {
         let required_records = solvables
             .into_iter()
             .filter_map(|id| match solver.pool().resolve_solvable(id).inner() {
-                SolverPackageRecord::Record(rec) => Some(rec.deref().clone()),
+                SolverPackageRecord::Record(rec) => Some((*rec).clone()),
                 SolverPackageRecord::VirtualPackage(_) => None,
             })
             .collect();
