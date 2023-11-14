@@ -1,5 +1,12 @@
-use pyo3::{exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr};
+use std::str::FromStr;
+
+use pyo3::{
+    exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr, PyResult,
+};
 use rattler_conda_types::RepoDataRecord;
+use url::Url;
+
+use crate::error::PyRattlerError;
 
 use super::package_record::PyPackageRecord;
 
@@ -43,6 +50,23 @@ impl<'a> TryFrom<&'a PyAny> for PyRepoDataRecord {
 
 #[pymethods]
 impl PyRepoDataRecord {
+    #[new]
+    pub fn new(
+        package_record: PyPackageRecord,
+        file_name: String,
+        url: String,
+        channel: String,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: RepoDataRecord {
+                package_record: package_record.inner.to_owned(),
+                file_name,
+                url: Url::from_str(url.as_str()).map_err(PyRattlerError::from)?,
+                channel,
+            },
+        })
+    }
+
     /// The data stored in the repodata.json.
     #[getter]
     pub fn package_record(&self) -> PyPackageRecord {

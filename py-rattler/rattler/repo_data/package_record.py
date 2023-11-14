@@ -10,83 +10,83 @@ from rattler.package import PackageName
 
 class PackageRecordProps:
     def __init__(self, package_record: PyPackageRecord) -> None:
-        self._record = package_record
+        self._package_record = package_record
 
     @property
     def arch(self) -> Optional[str]:
-        return self._record.arch
+        return self._package_record.arch
 
     @property
     def build(self) -> str:
-        return self._record.build
+        return self._package_record.build
 
     @property
     def build_number(self) -> int:
-        return self._record.build_number
+        return self._package_record.build_number
 
     @property
     def constrains(self) -> List[str]:
-        return self._record.constrains
+        return self._package_record.constrains
 
     @property
     def depends(self) -> List[str]:
-        return self._record.depends
+        return self._package_record.depends
 
     @property
     def features(self) -> Optional[str]:
-        return self._record.features
+        return self._package_record.features
 
     @property
     def legacy_bz2_md5(self) -> Optional[str]:
-        return self._record.legacy_bz2_md5
+        return self._package_record.legacy_bz2_md5
 
     @property
     def legacy_bz2_size(self) -> Optional[int]:
-        return self._record.legacy_bz2_size
+        return self._package_record.legacy_bz2_size
 
     @property
     def license(self) -> Optional[str]:
-        return self._record.license
+        return self._package_record.license
 
     @property
     def license_family(self) -> Optional[str]:
-        return self._record.license_family
+        return self._package_record.license_family
 
     @property
     def md5(self) -> Optional[str]:
-        return self._record.md5
+        return self._package_record.md5
 
     @property
     def name(self) -> PackageName:
-        return PackageName._from_py_package_name(self._record.name)
+        return PackageName._from_py_package_name(self._package_record.name)
 
     @property
     def platform(self) -> Optional[str]:
-        return self._record.platform
+        return self._package_record.platform
 
     @property
     def sha256(self) -> Optional[str]:
-        return self._record.sha256
+        return self._package_record.sha256
 
     @property
     def size(self) -> Optional[int]:
-        return self._record.size
+        return self._package_record.size
 
     @property
     def subdir(self) -> str:
-        return self._record.subdir
+        return self._package_record.subdir
 
     @property
     def timestamp(self) -> Optional[int]:
-        return self._record.timestamp
+        return self._package_record.timestamp
 
     @property
     def track_features(self) -> List[str]:
-        return self._record.track_features
+        return self._package_record.track_features
 
     @property
     def timestamp(self) -> Version:
-        return Version._from_py_version(self._record.version)
+        return Version._from_py_version(self._package_record.version)
 
 
 class PackageRecord(PackageRecordProps):
@@ -123,6 +123,10 @@ class PackageRecord(PackageRecordProps):
         """
         package_record = cls.__new__(cls)
         package_record._package_record = py_package_record
+        PackageRecordProps.__init__(
+            package_record,
+            package_record._package_record,
+        )
         return package_record
 
     def __str__(self) -> str:

@@ -9,8 +9,8 @@ from rattler.version import Version
 
 class RepoDataRecordProps(PackageRecordProps):
     def __init__(self, record: PyRepoDataRecord) -> None:
-        self._record = record
-        PackageRecordProps.__init__(self._record.package_record)
+        self._repodata_record = record
+        PackageRecordProps.__init__(self, self._repodata_record.package_record)
 
     @property
     def package_record(self) -> PackageRecord:
@@ -31,7 +31,9 @@ class RepoDataRecordProps(PackageRecordProps):
         >>>
         ```
         """
-        return PackageRecord._from_py_package_record(self._record.package_record)
+        return PackageRecord._from_py_package_record(
+            self._repodata_record.package_record
+        )
 
     @property
     def url(self) -> str:
@@ -52,7 +54,7 @@ class RepoDataRecordProps(PackageRecordProps):
         >>>
         ```
         """
-        return self._record.url
+        return self._repodata_record.url
 
     @property
     def channel(self) -> str:
@@ -75,7 +77,7 @@ class RepoDataRecordProps(PackageRecordProps):
         >>>
         ```
         """
-        return self._record.channel
+        return self._repodata_record.channel
 
     @property
     def file_name(self) -> str:
@@ -96,7 +98,7 @@ class RepoDataRecordProps(PackageRecordProps):
         >>>
         ```
         """
-        return self._record.file_name
+        return self._repodata_record.file_name
 
 
 class RepoDataRecord(RepoDataRecordProps):
@@ -112,7 +114,7 @@ class RepoDataRecord(RepoDataRecordProps):
         self._record = PyRepoDataRecord(
             package_record._package_record, file_name, url, channel
         )
-        PackageRecordProps.__init__(self._record.package_record)
+        PackageRecordProps.__init__(self, self._record.package_record)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRepoDataRecord) -> RepoDataRecord:
@@ -121,6 +123,7 @@ class RepoDataRecord(RepoDataRecordProps):
         """
         record = cls.__new__(cls)
         record._record = py_record
+        RepoDataRecordProps.__init__(record, record._record.package_record)
         return record
 
     def __repr__(self) -> str:
