@@ -11,6 +11,12 @@ use reqwest::{Client, IntoUrl, Method, Url};
 pub mod authentication_storage;
 pub mod retry_policies;
 
+mod redaction;
+
+pub use redaction::{
+    redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
+};
+
 /// A client that can be used to make authenticated requests, based on the [`reqwest::Client`].
 /// By default it uses the fallback storage in the default [`default_auth_store_fallback_directory`].
 #[derive(Clone, Default)]
