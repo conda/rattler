@@ -71,6 +71,15 @@ class PackageName:
         """
         return self._name.normalized
 
+    def __eq__(self, other: object) -> bool:
+        """
+        Returns True if this instance represents the same PackageName as `other`.
+        """
+        if not isinstance(other, PackageName):
+            return False
+
+        return self._name == other._name
+
     def __repr__(self) -> str:
         """
         Returns a representation of the version.

@@ -1782,6 +1782,7 @@ dependencies = [
  "pyo3-asyncio",
  "rattler",
  "rattler_conda_types",
+ "rattler_digest",
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_shell",

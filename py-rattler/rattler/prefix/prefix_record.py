@@ -6,7 +6,6 @@ from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
-from rattler.version.with_source import VersionWithSource
 
 
 class PrefixRecord(RepoDataRecord):

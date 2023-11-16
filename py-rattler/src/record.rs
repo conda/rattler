@@ -8,6 +8,8 @@ use rattler_conda_types::{
     PackageRecord, PrefixRecord, RepoDataRecord,
 };
 
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+
 use crate::{
     error::PyRattlerError, package_name::PyPackageName, prefix_record::PyPrefixPaths,
     version::PyVersion,
@@ -22,27 +24,27 @@ pub struct PyRecord {
 
 #[derive(Clone)]
 pub enum RecordInner {
-    PrefixRecord(PrefixRecord),
-    RepoDataRecord(RepoDataRecord),
-    PackageRecord(PackageRecord),
+    Prefix(PrefixRecord),
+    RepoData(RepoDataRecord),
+    Package(PackageRecord),
 }
 
 impl PyRecord {
     pub fn as_package_record(&self) -> PyResult<&PackageRecord> {
         match &self.inner {
-            RecordInner::PrefixRecord(r) => Ok(&r.repodata_record.package_record),
+            RecordInner::Prefix(r) => Ok(&r.repodata_record.package_record),
 
-            RecordInner::RepoDataRecord(r) => Ok(&r.package_record),
+            RecordInner::RepoData(r) => Ok(&r.package_record),
 
-            RecordInner::PackageRecord(r) => Ok(r),
+            RecordInner::Package(r) => Ok(r),
         }
     }
 
     pub fn as_repodata_record(&self) -> PyResult<&RepoDataRecord> {
         match &self.inner {
-            RecordInner::PrefixRecord(r) => Ok(&r.repodata_record),
-            RecordInner::RepoDataRecord(r) => Ok(r),
-            RecordInner::PackageRecord(_) => Err(PyTypeError::new_err(
+            RecordInner::Prefix(r) => Ok(&r.repodata_record),
+            RecordInner::RepoData(r) => Ok(r),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
         }
@@ -50,11 +52,11 @@ impl PyRecord {
 
     pub fn as_prefix_record(&self) -> PyResult<&PrefixRecord> {
         match &self.inner {
-            RecordInner::PrefixRecord(r) => Ok(r),
-            RecordInner::RepoDataRecord(_) => Err(PyTypeError::new_err(
+            RecordInner::Prefix(r) => Ok(r),
+            RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
-            RecordInner::PackageRecord(_) => Err(PyTypeError::new_err(
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
         }
@@ -83,7 +85,7 @@ impl PyRecord {
     /// The build number of the package.
     #[getter]
     pub fn build_number(&self) -> PyResult<u64> {
-        Ok(self.as_package_record()?.build_number.into())
+        Ok(self.as_package_record()?.build_number)
     }
 
     /// Additional constraints on packages.
@@ -266,7 +268,7 @@ impl PyRecord {
 impl From<PrefixRecord> for PyRecord {
     fn from(value: PrefixRecord) -> Self {
         Self {
-            inner: RecordInner::PrefixRecord(value),
+            inner: RecordInner::Prefix(value),
         }
     }
 }
@@ -274,7 +276,7 @@ impl From<PrefixRecord> for PyRecord {
 impl From<PyRecord> for PrefixRecord {
     fn from(value: PyRecord) -> Self {
         match value.inner {
-            RecordInner::PrefixRecord(r) => r,
+            RecordInner::Prefix(r) => r,
             _ => panic!("invalid conversion tried!"),
         }
     }
@@ -300,7 +302,7 @@ impl<'a> TryFrom<&'a PyAny> for PyRecord {
 impl From<RepoDataRecord> for PyRecord {
     fn from(value: RepoDataRecord) -> Self {
         Self {
-            inner: RecordInner::RepoDataRecord(value),
+            inner: RecordInner::RepoData(value),
         }
     }
 }
@@ -308,8 +310,8 @@ impl From<RepoDataRecord> for PyRecord {
 impl From<PyRecord> for RepoDataRecord {
     fn from(value: PyRecord) -> Self {
         match value.inner {
-            RecordInner::PrefixRecord(r) => r.repodata_record,
-            RecordInner::RepoDataRecord(r) => r,
+            RecordInner::Prefix(r) => r.repodata_record,
+            RecordInner::RepoData(r) => r,
             _ => panic!("invalid conversion tried!"),
         }
     }
@@ -318,7 +320,7 @@ impl From<PyRecord> for RepoDataRecord {
 impl From<PackageRecord> for PyRecord {
     fn from(value: PackageRecord) -> Self {
         Self {
-            inner: RecordInner::PackageRecord(value),
+            inner: RecordInner::Package(value),
         }
     }
 }
@@ -332,9 +334,9 @@ impl From<PyRecord> for PackageRecord {
 impl AsRef<PackageRecord> for PyRecord {
     fn as_ref(&self) -> &PackageRecord {
         match &self.inner {
-            RecordInner::PrefixRecord(r) => &r.repodata_record.package_record,
-            RecordInner::RepoDataRecord(r) => &r.package_record,
-            RecordInner::PackageRecord(r) => r,
+            RecordInner::Prefix(r) => &r.repodata_record.package_record,
+            RecordInner::RepoData(r) => &r.package_record,
+            RecordInner::Package(r) => r,
         }
     }
 }
@@ -363,9 +365,26 @@ impl PyRecord {
 impl PyRecord {
     /// Builds a `PyRecord` from path to an `index.json` and optionally a size.
     #[staticmethod]
-    fn from_index_json(index_json: PathBuf, size: Option<u64>) -> PyResult<Self> {
+    fn from_index_json(
+        index_json: PathBuf,
+        size: Option<u64>,
+        sha256: Option<String>,
+        md5: Option<String>,
+    ) -> PyResult<Self> {
         let index = IndexJson::from_path(index_json)?;
-        Ok(PackageRecord::from_index_json(index, size, None, None)
+        let sha256 = if let Some(hex) = sha256 {
+            parse_digest_from_hex::<Sha256>(&hex)
+        } else {
+            None
+        };
+
+        let md5 = if let Some(hex) = md5 {
+            parse_digest_from_hex::<Md5>(&hex)
+        } else {
+            None
+        };
+
+        Ok(PackageRecord::from_index_json(index, size, sha256, md5)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
     }
@@ -377,7 +396,11 @@ impl PyRecord {
     ///
     /// Note that this function only works for packages with unique names.
     #[staticmethod]
-    fn sort_topologically(records: Vec<Self>) -> Vec<Self> {
-        PackageRecord::sort_topologically(records)
+    fn sort_topologically(records: Vec<&PyAny>) -> PyResult<Vec<Self>> {
+        let records = records
+            .into_iter()
+            .map(PyRecord::try_from)
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(PackageRecord::sort_topologically(records))
     }
 }
