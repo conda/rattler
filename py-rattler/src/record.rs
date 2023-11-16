@@ -277,6 +277,14 @@ impl From<PackageRecord> for PyRecord {
     }
 }
 
+impl From<RepoDataRecord> for PyRecord {
+    fn from(value: RepoDataRecord) -> Self {
+        Self {
+            inner: RecordInner::RepoDataRecord(value),
+        }
+    }
+}
+
 impl AsRef<PackageRecord> for PyRecord {
     fn as_ref(&self) -> &PackageRecord {
         match &self.inner {
