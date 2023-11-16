@@ -49,26 +49,6 @@ impl PyRepoDataRecord {
         self.inner.package_record.clone().into()
     }
 
-    /// The filename of the package.
-    #[getter]
-    pub fn file_name(&self) -> String {
-        self.inner.file_name.clone()
-    }
-
-    /// The canonical URL from where to get this package.
-    #[getter]
-    pub fn url(&self) -> String {
-        self.inner.url.to_string()
-    }
-
-    /// String representation of the channel where the
-    /// package comes from. This could be a URL but it
-    /// could also be a channel name.
-    #[getter]
-    pub fn channel(&self) -> String {
-        self.inner.channel.clone()
-    }
-
     /// Returns a string representation of PyRepoDataRecord.
     pub fn as_str(&self) -> String {
         format!("{:?}", self.inner)

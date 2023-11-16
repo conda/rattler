@@ -9,6 +9,7 @@ mod networking;
 mod package_name;
 mod platform;
 mod prefix_record;
+mod record;
 mod repo_data;
 mod shell;
 mod solver;
@@ -39,6 +40,7 @@ use pyo3::prelude::*;
 use linker::py_link;
 use meta::get_rattler_version;
 use platform::{PyArch, PyPlatform};
+use record::PyRecord;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::py_solve;
 use virtual_package::PyVirtualPackage;
@@ -70,6 +72,8 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyRepoData>().unwrap();
     m.add_class::<PyRepoDataRecord>().unwrap();
     m.add_class::<PyPatchInstructions>().unwrap();
+
+    m.add_class::<PyRecord>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
         .unwrap();

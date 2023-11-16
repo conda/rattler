@@ -1,32 +1,11 @@
 from __future__ import annotations
 
-from rattler.rattler import PyRepoDataRecord
+from rattler.rattler import PyRecord
 from rattler.repo_data import PackageRecord
 
 
-class RepoDataRecord:
-    _record: PyRepoDataRecord
-
-    @property
-    def package_record(self) -> PackageRecord:
-        """
-        The data stored in the repodata.json.
-
-        Examples
-        --------
-        ```python
-        >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
-        ...     "../test-data/test-server/repo/noarch/repodata.json"
-        ... )
-        >>> record_list = repo_data.into_repo_data(Channel("test"))
-        >>> record = record_list[0]
-        >>> record.package_record
-        PackageRecord("test-package=0.1=0")
-        >>>
-        ```
-        """
-        return PackageRecord._from_py_package_record(self._record.package_record)
+class RepoDataRecord(PackageRecord):
+    _record: PyRecord
 
     @property
     def url(self) -> str:
@@ -94,7 +73,7 @@ class RepoDataRecord:
         return self._record.file_name
 
     @classmethod
-    def _from_py_record(cls, py_record: PyRepoDataRecord) -> RepoDataRecord:
+    def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:
         """
         Construct Rattler RepoDataRecord from FFI PyRepoDataRecord object.
         """

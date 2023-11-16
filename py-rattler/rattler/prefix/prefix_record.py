@@ -3,25 +3,20 @@ import os
 from typing import List, Optional
 from rattler.package.package_name import PackageName
 
-from rattler.rattler import PyPrefixRecord
+from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
+from rattler.repo_data.record import RepoDataRecord
 from rattler.version.with_source import VersionWithSource
 
 
-class PrefixRecord:
-    def __init__(self, source: str) -> None:
-        if not isinstance(source, str):
-            raise TypeError(
-                "PrefixRecord constructor received unsupported type "
-                f" {type(source).__name__!r} for the `source` parameter"
-            )
-        self._record = PyPrefixRecord(source)
+class PrefixRecord(RepoDataRecord):
+    _record: PyRecord
 
     @classmethod
-    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> PrefixRecord:
+    def _from_py_record(cls, py_record: PyRecord) -> PrefixRecord:
         """Construct Rattler PrefixRecord from FFI PyPrefixRecord object."""
         record = cls.__new__(cls)
-        record._record = py_prefix_record
+        record._record = py_record
         return record
 
     @staticmethod
@@ -38,7 +33,7 @@ class PrefixRecord:
         >>>
         ```
         """
-        return PrefixRecord._from_py_prefix_record(PyPrefixRecord.from_path(path))
+        return PrefixRecord._from_py_record(PyRecord.from_path(path))
 
     def write_to_path(self, path: os.PathLike[str], pretty: bool) -> None:
         """
@@ -157,24 +152,6 @@ class PrefixRecord:
         ```
         """
         return PackageName._from_py_package_name(self._record.name)
-
-    @property
-    def version(self) -> VersionWithSource:
-        """
-        Version of the PrefixRecord.
-
-        Examples
-        --------
-        ```python
-        >>> r = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
-        ... )
-        >>> r.version
-        VersionWithSource("2.28.2")
-        >>>
-        ```
-        """
-        return VersionWithSource(self._record.version)
 
     def __repr__(self) -> str:
         """
