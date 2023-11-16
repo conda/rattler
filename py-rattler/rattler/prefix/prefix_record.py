@@ -134,24 +134,6 @@ class PrefixRecord(RepoDataRecord):
         """
         return self._record.requested_spec
 
-    @property
-    def name(self) -> PackageName:
-        """
-        Package name of the PrefixRecord.
-
-        Examples
-        --------
-        ```python
-        >>> r = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
-        ... )
-        >>> r.name
-        PackageName("requests")
-        >>>
-        ```
-        """
-        return PackageName._from_py_package_name(self._record.name)
-
     def __repr__(self) -> str:
         """
         Returns a representation of the version
