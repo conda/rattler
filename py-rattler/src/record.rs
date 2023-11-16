@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyTypeError, pyclass, pymethods, PyResult};
+use pyo3::{
+    exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr, PyResult,
+};
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     PackageRecord, PrefixRecord, RepoDataRecord,
@@ -269,11 +271,29 @@ impl From<PrefixRecord> for PyRecord {
     }
 }
 
-impl From<PackageRecord> for PyRecord {
-    fn from(value: PackageRecord) -> Self {
-        Self {
-            inner: RecordInner::PackageRecord(value),
+impl From<PyRecord> for PrefixRecord {
+    fn from(value: PyRecord) -> Self {
+        match value.inner {
+            RecordInner::PrefixRecord(r) => r,
+            _ => panic!("invalid conversion tried!"),
         }
+    }
+}
+
+impl<'a> TryFrom<&'a PyAny> for PyRecord {
+    type Error = PyErr;
+    fn try_from(value: &'a PyAny) -> Result<Self, Self::Error> {
+        let intern_val = intern!(value.py(), "_record");
+        if !value.hasattr(intern_val)? {
+            return Err(PyTypeError::new_err("object is not a record type"));
+        }
+
+        let inner = value.getattr(intern_val)?;
+        if !inner.is_instance_of::<Self>() {
+            return Err(PyTypeError::new_err("'_record' is invalid"));
+        }
+
+        PyRecord::extract(inner)
     }
 }
 
@@ -282,6 +302,30 @@ impl From<RepoDataRecord> for PyRecord {
         Self {
             inner: RecordInner::RepoDataRecord(value),
         }
+    }
+}
+
+impl From<PyRecord> for RepoDataRecord {
+    fn from(value: PyRecord) -> Self {
+        match value.inner {
+            RecordInner::PrefixRecord(r) => r.repodata_record,
+            RecordInner::RepoDataRecord(r) => r,
+            _ => panic!("invalid conversion tried!"),
+        }
+    }
+}
+
+impl From<PackageRecord> for PyRecord {
+    fn from(value: PackageRecord) -> Self {
+        Self {
+            inner: RecordInner::PackageRecord(value),
+        }
+    }
+}
+
+impl From<PyRecord> for PackageRecord {
+    fn from(value: PyRecord) -> Self {
+        value.as_ref().to_owned()
     }
 }
 

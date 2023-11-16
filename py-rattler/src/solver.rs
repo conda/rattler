@@ -3,10 +3,8 @@ use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, SolverImpl, SolverTask};
 
 use crate::{
-    error::PyRattlerError,
-    generic_virtual_package::PyGenericVirtualPackage,
-    match_spec::PyMatchSpec,
-    repo_data::{repo_data_record::PyRepoDataRecord, sparse::PySparseRepoData},
+    error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage,
+    match_spec::PyMatchSpec, record::PyRecord, repo_data::sparse::PySparseRepoData,
 };
 
 #[pyfunction]
@@ -14,10 +12,10 @@ pub fn py_solve(
     py: Python<'_>,
     specs: Vec<PyMatchSpec>,
     available_packages: Vec<PySparseRepoData>,
-    locked_packages: Vec<PyRepoDataRecord>,
-    pinned_packages: Vec<PyRepoDataRecord>,
+    locked_packages: Vec<PyRecord>,
+    pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
-) -> PyResult<Vec<PyRepoDataRecord>> {
+) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
         let package_names = specs
             .iter()
@@ -39,11 +37,7 @@ pub fn py_solve(
 
         Ok(Solver
             .solve(task)
-            .map(|res| {
-                res.into_iter()
-                    .map(Into::into)
-                    .collect::<Vec<PyRepoDataRecord>>()
-            })
+            .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
             .map_err(PyRattlerError::from)?)
     })
 }

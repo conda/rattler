@@ -12,8 +12,7 @@ use rattler_networking::{retry_policies::default_retry_policy, AuthenticatedClie
 
 use crate::{
     error::PyRattlerError, networking::authenticated_client::PyAuthenticatedClient,
-    platform::PyPlatform, prefix_record::PyPrefixRecord,
-    repo_data::repo_data_record::PyRepoDataRecord,
+    platform::PyPlatform, record::PyRecord,
 };
 
 // TODO: Accept functions to report progress
@@ -29,12 +28,12 @@ pub fn py_link<'a>(
 ) -> PyResult<&'a PyAny> {
     let dependencies = dependencies
         .into_iter()
-        .map(|rdr| Ok(PyRepoDataRecord::try_from(rdr)?.into()))
+        .map(|rdr| Ok(PyRecord::try_from(rdr)?.into()))
         .collect::<PyResult<Vec<RepoDataRecord>>>()?;
 
     let installed_packages = installed_packages
         .iter()
-        .map(|&rdr| Ok(PyPrefixRecord::try_from(rdr)?.into()))
+        .map(|&rdr| Ok(PyRecord::try_from(rdr)?.into()))
         .collect::<PyResult<Vec<PrefixRecord>>>()?;
 
     let txn = py.allow_threads(move || {

@@ -7,9 +7,7 @@ use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};
 
 use patch_instructions::PyPatchInstructions;
 
-pub mod package_record;
 pub mod patch_instructions;
-pub mod repo_data_record;
 pub mod sparse;
 
 #[pyclass]
