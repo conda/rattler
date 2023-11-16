@@ -28,11 +28,8 @@ use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
-use prefix_record::{PyPrefixPaths, PyPrefixRecord};
-use repo_data::{
-    package_record::PyPackageRecord, patch_instructions::PyPatchInstructions,
-    repo_data_record::PyRepoDataRecord, sparse::PySparseRepoData, PyRepoData,
-};
+use prefix_record::PyPrefixPaths;
+use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -52,7 +49,6 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyMatchSpec>().unwrap();
     m.add_class::<PyNamelessMatchSpec>().unwrap();
 
-    m.add_class::<PyPackageRecord>().unwrap();
     m.add_class::<PyPackageName>().unwrap();
 
     m.add_class::<PyChannel>().unwrap();
@@ -70,7 +66,6 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PySparseRepoData>().unwrap();
     m.add_class::<PyRepoData>().unwrap();
-    m.add_class::<PyRepoDataRecord>().unwrap();
     m.add_class::<PyPatchInstructions>().unwrap();
 
     m.add_class::<PyRecord>().unwrap();
@@ -79,7 +74,6 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
         .unwrap();
     m.add_class::<PyGenericVirtualPackage>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
-    m.add_class::<PyPrefixRecord>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
