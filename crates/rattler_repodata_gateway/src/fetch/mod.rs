@@ -6,7 +6,7 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::AuthenticatedClient;
+use rattler_networking::{redact_known_secrets_from_error, AuthenticatedClient};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -32,7 +32,7 @@ pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
     #[error(transparent)]
-    HttpError(#[from] reqwest::Error),
+    HttpError(reqwest::Error),
 
     /// There was a file system error
     #[error(transparent)]
@@ -46,7 +46,7 @@ pub enum FetchRepoDataError {
     FailedToAcquireLock(#[source] anyhow::Error),
 
     #[error(transparent)]
-    HttpError(#[from] reqwest::Error),
+    HttpError(reqwest::Error),
 
     #[error(transparent)]
     FailedToDownloadRepoData(std::io::Error),
@@ -71,6 +71,18 @@ pub enum FetchRepoDataError {
 
     #[error("the operation was cancelled")]
     Cancelled,
+}
+
+impl From<reqwest::Error> for FetchRepoDataError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(redact_known_secrets_from_error(err))
+    }
+}
+
+impl From<reqwest::Error> for RepoDataNotFoundError {
+    fn from(value: reqwest::Error) -> Self {
+        Self::HttpError(redact_known_secrets_from_error(value))
+    }
 }
 
 impl From<tokio::task::JoinError> for FetchRepoDataError {
