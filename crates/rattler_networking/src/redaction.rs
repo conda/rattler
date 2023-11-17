@@ -68,7 +68,7 @@ mod test {
             ),
             Some(
                 Url::from_str(
-                    "https://conda.anaconda.org/t/xxxxxxxx/conda-forge/noarch/repodata.json"
+                    &format!("https://conda.anaconda.org/t/{DEFAULT_REDACTION_STR}/conda-forge/noarch/repodata.json")
                 )
                 .unwrap()
             )
