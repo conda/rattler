@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2023-11-17
+
+### 📃 Details
+
+#### Fixed
+
+* fix: redact tokens from urls in errors ([#407](https://github.com/mamba-org/rattler/pull/407))
+
 ## [0.12.0] - 2023-11-14
 
 ### ✨ Highlights
