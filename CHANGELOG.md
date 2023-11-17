@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2023-11-17
+
+### 📃 Details
+
+#### Fixed
+
+* fix: make redaction work by using `From` explicitly ([#408](https://github.com/mamba-org/rattler/pull/408))
+
 ## [0.12.1] - 2023-11-17
 
 ### 📃 Details
