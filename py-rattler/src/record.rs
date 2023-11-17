@@ -66,9 +66,28 @@ impl PyRecord {
 
 #[pymethods]
 impl PyRecord {
-    /// Returns a string representation of PackageRecord
+    /// Returns a string representation of `PackageRecord`.
     pub fn as_str(&self) -> String {
         format!("{}", self.as_package_record())
+    }
+
+    /// Checks whether if the current record is a `PackageRecord`.
+    #[getter]
+    pub fn is_package_record(&self) -> bool {
+        // always true, cuz all records are package record
+        true
+    }
+
+    /// Checks whether if the current record is a `RepoDataRecord`.
+    #[getter]
+    pub fn is_repodata_record(&self) -> bool {
+        self.try_as_repodata_record().is_ok()
+    }
+
+    /// Checks whether if the current record is a `PrefixRecord`.
+    #[getter]
+    pub fn is_prefix_record(&self) -> bool {
+        self.try_as_prefix_record().is_ok()
     }
 
     /// Optionally the architecture the package supports.

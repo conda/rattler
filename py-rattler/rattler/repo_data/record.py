@@ -71,11 +71,9 @@ class RepoDataRecord(PackageRecord):
         """
 
         # quick sanity check
-        assert isinstance(py_record, PyRecord)
+        assert py_record.is_repodata_record
         record = cls.__new__(cls)
         record._record = py_record
-        # quick sanity check
-        assert isinstance(record, RepoDataRecord)
         return record
 
     def __repr__(self) -> str:

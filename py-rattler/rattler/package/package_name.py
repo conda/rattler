@@ -80,6 +80,8 @@ class PackageName:
         ```python
         >>> hash(PackageName("test-abc")) == hash(PackageName("test-abc"))
         True
+        >>> hash(PackageName("test-abc")) == hash(PackageName("test-ABC"))
+        True
         >>> hash(PackageName("test-abc")) == hash(PackageName("abc-test"))
         False
         >>>
@@ -97,6 +99,8 @@ class PackageName:
         >>> PackageName("test-abc") == PackageName("abc-test")
         False
         >>> PackageName("test-abc") == PackageName("test-abc")
+        True
+        >>> PackageName("test-abc") == PackageName("test-ABC")
         True
         >>> PackageName("test-abc") == "test-abc"
         False
@@ -116,6 +120,8 @@ class PackageName:
         --------
         ```python
         >>> PackageName("test-abc") != PackageName("test-abc")
+        False
+        >>> PackageName("test-abc") != PackageName("test-ABC")
         False
         >>> PackageName("test-abc") != PackageName("abc-test")
         True
