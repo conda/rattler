@@ -31,6 +31,7 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
+        >>> assert isinstance(r, PrefixRecord)
         >>>
         ```
         """
@@ -107,8 +108,8 @@ class PrefixRecord(RepoDataRecord):
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.paths_data
-        PrefixPaths()
+        >>> r.paths_data # doctest:+ELLIPSIS
+        PrefixPaths(paths=[...])
         >>>
         ```
         """

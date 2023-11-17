@@ -88,17 +88,59 @@ class PackageRecord:
 
     @property
     def arch(self) -> Optional[str]:
-        """Optionally the architecture the package supports."""
+        """
+        Optionally the architecture the package supports.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.arch
+        'x86_64'
+        >>>
+        ```
+        """
         return self._record.arch
 
     @property
     def build(self) -> str:
-        """The build string of the package."""
+        """
+        The build string of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.build
+        'hcfcfb64_0'
+        >>>
+        ```
+        """
         return self._record.build
 
     @property
     def build_number(self) -> int:
-        """The build number of the package."""
+        """
+        The build number of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.build_number
+        0
+        >>>
+        ```
+        """
         return self._record.build_number
 
     @property
@@ -110,6 +152,18 @@ class PackageRecord:
         whereas packages specified in constrains are not required to
         be installed, but if they are installed they must follow
         these constraints.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.constrains
+        []
+        >>>
+        ```
         """
         return self._record.constrains
 
@@ -117,6 +171,18 @@ class PackageRecord:
     def depends(self) -> List[str]:
         """
         Specification of packages this package depends on.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.depends
+        ['ucrt >=10.0.20348.0', 'vc >=14.2,<15', 'vs2015_runtime >=14.29.30139']
+        >>>
+        ```
         """
         return self._record.depends
 
@@ -148,6 +214,18 @@ class PackageRecord:
     def license(self) -> Optional[str]:
         """
         The specific license of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.license
+        'Unlicense'
+        >>>
+        ```
         """
         return self._record.license
 
@@ -155,6 +233,19 @@ class PackageRecord:
     def license_family(self) -> Optional[str]:
         """
         The license family.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/pip-23.0-pyhd8ed1ab_0.json"
+        ... )
+        >>> record.license_family
+        'MIT'
+        >>>
+        ```
+
         """
         return self._record.license_family
 
@@ -162,6 +253,18 @@ class PackageRecord:
     def md5(self) -> Optional[str]:
         """
         Optionally a MD5 hash of the package archive.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.md5
+        '5E5A97795DE72F8CC3BAF3D9EA6327A2'
+        >>>
+        ```
         """
         return self._record.md5
 
@@ -169,6 +272,18 @@ class PackageRecord:
     def name(self) -> PackageName:
         """
         The name of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.name
+        PackageName("libsqlite")
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(self._record.name)
 
@@ -176,6 +291,18 @@ class PackageRecord:
     def platform(self) -> Optional[str]:
         """
         Optionally the platform the package supports.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.platform
+        'win32'
+        >>>
+        ```
         """
         return self._record.platform
 
@@ -183,6 +310,17 @@ class PackageRecord:
     def sha256(self) -> Optional[str]:
         """
         Optionally a SHA256 hash of the package archive.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.sha256
+        '4E50B3D90A351C9D47D239D3F90FCE4870DF2526E4F7FEF35203AB3276A6DFC9'
+        >>>
         """
         return self._record.sha256
 
@@ -190,6 +328,18 @@ class PackageRecord:
     def size(self) -> Optional[int]:
         """
         Optionally the size of the package archive in bytes.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.size
+        669941
+        >>>
+        ```
         """
         return self._record.size
 
@@ -197,6 +347,18 @@ class PackageRecord:
     def subdir(self) -> str:
         """
         The subdirectory where the package can be found.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.subdir
+        'win-64'
+        >>>
+        ```
         """
         return self._record.subdir
 
@@ -204,6 +366,18 @@ class PackageRecord:
     def timestamp(self) -> Optional[int]:
         """
         The date this entry was created.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.timestamp
+        1668697639
+        >>>
+        ```
         """
         return self._record.timestamp
 
@@ -215,6 +389,18 @@ class PackageRecord:
         To that effect, the number of track features is
         counted (number of commas) and the package is downweighted
         by the number of track_features.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.track_features
+        []
+        >>>
+        ```
         """
         return self._record.track_features
 
@@ -226,11 +412,12 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> record = PackageRecord.from_index_json(
-        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.version
-        Version("1.7.1")
+        Version("3.40.0")
         >>>
         ```
         """

@@ -13,14 +13,12 @@ class RepoDataRecord(PackageRecord):
         Examples
         --------
         ```python
-        >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
-        ...     "../test-data/test-server/repo/noarch/repodata.json"
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
-        >>> record_list = repo_data.into_repo_data(Channel("test"))
-        >>> record = record_list[0]
         >>> record.url
-        'https://conda.anaconda.org/test/noarch/test-package-0.1-0.tar.bz2'
+        'https://conda.anaconda.org/conda-forge/win-64/libsqlite-3.40.0-hcfcfb64_0.tar.bz2'
         >>>
         ```
         """
@@ -36,14 +34,12 @@ class RepoDataRecord(PackageRecord):
         Examples
         --------
         ```python
-        >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
-        ...     "../test-data/test-server/repo/noarch/repodata.json"
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
-        >>> record_list = repo_data.into_repo_data(Channel("test"))
-        >>> record = record_list[0]
         >>> record.channel
-        'https://conda.anaconda.org/test/'
+        'https://conda.anaconda.org/conda-forge/win-64'
         >>>
         ```
         """
@@ -57,14 +53,12 @@ class RepoDataRecord(PackageRecord):
         Examples
         --------
         ```python
-        >>> from rattler import RepoData, Channel
-        >>> repo_data = RepoData(
-        ...     "../test-data/test-server/repo/noarch/repodata.json"
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
-        >>> record_list = repo_data.into_repo_data(Channel("test"))
-        >>> record = record_list[0]
         >>> record.file_name
-        'test-package-0.1-0.tar.bz2'
+        'libsqlite-3.40.0-hcfcfb64_0.tar.bz2'
         >>>
         ```
         """
