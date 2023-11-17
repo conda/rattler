@@ -35,7 +35,6 @@ class PackageRecord:
         ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
         ... )
         >>> assert isinstance(record, PackageRecord)
-        True
         >>>
         ```
         """

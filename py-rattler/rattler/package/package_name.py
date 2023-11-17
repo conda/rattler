@@ -87,7 +87,7 @@ class PackageName:
         """
         return self._name.__hash__()
 
-    def __eq__(self, other: PackageName) -> bool:  # type: ignore[override]
+    def __eq__(self, other: object) -> bool:
         """
         Returns True if this instance represents the same PackageName as `other`.
 
@@ -103,11 +103,14 @@ class PackageName:
         >>>
         ```
         """
+        if not isinstance(other, PackageName):
+            return False
+
         return self._name == other._name
 
-    def __ne__(self, other: PackageName) -> bool:  # type: ignore[override]
+    def __ne__(self, other: object) -> bool:
         """
-        Returns False if this instance represents the same PackageName as `other`.
+        Returns True if this instance does not represents the same PackageName as `other`.
 
         Examples
         --------
@@ -117,10 +120,13 @@ class PackageName:
         >>> PackageName("test-abc") != PackageName("abc-test")
         True
         >>> PackageName("test-abc") != "test-abc"
-        False
+        True
         >>>
         ```
         """
+        if not isinstance(other, PackageName):
+            return True
+
         return self._name != other._name
 
     def __repr__(self) -> str:
