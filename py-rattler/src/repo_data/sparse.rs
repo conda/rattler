@@ -6,7 +6,7 @@ use rattler_repodata_gateway::sparse::SparseRepoData;
 
 use crate::channel::PyChannel;
 use crate::package_name::PyPackageName;
-use crate::repo_data::repo_data_record::PyRepoDataRecord;
+use crate::record::PyRecord;
 
 #[pyclass]
 #[repr(transparent)]
@@ -43,7 +43,7 @@ impl PySparseRepoData {
             .collect::<Vec<_>>()
     }
 
-    pub fn load_records(&self, package_name: &PyPackageName) -> PyResult<Vec<PyRepoDataRecord>> {
+    pub fn load_records(&self, package_name: &PyPackageName) -> PyResult<Vec<PyRecord>> {
         Ok(self
             .inner
             .load_records(&package_name.inner)?
@@ -62,7 +62,7 @@ impl PySparseRepoData {
         py: Python<'_>,
         repo_data: Vec<PySparseRepoData>,
         package_names: Vec<PyPackageName>,
-    ) -> PyResult<Vec<Vec<PyRepoDataRecord>>> {
+    ) -> PyResult<Vec<Vec<PyRecord>>> {
         py.allow_threads(move || {
             let repo_data = repo_data.iter().map(Into::into);
             let package_names = package_names.into_iter().map(Into::into);

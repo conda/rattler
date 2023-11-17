@@ -29,6 +29,7 @@ rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", defaul
     "sparse",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
+rattler_digest = { path = "../crates/rattler_digest" }
 rattler_networking = { path = "../crates/rattler_networking", default-features = false }
 rattler_shell = { path = "../crates/rattler_shell", default-features = false }
 rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", default-features = false }

@@ -3,14 +3,11 @@ use std::path::PathBuf;
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::RepoData;
 
-use crate::{channel::PyChannel, error::PyRattlerError};
+use crate::{channel::PyChannel, error::PyRattlerError, record::PyRecord};
 
 use patch_instructions::PyPatchInstructions;
-use repo_data_record::PyRepoDataRecord;
 
-pub mod package_record;
 pub mod patch_instructions;
-pub mod repo_data_record;
 pub mod sparse;
 
 #[pyclass]
@@ -55,9 +52,9 @@ impl PyRepoData {
             .map_err(PyRattlerError::IoError)?)
     }
 
-    /// Builds a `Vec<PyRepoDataRecord>` from the packages in a `PyRepoData` given the source of the data.
+    /// Builds a `Vec<PyRecord>` from the packages in a `PyRepoData` given the source of the data.
     #[staticmethod]
-    pub fn repo_data_to_records(repo_data: Self, channel: &PyChannel) -> Vec<PyRepoDataRecord> {
+    pub fn repo_data_to_records(repo_data: Self, channel: &PyChannel) -> Vec<PyRecord> {
         repo_data
             .inner
             .into_repo_data_records(&channel.inner)

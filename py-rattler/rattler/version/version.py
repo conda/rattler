@@ -342,7 +342,7 @@ class Version:
 
     def __ne__(self, other: Version) -> bool:  # type: ignore[override]
         """
-        Returns True if this instance represents the same version as `other`.
+        Returns False if this instance represents the same version as `other`.
 
         Examples
         --------

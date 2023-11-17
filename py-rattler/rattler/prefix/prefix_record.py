@@ -1,27 +1,21 @@
 from __future__ import annotations
 import os
 from typing import List, Optional
-from rattler.package.package_name import PackageName
 
-from rattler.rattler import PyPrefixRecord
+from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
-from rattler.version.with_source import VersionWithSource
+from rattler.repo_data.record import RepoDataRecord
 
 
-class PrefixRecord:
-    def __init__(self, source: str) -> None:
-        if not isinstance(source, str):
-            raise TypeError(
-                "PrefixRecord constructor received unsupported type "
-                f" {type(source).__name__!r} for the `source` parameter"
-            )
-        self._record = PyPrefixRecord(source)
-
+class PrefixRecord(RepoDataRecord):
     @classmethod
-    def _from_py_prefix_record(cls, py_prefix_record: PyPrefixRecord) -> PrefixRecord:
-        """Construct Rattler PrefixRecord from FFI PyPrefixRecord object."""
+    def _from_py_record(cls, py_record: PyRecord) -> PrefixRecord:
+        """Construct Rattler PrefixRecord from FFI PyRecord object."""
+
+        # quick sanity check
+        assert py_record.is_prefix_record
         record = cls.__new__(cls)
-        record._record = py_prefix_record
+        record._record = py_record
         return record
 
     @staticmethod
@@ -35,10 +29,11 @@ class PrefixRecord:
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
+        >>> assert isinstance(r, PrefixRecord)
         >>>
         ```
         """
-        return PrefixRecord._from_py_prefix_record(PyPrefixRecord.from_path(path))
+        return PrefixRecord._from_py_record(PyRecord.from_path(path))
 
     def write_to_path(self, path: os.PathLike[str], pretty: bool) -> None:
         """
@@ -111,8 +106,8 @@ class PrefixRecord:
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.paths_data
-        PrefixPaths()
+        >>> r.paths_data # doctest:+ELLIPSIS
+        PrefixPaths(paths=[...])
         >>>
         ```
         """
@@ -139,42 +134,6 @@ class PrefixRecord:
         ```
         """
         return self._record.requested_spec
-
-    @property
-    def name(self) -> PackageName:
-        """
-        Package name of the PrefixRecord.
-
-        Examples
-        --------
-        ```python
-        >>> r = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
-        ... )
-        >>> r.name
-        PackageName("requests")
-        >>>
-        ```
-        """
-        return PackageName._from_py_package_name(self._record.name)
-
-    @property
-    def version(self) -> VersionWithSource:
-        """
-        Version of the PrefixRecord.
-
-        Examples
-        --------
-        ```python
-        >>> r = PrefixRecord.from_path(
-        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
-        ... )
-        >>> r.version
-        VersionWithSource("2.28.2")
-        >>>
-        ```
-        """
-        return VersionWithSource(self._record.version)
 
     def __repr__(self) -> str:
         """

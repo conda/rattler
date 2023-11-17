@@ -4,8 +4,8 @@ use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
-    InvalidPackageNameError, ParseArchError, ParseChannelError, ParseMatchSpecError,
-    ParsePlatformError, ParseVersionError,
+    ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
+    ParseMatchSpecError, ParsePlatformError, ParseVersionError,
 };
 use rattler_repodata_gateway::fetch::FetchRepoDataError;
 use rattler_shell::activation::ActivationError;
@@ -46,6 +46,8 @@ pub enum PyRattlerError {
     TransactionError(#[from] TransactionError),
     #[error("{0}")]
     LinkError(String),
+    #[error(transparent)]
+    ConverSubdirError(#[from] ConvertSubdirError),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -80,6 +82,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::SolverError(err) => SolverException::new_err(err.to_string()),
             PyRattlerError::TransactionError(err) => TransactionException::new_err(err.to_string()),
             PyRattlerError::LinkError(err) => LinkException::new_err(err),
+            PyRattlerError::ConverSubdirError(err) => {
+                ConvertSubdirException::new_err(err.to_string())
+            }
         }
     }
 }
@@ -99,3 +104,4 @@ create_exception!(exceptions, IoException, PyException);
 create_exception!(exceptions, SolverException, PyException);
 create_exception!(exceptions, TransactionException, PyException);
 create_exception!(exceptions, LinkException, PyException);
+create_exception!(exceptions, ConvertSubdirException, PyException);

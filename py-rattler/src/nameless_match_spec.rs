@@ -1,10 +1,8 @@
-use pyo3::{pyclass, pymethods};
+use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::{MatchSpec, NamelessMatchSpec};
 use std::str::FromStr;
 
-use crate::{
-    error::PyRattlerError, match_spec::PyMatchSpec, repo_data::package_record::PyPackageRecord,
-};
+use crate::{error::PyRattlerError, match_spec::PyMatchSpec, record::PyRecord};
 
 #[pyclass]
 #[repr(transparent)]
@@ -35,7 +33,7 @@ impl From<PyMatchSpec> for PyNamelessMatchSpec {
 #[pymethods]
 impl PyNamelessMatchSpec {
     #[new]
-    pub fn __init__(spec: &str) -> pyo3::PyResult<Self> {
+    pub fn __init__(spec: &str) -> PyResult<Self> {
         Ok(NamelessMatchSpec::from_str(spec)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
@@ -46,9 +44,9 @@ impl PyNamelessMatchSpec {
         format!("{}", self.inner)
     }
 
-    /// Match a PyNamelessMatchSpec against a PyPackageRecord
-    pub fn matches(&self, record: &PyPackageRecord) -> bool {
-        self.inner.matches(&record.clone().into())
+    /// Match a PyNamelessMatchSpec against a PackageRecord
+    pub fn matches(&self, record: &PyRecord) -> bool {
+        self.inner.matches(&record.as_package_record().clone())
     }
 
     /// Constructs a [`PyNamelessMatchSpec`] from a [`PyMatchSpec`].

@@ -66,9 +66,9 @@ class PrefixPaths:
         >>> r = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
-        >>> r.paths_data
-        PrefixPaths()
+        >>> r.paths_data # doctest:+ELLIPSIS
+        PrefixPaths(paths=[...])
         >>>
         ```
         """
-        return "PrefixPaths()"
+        return f"PrefixPaths(paths={self.paths})"

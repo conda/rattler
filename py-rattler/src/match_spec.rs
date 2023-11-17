@@ -1,11 +1,8 @@
-use pyo3::{pyclass, pymethods};
+use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::{MatchSpec, PackageName};
 use std::str::FromStr;
 
-use crate::{
-    error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
-    repo_data::package_record::PyPackageRecord,
-};
+use crate::{error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec, record::PyRecord};
 
 #[pyclass]
 #[repr(transparent)]
@@ -29,7 +26,7 @@ impl From<PyMatchSpec> for MatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    pub fn __init__(spec: &str) -> pyo3::PyResult<Self> {
+    pub fn __init__(spec: &str) -> PyResult<Self> {
         Ok(MatchSpec::from_str(spec)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
@@ -41,13 +38,13 @@ impl PyMatchSpec {
     }
 
     /// Matches a MatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PyPackageRecord) -> bool {
-        self.inner.matches(&record.inner)
+    pub fn matches(&self, record: &PyRecord) -> bool {
+        self.inner.matches(record.as_package_record())
     }
 
     /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.
     #[staticmethod]
-    pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> pyo3::PyResult<Self> {
+    pub fn from_nameless(spec: &PyNamelessMatchSpec, name: String) -> PyResult<Self> {
         Ok(Self {
             inner: MatchSpec::from_nameless(
                 spec.clone().into(),
