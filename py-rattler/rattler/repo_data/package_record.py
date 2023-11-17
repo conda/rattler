@@ -24,7 +24,9 @@ class PackageRecord:
         md5: Optional[str] = None,
     ) -> PackageRecord:
         """
-        Builds a PackageRecord from a IndexJson.
+        Builds a PackageRecord from an `index.json`.
+        These can be found in `info` directory inside an
+        extracted package archive.
 
         Examples
         --------
@@ -32,8 +34,8 @@ class PackageRecord:
         >>> record = PackageRecord.from_index_json(
         ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
         ... )
-        >>> type(record)
-        <class 'rattler.repo_data.package_record.PackageRecord'>
+        >>> assert isinstance(record, PackageRecord)
+        True
         >>>
         ```
         """
@@ -54,8 +56,9 @@ class PackageRecord:
         ```python
         >>> from os import listdir
         >>> from os.path import isfile, join
+        >>> from rattler import PrefixRecord
         >>> records = [
-        ...     PackageRecord.from_index_json(join("../test-data/conda-meta/", f))
+        ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in listdir("../test-data/conda-meta")
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
@@ -73,10 +76,15 @@ class PackageRecord:
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
         """
-        Construct Rattler PackageRecord from FFI PyPackageRecord object.
+        Construct Rattler PackageRecord from FFI PyRecord object.
         """
+
+        # quick sanity check
+        assert isinstance(py_record, PyRecord)
         record = cls.__new__(cls)
         record._record = py_record
+        # quick sanity check
+        assert isinstance(record, PackageRecord)
         return record
 
     @property
@@ -98,7 +106,7 @@ class PackageRecord:
     def constrains(self) -> List[str]:
         """
         Additional constraints on packages.
-        constrains are different from depends in that packages
+        Constrains are different from depends in that packages
         specified in depends must be installed next to this package,
         whereas packages specified in constrains are not required to
         be installed, but if they are installed they must follow

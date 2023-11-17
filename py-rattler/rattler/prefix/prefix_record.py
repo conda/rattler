@@ -1,7 +1,6 @@
 from __future__ import annotations
 import os
 from typing import List, Optional
-from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
@@ -9,13 +8,16 @@ from rattler.repo_data.record import RepoDataRecord
 
 
 class PrefixRecord(RepoDataRecord):
-    _record: PyRecord
-
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PrefixRecord:
-        """Construct Rattler PrefixRecord from FFI PyPrefixRecord object."""
+        """Construct Rattler PrefixRecord from FFI PyRecord object."""
+
+        # quick sanity check
+        assert isinstance(py_record, PyRecord)
         record = cls.__new__(cls)
         record._record = py_record
+        # quick sanity check
+        assert isinstance(record, RepoDataRecord)
         return record
 
     @staticmethod

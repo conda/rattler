@@ -29,8 +29,14 @@ pub fn py_solve(
 
         let task = SolverTask {
             available_packages: &available_packages,
-            locked_packages: locked_packages.into_iter().map(Into::into).collect(),
-            pinned_packages: pinned_packages.into_iter().map(Into::into).collect(),
+            locked_packages: locked_packages
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<PyResult<Vec<_>>>()?,
+            pinned_packages: pinned_packages
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<PyResult<Vec<_>>>()?,
             virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
             specs: specs.into_iter().map(Into::into).collect(),
         };

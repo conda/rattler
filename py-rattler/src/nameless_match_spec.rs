@@ -45,8 +45,8 @@ impl PyNamelessMatchSpec {
     }
 
     /// Match a PyNamelessMatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PyRecord) -> PyResult<bool> {
-        Ok(self.inner.matches(&record.as_package_record()?.clone()))
+    pub fn matches(&self, record: &PyRecord) -> bool {
+        self.inner.matches(&record.as_package_record().clone())
     }
 
     /// Constructs a [`PyNamelessMatchSpec`] from a [`PyMatchSpec`].

@@ -5,8 +5,6 @@ from rattler.repo_data import PackageRecord
 
 
 class RepoDataRecord(PackageRecord):
-    _record: PyRecord
-
     @property
     def url(self) -> str:
         """
@@ -75,10 +73,15 @@ class RepoDataRecord(PackageRecord):
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:
         """
-        Construct Rattler RepoDataRecord from FFI PyRepoDataRecord object.
+        Construct Rattler RepoDataRecord from FFI PyRecord object.
         """
+
+        # quick sanity check
+        assert isinstance(py_record, PyRecord)
         record = cls.__new__(cls)
         record._record = py_record
+        # quick sanity check
+        assert isinstance(record, RepoDataRecord)
         return record
 
     def __repr__(self) -> str:

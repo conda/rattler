@@ -15,6 +15,7 @@ try:
         CacheDirError,
         FetchRepoDataError,
         SolverError,
+        ConvertSubdirError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -65,6 +66,9 @@ except ImportError:
     class SolverError(Exception):  # type: ignore[no-redef]
         """An error that can occur when trying to solve an environment"""
 
+    class ConvertSubdirError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when parsing a platform from a string."""
+
 
 __all__ = [
     "ActivationError",
@@ -82,4 +86,5 @@ __all__ = [
     "ParsePlatformError",
     "SolverError",
     "TransactionError",
+    "ConvertSubdirError",
 ]

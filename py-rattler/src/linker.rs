@@ -28,12 +28,12 @@ pub fn py_link<'a>(
 ) -> PyResult<&'a PyAny> {
     let dependencies = dependencies
         .into_iter()
-        .map(|rdr| Ok(PyRecord::try_from(rdr)?.into()))
+        .map(|rdr| PyRecord::try_from(rdr)?.try_into())
         .collect::<PyResult<Vec<RepoDataRecord>>>()?;
 
     let installed_packages = installed_packages
         .iter()
-        .map(|&rdr| Ok(PyRecord::try_from(rdr)?.into()))
+        .map(|&rdr| PyRecord::try_from(rdr)?.try_into())
         .collect::<PyResult<Vec<PrefixRecord>>>()?;
 
     let txn = py.allow_threads(move || {

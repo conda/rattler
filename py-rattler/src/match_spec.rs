@@ -38,8 +38,8 @@ impl PyMatchSpec {
     }
 
     /// Matches a MatchSpec against a PackageRecord
-    pub fn matches(&self, record: &PyRecord) -> PyResult<bool> {
-        Ok(self.inner.matches(record.as_package_record()?))
+    pub fn matches(&self, record: &PyRecord) -> bool {
+        self.inner.matches(record.as_package_record())
     }
 
     /// Constructs a PyMatchSpec from a PyNamelessMatchSpec and a name.

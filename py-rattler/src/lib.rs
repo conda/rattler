@@ -8,7 +8,7 @@ mod nameless_match_spec;
 mod networking;
 mod package_name;
 mod platform;
-mod prefix_record;
+mod prefix_paths;
 mod record;
 mod repo_data;
 mod shell;
@@ -18,17 +18,18 @@ mod virtual_package;
 
 use channel::{PyChannel, PyChannelConfig};
 use error::{
-    ActivationException, CacheDirException, DetectVirtualPackageException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
+    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
+    FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
+    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
+    LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
+    TransactionException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
-use prefix_record::PyPrefixPaths;
+use prefix_paths::PyPrefixPaths;
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
 use version::PyVersion;
 
@@ -131,6 +132,11 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add(
         "FetchRepoDataError",
         py.get_type::<FetchRepoDataException>(),
+    )
+    .unwrap();
+    m.add(
+        "ConvertSubdirError",
+        py.get_type::<ConvertSubdirException>(),
     )
     .unwrap();
     Ok(())
