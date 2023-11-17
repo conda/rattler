@@ -2,7 +2,7 @@ use itertools::Itertools;
 use url::Url;
 
 /// A default string to use for redaction.
-pub const DEFAULT_REDACTION_STR: &str = "xxxxxxxx";
+pub const DEFAULT_REDACTION_STR: &str = "********";
 
 /// Anaconda channels are not always publicly available. This function checks if a URL contains a
 /// secret by identifying whether it contains certain patterns. If it does, the function returns a

@@ -80,8 +80,8 @@ impl From<reqwest::Error> for FetchRepoDataError {
 }
 
 impl From<reqwest::Error> for RepoDataNotFoundError {
-    fn from(value: reqwest::Error) -> Self {
-        Self::HttpError(redact_known_secrets_from_error(value))
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(redact_known_secrets_from_error(err))
     }
 }
 
@@ -491,13 +491,13 @@ pub async fn fetch_repo_data(
     // Send the request and wait for a reply
     let response = match request_builder.headers(headers).send().await {
         Ok(response) if response.status() == StatusCode::NOT_FOUND => {
-            return Err(FetchRepoDataError::NotFound(
-                RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
-            ));
+            return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
+                response.error_for_status().unwrap_err(),
+            )));
         }
         Ok(response) => response.error_for_status()?,
         Err(e) => {
-            return Err(FetchRepoDataError::HttpError(e));
+            return Err(FetchRepoDataError::from(e));
         }
     };
 
