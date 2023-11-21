@@ -29,7 +29,7 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
-pub use match_spec::matcher::StringMatcher;
+pub use match_spec::matcher::{StringMatcher, StringMatcherParseError};
 pub use match_spec::parse::ParseMatchSpecError;
 pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
