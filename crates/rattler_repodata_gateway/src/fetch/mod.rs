@@ -444,7 +444,7 @@ pub async fn fetch_repo_data(
                 });
             }
             Err(error) => {
-                tracing::warn!("Error during JLAP request {:?}", error);
+                tracing::warn!("Error during JLAP request: {}", error);
                 None
             }
         }
@@ -573,7 +573,7 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        blake2_hash_nominal: None,
+        blake2_hash_nominal: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         has_jlap: variant_availability.has_jlap,
