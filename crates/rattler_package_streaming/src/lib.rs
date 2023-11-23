@@ -3,7 +3,6 @@
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
 use rattler_digest::{Md5Hash, Sha256Hash};
-use rattler_networking::redact_known_secrets_from_error;
 
 pub mod read;
 pub mod seek;
@@ -49,7 +48,7 @@ pub enum ExtractError {
 #[cfg(feature = "reqwest")]
 impl From<::reqwest::Error> for ExtractError {
     fn from(err: ::reqwest::Error) -> Self {
-        Self::ReqwestError(redact_known_secrets_from_error(err))
+        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err))
     }
 }
 
