@@ -7,7 +7,7 @@ use crate::{
     PackageHashes, PackageName, PipLockedDependency, Platform, RepoDataRecord, TimeMeta,
 };
 use fxhash::{FxHashMap, FxHashSet};
-use rattler_conda_types::NamelessMatchSpec;
+use rattler_conda_types::{NamelessMatchSpec, PackageUrl};
 use std::collections::HashSet;
 use url::Url;
 
@@ -174,6 +174,7 @@ impl LockedPackagesBuilder {
                         noarch: locked_package.noarch,
                         size: locked_package.size,
                         timestamp: locked_package.timestamp,
+                        purls: locked_package.purls,
                     }
                     .into(),
                 },
@@ -248,6 +249,9 @@ pub struct CondaLockedDependencyBuilder {
 
     /// Experimental: The date this entry was created.
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
+    /// Experimental: Defines that the package is an alias for a package from another ecosystem.
+    pub purls: Vec<PackageUrl>,
 }
 
 impl TryFrom<&RepoDataRecord> for CondaLockedDependencyBuilder {
@@ -286,6 +290,7 @@ impl TryFrom<RepoDataRecord> for CondaLockedDependencyBuilder {
             noarch: record.package_record.noarch,
             size: record.package_record.size,
             timestamp: record.package_record.timestamp,
+            purls: record.package_record.purls,
         })
     }
 }
@@ -401,6 +406,12 @@ impl CondaLockedDependencyBuilder {
         self.timestamp = Some(timestamp);
         self
     }
+
+    /// Adds a PackageUrl to the package
+    pub fn add_purl(mut self, purl: PackageUrl) -> Self {
+        self.purls.push(purl);
+        self
+    }
 }
 
 pub struct PipLockedDependencyBuilder {
@@ -472,6 +483,9 @@ mod tests {
                     noarch: NoArchType::python(),
                     size: Some(12000),
                     timestamp: Some(Utc::now()),
+                    purls: vec![
+                        "pkg:deb/debian/python@3.11.0?arch=x86_64".parse().unwrap(),
+                    ]
                 }))
             .build().unwrap();
 
