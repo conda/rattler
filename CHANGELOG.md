@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2023-11-23
+
+### 📃 Details
+
+#### Fixed
+
+* Expose missing `StringMatcherParseError` ([#410](https://github.com/mamba-org/rattler/pull/410))
+* Fix JLAP issue by setting the nominal hash when first downloading repodata ([#411](https://github.com/mamba-org/rattler/pull/411))
+* Support channel names with slashes ([#413](https://github.com/mamba-org/rattler/pull/413))
+
 ## [0.12.2] - 2023-11-17
 
 ### 📃 Details
