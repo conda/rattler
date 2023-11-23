@@ -285,6 +285,10 @@ fn parse_scheme(channel: &str) -> Option<&str> {
 
 /// Returns true if the specified string is considered to be a path
 fn is_path(path: &str) -> bool {
+    if path.contains("://") {
+        return false;
+    }
+
     // Check if the path starts with a common path prefix
     if path.starts_with("./")
         || path.starts_with("..")
