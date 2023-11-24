@@ -1,0 +1,9 @@
+{
+    "packages": {
+        "cross-python_emscripten-32-3.10.1-h60d57d3_8.tar.bz2": {
+            "purls": [
+                "pkg:pypi/cross-python@3.10.1"
+            ]
+        }
+    }
+}

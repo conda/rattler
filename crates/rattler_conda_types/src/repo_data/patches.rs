@@ -4,7 +4,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use std::io;
 use std::path::Path;
 
-use crate::{package::ArchiveType, PackageRecord, RepoData};
+use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData};
 
 /// Represents a Conda repodata patch.
 ///
@@ -92,6 +92,10 @@ pub struct PackageRecordPatch {
         with = "::serde_with::rust::double_option"
     )]
     pub license_family: Option<Option<String>>,
+
+    /// Package identifiers of packages that are equivalent to this package but from other
+    /// ecosystems.
+    pub purls: Option<Vec<PackageUrl>>,
 }
 
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
@@ -135,6 +139,9 @@ impl PackageRecord {
         }
         if let Some(license_family) = &patch.license_family {
             self.license_family = license_family.clone();
+        }
+        if let Some(package_urls) = &patch.purls {
+            self.purls = package_urls.clone();
         }
     }
 }
@@ -253,6 +260,19 @@ mod test {
         // test data
         let mut repodata = load_test_repodata();
         let patch_instructions = load_patch_instructions("patch_instructions_3.json");
+
+        // apply patch
+        repodata.apply_patches(&patch_instructions);
+
+        // check result
+        insta::assert_yaml_snapshot!(repodata);
+    }
+
+    #[test]
+    fn test_patch_purl() {
+        // test data
+        let mut repodata = load_test_repodata();
+        let patch_instructions = load_patch_instructions("patch_instructions_4.json");
 
         // apply patch
         repodata.apply_patches(&patch_instructions);

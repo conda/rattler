@@ -50,6 +50,9 @@ pub use version_spec::VersionSpec;
 #[cfg(test)]
 use std::path::{Path, PathBuf};
 
+/// An package identifier that can be used to identify packages across package ecosystems.
+pub type PackageUrl = purl::GenericPurl<String>;
+
 #[cfg(test)]
 pub(crate) fn get_test_data_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
