@@ -4,7 +4,7 @@ use crate::conda::ConversionError;
 use crate::{
     content_hash, content_hash::CalculateContentHashError, Channel, CondaLock,
     CondaLockedDependency, GitMeta, LockMeta, LockedDependency, MatchSpec, NoArchType,
-    PackageHashes, PackageName, PipLockedDependency, Platform, RepoDataRecord, TimeMeta,
+    PackageHashes, PackageName, PypiLockedDependency, Platform, RepoDataRecord, TimeMeta,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use rattler_conda_types::{NamelessMatchSpec, PackageUrl};
@@ -109,7 +109,7 @@ pub struct LockedPackagesBuilder {
 
 pub enum LockedDependencyBuilder {
     Conda(CondaLockedDependencyBuilder),
-    Pip(PipLockedDependencyBuilder),
+    Pypi(PypiLockedDependencyBuilder),
 }
 
 impl From<CondaLockedDependencyBuilder> for LockedDependencyBuilder {
@@ -118,9 +118,9 @@ impl From<CondaLockedDependencyBuilder> for LockedDependencyBuilder {
     }
 }
 
-impl From<PipLockedDependencyBuilder> for LockedDependencyBuilder {
-    fn from(value: PipLockedDependencyBuilder) -> Self {
-        LockedDependencyBuilder::Pip(value)
+impl From<PypiLockedDependencyBuilder> for LockedDependencyBuilder {
+    fn from(value: PypiLockedDependencyBuilder) -> Self {
+        LockedDependencyBuilder::Pypi(value)
     }
 }
 
@@ -178,12 +178,12 @@ impl LockedPackagesBuilder {
                     }
                     .into(),
                 },
-                LockedDependencyBuilder::Pip(locked_package) => LockedDependency {
+                LockedDependencyBuilder::Pypi(locked_package) => LockedDependency {
                     platform: self.platform,
                     version: locked_package.version,
                     name: locked_package.name.to_string(),
                     category: super::default_category(),
-                    kind: PipLockedDependency {
+                    kind: PypiLockedDependency {
                         requires_dist: locked_package.requires_dist,
                         requires_python: locked_package.requires_python,
                         extras: locked_package.extras,
@@ -414,7 +414,7 @@ impl CondaLockedDependencyBuilder {
     }
 }
 
-pub struct PipLockedDependencyBuilder {
+pub struct PypiLockedDependencyBuilder {
     /// Name of the locked package
     pub name: String,
     /// Package version

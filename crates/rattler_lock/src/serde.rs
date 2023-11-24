@@ -82,9 +82,9 @@ impl Serialize for CondaLock {
                     (LockedDependencyKind::Conda(a), LockedDependencyKind::Conda(b)) => {
                         a.build.cmp(&b.build)
                     }
-                    (LockedDependencyKind::Pip(_), LockedDependencyKind::Pip(_)) => Ordering::Equal,
-                    (LockedDependencyKind::Pip(_), _) => Ordering::Less,
-                    (_, LockedDependencyKind::Pip(_)) => Ordering::Greater,
+                    (LockedDependencyKind::Pypi(_), LockedDependencyKind::Pypi(_)) => Ordering::Equal,
+                    (LockedDependencyKind::Pypi(_), _) => Ordering::Less,
+                    (_, LockedDependencyKind::Pypi(_)) => Ordering::Greater,
                 })
         });
 
