@@ -14,14 +14,14 @@ pub mod builder;
 mod conda;
 mod content_hash;
 mod hash;
-mod pip;
+mod pypi;
 mod serde;
 mod utils;
 
 use crate::conda::ConversionError;
 pub use conda::CondaLockedDependency;
 pub use hash::PackageHashes;
-pub use pip::PipLockedDependency;
+pub use pypi::PypiLockedDependency;
 
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
@@ -160,16 +160,16 @@ impl LockedDependency {
     pub fn as_conda(&self) -> Option<&CondaLockedDependency> {
         match &self.kind {
             LockedDependencyKind::Conda(conda) => Some(conda),
-            LockedDependencyKind::Pip(_) => None,
+            LockedDependencyKind::Pypi(_) => None,
         }
     }
 
-    /// Returns a reference to the internal [`PipLockedDependency`] if this instance represents
-    /// a pip package.
-    pub fn as_pip(&self) -> Option<&PipLockedDependency> {
+    /// Returns a reference to the internal [`PypiLockedDependency`] if this instance represents
+    /// a pypi package.
+    pub fn as_pypi(&self) -> Option<&PypiLockedDependency> {
         match &self.kind {
             LockedDependencyKind::Conda(_) => None,
-            LockedDependencyKind::Pip(pip) => Some(pip),
+            LockedDependencyKind::Pypi(pypi) => Some(pypi),
         }
     }
 
@@ -178,9 +178,9 @@ impl LockedDependency {
         matches!(self.kind, LockedDependencyKind::Conda(_))
     }
 
-    /// Returns true if this instance represents a pip package.
-    pub fn is_pip(&self) -> bool {
-        matches!(self.kind, LockedDependencyKind::Pip(_))
+    /// Returns true if this instance represents a Pypi package.
+    pub fn is_pypi(&self) -> bool {
+        matches!(self.kind, LockedDependencyKind::Pypi(_))
     }
 }
 
@@ -188,7 +188,8 @@ impl LockedDependency {
 #[serde(tag = "manager", rename_all = "snake_case")]
 pub enum LockedDependencyKind {
     Conda(CondaLockedDependency),
-    Pip(PipLockedDependency),
+    #[serde(alias = "pip")]
+    Pypi(PypiLockedDependency),
 }
 
 impl From<CondaLockedDependency> for LockedDependencyKind {
@@ -197,13 +198,13 @@ impl From<CondaLockedDependency> for LockedDependencyKind {
     }
 }
 
-impl From<PipLockedDependency> for LockedDependencyKind {
-    fn from(value: PipLockedDependency) -> Self {
-        LockedDependencyKind::Pip(value)
+impl From<PypiLockedDependency> for LockedDependencyKind {
+    fn from(value: PypiLockedDependency) -> Self {
+        LockedDependencyKind::Pypi(value)
     }
 }
 
-/// The URL for the dependency (currently only used for pip packages)
+/// The URL for the dependency (currently only used for pypi packages)
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct DependencySource {
     // According to:
