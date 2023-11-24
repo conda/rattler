@@ -115,6 +115,6 @@ mod test {
         )
         .unwrap_err();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer file format version 1000, but only up to including version 2 is supported");
+        insta::assert_snapshot!(format!("{}", err), @"found newer file format version 1000, but only up to including version 3 is supported");
     }
 }
