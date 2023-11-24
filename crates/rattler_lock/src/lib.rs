@@ -165,11 +165,11 @@ impl LockedDependency {
     }
 
     /// Returns a reference to the internal [`PypiLockedDependency`] if this instance represents
-    /// a pip package.
-    pub fn as_pip(&self) -> Option<&PypiLockedDependency> {
+    /// a pypi package.
+    pub fn as_pypi(&self) -> Option<&PypiLockedDependency> {
         match &self.kind {
             LockedDependencyKind::Conda(_) => None,
-            LockedDependencyKind::Pypi(pip) => Some(pip),
+            LockedDependencyKind::Pypi(pypi) => Some(pypi),
         }
     }
 
@@ -178,8 +178,8 @@ impl LockedDependency {
         matches!(self.kind, LockedDependencyKind::Conda(_))
     }
 
-    /// Returns true if this instance represents a pip package.
-    pub fn is_pip(&self) -> bool {
+    /// Returns true if this instance represents a Pypi package.
+    pub fn is_pypi(&self) -> bool {
         matches!(self.kind, LockedDependencyKind::Pypi(_))
     }
 }
@@ -204,7 +204,7 @@ impl From<PypiLockedDependency> for LockedDependencyKind {
     }
 }
 
-/// The URL for the dependency (currently only used for pip packages)
+/// The URL for the dependency (currently only used for pypi packages)
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct DependencySource {
     // According to:

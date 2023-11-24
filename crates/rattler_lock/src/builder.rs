@@ -4,7 +4,7 @@ use crate::conda::ConversionError;
 use crate::{
     content_hash, content_hash::CalculateContentHashError, Channel, CondaLock,
     CondaLockedDependency, GitMeta, LockMeta, LockedDependency, MatchSpec, NoArchType,
-    PackageHashes, PackageName, PypiLockedDependency, Platform, RepoDataRecord, TimeMeta,
+    PackageHashes, PackageName, Platform, PypiLockedDependency, RepoDataRecord, TimeMeta,
 };
 use fxhash::{FxHashMap, FxHashSet};
 use rattler_conda_types::{NamelessMatchSpec, PackageUrl};
