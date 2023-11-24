@@ -1,0 +1,84 @@
+---
+source: crates/rattler_conda_types/src/repo_data/patches.rs
+assertion_line: 281
+expression: repodata
+---
+info:
+  subdir: linux-64
+packages:
+  cross-python_emscripten-32-3.10.1-h60d57d3_8.tar.bz2:
+    build: h60d57d3_8
+    build_number: 8
+    depends:
+      - coreutils
+      - crossenv >=1.2
+      - emscripten_emscripten-32
+      - pip
+      - python 3.10.*
+      - rsync
+      - sed
+      - setuptools
+    md5: 07b8bdf69566cd63e6e49759033830ad
+    name: cross-python_emscripten-32
+    purls:
+      - "pkg:pypi/cross-python@3.10.1"
+    sha256: 50064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
+    size: 7069
+    subdir: linux-64
+    timestamp: 1679045249592
+    version: 3.10.1
+  emscripten_emscripten-32-3.1.27-h60d57d3_5.tar.bz2:
+    build: h60d57d3_5
+    build_number: 5
+    depends:
+      - emsdk
+    md5: 16f2daa96cb33b21c78f3dbc6d83546f
+    name: emscripten_emscripten-32
+    sha256: ab5117990980e5243446c7e83a501cedfc9863c56bbf896e45c77155c84cc3ed
+    size: 6820
+    subdir: linux-64
+    timestamp: 1678986155405
+    version: 3.1.27
+packages.conda:
+  cross-python_emscripten-32-3.10.1-h60d57d3_8.conda:
+    build: h60d57d3_8
+    build_number: 8
+    depends:
+      - coreutils
+      - crossenv >=1.2
+      - emscripten_emscripten-32
+      - pip
+      - python 3.10.*
+      - rsync
+      - sed
+      - setuptools
+    md5: 07b8bdf69566cd63e6e49759033830ad
+    name: cross-python_emscripten-32
+    purls:
+      - "pkg:pypi/cross-python@3.10.1"
+    sha256: 12064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
+    size: 7069
+    subdir: linux-64
+    timestamp: 1679045249592
+    version: 3.10.1
+  cross-python_emscripten-32-3.12.1-h60d57d3_8.conda:
+    build: h60d57d3_8
+    build_number: 8
+    depends:
+      - coreutils
+      - crossenv >=1.2
+      - emscripten_emscripten-32
+      - pip
+      - python 3.12.*
+      - rsync
+      - sed
+      - setuptools
+    md5: 07b8bdf69566cd63e6e49759033830ad
+    name: cross-python_emscripten-32
+    sha256: 12064d294599734090b9a33a2194a94f5d3743325d5bae61fab3fa5151acf0f9
+    size: 7069
+    subdir: linux-64
+    timestamp: 1679045249592
+    version: 3.10.1
+repodata_version: 1
+
