@@ -3,7 +3,9 @@ use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
 
-const FILE_VERSION: u32 = 2;
+// Version 2: dependencies are now arrays instead of maps
+// Version 3: pip has been renamed to pypi
+const FILE_VERSION: u32 = 3;
 
 /// A helper struct to deserialize the version field of the lock file and provide potential errors
 /// in-line.
@@ -82,7 +84,9 @@ impl Serialize for CondaLock {
                     (LockedDependencyKind::Conda(a), LockedDependencyKind::Conda(b)) => {
                         a.build.cmp(&b.build)
                     }
-                    (LockedDependencyKind::Pypi(_), LockedDependencyKind::Pypi(_)) => Ordering::Equal,
+                    (LockedDependencyKind::Pypi(_), LockedDependencyKind::Pypi(_)) => {
+                        Ordering::Equal
+                    }
                     (LockedDependencyKind::Pypi(_), _) => Ordering::Less,
                     (_, LockedDependencyKind::Pypi(_)) => Ordering::Greater,
                 })
