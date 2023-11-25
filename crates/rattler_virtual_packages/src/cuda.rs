@@ -130,7 +130,7 @@ fn nvml_library_paths() -> &'static [&'static str] {
     #[cfg(windows)]
     static FILENAMES: &[&str] = &["nvml.dll"];
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-    compile_error!("unsupported target os");
+    static FILENAMES: &[&str] = &[];
     FILENAMES
 }
 
@@ -201,7 +201,7 @@ fn cuda_library_paths() -> &'static [&'static str] {
     #[cfg(windows)]
     static FILENAMES: &[&str] = &["nvcuda.dll"];
     #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-    compile_error!("unsupported target os");
+    static FILENAMES: &[&str] = &[];
     FILENAMES
 }
 
