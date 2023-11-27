@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * Experimental support for purls in PackageRecord and derived datastructures ([#414](https://github.com/mamba-org/rattler/pull/414))
 
+* Options to disable `bz2` and `zstd` in `fetch_repo_data`
+
 #### Changed
 
 * Rename `pip` to `pypi` in lockfile ([#415](https://github.com/mamba-org/rattler/pull/415))
