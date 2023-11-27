@@ -162,6 +162,12 @@ pub struct FetchRepoDataOptions {
 
     /// When enabled repodata can be fetched incrementally using JLAP
     pub jlap_enabled: bool,
+
+    /// When enabled, the zstd variant will be used if available
+    pub zstd_enabled: bool, 
+
+    /// When enabled, the bz2 variant will be used if available
+    pub bz2_enabled: bool,
 }
 
 impl Default for FetchRepoDataOptions {
@@ -170,6 +176,8 @@ impl Default for FetchRepoDataOptions {
             cache_action: Default::default(),
             variant: Variant::default(),
             jlap_enabled: true,
+            zstd_enabled: true,
+            bz2_enabled: true,
         }
     }
 }
@@ -400,13 +408,13 @@ pub async fn fetch_repo_data(
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
     // variants. We don't check the expiration here since we just refreshed it.
-    let has_zst = variant_availability.has_zst();
-    let has_bz2 = variant_availability.has_bz2();
-    let has_jlap = variant_availability.has_jlap();
+    let has_zst = options.zstd_enabled && variant_availability.has_zst();
+    let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
+    let has_jlap = options.jlap_enabled && variant_availability.has_jlap();
 
     // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
     // a normal request.
-    let jlap_state = if has_jlap && cache_state.is_some() && options.jlap_enabled {
+    let jlap_state = if has_jlap && cache_state.is_some() {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
             &client,
