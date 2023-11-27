@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2023-11-27
+
+### 📃 Details
+
+#### Added
+
+* Experimental support for purls in PackageRecord and derived datastructures ([#414](https://github.com/mamba-org/rattler/pull/414))
+
+#### Changed
+
+* Rename `pip` to `pypi` in lockfile ([#415](https://github.com/mamba-org/rattler/pull/415))
+
+#### Fixed
+
+* Allow compilation for android ([#418](https://github.com/mamba-org/rattler/pull/418))
+* Normalize relative-paths with writing to file ([#416](https://github.com/mamba-org/rattler/pull/416))
+
 ## [0.12.3] - 2023-11-23
 
 ### 📃 Details
