@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+#### Added
+
+* Options to disable `bz2` and `zstd` in `fetch_repo_data`
+
 ## [0.13.0] - 2023-11-27
 
 ### 📃 Details
