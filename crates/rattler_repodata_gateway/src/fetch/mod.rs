@@ -164,7 +164,7 @@ pub struct FetchRepoDataOptions {
     pub jlap_enabled: bool,
 
     /// When enabled, the zstd variant will be used if available
-    pub zstd_enabled: bool, 
+    pub zstd_enabled: bool,
 
     /// When enabled, the bz2 variant will be used if available
     pub bz2_enabled: bool,
