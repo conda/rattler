@@ -234,24 +234,32 @@ mod test {
     use rstest::rstest;
     use std::{
         io::Write,
-        path::{Path, PathBuf},
     };
-
-    /// Returns the path to the test data directory
-    fn test_data_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
-    }
+    use url::Url;
 
     #[rstest]
-    #[case::conda_22_9_0("conda-22.9.0-py38haa244fe_2.tar.bz2")]
-    #[case::conda_22_11_1("conda-22.11.1-py38haa244fe_1.conda")]
-    #[case::pytweening_1_0_4("pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2")]
-    #[case::ruff_0_0_171("ruff-0.0.171-py310h298983d_0.conda")]
-    fn test_validate_package_files(#[case] package: &str) {
+    #[case::conda(
+        "https://conda.anaconda.org/conda-forge/win-64/conda-22.9.0-py38haa244fe_2.tar.bz2",
+        "3c2c2e8e81bde5fb1ac4b014f51a62411feff004580c708c97a0ec2b7058cdc4"
+    )]
+    #[case::mamba(
+        "https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2",
+        "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97"
+    )]
+    #[case::conda(
+        "https://conda.anaconda.org/conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda",
+        "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e"
+    )]
+    #[case::mamba(
+        "https://conda.anaconda.org/conda-forge/win-64/mamba-1.1.0-py39hb3d9227_2.conda",
+        "c172acdf9cb7655dd224879b30361a657b09bb084b65f151e36a2b51e51a080a"
+    )]
+    fn test_validate_package_files(#[case] url: Url, #[case] sha256: &str) {
         // Create a temporary directory and extract the given package.
         let temp_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(&test_data_path().join(package), temp_dir.path())
-            .unwrap();
+        let package_path = tools::download_and_cache_file(url, sha256).unwrap();
+
+        rattler_package_streaming::fs::extract(&package_path, temp_dir.path()).unwrap();
 
         // Validate that the extracted package is correct. Since it's just been extracted this should
         // work.
@@ -290,14 +298,21 @@ mod test {
 
     #[rstest]
     #[cfg(unix)]
-    #[case::python_3_10_6("with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2")]
-    #[case::cph_test_data_0_0_1("with-symlinks/cph_test_data-0.0.1-0.tar.bz2")]
-    #[case::zlib_1_2_8("with-symlinks/zlib-1.2.8-3.tar.bz2")] // Very old file with deprecated paths.json
-    fn test_validate_package_files_symlink(#[case] package: &str) {
+    #[case::mamba(
+        "https://conda.anaconda.org/conda-forge/linux-ppc64le/python-3.10.6-h2c4edbf_0_cpython.tar.bz2",
+        "978c122f6529cb617b90e6e692308a5945bf9c3ba0c27acbe4bea4c8b02cdad0"
+    )]
+    // Very old file with deprecated paths.json
+    #[case::mamba(
+        "https://conda.anaconda.org/conda-forge/linux-64/zlib-1.2.8-3.tar.bz2",
+        "85fcb6906b8686fe6341db89b4e6fc2631ad69ee6eab2f4823bfd64ae0b20ac8"
+    )]
+    fn test_validate_package_files_symlink(#[case] url: Url, #[case] sha256: &str) {
         // Create a temporary directory and extract the given package.
         let temp_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(&test_data_path().join(package), temp_dir.path())
-            .unwrap();
+        let package_path = tools::download_and_cache_file(url, sha256).unwrap();
+
+        rattler_package_streaming::fs::extract(&package_path, temp_dir.path()).unwrap();
 
         // Validate that the extracted package is correct. Since it's just been extracted this should
         // work.

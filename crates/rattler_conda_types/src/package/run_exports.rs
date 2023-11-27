@@ -47,11 +47,15 @@ mod test {
     #[test]
     pub fn test_reconstruct_run_exports_json_with_symlinks() {
         let package_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("with-symlinks/libzlib-1.2.13-hfd90126_4.tar.bz2"),
-            package_dir.path(),
+
+        let package_path = tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/osx-64/zlib-1.2.12-hfd90126_4.tar.bz2"
+                .parse()
+                .unwrap(),
+            "81592fa07b17ecb26813a3238e198b9d1fe39b77628b3f68744bffbaac505e93",
         )
-        .unwrap();
+            .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());

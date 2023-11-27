@@ -82,11 +82,15 @@ mod test {
     #[test]
     pub fn test_reconstruct_about_json() {
         let package_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("conda-22.11.1-py38haa244fe_1.conda"),
-            package_dir.path(),
+
+        let package_path = tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda"
+                .parse()
+                .unwrap(),
+            "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
         )
         .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         insta::assert_yaml_snapshot!(AboutJson::from_package_directory(package_dir.path()).unwrap());
     }
@@ -94,11 +98,15 @@ mod test {
     #[test]
     pub fn test_reconstruct_about_json_mamba() {
         let package_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("mamba-1.0.0-py38hecfeebb_2.tar.bz2"),
-            package_dir.path(),
+
+        let package_path = tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/win-64/mamba-1.0.0-py38hecfeebb_2.tar.bz2"
+                .parse()
+                .unwrap(),
+            "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
         )
         .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());

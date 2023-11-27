@@ -9,6 +9,14 @@ bindgen = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 difference = { workspace = true }
 tempdir = { workspace = true }
+url = { workspace = true }
+fslock = { workspace = true }
+dirs = { workspace = true }
+thiserror = { workspace = true }
+rattler_digest = { path = "../rattler_digest" }
+reqwest = { workspace = true, default-features = false, features = ["blocking", "rustls"] }
+tempfile = { workspace = true }
+tokio = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary
