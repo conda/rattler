@@ -2,42 +2,65 @@
 //! async context.
 
 use crate::{ExtractError, ExtractResult};
-use futures_util::stream::TryStreamExt;
+use futures_util::StreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_networking::AuthenticatedClient;
 use reqwest::Response;
-use std::path::Path;
-use tokio::io::BufReader;
-use tokio_util::either::Either;
-use tokio_util::io::StreamReader;
+use std::{
+    fs::File,
+    io::{BufReader, Read, Seek, Write},
+    path::Path,
+};
+use tokio::task::JoinError;
 use url::Url;
+
+enum LocalOrTemp {
+    Local(BufReader<File>),
+    Temp(tempfile::SpooledTempFile),
+}
+
+impl Read for LocalOrTemp {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            LocalOrTemp::Local(file) => file.read(buf),
+            LocalOrTemp::Temp(file) => file.read(buf),
+        }
+    }
+}
 
 async fn get_reader(
     url: Url,
     client: AuthenticatedClient,
-) -> Result<impl tokio::io::AsyncRead, ExtractError> {
-    if url.scheme() == "file" {
-        let file = tokio::fs::File::open(url.to_file_path().expect("..."))
-            .await
-            .map_err(ExtractError::IoError)?;
-
-        Ok(Either::Left(BufReader::new(file)))
-    } else {
-        // Send the request for the file
-        let response = client
-            .get(url.clone())
-            .send()
-            .await
-            .and_then(Response::error_for_status)
-            .map_err(ExtractError::ReqwestError)?;
-
-        // Get the response as a stream
-        Ok(Either::Right(StreamReader::new(
-            response
-                .bytes_stream()
-                .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err)),
-        )))
+) -> Result<impl Read + Send + 'static, ExtractError> {
+    // If the url is a file path, then just open the file
+    if let Ok(path) = url.to_file_path() {
+        let file = File::open(path).map_err(ExtractError::IoError)?;
+        return Ok(LocalOrTemp::Local(BufReader::new(file)));
     }
+
+    // Create a request for the file.
+    let response = client
+        .get(url.clone())
+        .send()
+        .await
+        .and_then(Response::error_for_status)
+        .map_err(ExtractError::ReqwestError)?;
+
+    // Construct a spooled temporary file, a memory buffer that will be rolled over to disk if it
+    // exceeds a certain size.
+    let mut temp_file = tempfile::SpooledTempFile::new(5 * 1024 * 1024);
+
+    // Stream the download to the temporary file
+    let mut bytes = response.bytes_stream();
+    while let Some(bytes) = bytes.next().await {
+        let bytes = bytes.map_err(ExtractError::ReqwestError)?;
+        temp_file.write_all(&bytes).map_err(ExtractError::IoError)?;
+    }
+
+    // Rewind the spooled file to the beginning and return
+    temp_file.rewind().map_err(ExtractError::IoError)?;
+
+    Ok(LocalOrTemp::Temp(temp_file))
 }
 
 /// Extracts the contents a `.tar.bz2` package archive from the specified remote location.
@@ -63,8 +86,15 @@ pub async fn extract_tar_bz2(
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
     let reader = get_reader(url.clone(), client).await?;
-    // The `response` is used to stream in the package data
-    crate::tokio::async_read::extract_tar_bz2(reader, destination).await
+    let destination = destination.to_owned();
+    match tokio::task::spawn_blocking(move || crate::read::extract_tar_bz2(reader, &destination))
+        .await
+        .map_err(JoinError::try_into_panic)
+    {
+        Ok(result) => result,
+        Err(Ok(panic)) => std::panic::resume_unwind(panic),
+        Err(Err(_)) => Err(ExtractError::Cancelled),
+    }
 }
 
 /// Extracts the contents a `.conda` package archive from the specified remote location.
@@ -89,9 +119,16 @@ pub async fn extract_conda(
     url: Url,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // The `response` is used to stream in the package data
     let reader = get_reader(url.clone(), client).await?;
-    crate::tokio::async_read::extract_conda(reader, destination).await
+    let destination = destination.to_owned();
+    match tokio::task::spawn_blocking(move || crate::read::extract_conda(reader, &destination))
+        .await
+        .map_err(JoinError::try_into_panic)
+    {
+        Ok(result) => result,
+        Err(Ok(panic)) => std::panic::resume_unwind(panic),
+        Err(Err(_)) => Err(ExtractError::Cancelled),
+    }
 }
 
 /// Extracts the contents a package archive from the specified remote location. The type of package
