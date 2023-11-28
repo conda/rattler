@@ -33,9 +33,11 @@ async fn get_reader(
     client: AuthenticatedClient,
 ) -> Result<impl Read + Send + 'static, ExtractError> {
     // If the url is a file path, then just open the file
-    if let Ok(path) = url.to_file_path() {
-        let file = File::open(path).map_err(ExtractError::IoError)?;
-        return Ok(LocalOrTemp::Local(BufReader::new(file)));
+    if url.scheme() == "file" {
+        if let Ok(path) = url.to_file_path() {
+            let file = File::open(path).map_err(ExtractError::IoError)?;
+            return Ok(LocalOrTemp::Local(BufReader::new(file)));
+        }
     }
 
     // Create a request for the file.
