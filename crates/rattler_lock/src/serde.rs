@@ -33,8 +33,11 @@ impl<'de> Deserialize<'de> for Version {
                 String::from(env!("CARGO_PKG_NAME"))
             } else {
                 // When not testing, use the current executable's name, e.g. "pixi" for pixi.
-                let binary_path = std::env::current_exe().unwrap_or(PathBuf::from(env!("CARGO_PKG_NAME")));
-                let binary_file_name = binary_path.file_name().unwrap_or(env!("CARGO_PKG_NAME").as_ref());
+                let binary_path =
+                    std::env::current_exe().unwrap_or(PathBuf::from(env!("CARGO_PKG_NAME")));
+                let binary_file_name = binary_path
+                    .file_name()
+                    .unwrap_or(env!("CARGO_PKG_NAME").as_ref());
                 binary_file_name.to_string_lossy().into_owned()
             };
             return Err(D::Error::custom(format!(
