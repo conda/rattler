@@ -2,6 +2,7 @@ use super::{CondaLock, LockMeta, LockedDependency, LockedDependencyKind};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::Ordering;
+use std::path::PathBuf;
 
 // Version 2: dependencies are now arrays instead of maps
 // Version 3: pip has been renamed to pypi
@@ -27,9 +28,19 @@ impl<'de> Deserialize<'de> for Version {
         let version = u32::deserialize(deserializer)?;
 
         if version > FILE_VERSION {
+            let binary = if cfg!(test) {
+                // When running tests, use a hardcoded name or an environment variable
+                String::from(env!("CARGO_PKG_NAME"))
+            } else {
+                // When not testing, use the current executable's name, e.g. "pixi" for pixi.
+                let binary_path = std::env::current_exe().unwrap_or(PathBuf::from(env!("CARGO_PKG_NAME")));
+                let binary_file_name = binary_path.file_name().unwrap_or(env!("CARGO_PKG_NAME").as_ref());
+                binary_file_name.to_string_lossy().into_owned()
+            };
             return Err(D::Error::custom(format!(
-                "found newer file format version {}, but only up to including version {} is supported",
-                version, FILE_VERSION
+                "found newer lockfile format version {}, but only up to including version {} is supported.\n\
+                Please update your {} version.",
+                version, FILE_VERSION, binary
             )));
         }
 
@@ -115,6 +126,6 @@ mod test {
         )
         .unwrap_err();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer file format version 1000, but only up to including version 3 is supported");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 3 is supported.\nPlease update your rattler_lock version.");
     }
 }
