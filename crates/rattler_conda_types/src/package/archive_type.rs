@@ -5,9 +5,11 @@ use std::path::Path;
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum ArchiveType {
     /// A file with the `.tar.bz2` extension.
+    #[serde(rename = "tar.bz2")]
     TarBz2,
 
     /// A file with the `.conda` extension.
+    #[serde(rename = "conda")]
     Conda,
 }
 
@@ -48,10 +50,10 @@ mod test {
     fn test_archive_type_serialization() {
         let archive_type = ArchiveType::TarBz2;
         let serialized = serde_json::to_string(&archive_type).unwrap();
-        assert_eq!(serialized, "\"TarBz2\"");
+        assert_eq!(serialized, "\"tar.bz2\"");
 
         let archive_type = ArchiveType::Conda;
         let serialized = serde_json::to_string(&archive_type).unwrap();
-        assert_eq!(serialized, "\"Conda\"");
+        assert_eq!(serialized, "\"conda\"");
     }
 }
