@@ -48,10 +48,10 @@ impl FromStr for CondaLock {
                 })
             })?;
 
-        if version > FILE_VERSION as u64 {
+        if version > FILE_VERSION {
             return Err(ParseCondaLockError::IncompatibleVersion {
                 lock_file_version: version,
-                max_supported_version: FILE_VERSION as u64,
+                max_supported_version: FILE_VERSION,
             });
         }
 
