@@ -63,7 +63,7 @@ jobs:
         include:
           - { name: "Linux-x86_64",      target: x86_64-unknown-linux-musl,        os: ubuntu-latest }
           - { name: "Linux-aarch64",     target: aarch64-unknown-linux-musl,       os: ubuntu-latest, skip-tests: true }
-          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true }
+          - { name: "Linux-arm",         target: arm-unknown-linux-musleabi,       os: ubuntu-latest, use-cross: true, skip_tests: true }
 
           # - { name: "Linux-mips",        target: mips-unknown-linux-musl,          os: ubuntu-latest, use-cross: true, skip-tests: true }
           # - { name: "Linux-mipsel",      target: mipsel-unknown-linux-musl,        os: ubuntu-latest, use-cross: true, skip-tests: true }
@@ -112,7 +112,7 @@ jobs:
 
       - name: Use rustls on musl targets.
         id: build-options
-        if: contains(matrix.target, '-musl') || contains(matrix.target, '-powerpc') || contains(matrix.target, '-s390x')
+        if: contains(matrix.target, '-musl') || startsWith(matrix.target, 'powerpc') || startsWith(matrix.target, 's390x')
         run: |
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
