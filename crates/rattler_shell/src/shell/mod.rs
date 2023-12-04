@@ -568,53 +568,64 @@ impl ShellEnum {
         let mut system_info = sysinfo::System::new();
 
         // Get current process information
-        let current_pid = get_current_pid().ok()?;
+        let mut current_pid = get_current_pid().ok()?;
         system_info.refresh_process(current_pid);
-        let parent_process_id = system_info
+
+        while let Some(parent_process_id) = system_info
             .process(current_pid)
-            .and_then(|process| process.parent())?;
+            .and_then(|process| process.parent())
+        {
+            // Get the name of the parent process
+            system_info.refresh_process(parent_process_id);
+            let parent_process = system_info.process(parent_process_id)?;
+            let parent_process_name = parent_process.name().to_lowercase();
 
-        // Get the name of the parent process
-        system_info.refresh_process(parent_process_id);
-        let parent_process = system_info.process(parent_process_id)?;
-        let parent_process_name = parent_process.name().to_lowercase();
-
-        tracing::debug!(
-            "Guessing ShellEnum. Parent process name: {} and args: {:?}",
-            &parent_process_name,
-            &parent_process.cmd()
-        );
-
-        if parent_process_name.contains("bash") {
-            Some(Bash.into())
-        } else if parent_process_name.contains("zsh") {
-            Some(Zsh.into())
-        } else if parent_process_name.contains("xonsh")
-            // xonsh is a python shell, so we need to check if the parent process is python and if it
-            // contains xonsh in the arguments.
-            || (parent_process_name.contains("python")
+            let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
+                Some(Bash.into())
+            } else if parent_process_name.contains("zsh") {
+                Some(Zsh.into())
+            } else if parent_process_name.contains("xonsh")
+                // xonsh is a python shell, so we need to check if the parent process is python and if it
+                // contains xonsh in the arguments.
+                || (parent_process_name.contains("python")
                 && parent_process
-                    .cmd().iter()
-                    .any(|arg| arg.contains("xonsh")))
-        {
-            Some(Xonsh.into())
-        } else if parent_process_name.contains("fish") {
-            Some(Fish.into())
-        } else if parent_process_name.contains("nu") {
-            Some(NuShell.into())
-        } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
-        {
-            Some(
-                PowerShell {
-                    executable_path: Some(parent_process_name),
-                }
-                .into(),
-            )
-        } else if parent_process_name.contains("cmd.exe") {
-            Some(CmdExe.into())
-        } else {
-            None
+                .cmd().iter()
+                .any(|arg| arg.contains("xonsh")))
+            {
+                Some(Xonsh.into())
+            } else if parent_process_name.contains("fish") {
+                Some(Fish.into())
+            } else if parent_process_name.contains("nu") {
+                Some(NuShell.into())
+            } else if parent_process_name.contains("powershell")
+                || parent_process_name.contains("pwsh")
+            {
+                Some(
+                    PowerShell {
+                        executable_path: Some(parent_process_name.clone()),
+                    }
+                    .into(),
+                )
+            } else if parent_process_name.contains("cmd.exe") {
+                Some(CmdExe.into())
+            } else {
+                None
+            };
+
+            if let Some(shell) = shell {
+                tracing::debug!(
+                    "Guessing the current shell is {}. Parent process name: {} and args: {:?}",
+                    &shell.executable(),
+                    &parent_process_name,
+                    &parent_process.cmd()
+                );
+                return Some(shell);
+            }
+
+            current_pid = parent_process_id;
         }
+
+        None
     }
 }
 
