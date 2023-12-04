@@ -113,7 +113,7 @@ impl Platform {
                 target_arch = "powerpc64",
                 target_arch = "s390x"
             )))]
-            compile_error!("unsupported linux architecture {}", cfg!(target_arch));
+            compile_error!("unsupported linux architecture");
         }
         #[cfg(windows)]
         {
@@ -127,7 +127,7 @@ impl Platform {
             return Platform::WinArm64;
 
             #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
-            compile_error!("unsupported windows architecture {}", cfg!(target_arch));
+            compile_error!("unsupported windows architecture");
         }
         #[cfg(target_os = "macos")]
         {
