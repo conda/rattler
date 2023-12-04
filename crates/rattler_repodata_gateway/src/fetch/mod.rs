@@ -6,7 +6,10 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::{redact_known_secrets_from_error, AuthenticatedClient};
+use rattler_networking::{
+    redact_known_secrets_from_error, redact_known_secrets_from_url, AuthenticatedClient,
+    DEFAULT_REDACTION_STR,
+};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -49,7 +52,10 @@ pub enum FetchRepoDataError {
     HttpError(reqwest::Error),
 
     #[error(transparent)]
-    FailedToDownloadRepoData(std::io::Error),
+    IoError(std::io::Error),
+
+    #[error("failed to download {0}")]
+    FailedToDownload(Url, #[source] std::io::Error),
 
     #[error("repodata not found")]
     NotFound(#[from] RepoDataNotFoundError),
@@ -239,7 +245,7 @@ async fn repodata_from_file(
                 RepoDataNotFoundError::FileSystemError(e),
             ))
         } else {
-            Err(FetchRepoDataError::FailedToDownloadRepoData(e))
+            Err(FetchRepoDataError::IoError(e))
         };
     }
 
@@ -248,7 +254,7 @@ async fn repodata_from_file(
         url: subdir_url.clone(),
         cache_size: tokio::fs::metadata(&out_path)
             .await
-            .map_err(FetchRepoDataError::FailedToDownloadRepoData)?
+            .map_err(FetchRepoDataError::IoError)?
             .len(),
         cache_headers: CacheHeaders {
             etag: None,
@@ -544,6 +550,7 @@ pub async fn fetch_repo_data(
 
     // Stream the content to a temporary file
     let (temp_file, blake2_hash) = stream_and_decode_to_file(
+        repo_data_url.clone(),
         response,
         if has_zst {
             Encoding::Zst
@@ -612,6 +619,7 @@ pub async fn fetch_repo_data(
 /// to disk it also computes the BLAKE2 hash of the file.
 #[instrument(skip_all)]
 async fn stream_and_decode_to_file(
+    url: Url,
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
@@ -677,7 +685,12 @@ async fn stream_and_decode_to_file(
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
         .await
-        .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
+        .map_err(|e| {
+            FetchRepoDataError::FailedToDownload(
+                redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url),
+                e,
+            )
+        })?;
 
     // Finalize the hash
     let (_, hash) = hashing_file_writer.finalize();

@@ -252,6 +252,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "conda.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -288,6 +294,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "bearer.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -329,6 +341,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "basic.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
