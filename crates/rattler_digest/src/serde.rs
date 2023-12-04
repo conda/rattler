@@ -18,6 +18,7 @@ use digest::{Digest, Output};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
+use std::borrow::Cow;
 use std::fmt::LowerHex;
 use std::ops::Deref;
 
@@ -26,8 +27,9 @@ pub fn deserialize<'de, D, Dig: Digest>(deserializer: D) -> Result<Output<Dig>, 
 where
     D: Deserializer<'de>,
 {
-    let str = <&'de str>::deserialize(deserializer)?;
-    super::parse_digest_from_hex::<Dig>(str).ok_or_else(|| Error::custom("failed to parse digest"))
+    let str = Cow::<'de, str>::deserialize(deserializer)?;
+    super::parse_digest_from_hex::<Dig>(str.as_ref())
+        .ok_or_else(|| Error::custom("failed to parse digest"))
 }
 
 /// Serialize into a string
