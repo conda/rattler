@@ -23,6 +23,8 @@ pub use conda::CondaLockedDependency;
 pub use hash::PackageHashes;
 pub use pypi::PypiLockedDependency;
 
+pub use self::serde::ParseCondaLockError;
+
 /// Represents the conda-lock file
 /// Contains the metadata regarding the lock files
 /// also the locked packages
@@ -33,24 +35,6 @@ pub struct CondaLock {
 
     /// Locked packages
     pub package: Vec<LockedDependency>,
-}
-
-#[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
-pub enum ParseCondaLockError {
-    #[error(transparent)]
-    IoError(#[from] std::io::Error),
-
-    #[error(transparent)]
-    ParseError(#[from] serde_yaml::Error),
-}
-
-impl FromStr for CondaLock {
-    type Err = ParseCondaLockError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)
-    }
 }
 
 impl CondaLock {
