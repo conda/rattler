@@ -42,16 +42,16 @@ impl FromPyObject<'_> for Wrap<PathModificationBehavior> {
 #[pymethods]
 impl PyActivationVariables {
     #[new]
-    #[pyo3(signature = (conda_prefix, path, path_modification_behaviour))]
+    #[pyo3(signature = (conda_prefix, path, path_modification_behavior))]
     pub fn __init__(
         conda_prefix: Option<PathBuf>,
         path: Option<Vec<PathBuf>>,
-        path_modification_behaviour: Wrap<PathModificationBehavior>,
+        path_modification_behavior: Wrap<PathModificationBehavior>,
     ) -> Self {
         let activation_vars = ActivationVariables {
             conda_prefix,
             path,
-            path_modification_behaviour: path_modification_behaviour.0,
+            path_modification_behavior: path_modification_behavior.0,
         };
         activation_vars.into()
     }
