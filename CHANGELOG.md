@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+# [0.14.0] - 2023-12-05
+
+### 📃 Details
+
 #### Added
 
-* Options to disable `bz2` and `zstd` in `fetch_repo_data`
+* Options to disable `bz2` and `zstd` in `fetch_repo_data` ([#420](https://github.com/mamba-org/rattler/pull/420))
+* Support for powerpc64 and s390x ([#425](https://github.com/mamba-org/rattler/pull/425))
+
+#### Changed
+
+* Renamed `behaviour` to `behavior` ([#428](https://github.com/mamba-org/rattler/pull/428))
+
+#### Fixed
+
+* Recursive look for parent process name ([#424](https://github.com/mamba-org/rattler/pull/424))
+* Improve repodata fetch errors ([#426](https://github.com/mamba-org/rattler/pull/426))
+* Use filelock for authentication fallback storage  ([#427](https://github.com/mamba-org/rattler/pull/427))
+* Improved lockfile version mismatch error ([#423](https://github.com/mamba-org/rattler/pull/423))
 
 ## [0.13.0] - 2023-11-27
 
