@@ -65,7 +65,7 @@ pub trait Shell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         let mut paths_vec = paths
@@ -73,7 +73,7 @@ pub trait Shell {
             .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => (),
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
@@ -181,7 +181,7 @@ impl Shell for Bash {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         // Put paths in a vector of the correct format.
@@ -206,7 +206,7 @@ impl Shell for Bash {
             .collect_vec();
 
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => (),
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
@@ -475,7 +475,7 @@ impl Shell for NuShell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         _platform: &Platform,
     ) -> std::fmt::Result {
         let path = paths
@@ -484,7 +484,7 @@ impl Shell for NuShell {
             .join(", ");
 
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => {
                 writeln!(f, "$env.PATH = [{}]", path)
             }
