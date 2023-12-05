@@ -29,12 +29,12 @@ futures = "0.3.28"
 indicatif = "0.17.7"
 itertools = "0.11.0"
 once_cell = "1.18.0"
-rattler = { version = "0.13.0", path = "../rattler", default-features = false }
-rattler_networking = { version = "0.13.0", path = "../rattler_networking", default-features = false }
-rattler_conda_types = { version = "0.13.0", path = "../rattler_conda_types" }
-rattler_repodata_gateway = { version = "0.13.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
-rattler_solve = { version = "0.13.0", path = "../rattler_solve", features = ["resolvo", "libsolv_c"] }
-rattler_virtual_packages = { version = "0.13.0", path = "../rattler_virtual_packages" }
+rattler = { version = "0.14.0", path = "../rattler", default-features = false }
+rattler_networking = { version = "0.14.0", path = "../rattler_networking", default-features = false }
+rattler_conda_types = { version = "0.14.0", path = "../rattler_conda_types" }
+rattler_repodata_gateway = { version = "0.14.0", path = "../rattler_repodata_gateway", features = ["sparse"], default-features = false }
+rattler_solve = { version = "0.14.0", path = "../rattler_solve", features = ["resolvo", "libsolv_c"] }
+rattler_virtual_packages = { version = "0.14.0", path = "../rattler_virtual_packages" }
 reqwest = { version = "0.11.22", default-features = false }
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
