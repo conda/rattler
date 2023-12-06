@@ -1,24 +1,11 @@
 //! Fallback storage for passwords.
 use netrc_rs::{Machine, Netrc};
-use serde::de::value;
-use std::{
-    collections::HashMap,
-    env,
-    io::Read,
-    path::PathBuf,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashMap, env, io::Read, path::PathBuf};
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
 #[derive(Clone)]
 pub struct NetRcStorage {
-    /// The path to the JSON file
-    pub path: PathBuf,
-
-    /// A mutex to ensure that only one thread accesses the file at a time
-    mutex: Arc<Mutex<()>>,
-
     /// The netrc file contents
     machines: HashMap<String, Machine>,
 }
@@ -35,8 +22,10 @@ pub enum NetRcStorageError {
 }
 
 impl NetRcStorage {
-    /// Create a new fallback storage with the given path
-    pub fn new() -> Self {
+    /// Create a new fallback storage by retrieving the netrc file from the user environment.  
+    /// This uses the same environment variable as curl and will read the file from $NETRC
+    /// falling back to `~/.netrc`
+    pub fn from_env() -> Self {
         // Get the path to the netrc file
         let path = match env::var("NETRC") {
             Ok(val) => PathBuf::from(val),
@@ -50,37 +39,25 @@ impl NetRcStorage {
         };
 
         Self {
-            path: path.clone(),
-            mutex: Arc::new(Mutex::new(())),
-            machines: if path.exists() {
-                match std::fs::File::open(&path) {
-                    Ok(file) => {
-                        let mut reader = std::io::BufReader::new(file);
-                        let mut content = String::new();
-                        match reader.read_to_string(&mut content) {
-                            Ok(_) => match Netrc::parse(&content, false) {
-                                Ok(netrc) => netrc
-                                    .machines
-                                    .into_iter()
-                                    .map(|m| (m.name.clone(), m))
-                                    .filter_map(|(name, value)| name.map(|n| (n, value)))
-                                    .collect(),
-                                Err(_) => HashMap::new(),
-                            },
-                            Err(_) => HashMap::new(),
-                        }
-                    }
+            // Attempt to read the file and parse the netrc structure.
+            // If the file doesn't exist or is invalid, return an empty HashMap
+            machines: match std::fs::read_to_string(path) {
+                Ok(content) => match Netrc::parse(&content, false) {
+                    Ok(netrc) => netrc
+                        .machines
+                        .into_iter()
+                        .map(|m| (m.name.clone(), m))
+                        .filter_map(|(name, value)| name.map(|n| (n, value)))
+                        .collect(),
                     Err(_) => HashMap::new(),
-                }
-            } else {
-                HashMap::new()
+                },
+                Err(_) => HashMap::new(),
             },
         }
     }
 
     /// Retrieve the authentication information for the given host
     pub fn get_password(&self, host: &str) -> Result<Option<String>, NetRcStorageError> {
-        let _lock = self.mutex.lock().unwrap();
         match self.machines.get(host) {
             Some(machine) => Ok(machine.password.clone()),
             None => Ok(None),

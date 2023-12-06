@@ -39,7 +39,7 @@ impl AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
             cache: Arc::new(Mutex::new(HashMap::new())),
-            netrc_storage: netrc_storage::NetRcStorage::new(),
+            netrc_storage: netrc_storage::NetRcStorage::from_env(),
         }
     }
 }
