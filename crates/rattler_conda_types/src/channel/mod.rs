@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::borrow::Cow;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
@@ -284,7 +285,24 @@ fn parse_scheme(channel: &str) -> Option<&str> {
 
 /// Returns true if the specified string is considered to be a path
 fn is_path(path: &str) -> bool {
-    lazy_regex::regex!(r"(\./|\.\.|~|/|[a-zA-Z]:[/\\]|\\\\|//)").is_match(path)
+    if path.contains("://") {
+        return false;
+    }
+
+    // Check if the path starts with a common path prefix
+    if path.starts_with("./")
+        || path.starts_with("..")
+        || path.starts_with('~')
+        || path.starts_with('/')
+        || path.starts_with("\\\\")
+        || path.starts_with("//")
+    {
+        return true;
+    }
+
+    // A drive letter followed by a colon and a (backward or forward) slash
+    matches!(path.chars().take(3).collect_tuple(),
+        Some((letter, ':', '/' | '\\')) if letter.is_alphabetic())
 }
 
 /// Normalizes a file path by eliminating `..` and `.`.
@@ -328,14 +346,13 @@ fn absolute_path(path: &Path) -> Cow<'_, Path> {
 
 #[cfg(test)]
 mod tests {
-    use crate::channel::{absolute_path, normalize_path, parse_platforms};
-    use crate::{ParseChannelError, ParsePlatformError};
+    use super::*;
     use smallvec::smallvec;
-    use std::path::{Path, PathBuf};
-    use std::str::FromStr;
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+    };
     use url::Url;
-
-    use super::{parse_scheme, Channel, ChannelConfig, Platform};
 
     #[test]
     fn test_parse_platforms() {
@@ -524,5 +541,24 @@ mod tests {
         );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
         assert_eq!(channel.platforms, Some(smallvec![platform]));
+
+        let channel = Channel::from_str("conda-forge/label/rust_dev", &config).unwrap();
+        assert_eq!(
+            channel.base_url,
+            Url::from_str("https://conda.anaconda.org/conda-forge/label/rust_dev/").unwrap()
+        );
+        assert_eq!(channel.name.as_deref(), Some("conda-forge/label/rust_dev"));
+    }
+
+    #[test]
+    fn test_is_path() {
+        assert!(is_path("./foo"));
+        assert!(is_path("/foo"));
+        assert!(is_path("~/foo"));
+        assert!(is_path("../foo"));
+        assert!(is_path("/C:/foo"));
+        assert!(is_path("C:/foo"));
+
+        assert!(!is_path("conda-forge/label/rust_dev"));
     }
 }

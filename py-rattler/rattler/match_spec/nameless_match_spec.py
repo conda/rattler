@@ -28,7 +28,7 @@ class NamelessMatchSpec:
         """
         Match a MatchSpec against a PackageRecord
         """
-        return self._nameless_match_spec.matches(package_record._package_record)
+        return self._nameless_match_spec.matches(package_record._record)
 
     @classmethod
     def _from_py_nameless_match_spec(

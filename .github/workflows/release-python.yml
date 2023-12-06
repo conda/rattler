@@ -69,9 +69,8 @@ jobs:
             arch: x64
           - target: i686-pc-windows-msvc
             arch: x86
-          # ring 0.16.20 doesnt support this platform yet
-          # - target: aarch64-pc-windows-msvc
-          #   arch: x64
+          - target: aarch64-pc-windows-msvc
+            arch: x64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,13 +151,12 @@ jobs:
             arch: aarch64
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
-          # ring 0.16.20 doesnt support these platforms yet
-          # - target: s390x-unknown-linux-gnu
-          #   arch: s390x
-          # - target: powerpc64le-unknown-linux-gnu
-          #   arch: ppc64le
-          # - target: powerpc64-unknown-linux-gnu
-          #   arch: ppc64
+          - target: s390x-unknown-linux-gnu
+            arch: s390x
+          - target: powerpc64le-unknown-linux-gnu
+            arch: ppc64le
+          - target: powerpc64-unknown-linux-gnu
+            arch: ppc64
 
     steps:
       - uses: actions/checkout@v4

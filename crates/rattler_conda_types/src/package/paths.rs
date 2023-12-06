@@ -1,6 +1,8 @@
 use super::PackageFile;
-use crate::package::has_prefix::HasPrefixEntry;
-use crate::package::{Files, HasPrefix, NoLink, NoSoftlink};
+use crate::{
+    package::has_prefix::HasPrefixEntry,
+    package::{Files, HasPrefix, NoLink, NoSoftlink},
+};
 use rattler_digest::serde::SerializableHash;
 use rattler_macros::sorted;
 use serde::{Deserialize, Serialize, Serializer};
@@ -192,6 +194,7 @@ pub struct PathsEntry {
     // rename can't be sorted by the macro yet.
     /// The relative path from the root of the package
     #[serde(rename = "_path")]
+    #[serde_as(as = "crate::utils::serde::NormalizedPath")]
     pub relative_path: PathBuf,
 
     /// Whether or not this file should be linked or not when installing the package.
@@ -312,7 +315,7 @@ mod test {
         let mut paths = vec![];
         for i in 0..15 {
             paths.push(PathsEntry {
-                relative_path: format!("path_{}", i).into(),
+                relative_path: format!("rel\\path_{}", i).into(),
                 path_type: super::PathType::HardLink,
                 prefix_placeholder: None,
                 no_link: false,

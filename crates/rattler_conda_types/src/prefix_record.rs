@@ -54,6 +54,7 @@ impl From<Vec<PathsEntry>> for PrefixPaths {
 pub struct PathsEntry {
     /// The relative path from the root of the package
     #[serde(rename = "_path")]
+    #[serde_as(as = "crate::utils::serde::NormalizedPath")]
     pub relative_path: PathBuf,
 
     /// How the file was installed into the environment
@@ -122,6 +123,7 @@ impl From<crate::package::PathType> for PathType {
 
 /// A record of a single package installed within an environment. The struct includes the
 /// [`RepoDataRecord`] which specifies information about where the original package comes from.
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct PrefixRecord {
     /// The data from the repodata
@@ -138,6 +140,7 @@ pub struct PrefixRecord {
 
     /// A sorted list of all files included in this package
     #[serde(default)]
+    #[serde_as(as = "Vec<crate::utils::serde::NormalizedPath>")]
     pub files: Vec<PathBuf>,
 
     /// Information about how files have been linked when installing the package.

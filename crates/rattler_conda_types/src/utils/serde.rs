@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::de::Error as _;
+use serde::ser::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::de::DeserializeAsWrap;
 use serde_with::ser::SerializeAsWrap;
@@ -7,7 +8,33 @@ use serde_with::{DeserializeAs, SerializeAs};
 use std::collections::HashSet;
 use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
 use url::Url;
+
+/// A helper struct that serializes Paths in a normalized way.
+/// - Backslashes are replaced with forward-slashes.
+pub(crate) struct NormalizedPath;
+
+impl<P: AsRef<Path>> SerializeAs<P> for NormalizedPath {
+    fn serialize_as<S>(source: &P, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match source.as_ref().to_str() {
+            Some(s) => s.replace('\\', "/").serialize(serializer),
+            None => Err(S::Error::custom("path contains invalid UTF-8 characters")),
+        }
+    }
+}
+
+impl<'de> DeserializeAs<'de, PathBuf> for NormalizedPath {
+    fn deserialize_as<D>(deserializer: D) -> Result<PathBuf, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        PathBuf::deserialize(deserializer)
+    }
+}
 
 /// Deserialize a sequence into `Vec<T>` but filter `None` values.
 pub(crate) struct VecSkipNone<T>(PhantomData<T>);

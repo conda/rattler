@@ -80,7 +80,7 @@ use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::AuthenticatedClient;
+use rattler_networking::{redact_known_secrets_from_error, AuthenticatedClient};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -158,6 +158,12 @@ pub enum JLAPError {
     /// The operation was cancelled
     #[error("the operation was cancelled")]
     Cancelled,
+}
+
+impl From<reqwest::Error> for JLAPError {
+    fn from(value: reqwest::Error) -> Self {
+        Self::HTTP(redact_known_secrets_from_error(value))
+    }
 }
 
 /// Represents the numerous patches found in a JLAP file which makes up a majority
@@ -406,7 +412,7 @@ pub async fn patch_repo_data(
         fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.position).await?;
     let response_text = match response.text().await {
         Ok(value) => value,
-        Err(error) => return Err(JLAPError::HTTP(error)),
+        Err(error) => return Err(error.into()),
     };
 
     // Update position as it may have changed
@@ -477,12 +483,12 @@ async fn fetch_jlap_with_retry(
                 let range = "bytes=0-";
                 return match fetch_jlap(url, client, range).await {
                     Ok(response) => Ok((response, 0)),
-                    Err(error) => Err(JLAPError::HTTP(error)),
+                    Err(error) => Err(error.into()),
                 };
             }
             Ok((response, position))
         }
-        Err(error) => Err(JLAPError::HTTP(error)),
+        Err(error) => Err(error.into()),
     }
 }
 

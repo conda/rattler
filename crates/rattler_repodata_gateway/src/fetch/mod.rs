@@ -6,7 +6,10 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::AuthenticatedClient;
+use rattler_networking::{
+    redact_known_secrets_from_error, redact_known_secrets_from_url, AuthenticatedClient,
+    DEFAULT_REDACTION_STR,
+};
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -32,7 +35,7 @@ pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
     #[error(transparent)]
-    HttpError(#[from] reqwest::Error),
+    HttpError(reqwest::Error),
 
     /// There was a file system error
     #[error(transparent)]
@@ -46,10 +49,13 @@ pub enum FetchRepoDataError {
     FailedToAcquireLock(#[source] anyhow::Error),
 
     #[error(transparent)]
-    HttpError(#[from] reqwest::Error),
+    HttpError(reqwest::Error),
 
     #[error(transparent)]
-    FailedToDownloadRepoData(std::io::Error),
+    IoError(std::io::Error),
+
+    #[error("failed to download {0}")]
+    FailedToDownload(Url, #[source] std::io::Error),
 
     #[error("repodata not found")]
     NotFound(#[from] RepoDataNotFoundError),
@@ -71,6 +77,18 @@ pub enum FetchRepoDataError {
 
     #[error("the operation was cancelled")]
     Cancelled,
+}
+
+impl From<reqwest::Error> for FetchRepoDataError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(redact_known_secrets_from_error(err))
+    }
+}
+
+impl From<reqwest::Error> for RepoDataNotFoundError {
+    fn from(err: reqwest::Error) -> Self {
+        Self::HttpError(redact_known_secrets_from_error(err))
+    }
 }
 
 impl From<tokio::task::JoinError> for FetchRepoDataError {
@@ -150,6 +168,12 @@ pub struct FetchRepoDataOptions {
 
     /// When enabled repodata can be fetched incrementally using JLAP
     pub jlap_enabled: bool,
+
+    /// When enabled, the zstd variant will be used if available
+    pub zstd_enabled: bool,
+
+    /// When enabled, the bz2 variant will be used if available
+    pub bz2_enabled: bool,
 }
 
 impl Default for FetchRepoDataOptions {
@@ -158,6 +182,8 @@ impl Default for FetchRepoDataOptions {
             cache_action: Default::default(),
             variant: Variant::default(),
             jlap_enabled: true,
+            zstd_enabled: true,
+            bz2_enabled: true,
         }
     }
 }
@@ -219,7 +245,7 @@ async fn repodata_from_file(
                 RepoDataNotFoundError::FileSystemError(e),
             ))
         } else {
-            Err(FetchRepoDataError::FailedToDownloadRepoData(e))
+            Err(FetchRepoDataError::IoError(e))
         };
     }
 
@@ -228,7 +254,7 @@ async fn repodata_from_file(
         url: subdir_url.clone(),
         cache_size: tokio::fs::metadata(&out_path)
             .await
-            .map_err(FetchRepoDataError::FailedToDownloadRepoData)?
+            .map_err(FetchRepoDataError::IoError)?
             .len(),
         cache_headers: CacheHeaders {
             etag: None,
@@ -388,13 +414,13 @@ pub async fn fetch_repo_data(
 
     // Now that the caches have been refreshed determine whether or not we can use one of the
     // variants. We don't check the expiration here since we just refreshed it.
-    let has_zst = variant_availability.has_zst();
-    let has_bz2 = variant_availability.has_bz2();
-    let has_jlap = variant_availability.has_jlap();
+    let has_zst = options.zstd_enabled && variant_availability.has_zst();
+    let has_bz2 = options.bz2_enabled && variant_availability.has_bz2();
+    let has_jlap = options.jlap_enabled && variant_availability.has_jlap();
 
     // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
     // a normal request.
-    let jlap_state = if has_jlap && cache_state.is_some() && options.jlap_enabled {
+    let jlap_state = if has_jlap && cache_state.is_some() {
         let repo_data_state = cache_state.as_ref().unwrap();
         match jlap::patch_repo_data(
             &client,
@@ -432,7 +458,7 @@ pub async fn fetch_repo_data(
                 });
             }
             Err(error) => {
-                tracing::warn!("Error during JLAP request {:?}", error);
+                tracing::warn!("Error during JLAP request: {}", error);
                 None
             }
         }
@@ -479,13 +505,13 @@ pub async fn fetch_repo_data(
     // Send the request and wait for a reply
     let response = match request_builder.headers(headers).send().await {
         Ok(response) if response.status() == StatusCode::NOT_FOUND => {
-            return Err(FetchRepoDataError::NotFound(
-                RepoDataNotFoundError::HttpError(response.error_for_status().unwrap_err()),
-            ));
+            return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
+                response.error_for_status().unwrap_err(),
+            )));
         }
         Ok(response) => response.error_for_status()?,
         Err(e) => {
-            return Err(FetchRepoDataError::HttpError(e));
+            return Err(FetchRepoDataError::from(e));
         }
     };
 
@@ -524,6 +550,7 @@ pub async fn fetch_repo_data(
 
     // Stream the content to a temporary file
     let (temp_file, blake2_hash) = stream_and_decode_to_file(
+        repo_data_url.clone(),
         response,
         if has_zst {
             Encoding::Zst
@@ -561,7 +588,7 @@ pub async fn fetch_repo_data(
             .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
-        blake2_hash_nominal: None,
+        blake2_hash_nominal: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
         has_bz2: variant_availability.has_bz2,
         has_jlap: variant_availability.has_jlap,
@@ -592,6 +619,7 @@ pub async fn fetch_repo_data(
 /// to disk it also computes the BLAKE2 hash of the file.
 #[instrument(skip_all)]
 async fn stream_and_decode_to_file(
+    url: Url,
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
@@ -657,7 +685,12 @@ async fn stream_and_decode_to_file(
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
         .await
-        .map_err(FetchRepoDataError::FailedToDownloadRepoData)?;
+        .map_err(|e| {
+            FetchRepoDataError::FailedToDownload(
+                redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url),
+                e,
+            )
+        })?;
 
     // Finalize the hash
     let (_, hash) = hashing_file_writer.finalize();

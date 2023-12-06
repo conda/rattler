@@ -98,7 +98,7 @@ class MatchSpec:
 
     def matches(self, record: PackageRecord) -> bool:
         """Match a MatchSpec against a PackageRecord."""
-        return self._match_spec.matches(record._package_record)
+        return self._match_spec.matches(record._record)
 
     @classmethod
     def from_nameless(cls, spec: NamelessMatchSpec, name: str) -> MatchSpec:

@@ -1,54 +1,68 @@
 use super::{CondaLock, LockMeta, LockedDependency, LockedDependencyKind};
 use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer};
+use serde_yaml::Value;
 use std::cmp::Ordering;
+use std::str::FromStr;
 
-const FILE_VERSION: u32 = 2;
+// Version 2: dependencies are now arrays instead of maps
+// Version 3: pip has been renamed to pypi
+const FILE_VERSION: u64 = 3;
 
-/// A helper struct to deserialize the version field of the lock file and provide potential errors
-/// in-line.
-#[derive(Serialize)]
-#[serde(transparent)]
-struct Version(u32);
+#[allow(missing_docs)]
+#[derive(Debug, thiserror::Error)]
+pub enum ParseCondaLockError {
+    #[error(transparent)]
+    IoError(#[from] std::io::Error),
 
-impl Default for Version {
-    fn default() -> Self {
-        Self(FILE_VERSION)
-    }
+    #[error(transparent)]
+    ParseError(#[from] serde_yaml::Error),
+
+    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported.")]
+    IncompatibleVersion {
+        lock_file_version: u64,
+        max_supported_version: u64,
+    },
 }
 
-impl<'de> Deserialize<'de> for Version {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let version = u32::deserialize(deserializer)?;
+impl FromStr for CondaLock {
+    type Err = ParseCondaLockError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // First parse the document to a `serde_yaml::Value`.
+        let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
+
+        // Read the version number from the document
+        let version = document
+            .get("version")
+            .ok_or_else(|| {
+                ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                    "missing `version` field in lock file",
+                ))
+            })
+            .and_then(|v| {
+                v.as_u64().ok_or_else(|| {
+                    ParseCondaLockError::ParseError(serde_yaml::Error::custom(
+                        "`version` field in lock file is not an integer",
+                    ))
+                })
+            })?;
 
         if version > FILE_VERSION {
-            return Err(D::Error::custom(format!(
-                "found newer file format version {}, but only up to including version {} is supported",
-                version, FILE_VERSION
-            )));
+            return Err(ParseCondaLockError::IncompatibleVersion {
+                lock_file_version: version,
+                max_supported_version: FILE_VERSION,
+            });
         }
 
-        Ok(Self(version))
-    }
-}
-
-impl<'de> Deserialize<'de> for CondaLock {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[allow(dead_code)]
+        // Then parse the document to a `CondaLock`
         #[derive(Deserialize)]
         struct Raw {
-            version: Version,
             metadata: LockMeta,
             package: Vec<LockedDependency>,
         }
 
-        let raw = Raw::deserialize(deserializer)?;
+        let raw: Raw = serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
         Ok(Self {
             metadata: raw.metadata,
             package: raw.package,
@@ -63,7 +77,7 @@ impl Serialize for CondaLock {
     {
         #[derive(Serialize)]
         struct Raw<'a> {
-            version: Version,
+            version: u64,
             metadata: &'a LockMeta,
             package: Vec<&'a LockedDependency>,
         }
@@ -82,14 +96,16 @@ impl Serialize for CondaLock {
                     (LockedDependencyKind::Conda(a), LockedDependencyKind::Conda(b)) => {
                         a.build.cmp(&b.build)
                     }
-                    (LockedDependencyKind::Pip(_), LockedDependencyKind::Pip(_)) => Ordering::Equal,
-                    (LockedDependencyKind::Pip(_), _) => Ordering::Less,
-                    (_, LockedDependencyKind::Pip(_)) => Ordering::Greater,
+                    (LockedDependencyKind::Pypi(_), LockedDependencyKind::Pypi(_)) => {
+                        Ordering::Equal
+                    }
+                    (LockedDependencyKind::Pypi(_), _) => Ordering::Less,
+                    (_, LockedDependencyKind::Pypi(_)) => Ordering::Greater,
                 })
         });
 
         let raw = Raw {
-            version: Default::default(),
+            version: FILE_VERSION,
             metadata: &self.metadata,
             package: sorted_deps,
         };
@@ -111,6 +127,6 @@ mod test {
         )
         .unwrap_err();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer file format version 1000, but only up to including version 2 is supported");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 3 is supported.");
     }
 }

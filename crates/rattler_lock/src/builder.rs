@@ -4,10 +4,10 @@ use crate::conda::ConversionError;
 use crate::{
     content_hash, content_hash::CalculateContentHashError, Channel, CondaLock,
     CondaLockedDependency, GitMeta, LockMeta, LockedDependency, MatchSpec, NoArchType,
-    PackageHashes, PackageName, PipLockedDependency, Platform, RepoDataRecord, TimeMeta,
+    PackageHashes, PackageName, Platform, PypiLockedDependency, RepoDataRecord, TimeMeta,
 };
 use fxhash::{FxHashMap, FxHashSet};
-use rattler_conda_types::NamelessMatchSpec;
+use rattler_conda_types::{NamelessMatchSpec, PackageUrl};
 use std::collections::HashSet;
 use url::Url;
 
@@ -109,7 +109,7 @@ pub struct LockedPackagesBuilder {
 
 pub enum LockedDependencyBuilder {
     Conda(CondaLockedDependencyBuilder),
-    Pip(PipLockedDependencyBuilder),
+    Pypi(PypiLockedDependencyBuilder),
 }
 
 impl From<CondaLockedDependencyBuilder> for LockedDependencyBuilder {
@@ -118,9 +118,9 @@ impl From<CondaLockedDependencyBuilder> for LockedDependencyBuilder {
     }
 }
 
-impl From<PipLockedDependencyBuilder> for LockedDependencyBuilder {
-    fn from(value: PipLockedDependencyBuilder) -> Self {
-        LockedDependencyBuilder::Pip(value)
+impl From<PypiLockedDependencyBuilder> for LockedDependencyBuilder {
+    fn from(value: PypiLockedDependencyBuilder) -> Self {
+        LockedDependencyBuilder::Pypi(value)
     }
 }
 
@@ -174,15 +174,16 @@ impl LockedPackagesBuilder {
                         noarch: locked_package.noarch,
                         size: locked_package.size,
                         timestamp: locked_package.timestamp,
+                        purls: locked_package.purls,
                     }
                     .into(),
                 },
-                LockedDependencyBuilder::Pip(locked_package) => LockedDependency {
+                LockedDependencyBuilder::Pypi(locked_package) => LockedDependency {
                     platform: self.platform,
                     version: locked_package.version,
                     name: locked_package.name.to_string(),
                     category: super::default_category(),
-                    kind: PipLockedDependency {
+                    kind: PypiLockedDependency {
                         requires_dist: locked_package.requires_dist,
                         requires_python: locked_package.requires_python,
                         extras: locked_package.extras,
@@ -248,6 +249,9 @@ pub struct CondaLockedDependencyBuilder {
 
     /// Experimental: The date this entry was created.
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
+    /// Experimental: Defines that the package is an alias for a package from another ecosystem.
+    pub purls: Vec<PackageUrl>,
 }
 
 impl TryFrom<&RepoDataRecord> for CondaLockedDependencyBuilder {
@@ -286,6 +290,7 @@ impl TryFrom<RepoDataRecord> for CondaLockedDependencyBuilder {
             noarch: record.package_record.noarch,
             size: record.package_record.size,
             timestamp: record.package_record.timestamp,
+            purls: record.package_record.purls,
         })
     }
 }
@@ -401,9 +406,15 @@ impl CondaLockedDependencyBuilder {
         self.timestamp = Some(timestamp);
         self
     }
+
+    /// Adds a PackageUrl to the package
+    pub fn add_purl(mut self, purl: PackageUrl) -> Self {
+        self.purls.push(purl);
+        self
+    }
 }
 
-pub struct PipLockedDependencyBuilder {
+pub struct PypiLockedDependencyBuilder {
     /// Name of the locked package
     pub name: String,
     /// Package version
@@ -472,6 +483,9 @@ mod tests {
                     noarch: NoArchType::python(),
                     size: Some(12000),
                     timestamp: Some(Utc::now()),
+                    purls: vec![
+                        "pkg:deb/debian/python@3.11.0?arch=x86_64".parse().unwrap(),
+                    ]
                 }))
             .build().unwrap();
 

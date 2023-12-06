@@ -37,8 +37,8 @@ pub struct ActivationVariables {
     /// The value of the `PATH` environment variable that contains the paths to the executables
     pub path: Option<Vec<PathBuf>>,
 
-    /// The type of behaviour of what should happen with the defined paths.
-    pub path_modification_behaviour: PathModificationBehavior,
+    /// The type of behavior of what should happen with the defined paths.
+    pub path_modification_behavior: PathModificationBehavior,
 }
 
 impl ActivationVariables {
@@ -47,7 +47,7 @@ impl ActivationVariables {
         Ok(Self {
             conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
             path: None,
-            path_modification_behaviour: PathModificationBehavior::Prepend,
+            path_modification_behavior: PathModificationBehavior::Prepend,
         })
     }
 }
@@ -375,7 +375,7 @@ impl<T: Shell + Clone> Activator<T> {
             .set_path(
                 &mut script,
                 path.as_slice(),
-                variables.path_modification_behaviour,
+                variables.path_modification_behavior,
                 &self.platform,
             )
             .map_err(ActivationError::FailedToWriteActivationScript)?;
@@ -597,7 +597,7 @@ mod tests {
     #[cfg(unix)]
     fn get_script<T: Shell>(
         shell_type: T,
-        path_modification_behaviour: PathModificationBehavior,
+        path_modification_behavior: PathModificationBehavior,
     ) -> String
     where
         T: Clone,
@@ -616,7 +616,7 @@ mod tests {
                     PathBuf::from("/sbin"),
                     PathBuf::from("/usr/local/bin"),
                 ]),
-                path_modification_behaviour,
+                path_modification_behavior,
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();

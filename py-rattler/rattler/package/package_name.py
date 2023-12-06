@@ -71,9 +71,73 @@ class PackageName:
         """
         return self._name.normalized
 
+    def __hash__(self) -> int:
+        """
+        Computes the hash of this instance.
+
+        Examples
+        --------
+        ```python
+        >>> hash(PackageName("test-abc")) == hash(PackageName("test-abc"))
+        True
+        >>> hash(PackageName("test-abc")) == hash(PackageName("test-ABC"))
+        True
+        >>> hash(PackageName("test-abc")) == hash(PackageName("abc-test"))
+        False
+        >>>
+        ```
+        """
+        return self._name.__hash__()
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Returns True if this instance represents the same PackageName as `other`.
+
+        Examples
+        --------
+        ```python
+        >>> PackageName("test-abc") == PackageName("abc-test")
+        False
+        >>> PackageName("test-abc") == PackageName("test-abc")
+        True
+        >>> PackageName("test-abc") == PackageName("test-ABC")
+        True
+        >>> PackageName("test-abc") == "test-abc"
+        False
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageName):
+            return False
+
+        return self._name == other._name
+
+    def __ne__(self, other: object) -> bool:
+        """
+        Returns True if this instance does not represents the same PackageName as `other`.
+
+        Examples
+        --------
+        ```python
+        >>> PackageName("test-abc") != PackageName("test-abc")
+        False
+        >>> PackageName("test-abc") != PackageName("test-ABC")
+        False
+        >>> PackageName("test-abc") != PackageName("abc-test")
+        True
+        >>> PackageName("test-abc") != "test-abc"
+        True
+        >>>
+        ```
+        """
+        if not isinstance(other, PackageName):
+            return True
+
+        return self._name != other._name
+
     def __repr__(self) -> str:
         """
-        Returns a representation of the version.
+        Returns a representation of the PackageName.
 
         Examples
         --------

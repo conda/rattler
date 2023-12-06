@@ -1773,7 +1773,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "futures 0.3.28",
@@ -1782,6 +1782,7 @@ dependencies = [
  "pyo3-asyncio",
  "rattler",
  "rattler_conda_types",
+ "rattler_digest",
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_shell",
@@ -1922,7 +1923,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1961,7 +1962,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "chrono",
  "fxhash",
@@ -1988,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "blake2",
  "digest",
@@ -2002,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "quote",
  "syn 2.0.37",
@@ -2010,11 +2011,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "anyhow",
  "dirs",
  "getrandom",
+ "itertools",
  "keyring",
  "lazy_static",
  "libc",
@@ -2024,11 +2026,12 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+ "url",
 ]
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2050,7 +2053,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2087,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.0.2",
@@ -2102,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2120,7 +2123,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.11.0"
+version = "0.12.2"
 dependencies = [
  "cfg-if",
  "libloading",
@@ -2240,9 +2243,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dab30801b54723f1949c6453a35db09c89e2ce7e052dc63e715f32fb40e427c"
+checksum = "554db165775d6858d17a9626c327b796d81db95db0a4cd6ca0efdfb7e7e3a264"
 dependencies = [
  "bitvec",
  "elsa",

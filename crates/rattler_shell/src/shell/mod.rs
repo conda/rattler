@@ -65,7 +65,7 @@ pub trait Shell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         let mut paths_vec = paths
@@ -73,7 +73,7 @@ pub trait Shell {
             .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => (),
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
@@ -120,7 +120,11 @@ pub trait Shell {
     /// Parses environment variables emitted by the `Shell::env` command.
     fn parse_env<'i>(&self, env: &'i str) -> HashMap<&'i str, &'i str> {
         env.lines()
-            .filter_map(|line| line.split_once('='))
+            .filter_map(|line| {
+                line.split_once('=')
+                    // Trim " as CmdExe could add this to its variables.
+                    .map(|(key, value)| (key, value.trim_matches('"')))
+            })
             .collect()
     }
 }
@@ -177,7 +181,7 @@ impl Shell for Bash {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         platform: &Platform,
     ) -> std::fmt::Result {
         // Put paths in a vector of the correct format.
@@ -202,7 +206,7 @@ impl Shell for Bash {
             .collect_vec();
 
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => (),
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
@@ -471,7 +475,7 @@ impl Shell for NuShell {
         &self,
         f: &mut impl Write,
         paths: &[PathBuf],
-        modification_behaviour: PathModificationBehavior,
+        modification_behavior: PathModificationBehavior,
         _platform: &Platform,
     ) -> std::fmt::Result {
         let path = paths
@@ -480,7 +484,7 @@ impl Shell for NuShell {
             .join(", ");
 
         // Replace, Append, or Prepend the path variable to the paths.
-        match modification_behaviour {
+        match modification_behavior {
             PathModificationBehavior::Replace => {
                 writeln!(f, "$env.PATH = [{}]", path)
             }
@@ -564,53 +568,64 @@ impl ShellEnum {
         let mut system_info = sysinfo::System::new();
 
         // Get current process information
-        let current_pid = get_current_pid().ok()?;
+        let mut current_pid = get_current_pid().ok()?;
         system_info.refresh_process(current_pid);
-        let parent_process_id = system_info
+
+        while let Some(parent_process_id) = system_info
             .process(current_pid)
-            .and_then(|process| process.parent())?;
+            .and_then(|process| process.parent())
+        {
+            // Get the name of the parent process
+            system_info.refresh_process(parent_process_id);
+            let parent_process = system_info.process(parent_process_id)?;
+            let parent_process_name = parent_process.name().to_lowercase();
 
-        // Get the name of the parent process
-        system_info.refresh_process(parent_process_id);
-        let parent_process = system_info.process(parent_process_id)?;
-        let parent_process_name = parent_process.name().to_lowercase();
-
-        tracing::debug!(
-            "Guessing ShellEnum. Parent process name: {} and args: {:?}",
-            &parent_process_name,
-            &parent_process.cmd()
-        );
-
-        if parent_process_name.contains("bash") {
-            Some(Bash.into())
-        } else if parent_process_name.contains("zsh") {
-            Some(Zsh.into())
-        } else if parent_process_name.contains("xonsh")
-            // xonsh is a python shell, so we need to check if the parent process is python and if it
-            // contains xonsh in the arguments.
-            || (parent_process_name.contains("python")
+            let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
+                Some(Bash.into())
+            } else if parent_process_name.contains("zsh") {
+                Some(Zsh.into())
+            } else if parent_process_name.contains("xonsh")
+                // xonsh is a python shell, so we need to check if the parent process is python and if it
+                // contains xonsh in the arguments.
+                || (parent_process_name.contains("python")
                 && parent_process
-                    .cmd().iter()
-                    .any(|arg| arg.contains("xonsh")))
-        {
-            Some(Xonsh.into())
-        } else if parent_process_name.contains("fish") {
-            Some(Fish.into())
-        } else if parent_process_name.contains("nu") {
-            Some(NuShell.into())
-        } else if parent_process_name.contains("powershell") || parent_process_name.contains("pwsh")
-        {
-            Some(
-                PowerShell {
-                    executable_path: Some(parent_process_name),
-                }
-                .into(),
-            )
-        } else if parent_process_name.contains("cmd.exe") {
-            Some(CmdExe.into())
-        } else {
-            None
+                .cmd().iter()
+                .any(|arg| arg.contains("xonsh")))
+            {
+                Some(Xonsh.into())
+            } else if parent_process_name.contains("fish") {
+                Some(Fish.into())
+            } else if parent_process_name.contains("nu") {
+                Some(NuShell.into())
+            } else if parent_process_name.contains("powershell")
+                || parent_process_name.contains("pwsh")
+            {
+                Some(
+                    PowerShell {
+                        executable_path: Some(parent_process_name.clone()),
+                    }
+                    .into(),
+                )
+            } else if parent_process_name.contains("cmd.exe") {
+                Some(CmdExe.into())
+            } else {
+                None
+            };
+
+            if let Some(shell) = shell {
+                tracing::debug!(
+                    "Guessing the current shell is {}. Parent process name: {} and args: {:?}",
+                    &shell.executable(),
+                    &parent_process_name,
+                    &parent_process.cmd()
+                );
+                return Some(shell);
+            }
+
+            current_pid = parent_process_id;
         }
+
+        None
     }
 }
 
@@ -783,5 +798,19 @@ mod tests {
             PathModificationBehavior::Prepend,
         );
         assert!(script.contents.contains("/foo;/bar"));
+    }
+
+    #[test]
+    fn test_parse_env() {
+        let script = ShellScript::new(CmdExe, Platform::Win64);
+        let input = "VAR1=\"value1\"\nNUM=1\nNUM2=\"2\"";
+        let parsed_env = script.shell.parse_env(input);
+
+        let expected_env: HashMap<&str, &str> =
+            vec![("VAR1", "value1"), ("NUM", "1"), ("NUM2", "2")]
+                .into_iter()
+                .collect();
+
+        assert_eq!(parsed_env, expected_env);
     }
 }

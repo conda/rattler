@@ -167,7 +167,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                     record.depends.push("pip".to_string());
                 }
             }),
-            true,
         )
     })?;
 

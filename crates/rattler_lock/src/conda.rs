@@ -3,8 +3,8 @@ use crate::{
     PackageHashes::{Md5, Md5Sha256, Sha256},
 };
 use rattler_conda_types::{
-    InvalidPackageNameError, NoArchType, PackageName, PackageRecord, ParseMatchSpecError,
-    ParseVersionError, RepoDataRecord,
+    InvalidPackageNameError, NoArchType, PackageName, PackageRecord, PackageUrl,
+    ParseMatchSpecError, ParseVersionError, RepoDataRecord,
 };
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
@@ -67,6 +67,10 @@ pub struct CondaLockedDependency {
     /// Experimental: The date this entry was created.
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
+    /// Experimental: Defines that the package is an alias for a package from another ecosystem.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub purls: Vec<PackageUrl>,
 }
 
 impl TryFrom<&LockedDependency> for RepoDataRecord {
@@ -136,6 +140,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
                 timestamp: value.timestamp,
                 track_features: value.track_features,
                 version,
+                purls: value.purls,
             },
             file_name,
             url: value.url,

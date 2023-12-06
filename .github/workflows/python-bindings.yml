@@ -2,7 +2,7 @@ name: Python bindings CI
 
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [ main ]
     paths:
       - 'py-rattler/**/*'
       - '.github/workflows/python-bindings.yml'
@@ -21,7 +21,7 @@ jobs:
         with:
           submodules: recursive
           lfs: true
-      - uses: prefix-dev/setup-pixi@v0.3.0
+      - uses: prefix-dev/setup-pixi@v0.4.1
         with:
           pixi-version: v0.5.0
           cache: true

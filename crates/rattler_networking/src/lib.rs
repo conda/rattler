@@ -11,6 +11,12 @@ use reqwest::{Client, IntoUrl, Method, Url};
 pub mod authentication_storage;
 pub mod retry_policies;
 
+mod redaction;
+
+pub use redaction::{
+    redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
+};
+
 /// A client that can be used to make authenticated requests, based on the [`reqwest::Client`].
 /// By default it uses the fallback storage in the default [`default_auth_store_fallback_directory`].
 #[derive(Clone, Default)]
@@ -246,6 +252,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "conda.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -282,6 +294,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "bearer.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
@@ -323,6 +341,12 @@ mod tests {
         let tdir = tempdir()?;
         let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
         let host = "basic.example.com";
+
+        // Make sure the keyring is empty
+        if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
+            let _ = entry.delete_password();
+        }
+
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {

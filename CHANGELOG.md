@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+# [0.14.0] - 2023-12-05
+
+### 📃 Details
+
+#### Added
+
+* Options to disable `bz2` and `zstd` in `fetch_repo_data` ([#420](https://github.com/mamba-org/rattler/pull/420))
+* Support for powerpc64 and s390x ([#425](https://github.com/mamba-org/rattler/pull/425))
+
+#### Changed
+
+* Renamed `behaviour` to `behavior` ([#428](https://github.com/mamba-org/rattler/pull/428))
+
+#### Fixed
+
+* Recursive look for parent process name ([#424](https://github.com/mamba-org/rattler/pull/424))
+* Improve repodata fetch errors ([#426](https://github.com/mamba-org/rattler/pull/426))
+* Use filelock for authentication fallback storage  ([#427](https://github.com/mamba-org/rattler/pull/427))
+* Improved lockfile version mismatch error ([#423](https://github.com/mamba-org/rattler/pull/423))
+
+## [0.13.0] - 2023-11-27
+
+### 📃 Details
+
+#### Added
+
+* Experimental support for purls in PackageRecord and derived datastructures ([#414](https://github.com/mamba-org/rattler/pull/414))
+
+#### Changed
+
+* Rename `pip` to `pypi` in lockfile ([#415](https://github.com/mamba-org/rattler/pull/415))
+
+#### Fixed
+
+* Allow compilation for android ([#418](https://github.com/mamba-org/rattler/pull/418))
+* Normalize relative-paths with writing to file ([#416](https://github.com/mamba-org/rattler/pull/416))
+
+## [0.12.3] - 2023-11-23
+
+### 📃 Details
+
+#### Fixed
+
+* Expose missing `StringMatcherParseError` ([#410](https://github.com/mamba-org/rattler/pull/410))
+* Fix JLAP issue by setting the nominal hash when first downloading repodata ([#411](https://github.com/mamba-org/rattler/pull/411))
+* Support channel names with slashes ([#413](https://github.com/mamba-org/rattler/pull/413))
+
+## [0.12.2] - 2023-11-17
+
+### 📃 Details
+
+#### Fixed
+
+* fix: make redaction work by using `From` explicitly ([#408](https://github.com/mamba-org/rattler/pull/408))
+
+## [0.12.1] - 2023-11-17
+
+### 📃 Details
+
+#### Fixed
+
+* fix: redact tokens from urls in errors ([#407](https://github.com/mamba-org/rattler/pull/407))
+
+## [0.12.0] - 2023-11-14
+
+### ✨ Highlights
+
+Adds support for strict priority channel ordering, channel-specific selectors, 
+
+### 📃 Details
+
+#### Added
+
+* Add strict channel priority option ([#385](https://github.com/mamba-org/rattler/pull/385))
+* Add lock-file forward compatibility error ([#389](https://github.com/mamba-org/rattler/pull/389))
+* Add channel priority and channel-specific selectors to solver info ([#394](https://github.com/mamba-org/rattler/pull/394))
+
+#### Changed
+
+* Channel in the `MatchSpec` struct changed to `Channel` type  ([#401](https://github.com/mamba-org/rattler/pull/401))
+
+#### Fixed
+
+* Expose previous python version information in transaction ([#384](https://github.com/mamba-org/rattler/pull/384))
+* Avoid use of \ in doctest strings, for ide integration ([#387](https://github.com/mamba-org/rattler/pull/387))
+* Issue with JLAP using the wrong hash ([#390](https://github.com/mamba-org/rattler/pull/390))
+* Use the correct channel in the reason for exclude ([#397](https://github.com/mamba-org/rattler/pull/397))
+* Environment activation for windows ([#398](https://github.com/mamba-org/rattler/pull/398))
+
 ## [0.11.0] - 2023-10-17
 
 ### ✨ Highlights

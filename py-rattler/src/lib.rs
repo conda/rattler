@@ -8,7 +8,8 @@ mod nameless_match_spec;
 mod networking;
 mod package_name;
 mod platform;
-mod prefix_record;
+mod prefix_paths;
+mod record;
 mod repo_data;
 mod shell;
 mod solver;
@@ -17,21 +18,19 @@ mod virtual_package;
 
 use channel::{PyChannel, PyChannelConfig};
 use error::{
-    ActivationException, CacheDirException, DetectVirtualPackageException, FetchRepoDataException,
-    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
-    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
-    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
+    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
+    FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
+    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
+    LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
+    TransactionException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
-use prefix_record::{PyPrefixPaths, PyPrefixRecord};
-use repo_data::{
-    package_record::PyPackageRecord, patch_instructions::PyPatchInstructions,
-    repo_data_record::PyRepoDataRecord, sparse::PySparseRepoData, PyRepoData,
-};
+use prefix_paths::PyPrefixPaths;
+use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -39,6 +38,7 @@ use pyo3::prelude::*;
 use linker::py_link;
 use meta::get_rattler_version;
 use platform::{PyArch, PyPlatform};
+use record::PyRecord;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::py_solve;
 use virtual_package::PyVirtualPackage;
@@ -50,7 +50,6 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyMatchSpec>().unwrap();
     m.add_class::<PyNamelessMatchSpec>().unwrap();
 
-    m.add_class::<PyPackageRecord>().unwrap();
     m.add_class::<PyPackageName>().unwrap();
 
     m.add_class::<PyChannel>().unwrap();
@@ -68,14 +67,14 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PySparseRepoData>().unwrap();
     m.add_class::<PyRepoData>().unwrap();
-    m.add_class::<PyRepoDataRecord>().unwrap();
     m.add_class::<PyPatchInstructions>().unwrap();
+
+    m.add_class::<PyRecord>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
         .unwrap();
     m.add_class::<PyGenericVirtualPackage>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
-    m.add_class::<PyPrefixRecord>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
@@ -133,6 +132,11 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add(
         "FetchRepoDataError",
         py.get_type::<FetchRepoDataException>(),
+    )
+    .unwrap();
+    m.add(
+        "ConvertSubdirError",
+        py.get_type::<ConvertSubdirException>(),
     )
     .unwrap();
     Ok(())

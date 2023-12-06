@@ -52,13 +52,22 @@ impl StringMatcher {
     }
 }
 
+/// Error when parsing [`StringMatcher`]
 #[derive(Debug, Clone, Eq, PartialEq, thiserror::Error)]
 pub enum StringMatcherParseError {
+    /// Could not parse the string as a glob
     #[error("invalid glob: {glob}")]
-    InvalidGlob { glob: String },
+    InvalidGlob {
+        /// The invalid glob
+        glob: String,
+    },
 
+    /// Could not parse the string as a regex
     #[error("invalid regex: {regex}")]
-    InvalidRegex { regex: String },
+    InvalidRegex {
+        /// The invalid regex
+        regex: String,
+    },
 }
 
 impl FromStr for StringMatcher {

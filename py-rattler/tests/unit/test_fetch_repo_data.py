@@ -59,7 +59,7 @@ async def test_fetch_repo_data(
 
     assert repodata_record.channel == f"http://localhost:{port}/{repo}/"
     assert repodata_record.file_name == "test-package-0.1-0.tar.bz2"
-    assert str(repodata_record.package_record) == "test-package=0.1=0"
+    assert repodata_record.name == PackageName("test-package")
     assert (
         repodata_record.url
         == f"http://localhost:{port}/test-repo/noarch/test-package-0.1-0.tar.bz2"

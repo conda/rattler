@@ -14,7 +14,6 @@ def solve(
     locked_packages: Optional[List[RepoDataRecord]] = None,
     pinned_packages: Optional[List[RepoDataRecord]] = None,
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
-    strict_channel_priority: bool = True,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -39,9 +38,6 @@ def solve(
                          will always select that version no matter what even if that
                          means other packages have to be downgraded.
         virtual_packages: A list of virtual packages considered active.
-        strict_channel_priority: (Default = True) When `True` the channel that the package
-                         is first found in will be used as the only channel for that package.
-                         When `False` it will search for every package in every channel.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -58,6 +54,5 @@ def solve(
                 v_package._generic_virtual_package
                 for v_package in virtual_packages or []
             ],
-            strict_channel_priority,
         )
     ]

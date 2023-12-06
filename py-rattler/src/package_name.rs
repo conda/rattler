@@ -1,4 +1,9 @@
-use pyo3::{pyclass, pymethods};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
+
+use pyo3::{basic::CompareOp, pyclass, pymethods};
 use rattler_conda_types::PackageName;
 
 use crate::error::PyRattlerError;
@@ -53,5 +58,17 @@ impl PyPackageName {
     #[getter]
     pub fn normalized(&self) -> String {
         self.inner.as_normalized().into()
+    }
+
+    /// Compute the hash of the name.
+    fn __hash__(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.inner.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Performs comparison between this name and another.
+    pub fn __richcmp__(&self, other: &Self, op: CompareOp) -> bool {
+        op.matches(self.inner.cmp(&other.inner))
     }
 }

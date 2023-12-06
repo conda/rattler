@@ -29,7 +29,7 @@ pub use explicit_environment_spec::{
     ParseExplicitEnvironmentSpecError, ParsePackageArchiveHashError,
 };
 pub use generic_virtual_package::GenericVirtualPackage;
-pub use match_spec::matcher::StringMatcher;
+pub use match_spec::matcher::{StringMatcher, StringMatcherParseError};
 pub use match_spec::parse::ParseMatchSpecError;
 pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
@@ -49,6 +49,9 @@ pub use version_spec::VersionSpec;
 
 #[cfg(test)]
 use std::path::{Path, PathBuf};
+
+/// An package identifier that can be used to identify packages across package ecosystems.
+pub type PackageUrl = purl::GenericPurl<String>;
 
 #[cfg(test)]
 pub(crate) fn get_test_data_dir() -> PathBuf {

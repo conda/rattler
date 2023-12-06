@@ -45,6 +45,13 @@ pub enum ExtractError {
     Cancelled,
 }
 
+#[cfg(feature = "reqwest")]
+impl From<::reqwest::Error> for ExtractError {
+    fn from(err: ::reqwest::Error) -> Self {
+        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err))
+    }
+}
+
 /// Result struct returned by extraction functions.
 #[derive(Debug)]
 pub struct ExtractResult {
