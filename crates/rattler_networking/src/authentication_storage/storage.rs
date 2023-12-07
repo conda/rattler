@@ -35,11 +35,19 @@ impl AuthenticationStorage {
     pub fn new(store_key: &str, fallback_folder: &Path) -> AuthenticationStorage {
         let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
 
+        let netrc_storage = match netrc_storage::NetRcStorage::from_env() {
+            Ok(storage) => storage,
+            Err((path, err)) => {
+                tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
+                netrc_storage::NetRcStorage::default()
+            }
+        };
+
         AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
             cache: Arc::new(Mutex::new(HashMap::new())),
-            netrc_storage: netrc_storage::NetRcStorage::from_env(),
+            netrc_storage,
         }
     }
 }
