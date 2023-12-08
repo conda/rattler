@@ -151,4 +151,12 @@ mod tests {
             .unwrap()
             .matches("foobar"));
     }
+
+    #[test]
+    fn test_special_characters_matches() {
+        let special_characters = "~!@#$%^&*()_-+={}[]|;:'<>,.?/";
+        for special_character in special_characters.chars()  {
+            assert!(StringMatcher::from_str(&special_character.to_string()).unwrap().matches(&special_character.to_string()));
+        }  
+    } 
 }
