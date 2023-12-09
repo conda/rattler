@@ -474,7 +474,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::{
-        split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
+        split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError, strip_package_name,
     };
     use crate::match_spec::parse::parse_bracket_list;
     use crate::{BuildNumberSpec, Channel, NamelessMatchSpec, VersionSpec};
@@ -739,5 +739,17 @@ mod tests {
         let _unknown_key = String::from("unknown");
         let spec = MatchSpec::from_str("conda-forge::foo[unknown=1.0.*]");
         assert_matches!(spec,  Err(ParseMatchSpecError::InvalidBracketKey(_unknown_key)));
+    }
+
+    #[test]
+    fn test_invalid_number_of_colons() {
+        let spec = MatchSpec::from_str("conda-forge::::foo[version=\"1.0.*\"]");
+        assert_matches!(spec,  Err(ParseMatchSpecError::InvalidNumberOfColons));
+    }
+
+    #[test]
+    fn test_missing_package_name() {
+        let package_name = strip_package_name("");
+        assert_matches!(package_name,  Err(ParseMatchSpecError::MissingPackageName));
     }
 }
