@@ -506,15 +506,6 @@ mod tests {
         assert_eq!(result.0, "bla ");
         let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", "1")];
         assert_eq!(result.1, expected);
-
-        assert_matches!(
-            strip_brackets(r#"bla [version="1.2.3", build_number=]"#),
-            Err(ParseMatchSpecError::InvalidBracket)
-        );
-        assert_matches!(
-            strip_brackets(r#"bla [version="1.2.3, build_number=1]"#),
-            Err(ParseMatchSpecError::InvalidBracket)
-        );
     }
 
     #[test]
@@ -729,5 +720,17 @@ mod tests {
             })
             .collect();
         insta::assert_yaml_snapshot!("parsed matchspecs", evaluated);
+    }
+
+    #[test]
+    fn test_invalid_bracket() {
+        assert_matches!(
+            strip_brackets(r#"bla [version="1.2.3", build_number=]"#),
+            Err(ParseMatchSpecError::InvalidBracket)
+        );
+        assert_matches!(
+            strip_brackets(r#"bla [version="1.2.3, build_number=1]"#),
+            Err(ParseMatchSpecError::InvalidBracket)
+        );
     }
 }
