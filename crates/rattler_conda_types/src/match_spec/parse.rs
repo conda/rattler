@@ -733,4 +733,11 @@ mod tests {
             Err(ParseMatchSpecError::InvalidBracket)
         );
     }
+
+    #[test]
+    fn test_invalid_bracket_key() {
+        let _unknown_key = String::from("unknown");
+        let spec = MatchSpec::from_str("conda-forge::foo[unknown=1.0.*]");
+        assert_matches!(spec,  Err(ParseMatchSpecError::InvalidBracketKey(_unknown_key)));
+    }
 }
