@@ -156,20 +156,32 @@ mod tests {
     #[test]
     fn test_special_characters_matches() {
         let special_characters = "~!@#$%^&*()_-+={}[]|;:'<>,.?/";
-        for special_character in special_characters.chars()  {
-            assert!(StringMatcher::from_str(&special_character.to_string()).unwrap().matches(&special_character.to_string()));
-        }  
+        for special_character in special_characters.chars() {
+            assert!(StringMatcher::from_str(&special_character.to_string())
+                .unwrap()
+                .matches(&special_character.to_string()));
+        }
     }
 
     #[test]
     fn test_invalid_regex() {
         let _invalid_regex = "^.*[oo|bar.*$";
-        assert_matches!(StringMatcher::from_str(_invalid_regex),  Err(StringMatcherParseError::InvalidRegex { regex: _invalid_regex, }));
+        assert_matches!(
+            StringMatcher::from_str(_invalid_regex),
+            Err(StringMatcherParseError::InvalidRegex {
+                regex: _invalid_regex,
+            })
+        );
     }
 
     #[test]
     fn test_invalid_glob() {
         let _invalid_glob = "[foo*";
-        assert_matches!(StringMatcher::from_str(_invalid_glob),  Err(StringMatcherParseError::InvalidGlob { glob: _invalid_glob, }));
+        assert_matches!(
+            StringMatcher::from_str(_invalid_glob),
+            Err(StringMatcherParseError::InvalidGlob {
+                glob: _invalid_glob,
+            })
+        );
     }
 }
