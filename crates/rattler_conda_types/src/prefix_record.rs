@@ -168,8 +168,23 @@ impl PrefixRecord {
         Self::from_reader(File::open(path.as_ref())?)
     }
 
+    /// Return the canonical file name for a `PrefixRecord`. Takes the form of
+    /// `<package_name>-<version>-<build>.json`.
+    pub fn file_name(&self) -> String {
+        format!(
+            "{}-{}-{}.json",
+            self.repodata_record.package_record.name.as_normalized(),
+            self.repodata_record.package_record.version,
+            self.repodata_record.package_record.build
+        )
+    }
+
     /// Writes the contents of this instance to the file at the specified location.
-    pub fn write_to_path(self, path: impl AsRef<Path>, pretty: bool) -> Result<(), std::io::Error> {
+    pub fn write_to_path(
+        &self,
+        path: impl AsRef<Path>,
+        pretty: bool,
+    ) -> Result<(), std::io::Error> {
         self.write_to(File::create(path)?, pretty)
     }
 
@@ -185,6 +200,21 @@ impl PrefixRecord {
             serde_json::to_writer(BufWriter::new(writer), self)?;
         }
         Ok(())
+    }
+
+    /// Collects all `PrefixRecord`s from the specified prefix. This function will read all files in
+    /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
+    pub fn collect_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
+        let mut records = Vec::new();
+        for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
+            let entry = entry?;
+
+            if entry.file_type()?.is_file() && entry.file_name().to_string_lossy().ends_with(".json") {
+                let record = Self::from_path(entry.path())?;
+                records.push(record);
+            }
+        }
+        Ok(records)
     }
 }
 

@@ -142,6 +142,7 @@ pub fn link_file(
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
+    clobber_rename: Option<PathBuf>,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -153,9 +154,12 @@ pub fn link_file(
             }
             None => return Err(LinkFileError::MissingPythonInfo),
         }
+    } else if let Some(clobber_rename) = clobber_rename {
+        clobber_rename.into()
     } else {
         path_json_entry.relative_path.as_path().into()
     };
+
     let destination_path = target_dir.join(&destination_relative_path);
 
     // Ensure that all directories up to the path exist.
@@ -209,7 +213,7 @@ pub fn link_file(
         };
 
         // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placholders(
+        copy_and_replace_placeholders(
             source.as_ref(),
             &mut destination_writer,
             placeholder,
@@ -472,7 +476,7 @@ fn copy_to_destination(
 /// This switches to more specialized functions that handle the replacement of either
 /// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
-pub fn copy_and_replace_placholders(
+pub fn copy_and_replace_placeholders(
     source_bytes: &[u8],
     destination: impl Write,
     prefix_placeholder: &str,

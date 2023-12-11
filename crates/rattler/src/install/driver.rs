@@ -1,8 +1,12 @@
+use super::clobber_registry::ClobberRegistry;
 use super::InstallError;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
+use rattler_conda_types::{PackageRecord, PrefixRecord};
 use std::future::pending;
-use std::sync::Arc;
+use std::path::Path;
+use std::sync::MutexGuard;
+use std::sync::{Arc, Mutex};
 use tokio::{
     select,
     sync::mpsc::{unbounded_channel, UnboundedSender},
@@ -12,12 +16,13 @@ use tokio::{
 
 /// Packages can mostly be installed in isolation and therefor in parallel. However, when installing
 /// a large number of packages at the same time the different installation tasks start competing for
-/// resources. The [`InstallDriver`] helps to assist in making sure that tasks dont starve
+/// resources. The [`InstallDriver`] helps to assist in making sure that tasks don't starve
 /// each other from resource as well as making sure that due to the large number of requests the
-/// process doesnt try to acquire more resources than the system has available.
+/// process doesn't try to acquire more resources than the system has available.
 pub struct InstallDriver {
-    inner: Arc<std::sync::Mutex<InstallDriverInner>>,
+    inner: Arc<Mutex<InstallDriverInner>>,
     concurrency_limit: usize,
+    clobber_registry: Arc<Mutex<ClobberRegistry>>,
 }
 
 struct InstallDriverInner {
@@ -29,7 +34,7 @@ type Task = Box<dyn FnOnce() + Send + 'static>;
 
 impl Default for InstallDriver {
     fn default() -> Self {
-        Self::new(100)
+        Self::new(100, None)
     }
 }
 
@@ -37,7 +42,7 @@ impl InstallDriver {
     /// Constructs a new [`InstallDriver`] with a given maximum number of concurrent tasks. This is
     /// the number of tasks spawned through the driver that can run concurrently. This is especially
     /// useful to make sure no filesystem limits are encountered.
-    pub fn new(concurrency_limit: usize) -> Self {
+    pub fn new(concurrency_limit: usize, prefix_records: Option<&[PrefixRecord]>) -> Self {
         let (tx, mut rx) = unbounded_channel::<Task>();
         let join_handle = tokio::spawn(async move {
             let mut pending_futures = FuturesUnordered::new();
@@ -69,18 +74,23 @@ impl InstallDriver {
                             std::panic::resume_unwind(panic);
                         }
 
-                        // Note: we dont handle the cancelled error here. This can be handled by a
+                        // Note: we don't handle the cancelled error here. This can be handled by a
                         // sender/receiver pair that get closed when the task drops.
                     }}
                 }
             }
         });
+
+        let clobber_registry = if let Some(prefix_records) = prefix_records {
+            ClobberRegistry::from_prefix_records(prefix_records)
+        } else {
+            ClobberRegistry::default()
+        };
+
         Self {
-            inner: Arc::new(std::sync::Mutex::new(InstallDriverInner {
-                tx,
-                join_handle,
-            })),
+            inner: Arc::new(Mutex::new(InstallDriverInner { tx, join_handle })),
             concurrency_limit,
+            clobber_registry: Arc::new(Mutex::new(clobber_registry)),
         }
     }
 
@@ -129,6 +139,31 @@ impl InstallDriver {
                 this function. Therefor this should never happen."
             );
         }
+    }
+
+    /// Return a locked reference to the paths registry. This is used to make sure that the same
+    /// path is not installed twice.
+    pub fn clobber_registry(&self) -> MutexGuard<'_, ClobberRegistry> {
+        self.clobber_registry.lock().unwrap()
+    }
+
+    /// Call this after all packages have been installed to perform any post processing that is
+    /// required.
+    ///
+    /// This function will select a winner among multiple packages that might write to a single package
+    /// and will also execute any `post-link.sh/bat` scripts
+    pub fn post_process(
+        &self,
+        prefix_records: &[PrefixRecord],
+        target_prefix: &Path,
+    ) -> Result<(), InstallError> {
+        let required_packages =
+            PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
+
+        self.clobber_registry()
+            .post_process(&required_packages, target_prefix);
+
+        Ok(())
     }
 }
 
