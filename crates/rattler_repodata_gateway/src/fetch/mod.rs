@@ -1366,7 +1366,6 @@ mod test {
     pub async fn test_gzip_transfer_encoding() {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
-        let tempdir = TempDir::new().unwrap();
         write_encoded(
             FAKE_REPO_DATA.as_ref(),
             &subdir_path.path().join("repodata.json.gz"),
