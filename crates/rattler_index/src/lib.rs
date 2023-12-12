@@ -1,4 +1,6 @@
 //! Indexing of packages in a output folder to create up to date repodata.json files
+#![deny(missing_docs)]
+
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::package::IndexJson;
 use rattler_conda_types::package::PackageFile;

@@ -9,7 +9,7 @@ from rattler.rattler import py_index
 def index(
     channel_directory: os.PathLike[str],
     target_platform: Optional[Platform] = None,
-) -> bool:
+) -> None:
     """
     Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
     Will generate repodata.json files in each subdirectory containing metadata about each present package,
@@ -21,11 +21,8 @@ def index(
         channel_directory: A `os.PathLike[str]` that is the directory containing subdirectories
                            of dependencies to index.
         target_platform(optional): A `Platform` to index dependencies for
-
-    Returns:
-        True iff indexing was successful
     """
-    return py_index(
+    py_index(
         channel_directory,
         target_platform._inner if target_platform else target_platform,
     )

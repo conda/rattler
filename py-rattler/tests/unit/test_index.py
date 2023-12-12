@@ -23,7 +23,7 @@ def package_directory(tmp_path) -> Path:
 
 
 def test_index(package_directory):
-    assert index(package_directory) is True
+    index(package_directory)
 
     assert set(os.listdir(package_directory)) == {"noarch", "win-64"}
     assert "repodata.json" in os.listdir(package_directory / "win-64")
@@ -35,7 +35,7 @@ def test_index(package_directory):
 
 
 def test_index_specific_subdir_non_noarch(package_directory):
-    assert index(package_directory, Platform("win-64")) is True
+    index(package_directory, Platform("win-64"))
 
     assert "repodata.json" in os.listdir(package_directory / "win-64")
     with open(package_directory / "win-64/repodata.json") as f:
@@ -46,7 +46,7 @@ def test_index_specific_subdir_non_noarch(package_directory):
 
 
 def test_index_specific_subdir_noarch(package_directory):
-    assert index(package_directory, Platform("noarch")) is True
+    index(package_directory, Platform("noarch"))
 
     win_files = os.listdir(package_directory / "win-64")
     assert "repodata.json" not in win_files
