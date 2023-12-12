@@ -118,7 +118,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
         .join("rattler/auth");
 
-    let authentication_storage = AuthenticationStorage::new("rattler_credentials", &auth_dir);
+    let authentication_storage = AuthenticationStorage::default();
 
     let download_client = AuthenticatedClient::from_client(download_client, authentication_storage);
     let multi_progress = global_multi_progress();

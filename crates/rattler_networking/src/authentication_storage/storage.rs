@@ -1,109 +1,76 @@
 //! Storage and access of authentication information
+
+use anyhow::{anyhow, Result};
+use reqwest::IntoUrl;
 use std::{
     collections::HashMap,
-    path::Path,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
+use url::Url;
 
-use keyring::Entry;
-use reqwest::{IntoUrl, Url};
+use super::{
+    authentication::Authentication,
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorage},
+    StorageBackend,
+};
 
-use super::{authentication::Authentication, fallback_storage};
-
-/// A struct that implements storage and access of authentication
-/// information
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+/// This struct implements storage and access of authentication
+/// information backed by multiple storage backends
+/// (e.g. keyring and file storage)
+/// Credentials are stored and retrieved from the backends in the
+/// order they are added to the storage
 pub struct AuthenticationStorage {
-    /// The store_key needs to be unique per program as it is stored
-    /// in a global dictionary in the operating system
-    pub store_key: String,
-
-    /// Fallback Storage that will be used if the is no key store application available.
-    pub fallback_storage: fallback_storage::FallbackStorage,
-
-    /// A cache so that we don't have to access the keyring all the time
+    backends: Vec<Arc<Box<dyn StorageBackend + Send + Sync>>>,
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
+}
 
-    /// Force fallback storage to be used
-    pub force_fallback_storage: bool,
+impl Default for AuthenticationStorage {
+    fn default() -> Self {
+        let mut storage = Self::new();
+
+        storage.add_backend(Box::from(KeyringAuthenticationStorage::default()));
+        storage.add_backend(Box::from(FileStorage::default()));
+
+        storage
+    }
 }
 
 impl AuthenticationStorage {
-    /// Create a new authentication storage with the given store key
-    pub fn new(store_key: &str, fallback_folder: &Path) -> AuthenticationStorage {
-        let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
-        AuthenticationStorage {
-            store_key: store_key.to_string(),
-            fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
+    /// Create a new authentication storage with no backends
+    pub fn new() -> Self {
+        Self {
+            backends: vec![],
             cache: Arc::new(Mutex::new(HashMap::new())),
-            force_fallback_storage: false,
         }
     }
 
-    /// Set whether to force the fallback storage to be used
-    pub fn set_force_fallback_storage(&mut self, force: bool) {
-        self.force_fallback_storage = force;
+    /// Add a new storage backend to the authentication storage
+    /// (backends are tried in the order they are added)
+    pub fn add_backend(&mut self, backend: Box<dyn StorageBackend + Send + Sync>) {
+        self.backends.push(Arc::new(backend));
     }
-}
 
-/// An error that can occur when accessing the authentication storage
-#[derive(thiserror::Error, Debug)]
-pub enum AuthenticationStorageError {
-    /// An error occurred when accessing the authentication storage
-    #[error("Could not retrieve credentials from authentication storage: {0}")]
-    StorageError(#[from] keyring::Error),
-
-    /// An error occurred when serializing the credentials
-    #[error("Could not serialize credentials {0}")]
-    SerializeCredentialsError(#[from] serde_json::Error),
-
-    /// An error occurred when parsing the credentials
-    #[error("Could not parse credentials stored for {host}")]
-    ParseCredentialsError {
-        /// The host for which the credentials could not be parsed
-        host: String,
-    },
-
-    /// An error occurred when accessing the fallback storage
-    /// (e.g. the JSON file)
-    #[error("Could not retrieve credentials from fallback storage: {0}")]
-    FallbackStorageError(#[from] fallback_storage::FallbackStorageError),
-}
-
-impl AuthenticationStorage {
     /// Store the given authentication information for the given host
-    pub fn store(
-        &self,
-        host: &str,
-        authentication: &Authentication,
-    ) -> Result<(), AuthenticationStorageError> {
-        let password = serde_json::to_string(authentication)?;
-
-        if self.force_fallback_storage {
-            self.fallback_storage.set_password(host, &password)?;
-            return Ok(());
+    pub fn store(&self, host: &str, authentication: &Authentication) -> Result<()> {
+        {
+            let mut cache = self.cache.lock().unwrap();
+            cache.insert(host.to_string(), Some(authentication.clone()));
         }
 
-        let entry = Entry::new(&self.store_key, host)?;
-
-        match entry.set_password(&password) {
-            Ok(_) => return Ok(()),
-            Err(e) => {
-                tracing::warn!(
-                    "Error storing credentials for {}: {}, using fallback storage at {}",
-                    host,
-                    e,
-                    self.fallback_storage.path.display()
-                );
-                self.fallback_storage.set_password(host, &password)?;
+        for backend in &self.backends {
+            if let Err(e) = backend.store(host, authentication) {
+                tracing::warn!("Error storing credentials in backend: {}", e);
+            } else {
+                return Ok(());
             }
         }
-        Ok(())
+
+        Err(anyhow!("Could not store credentials in any backend"))
     }
 
     /// Retrieve the authentication information for the given host
-    pub fn get(&self, host: &str) -> Result<Option<Authentication>, AuthenticationStorageError> {
+    pub fn get(&self, host: &str) -> Result<Option<Authentication>> {
         {
             let cache = self.cache.lock().unwrap();
             if let Some(auth) = cache.get(host) {
@@ -111,71 +78,21 @@ impl AuthenticationStorage {
             }
         }
 
-        let p_string = if self.force_fallback_storage {
-            match self.fallback_storage.get_password(host)? {
-                None => return Ok(None),
-                Some(password) => password,
-            }
-        } else {
-            let entry = Entry::new(&self.store_key, host)?;
-            let password = entry.get_password();
-
-            match password {
-                Ok(password) => password,
-                Err(keyring::Error::NoEntry) => {
-                    return Ok(None);
+        for backend in &self.backends {
+            match backend.get(host) {
+                Ok(Some(auth)) => {
+                    let mut cache = self.cache.lock().unwrap();
+                    cache.insert(host.to_string(), Some(auth.clone()));
+                    return Ok(Some(auth));
                 }
+                Ok(None) => {}
                 Err(e) => {
-                    tracing::debug!(
-                    "Unable to retrieve credentials for {}: {}, using fallback credential storage at {}",
-                    host,
-                    e,
-                    self.fallback_storage.path.display()
-                );
-                    match self.fallback_storage.get_password(host)? {
-                        None => return Ok(None),
-                        Some(password) => password,
-                    }
+                    tracing::warn!("Error retrieving credentials from backend: {}", e);
                 }
             }
-        };
-
-        match Authentication::from_str(&p_string) {
-            Ok(auth) => {
-                let mut cache = self.cache.lock().unwrap();
-                cache.insert(host.to_string(), Some(auth.clone()));
-                Ok(Some(auth))
-            }
-            Err(err) => {
-                tracing::warn!("Error parsing credentials for {}: {:?}", host, err);
-                Err(AuthenticationStorageError::ParseCredentialsError {
-                    host: host.to_string(),
-                })
-            }
-        }
-    }
-
-    /// Delete the authentication information for the given host
-    pub fn delete(&self, host: &str) -> Result<(), AuthenticationStorageError> {
-        {
-            let mut cache = self.cache.lock().unwrap();
-            cache.remove(host);
         }
 
-        if self.force_fallback_storage {
-            return Ok(self.fallback_storage.delete_password(host)?);
-        }
-
-        let entry = Entry::new(&self.store_key, host)?;
-        match entry.delete_password() {
-            Ok(_) => {}
-            Err(keyring::Error::NoEntry) => {}
-            Err(e) => {
-                tracing::warn!("Error deleting credentials for {}: {}", host, e);
-            }
-        }
-
-        Ok(self.fallback_storage.delete_password(host)?)
+        Ok(None)
     }
 
     /// Retrieve the authentication information for the given URL
@@ -215,5 +132,19 @@ impl AuthenticationStorage {
         } else {
             Ok((url, None))
         }
+    }
+
+    /// Delete the authentication information for the given host
+    pub fn delete(&self, host: &str) -> Result<()> {
+        {
+            let mut cache = self.cache.lock().unwrap();
+            cache.insert(host.to_string(), None);
+        }
+
+        for backend in &self.backends {
+            backend.delete(host)?;
+        }
+
+        Ok(())
     }
 }

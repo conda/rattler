@@ -43,12 +43,6 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
     })
 }
 
-impl Default for AuthenticationStorage {
-    fn default() -> Self {
-        AuthenticationStorage::new("rattler", default_auth_store_fallback_directory())
-    }
-}
-
 impl AuthenticatedClient {
     /// Create a new authenticated client from the given client and authentication storage
     pub fn from_client(client: Client, auth_storage: AuthenticationStorage) -> AuthenticatedClient {
@@ -232,6 +226,8 @@ impl AuthenticatedClientBlocking {
 
 #[cfg(test)]
 mod tests {
+    use crate::authentication_storage::backends::file::FileStorage;
+
     use super::*;
 
     use tempfile::tempdir;
@@ -239,7 +235,9 @@ mod tests {
     #[test]
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
+        let mut storage = AuthenticationStorage::new();
+        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
         storage.store(host, &authentication)?;
@@ -250,7 +248,9 @@ mod tests {
     #[test]
     fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
+        let mut storage = AuthenticationStorage::new();
+        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+
         let host = "conda.example.com";
 
         // Make sure the keyring is empty
@@ -292,7 +292,8 @@ mod tests {
     #[test]
     fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
+        let mut storage = AuthenticationStorage::new();
+        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
         let host = "bearer.example.com";
 
         // Make sure the keyring is empty
@@ -339,7 +340,8 @@ mod tests {
     #[test]
     fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
-        let storage = super::AuthenticationStorage::new("rattler_test", tdir.path());
+        let mut storage = AuthenticationStorage::new();
+        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
         let host = "basic.example.com";
 
         // Make sure the keyring is empty

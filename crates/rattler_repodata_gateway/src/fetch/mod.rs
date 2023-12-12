@@ -1383,9 +1383,11 @@ mod test {
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
         let client = Client::builder().no_gzip().build().unwrap();
+        
+
         let authenticated_client = AuthenticatedClient::from_client(
             client,
-            AuthenticationStorage::new("rattler", tempdir.path()),
+            AuthenticationStorage::default(),
         );
         let result = fetch_repo_data(
             server.url(),
