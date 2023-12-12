@@ -236,7 +236,9 @@ mod tests {
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+        storage.add_backend(Box::from(FileStorage::new(
+            tdir.path().to_path_buf().join("auth.json"),
+        )));
 
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
@@ -249,7 +251,9 @@ mod tests {
     fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+        storage.add_backend(Box::from(FileStorage::new(
+            tdir.path().to_path_buf().join("auth.json"),
+        )));
 
         let host = "conda.example.com";
 
@@ -293,7 +297,9 @@ mod tests {
     fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+        storage.add_backend(Box::from(FileStorage::new(
+            tdir.path().to_path_buf().join("auth.json"),
+        )));
         let host = "bearer.example.com";
 
         // Make sure the keyring is empty
@@ -341,7 +347,9 @@ mod tests {
     fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(tdir.path().to_path_buf().join("auth.json"))));
+        storage.add_backend(Box::from(FileStorage::new(
+            tdir.path().to_path_buf().join("auth.json"),
+        )));
         let host = "basic.example.com";
 
         // Make sure the keyring is empty

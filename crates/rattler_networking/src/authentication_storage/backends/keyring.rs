@@ -1,8 +1,8 @@
 //! Backend to store credentials in the operating system's keyring
 
-use std::str::FromStr;
-use keyring::Entry;
 use anyhow::Result;
+use keyring::Entry;
+use std::str::FromStr;
 
 use crate::{authentication_storage::StorageBackend, Authentication};
 
@@ -49,11 +49,7 @@ impl Default for KeyringAuthenticationStorage {
 }
 
 impl StorageBackend for KeyringAuthenticationStorage {
-    fn store(
-        &self,
-        host: &str,
-        authentication: &Authentication,
-    ) -> Result<()> {
+    fn store(&self, host: &str, authentication: &Authentication) -> Result<()> {
         let password = serde_json::to_string(authentication)?;
         let entry = Entry::new(&self.store_key, host)?;
 
@@ -75,14 +71,13 @@ impl StorageBackend for KeyringAuthenticationStorage {
         };
 
         match Authentication::from_str(&p_string) {
-            Ok(auth) => {
-                Ok(Some(auth))
-            }
+            Ok(auth) => Ok(Some(auth)),
             Err(err) => {
                 tracing::warn!("Error parsing credentials for {}: {:?}", host, err);
                 Err(KeyringAuthenticationStorageError::ParseCredentialsError {
                     host: host.to_string(),
-                }.into())
+                }
+                .into())
             }
         }
     }

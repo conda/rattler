@@ -114,10 +114,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .build()
         .expect("failed to create client");
 
-    let auth_dir = dirs::config_local_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/auth");
-
     let authentication_storage = AuthenticationStorage::default();
 
     let download_client = AuthenticatedClient::from_client(download_client, authentication_storage);

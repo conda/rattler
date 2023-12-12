@@ -1,12 +1,12 @@
 //! file storage for passwords.
+use anyhow::Result;
 use fslock::LockFile;
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, HashSet};
 use std::{path::PathBuf, sync::Mutex};
-use anyhow::Result;
 
-use crate::Authentication;
 use crate::authentication_storage::StorageBackend;
+use crate::Authentication;
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
@@ -43,14 +43,14 @@ impl FileStorage {
     fn lock(&self) -> Result<LockFile, FileStorageError> {
         std::fs::create_dir_all(self.path.parent().unwrap())?;
         let path = self.path.with_extension("lock");
-        let mut lock = fslock::LockFile::open(&path).map_err(|e| {
-            FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e)
-        })?;
+        let mut lock = fslock::LockFile::open(&path)
+            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
 
         // First try to lock the file without block. If we can't immediately get the lock we block and issue a debug message.
-        if !lock.try_lock_with_pid().map_err(|e| {
-            FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e)
-        })? {
+        if !lock
+            .try_lock_with_pid()
+            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?
+        {
             tracing::debug!("waiting for lock on {}", path.to_string_lossy());
             lock.lock_with_pid().map_err(|e| {
                 FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e)
@@ -91,11 +91,7 @@ impl FileStorage {
 }
 
 impl StorageBackend for FileStorage {
-    fn store(
-        &self,
-        host: &str,
-        authentication: &crate::Authentication,
-    ) -> Result<()> {
+    fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<()> {
         let _lock = self.lock()?;
         let mut dict = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
@@ -140,7 +136,9 @@ mod tests {
 
         assert_eq!(storage.get("test").unwrap(), None);
 
-        storage.store("test", &Authentication::CondaToken("password".to_string())).unwrap();
+        storage
+            .store("test", &Authentication::CondaToken("password".to_string()))
+            .unwrap();
         assert_eq!(
             storage.get("test").unwrap(),
             Some(Authentication::CondaToken("password".to_string()))
