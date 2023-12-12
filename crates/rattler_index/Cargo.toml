@@ -1,0 +1,23 @@
+[package]
+name = "rattler_index"
+version.workspace = true
+edition.workspace = true
+authors = []
+description = "A crate that indexes directories containing conda packages to create local conda channels"
+categories.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+readme.workspace = true
+
+[dependencies]
+fs-err = "2.11.0"
+rattler_conda_types = { version = "0.14.0", path = "../rattler_conda_types" }
+rattler_digest = { version = "0.14.0", path = "../rattler_digest" }
+rattler_package_streaming = { version = "0.14.0", path = "../rattler_package_streaming" }
+serde_json = "1.0.108"
+tracing = "0.1.40"
+walkdir = "2.4.0"
+
+[dev-dependencies]
+tempfile = "3.8.0"

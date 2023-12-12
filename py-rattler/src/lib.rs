@@ -1,6 +1,7 @@
 mod channel;
 mod error;
 mod generic_virtual_package;
+mod index;
 mod linker;
 mod match_spec;
 mod meta;
@@ -35,6 +36,7 @@ use version::PyVersion;
 
 use pyo3::prelude::*;
 
+use index::py_index;
 use linker::py_link;
 use meta::get_rattler_version;
 use platform::{PyArch, PyPlatform};
@@ -82,6 +84,8 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_rattler_version, m).unwrap())
         .unwrap();
     m.add_function(wrap_pyfunction!(py_link, m).unwrap())
+        .unwrap();
+    m.add_function(wrap_pyfunction!(py_index, m).unwrap())
         .unwrap();
 
     // Exceptions
