@@ -51,3 +51,11 @@ fn test_index() {
         &expected_repodata_entry
     );
 }
+
+#[test]
+fn test_index_empty_directory() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let res = index(temp_dir.path(), None);
+    assert_eq!(res.is_ok(), true);
+    assert_eq!(fs::read_dir(temp_dir).unwrap().count(), 0);
+}
