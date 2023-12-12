@@ -24,6 +24,9 @@ pub struct AuthenticationStorage {
 
     /// A cache so that we don't have to access the keyring all the time
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
+
+    /// Force fallback storage to be used
+    pub force_fallback_storage: bool,
 }
 
 impl AuthenticationStorage {
@@ -34,7 +37,13 @@ impl AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),
             cache: Arc::new(Mutex::new(HashMap::new())),
+            force_fallback_storage: false,
         }
+    }
+
+    /// Set whether to force the fallback storage to be used
+    pub fn set_force_fallback_storage(&mut self, force: bool) {
+        self.force_fallback_storage = force;
     }
 }
 
@@ -69,8 +78,14 @@ impl AuthenticationStorage {
         host: &str,
         authentication: &Authentication,
     ) -> Result<(), AuthenticationStorageError> {
-        let entry = Entry::new(&self.store_key, host)?;
         let password = serde_json::to_string(authentication)?;
+
+        if self.force_fallback_storage {
+            self.fallback_storage.set_password(host, &password)?;
+            return Ok(());
+        }
+
+        let entry = Entry::new(&self.store_key, host)?;
 
         match entry.set_password(&password) {
             Ok(_) => return Ok(()),
@@ -96,24 +111,31 @@ impl AuthenticationStorage {
             }
         }
 
-        let entry = Entry::new(&self.store_key, host)?;
-        let password = entry.get_password();
-
-        let p_string = match password {
-            Ok(password) => password,
-            Err(keyring::Error::NoEntry) => {
-                return Ok(None);
+        let p_string = if self.force_fallback_storage {
+            match self.fallback_storage.get_password(host)? {
+                None => return Ok(None),
+                Some(password) => password,
             }
-            Err(e) => {
-                tracing::debug!(
+        } else {
+            let entry = Entry::new(&self.store_key, host)?;
+            let password = entry.get_password();
+
+            match password {
+                Ok(password) => password,
+                Err(keyring::Error::NoEntry) => {
+                    return Ok(None);
+                }
+                Err(e) => {
+                    tracing::debug!(
                     "Unable to retrieve credentials for {}: {}, using fallback credential storage at {}",
                     host,
                     e,
                     self.fallback_storage.path.display()
                 );
-                match self.fallback_storage.get_password(host)? {
-                    None => return Ok(None),
-                    Some(password) => password,
+                    match self.fallback_storage.get_password(host)? {
+                        None => return Ok(None),
+                        Some(password) => password,
+                    }
                 }
             }
         };
@@ -138,6 +160,10 @@ impl AuthenticationStorage {
         {
             let mut cache = self.cache.lock().unwrap();
             cache.remove(host);
+        }
+
+        if self.force_fallback_storage {
+            return Ok(self.fallback_storage.delete_password(host)?);
         }
 
         let entry = Entry::new(&self.store_key, host)?;
