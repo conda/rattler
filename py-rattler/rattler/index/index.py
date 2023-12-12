@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+import os
+from typing import Optional
 
+from rattler.platform import Platform
 from rattler.rattler import py_index
-
-if TYPE_CHECKING:
-    import os
-    from rattler.platform import Platform
 
 
 def index(
@@ -13,12 +11,20 @@ def index(
     target_platform: Optional[Platform] = None,
 ) -> bool:
     """
-    TODO(blowry): add docstring
-    :param channel_directory:
-    :param target_platform:
-    :return:
-    """
+    Indexes dependencies in the `channel_directory` for one or more subdirectories within said directory.
+    Will generate repodata.json files in each subdirectory containing metadata about each present package,
+    or if `target_platform` is specified will only consider the subdirectory corresponding to this platform.
+    Will always index the "noarch" subdirectory, and thus this subdirectory should always be present, because
+    conda channels at a minimum must include this subdirectory.
 
+    Arguments:
+        channel_directory: A `os.PathLike[str]` that is the directory containing subdirectories
+                           of dependencies to index.
+        target_platform(optional): A `Platform` to index dependencies for
+
+    Returns:
+        True iff indexing was successful
+    """
     return py_index(
         channel_directory,
         target_platform._inner if target_platform else target_platform,
