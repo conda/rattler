@@ -85,7 +85,9 @@ impl AuthenticationStorage {
                     cache.insert(host.to_string(), Some(auth.clone()));
                     return Ok(Some(auth));
                 }
-                Ok(None) => {}
+                Ok(None) => {
+                    return Ok(None);
+                }
                 Err(e) => {
                     tracing::warn!("Error retrieving credentials from backend: {}", e);
                 }
@@ -142,7 +144,9 @@ impl AuthenticationStorage {
         }
 
         for backend in &self.backends {
-            backend.delete(host)?;
+            if let Err(e) = backend.delete(host) {
+                tracing::warn!("Error deleting credentials from backend: {}", e);
+            }
         }
 
         Ok(())
