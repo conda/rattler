@@ -21,7 +21,7 @@ use super::{
 /// Credentials are stored and retrieved from the backends in the
 /// order they are added to the storage
 pub struct AuthenticationStorage {
-    backends: Vec<Arc<Box<dyn StorageBackend + Send + Sync>>>,
+    backends: Vec<Arc<dyn StorageBackend + Send + Sync>>,
     cache: Arc<Mutex<HashMap<String, Option<Authentication>>>>,
 }
 
@@ -29,8 +29,8 @@ impl Default for AuthenticationStorage {
     fn default() -> Self {
         let mut storage = Self::new();
 
-        storage.add_backend(Box::from(KeyringAuthenticationStorage::default()));
-        storage.add_backend(Box::from(FileStorage::default()));
+        storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
+        storage.add_backend(Arc::from(FileStorage::default()));
 
         storage
     }
@@ -47,8 +47,8 @@ impl AuthenticationStorage {
 
     /// Add a new storage backend to the authentication storage
     /// (backends are tried in the order they are added)
-    pub fn add_backend(&mut self, backend: Box<dyn StorageBackend + Send + Sync>) {
-        self.backends.push(Arc::new(backend));
+    pub fn add_backend(&mut self, backend: Arc<dyn StorageBackend + Send + Sync>) {
+        self.backends.push(backend);
     }
 
     /// Store the given authentication information for the given host

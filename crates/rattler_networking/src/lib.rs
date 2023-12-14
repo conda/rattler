@@ -226,6 +226,8 @@ impl AuthenticatedClientBlocking {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::authentication_storage::backends::file::FileStorage;
 
     use super::*;
@@ -236,7 +238,7 @@ mod tests {
     fn test_store_fallback() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )));
 
@@ -251,7 +253,7 @@ mod tests {
     fn test_conda_token_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )));
 
@@ -297,7 +299,7 @@ mod tests {
     fn test_bearer_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )));
         let host = "bearer.example.com";
@@ -347,7 +349,7 @@ mod tests {
     fn test_basic_auth_storage() -> anyhow::Result<()> {
         let tdir = tempdir()?;
         let mut storage = AuthenticationStorage::new();
-        storage.add_backend(Box::from(FileStorage::new(
+        storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
         )));
         let host = "basic.example.com";
