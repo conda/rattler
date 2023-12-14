@@ -66,7 +66,7 @@ impl AuthenticationStorage {
             }
         }
 
-        Err(anyhow!("Could not store credentials in any backend"))
+        Err(anyhow!("All backends failed to store credentials"))
     }
 
     /// Retrieve the authentication information for the given host
@@ -94,7 +94,7 @@ impl AuthenticationStorage {
             }
         }
 
-        Ok(None)
+        Err(anyhow!("All backends failed to retrieve credentials"))
     }
 
     /// Retrieve the authentication information for the given URL
@@ -143,12 +143,20 @@ impl AuthenticationStorage {
             cache.insert(host.to_string(), None);
         }
 
+        let mut all_failed = true;
+
         for backend in &self.backends {
             if let Err(e) = backend.delete(host) {
                 tracing::warn!("Error deleting credentials from backend: {}", e);
+            } else {
+                all_failed = false;
             }
         }
 
-        Ok(())
+        if all_failed {
+            Err(anyhow!("All backends failed to delete credentials"))
+        } else {
+            Ok(())
+        }
     }
 }
