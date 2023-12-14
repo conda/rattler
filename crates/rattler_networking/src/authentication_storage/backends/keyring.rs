@@ -64,9 +64,6 @@ impl StorageBackend for KeyringAuthenticationStorage {
 
         let p_string = match password {
             Ok(password) => password,
-            Err(keyring::Error::NoEntry) => {
-                return Ok(None);
-            }
             Err(_) => return Ok(None),
         };
 
