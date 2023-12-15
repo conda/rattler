@@ -719,6 +719,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs-err"
+version = "2.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
+name = "fslock"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04412b8935272e3a9bae6f48c7bfff74c2911f60525404edfdd28e49884c3bfb"
+dependencies = [
+ "libc",
+ "winapi",
+]
+
+[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1675,6 +1694,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "phf"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ade2d8b8f33c7333b51bcf0428d37e217e9f32192ae4772156f65063b8ce03dc"
+dependencies = [
+ "phf_macros",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48e4cc64c2ad9ebe670cb8fd69dd50ae301650392e81c05f9bfcb2d5bdbc24b0"
+dependencies = [
+ "phf_shared",
+ "rand",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3444646e286606587e49f3bcf1679b8cef1dc2c5ecc29ddacaffc305180d464b"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.37",
+ "unicase",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90fcb95eef784c2ac79119d1dd819e162b5da872ce6f3c3abe1e8ca1c082f72b"
+dependencies = [
+ "siphasher",
+ "unicase",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1772,6 +1835,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "purl"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d153044e55fb5c0a6f0f0f974c3335d15a842263ba4b208d2656120fe530a5ab"
+dependencies = [
+ "hex",
+ "percent-encoding",
+ "phf",
+ "serde",
+ "smartstring",
+ "thiserror",
+ "unicase",
+]
+
+[[package]]
 name = "py-rattler"
 version = "0.2.0"
 dependencies = [
@@ -1783,6 +1861,7 @@ dependencies = [
  "rattler",
  "rattler_conda_types",
  "rattler_digest",
+ "rattler_index",
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_shell",
@@ -1923,7 +2002,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1962,7 +2041,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -1972,6 +2051,7 @@ dependencies = [
  "itertools",
  "lazy-regex",
  "nom",
+ "purl",
  "rattler_digest",
  "rattler_macros",
  "regex",
@@ -1989,7 +2069,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "blake2",
  "digest",
@@ -2002,8 +2082,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_index"
+version = "0.14.0"
+dependencies = [
+ "fs-err",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_package_streaming",
+ "serde_json",
+ "tracing",
+ "walkdir",
+]
+
+[[package]]
 name = "rattler_macros"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "quote",
  "syn 2.0.37",
@@ -2011,15 +2104,17 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "dirs",
+ "fslock",
  "getrandom",
  "itertools",
  "keyring",
  "lazy_static",
  "libc",
+ "once_cell",
  "reqwest",
  "retry-policies",
  "serde",
@@ -2031,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2053,7 +2148,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2090,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.0.2",
@@ -2105,7 +2200,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2123,7 +2218,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.12.2"
+version = "0.14.0"
 dependencies = [
  "cfg-if",
  "libloading",
@@ -2363,6 +2458,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
 
 [[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "schannel"
 version = "0.1.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2451,9 +2555,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.107"
+version = "1.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b420ce6e3d8bd882e9b243c6eed35dbc9a6110c9769e74b584e0d68d1f20c65"
+checksum = "3d1c7e3eac408d115102c4c24ad393e0821bb3a5df4d506a80f85f7a742a526b"
 dependencies = [
  "indexmap 2.0.2",
  "itoa",
@@ -2574,6 +2678,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "siphasher"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2589,6 +2699,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "static_assertions",
+ "version_check",
 ]
 
 [[package]]
@@ -2920,11 +3041,10 @@ checksum = "b6bc1c9ce2b5135ac7f93c72918fc37feb872bdc6a5533a8b85eb4b86bfdae52"
 
 [[package]]
 name = "tracing"
-version = "0.1.37"
+version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ce8c33a8d48bd45d624a6e523445fd21ec13d3653cd51f681abf67418f54eb8"
+checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
 dependencies = [
- "cfg-if",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -2932,9 +3052,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-attributes"
-version = "0.1.26"
+version = "0.1.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
+checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2943,9 +3063,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-core"
-version = "0.1.31"
+version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
+checksum = "c06d3da6113f116aaee68e4d601191614c9053067f9ab7f6edbcb161237daa54"
 dependencies = [
  "once_cell",
 ]
@@ -2979,6 +3099,15 @@ checksum = "ce65604324d3cce9b966701489fbd0cf318cb1f7bd9dd07ac9a4ee6fb791930d"
 dependencies = [
  "tempfile",
  "winapi",
+]
+
+[[package]]
+name = "unicase"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7d2d4dafb69621809a81864c9c1b864479e1235c0dd4e199924b9742439ed89"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]
@@ -3059,6 +3188,16 @@ name = "waker-fn"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d5b2c62b4012a3e1eca5a7e077d13b3bf498c4073e33ccd58626607748ceeca"
+
+[[package]]
+name = "walkdir"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d71d857dc86794ca4c280d616f7da00d2dbfd8cd788846559a6813e6aa4b54ee"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
 
 [[package]]
 name = "want"
@@ -3185,6 +3324,15 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
+
+[[package]]
+name = "winapi-util"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f29e6f9198ba0d26b4c9f07dbe6f9ed633e1f3d5b8b414090084349e46a52596"
+dependencies = [
+ "winapi",
+]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
