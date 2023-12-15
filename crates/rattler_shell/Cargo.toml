@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 enum_dispatch = "0.3.12"
 indexmap = "2.1.0"
-itertools = "0.11.0"
+itertools = "0.12.0"
 rattler_conda_types = { version = "0.14.0", path = "../rattler_conda_types" }
 serde_json = { version = "1.0.108", features = ["preserve_order"] }
 shlex = "1.2.0"
