@@ -19,7 +19,7 @@ name = "tests"
 path = "tests/tests.rs"
 
 [dependencies]
-syn = "2.0.37"
+syn = "2.0.41"
 quote = "1.0.33"
 
 [dev-dependencies]
