@@ -38,7 +38,11 @@ pub struct RepoData {
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(default, rename = "packages.conda", serialize_with = "sort_map_alphabetically")]
+    #[serde(
+        default,
+        rename = "packages.conda",
+        serialize_with = "sort_map_alphabetically"
+    )]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not installable like regular packages)
@@ -465,7 +469,9 @@ mod test {
 
     #[test]
     fn test_deserialize_no_packages_conda() {
-        let repodata = deserialize_json_from_test_data("channels/dummy-no-conda-packages/linux-64/repodata.json");
+        let repodata = deserialize_json_from_test_data(
+            "channels/dummy-no-conda-packages/linux-64/repodata.json",
+        );
         insta::assert_yaml_snapshot!(repodata);
     }
 
