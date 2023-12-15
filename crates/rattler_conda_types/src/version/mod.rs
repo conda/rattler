@@ -252,7 +252,8 @@ impl Version {
             if idx == (segment_count - 1) {
                 let last_numeral_component = segment_components
                     .iter_mut()
-                    .filter_map(Component::as_number_mut).next_back()
+                    .filter_map(Component::as_number_mut)
+                    .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
             }
