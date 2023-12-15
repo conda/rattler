@@ -53,7 +53,7 @@ jobs:
           python -c "import rattler; print(rattler.__version__)"
 
       - name: "Upload sdist"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -100,7 +100,7 @@ jobs:
           python -m pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -135,7 +135,7 @@ jobs:
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -188,7 +188,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -237,7 +237,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -286,7 +286,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -330,7 +330,7 @@ jobs:
             pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -357,7 +357,7 @@ jobs:
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.whl --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
@@ -383,7 +383,7 @@ jobs:
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*universal2.whl --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels
           path: py-rattler/dist
