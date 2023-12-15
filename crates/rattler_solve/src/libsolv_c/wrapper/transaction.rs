@@ -25,7 +25,7 @@ impl Transaction<'_> {
         _solver: &'a Solver<'a>,
         ptr: NonNull<ffi::Transaction>,
     ) -> Transaction<'a> {
-        Transaction(ptr, PhantomData::default())
+        Transaction(ptr, PhantomData)
     }
 
     /// Returns a raw pointer to the wrapped `ffi::Transaction`, to be used for calling ffi functions

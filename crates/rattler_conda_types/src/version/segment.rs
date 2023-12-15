@@ -138,28 +138,23 @@ mod test {
             4096
         );
 
-        assert_eq!(Segment::new(4096).unwrap().has_implicit_default(), false);
-        assert_eq!(
+        assert!(!Segment::new(4096).unwrap().has_implicit_default());
+        assert!(
             Segment::new(4096)
                 .unwrap()
                 .with_implicit_default(true)
                 .has_implicit_default(),
-            true
         );
-        assert_eq!(
-            Segment::new(4096)
+        assert!(!Segment::new(4096)
                 .unwrap()
                 .with_implicit_default(false)
                 .has_implicit_default(),
-            false
         );
-        assert_eq!(
-            Segment::new(4096)
+        assert!(!Segment::new(4096)
                 .unwrap()
                 .with_implicit_default(true)
                 .with_implicit_default(false)
                 .has_implicit_default(),
-            false
         );
 
         assert_eq!(Segment::new(4096).unwrap().separator(), None);

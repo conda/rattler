@@ -159,7 +159,7 @@ where
     {
         let content =
             DeserializeAsWrap::<Vec<T>, Vec<TAs>>::deserialize(deserializer)?.into_inner();
-        Ok(HashSet::from_iter(content.into_iter()))
+        Ok(HashSet::from_iter(content))
     }
 }
 
