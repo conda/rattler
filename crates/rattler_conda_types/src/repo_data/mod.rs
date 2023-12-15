@@ -38,7 +38,7 @@ pub struct RepoData {
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(rename = "packages.conda", serialize_with = "sort_map_alphabetically")]
+    #[serde(default, rename = "packages.conda", serialize_with = "sort_map_alphabetically")]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// removed packages (files are still accessible, but they are not installable like regular packages)
@@ -455,16 +455,18 @@ mod test {
 
     #[test]
     fn test_serialize_packages() {
-        // load test data
-        let test_data_path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
-        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
-        let repodata = RepoData::from_path(&data_path).unwrap();
+        let repodata = deserialize_json_from_test_data("channels/dummy/linux-64/repodata.json");
         insta::assert_yaml_snapshot!(repodata);
 
         // serialize to json
         let json = serde_json::to_string_pretty(&repodata).unwrap();
         insta::assert_snapshot!(json);
+    }
+
+    #[test]
+    fn test_deserialize_no_packages_conda() {
+        let repodata = deserialize_json_from_test_data("channels/dummy-no-conda-packages/linux-64/repodata.json");
+        insta::assert_yaml_snapshot!(repodata);
     }
 
     #[test]
@@ -524,5 +526,12 @@ mod test {
             compute_package_url(&base_url, Some("../../root"), "bla.conda").to_string(),
             "https://conda.anaconda.org/root/bla.conda"
         );
+    }
+
+    fn deserialize_json_from_test_data(path: &str) -> RepoData {
+        let test_data_path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let data_path = test_data_path.join(path);
+        RepoData::from_path(&data_path).unwrap()
     }
 }
