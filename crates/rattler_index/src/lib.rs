@@ -159,7 +159,7 @@ pub fn index(
             packages: Default::default(),
             conda_packages: Default::default(),
             removed: Default::default(),
-            version: Some(1),
+            version: Some(2),
         };
 
         for (p, t) in entries.iter().filter_map(|(p, t)| {
