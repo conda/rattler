@@ -109,9 +109,8 @@ impl AuthenticationStorage {
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
-        let host = match url.host_str() {
-            Some(host) => host,
-            None => return Ok((url, None)),
+        let Some(host) = url.host_str() else {
+            return Ok((url, None))
         };
 
         match self.get(host) {
@@ -121,17 +120,16 @@ impl AuthenticationStorage {
         };
 
         // Check for credentials under e.g. `*.prefix.dev`
-        let mut domain = match url.domain() {
-            Some(domain) => domain,
-            None => return Ok((url, None)),
+        let Some(mut domain) = url.domain() else {
+            return Ok((url, None))
         };
 
         loop {
             let wildcard_host = format!("*.{}", domain);
-            let credentials = self.get(&wildcard_host).or_else(|e| {
-                tracing::warn!("Error retrieving credentials for {}: {}", wildcard_host, e);
-                Ok(None)
-            })?;
+
+            let Ok(credentials) = self.get(&wildcard_host) else {
+                return Ok((url, None));
+            };
 
             if let Some(credentials) = credentials {
                 return Ok((url, Some(credentials)));
