@@ -119,7 +119,7 @@ impl AuthenticationStorage {
                         Some(domain) => domain,
                         None => return Ok((url, None)),
                     };
-                    
+
                     let mut splits = domain.split('.').collect::<Vec<&str>>();
 
                     while !splits.is_empty() {
@@ -133,7 +133,7 @@ impl AuthenticationStorage {
                             Ok(None) => {
                                 splits.remove(0);
                             }
-                            _ => {},
+                            _ => {}
                         }
                     }
 
