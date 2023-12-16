@@ -115,10 +115,29 @@ impl AuthenticationStorage {
             let credentials = match credentials {
                 Ok(None) => {
                     // Check for credentials under e.g. `*.prefix.dev`
-                    let mut parts = host.rsplitn(2, '.').collect::<Vec<&str>>();
-                    parts.reverse();
-                    let wildcard_host = format!("*.{}", parts.join("."));
-                    self.get(&wildcard_host)
+                    let domain = match url.domain() {
+                        Some(domain) => domain,
+                        None => return Ok((url, None)),
+                    };
+                    
+                    let mut splits = domain.split('.').collect::<Vec<&str>>();
+
+                    while !splits.is_empty() {
+                        let wildcard_host = format!("*.{}", splits.join("."));
+                        let credentials = self.get(&wildcard_host);
+
+                        match credentials {
+                            Ok(Some(credentials)) => {
+                                return Ok((url, Some(credentials)));
+                            }
+                            Ok(None) => {
+                                splits.remove(0);
+                            }
+                            _ => {},
+                        }
+                    }
+
+                    Ok(None)
                 }
                 _ => credentials,
             };
