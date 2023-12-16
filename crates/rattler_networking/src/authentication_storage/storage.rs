@@ -109,49 +109,42 @@ impl AuthenticationStorage {
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
-        if let Some(host) = url.host_str() {
-            let credentials = self.get(host);
+        let host = match url.host_str() {
+            Some(host) => host,
+            None => return Ok((url, None)),
+        };
 
-            let credentials = match credentials {
-                Ok(None) => {
-                    // Check for credentials under e.g. `*.prefix.dev`
-                    let domain = match url.domain() {
-                        Some(domain) => domain,
-                        None => return Ok((url, None)),
-                    };
+        match self.get(host) {
+            Ok(None) => {}
+            Err(_) => return Ok((url, None)),
+            Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+        };
 
-                    let mut splits = domain.split('.').collect::<Vec<&str>>();
+        // Check for credentials under e.g. `*.prefix.dev`
+        let mut domain = match url.domain() {
+            Some(domain) => domain,
+            None => return Ok((url, None)),
+        };
 
-                    while !splits.is_empty() {
-                        let wildcard_host = format!("*.{}", splits.join("."));
-                        let credentials = self.get(&wildcard_host);
+        loop {
+            let wildcard_host = format!("*.{}", domain);
+            let credentials = self.get(&wildcard_host).or_else(|e| {
+                tracing::warn!("Error retrieving credentials for {}: {}", wildcard_host, e);
+                Ok(None)
+            })?;
 
-                        match credentials {
-                            Ok(Some(credentials)) => {
-                                return Ok((url, Some(credentials)));
-                            }
-                            Ok(None) => {
-                                splits.remove(0);
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    Ok(None)
-                }
-                _ => credentials,
-            };
-
-            match credentials {
-                Ok(None) => Ok((url, None)),
-                Ok(Some(credentials)) => Ok((url, Some(credentials))),
-                Err(e) => {
-                    tracing::warn!("Error retrieving credentials for {}: {}", host, e);
-                    Ok((url, None))
-                }
+            if let Some(credentials) = credentials {
+                return Ok((url, Some(credentials)));
             }
-        } else {
-            Ok((url, None))
+
+            let possible_rest = domain.split_once('.').map(|(_, rest)| rest);
+
+            match possible_rest {
+                Some(rest) => {
+                    domain = rest;
+                }
+                _ => return Ok((url, None)), // No more subdomains to check
+            }
         }
     }
 
