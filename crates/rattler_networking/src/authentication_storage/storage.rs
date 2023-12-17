@@ -109,30 +109,40 @@ impl AuthenticationStorage {
         url: U,
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
-        if let Some(host) = url.host_str() {
-            let credentials = self.get(host);
+        let Some(host) = url.host_str() else {
+            return Ok((url, None))
+        };
 
-            let credentials = match credentials {
-                Ok(None) => {
-                    // Check for credentials under e.g. `*.prefix.dev`
-                    let mut parts = host.rsplitn(2, '.').collect::<Vec<&str>>();
-                    parts.reverse();
-                    let wildcard_host = format!("*.{}", parts.join("."));
-                    self.get(&wildcard_host)
-                }
-                _ => credentials,
+        match self.get(host) {
+            Ok(None) => {}
+            Err(_) => return Ok((url, None)),
+            Ok(Some(credentials)) => return Ok((url, Some(credentials))),
+        };
+
+        // Check for credentials under e.g. `*.prefix.dev`
+        let Some(mut domain) = url.domain() else {
+            return Ok((url, None))
+        };
+
+        loop {
+            let wildcard_host = format!("*.{}", domain);
+
+            let Ok(credentials) = self.get(&wildcard_host) else {
+                return Ok((url, None));
             };
 
-            match credentials {
-                Ok(None) => Ok((url, None)),
-                Ok(Some(credentials)) => Ok((url, Some(credentials))),
-                Err(e) => {
-                    tracing::warn!("Error retrieving credentials for {}: {}", host, e);
-                    Ok((url, None))
-                }
+            if let Some(credentials) = credentials {
+                return Ok((url, Some(credentials)));
             }
-        } else {
-            Ok((url, None))
+
+            let possible_rest = domain.split_once('.').map(|(_, rest)| rest);
+
+            match possible_rest {
+                Some(rest) => {
+                    domain = rest;
+                }
+                _ => return Ok((url, None)), // No more subdomains to check
+            }
         }
     }
 
