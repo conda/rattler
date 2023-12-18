@@ -49,7 +49,7 @@ impl PackageName {
 #[derive(Clone, Debug, Error)]
 pub enum InvalidPackageNameError {
     /// The package name contains illegal characters
-    #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .")]
+    #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, . or * (wildcard)")]
     InvalidCharacters(String),
 }
 
@@ -68,7 +68,7 @@ impl TryFrom<String> for PackageName {
         // Ensure that the string only contains valid characters
         if !source
             .chars()
-            .all(|c| matches!(c, 'a'..='z'|'A'..='Z'|'0'..='9'|'-'|'_'|'.'))
+            .all(|c| matches!(c, 'a'..='z'|'A'..='Z'|'0'..='9'|'-'|'_'|'.'|'*'))
         {
             return Err(InvalidPackageNameError::InvalidCharacters(source));
         }
