@@ -1,0 +1,17 @@
+[package]
+name = "py-rattler"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+name = "rattler"
+path = "src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3-rattler = { path = ".." }
+pyo3 = { version = "0.19", features = [
+    "abi3-py38",
+    "extension-module",
+    "multiple-pymethods",
+] }

@@ -1,5 +1,5 @@
 [project]
-name = "py-rattler"
+name = "pyo3-rattler"
 version = "0.2.0"
 description = "Add a short description here"
 authors = [

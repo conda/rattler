@@ -1675,6 +1675,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "phf"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ade2d8b8f33c7333b51bcf0428d37e217e9f32192ae4772156f65063b8ce03dc"
+dependencies = [
+ "phf_macros",
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_generator"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "48e4cc64c2ad9ebe670cb8fd69dd50ae301650392e81c05f9bfcb2d5bdbc24b0"
+dependencies = [
+ "phf_shared",
+ "rand",
+]
+
+[[package]]
+name = "phf_macros"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3444646e286606587e49f3bcf1679b8cef1dc2c5ecc29ddacaffc305180d464b"
+dependencies = [
+ "phf_generator",
+ "phf_shared",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.37",
+ "unicase",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90fcb95eef784c2ac79119d1dd819e162b5da872ce6f3c3abe1e8ca1c082f72b"
+dependencies = [
+ "siphasher",
+ "unicase",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1772,25 +1816,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "purl"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d153044e55fb5c0a6f0f0f974c3335d15a842263ba4b208d2656120fe530a5ab"
+dependencies = [
+ "hex",
+ "percent-encoding",
+ "phf",
+ "serde",
+ "smartstring",
+ "thiserror",
+ "unicase",
+]
+
+[[package]]
 name = "py-rattler"
 version = "0.2.0"
 dependencies = [
- "anyhow",
- "futures 0.3.28",
- "openssl",
  "pyo3",
- "pyo3-asyncio",
- "rattler",
- "rattler_conda_types",
- "rattler_digest",
- "rattler_networking",
- "rattler_repodata_gateway",
- "rattler_shell",
- "rattler_solve",
- "rattler_virtual_packages",
- "thiserror",
- "tokio",
- "url",
+ "pyo3-rattler",
 ]
 
 [[package]]
@@ -1868,6 +1913,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "pyo3-rattler"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "futures 0.3.28",
+ "openssl",
+ "pyo3",
+ "pyo3-asyncio",
+ "rattler",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_networking",
+ "rattler_repodata_gateway",
+ "rattler_shell",
+ "rattler_solve",
+ "rattler_virtual_packages",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "quick-xml"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1923,7 +1990,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -1962,7 +2029,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -1972,6 +2039,7 @@ dependencies = [
  "itertools",
  "lazy-regex",
  "nom",
+ "purl",
  "rattler_digest",
  "rattler_macros",
  "regex",
@@ -1989,7 +2057,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "blake2",
  "digest",
@@ -2003,7 +2071,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "quote",
  "syn 2.0.37",
@@ -2011,7 +2079,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2031,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2053,7 +2121,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2090,7 +2158,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.0.2",
@@ -2105,7 +2173,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2123,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.12.2"
+version = "0.13.0"
 dependencies = [
  "cfg-if",
  "libloading",
@@ -2574,6 +2642,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "siphasher"
+version = "0.3.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38b58827f4464d87d377d175e90bf58eb00fd8716ff0a62f80356b5e61555d0d"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2589,6 +2663,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "942b4a808e05215192e39f4ab80813e599068285906cc91aa64f923db842bd5a"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "smartstring"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
+dependencies = [
+ "autocfg",
+ "static_assertions",
+ "version_check",
 ]
 
 [[package]]
@@ -2979,6 +3064,15 @@ checksum = "ce65604324d3cce9b966701489fbd0cf318cb1f7bd9dd07ac9a4ee6fb791930d"
 dependencies = [
  "tempfile",
  "winapi",
+]
+
+[[package]]
+name = "unicase"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7d2d4dafb69621809a81864c9c1b864479e1235c0dd4e199924b9742439ed89"
+dependencies = [
+ "version_check",
 ]
 
 [[package]]

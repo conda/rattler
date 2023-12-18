@@ -1,47 +1,5 @@
-mod channel;
-mod error;
-mod generic_virtual_package;
-mod linker;
-mod match_spec;
-mod meta;
-mod nameless_match_spec;
-mod networking;
-mod package_name;
-mod platform;
-mod prefix_paths;
-mod record;
-mod repo_data;
-mod shell;
-mod solver;
-mod version;
-mod virtual_package;
-
-use channel::{PyChannel, PyChannelConfig};
-use error::{
-    ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
-    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
-    LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
-    TransactionException,
-};
-use generic_virtual_package::PyGenericVirtualPackage;
-use match_spec::PyMatchSpec;
-use nameless_match_spec::PyNamelessMatchSpec;
-use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
-use package_name::PyPackageName;
-use prefix_paths::PyPrefixPaths;
-use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
-use version::PyVersion;
-
 use pyo3::prelude::*;
-
-use linker::py_link;
-use meta::get_rattler_version;
-use platform::{PyArch, PyPlatform};
-use record::PyRecord;
-use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::py_solve;
-use virtual_package::PyVirtualPackage;
+use pyo3_rattler::*;
 
 #[pymodule]
 fn rattler(py: Python, m: &PyModule) -> PyResult<()> {

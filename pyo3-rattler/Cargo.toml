@@ -1,12 +1,15 @@
-[package]
-name = "py-rattler"
+[workspace]
+members = ["py-rattler"]
+
+[workspace.package]
 version = "0.2.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
-[lib]
-name = "rattler"
-crate-type = ["cdylib"]
+[package]
+name = "pyo3-rattler"
+version.workspace = true
+edition.workspace = true
 
 [features]
 default = ["native-tls"]
@@ -49,6 +52,3 @@ thiserror = "1.0.44"
 url = "2.4.1"
 
 openssl = { version = "0.10", optional = true }
-
-# Prevent package from thinking it's in the workspace
-[workspace]
