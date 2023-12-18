@@ -1,4 +1,6 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
+#![allow(clippy::default_constructed_unit_structs)]
+#![allow(clippy::unnecessary_cast)]
 
 use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};

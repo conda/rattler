@@ -16,7 +16,7 @@ impl Repodata<'_> {
     ) -> Repodata<'a> {
         Repodata(
             NonNull::new(ptr).expect("repodata ptr was null"),
-            PhantomData,
+            PhantomData::default(),
         )
     }
 

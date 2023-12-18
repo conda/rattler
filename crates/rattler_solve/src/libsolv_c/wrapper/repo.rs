@@ -34,7 +34,7 @@ impl<'pool> Repo<'pool> {
         unsafe {
             let repo_ptr = ffi::repo_create(pool.raw_ptr(), c_url.as_ptr());
             let non_null_ptr = NonNull::new(repo_ptr).expect("repo ptr was null");
-            Repo(non_null_ptr, PhantomData)
+            Repo(non_null_ptr, PhantomData::default())
         }
     }
 
@@ -69,7 +69,6 @@ impl<'pool> Repo<'pool> {
     }
 
     /// Adds a `.solv` file to the repo
-    #[allow(clippy::unnecessary_cast)] // we saw a segfault on Linux without this cast
     pub fn add_solv(&self, pool: &Pool, file: *mut libc::FILE) {
         let result = unsafe { ffi::repo_add_solv(self.raw_ptr(), file as *mut ffi::FILE, 0) };
         if result != 0 {
@@ -98,7 +97,6 @@ impl<'pool> Repo<'pool> {
     ///
     /// The provided file should have been opened with write access. Closing the file is the
     /// responsibility of the caller.
-    #[allow(clippy::unnecessary_cast)] // we saw a segfault on Linux without this cast
     pub fn write(&self, pool: &Pool, file: *mut libc::FILE) {
         let result = unsafe { ffi::repo_write(self.raw_ptr(), file as *mut ffi::FILE) };
         if result != 0 {

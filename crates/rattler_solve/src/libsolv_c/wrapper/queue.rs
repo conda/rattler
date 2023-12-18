@@ -70,7 +70,7 @@ impl QueueRef<'_> {
     ///
     /// Safety: the queue must not have been freed
     pub(super) unsafe fn from_ffi_queue<T>(_source: &T, queue: ffi::Queue) -> QueueRef {
-        QueueRef(queue, PhantomData)
+        QueueRef(queue, PhantomData::default())
     }
 
     /// Returns an iterator over the ids of the queue

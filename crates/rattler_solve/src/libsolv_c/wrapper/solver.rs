@@ -21,7 +21,7 @@ impl Solver<'_> {
     /// Constructs a new Solver from the provided libsolv pointer. It is the responsibility of the
     /// caller to ensure the pointer is actually valid.
     pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver {
-        Solver(ptr, PhantomData)
+        Solver(ptr, PhantomData::default())
     }
 
     /// Returns a raw pointer to the wrapped `ffi::Solver`, to be used for calling ffi functions
