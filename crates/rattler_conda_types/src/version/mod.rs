@@ -23,7 +23,7 @@ mod segment;
 mod with_source;
 
 pub(crate) mod bump;
-pub use bump::VersionBumpType;
+pub use bump::{VersionBumpError, VersionBumpType};
 
 use flags::Flags;
 use segment::Segment;
@@ -231,7 +231,7 @@ impl Version {
     }
 
     /// Returns a new version after bumping it according to the specified bump type.
-    pub fn bump(&self, bump_type: VersionBumpType) -> Self {
+    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
         let mut flags = Flags::default();
@@ -247,22 +247,38 @@ impl Version {
         match bump_type {
             VersionBumpType::Major => {
                 if segment_count < 1 {
-                    panic!("cannot bump the major segment of a version with less than 1 segment");
+                    return Err(VersionBumpError {
+                        reason: String::from(
+                            "cannot bump the major segment of a version with less than 1 segment",
+                        ),
+                    });
                 }
             }
             VersionBumpType::Minor => {
                 if segment_count < 2 {
-                    panic!("cannot bump the minor segment of a version with less than 2 segments");
+                    return Err(VersionBumpError {
+                        reason: String::from(
+                            "cannot bump the major segment of a version with less than 2 segment",
+                        ),
+                    });
                 }
             }
             VersionBumpType::Patch => {
                 if segment_count < 3 {
-                    panic!("cannot bump the last segment of a version with less than 3 segment");
+                    return Err(VersionBumpError {
+                        reason: String::from(
+                            "cannot bump the major segment of a version with less than 3 segment",
+                        ),
+                    });
                 }
             }
             VersionBumpType::Last => {
                 if segment_count == 0 {
-                    panic!("cannot bump the last segment of a version with no segments");
+                    return Err(VersionBumpError {
+                        reason: String::from(
+                            "cannot bump the last segment of a version with no segments",
+                        ),
+                    });
                 }
             }
         }
@@ -325,11 +341,11 @@ impl Version {
                 .expect("this should never fail because no new segments are added")
         }
 
-        Self {
+        Ok(Self {
             components,
             segments,
             flags,
-        }
+        })
     }
 
     /// Returns the segments that belong the local part of the version.
@@ -1241,19 +1257,22 @@ mod test {
         assert_eq!(
             Version::from_str("1.1")
                 .unwrap()
-                .bump(VersionBumpType::Last),
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2").unwrap()
         );
         assert_eq!(
             Version::from_str("1.1l")
                 .unwrap()
-                .bump(VersionBumpType::Last),
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2l").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.alpha+3.4")
                 .unwrap()
-                .bump(VersionBumpType::Last),
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("5!1.1alpha+3.4").unwrap()
         );
     }
@@ -1390,34 +1409,26 @@ mod test {
     }
 
     #[test]
-    fn bump_dev() {
-        let version = Version::from_str("5!1.alpha+3.4").unwrap();
-
-        println!("****************");
-        println!("components: {:?}", version.components);
-        println!("flags: {:?}", version.flags);
-        println!("segments: {:#?}", version.segments);
-        println!("****************");
-    }
-
-    #[test]
     fn bump_major() {
         assert_eq!(
             Version::from_str("1.1")
                 .unwrap()
-                .bump(VersionBumpType::Major),
+                .bump(VersionBumpType::Major)
+                .unwrap(),
             Version::from_str("2.1").unwrap()
         );
         assert_eq!(
             Version::from_str("2.1l")
                 .unwrap()
-                .bump(VersionBumpType::Major),
+                .bump(VersionBumpType::Major)
+                .unwrap(),
             Version::from_str("3.1l").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.alpha+3.4")
                 .unwrap()
-                .bump(VersionBumpType::Major),
+                .bump(VersionBumpType::Major)
+                .unwrap(),
             Version::from_str("5!2.alpha+3.4").unwrap()
         );
     }
@@ -1427,29 +1438,36 @@ mod test {
         assert_eq!(
             Version::from_str("1.1")
                 .unwrap()
-                .bump(VersionBumpType::Minor),
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
             Version::from_str("1.2").unwrap()
         );
         assert_eq!(
             Version::from_str("2.1l")
                 .unwrap()
-                .bump(VersionBumpType::Minor),
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
             Version::from_str("2.2l").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.alpha+3.4")
                 .unwrap()
-                .bump(VersionBumpType::Minor),
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
             Version::from_str("5!1.1alpha+3.4").unwrap()
         );
     }
 
     #[test]
-    #[should_panic(
-        expected = "cannot bump the minor segment of a version with less than 2 segments"
-    )]
     fn bump_minor_fail() {
-        Version::from_str("1").unwrap().bump(VersionBumpType::Minor);
+        let err = Version::from_str("1")
+            .unwrap()
+            .bump(VersionBumpType::Minor)
+            .unwrap_err();
+
+        assert!(err
+            .reason
+            .contains("cannot bump the major segment of a version with less than 2 segment"))
     }
 
     #[test]
@@ -1457,28 +1475,35 @@ mod test {
         assert_eq!(
             Version::from_str("1.1.9")
                 .unwrap()
-                .bump(VersionBumpType::Patch),
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
             Version::from_str("1.1.10").unwrap()
         );
         assert_eq!(
             Version::from_str("2.1l.5alpha")
                 .unwrap()
-                .bump(VersionBumpType::Patch),
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
             Version::from_str("2.1l.6alpha").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.8.alpha+3.4")
                 .unwrap()
-                .bump(VersionBumpType::Patch),
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
             Version::from_str("5!1.8.1alpha+3.4").unwrap()
         );
     }
 
     #[test]
-    #[should_panic(expected = "cannot bump the last segment of a version with less than 3 segment")]
     fn bump_patch_fail() {
-        Version::from_str("1.3")
+        let err = Version::from_str("1.3")
             .unwrap()
-            .bump(VersionBumpType::Patch);
+            .bump(VersionBumpType::Patch)
+            .unwrap_err();
+
+        assert!(err
+            .reason
+            .contains("cannot bump the major segment of a version with less than 3 segment"))
     }
 }
