@@ -247,38 +247,22 @@ impl Version {
         match bump_type {
             VersionBumpType::Major => {
                 if segment_count < 1 {
-                    return Err(VersionBumpError {
-                        reason: String::from(
-                            "cannot bump the major segment of a version with less than 1 segment",
-                        ),
-                    });
+                    return Err(VersionBumpError::NoMajorSegment);
                 }
             }
             VersionBumpType::Minor => {
                 if segment_count < 2 {
-                    return Err(VersionBumpError {
-                        reason: String::from(
-                            "cannot bump the major segment of a version with less than 2 segment",
-                        ),
-                    });
+                    return Err(VersionBumpError::NoMinorSegment);
                 }
             }
             VersionBumpType::Patch => {
                 if segment_count < 3 {
-                    return Err(VersionBumpError {
-                        reason: String::from(
-                            "cannot bump the major segment of a version with less than 3 segment",
-                        ),
-                    });
+                    return Err(VersionBumpError::NoPatchSegment);
                 }
             }
             VersionBumpType::Last => {
                 if segment_count == 0 {
-                    return Err(VersionBumpError {
-                        reason: String::from(
-                            "cannot bump the last segment of a version with no segments",
-                        ),
-                    });
+                    return Err(VersionBumpError::NoLastSegment);
                 }
             }
         }
@@ -1049,7 +1033,7 @@ mod test {
 
     use rand::seq::SliceRandom;
 
-    use crate::version::{StrictVersion, VersionBumpType};
+    use crate::version::{StrictVersion, VersionBumpError, VersionBumpType};
 
     use super::Version;
 
@@ -1465,9 +1449,7 @@ mod test {
             .bump(VersionBumpType::Minor)
             .unwrap_err();
 
-        assert!(err
-            .reason
-            .contains("cannot bump the major segment of a version with less than 2 segment"))
+        assert_eq!(err, VersionBumpError::NoMinorSegment);
     }
 
     #[test]
@@ -1502,8 +1484,6 @@ mod test {
             .bump(VersionBumpType::Patch)
             .unwrap_err();
 
-        assert!(err
-            .reason
-            .contains("cannot bump the major segment of a version with less than 3 segment"))
+        assert_eq!(err, VersionBumpError::NoPatchSegment);
     }
 }
