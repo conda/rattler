@@ -2,8 +2,8 @@ mod component;
 
 use crate::PyRattlerError;
 use component::PyComponent;
-use pyo3::{basic::CompareOp, pyclass, pymethods};
-use rattler_conda_types::Version;
+use pyo3::{basic::CompareOp, pyclass, pymethods, PyResult};
+use rattler_conda_types::{Version, VersionBumpType};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -133,10 +133,10 @@ impl PyVersion {
     }
 
     /// Returns a new version where the last numerical segment of this version has been bumped.
-    pub fn bump(&self) -> Self {
-        Self {
-            inner: self.inner.bump(),
-        }
+    pub fn bump(&self, bump_type: VersionBumpType) -> PyResult<Self> {
+        Ok(Self {
+            inner: self.inner.bump(bump_type).unwrap(),
+        })
     }
 
     /// Compute the hash of the version.

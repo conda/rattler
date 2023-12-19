@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 /// VersionBumpType is used to specify the type of bump to perform on a version.
+#[derive(Clone)]
 pub enum VersionBumpType {
     /// Bump the major version number.
     Major,
