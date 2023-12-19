@@ -1,4 +1,4 @@
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
 use rattler_conda_types::{Channel, MatchSpec, PackageName};
 use std::{str::FromStr, sync::Arc};
 
@@ -94,14 +94,14 @@ impl PyMatchSpec {
 
     /// The md5 hash of the package
     #[getter]
-    pub fn md5(&self) -> Option<String> {
-        self.inner.md5.map(|md5| format!("{md5:X}"))
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.md5.map(|md5| PyBytes::new(py, &md5))
     }
 
     /// The sha256 hash of the package
     #[getter]
-    pub fn sha256(&self) -> Option<String> {
-        self.inner.sha256.map(|sha256| format!("{sha256:X}"))
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
     /// Returns a string representation of MatchSpec

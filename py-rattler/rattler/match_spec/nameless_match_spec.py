@@ -77,14 +77,14 @@ class NamelessMatchSpec:
         return self._nameless_match_spec.namespace
 
     @property
-    def md5(self) -> Optional[str]:
+    def md5(self) -> Optional[bytes]:
         """
         The md5 hash of the package.
         """
         return self._nameless_match_spec.md5
 
     @property
-    def sha256(self) -> Optional[str]:
+    def sha256(self) -> Optional[bytes]:
         """
         The sha256 hash of the package.
         """
