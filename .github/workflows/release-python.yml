@@ -437,7 +437,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          merge-multiple: true
           path: wheels
       - name: Publish to PyPi
         uses: pypa/gh-action-pypi-publish@release/v1
