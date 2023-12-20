@@ -266,8 +266,6 @@ impl Version {
                 }
             }
             VersionBumpType::Segment(index) => {
-                // let uindex;
-
                 let uindex = if index < 0 {
                     segment_count as i32 + index
                 } else {
