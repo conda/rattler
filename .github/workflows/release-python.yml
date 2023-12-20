@@ -15,7 +15,7 @@ on:
       # When we change pyproject.toml, we want to ensure that the maturin builds still work
       - py-rattler/pyproject.toml
       # And when we change this workflow itself...
-      - .github/workflows/python-release.yaml
+      - .github/workflows/release-python.yaml
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -51,11 +51,10 @@ jobs:
           rustup default $(cat rust-toolchain)
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
-
       - name: "Upload sdist"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: sdist
           path: py-rattler/dist
 
   windows:
@@ -102,7 +101,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: windows-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   linux:
@@ -137,7 +136,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.target }}
           path: py-rattler/dist
 
   linux-cross:
@@ -151,12 +150,6 @@ jobs:
             arch: aarch64
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
-          - target: s390x-unknown-linux-gnu
-            arch: s390x
-          - target: powerpc64le-unknown-linux-gnu
-            arch: ppc64le
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
 
     steps:
       - uses: actions/checkout@v4
@@ -190,7 +183,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   linux-cross-native-tls:
@@ -239,7 +232,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   musllinux:
@@ -283,12 +276,12 @@ jobs:
           options: -v ${{ github.workspace }}:/io -w /io
           run: |
             apk add py3-pip
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links /io/py-rattler/dist/ --force-reinstall --break-system-packages
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.target }}
           path: py-rattler/dist
 
   musllinux-cross:
@@ -327,12 +320,12 @@ jobs:
           install: |
             apk add py3-pip
           run: |
-            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall
+            pip3 install ${{ env.PACKAGE_NAME }} --no-index --find-links py-rattler/dist/ --force-reinstall --break-system-packages
             python3 -c "import rattler; print(rattler.__version__)"
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   macos-x86_64:
@@ -359,7 +352,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: macos-wheels-x86_64
           path: py-rattler/dist
 
   macos-universal:
@@ -385,7 +378,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: macos-wheels-universal2
           path: py-rattler/dist
 
   validate-tag:
@@ -444,7 +437,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: wheels
+          merge-multiple: true
           path: wheels
       - name: Publish to PyPi
         uses: pypa/gh-action-pypi-publish@release/v1
