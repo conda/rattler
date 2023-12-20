@@ -51,11 +51,10 @@ jobs:
           rustup default $(cat rust-toolchain)
           pip install py-rattler/dist/${{ env.PACKAGE_NAME }}-*.tar.gz --force-reinstall
           python -c "import rattler; print(rattler.__version__)"
-
       - name: "Upload sdist"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: sdist
           path: py-rattler/dist
 
   windows:
@@ -102,7 +101,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: windows-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   linux:
@@ -137,7 +136,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.target }}
           path: py-rattler/dist
 
   linux-cross:
@@ -190,7 +189,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   linux-cross-native-tls:
@@ -239,7 +238,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   musllinux:
@@ -288,7 +287,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.target }}
           path: py-rattler/dist
 
   musllinux-cross:
@@ -332,7 +331,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: linux-wheels-${{ matrix.platform.target }}
           path: py-rattler/dist
 
   macos-x86_64:
@@ -359,7 +358,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: macos-wheels-x86_64
           path: py-rattler/dist
 
   macos-universal:
@@ -385,7 +384,7 @@ jobs:
       - name: "Upload wheels"
         uses: actions/upload-artifact@v4
         with:
-          name: wheels
+          name: macos-wheels-universal2
           path: py-rattler/dist
 
   validate-tag:
