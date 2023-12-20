@@ -9,8 +9,10 @@ pub enum VersionBumpType {
     Minor,
     /// Bump the patch version number.
     Patch,
-    /// Bump the last  version number.
+    /// Bump the last version number.
     Last,
+    /// Bump a given segment. If negative, count from the end.
+    Segment(i32),
 }
 
 /// VersionBumpError is used to specify the type of error that occurred when bumping a version.
@@ -28,4 +30,10 @@ pub enum VersionBumpError {
     /// Cannot bump the last segment of a version with no segments.
     #[error("cannot bump the last segment of a version with no segments")]
     NoLastSegment,
+    /// Invalid segment index.
+    #[error("cannot bump the segment '{index:?}' of a version if it's not present")]
+    InvalidSegment {
+        /// The segment index that was attempted to be bumped.
+        index: i32,
+    },
 }
