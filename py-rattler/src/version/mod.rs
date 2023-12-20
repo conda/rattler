@@ -132,11 +132,36 @@ impl PyVersion {
         }
     }
 
-    /// Returns a new version where the last numerical segment of this version has been bumped.
-    pub fn bump(&self, bump_type: VersionBumpType) -> PyResult<Self> {
-        Ok(Self {
-            inner: self.inner.bump(bump_type).unwrap(),
-        })
+    /// Returns a new version where the major segment of this version has been bumped.
+    pub fn bump_major(&self) -> PyResult<Self> {
+        match self.inner.bump(VersionBumpType::Major) {
+            Ok(v) => Ok(Self { inner: v }),
+            Err(e) => Err(PyRattlerError::from(e).into()),
+        }
+    }
+
+    /// Returns a new version where the minor segment of this version has been bumped.
+    pub fn bump_minor(&self) -> PyResult<Self> {
+        match self.inner.bump(VersionBumpType::Minor) {
+            Ok(v) => Ok(Self { inner: v }),
+            Err(e) => Err(PyRattlerError::from(e).into()),
+        }
+    }
+
+    /// Returns a new version where the patch segment of this version has been bumped.
+    pub fn bump_patch(&self) -> PyResult<Self> {
+        match self.inner.bump(VersionBumpType::Patch) {
+            Ok(v) => Ok(Self { inner: v }),
+            Err(e) => Err(PyRattlerError::from(e).into()),
+        }
+    }
+
+    /// Returns a new version where the last segment of this version has been bumped.
+    pub fn bump_last(&self) -> PyResult<Self> {
+        match self.inner.bump(VersionBumpType::Last) {
+            Ok(v) => Ok(Self { inner: v }),
+            Err(e) => Err(PyRattlerError::from(e).into()),
+        }
     }
 
     /// Compute the hash of the version.

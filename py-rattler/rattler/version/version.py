@@ -49,21 +49,69 @@ class Version:
         """
         return self._version.epoch()
 
-    def bump(self) -> Version:
+    def bump_major(self) -> Version:
         """
-        Returns a new version where the last numerical segment of this version has
+        Returns a new version where the major segment of this version has
         been bumped.
 
         Examples
         --------
         ```python
         >>> v = Version('1.0')
-        >>> v.bump()
+        >>> v.bump_major()
+        Version("2.0")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.bump_major())
+
+    def bump_minor(self) -> Version:
+        """
+        Returns a new version where the minor segment of this version has
+        been bumped.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0')
+        >>> v.bump_minor()
         Version("1.1")
         >>>
         ```
         """
-        return Version._from_py_version(self._version.bump())
+        return Version._from_py_version(self._version.bump_minor())
+
+    def bump_patch(self) -> Version:
+        """
+        Returns a new version where the patch segment of this version has
+        been bumped.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0.5')
+        >>> v.bump_patch()
+        Version("1.0.6")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.bump_patch())
+
+    def bump_last(self) -> Version:
+        """
+        Returns a new version where the last segment of this version has
+        been bumped.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0')
+        >>> v.bump_last()
+        Version("1.1")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.bump_last())
 
     @property
     def has_local(self) -> bool:

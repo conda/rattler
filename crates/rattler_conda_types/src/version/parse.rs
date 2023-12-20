@@ -208,7 +208,9 @@ fn trailing_dash_underscore_parser(
     dash_or_underscore: Option<char>,
 ) -> IResult<&str, (Option<Component>, Option<char>), ParseVersionErrorKind> {
     // Parse a - or _. Return early if it cannot be found.
-    let (rest, Some(separator)) = opt(one_of::<_,_,(&str, ErrorKind)>("-_"))(input).map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))? else {
+    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_"))(input)
+        .map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))?
+    else {
         return Ok((input, (None, dash_or_underscore)));
     };
 
