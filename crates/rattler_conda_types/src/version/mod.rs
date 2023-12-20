@@ -266,16 +266,16 @@ impl Version {
                 }
             }
             VersionBumpType::Segment(index) => {
-                let uindex;
+                // let uindex;
 
-                if index < 0 {
-                    uindex = segment_count as i32 + index;
+                let uindex = if index < 0 {
+                    segment_count as i32 + index
                 } else {
-                    uindex = index;
-                }
+                    index
+                };
 
                 if uindex < 0 || uindex >= segment_count as i32 {
-                    return Err(VersionBumpError::InvalidSegment { index: index });
+                    return Err(VersionBumpError::InvalidSegment { index });
                 }
             }
         }
