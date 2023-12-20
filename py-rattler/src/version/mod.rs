@@ -164,6 +164,14 @@ impl PyVersion {
         }
     }
 
+    /// Returns a new version where the given segment of this version has been bumped.
+    pub fn bump_segment(&self, index: i32) -> PyResult<Self> {
+        match self.inner.bump(VersionBumpType::Segment(index)) {
+            Ok(v) => Ok(Self { inner: v }),
+            Err(e) => Err(PyRattlerError::from(e).into()),
+        }
+    }
+
     /// Compute the hash of the version.
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();

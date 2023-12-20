@@ -25,6 +25,8 @@ def test_bump() -> None:
     assert Version("0.5.5").bump_minor() == Version("0.6.5")
     assert Version("0.5.5").bump_patch() == Version("0.5.6")
     assert Version("0.5.5").bump_last() == Version("0.5.6")
+    assert Version("0.5.5").bump_segment(1) == Version("0.6.5")
+    assert Version("0.5.5").bump_segment(-1) == Version("0.5.6")
 
 
 def test_bump_fail() -> None:
@@ -33,3 +35,9 @@ def test_bump_fail() -> None:
 
     with pytest.raises(VersionBumpError):
         Version("1.5").bump_patch()
+
+    with pytest.raises(VersionBumpError):
+        Version("1.5").bump_segment(-5)
+
+    with pytest.raises(VersionBumpError):
+        Version("1.5").bump_segment(5)

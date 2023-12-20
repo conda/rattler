@@ -113,6 +113,22 @@ class Version:
         """
         return Version._from_py_version(self._version.bump_last())
 
+    def bump_segment(self, index: int) -> Version:
+        """
+        Returns a new version where the last segment of this version has
+        been bumped.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0')
+        >>> v.bump_segment(index=1)
+        Version("1.1")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.bump_segment(index))
+
     @property
     def has_local(self) -> bool:
         """
