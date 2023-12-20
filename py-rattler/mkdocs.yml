@@ -3,7 +3,14 @@ site_name: "py-rattler"
 theme:
   name: material
   palette:
-    primary: custom
+    primary: yellow
+    accent: yellow
+    scheme: slate
+
+  font:
+    text: Red Hat Text
+    code: JetBrains Mono
+
 
 extra_css:
   - stylesheets/extra.css
@@ -18,6 +25,9 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - admonition
+  - def_list
+  - footnotes
 
 nav:
   - First Steps: index.md
@@ -77,6 +87,16 @@ nav:
           - SolverError: solver_error.md
           - TransactionError: transaction_error.md
 
+extra:
+  social:
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/prefix_dev
+    - icon: fontawesome/brands/linkedin
+      link: https://www.linkedin.com/company/prefix-dev
+    - icon: fontawesome/brands/github
+      link: https://github.com/prefix-dev
+
+
 plugins:
   - mkdocstrings:
       handlers:
@@ -85,3 +105,4 @@ plugins:
             show_source: false
 
   - search
+  - social
