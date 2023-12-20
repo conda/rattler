@@ -150,12 +150,6 @@ jobs:
             arch: aarch64
           - target: armv7-unknown-linux-gnueabihf
             arch: armv7
-          - target: s390x-unknown-linux-gnu
-            arch: s390x
-          - target: powerpc64le-unknown-linux-gnu
-            arch: ppc64le
-          - target: powerpc64-unknown-linux-gnu
-            arch: ppc64
 
     steps:
       - uses: actions/checkout@v4
