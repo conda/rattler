@@ -294,7 +294,7 @@ impl Version {
                 VersionBumpType::Last => idx == (segment_count - 1),
                 VersionBumpType::Segment(mut index_to_bump) => {
                     if index_to_bump < 0 {
-                        index_to_bump = segment_count as i32 + index_to_bump;
+                        index_to_bump += segment_count as i32;
                     }
 
                     idx == index_to_bump as usize
@@ -306,8 +306,7 @@ impl Version {
                 let last_numeral_component = segment_components
                     .iter_mut()
                     .filter_map(Component::as_number_mut)
-                    .rev()
-                    .next()
+                    .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
             }
