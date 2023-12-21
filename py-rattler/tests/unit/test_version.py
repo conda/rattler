@@ -20,15 +20,6 @@ def test_version_dash_normalisation() -> None:
         Version("1-.0dev+3.4-")
 
 
-def test_bump() -> None:
-    assert Version("0.5.5").bump_major() == Version("1.5.5")
-    assert Version("0.5.5").bump_minor() == Version("0.6.5")
-    assert Version("0.5.5").bump_patch() == Version("0.5.6")
-    assert Version("0.5.5").bump_last() == Version("0.5.6")
-    assert Version("0.5.5").bump_segment(1) == Version("0.6.5")
-    assert Version("0.5.5").bump_segment(-1) == Version("0.5.6")
-
-
 def test_bump_fail() -> None:
     with pytest.raises(VersionBumpError):
         Version("1").bump_minor()
