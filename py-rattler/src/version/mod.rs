@@ -134,7 +134,11 @@ impl PyVersion {
 
     /// Returns a new version where the major segment of this version has been bumped.
     pub fn bump_major(&self) -> PyResult<Self> {
-        match self.inner.bump(VersionBumpType::Major) {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Major)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
             Ok(v) => Ok(Self { inner: v }),
             Err(e) => Err(PyRattlerError::from(e).into()),
         }
