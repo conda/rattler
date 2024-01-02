@@ -155,6 +155,15 @@ pub struct InstallOptions {
     /// are on the same filesystem.
     pub allow_hard_links: Option<bool>,
 
+    /// Whether or not to use ref links where possible. If this is set to `Some(false)` the use of
+    /// hard links is disabled, if set to `Some(true)` ref links are always used when hard links are
+    /// specified in the [`info/paths.json`] file even if this is not supported. If the value is set
+    /// to `None` ref links are only used if they are supported.
+    ///
+    /// Ref links are only support by a small number of OSes and filesystems. If reflinking fails
+    /// for whatever reason the files are hardlinked instead (if allowed).
+    pub allow_ref_links: Option<bool>,
+
     /// The platform for which the package is installed. Some operations like signing require
     /// different behavior depending on the platform. If the field is set to `None` the current
     /// platform is used.
@@ -238,6 +247,7 @@ pub async fn link_package(
             None => can_create_hardlinks(target_dir, package_dir).right_future(),
         }
     );
+    let allow_ref_links = options.allow_ref_links.unwrap_or(allow_hard_links);
 
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
@@ -276,6 +286,7 @@ pub async fn link_package(
                 &target_prefix,
                 allow_symbolic_links && !entry.no_link,
                 allow_hard_links && !entry.no_link,
+                allow_ref_links && !entry.no_link,
                 platform,
                 python_info.as_deref(),
                 options.apple_codesign_behavior,

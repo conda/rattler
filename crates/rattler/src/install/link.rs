@@ -6,6 +6,7 @@ use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceho
 use rattler_conda_types::{NoArchType, Platform};
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
+use reflink_copy::reflink;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
@@ -19,6 +20,10 @@ use super::apple_codesign::{codesign, AppleCodeSignBehavior};
 /// destination directory.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum LinkMethod {
+    /// A ref link is created from the cache to the destination. This ensures that the file does
+    /// not take up more disk-space and that the file is not accidentally modified in the cache.
+    Reflink,
+
     /// A hard link is created from the cache to the destination. This ensures that the file does
     /// not take up more disk-space but has the downside that if the file is accidentally modified
     /// it is also modified in the cache.
@@ -41,6 +46,7 @@ impl fmt::Display for LinkMethod {
         match self {
             LinkMethod::Hardlink => write!(f, "hardlink"),
             LinkMethod::Softlink => write!(f, "softlink"),
+            LinkMethod::Reflink => write!(f, "reflink"),
             LinkMethod::Copy => write!(f, "copy"),
             LinkMethod::Patched(FileMode::Binary) => write!(f, "binary patched"),
             LinkMethod::Patched(FileMode::Text) => write!(f, "text patched"),
@@ -132,6 +138,7 @@ pub fn link_file(
     target_prefix: &str,
     allow_symbolic_links: bool,
     allow_hard_links: bool,
+    allow_ref_links: bool,
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
@@ -257,15 +264,14 @@ pub fn link_file(
             }
         }
         LinkMethod::Patched(*file_mode)
+    } else if path_json_entry.path_type == PathType::HardLink && allow_ref_links {
+        reflink_to_destination(&source_path, &destination_path, allow_hard_links)?
     } else if path_json_entry.path_type == PathType::HardLink && allow_hard_links {
-        hardlink_to_destination(&source_path, &destination_path)?;
-        LinkMethod::Hardlink
+        hardlink_to_destination(&source_path, &destination_path)?
     } else if path_json_entry.path_type == PathType::SoftLink && allow_symbolic_links {
-        symlink_to_destination(&source_path, &destination_path)?;
-        LinkMethod::Softlink
+        symlink_to_destination(&source_path, &destination_path)?
     } else {
-        copy_to_destination(&source_path, &destination_path)?;
-        LinkMethod::Copy
+        copy_to_destination(&source_path, &destination_path)?
     };
 
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
@@ -345,15 +351,55 @@ fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileEr
     })
 }
 
-/// Symlink the specified file from the source (or cached) directory. If the file already exists it
-/// is removed and the operation is retried.
+/// Reflink (Copy-On-Write) the specified file from the source (or cached) directory. If the file
+/// already exists it is removed and the operation is retried.
+fn reflink_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+    allow_hard_links: bool,
+) -> Result<LinkMethod, LinkFileError> {
+    loop {
+        match reflink(source_path, destination_path) {
+            Ok(_) => return Ok(LinkMethod::Reflink),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+                std::fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
+            }
+            Err(e) if e.kind() == ErrorKind::Unsupported && allow_hard_links => {
+                return hardlink_to_destination(source_path, destination_path)
+            }
+            Err(e) if e.kind() == ErrorKind::Unsupported && !allow_hard_links => {
+                return copy_to_destination(source_path, destination_path)
+            }
+            Err(e) => {
+                return if allow_hard_links {
+                    tracing::error!(
+                        "failed to reflink {}: {e}, falling back to hard linking.",
+                        destination_path.display()
+                    );
+                    hardlink_to_destination(source_path, destination_path)
+                } else {
+                    tracing::error!(
+                        "failed to reflink {}: {e}, falling back to copying.",
+                        destination_path.display()
+                    );
+                    copy_to_destination(source_path, destination_path)
+                }
+            }
+        }
+    }
+}
+
+/// Hard link the specified file from the source (or cached) directory. If the file already exists
+/// it is removed and the operation is retried.
 fn hardlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
-) -> Result<(), LinkFileError> {
+) -> Result<LinkMethod, LinkFileError> {
     loop {
         match std::fs::hard_link(source_path, destination_path) {
-            Ok(_) => return Ok(()),
+            Ok(_) => return Ok(LinkMethod::Hardlink),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 std::fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -375,14 +421,14 @@ fn hardlink_to_destination(
 fn symlink_to_destination(
     source_path: &Path,
     destination_path: &Path,
-) -> Result<(), LinkFileError> {
+) -> Result<LinkMethod, LinkFileError> {
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
 
     loop {
         match symlink(&linked_path, destination_path) {
-            Ok(_) => return Ok(()),
+            Ok(_) => return Ok(LinkMethod::Softlink),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 std::fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -401,7 +447,10 @@ fn symlink_to_destination(
 
 /// Copy the specified file from the source (or cached) directory. If the file already exists it is
 /// removed and the operation is retried.
-fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<(), LinkFileError> {
+fn copy_to_destination(
+    source_path: &Path,
+    destination_path: &Path,
+) -> Result<LinkMethod, LinkFileError> {
     loop {
         match std::fs::copy(source_path, destination_path) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
@@ -410,7 +459,7 @@ fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<()
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
                 })?;
             }
-            Ok(_) => return Ok(()),
+            Ok(_) => return Ok(LinkMethod::Copy),
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),
         }
     }
