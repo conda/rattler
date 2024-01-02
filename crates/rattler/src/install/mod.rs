@@ -560,11 +560,6 @@ async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
     paths_have_same_filesystem(target_dir, package_dir).await
 }
 
-/// Returns true if two paths share the same prefix.
-fn paths_have_same_prefix(a: &Path, b: &Path) -> bool {
-    a.components().next() == b.components().next()
-}
-
 /// Returns true if two paths share the same filesystem
 #[cfg(unix)]
 async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
@@ -579,7 +574,7 @@ async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
 #[cfg(not(unix))]
 async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
     match (a.canonicalize(), b.canonicalize()) {
-        (Ok(a), Ok(b)) => paths_have_same_prefix(&a, &b),
+        (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
         _ => false,
     }
 }
