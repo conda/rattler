@@ -246,12 +246,12 @@ pub enum PathType {
     Directory,
 }
 
-/// Returns the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns the default value for the `no_link` value of a [`PathsEntry`]
 fn no_link_default() -> bool {
     false
 }
 
-/// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns true if the value is equal to the default value for the `no_link` value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
 }
@@ -311,6 +311,8 @@ mod test {
 
     #[test]
     pub fn test_paths_sorted() {
+        use rand::seq::SliceRandom;
+
         // create some fake data
         let mut paths = vec![];
         for i in 0..15 {
@@ -325,7 +327,6 @@ mod test {
         }
 
         // shuffle the data
-        use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
         paths.shuffle(&mut rng);
 

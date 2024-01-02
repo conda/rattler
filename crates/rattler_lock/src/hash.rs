@@ -21,7 +21,7 @@ pub enum PackageHashes {
 impl PackageHashes {
     /// Create correct enum from hashes
     pub fn from_hashes(md5: Option<Md5Hash>, sha256: Option<Sha256Hash>) -> Option<PackageHashes> {
-        use PackageHashes::*;
+        use PackageHashes::{Md5, Md5Sha256, Sha256};
         match (md5, sha256) {
             (Some(md5), None) => Some(Md5(md5)),
             (None, Some(sha256)) => Some(Sha256(sha256)),
@@ -58,7 +58,7 @@ impl Serialize for PackageHashes {
     where
         S: Serializer,
     {
-        use PackageHashes::*;
+        use PackageHashes::{Md5, Md5Sha256, Sha256};
         let raw = match self {
             Md5(hash) => RawPackageHashes {
                 md5: Some(SerializableHash::from(*hash)),
@@ -89,7 +89,7 @@ impl<'de> Deserialize<'de> for PackageHashes {
     where
         D: Deserializer<'de>,
     {
-        use PackageHashes::*;
+        use PackageHashes::{Md5, Md5Sha256, Sha256};
         let temp = RawPackageHashes::deserialize(deserializer)?;
         Ok(match (temp.md5, temp.sha256) {
             (Some(md5), Some(sha)) => Md5Sha256(md5.into(), sha.into()),

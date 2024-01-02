@@ -166,6 +166,15 @@ type ComponentVec = SmallVec<[Component; 3]>;
 type SegmentVec = SmallVec<[Segment; 4]>;
 
 impl Version {
+    /// Constructs a version with just a major component and no other components, e.g. "1".
+    pub fn major(major: u64) -> Version {
+        Version {
+            components: smallvec::smallvec![Component::Numeral(major)],
+            segments: smallvec::smallvec![Segment::new(1).unwrap()],
+            flags: Flags(0),
+        }
+    }
+
     /// Returns true if this version has an epoch.
     pub fn has_epoch(&self) -> bool {
         self.flags.has_epoch()
@@ -210,7 +219,7 @@ impl Version {
     pub fn segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
-        let mut idx = if self.has_epoch() { 1 } else { 0 };
+        let mut idx = usize::from(self.has_epoch());
         let version_segments = if let Some(local_index) = self.local_segment_index() {
             &self.segments[..local_index]
         } else {
@@ -261,7 +270,7 @@ impl Version {
 
             let has_implicit_default =
                 segment.has_implicit_default() && segment_components[0] == Component::default();
-            let start_idx = if has_implicit_default { 1 } else { 0 };
+            let start_idx = usize::from(has_implicit_default);
 
             let component_count = segment_components.len();
             for component in segment_components.into_iter().skip(start_idx) {
@@ -287,7 +296,7 @@ impl Version {
             }
             flags = flags
                 .with_local_segment_index(segment_idx)
-                .expect("this should never fail because no new segments are added")
+                .expect("this should never fail because no new segments are added");
         }
 
         Self {
@@ -309,7 +318,7 @@ impl Version {
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
-            let mut idx = if self.has_epoch() { 1 } else { 0 };
+            let mut idx = usize::from(self.has_epoch());
             idx += self.segments[..start]
                 .iter()
                 .map(|segment| segment.len() as usize)
@@ -341,11 +350,11 @@ impl Version {
                 major_segment
                     .components()
                     .next()
-                    .and_then(|c| c.as_number())?,
+                    .and_then(Component::as_number)?,
                 minor_segment
                     .components()
                     .next()
-                    .and_then(|c| c.as_number())?,
+                    .and_then(Component::as_number)?,
             ))
         } else {
             None
@@ -358,7 +367,7 @@ impl Version {
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
-            .any(|component| component.is_dev())
+            .any(Component::is_dev)
     }
 
     /// Check if this version version and local strings start with the same as other.
@@ -628,7 +637,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
 
         write!(f, "[")?;
         if let Some(epoch) = epoch {
-            write!(f, "[{}], ", epoch)?;
+            write!(f, "[{epoch}], ")?;
         }
         for (idx, segment) in iter.enumerate() {
             if idx > 0 {
@@ -650,7 +659,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
         };
 
         if let Some(epoch) = epoch {
-            write!(f, "{epoch}!")?
+            write!(f, "{epoch}!")?;
         }
 
         for segment in iter {
@@ -755,6 +764,7 @@ impl Default for Component {
 }
 
 impl Ord for Component {
+    #[allow(clippy::match_same_arms)]
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             // Numbers are always ordered higher than strings
@@ -798,8 +808,8 @@ impl PartialOrd for Component {
 impl Display for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Component::Numeral(n) => write!(f, "{}", n),
-            Component::Iden(s) => write!(f, "{}", s),
+            Component::Numeral(n) => write!(f, "{n}"),
+            Component::Iden(s) => write!(f, "{s}"),
             Component::Post => write!(f, "post"),
             Component::Dev => write!(f, "dev"),
             Component::UnderscoreOrDash { is_dash: true } => write!(f, "-"),
@@ -811,8 +821,8 @@ impl Display for Component {
 impl Debug for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Component::Numeral(n) => write!(f, "{}", n),
-            Component::Iden(s) => write!(f, "'{}'", s),
+            Component::Numeral(n) => write!(f, "{n}"),
+            Component::Iden(s) => write!(f, "'{s}'"),
             Component::Post => write!(f, "inf"),
             Component::Dev => write!(f, "'DEV'"),
             Component::UnderscoreOrDash { .. } => write!(f, "'_'"),
@@ -1006,6 +1016,12 @@ mod test {
 
     #[test]
     fn valid_versions() {
+        enum CmpOp {
+            Less,
+            Equal,
+            Restart,
+        }
+
         let versions = [
             "   0.4",
             "== 0.4.0",
@@ -1036,12 +1052,6 @@ mod test {
             " < 2!0.4.1", // epoch increased again
         ];
 
-        enum CmpOp {
-            Less,
-            Equal,
-            Restart,
-        }
-
         let ops = versions.iter().map(|&v| {
             let (op, version) = if let Some((op, version)) = v.trim().split_once(' ') {
                 (op, version.trim())
@@ -1062,25 +1072,29 @@ mod test {
             match op {
                 CmpOp::Less => {
                     let comparison = previous.as_ref().map(|previous| previous.cmp(&version));
-                    if Some(Ordering::Less) != comparison {
-                        panic!(
-                            "{} is not less than {}: {:?}",
-                            previous.as_ref().map(|v| v.to_string()).unwrap_or_default(),
-                            version,
-                            comparison
-                        );
-                    }
+                    assert!(
+                        Some(Ordering::Less) == comparison,
+                        "{} is not less than {}: {:?}",
+                        previous
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                        version,
+                        comparison
+                    );
                 }
                 CmpOp::Equal => {
                     let comparison = previous.as_ref().map(|previous| previous.cmp(&version));
-                    if Some(Ordering::Equal) != comparison {
-                        panic!(
-                            "{} is not equal to {}: {:?}",
-                            previous.as_ref().map(|v| v.to_string()).unwrap_or_default(),
-                            version,
-                            comparison
-                        );
-                    }
+                    assert!(
+                        Some(Ordering::Equal) == comparison,
+                        "{} is not equal to {}: {:?}",
+                        previous
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                        version,
+                        comparison
+                    );
                 }
                 CmpOp::Restart => {}
             }
@@ -1234,7 +1248,7 @@ mod test {
     fn hash() {
         let v1 = Version::from_str("1.2.0").unwrap();
 
-        println!("{:?}", v1);
+        println!("{v1:?}");
 
         let vx2 = Version::from_str("1.2.0").unwrap();
         assert_eq!(get_hash(&v1), get_hash(&vx2));

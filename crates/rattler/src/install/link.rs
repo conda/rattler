@@ -320,7 +320,8 @@ impl AsRef<[u8]> for MmapOrBytes {
 ///
 /// This fallback exists because we've seen that in some particular situations memory mapping is not
 /// allowed. A particular dubious case we've encountered is described in the this issue:
-/// https://github.com/prefix-dev/pixi/issues/234
+/// <https://github.com/prefix-dev/pixi/issues/234>
+#[allow(clippy::verbose_file_reads)]
 fn map_or_read_source_file(source_path: &Path) -> Result<MmapOrBytes, LinkFileError> {
     let mut file =
         std::fs::File::open(source_path).map_err(LinkFileError::FailedToOpenSourceFile)?;

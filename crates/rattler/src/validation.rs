@@ -178,8 +178,8 @@ fn validate_package_hard_link_entry(
         // Compare the two hashes
         if expected_hash != &hash {
             return Err(PackageEntryValidationError::HashMismatch(
-                format!("{:x}", expected_hash),
-                format!("{:x}", hash),
+                format!("{expected_hash:x}"),
+                format!("{hash:x}"),
             ));
         }
     }
@@ -216,10 +216,10 @@ fn validate_package_directory_entry(
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::Directory);
 
-    if !metadata.is_dir() {
-        Err(PackageEntryValidationError::ExpectedDirectory)
-    } else {
+    if metadata.is_dir() {
         Ok(())
+    } else {
+        Err(PackageEntryValidationError::ExpectedDirectory)
     }
 }
 
@@ -231,7 +231,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use rattler_conda_types::package::{PackageFile, PathType, PathsJson};
-    use rstest::*;
+    use rstest::rstest;
     use std::{
         io::Write,
         path::{Path, PathBuf},

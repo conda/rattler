@@ -9,6 +9,7 @@ use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::mem::ManuallyDrop;
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -54,8 +55,8 @@ impl<'a> RepoData<'a> {
 
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
-/// Convenience method that converts a string reference to a CString, replacing NUL characters with
-/// whitespace (` `)
+/// Convenience method that converts a string reference to a `CString`, replacing NUL characters
+/// with whitespace (`b' '`)
 fn c_string<T: AsRef<str>>(str: T) -> CString {
     let bytes = str.as_ref().as_bytes();
 
@@ -115,7 +116,9 @@ impl super::SolverImpl for Solver {
             }
 
             let channel_name = &repodata.records[0].channel;
-            let repo = Repo::new(&pool, channel_name);
+
+            // We dont want to drop the Repo, its stored in the pool anyway.
+            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
@@ -126,9 +129,6 @@ impl super::SolverImpl for Solver {
             // Keep our own info about repodata_records
             repo_mapping.insert(repo.id(), repo_mapping.len());
             all_repodata_records.push(repodata.records);
-
-            // We dont want to drop the Repo, its stored in the pool anyway, so just forget it.
-            std::mem::forget(repo);
         }
 
         // Create a special pool for records that are already installed or locked.
@@ -166,7 +166,7 @@ impl super::SolverImpl for Solver {
         // Specify the matchspec requests
         for spec in task.specs {
             let id = pool.intern_matchspec(&spec);
-            goal.install(id, false)
+            goal.install(id, false);
         }
 
         // Construct a solver and solve the problems in the queue

@@ -125,7 +125,7 @@ impl AuthenticationStorage {
         };
 
         loop {
-            let wildcard_host = format!("*.{}", domain);
+            let wildcard_host = format!("*.{domain}");
 
             let Ok(credentials) = self.get(&wildcard_host) else {
                 return Ok((url, None));

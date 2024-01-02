@@ -29,6 +29,13 @@ impl FromStr for CondaLock {
     type Err = ParseCondaLockError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Then parse the document to a `CondaLock`
+        #[derive(Deserialize)]
+        struct Raw {
+            metadata: LockMeta,
+            package: Vec<LockedDependency>,
+        }
+
         // First parse the document to a `serde_yaml::Value`.
         let document: Value = serde_yaml::from_str(s).map_err(ParseCondaLockError::ParseError)?;
 
@@ -53,13 +60,6 @@ impl FromStr for CondaLock {
                 lock_file_version: version,
                 max_supported_version: FILE_VERSION,
             });
-        }
-
-        // Then parse the document to a `CondaLock`
-        #[derive(Deserialize)]
-        struct Raw {
-            metadata: LockMeta,
-            package: Vec<LockedDependency>,
         }
 
         let raw: Raw = serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;

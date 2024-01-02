@@ -58,7 +58,7 @@ impl From<&PackageRecord> for CacheKey {
         Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record.build.to_string(),
+            build_string: record.build.clone(),
         }
     }
 }
@@ -95,7 +95,7 @@ impl PackageCache {
         Self {
             inner: Arc::new(Mutex::new(PackageCacheInner {
                 path: path.into(),
-                packages: Default::default(),
+                packages: FxHashMap::default(),
             })),
         }
     }
@@ -227,8 +227,7 @@ impl PackageCache {
                     err.is_connect() ||
                     err
                         .status()
-                        .map(|status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
-                        .unwrap_or(false)
+                        .map_or(false, |status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
                 ) {
                     return Err(err);
                 }

@@ -64,7 +64,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         Platform::current()
     };
 
-    println!("installing for platform: {:?}", install_platform);
+    println!("installing for platform: {install_platform:?}");
 
     // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
     // with this because we need to parse the `channel_config` when parsing matchspecs.
@@ -182,7 +182,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                             .map(|s| Version::from_str(s))
                             .unwrap_or(Version::from_str("0"))
                             .expect("Could not parse virtual package version"),
-                        build_string: elems.get(2).unwrap_or(&"").to_string(),
+                        build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
                     })
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?)
@@ -198,7 +198,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         }
     })?;
 
-    println!("virtual packages: {:?}", virtual_packages);
+    println!("virtual packages: {virtual_packages:?}");
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
@@ -262,10 +262,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                     );
                 }
                 TransactionOperation::Reinstall(r) => {
-                    println!("* Reinstall: {}", format_record(&r.repodata_record))
+                    println!("* Reinstall: {}", format_record(&r.repodata_record));
                 }
                 TransactionOperation::Remove(r) => {
-                    println!("* Remove: {}", format_record(&r.repodata_record))
+                    println!("* Remove: {}", format_record(&r.repodata_record));
                 }
             }
         }
@@ -273,16 +273,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    if !transaction.operations.is_empty() {
+    if transaction.operations.is_empty() {
+        println!(
+            "{} Already up to date",
+            console::style(console::Emoji("✔", "")).green(),
+        );
+    } else {
         // Execute the operations that are returned by the solver.
         execute_transaction(transaction, target_prefix, cache_dir, download_client).await?;
         println!(
             "{} Successfully updated the environment",
-            console::style(console::Emoji("✔", "")).green(),
-        );
-    } else {
-        println!(
-            "{} Already up to date",
             console::style(console::Emoji("✔", "")).green(),
         );
     }
@@ -644,17 +644,16 @@ async fn fetch_repo_data_records_with_progress(
             progress_bar.finish_with_message("Error");
             Err(err.into())
         }
-        Err(err) => match err.try_into_panic() {
-            Ok(panic) => {
+        Err(err) => {
+            if let Ok(panic) = err.try_into_panic() {
                 std::panic::resume_unwind(panic);
-            }
-            Err(_) => {
+            } else {
                 progress_bar.set_style(errored_progress_style());
                 progress_bar.finish_with_message("Cancelled..");
                 // Since the task was cancelled most likely the whole async stack is being cancelled.
                 Err(anyhow::anyhow!("cancelled"))
             }
-        },
+        }
     }
 }
 
@@ -663,8 +662,7 @@ fn friendly_channel_name(channel: &Channel) -> String {
     channel
         .name
         .as_ref()
-        .map(String::from)
-        .unwrap_or_else(|| channel.canonical_name())
+        .map_or_else(|| channel.canonical_name(), String::from)
 }
 
 /// Returns the style to use for a progressbar that is currently in progress.
@@ -676,7 +674,7 @@ fn default_bytes_style() -> indicatif::ProgressStyle {
             "smoothed_bytes_per_sec",
             |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
                 (pos, elapsed_ms) if elapsed_ms > 0 => {
-                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap()
+                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap();
                 }
                 _ => write!(w, "-").unwrap(),
             },

@@ -5,8 +5,8 @@ use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
 use crate::{
-    Channel, InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError,
-    VersionSpec,
+    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
+    ParseChannelError, VersionSpec,
 };
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
@@ -93,8 +93,7 @@ impl FromStr for MatchSpec {
 fn strip_comment(input: &str) -> (&str, Option<&str>) {
     input
         .split_once('#')
-        .map(|(spec, comment)| (spec, Some(comment)))
-        .unwrap_or_else(|| (input, None))
+        .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
 }
 
 /// Strips any if statements from the matchspec. `if` statements in matchspec are "anticipating
@@ -133,7 +132,7 @@ where
 }
 
 /// Parses the contents of a bracket list `[version="1,2,3", bla=3]`
-fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
+fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError> {
     /// Parses a key in a bracket string
     fn parse_key(input: &str) -> IResult<&str, &str> {
         whitespace_enclosed(context(
@@ -177,7 +176,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec, ParseMatchSpecError> {
 
 /// Strips the brackets part of the matchspec returning the rest of the matchspec and  the contents
 /// of the brackets as a `Vec<&str>`.
-fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec), ParseMatchSpecError> {
+fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
     if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
@@ -194,9 +193,9 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec), ParseMatchS
     }
 }
 
-/// Parses a BracketVec into precise components
+/// Parses a [`BracketVec`] into precise components
 fn parse_bracket_vec_into_components(
-    bracket: BracketVec,
+    bracket: BracketVec<'_>,
     match_spec: NamelessMatchSpec,
 ) -> Result<NamelessMatchSpec, ParseMatchSpecError> {
     let mut match_spec = match_spec;
@@ -211,13 +210,13 @@ fn parse_bracket_vec_into_components(
                 match_spec.sha256 = Some(
                     parse_digest_from_hex::<Sha256>(value)
                         .ok_or(ParseMatchSpecError::InvalidHashDigest)?,
-                )
+                );
             }
             "md5" => {
                 match_spec.md5 = Some(
                     parse_digest_from_hex::<Md5>(value)
                         .ok_or(ParseMatchSpecError::InvalidHashDigest)?,
-                )
+                );
             }
             "fn" => match_spec.file_name = Some(value.to_string()),
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -312,7 +311,8 @@ impl FromStr for NamelessMatchSpec {
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         // Strip off brackets portion
         let (input, brackets) = strip_brackets(input.trim())?;
-        let mut match_spec = parse_bracket_vec_into_components(brackets, Default::default())?;
+        let mut match_spec =
+            parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default())?;
 
         // Get the version and optional build string
         let input = input.trim();
@@ -345,7 +345,7 @@ impl FromStr for NamelessMatchSpec {
 }
 
 /// Parses a conda match spec.
-/// This is based on: https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569
+/// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
 fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
@@ -360,7 +360,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
             #[cfg(not(target_arch = "wasm32"))]
             Err(_) => match PathBuf::from_str(input) {
                 Ok(path) => Url::from_file_path(path)
-                    .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)?,
+                    .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?,
                 Err(_) => return Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
             },
         };
@@ -371,7 +371,8 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
     // 3. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
-    let mut nameless_match_spec = parse_bracket_vec_into_components(brackets, Default::default())?;
+    let mut nameless_match_spec =
+        parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default())?;
 
     // 4. Strip off parens portion
     // TODO: What is this? I've never seen in
@@ -399,11 +400,11 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     if let Some(channel_str) = channel_str {
         if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
             nameless_match_spec.channel =
-                Some(Channel::from_str(channel, &Default::default())?.into());
+                Some(Channel::from_str(channel, &ChannelConfig::default())?.into());
             nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
             nameless_match_spec.channel =
-                Some(Channel::from_str(channel_str, &Default::default())?.into());
+                Some(Channel::from_str(channel_str, &ChannelConfig::default())?.into());
         }
     }
 
@@ -478,34 +479,34 @@ mod tests {
         ParseMatchSpecError,
     };
     use crate::match_spec::parse::parse_bracket_list;
-    use crate::{BuildNumberSpec, Channel, NamelessMatchSpec, VersionSpec};
+    use crate::{BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
     fn test_strip_brackets() {
         let result = strip_brackets(r#"bla [version="1.2.3"]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version='1.2.3']"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"conda-forge::bla[version=1]"#).unwrap();
         assert_eq!(result.0, "conda-forge::bla");
-        let expected: BracketVec = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version="1.2.3", build_number=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3"), ("build_number", "1")];
         assert_eq!(result.1, expected);
     }
 
@@ -572,8 +573,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -584,8 +585,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -597,8 +598,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -689,6 +690,13 @@ mod tests {
 
     #[test]
     fn test_from_str() {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum MatchSpecOrError {
+            Error { error: String },
+            MatchSpec(MatchSpec),
+        }
+
         // A list of matchspecs to parse.
         // Please keep this list sorted.
         let specs = [
@@ -700,23 +708,17 @@ mod tests {
             "x264 >=1!164.3095,<1!165",
         ];
 
-        #[derive(Serialize)]
-        #[serde(untagged)]
-        enum MatchSpecOrError {
-            Error { error: String },
-            MatchSpec(MatchSpec),
-        }
-
         let evaluated: BTreeMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
                     spec,
-                    MatchSpec::from_str(spec)
-                        .map(MatchSpecOrError::MatchSpec)
-                        .unwrap_or_else(|err| MatchSpecOrError::Error {
+                    MatchSpec::from_str(spec).map_or_else(
+                        |err| MatchSpecOrError::Error {
                             error: err.to_string(),
-                        }),
+                        },
+                        MatchSpecOrError::MatchSpec,
+                    ),
                 )
             })
             .collect();

@@ -46,7 +46,7 @@ impl BuildNumberSpec {
                         .expect("nom found at least 1 digit(s)"),
                 )
             })
-            .map_err(|_: nom::Err<nom::error::Error<&str>>| {
+            .map_err(|_err: nom::Err<nom::error::Error<&str>>| {
                 nom::Err::Error(ParseBuildNumberSpecError::InvalidBuildNumber(
                     ParseBuildNumberError,
                 ))
@@ -59,7 +59,8 @@ impl BuildNumberSpec {
     }
 }
 
-/// Possible errors when parsing the OrdOperator which precedes the digits in a build number spec
+/// Possible errors when parsing the [`OrdOperator`] which precedes the digits in a build number
+/// spec.
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseOrdOperatorError {
     /// Indicates that operator symbols were captured,
@@ -105,11 +106,12 @@ impl FromStr for OrdOperator {
 }
 
 impl OrdOperator {
-    /// Parses an operator representing PartialOrd compares, returns an error if the operator is not recognized or not found.
+    /// Parses an operator representing [`PartialOrd`] compares, returns an error if the operator is
+    /// not recognized or not found.
     fn parser(input: &str) -> IResult<&str, OrdOperator, ParseOrdOperatorError> {
         // Take anything that looks like an operator.
         let (rest, operator_str) = take_while1(|c| "=!<>".contains(c))(input).map_err(
-            |_: nom::Err<nom::error::Error<&str>>| {
+            |_err: nom::Err<nom::error::Error<&str>>| {
                 nom::Err::Error(ParseOrdOperatorError::ExpectedOperator)
             },
         )?;
@@ -150,7 +152,7 @@ mod test {
         ];
 
         for (s, op) in test_params {
-            assert_eq!(OrdOperator::parser(s), Ok(("3.1", op)))
+            assert_eq!(OrdOperator::parser(s), Ok(("3.1", op)));
         }
 
         assert_eq!(
@@ -180,7 +182,7 @@ mod test {
             assert_eq!(
                 BuildNumberSpec::parser(s),
                 Ok(("", BuildNumberSpec::new(op, 1)))
-            )
+            );
         }
 
         assert_eq!(

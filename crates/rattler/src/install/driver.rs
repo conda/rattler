@@ -113,7 +113,7 @@ impl InstallDriver {
         // Await the result being send back. If an error occurs during receive it means that the
         // sending end of the channel was closed. This can only really happen when the task has been
         // dropped. We assume that that means the task has been cancelled.
-        rx.await.map_err(|_| InstallError::Cancelled)?
+        rx.await.map_err(|_err| InstallError::Cancelled)?
     }
 
     /// Spawns a blocking operation on another thread but does not wait for it to complete. This is
@@ -134,6 +134,6 @@ impl InstallDriver {
 
 impl Drop for InstallDriverInner {
     fn drop(&mut self) {
-        self.join_handle.abort()
+        self.join_handle.abort();
     }
 }

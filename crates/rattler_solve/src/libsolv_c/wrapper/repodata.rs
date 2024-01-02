@@ -20,13 +20,13 @@ impl Repodata<'_> {
         )
     }
 
-    /// Returns a raw pointer to the wrapped `ffi::Repodata`, to be used for calling ffi functions
+    /// Returns a raw pointer to the wrapped [`ffi::Repodata`], to be used for calling ffi functions
     /// that require access to the repodata (and for nothing else)
     pub(super) fn raw_ptr(&self) -> *mut ffi::Repodata {
         self.0.as_ptr()
     }
 
-    /// Calls repodata_set_checksum
+    /// Calls [`ffi::repodata_set_checksum`]
     pub fn set_checksum(
         &self,
         solvable_id: SolvableId,
@@ -41,11 +41,11 @@ impl Repodata<'_> {
                 key.into(),
                 checksum_type.into(),
                 value.as_ptr(),
-            )
+            );
         }
     }
 
-    /// Calls repodata_set_location
+    /// Calls [`ffi::repodata_set_location`]
     pub fn set_location(&self, solvable_id: SolvableId, dir: &CStr, file: &CStr) {
         unsafe {
             ffi::repodata_set_location(
@@ -58,14 +58,14 @@ impl Repodata<'_> {
         }
     }
 
-    /// Calls repodata_set_num
+    /// Calls [`ffi::repodata_set_num`]
     pub fn set_num(&self, solvable_id: SolvableId, key: StringId, value: u64) {
         unsafe {
             ffi::repodata_set_num(self.raw_ptr(), solvable_id.into(), key.into(), value);
         }
     }
 
-    /// Calls repodata_set_str
+    /// Calls [`ffi::repodata_set_str`]
     pub fn set_str(&self, solvable_id: SolvableId, key: StringId, value: &CStr) {
         unsafe {
             ffi::repodata_set_str(
@@ -73,18 +73,18 @@ impl Repodata<'_> {
                 solvable_id.into(),
                 key.into(),
                 value.as_ptr(),
-            )
+            );
         }
     }
 
-    /// Calls repodata_add_idarray
+    /// Calls [`ffi::repodata_add_idarray`]
     pub fn add_idarray(&self, solvable_id: SolvableId, array_key: StringId, id: ffi::Id) {
         unsafe {
             ffi::repodata_add_idarray(self.raw_ptr(), solvable_id.into(), array_key.into(), id);
         }
     }
 
-    /// Calls repodata_add_poolstr_array
+    /// Calls [`ffi::repodata_add_poolstr_array`]
     pub fn add_poolstr_array(&self, solvable_id: SolvableId, key: StringId, value: &CStr) {
         unsafe {
             ffi::repodata_add_poolstr_array(
@@ -92,11 +92,11 @@ impl Repodata<'_> {
                 solvable_id.into(),
                 key.into(),
                 value.as_ptr(),
-            )
+            );
         };
     }
 
-    /// Calls repodata_swap_attrs
+    /// Calls [`ffi::repodata_swap_attrs`]
     pub fn swap_attrs(&self, s1: SolvableId, s2: SolvableId) {
         unsafe {
             ffi::repodata_swap_attrs(self.raw_ptr(), s1.into(), s2.into());

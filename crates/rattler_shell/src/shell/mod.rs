@@ -140,7 +140,7 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
 
     match output {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|_| {
+            .map_err(|_err| {
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "failed to convert path to Unix style",
@@ -166,11 +166,11 @@ pub struct Bash;
 
 impl Shell for Bash {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "export {}=\"{}\"", env_var, value)
+        writeln!(f, "export {env_var}=\"{value}\"")
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "unset {}", env_var)
+        writeln!(f, "unset {env_var}")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -245,11 +245,11 @@ pub struct Zsh;
 
 impl Shell for Zsh {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "export {}=\"{}\"", env_var, value)
+        writeln!(f, "export {env_var}=\"{value}\"")
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "unset {}", env_var)
+        writeln!(f, "unset {env_var}")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -277,11 +277,11 @@ pub struct Xonsh;
 
 impl Shell for Xonsh {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "${} = \"{}\"", env_var, value)
+        writeln!(f, "${env_var} = \"{value}\"")
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "del ${}", env_var)
+        writeln!(f, "del ${env_var}")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -322,11 +322,11 @@ pub struct CmdExe;
 
 impl Shell for CmdExe {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "@SET \"{}={}\"", env_var, value)
+        writeln!(f, "@SET \"{env_var}={value}\"")
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "@SET {}=", env_var)
+        writeln!(f, "@SET {env_var}=")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -369,7 +369,7 @@ impl Shell for CmdExe {
     }
 }
 
-/// A [`Shell`] implementation for PowerShell.
+/// A [`Shell`] implementation for `PowerShell`.
 #[derive(Debug, Clone, Default)]
 pub struct PowerShell {
     executable_path: Option<String>,
@@ -377,11 +377,11 @@ pub struct PowerShell {
 
 impl Shell for PowerShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "${{Env:{}}} = \"{}\"", env_var, value)
+        writeln!(f, "${{Env:{env_var}}} = \"{value}\"")
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "${{Env:{}}}=\"\"", env_var)
+        writeln!(f, "${{Env:{env_var}}}=\"\"")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -418,7 +418,7 @@ pub struct Fish;
 
 impl Shell for Fish {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
-        writeln!(f, "set -gx {} \"{}\"", env_var, value)
+        writeln!(f, "set -gx {env_var} \"{value}\"")
     }
 
     fn format_env_var(&self, var_name: &str) -> String {
@@ -427,7 +427,7 @@ impl Shell for Fish {
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "set -e {}", env_var)
+        writeln!(f, "set -e {env_var}")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -464,7 +464,7 @@ impl Shell for NuShell {
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "hide-env {}", env_var)
+        writeln!(f, "hide-env {env_var}")
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -486,13 +486,13 @@ impl Shell for NuShell {
         // Replace, Append, or Prepend the path variable to the paths.
         match modification_behavior {
             PathModificationBehavior::Replace => {
-                writeln!(f, "$env.PATH = [{}]", path)
+                writeln!(f, "$env.PATH = [{path}]")
             }
             PathModificationBehavior::Prepend => {
-                writeln!(f, "$env.PATH = ($env.PATH | prepend [{}])", path)
+                writeln!(f, "$env.PATH = ($env.PATH | prepend [{path}])")
             }
             PathModificationBehavior::Append => {
-                writeln!(f, "$env.PATH = ($env.PATH | append [{}])", path)
+                writeln!(f, "$env.PATH = ($env.PATH | append [{path}])")
             }
         }
     }
@@ -647,8 +647,7 @@ impl FromStr for ShellEnum {
             "nu" | "nushell" => Ok(NuShell.into()),
             "powershell" | "powershell_ise" => Ok(PowerShell::default().into()),
             _ => Err(ParseShellEnumError(format!(
-                "'{}' is an unknown shell variant",
-                s
+                "'{s}' is an unknown shell variant"
             ))),
         }
     }
@@ -780,7 +779,7 @@ mod tests {
     #[test]
     fn test_from_env() {
         let shell = ShellEnum::from_env();
-        println!("Detected shell: {:?}", shell);
+        println!("Detected shell: {shell:?}");
     }
 
     #[test]

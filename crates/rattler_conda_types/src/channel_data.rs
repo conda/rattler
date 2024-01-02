@@ -5,8 +5,8 @@
 //! The [`ChannelData`] struct represents the data found within the `channeldata.json` file. The
 //! [`ChannelDataPackage`] contains information about a package.
 //!
-//! Note that certain aspects of `ChannelData` are broken (e.g. run_exports is only available for a single package variant) and therefore the
-//! `ChannelData` struct is not really used much more.
+//! Note that certain aspects of `ChannelData` are broken (e.g. `run_exports` is only available for
+//! a single package variant) and therefore the `ChannelData` struct is not really used much more.
 //!
 use crate::{
     utils::serde::{LossyUrl, VecSkipNone},

@@ -20,7 +20,7 @@ const LOCAL_VERSION_OFFSET: u8 = 1;
 /// version part.
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 #[repr(transparent)]
-pub struct Flags(u8);
+pub struct Flags(pub(super) u8);
 
 impl Debug for Flags {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -76,15 +76,12 @@ mod test {
 
     #[test]
     fn test_epoch() {
-        assert_eq!(Flags::default().has_epoch(), false);
-        assert_eq!(Flags::default().with_has_epoch(true).has_epoch(), true);
-        assert_eq!(
-            Flags::default()
-                .with_has_epoch(true)
-                .with_has_epoch(false)
-                .has_epoch(),
-            false
-        );
+        assert!(!Flags::default().has_epoch());
+        assert!(Flags::default().with_has_epoch(true).has_epoch());
+        assert!(!Flags::default()
+            .with_has_epoch(true)
+            .with_has_epoch(false)
+            .has_epoch(),);
     }
 
     #[test]

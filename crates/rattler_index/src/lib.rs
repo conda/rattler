@@ -1,22 +1,19 @@
 //! Indexing of packages in a output folder to create up to date repodata.json files
 #![deny(missing_docs)]
 
-use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::package::IndexJson;
-use rattler_conda_types::package::PackageFile;
-use rattler_conda_types::ChannelInfo;
-use rattler_conda_types::PackageRecord;
-use rattler_conda_types::Platform;
-use rattler_conda_types::RepoData;
-use rattler_package_streaming::read;
-use rattler_package_streaming::seek;
+use rattler_conda_types::{
+    package::ArchiveType, package::IndexJson, package::PackageFile, ChannelInfo, PackageRecord,
+    Platform, RepoData,
+};
+use rattler_package_streaming::{read, seek};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::OsStr,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
 
 use fs_err::File;
-use std::ffi::OsStr;
-use std::io::Read;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
 use walkdir::WalkDir;
 
 fn package_record_from_index_json<T: Read>(
@@ -50,7 +47,7 @@ fn package_record_from_index_json<T: Read>(
         timestamp: index.timestamp,
         legacy_bz2_md5: None,
         legacy_bz2_size: None,
-        purls: Default::default(),
+        purls: Vec::default(),
     };
     Ok(package_record)
 }
@@ -98,7 +95,7 @@ pub fn index(
     let entries = WalkDir::new(output_folder).into_iter();
     let entries: Vec<(PathBuf, ArchiveType)> = entries
         .filter_entry(|e| e.depth() <= 2)
-        .filter_map(|e| e.ok())
+        .filter_map(Result::ok)
         .filter_map(|e| {
             ArchiveType::split_str(e.path().to_string_lossy().as_ref())
                 .map(|(p, t)| (PathBuf::from(format!("{}{}", p, t.extension())), t))
@@ -109,16 +106,14 @@ pub fn index(
     let mut platforms = entries
         .iter()
         .filter_map(|(p, _)| {
-            p.parent()
-                .and_then(|parent| parent.file_name())
-                .and_then(|file_name| {
-                    let name = file_name.to_string_lossy().to_string();
-                    if name != "src_cache" {
-                        Some(name)
-                    } else {
-                        None
-                    }
-                })
+            p.parent().and_then(Path::file_name).and_then(|file_name| {
+                let name = file_name.to_string_lossy().to_string();
+                if name == "src_cache" {
+                    None
+                } else {
+                    Some(name)
+                }
+            })
         })
         .collect::<std::collections::HashSet<_>>();
 
@@ -140,13 +135,13 @@ pub fn index(
     for platform in platforms {
         if let Some(target_platform) = target_platform {
             if platform != target_platform.to_string() {
-                if platform != "noarch" {
-                    continue;
-                } else {
+                if platform == "noarch" {
                     // check that noarch is already indexed if it is not the target platform
                     if output_folder.join("noarch/repodata.json").exists() {
                         continue;
                     }
+                } else {
+                    continue;
                 }
             }
         }
@@ -156,9 +151,9 @@ pub fn index(
                 subdir: platform.clone(),
                 base_url: None,
             }),
-            packages: Default::default(),
-            conda_packages: Default::default(),
-            removed: Default::default(),
+            packages: HashMap::default(),
+            conda_packages: HashMap::default(),
+            removed: HashSet::default(),
             version: Some(2),
         };
 
