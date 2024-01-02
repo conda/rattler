@@ -229,7 +229,7 @@ pub async fn link_package(
 
     // Parse the `link.json` file and extract entry points from it.
     let link_json = if index_json.noarch.is_python() {
-        read_link_json(package_dir, driver, options.link_json).await?
+        read_link_json(package_dir, driver, options.link_json.flatten()).await?
     } else {
         None
     };
@@ -260,10 +260,10 @@ pub async fn link_package(
 
     // Start linking all package files in parallel
     let mut number_of_paths_entries = 0;
-    for entry in paths_json.paths.into_iter() {
+    for entry in paths_json.paths {
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
-        let target_prefix = target_prefix.to_owned();
+        let target_prefix = target_prefix.clone();
         let python_info = python_info.clone();
 
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
@@ -336,7 +336,7 @@ pub async fn link_package(
             let tx = tx.clone();
             let python_info = python_info.clone();
             let target_dir = target_dir.to_owned();
-            let target_prefix = target_prefix.to_owned();
+            let target_prefix = target_prefix.clone();
 
             if platform.is_windows() {
                 driver.spawn_throttled_and_forget(move || {
@@ -363,7 +363,7 @@ pub async fn link_package(
                         }
                     }
                 });
-                number_of_paths_entries += 2
+                number_of_paths_entries += 2;
             } else {
                 driver.spawn_throttled_and_forget(move || {
                     // Return immediately if the receiver was closed. This can happen if a previous step
@@ -444,17 +444,16 @@ async fn read_paths_json(
     driver: &InstallDriver,
     paths_json: Option<PathsJson>,
 ) -> Result<PathsJson, InstallError> {
-    match paths_json {
-        Some(paths) => Ok(paths),
-        None => {
-            let package_dir = package_dir.to_owned();
-            driver
-                .spawn_throttled(move || {
-                    PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
-                        .map_err(InstallError::FailedToReadPathsJson)
-                })
-                .await
-        }
+    if let Some(paths_json) = paths_json {
+        Ok(paths_json)
+    } else {
+        let package_dir = package_dir.to_owned();
+        driver
+            .spawn_throttled(move || {
+                PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
+                    .map_err(InstallError::FailedToReadPathsJson)
+            })
+            .await
     }
 }
 
@@ -465,17 +464,16 @@ async fn read_index_json(
     driver: &InstallDriver,
     index_json: Option<IndexJson>,
 ) -> Result<IndexJson, InstallError> {
-    match index_json {
-        Some(index) => Ok(index),
-        None => {
-            let package_dir = package_dir.to_owned();
-            driver
-                .spawn_throttled(move || {
-                    IndexJson::from_package_directory(package_dir)
-                        .map_err(InstallError::FailedToReadIndexJson)
-                })
-                .await
-        }
+    if let Some(index) = index_json {
+        Ok(index)
+    } else {
+        let package_dir = package_dir.to_owned();
+        driver
+            .spawn_throttled(move || {
+                IndexJson::from_package_directory(package_dir)
+                    .map_err(InstallError::FailedToReadIndexJson)
+            })
+            .await
     }
 }
 
@@ -484,34 +482,33 @@ async fn read_index_json(
 async fn read_link_json(
     package_dir: &Path,
     driver: &InstallDriver,
-    index_json: Option<Option<LinkJson>>,
+    index_json: Option<LinkJson>,
 ) -> Result<Option<LinkJson>, InstallError> {
-    match index_json {
-        Some(index) => Ok(index),
-        None => {
-            let package_dir = package_dir.to_owned();
-            driver
-                .spawn_throttled(move || {
-                    LinkJson::from_package_directory(package_dir)
-                        .map_or_else(
-                            |e| {
-                                // Its ok if the file is not present.
-                                if e.kind() == ErrorKind::NotFound {
-                                    Ok(None)
-                                } else {
-                                    Err(e)
-                                }
-                            },
-                            |link_json| Ok(Some(link_json)),
-                        )
-                        .map_err(InstallError::FailedToReadLinkJson)
-                })
-                .await
-        }
+    if let Some(index) = index_json {
+        Ok(Some(index))
+    } else {
+        let package_dir = package_dir.to_owned();
+        driver
+            .spawn_throttled(move || {
+                LinkJson::from_package_directory(package_dir)
+                    .map_or_else(
+                        |e| {
+                            // Its ok if the file is not present.
+                            if e.kind() == ErrorKind::NotFound {
+                                Ok(None)
+                            } else {
+                                Err(e)
+                            }
+                        },
+                        |link_json| Ok(Some(link_json)),
+                    )
+                    .map_err(InstallError::FailedToReadLinkJson)
+            })
+            .await
     }
 }
 
-/// A helper struct for a BinaryHeap to provides ordering to items that are otherwise unordered.
+/// A helper struct for a `BinaryHeap` to provides ordering to items that are otherwise unordered.
 struct OrderWrapper<T> {
     index: usize,
     data: T,
@@ -541,7 +538,7 @@ impl<T> Ord for OrderWrapper<T> {
 /// Returns true if it is possible to create symlinks in the target directory.
 async fn can_create_symlinks(target_dir: &Path) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{}", uuid));
+    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = tokio::fs::symlink_file("./", &symlink_path).await;
     #[cfg(unix)]
@@ -552,7 +549,7 @@ async fn can_create_symlinks(target_dir: &Path) -> bool {
                 tracing::warn!(
                     "failed to delete temporary file '{}': {e}",
                     symlink_path.display()
-                )
+                );
             }
             true
         }

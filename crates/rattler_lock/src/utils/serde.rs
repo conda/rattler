@@ -59,7 +59,7 @@ impl SerializeAs<chrono::DateTime<chrono::Utc>> for Timestamp {
     }
 }
 
-/// Used with serde_with to serialize a collection as a sorted collection.
+/// Used with `serde_with` to serialize a collection as a sorted collection.
 #[derive(Default)]
 pub(crate) struct Ordered<T>(PhantomData<T>);
 
@@ -74,7 +74,7 @@ where
     {
         let content =
             DeserializeAsWrap::<Vec<T>, Vec<TAs>>::deserialize(deserializer)?.into_inner();
-        Ok(HashSet::from_iter(content.into_iter()))
+        Ok(content.into_iter().collect())
     }
 }
 
@@ -83,7 +83,7 @@ impl<T: Ord, HS, TAs: SerializeAs<T>> SerializeAs<HashSet<T, HS>> for Ordered<TA
     where
         S: Serializer,
     {
-        let mut elements = Vec::from_iter(source.iter());
+        let mut elements: Vec<_> = source.iter().collect();
         elements.sort();
         SerializeAsWrap::<Vec<&T>, Vec<&TAs>>::new(&elements).serialize(serializer)
     }
@@ -109,7 +109,7 @@ impl<T: Ord, TAs: SerializeAs<T>> SerializeAs<Vec<T>> for Ordered<TAs> {
     where
         S: Serializer,
     {
-        let mut elements = Vec::from_iter(source.iter());
+        let mut elements: Vec<_> = source.iter().collect();
         elements.sort();
         SerializeAsWrap::<Vec<&T>, Vec<&TAs>>::new(&elements).serialize(serializer)
     }

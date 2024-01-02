@@ -34,12 +34,11 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
     static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
     FALLBACK_AUTH_DIR.get_or_init(|| {
         dirs::home_dir()
-            .map(|home| home.join(".rattler/"))
-            .unwrap_or_else(|| {
+            .map_or_else(|| {
                 tracing::warn!("using '/rattler' to store fallback authentication credentials because the home directory could not be found");
                 // This can only happen if the dirs lib can't find a home directory this is very unlikely.
                 PathBuf::from("/rattler/")
-            })
+            }, |home| home.join(".rattler/"))
     })
 }
 
@@ -78,21 +77,21 @@ impl AuthenticatedClient {
                 self.client.request(method, url_clone)
             }
             Ok((url, auth)) => {
-                let url = self.authenticate_url(url, &auth);
+                let url = Self::authenticate_url(url, &auth);
                 let request_builder = self.client.request(method, url);
-                self.authenticate_request(request_builder, &auth)
+                Self::authenticate_request(request_builder, &auth)
             }
         }
     }
 
     /// Authenticate the given URL with the given authentication information
-    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+    fn authenticate_url(url: Url, auth: &Option<Authentication>) -> Url {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::CondaToken(token) => {
                     let path = url.path();
                     let mut new_path = String::new();
-                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(format!("/t/{token}").as_str());
                     new_path.push_str(path);
                     let mut url = url.clone();
                     url.set_path(&new_path);
@@ -107,7 +106,6 @@ impl AuthenticatedClient {
 
     /// Authenticate the given request builder with the given authentication information
     fn authenticate_request(
-        &self,
         builder: reqwest::RequestBuilder,
         auth: &Option<Authentication>,
     ) -> reqwest::RequestBuilder {
@@ -177,21 +175,21 @@ impl AuthenticatedClientBlocking {
                 self.client.request(method, url_clone)
             }
             Ok((url, auth)) => {
-                let url = self.authenticate_url(url, &auth);
+                let url = Self::authenticate_url(url, &auth);
                 let request_builder = self.client.request(method, url);
-                self.authenticate_request(request_builder, &auth)
+                Self::authenticate_request(request_builder, &auth)
             }
         }
     }
 
     /// Authenticate the given URL with the given authentication information
-    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+    fn authenticate_url(url: Url, auth: &Option<Authentication>) -> Url {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::CondaToken(token) => {
                     let path = url.path();
                     let mut new_path = String::new();
-                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(format!("/t/{token}").as_str());
                     new_path.push_str(path);
                     let mut url = url.clone();
                     url.set_path(&new_path);
@@ -206,7 +204,6 @@ impl AuthenticatedClientBlocking {
 
     /// Authenticate the given request builder with the given authentication information
     fn authenticate_request(
-        &self,
         builder: reqwest::blocking::RequestBuilder,
         auth: &Option<Authentication>,
     ) -> reqwest::blocking::RequestBuilder {
@@ -267,7 +264,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());
@@ -312,7 +309,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());
@@ -362,7 +359,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());

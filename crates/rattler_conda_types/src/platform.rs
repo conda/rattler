@@ -308,11 +308,7 @@ impl Platform {
     /// Only for 32 and 64 bit platforms the arch is `x86` and `x86_64` respectively.
     pub fn arch(&self) -> Option<Arch> {
         match self {
-            Platform::NoArch => None,
-            Platform::Unknown => None,
-            Platform::Linux32 => Some(Arch::X86),
-            Platform::Linux64 => Some(Arch::X86_64),
-            Platform::LinuxAarch64 => Some(Arch::Aarch64),
+            Platform::Unknown | Platform::NoArch => None,
             Platform::LinuxArmV6l => Some(Arch::ArmV6l),
             Platform::LinuxArmV7l => Some(Arch::ArmV7l),
             Platform::LinuxPpc64le => Some(Arch::Ppc64le),
@@ -320,13 +316,10 @@ impl Platform {
             Platform::LinuxS390X => Some(Arch::S390X),
             Platform::LinuxRiscv32 => Some(Arch::Riscv32),
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
-            Platform::Osx64 => Some(Arch::X86_64),
-            Platform::OsxArm64 => Some(Arch::Aarch64),
-            Platform::Win32 => Some(Arch::X86),
-            Platform::Win64 => Some(Arch::X86_64),
-            Platform::WinArm64 => Some(Arch::Aarch64),
-            Platform::EmscriptenWasm32 => Some(Arch::Wasm32),
-            Platform::WasiWasm32 => Some(Arch::Wasm32),
+            Platform::Linux32 | Platform::Win32 => Some(Arch::X86),
+            Platform::Linux64 | Platform::Win64 | Platform::Osx64 => Some(Arch::X86_64),
+            Platform::LinuxAarch64 | Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Aarch64),
+            Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
         }
     }
 }

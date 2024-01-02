@@ -69,7 +69,7 @@ impl QueueRef<'_> {
     /// Construct a new `QueueRef` based on the provided `ffi::Queue`
     ///
     /// Safety: the queue must not have been freed
-    pub(super) unsafe fn from_ffi_queue<T>(_source: &T, queue: ffi::Queue) -> QueueRef {
+    pub(super) unsafe fn from_ffi_queue<T>(_source: &T, queue: ffi::Queue) -> QueueRef<'_> {
         QueueRef(queue, PhantomData::default())
     }
 

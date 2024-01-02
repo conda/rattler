@@ -16,6 +16,7 @@ try:
         FetchRepoDataError,
         SolverError,
         ConvertSubdirError,
+        VersionBumpError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -69,6 +70,9 @@ except ImportError:
     class ConvertSubdirError(Exception):  # type: ignore[no-redef]
         """An error that can occur when parsing a platform from a string."""
 
+    class VersionBumpError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when bumping a version."""
+
 
 __all__ = [
     "ActivationError",
@@ -87,4 +91,5 @@ __all__ = [
     "SolverError",
     "TransactionError",
     "ConvertSubdirError",
+    "VersionBumpError",
 ]

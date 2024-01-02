@@ -378,7 +378,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
     if lines.len() >= JLAP_FOOTER_OFFSET {
         lines[0..lines.len() - JLAP_FOOTER_OFFSET]
             .iter()
-            .map(|x| format!("{}\n", x).into_bytes().len() as u64)
+            .map(|x| format!("{x}\n").into_bytes().len() as u64)
             .sum()
     } else {
         0
@@ -458,14 +458,14 @@ async fn fetch_jlap(
     request_builder.headers(headers).send().await
 }
 
-/// Fetches the JLAP response but also retries in the case of a RANGE_NOT_SATISFIABLE error
+/// Fetches the JLAP response but also retries in the case of a `RANGE_NOT_SATISFIABLE` error
 ///
 /// When a JLAP file is updated on the server, it may cause new requests to trigger a
-/// RANGE_NOT_SATISFIABLE error because the local cache is now out of sync. In this case, we
+/// `RANGE_NOT_SATISFIABLE` error because the local cache is now out of sync. In this case, we
 /// try the request once more from the beginning.
 ///
 /// We return a new value for position if this was triggered so that we can update the
-/// JLAPState accordingly.
+/// `JLAPState` accordingly.
 async fn fetch_jlap_with_retry(
     url: &str,
     client: &AuthenticatedClient,
@@ -588,7 +588,7 @@ fn apply_jlap_patches(
     Ok(hash)
 }
 
-/// Retrieves the correct values for `position` and `initialization_vector` from a JLAPState object
+/// Retrieves the correct values for `position` and `initialization_vector` from a `JLAPState` object
 ///
 /// If we cannot find the correct values, we provide defaults from this module.
 /// When we can correctly parse a hex string (the `initialization_vector` should always be a
@@ -873,7 +873,7 @@ mod test {
                 .join("repodata.json")
                 .expect("file name is valid"),
         );
-        let cache_repo_data_path = cache_dir.path().join(format!("{}.json", cache_key));
+        let cache_repo_data_path = cache_dir.path().join(format!("{cache_key}.json"));
 
         if let Some(content) = cache_repo_data {
             tokio::fs::write(cache_repo_data_path.clone(), content)

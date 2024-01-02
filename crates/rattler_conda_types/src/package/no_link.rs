@@ -42,6 +42,6 @@ mod test {
                     PathBuf::from("lib/pkgconfig/zlib.pc"),
                 ]
             }
-        )
+        );
     }
 }

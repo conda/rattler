@@ -28,7 +28,7 @@ impl<'pool> Drop for Repo<'pool> {
 
 impl<'pool> Repo<'pool> {
     /// Constructs a repo in the provided pool, associated to the given url
-    pub fn new(pool: &Pool, url: impl AsRef<str>) -> Repo {
+    pub fn new(pool: &Pool, url: impl AsRef<str>) -> Repo<'_> {
         let c_url = c_string(url);
 
         unsafe {
@@ -61,7 +61,7 @@ impl<'pool> Repo<'pool> {
 
     /// Adds a new repodata to this repo (repodata is a libsolv datastructure, see [`Repodata`] for
     /// details)
-    pub fn add_repodata(&self) -> Repodata {
+    pub fn add_repodata(&self) -> Repodata<'_> {
         unsafe {
             let repodata_ptr = ffi::repo_add_repodata(self.raw_ptr(), 0);
             Repodata::from_ptr(self, repodata_ptr)
@@ -70,10 +70,8 @@ impl<'pool> Repo<'pool> {
 
     /// Adds a `.solv` file to the repo
     pub fn add_solv(&self, pool: &Pool, file: *mut libc::FILE) {
-        let result = unsafe { ffi::repo_add_solv(self.raw_ptr(), file as *mut ffi::FILE, 0) };
-        if result != 0 {
-            panic!("add_solv failed: {}", pool.last_error());
-        }
+        let result = unsafe { ffi::repo_add_solv(self.raw_ptr(), file.cast(), 0) };
+        assert_eq!(result, 0, "add_solv failed: {}", pool.last_error());
     }
 
     /// Adds a new solvable to this repo
@@ -98,10 +96,8 @@ impl<'pool> Repo<'pool> {
     /// The provided file should have been opened with write access. Closing the file is the
     /// responsibility of the caller.
     pub fn write(&self, pool: &Pool, file: *mut libc::FILE) {
-        let result = unsafe { ffi::repo_write(self.raw_ptr(), file as *mut ffi::FILE) };
-        if result != 0 {
-            panic!("repo_write failed: {}", pool.last_error());
-        }
+        let result = unsafe { ffi::repo_write(self.raw_ptr(), file.cast()) };
+        assert_eq!(result, 0, "repo_write failed: {}", pool.last_error());
     }
 
     /// Wrapper around `repo_internalize`

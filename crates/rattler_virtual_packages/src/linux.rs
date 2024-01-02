@@ -78,9 +78,9 @@ fn parse_linux_version(version_str: &str) -> Result<Version, ParseLinuxVersionEr
 /// Takes the first 2, 3, or 4 digits of the linux uname version.
 #[allow(dead_code)]
 fn extract_linux_version_part(version_str: &str) -> Option<&str> {
-    use nom::character::complete::*;
-    use nom::combinator::*;
-    use nom::sequence::*;
+    use nom::character::complete::{char, digit1};
+    use nom::combinator::{opt, recognize};
+    use nom::sequence::{pair, tuple};
     let result: Result<_, nom::Err<nom::error::Error<_>>> = recognize(tuple((
         digit1,
         char('.'),

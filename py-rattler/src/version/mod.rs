@@ -2,8 +2,8 @@ mod component;
 
 use crate::PyRattlerError;
 use component::PyComponent;
-use pyo3::{basic::CompareOp, pyclass, pymethods};
-use rattler_conda_types::Version;
+use pyo3::{basic::CompareOp, pyclass, pymethods, PyResult};
+use rattler_conda_types::{Version, VersionBumpType};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
@@ -132,11 +132,49 @@ impl PyVersion {
         }
     }
 
-    /// Returns a new version where the last numerical segment of this version has been bumped.
-    pub fn bump(&self) -> Self {
-        Self {
-            inner: self.inner.bump(),
-        }
+    /// Returns a new version where the major segment of this version has been bumped.
+    pub fn bump_major(&self) -> PyResult<Self> {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Major)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a new version where the minor segment of this version has been bumped.
+    pub fn bump_minor(&self) -> PyResult<Self> {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Minor)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a new version where the patch segment of this version has been bumped.
+    pub fn bump_patch(&self) -> PyResult<Self> {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Patch)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a new version where the last segment of this version has been bumped.
+    pub fn bump_last(&self) -> PyResult<Self> {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Last)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a new version where the given segment of this version has been bumped.
+    pub fn bump_segment(&self, index: i32) -> PyResult<Self> {
+        Ok(self
+            .inner
+            .bump(VersionBumpType::Segment(index))
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
     }
 
     /// Compute the hash of the version.

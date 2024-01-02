@@ -1,12 +1,12 @@
-//! Low-level functions to detect the LibC family and version. See [`libc_family_and_version`].
+//! Low-level functions to detect the `LibC` family and version. See [`libc_family_and_version`].
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{ParseVersionError, Version};
 
-/// Returns the LibC version and family of the current platform.
+/// Returns the `LibC` version and family of the current platform.
 ///
-/// Returns an error if determining the LibC family and version resulted in an error. Returns
-/// `None` if the current platform does not provide a version of LibC.
+/// Returns an error if determining the `LibC` family and version resulted in an error. Returns
+/// `None` if the current platform does not provide a version of `LibC`.
 pub fn libc_family_and_version() -> Result<Option<(String, Version)>, DetectLibCError> {
     static DETECTED_LIBC_VERSION: OnceCell<Option<(String, Version)>> = OnceCell::new();
     DETECTED_LIBC_VERSION
