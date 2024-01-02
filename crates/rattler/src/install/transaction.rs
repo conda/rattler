@@ -54,9 +54,9 @@ impl<Old, New> TransactionOperation<Old, New> {
     pub fn record_to_remove(&self) -> Option<&Old> {
         match self {
             TransactionOperation::Install(_) => None,
-            TransactionOperation::Change { old, .. } => Some(old),
-            TransactionOperation::Reinstall(old) => Some(old),
-            TransactionOperation::Remove(old) => Some(old),
+            TransactionOperation::Change { old, .. }
+            | TransactionOperation::Reinstall(old)
+            | TransactionOperation::Remove(old) => Some(old),
         }
     }
 }

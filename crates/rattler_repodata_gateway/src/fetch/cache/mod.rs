@@ -4,7 +4,7 @@ pub use cache_headers::CacheHeaders;
 use rattler_digest::{serde::SerializableHash, Blake2b256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
-use std::{fs::File, io::Read, path::Path, str::FromStr, time::SystemTime};
+use std::{fs, fs::File, path::Path, str::FromStr, time::SystemTime};
 use url::Url;
 
 /// Representation of the `.info.json` file alongside a `repodata.json` file.
@@ -66,12 +66,7 @@ pub struct RepoDataState {
 impl RepoDataState {
     /// Reads and parses a file from disk.
     pub fn from_path(path: &Path) -> Result<RepoDataState, std::io::Error> {
-        let content = {
-            let mut file = File::open(path)?;
-            let mut content = Default::default();
-            file.read_to_string(&mut content)?;
-            content
-        };
+        let content = fs::read_to_string(path)?;
         Ok(Self::from_str(&content)?)
     }
 
@@ -156,7 +151,7 @@ where
 fn duration_to_nanos<S: Serializer>(time: &SystemTime, s: S) -> Result<S::Ok, S::Error> {
     use serde::ser::Error;
     time.duration_since(SystemTime::UNIX_EPOCH)
-        .map_err(|_| S::Error::custom("duration cannot be computed for file time"))?
+        .map_err(|_err| S::Error::custom("duration cannot be computed for file time"))?
         .as_nanos()
         .serialize(s)
 }
@@ -183,7 +178,7 @@ fn serialize_blake2_hash<S: Serializer>(
 ) -> Result<S::Ok, S::Error> {
     match time.as_ref() {
         None => s.serialize_none(),
-        Some(hash) => format!("{:x}", hash).serialize(s),
+        Some(hash) => format!("{hash:x}").serialize(s),
     }
 }
 

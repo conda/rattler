@@ -35,6 +35,6 @@ impl FromStr for Authentication {
 
     /// Parse an authentication string into an Authentication struct
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(|_| AuthenticationParseError::InvalidToken)
+        serde_json::from_str(s).map_err(|_err| AuthenticationParseError::InvalidToken)
     }
 }

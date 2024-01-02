@@ -1,3 +1,5 @@
+#![allow(clippy::option_option)]
+
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
@@ -158,7 +160,7 @@ impl RepoData {
             // also apply the patch to the conda packages
             if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
                 assert!(archive_type == ArchiveType::TarBz2);
-                if let Some(record) = self.conda_packages.get_mut(&format!("{}.conda", pkg_name)) {
+                if let Some(record) = self.conda_packages.get_mut(&format!("{pkg_name}.conda")) {
                     record.apply_patch(patch);
                 }
             }
@@ -181,7 +183,7 @@ impl RepoData {
                         }
 
                         // also remove equivalent .conda package if it exists
-                        let conda_pkg_name = format!("{}.conda", pkg_name);
+                        let conda_pkg_name = format!("{pkg_name}.conda");
                         if self.conda_packages.remove_entry(&conda_pkg_name).is_some() {
                             removed.insert(conda_pkg_name);
                         }
@@ -217,13 +219,13 @@ mod test {
     fn load_test_repodata() -> RepoData {
         let repodata_path = test_data_path().join("linux-64/repodata_from_packages.json");
         let repodata: RepoData =
-            serde_json::from_str(&std::fs::read_to_string(&repodata_path).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(repodata_path).unwrap()).unwrap();
         repodata
     }
 
     fn load_patch_instructions(name: &str) -> PatchInstructions {
         let patch_instructions_path = test_data_path().join("linux-64").join(name);
-        let patch_instructions = std::fs::read_to_string(&patch_instructions_path).unwrap();
+        let patch_instructions = std::fs::read_to_string(patch_instructions_path).unwrap();
         let patch_instructions: PatchInstructions =
             serde_json::from_str(&patch_instructions).unwrap();
         patch_instructions

@@ -67,17 +67,6 @@ impl FromStr for PackageArchiveHash {
     type Err = ParsePackageArchiveHashError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        return if let Some(sha) = s.strip_prefix("sha256:") {
-            // If the string starts with sha256 we parse as Sha256
-            parse_sha256(sha)
-        } else if s.len() == 64 {
-            // If the string is 64 characters is length we parse as Sha256
-            parse_sha256(s)
-        } else {
-            // Otherwise its an Md5
-            parse_md5(s)
-        };
-
         // Parses a SHA256 hash from a string
         fn parse_sha256(str: &str) -> Result<PackageArchiveHash, ParsePackageArchiveHashError> {
             let mut hash = <rattler_digest::Sha256Hash>::default();
@@ -91,6 +80,17 @@ impl FromStr for PackageArchiveHash {
             hex::decode_to_slice(str, &mut hash)
                 .map_err(ParsePackageArchiveHashError::InvalidMd5Hash)?;
             Ok(PackageArchiveHash::Md5(hash))
+        }
+
+        if let Some(sha) = s.strip_prefix("sha256:") {
+            // If the string starts with sha256 we parse as Sha256
+            parse_sha256(sha)
+        } else if s.len() == 64 {
+            // If the string is 64 characters is length we parse as Sha256
+            parse_sha256(s)
+        } else {
+            // Otherwise its an Md5
+            parse_md5(s)
         }
     }
 }
@@ -168,7 +168,7 @@ impl FromStr for ExplicitEnvironmentSpec {
                     platform = Some(Platform::from_str(platform_str.trim())?);
                 }
             } else if line.trim() == "@EXPLICIT" {
-                is_explicit = true
+                is_explicit = true;
             } else if !is_explicit {
                 return Err(ParseExplicitEnvironmentSpecError::MissingExplicitTag);
             } else {
@@ -187,7 +187,7 @@ impl FromStr for ExplicitEnvironmentSpec {
             return Err(ParseExplicitEnvironmentSpecError::MissingExplicitTag);
         }
 
-        Ok(ExplicitEnvironmentSpec { packages, platform })
+        Ok(ExplicitEnvironmentSpec { platform, packages })
     }
 }
 
@@ -200,7 +200,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use hex_literal::hex;
-    use rstest::{self, *};
+    use rstest::rstest;
     use std::str::FromStr;
     use url::Url;
 
@@ -210,7 +210,7 @@ mod test {
     #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
     fn test_parse(#[case] path: &str) {
         let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
-        insta::assert_yaml_snapshot!(path, env)
+        insta::assert_yaml_snapshot!(path, env);
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod test {
         assert_matches!(
             entry.package_archive_hash(),
             Ok(Some(PackageArchiveHash::Md5(hash))) if hash[..] == hex!("a98ea1e3abfdbbd201d60ff6b43ea7e4")
-        )
+        );
     }
 
     #[test]

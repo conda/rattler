@@ -53,7 +53,7 @@ impl Drop for Pool {
             // Free the registered Rust callback, if present
             let ptr = (*self.raw_ptr()).debugcallbackdata;
             if !ptr.is_null() {
-                let _: Box<BoxedLogCallback> = Box::from_raw(ptr as *mut _);
+                let _: Box<BoxedLogCallback> = Box::from_raw(ptr.cast());
             }
 
             // Free the pool itself
@@ -76,7 +76,7 @@ extern "C" fn log_callback(
     unsafe {
         // We have previously stored a `BoxedLogCallback` in `user_data`, so now we can retrieve it
         // and run it
-        let closure: &mut BoxedLogCallback = &mut *(user_data as *mut BoxedLogCallback);
+        let closure: &mut BoxedLogCallback = &mut *(user_data.cast::<BoxedLogCallback>());
         let str = CStr::from_ptr(str);
         closure(str.to_str().expect("utf-8 error"), flags);
     }
@@ -114,7 +114,7 @@ impl Pool {
         solvables.swap(s1.0 as _, s2.0 as _);
     }
 
-    /// Interns a REL_EQ relation between `id1` and `id2`
+    /// Interns a `REL_EQ` relation between `id1` and `id2`
     pub fn rel_eq(&self, id1: Id, id2: Id) -> Id {
         unsafe { ffi::pool_rel2id(self.raw_ptr(), id1, id2, ffi::REL_EQ as i32, 1) }
     }
@@ -134,7 +134,7 @@ impl Pool {
             ffi::pool_setdebugcallback(
                 self.raw_ptr(),
                 Some(log_callback),
-                Box::into_raw(box_callback) as *mut _,
+                Box::into_raw(box_callback).cast(),
             );
         }
     }
@@ -155,7 +155,7 @@ impl Pool {
     /// Set the provided repo to be considered as a source of installed packages
     ///
     /// Panics if the repo does not belong to this pool
-    pub fn set_installed(&self, repo: &Repo) {
+    pub fn set_installed(&self, repo: &Repo<'_>) {
         repo.ensure_belongs_to_pool(self);
         unsafe { ffi::pool_set_installed(self.raw_ptr(), repo.raw_ptr()) }
     }
@@ -167,7 +167,7 @@ impl Pool {
     }
 
     /// Create the solver
-    pub fn create_solver(&self) -> Solver {
+    pub fn create_solver(&self) -> Solver<'_> {
         let solver = NonNull::new(unsafe { ffi::solver_create(self.raw_ptr()) })
             .expect("solver_create returned a nullptr");
 
@@ -232,7 +232,7 @@ impl Pool {
     }
 }
 
-/// Wrapper for the StringId of libsolv
+/// Wrapper for the [`StringId`] of libsolv
 #[derive(Copy, Clone)]
 pub struct StringId(pub(super) Id);
 
@@ -262,7 +262,7 @@ impl From<StringId> for Id {
     }
 }
 
-/// Wrapper for the StringId of libsolv
+/// Wrapper for the match spec type of libsolv
 #[derive(Copy, Clone)]
 pub struct MatchSpecId(Id);
 

@@ -214,7 +214,7 @@ impl RepoData {
                 channel: channel_name.clone(),
                 package_record,
                 file_name: filename,
-            })
+            });
         }
         records
     }
@@ -246,21 +246,21 @@ pub fn compute_package_url(
 
     let path = absolute_url.path();
     if !path.ends_with('/') {
-        absolute_url.set_path(&format!("{path}/"))
+        absolute_url.set_path(&format!("{path}/"));
     }
     absolute_url
         .join(filename)
         .expect("failed to join base_url and filename")
 }
 
-fn add_trailing_slash(url: &Url) -> Cow<Url> {
+fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
     let path = url.path();
-    if !path.ends_with('/') {
+    if path.ends_with('/') {
+        Cow::Borrowed(url)
+    } else {
         let mut url = url.clone();
         url.set_path(&format!("{path}/"));
         Cow::Owned(url)
-    } else {
-        Cow::Borrowed(url)
     }
 }
 
@@ -280,7 +280,7 @@ impl PackageRecord {
             license_family: None,
             md5: None,
             name,
-            noarch: Default::default(),
+            noarch: NoArchType::default(),
             platform: None,
             sha256: None,
             size: None,
@@ -327,9 +327,9 @@ pub enum ConvertSubdirError {
 /// These were the combinations that have been found in the database.
 /// and have been represented in the function.
 ///
-/// # Why can we not use Platform::FromStr?
+/// # Why can we not use `Platform::FromStr`?
 ///
-/// We cannot use the Platform FromStr directly because x86 and x86_64
+/// We cannot use the [`Platform`] `FromStr` directly because `x86` and `x86_64`
 /// are different architecture strings. Also some combinations have been removed,
 /// because they have not been found.
 fn determine_subdir(
@@ -412,20 +412,23 @@ fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
     value: &FxHashMap<String, T>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    return BTreeMap::from_iter(value.iter()).serialize(serializer);
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
     value: &FxHashSet<String>,
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
-    return BTreeSet::from_iter(value.iter()).serialize(serializer);
+    value.iter().collect::<BTreeSet<_>>().serialize(serializer)
 }
 
 #[cfg(test)]
 mod test {
     use crate::repo_data::{compute_package_url, determine_subdir};
-    use fxhash::FxHashSet;
+    use fxhash::FxHashMap;
 
     use crate::{Channel, ChannelConfig, RepoData};
 
@@ -445,14 +448,13 @@ mod test {
     fn test_serialize() {
         let repodata = RepoData {
             version: Some(2),
-            info: Default::default(),
-            packages: Default::default(),
-            conda_packages: Default::default(),
-            removed: FxHashSet::from_iter(
-                ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
-                    .iter()
-                    .map(|s| s.to_string()),
-            ),
+            info: None,
+            packages: FxHashMap::default(),
+            conda_packages: FxHashMap::default(),
+            removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         };
         insta::assert_yaml_snapshot!(repodata);
     }

@@ -38,14 +38,14 @@ impl PythonInfo {
         let path = if platform.is_windows() {
             PathBuf::from("python.exe")
         } else {
-            PathBuf::from(format!("bin/python{}.{}", major, minor))
+            PathBuf::from(format!("bin/python{major}.{minor}"))
         };
 
         // Find the location of the site packages
         let site_packages_path = if platform.is_windows() {
             PathBuf::from("Lib/site-packages")
         } else {
-            PathBuf::from(format!("lib/python{}.{}/site-packages", major, minor))
+            PathBuf::from(format!("lib/python{major}.{minor}/site-packages"))
         };
 
         // Binary directory

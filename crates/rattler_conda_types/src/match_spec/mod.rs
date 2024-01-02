@@ -148,12 +148,12 @@ impl Display for MatchSpec {
         if let Some(channel) = &self.channel {
             if let Some(name) = &channel.name {
                 // TODO: namespace
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
             }
         }
 
         if let Some(subdir) = &self.subdir {
-            write!(f, "/{}", subdir)?;
+            write!(f, "/{subdir}")?;
         }
 
         match &self.name {
@@ -162,17 +162,17 @@ impl Display for MatchSpec {
         }
 
         if let Some(namespace) = &self.namespace {
-            write!(f, ":{}:", namespace)?;
+            write!(f, ":{namespace}:")?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
         }
 
         if let Some(version) = &self.version {
-            write!(f, " {}", version)?;
+            write!(f, " {version}")?;
         }
 
         if let Some(build) = &self.build {
-            write!(f, " {}", build)?;
+            write!(f, " {build}")?;
         }
 
         let mut keys = Vec::new();
@@ -194,7 +194,7 @@ impl Display for MatchSpec {
 }
 
 impl MatchSpec {
-    /// Match a MatchSpec against a PackageRecord
+    /// Match a [`MatchSpec`] against a [`PackageRecord`]
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
             if name != &record.name {
@@ -286,7 +286,7 @@ pub struct NamelessMatchSpec {
 }
 
 impl NamelessMatchSpec {
-    /// Match a MatchSpec against a PackageRecord
+    /// Match a [`MatchSpec`] against a [`PackageRecord`]
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(spec) = self.version.as_ref() {
             if !spec.matches(&record.version) {
@@ -324,7 +324,7 @@ impl Display for NamelessMatchSpec {
         }
 
         if let Some(build) = &self.build {
-            write!(f, " {}", build)?;
+            write!(f, " {build}")?;
         }
 
         let mut keys = Vec::new();
@@ -424,7 +424,7 @@ mod tests {
         let spec_as_string = spec.to_string();
         let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
 
-        assert_eq!(spec, rebuild_spec)
+        assert_eq!(spec, rebuild_spec);
     }
 
     #[test]
@@ -434,8 +434,12 @@ mod tests {
         assert_eq!(spec1, spec2);
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let hash1 = spec1.hash(&mut hasher);
-        let hash2 = spec2.hash(&mut hasher);
+        spec1.hash(&mut hasher);
+        let hash1 = hasher.finish();
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        spec2.hash(&mut hasher);
+        let hash2 = hasher.finish();
 
         assert_eq!(hash1, hash2);
     }
@@ -449,6 +453,8 @@ mod tests {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec1.hash(&mut hasher);
         let hash1 = hasher.finish();
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec2.hash(&mut hasher);
         let hash2 = hasher.finish();
 

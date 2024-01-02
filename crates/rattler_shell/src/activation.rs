@@ -105,7 +105,7 @@ fn collect_scripts<T: Shell>(path: &Path, shell_type: &T) -> Result<Vec<PathBuf>
 
     let mut scripts = paths
         .into_iter()
-        .filter_map(|r| r.ok())
+        .filter_map(std::result::Result::ok)
         .map(|r| r.path())
         .filter(|path| shell_type.can_run_script(path))
         .collect::<Vec<_>>();
@@ -186,7 +186,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
         let mut env_var_files = env_var_files
             .into_iter()
-            .filter_map(|r| r.ok())
+            .filter_map(std::result::Result::ok)
             .map(|e| e.path())
             .filter(|path| path.is_file())
             .collect::<Vec<_>>();
@@ -199,14 +199,14 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
             .map(|path| {
                 fs::read_to_string(path)?
                     .parse::<serde_json::Value>()
-                    .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, path.to_path_buf()))
+                    .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, path.clone()))
             })
             .collect::<Result<Vec<serde_json::Value>, ActivationError>>()?;
 
         for (env_var_json, env_var_file) in env_var_json_files.iter().zip(env_var_files.iter()) {
             let env_var_json = env_var_json.as_object().ok_or_else(|| {
                 ActivationError::InvalidEnvVarFileJsonNoObject {
-                    file: pkg_env_var_dir.to_path_buf(),
+                    file: pkg_env_var_dir.clone(),
                 }
             })?;
 
@@ -226,11 +226,11 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 
         // load json but preserve the order of dicts - for this we use the serde preserve_order feature
         let state_json: serde_json::Value = serde_json::from_str(&state_json)
-            .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, state_file.to_path_buf()))?;
+            .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, state_file.clone()))?;
 
         let state_env_vars = state_json["env_vars"].as_object().ok_or_else(|| {
             ActivationError::InvalidEnvVarFileStateFile {
-                file: state_file.to_path_buf(),
+                file: state_file.clone(),
             }
         })?;
 
@@ -241,7 +241,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
             }
 
             if let Some(value) = value.as_str() {
-                env_vars.insert(key.to_uppercase().to_string(), value.to_string());
+                env_vars.insert(key.to_uppercase(), value.to_string());
             } else {
                 tracing::warn!(
                     "WARNING: environment variable {key} has no string value (path: {state_file:?})");

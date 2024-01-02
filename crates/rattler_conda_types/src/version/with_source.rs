@@ -85,7 +85,7 @@ impl VersionWithSource {
 
     /// Returns the string representation of this instance. Either this is a reference to the source
     /// string or an owned formatted version of the stored version.
-    pub fn as_str(&self) -> Cow<str> {
+    pub fn as_str(&self) -> Cow<'_, str> {
         match &self.source {
             Some(source) => Cow::Borrowed(source.as_ref()),
             None => Cow::Owned(format!("{}", &self.version)),
