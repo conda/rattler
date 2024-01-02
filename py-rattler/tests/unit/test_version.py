@@ -1,6 +1,5 @@
 import pytest
 from rattler import Version
-from rattler.exceptions import VersionBumpError
 
 
 def test_version_dash_normalisation() -> None:
