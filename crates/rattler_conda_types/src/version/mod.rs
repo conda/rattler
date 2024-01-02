@@ -22,6 +22,9 @@ pub(crate) mod parse;
 mod segment;
 mod with_source;
 
+pub(crate) mod bump;
+pub use bump::{VersionBumpError, VersionBumpType};
+
 use flags::Flags;
 use segment::Segment;
 
@@ -236,8 +239,8 @@ impl Version {
         })
     }
 
-    /// Returns a new version where the last numerical segment of this version has been bumped.
-    pub fn bump(&self) -> Self {
+    /// Returns a new version after bumping it according to the specified bump type.
+    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
         let mut flags = Flags::default();
@@ -248,6 +251,42 @@ impl Version {
             flags = flags.with_has_epoch(true);
         }
 
+        // Sanity check whether the version has enough segments for this bump type.
+        let segment_count = self.segment_count();
+        match bump_type {
+            VersionBumpType::Major => {
+                if segment_count < 1 {
+                    return Err(VersionBumpError::NoMajorSegment);
+                }
+            }
+            VersionBumpType::Minor => {
+                if segment_count < 2 {
+                    return Err(VersionBumpError::NoMinorSegment);
+                }
+            }
+            VersionBumpType::Patch => {
+                if segment_count < 3 {
+                    return Err(VersionBumpError::NoPatchSegment);
+                }
+            }
+            VersionBumpType::Last => {
+                if segment_count == 0 {
+                    return Err(VersionBumpError::NoLastSegment);
+                }
+            }
+            VersionBumpType::Segment(index) => {
+                let uindex = if index < 0 {
+                    segment_count as i32 + index
+                } else {
+                    index
+                };
+
+                if uindex < 0 || uindex >= segment_count as i32 {
+                    return Err(VersionBumpError::InvalidSegment { index });
+                }
+            }
+        }
+
         // Copy over all the segments and bump the last segment.
         let segment_count = self.segment_count();
         for (idx, segment_iter) in self.segments().enumerate() {
@@ -256,14 +295,27 @@ impl Version {
             let mut segment_components =
                 segment_iter.components().cloned().collect::<ComponentVec>();
 
-            // If this is the last segment of the version bump the last number. Each segment must at
-            // least start with a number so this should always work.
-            if idx == (segment_count - 1) {
+            // Determine whether this is the segment that needs to be bumped.
+            let is_segment_to_bump = match bump_type {
+                VersionBumpType::Major => idx == 0,
+                VersionBumpType::Minor => idx == 1,
+                VersionBumpType::Patch => idx == 2,
+                VersionBumpType::Last => idx == (segment_count - 1),
+                VersionBumpType::Segment(mut index_to_bump) => {
+                    if index_to_bump < 0 {
+                        index_to_bump += segment_count as i32;
+                    }
+
+                    idx == index_to_bump as usize
+                }
+            };
+
+            // Bump the segment if we need to. Each segment must at least start with a number so this should always work.
+            if is_segment_to_bump {
                 let last_numeral_component = segment_components
                     .iter_mut()
                     .filter_map(Component::as_number_mut)
-                    .rev()
-                    .next()
+                    .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
             }
@@ -299,11 +351,11 @@ impl Version {
                 .expect("this should never fail because no new segments are added");
         }
 
-        Self {
+        Ok(Self {
             components,
             segments,
             flags,
-        }
+        })
     }
 
     /// Returns the segments that belong the local part of the version.
@@ -1008,7 +1060,7 @@ mod test {
 
     use rand::seq::SliceRandom;
 
-    use crate::version::StrictVersion;
+    use crate::version::{StrictVersion, VersionBumpError, VersionBumpType};
 
     use super::Version;
 
@@ -1216,17 +1268,26 @@ mod test {
     }
 
     #[test]
-    fn bump() {
+    fn bump_last() {
         assert_eq!(
-            Version::from_str("1.1").unwrap().bump(),
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2").unwrap()
         );
         assert_eq!(
-            Version::from_str("1.1l").unwrap().bump(),
+            Version::from_str("1.1l")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2l").unwrap()
         );
         assert_eq!(
-            Version::from_str("5!1.alpha+3.4").unwrap().bump(),
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("5!1.1alpha+3.4").unwrap()
         );
     }
@@ -1360,5 +1421,165 @@ mod test {
                 .into_owned(),
             Version::from_str("3!4.5a.6b").unwrap()
         );
+    }
+
+    #[test]
+    fn bump_major() {
+        assert_eq!(
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("2.1").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("3.1l").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("5!2.alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_minor() {
+        assert_eq!(
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("1.2").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("2.2l").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("5!1.1alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_minor_fail() {
+        let err = Version::from_str("1")
+            .unwrap()
+            .bump(VersionBumpType::Minor)
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::NoMinorSegment);
+    }
+
+    #[test]
+    fn bump_patch() {
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l.5alpha")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("2.1l.6alpha").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.8.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("5!1.8.1alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_patch_fail() {
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Patch)
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::NoPatchSegment);
+    }
+
+    #[test]
+    fn bump_segment() {
+        // Positive index
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(0))
+                .unwrap(),
+            Version::from_str("2.1.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(1))
+                .unwrap(),
+            Version::from_str("1.2.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(2))
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        // Negative index
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-1))
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-2))
+                .unwrap(),
+            Version::from_str("1.2.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-3))
+                .unwrap(),
+            Version::from_str("2.1.9").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_segment_fail() {
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Segment(3))
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::InvalidSegment { index: 3 });
+
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Segment(-3))
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::InvalidSegment { index: -3 });
     }
 }

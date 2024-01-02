@@ -110,7 +110,7 @@ impl AuthenticationStorage {
     ) -> Result<(Url, Option<Authentication>), reqwest::Error> {
         let url = url.into_url()?;
         let Some(host) = url.host_str() else {
-            return Ok((url, None))
+            return Ok((url, None));
         };
 
         match self.get(host) {
@@ -121,7 +121,7 @@ impl AuthenticationStorage {
 
         // Check for credentials under e.g. `*.prefix.dev`
         let Some(mut domain) = url.domain() else {
-            return Ok((url, None))
+            return Ok((url, None));
         };
 
         loop {
