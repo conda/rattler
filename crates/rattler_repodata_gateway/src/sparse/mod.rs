@@ -196,14 +196,17 @@ struct LazyRepoData<'i> {
     info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(borrow)]
-    #[serde(deserialize_with = "deserialize_filename_and_raw_record")]
+    #[serde(borrow, deserialize_with = "deserialize_filename_and_raw_record")]
     packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// The conda packages contained in the repodata.json file (under a different key for
     /// backwards compatibility with previous conda versions)
-    #[serde(borrow, rename = "packages.conda")]
-    #[serde(deserialize_with = "deserialize_filename_and_raw_record")]
+    #[serde(
+        borrow,
+        default,
+        deserialize_with = "deserialize_filename_and_raw_record",
+        rename = "packages.conda"
+    )]
     conda_packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 }
 

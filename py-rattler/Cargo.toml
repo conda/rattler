@@ -1,6 +1,6 @@
 [package]
 name = "py-rattler"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "BSD-3-Clause"
 
@@ -36,6 +36,7 @@ rattler_virtual_packages = { path = "../crates/rattler_virtual_packages", defaul
 rattler_solve = { path = "../crates/rattler_solve", default-features = false, features = [
     "resolvo",
 ] }
+rattler_index = { path = "../crates/rattler_index" }
 
 pyo3 = { version = "0.19", features = [
     "abi3-py38",
