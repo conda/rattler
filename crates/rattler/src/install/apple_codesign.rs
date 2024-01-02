@@ -28,7 +28,8 @@ pub(crate) fn codesign(destination_path: &Path) -> Result<(), LinkFileError> {
         .arg(destination_path)
         .stdout(std::process::Stdio::null()) // Suppress stdout
         .stderr(std::process::Stdio::null()) // Suppress stderr
-        .status()?;
+        .status()
+        .map_err(|err| LinkFileError::IoError(String::from("invoking /usr/bin/codesign"), err))?;
 
     if !status.success() {
         return Err(LinkFileError::FailedToSignAppleBinary);
