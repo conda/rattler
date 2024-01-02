@@ -18,17 +18,3 @@ def test_version_dash_normalisation() -> None:
 
     with pytest.raises(Exception):
         Version("1-.0dev+3.4-")
-
-
-def test_bump_fail() -> None:
-    with pytest.raises(VersionBumpError):
-        Version("1").bump_minor()
-
-    with pytest.raises(VersionBumpError):
-        Version("1.5").bump_patch()
-
-    with pytest.raises(VersionBumpError):
-        Version("1.5").bump_segment(-5)
-
-    with pytest.raises(VersionBumpError):
-        Version("1.5").bump_segment(5)

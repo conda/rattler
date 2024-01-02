@@ -77,6 +77,10 @@ class Version:
         >>> v.bump_minor()
         Version("1.1")
         >>>
+        >>> Version("1").bump_minor() # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        exceptions.VersionBumpException
+        >>>
         ```
         """
         return Version._from_py_version(self._version.bump_minor())
@@ -92,6 +96,10 @@ class Version:
         >>> v = Version('1.0.5')
         >>> v.bump_patch()
         Version("1.0.6")
+        >>>
+        >>> Version("1.5").bump_patch() # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        exceptions.VersionBumpException
         >>>
         ```
         """
@@ -124,6 +132,13 @@ class Version:
         >>> v = Version('1.0')
         >>> v.bump_segment(index=1)
         Version("1.1")
+        >>>
+        >>> Version("1.5").bump_segment(-5) # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        exceptions.VersionBumpException
+        >>> Version("1.5").bump_segment(5) # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        exceptions.VersionBumpException
         >>>
         ```
         """
