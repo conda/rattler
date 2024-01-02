@@ -40,7 +40,7 @@ impl<Operator, Element> OperatorConstraint<Operator, Element> {
     }
 }
 
-/// Define match from [`OrdOperator`] and [`BuildNumber`] as Element
+/// Define match from `OrdOperator` and `BuildNumber` as Element
 pub type BuildNumberSpec = OperatorConstraint<OrdOperator, BuildNumber>;
 
 impl Display for OrdOperator {
