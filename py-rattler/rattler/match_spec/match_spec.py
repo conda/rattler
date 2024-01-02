@@ -1,7 +1,10 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+from rattler.channel.channel import Channel
 
 from rattler.rattler import PyMatchSpec
+
+from rattler.package.package_name import PackageName
 
 if TYPE_CHECKING:
     from rattler.match_spec import NamelessMatchSpec
@@ -85,6 +88,78 @@ class MatchSpec:
                 "MatchSpec constructor received unsupported type"
                 f" {type(spec).__name__!r} for the 'spec' parameter"
             )
+
+    @property
+    def name(self) -> Optional[PackageName]:
+        """
+        The name of the package.
+        """
+        return PackageName._from_py_package_name(self._match_spec.name)
+
+    @property
+    def version(self) -> Optional[str]:
+        """
+        The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
+        """
+        return self._match_spec.version
+
+    @property
+    def build(self) -> Optional[str]:
+        """
+        The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
+        """
+        return self._match_spec.build
+
+    @property
+    def build_number(self) -> Optional[str]:
+        """
+        The build number of the package.
+        """
+        return self._match_spec.build_number
+
+    @property
+    def file_name(self) -> Optional[str]:
+        """
+        Match the specific filename of the package.
+        """
+        return self._match_spec.file_name
+
+    @property
+    def channel(self) -> Optional[Channel]:
+        """
+        The channel of the package.
+        """
+        if (channel := self._match_spec.channel) is not None:
+            return Channel(channel.name)
+        return None
+
+    @property
+    def subdir(self) -> Optional[str]:
+        """
+        The subdir of the channel.
+        """
+        return self._match_spec.subdir
+
+    @property
+    def namespace(self) -> Optional[str]:
+        """
+        The namespace of the package.
+        """
+        return self._match_spec.namespace
+
+    @property
+    def md5(self) -> Optional[bytes]:
+        """
+        The md5 hash of the package.
+        """
+        return self._match_spec.md5
+
+    @property
+    def sha256(self) -> Optional[bytes]:
+        """
+        The sha256 hash of the package.
+        """
+        return self._match_spec.sha256
 
     @classmethod
     def _from_py_match_spec(cls, py_match_spec: PyMatchSpec) -> MatchSpec:

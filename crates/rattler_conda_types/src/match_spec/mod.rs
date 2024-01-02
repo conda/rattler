@@ -271,7 +271,7 @@ pub struct NamelessMatchSpec {
     /// Match the specific filename of the package
     pub file_name: Option<String>,
     /// The channel of the package
-    #[serde(deserialize_with = "deserialize_channel")]
+    #[serde(deserialize_with = "deserialize_channel", default)]
     pub channel: Option<Arc<Channel>>,
     /// The subdir of the channel
     pub subdir: Option<String>,

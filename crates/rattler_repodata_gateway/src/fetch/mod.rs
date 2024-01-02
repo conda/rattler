@@ -1351,7 +1351,6 @@ mod test {
     pub async fn test_gzip_transfer_encoding() {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
-        let tempdir = TempDir::new().unwrap();
         write_encoded(
             FAKE_REPO_DATA.as_ref(),
             &subdir_path.path().join("repodata.json.gz"),
@@ -1368,10 +1367,9 @@ mod test {
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
         let client = Client::builder().no_gzip().build().unwrap();
-        let authenticated_client = AuthenticatedClient::from_client(
-            client,
-            AuthenticationStorage::new("rattler", tempdir.path()),
-        );
+
+        let authenticated_client =
+            AuthenticatedClient::from_client(client, AuthenticationStorage::default());
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,

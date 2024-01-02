@@ -116,6 +116,7 @@ impl Serialize for StringMatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use assert_matches::assert_matches;
 
     #[test]
     fn test_string_matcher() {
@@ -150,5 +151,37 @@ mod tests {
         assert!(!StringMatcher::from_str("^[not].*$")
             .unwrap()
             .matches("foobar"));
+    }
+
+    #[test]
+    fn test_special_characters_matches() {
+        let special_characters = "~!@#$%^&*()_-+={}[]|;:'<>,.?/";
+        for special_character in special_characters.chars() {
+            assert!(StringMatcher::from_str(&special_character.to_string())
+                .unwrap()
+                .matches(&special_character.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_invalid_regex() {
+        let _invalid_regex = "^.*[oo|bar.*$";
+        assert_matches!(
+            StringMatcher::from_str(_invalid_regex),
+            Err(StringMatcherParseError::InvalidRegex {
+                regex: _invalid_regex,
+            })
+        );
+    }
+
+    #[test]
+    fn test_invalid_glob() {
+        let _invalid_glob = "[foo*";
+        assert_matches!(
+            StringMatcher::from_str(_invalid_glob),
+            Err(StringMatcherParseError::InvalidGlob {
+                glob: _invalid_glob,
+            })
+        );
     }
 }

@@ -1,8 +1,11 @@
-use pyo3::{pyclass, pymethods, PyResult};
-use rattler_conda_types::{MatchSpec, PackageName};
-use std::str::FromStr;
+use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
+use rattler_conda_types::{Channel, MatchSpec, PackageName};
+use std::{str::FromStr, sync::Arc};
 
-use crate::{error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec, record::PyRecord};
+use crate::{
+    channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
+    package_name::PyPackageName, record::PyRecord,
+};
 
 #[pyclass]
 #[repr(transparent)]
@@ -30,6 +33,75 @@ impl PyMatchSpec {
         Ok(MatchSpec::from_str(spec)
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// The name of the package
+    #[getter]
+    pub fn name(&self) -> Option<PyPackageName> {
+        self.inner.name.clone().map(|name| name.into())
+    }
+
+    /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
+    #[getter]
+    pub fn version(&self) -> Option<String> {
+        self.inner
+            .version
+            .clone()
+            .map(|version| version.to_string())
+    }
+
+    /// The build string of the package (e.g. `py37_0`, `py37h6de7cb9_0`, `py*`)
+    #[getter]
+    pub fn build(&self) -> Option<String> {
+        self.inner.build.clone().map(|build| build.to_string())
+    }
+
+    /// The build number of the package
+    #[getter]
+    pub fn build_number(&self) -> Option<String> {
+        self.inner
+            .build_number
+            .clone()
+            .map(|build_number| build_number.to_string())
+    }
+
+    /// Match the specific filename of the package
+    #[getter]
+    pub fn file_name(&self) -> Option<String> {
+        self.inner.file_name.to_owned()
+    }
+
+    /// The channel of the package
+    #[getter]
+    pub fn channel(&self) -> Option<PyChannel> {
+        self.inner
+            .channel
+            .clone()
+            .map(|mut channel| Arc::<Channel>::make_mut(&mut channel).to_owned().into())
+    }
+
+    /// The subdir of the channel
+    #[getter]
+    pub fn subdir(&self) -> Option<String> {
+        self.inner.subdir.clone()
+    }
+
+    /// The namespace of the package (currently not used)
+    #[getter]
+    pub fn namespace(&self) -> Option<String> {
+        self.inner.namespace.clone()
+    }
+
+    /// The md5 hash of the package
+    #[getter]
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.md5.map(|md5| PyBytes::new(py, &md5))
+    }
+
+    /// The sha256 hash of the package
+    #[getter]
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.sha256.map(|sha256| PyBytes::new(py, &sha256))
     }
 
     /// Returns a string representation of MatchSpec

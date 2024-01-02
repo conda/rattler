@@ -1,0 +1,35 @@
+{
+  "arch": "x86_64",
+  "build": "py38haa244fe_1",
+  "build_number": 1,
+  "constrains": [
+    "conda-content-trust >=0.1.1",
+    "cytoolz >=0.8.1",
+    "conda-libmamba-solver >=22.12.0",
+    "conda-env >=2.6",
+    "conda-build >=3"
+  ],
+  "depends": [
+    "conda-package-handling >=1.3.0",
+    "menuinst >=1.4.11,<2",
+    "pluggy >=1.0.0",
+    "pycosat >=0.6.3",
+    "pyopenssl >=16.2.0",
+    "python >=3.8,<3.9.0a0",
+    "python_abi 3.8.* *_cp38",
+    "requests >=2.20.1,<3",
+    "ruamel.yaml >=0.11.14,<0.18",
+    "setuptools >=31.0.1",
+    "toolz >=0.8.1",
+    "tqdm >=4"
+  ],
+  "license": "BSD-3-Clause",
+  "md5": "9987c96161034575f5a9c2be848960c5",
+  "name": "conda",
+  "platform": "win",
+  "sha256": "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
+  "size": 928900,
+  "subdir": "win-64",
+  "timestamp": 1670456742050,
+  "version": "22.11.1"
+}
