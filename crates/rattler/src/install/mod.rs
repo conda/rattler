@@ -250,10 +250,10 @@ pub async fn link_package(
 
     // Start linking all package files in parallel
     let mut number_of_paths_entries = 0;
-    for entry in paths_json.paths.into_iter() {
+    for entry in paths_json.paths {
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
-        let target_prefix = target_prefix.to_owned();
+        let target_prefix = target_prefix.clone();
         let python_info = python_info.clone();
 
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
@@ -325,7 +325,7 @@ pub async fn link_package(
             let tx = tx.clone();
             let python_info = python_info.clone();
             let target_dir = target_dir.to_owned();
-            let target_prefix = target_prefix.to_owned();
+            let target_prefix = target_prefix.clone();
 
             if platform.is_windows() {
                 driver.spawn_throttled_and_forget(move || {
@@ -500,7 +500,7 @@ async fn read_link_json(
     }
 }
 
-/// A helper struct for a BinaryHeap to provides ordering to items that are otherwise unordered.
+/// A helper struct for a `BinaryHeap` to provides ordering to items that are otherwise unordered.
 struct OrderWrapper<T> {
     index: usize,
     data: T,
@@ -530,7 +530,7 @@ impl<T> Ord for OrderWrapper<T> {
 /// Returns true if it is possible to create symlinks in the target directory.
 async fn can_create_symlinks(target_dir: &Path) -> bool {
     let uuid = uuid::Uuid::new_v4();
-    let symlink_path = target_dir.join(format!("symtest_{}", uuid));
+    let symlink_path = target_dir.join(format!("symtest_{uuid}"));
     #[cfg(windows)]
     let result = tokio::fs::symlink_file("./", &symlink_path).await;
     #[cfg(unix)]

@@ -34,7 +34,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
     // Convert the hash to an MD5 hash.
     let mut result = String::with_capacity(8);
     for x in &hash[0..4] {
-        write!(result, "{:02x}", x).unwrap();
+        write!(result, "{x:02x}").unwrap();
     }
     result
 }

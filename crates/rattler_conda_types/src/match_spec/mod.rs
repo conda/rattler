@@ -424,7 +424,7 @@ mod tests {
         let spec_as_string = spec.to_string();
         let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
 
-        assert_eq!(spec, rebuild_spec)
+        assert_eq!(spec, rebuild_spec);
     }
 
     #[test]
@@ -434,8 +434,10 @@ mod tests {
         assert_eq!(spec1, spec2);
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let hash1 = spec1.hash(&mut hasher);
-        let hash2 = spec2.hash(&mut hasher);
+        spec1.hash(&mut hasher);
+        let hash1 = hasher.finish();
+        spec2.hash(&mut hasher);
+        let hash2 = hasher.finish();
 
         assert_eq!(hash1, hash2);
     }

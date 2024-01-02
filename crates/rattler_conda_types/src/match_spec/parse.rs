@@ -4,7 +4,10 @@ use crate::build_spec::{BuildNumberSpec, ParseBuildNumberSpecError};
 use crate::package::ArchiveType;
 use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
 use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError, VersionSpec};
+use crate::{
+    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
+    ParseChannelError, VersionSpec,
+};
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
 use nom::character::complete::{char, multispace0, one_of};
@@ -475,34 +478,34 @@ mod tests {
         split_version_and_build, strip_brackets, BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::match_spec::parse::parse_bracket_list;
-    use crate::{BuildNumberSpec, Channel, NamelessMatchSpec, VersionSpec};
+    use crate::{BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
 
     #[test]
     fn test_strip_brackets() {
         let result = strip_brackets(r#"bla [version="1.2.3"]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version='1.2.3']"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"conda-forge::bla[version=1]"#).unwrap();
         assert_eq!(result.0, "conda-forge::bla");
-        let expected: BracketVec = smallvec![("version", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1")];
         assert_eq!(result.1, expected);
 
         let result = strip_brackets(r#"bla [version="1.2.3", build_number=1]"#).unwrap();
         assert_eq!(result.0, "bla ");
-        let expected: BracketVec = smallvec![("version", "1.2.3"), ("build_number", "1")];
+        let expected: BracketVec<'_> = smallvec![("version", "1.2.3"), ("build_number", "1")];
         assert_eq!(result.1, expected);
 
         assert_matches!(
@@ -578,8 +581,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -590,8 +593,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -603,8 +606,8 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &Default::default())
-                    .map(|channel| Arc::new(channel))
+                Channel::from_str("conda-forge", &ChannelConfig::default())
+                    .map(Arc::new)
                     .unwrap()
             )
         );
@@ -695,6 +698,13 @@ mod tests {
 
     #[test]
     fn test_from_str() {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum MatchSpecOrError {
+            Error { error: String },
+            MatchSpec(MatchSpec),
+        }
+
         // A list of matchspecs to parse.
         // Please keep this list sorted.
         let specs = [
@@ -706,23 +716,17 @@ mod tests {
             "x264 >=1!164.3095,<1!165",
         ];
 
-        #[derive(Serialize)]
-        #[serde(untagged)]
-        enum MatchSpecOrError {
-            Error { error: String },
-            MatchSpec(MatchSpec),
-        }
-
         let evaluated: BTreeMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
                     spec,
-                    MatchSpec::from_str(spec)
-                        .map(MatchSpecOrError::MatchSpec)
-                        .unwrap_or_else(|err| MatchSpecOrError::Error {
+                    MatchSpec::from_str(spec).map_or_else(
+                        |err| MatchSpecOrError::Error {
                             error: err.to_string(),
-                        }),
+                        },
+                        MatchSpecOrError::MatchSpec,
+                    ),
                 )
             })
             .collect();

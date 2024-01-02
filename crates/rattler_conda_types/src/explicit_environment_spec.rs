@@ -200,7 +200,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use hex_literal::hex;
-    use rstest::{self, *};
+    use rstest::{self, rstest};
     use std::str::FromStr;
     use url::Url;
 
@@ -210,7 +210,7 @@ mod test {
     #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
     fn test_parse(#[case] path: &str) {
         let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
-        insta::assert_yaml_snapshot!(path, env)
+        insta::assert_yaml_snapshot!(path, env);
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod test {
         assert_matches!(
             entry.package_archive_hash(),
             Ok(Some(PackageArchiveHash::Md5(hash))) if hash[..] == hex!("a98ea1e3abfdbbd201d60ff6b43ea7e4")
-        )
+        );
     }
 
     #[test]

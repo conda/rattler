@@ -54,7 +54,7 @@ pub fn detect_cuda_version_via_nvml() -> Option<Version> {
 
     // Get the initialization function. We first try to get `nvmlInit_v2` but if we can't find that
     // we use the `nvmlInit` function.
-    let nvml_init: Symbol<unsafe extern "C" fn() -> c_int> = unsafe {
+    let nvml_init: Symbol<'_, unsafe extern "C" fn() -> c_int> = unsafe {
         library
             .get(b"nvmlInit_v2\0")
             .or_else(|_| library.get(b"nvmlInit\0"))
@@ -62,12 +62,12 @@ pub fn detect_cuda_version_via_nvml() -> Option<Version> {
     .ok()?;
 
     // Find the shutdown function
-    let nvml_shutdown: Symbol<unsafe extern "C" fn() -> c_int> =
+    let nvml_shutdown: Symbol<'_, unsafe extern "C" fn() -> c_int> =
         unsafe { library.get(b"nvmlShutdown\0") }.ok()?;
 
     // Find the `nvmlSystemGetCudaDriverVersion_v2` function. If that function cannot be found, fall
     // back to the `nvmlSystemGetCudaDriverVersion` function instead.
-    let nvml_system_get_cuda_driver_version: Symbol<unsafe extern "C" fn(*mut c_int) -> c_int> =
+    let nvml_system_get_cuda_driver_version: Symbol<'_, unsafe extern "C" fn(*mut c_int) -> c_int> =
         unsafe {
             library
                 .get(b"nvmlSystemGetCudaDriverVersion_v2\0")
@@ -150,9 +150,9 @@ pub fn detect_cuda_version_via_libcuda() -> Option<Version> {
         .find_map(|path| unsafe { libloading::Library::new(*path).ok() })?;
 
     // Get entry points from the library
-    let cu_init: Symbol<unsafe extern "C" fn(c_uint) -> c_ulong> =
+    let cu_init: Symbol<'_, unsafe extern "C" fn(c_uint) -> c_ulong> =
         unsafe { cuda_library.get(b"cuInit\0") }.ok()?;
-    let cu_driver_get_version: Symbol<unsafe extern "C" fn(*mut c_int) -> c_ulong> =
+    let cu_driver_get_version: Symbol<'_, unsafe extern "C" fn(*mut c_int) -> c_ulong> =
         unsafe { cuda_library.get(b"cuDriverGetVersion\0") }.ok()?;
 
     // Initialize the CUDA library
@@ -260,12 +260,12 @@ mod test {
     #[test]
     pub fn doesnt_crash() {
         let version = detect_cuda_version_via_nvml();
-        println!("Cuda {:?}", version);
+        println!("Cuda {version:?}");
     }
 
     #[test]
     pub fn doesnt_crash_nvidia_smi() {
         let version = detect_cuda_version_via_nvidia_smi();
-        println!("Cuda {:?}", version);
+        println!("Cuda {version:?}");
     }
 }

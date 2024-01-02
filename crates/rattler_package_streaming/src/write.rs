@@ -22,8 +22,8 @@ fn sort_paths<'a>(
         .map(|p| p.strip_prefix(base_path).unwrap())
         .partition(|&path| path.starts_with(info));
 
-    let info_paths = sorted(info_paths.into_iter().map(|p| p.to_path_buf()));
-    let other_paths = sorted(other_paths.into_iter().map(|p| p.to_path_buf()));
+    let info_paths = sorted(info_paths.into_iter().map(std::path::Path::to_path_buf));
+    let other_paths = sorted(other_paths.into_iter().map(std::path::Path::to_path_buf));
 
     (info_paths, other_paths)
 }
@@ -110,7 +110,7 @@ impl CompressionLevel {
 ///
 /// # See also
 ///
-/// * [write_conda_package]
+/// * [`write_conda_package`]
 pub fn write_tar_bz2_package<W: Write>(
     writer: W,
     base_path: &Path,

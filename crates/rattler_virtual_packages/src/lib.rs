@@ -186,7 +186,7 @@ impl From<Linux> for VirtualPackage {
     }
 }
 
-/// LibC virtual package description
+/// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
     /// The family of LibC. This could be glibc for instance.
@@ -197,10 +197,10 @@ pub struct LibC {
 }
 
 impl LibC {
-    /// Returns the LibC family and version of the current platform.
+    /// Returns the `LibC` family and version of the current platform.
     ///
-    /// Returns an error if determining the LibC family and version resulted in an error. Returns
-    /// `None` if the current platform does not have an available version of LibC.
+    /// Returns an error if determining the `LibC` family and version resulted in an error. Returns
+    /// `None` if the current platform does not have an available version of `LibC`.
     pub fn current() -> Result<Option<Self>, DetectLibCError> {
         Ok(libc::libc_family_and_version()?.map(|(family, version)| Self { family, version }))
     }
@@ -349,6 +349,6 @@ mod test {
     #[test]
     fn doesnt_crash() {
         let virtual_packages = VirtualPackage::current().unwrap();
-        println!("{:?}", virtual_packages);
+        println!("{virtual_packages:?}");
     }
 }

@@ -79,7 +79,7 @@ impl FallbackStorage {
         self.write_json(&dict)
     }
 
-    /// Read the JSON file and deserialize it into a HashMap, or return an empty HashMap if the file
+    /// Read the JSON file and deserialize it into a `HashMap`, or return an empty `HashMap` if the file
     /// does not exist
     fn read_json(&self) -> Result<HashMap<String, String>, FallbackStorageError> {
         if !self.path.exists() {
@@ -100,7 +100,7 @@ impl FallbackStorage {
         Ok(dict)
     }
 
-    /// Serialize the given HashMap and write it to the JSON file
+    /// Serialize the given `HashMap` and write it to the JSON file
     fn write_json(&self, dict: &HashMap<String, String>) -> Result<(), FallbackStorageError> {
         let file = std::fs::File::create(&self.path)?;
         let writer = std::io::BufWriter::new(file);

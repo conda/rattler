@@ -32,7 +32,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
-use sys::*;
+use sys::{error_contended, error_unsupported, lock_exclusive, lock_shared, try_lock_exclusive, try_lock_shared, unlock};
 
 #[derive(Debug)]
 pub struct LockedFile {

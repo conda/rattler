@@ -217,13 +217,13 @@ mod test {
     fn load_test_repodata() -> RepoData {
         let repodata_path = test_data_path().join("linux-64/repodata_from_packages.json");
         let repodata: RepoData =
-            serde_json::from_str(&std::fs::read_to_string(&repodata_path).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(repodata_path).unwrap()).unwrap();
         repodata
     }
 
     fn load_patch_instructions(name: &str) -> PatchInstructions {
         let patch_instructions_path = test_data_path().join("linux-64").join(name);
-        let patch_instructions = std::fs::read_to_string(&patch_instructions_path).unwrap();
+        let patch_instructions = std::fs::read_to_string(patch_instructions_path).unwrap();
         let patch_instructions: PatchInstructions =
             serde_json::from_str(&patch_instructions).unwrap();
         patch_instructions

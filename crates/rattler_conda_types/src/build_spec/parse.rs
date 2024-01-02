@@ -152,7 +152,7 @@ mod test {
         ];
 
         for (s, op) in test_params {
-            assert_eq!(OrdOperator::parser(s), Ok(("3.1", op)))
+            assert_eq!(OrdOperator::parser(s), Ok(("3.1", op)));
         }
 
         assert_eq!(
@@ -182,7 +182,7 @@ mod test {
             assert_eq!(
                 BuildNumberSpec::parser(s),
                 Ok(("", BuildNumberSpec::new(op, 1)))
-            )
+            );
         }
 
         assert_eq!(

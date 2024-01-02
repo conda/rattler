@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn test_treeify() {
-        use LogicalOperator::*;
-        use VersionTree::*;
+        use LogicalOperator::{And, Or};
+        use VersionTree::{Group, Term};
 
         assert_eq!(VersionTree::try_from("1.2.3").unwrap(), Term("1.2.3"));
 
@@ -263,38 +263,38 @@ mod tests {
         type Err<'a> = nom::error::Error<&'a str>;
 
         assert_eq!(
-            parse_operator::<Err>("=="),
+            parse_operator::<Err<'_>>("=="),
             Ok(("", VersionOperators::Exact(EqualityOperator::Equals)))
         );
         assert_eq!(
-            parse_operator::<Err>("!="),
+            parse_operator::<Err<'_>>("!="),
             Ok(("", VersionOperators::Exact(EqualityOperator::NotEquals)))
         );
         assert_eq!(
-            parse_operator::<Err>(">"),
+            parse_operator::<Err<'_>>(">"),
             Ok(("", VersionOperators::Range(RangeOperator::Greater)))
         );
         assert_eq!(
-            parse_operator::<Err>(">="),
+            parse_operator::<Err<'_>>(">="),
             Ok(("", VersionOperators::Range(RangeOperator::GreaterEquals)))
         );
         assert_eq!(
-            parse_operator::<Err>("<"),
+            parse_operator::<Err<'_>>("<"),
             Ok(("", VersionOperators::Range(RangeOperator::Less)))
         );
         assert_eq!(
-            parse_operator::<Err>("<="),
+            parse_operator::<Err<'_>>("<="),
             Ok(("", VersionOperators::Range(RangeOperator::LessEquals)))
         );
         assert_eq!(
-            parse_operator::<Err>("="),
+            parse_operator::<Err<'_>>("="),
             Ok((
                 "",
                 VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
             ))
         );
         assert_eq!(
-            parse_operator::<Err>("~="),
+            parse_operator::<Err<'_>>("~="),
             Ok((
                 "",
                 VersionOperators::StrictRange(StrictRangeOperator::Compatible)
@@ -302,12 +302,12 @@ mod tests {
         );
 
         // Anything else is an error
-        assert!(parse_operator::<Err>("").is_err());
-        assert!(parse_operator::<Err>("  >=").is_err());
+        assert!(parse_operator::<Err<'_>>("").is_err());
+        assert!(parse_operator::<Err<'_>>("  >=").is_err());
 
         // Only the operator is parsed
         assert_eq!(
-            parse_operator::<Err>(">=3.8"),
+            parse_operator::<Err<'_>>(">=3.8"),
             Ok(("3.8", VersionOperators::Range(RangeOperator::GreaterEquals)))
         );
     }
@@ -407,17 +407,20 @@ mod tests {
     fn test_recognize_constraint() {
         type Err<'a> = nom::error::Error<&'a str>;
 
-        assert_eq!(recognize_constraint::<Err>("*"), Ok(("", "*")));
-        assert_eq!(recognize_constraint::<Err>("3.8"), Ok(("", "3.8")));
-        assert_eq!(recognize_constraint::<Err>("3.8*"), Ok(("", "3.8*")));
-        assert_eq!(recognize_constraint::<Err>("3.8.*"), Ok(("", "3.8.*")));
-        assert_eq!(recognize_constraint::<Err>(">=3.8.*"), Ok(("", ">=3.8.*")));
+        assert_eq!(recognize_constraint::<Err<'_>>("*"), Ok(("", "*")));
+        assert_eq!(recognize_constraint::<Err<'_>>("3.8"), Ok(("", "3.8")));
+        assert_eq!(recognize_constraint::<Err<'_>>("3.8*"), Ok(("", "3.8*")));
+        assert_eq!(recognize_constraint::<Err<'_>>("3.8.*"), Ok(("", "3.8.*")));
         assert_eq!(
-            recognize_constraint::<Err>(">=3.8.*<3.9"),
+            recognize_constraint::<Err<'_>>(">=3.8.*"),
+            Ok(("", ">=3.8.*"))
+        );
+        assert_eq!(
+            recognize_constraint::<Err<'_>>(">=3.8.*<3.9"),
             Ok(("<3.9", ">=3.8.*"))
         );
         assert_eq!(
-            recognize_constraint::<Err>(">=3.8.*,<3.9"),
+            recognize_constraint::<Err<'_>>(">=3.8.*,<3.9"),
             Ok((",<3.9", ">=3.8.*"))
         );
     }

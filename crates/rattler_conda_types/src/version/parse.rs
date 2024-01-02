@@ -466,6 +466,13 @@ mod test {
 
     #[test]
     fn test_parse() {
+        #[derive(Debug, Serialize)]
+        #[serde(untagged)]
+        enum VersionOrError {
+            Version(Version),
+            Error(String),
+        }
+
         let versions = [
             "$",
             ".",
@@ -490,13 +497,6 @@ mod test {
             "1-_",
             "1_-",
         ];
-
-        #[derive(Debug, Serialize)]
-        #[serde(untagged)]
-        enum VersionOrError {
-            Version(Version),
-            Error(String),
-        }
 
         let mut index_map: BTreeMap<String, VersionOrError> = BTreeMap::default();
         for version_str in versions {
@@ -535,7 +535,7 @@ mod test {
         .unwrap();
         for line in versions.lines() {
             // Skip comments and empty lines
-            if line.trim_start().starts_with("#") || line.trim().is_empty() {
+            if line.trim_start().starts_with('#') || line.trim().is_empty() {
                 continue;
             }
 

@@ -29,7 +29,7 @@ pub struct AuthenticationStorage {
 impl AuthenticationStorage {
     /// Create a new authentication storage with the given store key
     pub fn new(store_key: &str, fallback_folder: &Path) -> AuthenticationStorage {
-        let fallback_location = fallback_folder.join(format!("{}_auth_store.json", store_key));
+        let fallback_location = fallback_folder.join(format!("{store_key}_auth_store.json"));
         AuthenticationStorage {
             store_key: store_key.to_string(),
             fallback_storage: fallback_storage::FallbackStorage::new(fallback_location),

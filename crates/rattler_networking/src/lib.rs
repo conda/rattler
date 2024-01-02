@@ -98,7 +98,7 @@ impl AuthenticatedClient {
                 Authentication::CondaToken(token) => {
                     let path = url.path();
                     let mut new_path = String::new();
-                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(format!("/t/{token}").as_str());
                     new_path.push_str(path);
                     let mut url = url.clone();
                     url.set_path(&new_path);
@@ -182,9 +182,9 @@ impl AuthenticatedClientBlocking {
                 self.client.request(method, url_clone)
             }
             Ok((url, auth)) => {
-                let url = self.authenticate_url(url, &auth);
+                let url = Self::authenticate_url(url, &auth);
                 let request_builder = self.client.request(method, url);
-                self.authenticate_request(request_builder, &auth)
+                Self::authenticate_request(request_builder, &auth)
             }
         }
     }
@@ -259,7 +259,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());
@@ -301,7 +301,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());
@@ -348,7 +348,7 @@ mod tests {
         let retrieved = storage.get(host);
 
         if let Err(e) = retrieved.as_ref() {
-            println!("{:?}", e);
+            println!("{e:?}");
         }
 
         assert!(retrieved.is_ok());

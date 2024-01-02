@@ -254,7 +254,7 @@ fn parse_records<'i>(
 
 /// A helper function that immediately loads the records for the given packages (and their dependencies).
 /// Records for the specified packages are loaded from the repodata files.
-/// The patch_record_fn is applied to each record after it has been parsed and can mutate the record after
+/// The `patch_record_fn` is applied to each record after it has been parsed and can mutate the record after
 /// it has been loaded.
 pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
@@ -316,7 +316,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     {
         type Value = I;
 
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             formatter.write_str("a map")
         }
 
@@ -425,7 +425,7 @@ mod test {
         let sparse_empty_data = load_sparse(["_libgcc_mutex"]).await;
         let total_records = sparse_empty_data
             .iter()
-            .map(|repo| repo.len())
+            .map(std::vec::Vec::len)
             .sum::<usize>();
 
         assert_eq!(total_records, 3);
@@ -436,7 +436,7 @@ mod test {
         let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
         let total_records = sparse_empty_data
             .iter()
-            .map(|repo| repo.len())
+            .map(std::vec::Vec::len)
             .sum::<usize>();
 
         // Number of records should still be 3. The duplicate package name should be ignored.
@@ -449,7 +449,7 @@ mod test {
 
         let total_records = sparse_empty_data
             .iter()
-            .map(|repo| repo.len())
+            .map(std::vec::Vec::len)
             .sum::<usize>();
 
         assert_eq!(total_records, 21731);
@@ -485,7 +485,7 @@ mod test {
 
         let total_records = sparse_empty_data
             .iter()
-            .map(|repo| repo.len())
+            .map(std::vec::Vec::len)
             .sum::<usize>();
 
         assert_eq!(total_records, 16064);

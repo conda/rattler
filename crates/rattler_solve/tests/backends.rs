@@ -489,7 +489,7 @@ macro_rules! solver_backend_tests {
 
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
-    use super::*;
+    use super::{FromStr, GenericVirtualPackage, SolveError, Version, dummy_channel_json_path, installed_package, solve, solve_real_world};
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
@@ -562,7 +562,7 @@ mod libsolv_c {
 
 #[cfg(feature = "resolvo")]
 mod resolvo {
-    use super::*;
+    use super::{FromStr, GenericVirtualPackage, SolveError, Version, dummy_channel_json_path, installed_package, solve, solve_real_world};
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 

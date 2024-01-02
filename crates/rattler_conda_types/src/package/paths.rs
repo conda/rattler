@@ -311,6 +311,8 @@ mod test {
 
     #[test]
     pub fn test_paths_sorted() {
+        use rand::seq::SliceRandom;
+
         // create some fake data
         let mut paths = vec![];
         for i in 0..15 {
@@ -325,7 +327,6 @@ mod test {
         }
 
         // shuffle the data
-        use rand::seq::SliceRandom;
         let mut rng = rand::thread_rng();
         paths.shuffle(&mut rng);
 

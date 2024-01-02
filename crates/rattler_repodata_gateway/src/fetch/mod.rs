@@ -30,7 +30,7 @@ pub mod jlap;
 /// Type alias for function to report progress while downloading repodata
 pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
 
-/// RepoData could not be found for given channel and platform
+/// `RepoData` could not be found for given channel and platform
 #[derive(Debug, thiserror::Error)]
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
@@ -281,7 +281,7 @@ async fn repodata_from_file(
 
     Ok(CachedRepoData {
         lock_file,
-        repo_data_json_path: out_path.to_path_buf(),
+        repo_data_json_path: out_path.clone(),
         cache_state: new_cache_state,
         cache_result: CacheResult::CacheHit,
     })
@@ -322,8 +322,8 @@ pub async fn fetch_repo_data(
             .join(options.variant.file_name())
             .expect("file name is valid"),
     );
-    let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
+    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Lock all files that have to do with that cache key
     let lock_file_path = cache_path.join(format!("{}.lock", &cache_key));
@@ -718,24 +718,21 @@ impl VariantAvailability {
     pub fn has_zst(&self) -> bool {
         self.has_zst
             .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+            .map_or(false, |state| state.value)
     }
 
     /// Returns true if there is a Bz2 variant available, regardless of when it was checked
     pub fn has_bz2(&self) -> bool {
         self.has_bz2
             .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+            .map_or(false, |state| state.value)
     }
 
     /// Returns true if there is a JLAP variant available, regardless of when it was checked
     pub fn has_jlap(&self) -> bool {
         self.has_jlap
             .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+            .map_or(false, |state| state.value)
     }
 }
 
@@ -902,8 +899,8 @@ fn validate_cached_state(
     subdir_url: &Url,
     cache_key: &str,
 ) -> ValidatedCacheState {
-    let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
+    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Check if we have cached repodata.json file
     let json_metadata = match std::fs::metadata(&repo_data_json_path) {

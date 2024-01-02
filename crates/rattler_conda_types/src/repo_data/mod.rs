@@ -210,7 +210,7 @@ impl RepoData {
                 channel: channel_name.clone(),
                 package_record,
                 file_name: filename,
-            })
+            });
         }
         records
     }
@@ -276,7 +276,7 @@ impl PackageRecord {
             license_family: None,
             md5: None,
             name,
-            noarch: Default::default(),
+            noarch: NoArchType::default(),
             platform: None,
             sha256: None,
             size: None,
@@ -422,6 +422,7 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 mod test {
     use crate::repo_data::{compute_package_url, determine_subdir};
     use fxhash::FxHashSet;
+    use std::collections::HashMap;
 
     use crate::{Channel, ChannelConfig, RepoData};
 
@@ -441,14 +442,13 @@ mod test {
     fn test_serialize() {
         let repodata = RepoData {
             version: Some(2),
-            info: Default::default(),
-            packages: Default::default(),
-            conda_packages: Default::default(),
-            removed: FxHashSet::from_iter(
-                ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
-                    .iter()
-                    .map(|s| s.to_string()),
-            ),
+            info: None,
+            packages: FxHashMap::default(),
+            conda_packages: FxHashMap::default(),
+            removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         };
         insta::assert_yaml_snapshot!(repodata);
     }

@@ -160,9 +160,6 @@ impl FromStr for VersionSpec {
     type Err = ParseVersionSpecError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let version_tree =
-            VersionTree::try_from(s).map_err(ParseVersionSpecError::InvalidVersionTree)?;
-
         fn parse_tree(tree: VersionTree<'_>) -> Result<VersionSpec, ParseVersionSpecError> {
             match tree {
                 VersionTree::Term(str) => Ok(Constraint::from_str(str)
@@ -177,6 +174,9 @@ impl FromStr for VersionSpec {
                 )),
             }
         }
+
+        let version_tree =
+            VersionTree::try_from(s).map_err(ParseVersionSpecError::InvalidVersionTree)?;
 
         parse_tree(version_tree)
     }
@@ -386,7 +386,7 @@ mod tests {
         assert!(!vs2.matches(&v2));
 
         let v3 = Version::from_str("1!1.2.3").unwrap();
-        println!("{:?}", v3);
+        println!("{v3:?}");
 
         assert!(!vs1.matches(&v3));
         assert!(!vs2.matches(&v3));

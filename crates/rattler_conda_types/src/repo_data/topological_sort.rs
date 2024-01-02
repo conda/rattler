@@ -291,7 +291,7 @@ mod tests {
 
             // All the package's dependencies must have already been installed
             for dep in deps {
-                let dep_name = package_name_from_match_spec(&dep);
+                let dep_name = package_name_from_match_spec(dep);
 
                 if circular_dependencies.contains(&(name, dep_name)) {
                     // Ignore circular dependencies
@@ -344,7 +344,7 @@ mod tests {
         #[case] circular_deps: &[(&str, &str)],
     ) {
         let sorted_packages = sort_topologically(packages.clone());
-        let circular_deps = circular_deps.into_iter().cloned().collect();
+        let circular_deps = circular_deps.iter().cloned().collect();
 
         sanity_check_topological_sort(&sorted_packages, &packages);
         simulate_install(&sorted_packages, &circular_deps);
@@ -354,7 +354,7 @@ mod tests {
         assert_eq!(
             last_package.package_record.name.as_normalized(),
             expected_last_package
-        )
+        );
     }
 
     fn get_resolved_packages_for_two_roots() -> Vec<RepoDataRecord> {
@@ -1829,6 +1829,6 @@ mod tests {
         let mut python = get_resolved_packages_for_python();
         let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
         python.extend(pip);
-        return python;
+        python
     }
 }
