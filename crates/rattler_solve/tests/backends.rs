@@ -500,8 +500,8 @@ mod libsolv_c {
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
         use super::read_repodata;
-        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, SolverTask};
-        use rattler_solve::SolverImpl;
+        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
+        use rattler_solve::{SolverImpl, SolverTask};
 
         let repo_data = read_repodata(&dummy_channel_json_path());
 
