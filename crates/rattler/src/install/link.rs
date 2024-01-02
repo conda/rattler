@@ -52,8 +52,8 @@ impl fmt::Display for LinkMethod {
 #[derive(Debug, thiserror::Error)]
 pub enum LinkFileError {
     /// An IO error occurred.
-    #[error(transparent)]
-    IoError(#[from] std::io::Error),
+    #[error("unexpected io operation while {0}")]
+    IoError(String, #[source] std::io::Error),
 
     /// The parent directory of the destination file could not be created.
     #[error("failed to create parent directory")]
@@ -208,7 +208,8 @@ pub fn link_file(
             placeholder,
             &target_prefix,
             *file_mode,
-        )?;
+        )
+        .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
 
         let (mut file, current_hash) = destination_writer.finalize();
 
@@ -355,9 +356,17 @@ fn hardlink_to_destination(
         match std::fs::hard_link(source_path, destination_path) {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(destination_path)?;
+                std::fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
             }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Hardlink, e)),
+            Err(e) => {
+                tracing::error!(
+                    "failed to hardlink {}: {e}, falling back to copying.",
+                    destination_path.display()
+                );
+                return copy_to_destination(source_path, destination_path);
+            }
         }
     }
 }
@@ -376,9 +385,17 @@ fn symlink_to_destination(
         match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(()),
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
-                std::fs::remove_file(destination_path)?;
+                std::fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
             }
-            Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Softlink, e)),
+            Err(e) => {
+                tracing::error!(
+                    "failed to symlink {}: {e}, falling back to copying.",
+                    destination_path.display()
+                );
+                return copy_to_destination(source_path, destination_path);
+            }
         }
     }
 }
@@ -390,7 +407,9 @@ fn copy_to_destination(source_path: &Path, destination_path: &Path) -> Result<()
         match std::fs::copy(source_path, destination_path) {
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 // If the file already exists, remove it and try again.
-                std::fs::remove_file(destination_path)?;
+                std::fs::remove_file(destination_path).map_err(|err| {
+                    LinkFileError::IoError(String::from("removing clobbered file"), err)
+                })?;
             }
             Ok(_) => return Ok(()),
             Err(e) => return Err(LinkFileError::FailedToLink(LinkMethod::Copy, e)),

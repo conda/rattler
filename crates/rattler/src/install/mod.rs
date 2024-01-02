@@ -235,7 +235,7 @@ pub async fn link_package(
         // Determine if we can use hard links
         match options.allow_hard_links {
             Some(value) => ready(value).left_future(),
-            None => can_create_hardlinks(&paths_json, target_dir, package_dir).right_future(),
+            None => can_create_hardlinks(target_dir, package_dir).right_future(),
         }
     );
 
@@ -553,37 +553,27 @@ async fn can_create_symlinks(target_dir: &Path) -> bool {
 
 /// Returns true if it is possible to create hard links from the target directory to the package
 /// cache directory.
-async fn can_create_hardlinks(
-    paths_json: &PathsJson,
-    target_dir: &Path,
-    package_dir: &Path,
-) -> bool {
-    let dst_link_path = target_dir.join(format!("sentinel_{}", uuid::Uuid::new_v4()));
-    let src_link_path = match paths_json.paths.first() {
-        Some(path) => package_dir.join(&path.relative_path),
-        None => return false,
-    };
-    tokio::task::spawn_blocking(
-        move || match std::fs::hard_link(&src_link_path, &dst_link_path) {
-            Ok(_) => {
-                if let Err(e) = std::fs::remove_file(&dst_link_path) {
-                    tracing::warn!(
-                        "failed to delete temporary file '{}': {e}",
-                        dst_link_path.display()
-                    );
-                }
-                true
-            }
-            Err(e) => {
-                tracing::debug!(
-                "failed to create hard link in target directory: {e}. Disabling use of hard links."
-            );
-                false
-            }
-        },
-    )
-    .await
-    .unwrap_or(false)
+async fn can_create_hardlinks(target_dir: &Path, package_dir: &Path) -> bool {
+    paths_have_same_filesystem(target_dir, package_dir).await
+}
+
+/// Returns true if two paths share the same filesystem
+#[cfg(unix)]
+async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match tokio::join!(tokio::fs::metadata(a), tokio::fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev(),
+        _ => false,
+    }
+}
+
+/// Returns true if two paths share the same filesystem
+#[cfg(not(unix))]
+async fn paths_have_same_filesystem(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a.components().next() == b.components().next(),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
