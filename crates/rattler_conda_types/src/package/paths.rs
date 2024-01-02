@@ -246,12 +246,12 @@ pub enum PathType {
     Directory,
 }
 
-/// Returns the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns the default value for the `no_link` value of a [`PathsEntry`]
 fn no_link_default() -> bool {
     false
 }
 
-/// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns true if the value is equal to the default value for the `no_link` value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
 }

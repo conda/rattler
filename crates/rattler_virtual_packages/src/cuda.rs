@@ -217,6 +217,11 @@ fn cuda_library_paths() -> &'static [&'static str] {
 /// dynamically load a library which might not be supported on all systems. The downside is that
 /// executing a subprocess is generally slower and more prone to errors.
 fn detect_cuda_version_via_nvidia_smi() -> Option<Version> {
+    static CUDA_VERSION_RE: once_cell::sync::Lazy<regex::Regex> =
+        once_cell::sync::Lazy::new(|| {
+            regex::Regex::new("<cuda_version>(.*)<\\/cuda_version>").unwrap()
+        });
+
     // Invoke the "nvidia-smi" command to query the driver version that is usually installed when
     // Cuda drivers are installed.
     let nvidia_smi_output = Command::new("nvidia-smi")
@@ -240,10 +245,6 @@ fn detect_cuda_version_via_nvidia_smi() -> Option<Version> {
     // characters. If thats the case we simply assume the version in the file also wont make sense
     // during parsing.
     let output = String::from_utf8_lossy(&nvidia_smi_output.stdout);
-    static CUDA_VERSION_RE: once_cell::sync::Lazy<regex::Regex> =
-        once_cell::sync::Lazy::new(|| {
-            regex::Regex::new("<cuda_version>(.*)<\\/cuda_version>").unwrap()
-        });
 
     // Extract the version from the XML
     let version_match = CUDA_VERSION_RE.captures(&output)?;

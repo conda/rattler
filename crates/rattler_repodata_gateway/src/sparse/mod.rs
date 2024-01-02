@@ -1,6 +1,8 @@
 //! This module provides the [`SparseRepoData`] which is a struct to enable only sparsely loading records
 //! from a `repodata.json` file.
 
+#![allow(clippy::mem_forget)]
+
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
 use rattler_conda_types::{
@@ -39,6 +41,7 @@ pub struct SparseRepoData {
 
 /// A struct that holds a memory map of a `repodata.json` file and also a self-referential field which
 /// indexes the data in the memory map with a sparsely parsed json struct. See [`LazyRepoData`].
+
 #[ouroboros::self_referencing]
 struct SparseRepoDataInner {
     /// Memory map of the `repodata.json` file
@@ -127,13 +130,13 @@ impl SparseRepoData {
         let repo_data: Vec<_> = repo_data.into_iter().collect();
 
         // Construct the result map
-        let mut result = Vec::from_iter((0..repo_data.len()).map(|_| Vec::new()));
+        let mut result: Vec<_> = (0..repo_data.len()).map(|_| Vec::new()).collect();
 
         // Construct a set of packages that we have seen and have been added to the pending list.
-        let mut seen: HashSet<PackageName> = HashSet::from_iter(package_names);
+        let mut seen: HashSet<PackageName> = package_names.into_iter().collect();
 
         // Construct a queue to store packages in that still need to be processed
-        let mut pending = VecDeque::from_iter(seen.iter().cloned());
+        let mut pending: VecDeque<_> = seen.iter().cloned().collect();
 
         // Iterate over the list of packages that still need to be processed.
         while let Some(next_package) = pending.pop_front() {
@@ -284,27 +287,6 @@ pub async fn load_repo_data_recursively(
 fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     deserializer: D,
 ) -> Result<Vec<(PackageFilename<'d>, &'d RawValue)>, D::Error> {
-    let mut entries: Vec<(PackageFilename<'d>, &'d RawValue)> =
-        deserializer.deserialize_map(MapVisitor(PhantomData))?;
-
-    // Although in general the filenames are sorted in repodata.json this doesnt necessarily mean
-    // that the records are also sorted by package name.
-    //
-    // To illustrate, the following filenames are properly sorted by filename but they are NOT
-    // properly sorted by package name.
-    // - clang-format-12.0.1-default_he082bbe_4.tar.bz2 (package name: clang-format)
-    // - clang-format-13-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format-13)
-    // - clang-format-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format)
-    //
-    // Because most use-cases involve finding filenames by package name we reorder the entries here
-    // by package name. This enables use the binary search for the packages we need.
-    //
-    // Since (in most cases) the repodata is already ordered by filename which does closely resemble
-    // ordering by package name this sort operation will most likely be very fast.
-    entries.sort_by(|(a, _), (b, _)| a.package.cmp(b.package));
-
-    return Ok(entries);
-
     #[allow(clippy::type_complexity)]
     struct MapVisitor<I, K, V>(PhantomData<fn() -> (I, K, V)>);
 
@@ -347,6 +329,27 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
             }
         }
     }
+
+    let mut entries: Vec<(PackageFilename<'d>, &'d RawValue)> =
+        deserializer.deserialize_map(MapVisitor(PhantomData))?;
+
+    // Although in general the filenames are sorted in repodata.json this doesnt necessarily mean
+    // that the records are also sorted by package name.
+    //
+    // To illustrate, the following filenames are properly sorted by filename but they are NOT
+    // properly sorted by package name.
+    // - clang-format-12.0.1-default_he082bbe_4.tar.bz2 (package name: clang-format)
+    // - clang-format-13-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format-13)
+    // - clang-format-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format)
+    //
+    // Because most use-cases involve finding filenames by package name we reorder the entries here
+    // by package name. This enables use the binary search for the packages we need.
+    //
+    // Since (in most cases) the repodata is already ordered by filename which does closely resemble
+    // ordering by package name this sort operation will most likely be very fast.
+    entries.sort_by(|(a, _), (b, _)| a.package.cmp(b.package));
+
+    Ok(entries)
 }
 
 /// A struct that holds both a filename and the part of the filename thats just the package name.

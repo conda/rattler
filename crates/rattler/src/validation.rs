@@ -216,10 +216,10 @@ fn validate_package_directory_entry(
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::Directory);
 
-    if !metadata.is_dir() {
-        Err(PackageEntryValidationError::ExpectedDirectory)
-    } else {
+    if metadata.is_dir() {
         Ok(())
+    } else {
+        Err(PackageEntryValidationError::ExpectedDirectory)
     }
 }
 

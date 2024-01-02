@@ -20,7 +20,7 @@ const LOCAL_VERSION_OFFSET: u8 = 1;
 /// version part.
 #[derive(Copy, Clone, Eq, PartialEq, Default)]
 #[repr(transparent)]
-pub struct Flags(u8);
+pub struct Flags(pub(super) u8);
 
 impl Debug for Flags {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

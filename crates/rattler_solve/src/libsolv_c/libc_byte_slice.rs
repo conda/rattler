@@ -37,6 +37,6 @@ impl LibcByteSlice {
 
 impl Drop for LibcByteSlice {
     fn drop(&mut self) {
-        unsafe { libc::free(self.ptr.as_ptr() as *mut _) }
+        unsafe { libc::free(self.ptr.as_ptr().cast()) }
     }
 }

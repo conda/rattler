@@ -58,7 +58,7 @@ impl From<&PackageRecord> for CacheKey {
         Self {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
-            build_string: record.build.to_string(),
+            build_string: record.build.clone(),
         }
     }
 }
@@ -95,7 +95,7 @@ impl PackageCache {
         Self {
             inner: Arc::new(Mutex::new(PackageCacheInner {
                 path: path.into(),
-                packages: FxHashMap::new(),
+                packages: FxHashMap::default(),
             })),
         }
     }

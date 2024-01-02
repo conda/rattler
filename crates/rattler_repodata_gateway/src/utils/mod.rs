@@ -22,7 +22,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
 
     // Ensure there is a slash if the URL is empty or doesnt refer to json file
     if url_str.is_empty() || (!url_str.ends_with('/') && !url_str.ends_with(".json")) {
-        url_str.push('/')
+        url_str.push('/');
     }
 
     // Mimicking conda's (weird) behavior by special handling repodata.json

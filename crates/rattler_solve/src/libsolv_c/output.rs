@@ -18,7 +18,7 @@ use std::collections::HashMap;
 pub fn get_required_packages(
     pool: &Pool,
     repo_mapping: &HashMap<RepoId, usize>,
-    transaction: &Transaction,
+    transaction: &Transaction<'_>,
     repodata_records: &[Vec<&RepoDataRecord>],
 ) -> Result<Vec<RepoDataRecord>, Vec<ffi::Id>> {
     let mut required_packages = Vec::new();

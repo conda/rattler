@@ -55,7 +55,7 @@ fn placeholder_string() -> &'static str {
         .get_or_init(|| {
             let mut result = black_box(String::from("/opt/"));
             for i in 1..=3 {
-                result.push_str(&format!("anaconda{i}"))
+                result.push_str(&format!("anaconda{i}"));
             }
             result
         })
@@ -66,11 +66,7 @@ impl FromStr for HasPrefixEntry {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        return alt((prefix_file_mode_path, only_path))(s)
-            .map(|(_, res)| res)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()));
-
-        /// Parses "<prefix> <file_mode> <path>" and fails if there is more input.
+        /// Parses `<prefix> <file_mode> <path>` and fails if there is more input.
         fn prefix_file_mode_path(buf: &str) -> IResult<&str, HasPrefixEntry> {
             all_consuming(map(
                 tuple((
@@ -109,15 +105,12 @@ impl FromStr for HasPrefixEntry {
         fn possibly_quoted_string(buf: &str) -> IResult<&str, Cow<'_, str>> {
             alt((
                 map(quoted_string, Cow::Owned),
-                map(take_till1(|c: char| c.is_whitespace()), Cow::Borrowed),
+                map(take_till1(char::is_whitespace), Cow::Borrowed),
             ))(buf)
         }
 
         /// Parses a quoted string and delimited '\"'
         fn quoted_string(buf: &str) -> IResult<&str, String> {
-            let qs = preceded(tag("\""), in_quotes);
-            return terminated(qs, tag("\""))(buf);
-
             fn in_quotes(buf: &str) -> IResult<&str, String> {
                 let mut ret = String::new();
                 let mut skip_delimiter = false;
@@ -133,7 +126,14 @@ impl FromStr for HasPrefixEntry {
                 }
                 Err(nom::Err::Incomplete(nom::Needed::Unknown))
             }
+
+            let qs = preceded(tag("\""), in_quotes);
+            terminated(qs, tag("\""))(buf)
         }
+
+        alt((prefix_file_mode_path, only_path))(s)
+            .map(|(_, res)| res)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
     }
 }
 

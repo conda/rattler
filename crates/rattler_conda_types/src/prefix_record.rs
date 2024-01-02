@@ -30,7 +30,7 @@ impl Default for PrefixPaths {
     fn default() -> Self {
         Self {
             paths_version: 1,
-            paths: Default::default(),
+            paths: Vec::default(),
         }
     }
 }
@@ -180,9 +180,9 @@ impl PrefixRecord {
         pretty: bool,
     ) -> Result<(), std::io::Error> {
         if pretty {
-            serde_json::to_writer_pretty(BufWriter::new(writer), self)?
+            serde_json::to_writer_pretty(BufWriter::new(writer), self)?;
         } else {
-            serde_json::to_writer(BufWriter::new(writer), self)?
+            serde_json::to_writer(BufWriter::new(writer), self)?;
         }
         Ok(())
     }
@@ -222,12 +222,12 @@ pub enum LinkType {
     Directory = 4,
 }
 
-/// Returns the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns the default value for the `no_link` value of a [`PathsEntry`]
 fn no_link_default() -> bool {
     false
 }
 
-/// Returns true if the value is equal to the default value for the "no_link" value of a [`PathsEntry`]
+/// Returns true if the value is equal to the default value for the `no_link` value of a [`PathsEntry`]
 fn is_no_link_default(value: &bool) -> bool {
     *value == no_link_default()
 }

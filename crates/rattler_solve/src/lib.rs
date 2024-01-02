@@ -45,7 +45,7 @@ pub enum SolveError {
 }
 
 impl fmt::Display for SolveError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SolveError::Unsolvable(operations) => {
                 write!(
@@ -58,7 +58,7 @@ impl fmt::Display for SolveError {
                 write!(f, "Unsupported operations: {}", operations.join(", "))
             }
             SolveError::ParseMatchSpecError(e) => {
-                write!(f, "Error parsing match spec: {}", e)
+                write!(f, "Error parsing match spec: {e}")
             }
         }
     }
@@ -116,13 +116,13 @@ pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
 
 impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a Vec<RepoDataRecord> {
     fn into(self) -> S {
-        S::from_iter(self.iter())
+        self.iter().collect()
     }
 }
 
 impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a [RepoDataRecord] {
     fn into(self) -> S {
-        S::from_iter(self.iter())
+        self.iter().collect()
     }
 }
 

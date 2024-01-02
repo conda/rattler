@@ -200,7 +200,7 @@ mod test {
     };
     use assert_matches::assert_matches;
     use hex_literal::hex;
-    use rstest::{self, rstest};
+    use rstest::rstest;
     use std::str::FromStr;
     use url::Url;
 

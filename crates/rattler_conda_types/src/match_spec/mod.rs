@@ -194,7 +194,7 @@ impl Display for MatchSpec {
 }
 
 impl MatchSpec {
-    /// Match a MatchSpec against a PackageRecord
+    /// Match a [`MatchSpec`] against a [`PackageRecord`]
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(name) = self.name.as_ref() {
             if name != &record.name {
@@ -286,7 +286,7 @@ pub struct NamelessMatchSpec {
 }
 
 impl NamelessMatchSpec {
-    /// Match a MatchSpec against a PackageRecord
+    /// Match a [`MatchSpec`] against a [`PackageRecord`]
     pub fn matches(&self, record: &PackageRecord) -> bool {
         if let Some(spec) = self.version.as_ref() {
             if !spec.matches(&record.version) {
@@ -324,7 +324,7 @@ impl Display for NamelessMatchSpec {
         }
 
         if let Some(build) = &self.build {
-            write!(f, " {}", build)?;
+            write!(f, " {build}")?;
         }
 
         let mut keys = Vec::new();
@@ -436,6 +436,8 @@ mod tests {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec1.hash(&mut hasher);
         let hash1 = hasher.finish();
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec2.hash(&mut hasher);
         let hash2 = hasher.finish();
 
@@ -451,6 +453,8 @@ mod tests {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec1.hash(&mut hasher);
         let hash1 = hasher.finish();
+
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
         spec2.hash(&mut hasher);
         let hash2 = hasher.finish();
 

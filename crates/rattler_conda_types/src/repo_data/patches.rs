@@ -1,3 +1,5 @@
+#![allow(clippy::option_option)]
+
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
@@ -158,7 +160,7 @@ impl RepoData {
             // also apply the patch to the conda packages
             if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
                 assert!(archive_type == ArchiveType::TarBz2);
-                if let Some(record) = self.conda_packages.get_mut(&format!("{}.conda", pkg_name)) {
+                if let Some(record) = self.conda_packages.get_mut(&format!("{pkg_name}.conda")) {
                     record.apply_patch(patch);
                 }
             }
@@ -181,7 +183,7 @@ impl RepoData {
                         }
 
                         // also remove equivalent .conda package if it exists
-                        let conda_pkg_name = format!("{}.conda", pkg_name);
+                        let conda_pkg_name = format!("{pkg_name}.conda");
                         if self.conda_packages.remove_entry(&conda_pkg_name).is_some() {
                             removed.insert(conda_pkg_name);
                         }

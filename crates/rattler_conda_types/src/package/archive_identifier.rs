@@ -57,7 +57,7 @@ impl ArchiveIdentifier {
     /// Since Conda archives have a format for file names (see [`Self::to_file_name`]) we can
     /// reverse engineer the information that went into it. This function tries to do just that.
     pub fn try_from_url(url: &Url) -> Option<Self> {
-        let filename = url.path_segments().and_then(|segments| segments.last())?;
+        let filename = url.path_segments().and_then(Iterator::last)?;
         Self::try_from_filename(filename)
     }
 }

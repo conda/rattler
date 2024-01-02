@@ -102,7 +102,7 @@ impl SolveProblem {
                 target: target.unwrap(),
             },
             SOLVER_RULE_SOLVER_RULE_UPDATE => Self::Update,
-            _ => panic!("Unknown problem type: {}", problem_type),
+            _ => panic!("Unknown problem type: {problem_type}"),
         }
     }
 }

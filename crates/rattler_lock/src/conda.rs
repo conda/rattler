@@ -98,14 +98,12 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
 
         let version = version.parse()?;
         let md5 = match value.hash {
-            Md5(md5) => Some(md5),
-            Md5Sha256(md5, _) => Some(md5),
-            _ => None,
+            Md5(md5) | Md5Sha256(md5, _) => Some(md5),
+            Sha256(_) => None,
         };
         let sha256 = match value.hash {
-            Sha256(sha256) => Some(sha256),
-            Md5Sha256(_, sha256) => Some(sha256),
-            _ => None,
+            Sha256(sha256) | Md5Sha256(_, sha256) => Some(sha256),
+            Md5(_) => None,
         };
         let channel = channel_from_url(&value.url)
             .ok_or_else(|| ConversionError::Missing("channel in url".to_string()))?
@@ -133,7 +131,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
                 md5,
                 name: PackageName::try_from(name)?,
                 noarch: value.noarch,
-                platform: platform.only_platform().map(|p| p.to_string()),
+                platform: platform.only_platform().map(ToString::to_string),
                 sha256,
                 size: value.size,
                 subdir: value.subdir.unwrap_or(platform.to_string()),
@@ -149,7 +147,7 @@ impl TryFrom<LockedDependency> for RepoDataRecord {
     }
 }
 
-/// Error used when converting from repo_data module to conda lock module
+/// Error used when converting from `repo_data` module to conda lock module
 #[derive(thiserror::Error, Debug)]
 pub enum ConversionError {
     /// This field was found missing during the conversion
@@ -174,8 +172,8 @@ fn file_name_from_url(url: &Url) -> Option<&str> {
 }
 
 /// Channel from url, this is everything before the filename and the subdir
-/// So for example: https://conda.anaconda.org/conda-forge/ is a channel name
-/// that we parse from something like: https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda
+/// So for example: <https://conda.anaconda.org/conda-forge/> is a channel name
+/// that we parse from something like: <https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda>
 fn channel_from_url(url: &Url) -> Option<Url> {
     let mut result = url.clone();
 

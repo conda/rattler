@@ -59,7 +59,7 @@ impl Transaction<'_> {
     }
 
     /// Returns the transaction's queue, containing a solvable id for each transaction
-    pub fn get_steps(&self) -> QueueRef {
+    pub fn get_steps(&self) -> QueueRef<'_> {
         // Safe because the transaction is live and `transaction.steps` is a queue
         unsafe { QueueRef::from_ffi_queue(self, self.as_ref().steps) }
     }

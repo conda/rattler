@@ -34,12 +34,11 @@ pub fn default_auth_store_fallback_directory() -> &'static Path {
     static FALLBACK_AUTH_DIR: OnceLock<PathBuf> = OnceLock::new();
     FALLBACK_AUTH_DIR.get_or_init(|| {
         dirs::home_dir()
-            .map(|home| home.join(".rattler/"))
-            .unwrap_or_else(|| {
+            .map_or_else(|| {
                 tracing::warn!("using '/rattler' to store fallback authentication credentials because the home directory could not be found");
                 // This can only happen if the dirs lib can't find a home directory this is very unlikely.
                 PathBuf::from("/rattler/")
-            })
+            }, |home| home.join(".rattler/"))
     })
 }
 
@@ -84,7 +83,7 @@ impl AuthenticatedClient {
                 self.client.request(method, url_clone)
             }
             Ok((url, auth)) => {
-                let url = self.authenticate_url(url, &auth);
+                let url = Self::authenticate_url(url, &auth);
                 let request_builder = self.client.request(method, url);
                 Self::authenticate_request(request_builder, &auth)
             }
@@ -92,7 +91,7 @@ impl AuthenticatedClient {
     }
 
     /// Authenticate the given URL with the given authentication information
-    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+    fn authenticate_url(url: Url, auth: &Option<Authentication>) -> Url {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::CondaToken(token) => {

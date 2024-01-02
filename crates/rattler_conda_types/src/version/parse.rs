@@ -176,27 +176,24 @@ fn segment_parser<'i>(
                 return Err(e);
             }
         };
-        match component {
-            Some(component) => {
-                components.push(component);
-                component_count = match component_count.checked_add(1) {
-                    Some(length) => length,
-                    None => {
-                        return Err(nom::Err::Failure(
-                            ParseVersionErrorKind::TooManyComponentsInASegment,
-                        ))
-                    }
+        if let Some(component) = component {
+            components.push(component);
+            component_count = match component_count.checked_add(1) {
+                Some(length) => length,
+                None => {
+                    return Err(nom::Err::Failure(
+                        ParseVersionErrorKind::TooManyComponentsInASegment,
+                    ))
                 }
             }
-            None => {
-                let segment = Segment::new(component_count)
-                    .ok_or(nom::Err::Failure(
-                        ParseVersionErrorKind::TooManyComponentsInASegment,
-                    ))?
-                    .with_implicit_default(has_implicit_default);
+        } else {
+            let segment = Segment::new(component_count)
+                .ok_or(nom::Err::Failure(
+                    ParseVersionErrorKind::TooManyComponentsInASegment,
+                ))?
+                .with_implicit_default(has_implicit_default);
 
-                break Ok((remaining, segment));
-            }
+            break Ok((remaining, segment));
         }
         rest = remaining;
     }
@@ -414,9 +411,9 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
     Ok((
         rest,
         Version {
-            flags,
             components,
             segments,
+            flags,
         },
     ))
 }

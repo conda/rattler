@@ -81,7 +81,7 @@ impl TryFrom<String> for PackageName {
             None
         };
 
-        Ok(Self { source, normalized })
+        Ok(Self { normalized, source })
     }
 }
 
@@ -103,7 +103,7 @@ impl FromStr for PackageName {
 
 impl Hash for PackageName {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_normalized().hash(state)
+        self.as_normalized().hash(state);
     }
 }
 

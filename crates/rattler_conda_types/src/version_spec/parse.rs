@@ -25,7 +25,7 @@ enum ParseVersionOperatorError<'i> {
 fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError<'_>> {
     // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
-        |_: nom::Err<nom::error::Error<&str>>| {
+        |_err: nom::Err<nom::error::Error<&str>>| {
             nom::Err::Error(ParseVersionOperatorError::ExpectedOperator)
         },
     )?;
@@ -121,7 +121,7 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
     let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
         c.is_alphanumeric() || "!-_.*+".contains(c)
     })(input)
-    .map_err(|_| {
+    .map_err(|_err| {
         nom::Err::Error(ParseConstraintError::InvalidVersion(ParseVersionError {
             kind: ParseVersionErrorKind::Empty,
             version: String::from(""),
@@ -148,12 +148,10 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
         ("*" | ".*", Some(VersionOperators::StrictRange(StrictRangeOperator::StartsWith))) => {
             VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
         }
-        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::GreaterEquals))) => {
-            VersionOperators::Range(RangeOperator::GreaterEquals)
-        }
-        ("*" | ".*", Some(VersionOperators::Range(RangeOperator::Greater))) => {
-            VersionOperators::Range(RangeOperator::GreaterEquals)
-        }
+        (
+            "*" | ".*",
+            Some(VersionOperators::Range(RangeOperator::GreaterEquals | RangeOperator::Greater)),
+        ) => VersionOperators::Range(RangeOperator::GreaterEquals),
         ("*" | ".*", Some(VersionOperators::Exact(EqualityOperator::NotEquals))) => {
             VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
         }

@@ -140,7 +140,7 @@ fn native_path_to_unix(path: &str) -> Result<String, std::io::Error> {
 
     match output {
         Ok(output) if output.status.success() => Ok(String::from_utf8(output.stdout)
-            .map_err(|_| {
+            .map_err(|_err| {
                 std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "failed to convert path to Unix style",

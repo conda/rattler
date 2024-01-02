@@ -188,10 +188,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 
         match all_consuming(parse_or_group)(input) {
             Ok((_, tree)) => Ok(tree),
-            Err(nom::Err::Error(e)) => {
-                Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
-            }
-            Err(nom::Err::Failure(e)) => {
+            Err(nom::Err::Error(e) | nom::Err::Failure(e)) => {
                 Err(ParseVersionTreeError::ParseError(convert_error(input, e)))
             }
             _ => unreachable!("with all_consuming the only error can be Error"),
@@ -316,14 +313,14 @@ mod tests {
     fn test_recognize_version() {
         type Err<'a> = nom::error::Error<&'a str>;
 
-        assert_eq!(recognize_version::<Err>("3.8.9"), Ok(("", "3.8.9")));
-        assert_eq!(recognize_version::<Err>("3"), Ok(("", "3")));
+        assert_eq!(recognize_version::<Err<'_>>("3.8.9"), Ok(("", "3.8.9")));
+        assert_eq!(recognize_version::<Err<'_>>("3"), Ok(("", "3")));
         assert_eq!(
-            recognize_version::<Err>("1!3.8.9+3.4-alpha.2"),
+            recognize_version::<Err<'_>>("1!3.8.9+3.4-alpha.2"),
             Ok(("", "1!3.8.9+3.4-alpha.2"))
         );
-        assert_eq!(recognize_version::<Err>("3."), Ok((".", "3")));
-        assert_eq!(recognize_version::<Err>("3.*"), Ok((".*", "3")));
+        assert_eq!(recognize_version::<Err<'_>>("3."), Ok((".", "3")));
+        assert_eq!(recognize_version::<Err<'_>>("3.*"), Ok((".*", "3")));
 
         let versions = [
             // Implicit epoch of 0
@@ -383,7 +380,10 @@ mod tests {
         ];
 
         for version_str in versions {
-            assert_eq!(recognize_version::<Err>(version_str), Ok(("", version_str)));
+            assert_eq!(
+                recognize_version::<Err<'_>>(version_str),
+                Ok(("", version_str))
+            );
         }
     }
 
@@ -392,13 +392,13 @@ mod tests {
         type Err<'a> = nom::error::Error<&'a str>;
 
         assert_eq!(
-            parse_version_epoch::<Err>("1!1.0b2.post345.dev456"),
+            parse_version_epoch::<Err<'_>>("1!1.0b2.post345.dev456"),
             Ok(("1.0b2.post345.dev456", 1))
         );
 
         // Epochs must be integers
         assert!(
-            parse_version_epoch::<Err>("12.23!1").is_err(),
+            parse_version_epoch::<Err<'_>>("12.23!1").is_err(),
             "epochs should only be integers"
         );
     }

@@ -2,20 +2,29 @@
 //! environment
 
 use super::{
-    c_string, libc_byte_slice::LibcByteSlice, wrapper::keys::*, wrapper::pool::Pool,
-    wrapper::repo::Repo, wrapper::repodata::Repodata, wrapper::solvable::SolvableId,
+    c_string,
+    libc_byte_slice::LibcByteSlice,
+    wrapper::{
+        keys::{
+            REPOKEY_TYPE_MD5, REPOKEY_TYPE_SHA256, SOLVABLE_BUILDFLAVOR, SOLVABLE_BUILDTIME,
+            SOLVABLE_BUILDVERSION, SOLVABLE_CHECKSUM, SOLVABLE_CONSTRAINS, SOLVABLE_DOWNLOADSIZE,
+            SOLVABLE_LICENSE, SOLVABLE_PKGID, SOLVABLE_TRACK_FEATURES,
+        },
+        pool::Pool,
+        repo::Repo,
+        repodata::Repodata,
+        solvable::SolvableId,
+    },
 };
-use rattler_conda_types::package::ArchiveType;
-use rattler_conda_types::{GenericVirtualPackage, RepoDataRecord};
-use std::cmp::Ordering;
-use std::collections::HashMap;
+use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
+use std::{cmp::Ordering, collections::HashMap};
 
 #[cfg(not(target_family = "unix"))]
 /// Adds solvables to a repo from an in-memory .solv file
 ///
 /// Note: this function relies on primitives that are only available on unix-like operating systems,
 /// and will panic if called from another platform (e.g. Windows)
-pub fn add_solv_file(_pool: &Pool, _repo: &Repo, _solv_bytes: &LibcByteSlice) {
+pub fn add_solv_file(_pool: &Pool, _repo: &Repo<'_>, _solv_bytes: &LibcByteSlice) {
     unimplemented!("this platform does not support in-memory .solv files");
 }
 
@@ -24,7 +33,7 @@ pub fn add_solv_file(_pool: &Pool, _repo: &Repo, _solv_bytes: &LibcByteSlice) {
 ///
 /// Note: this function relies on primitives that are only available on unix-like operating systems,
 /// and will panic if called from another platform (e.g. Windows)
-pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
+pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
     // Add solv file from memory if available
     let mode = c_string("r");
     let file = unsafe { libc::fmemopen(solv_bytes.as_ptr(), solv_bytes.len(), mode.as_ptr()) };
@@ -37,7 +46,7 @@ pub fn add_solv_file(pool: &Pool, repo: &Repo, solv_bytes: &LibcByteSlice) {
 /// Panics if the repo does not belong to the pool
 pub fn add_repodata_records<'a>(
     pool: &Pool,
-    repo: &Repo,
+    repo: &Repo<'_>,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
 ) -> Vec<SolvableId> {
     // Sanity check
@@ -165,7 +174,7 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_pkg_id,
                 repo_type_md5,
-                &c_string(format!("{:x}", md5)),
+                &c_string(format!("{md5:x}")),
             );
         }
 
@@ -175,11 +184,11 @@ pub fn add_repodata_records<'a>(
                 solvable_id,
                 solvable_checksum,
                 repo_type_sha256,
-                &c_string(format!("{:x}", sha256)),
+                &c_string(format!("{sha256:x}")),
             );
         }
 
-        solvable_ids.push(solvable_id)
+        solvable_ids.push(solvable_id);
     }
 
     repo.internalize();
@@ -194,8 +203,8 @@ pub fn add_repodata_records<'a>(
 /// solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
     pool: &Pool,
-    repo: &Repo,
-    data: &Repodata,
+    repo: &Repo<'_>,
+    data: &Repodata<'_>,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
 ) -> Option<SolvableId> {
@@ -235,7 +244,7 @@ fn add_or_reuse_solvable<'a>(
     Some(repo.add_solvable())
 }
 
-pub fn add_virtual_packages(pool: &Pool, repo: &Repo, packages: &[GenericVirtualPackage]) {
+pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVirtualPackage]) {
     let data = repo.add_repodata();
 
     let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
@@ -262,7 +271,7 @@ pub fn add_virtual_packages(pool: &Pool, repo: &Repo, packages: &[GenericVirtual
     }
 }
 
-fn reset_solvable(pool: &Pool, repo: &Repo, data: &Repodata, solvable_id: SolvableId) {
+fn reset_solvable(pool: &Pool, repo: &Repo<'_>, data: &Repodata<'_>, solvable_id: SolvableId) {
     let blank_solvable = repo.add_solvable();
 
     // Replace the existing solvable with the blank one

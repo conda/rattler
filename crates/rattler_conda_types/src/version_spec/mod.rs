@@ -228,15 +228,15 @@ impl Display for VersionSpec {
             match spec {
                 VersionSpec::Any => write!(f, "*"),
                 VersionSpec::StrictRange(op, version) => match op {
-                    StrictRangeOperator::StartsWith => write!(f, "{}.*", version),
-                    StrictRangeOperator::NotStartsWith => write!(f, "!={}.*", version),
-                    op => write!(f, "{}{}", op, version),
+                    StrictRangeOperator::StartsWith => write!(f, "{version}.*"),
+                    StrictRangeOperator::NotStartsWith => write!(f, "!={version}.*"),
+                    op => write!(f, "{op}{version}"),
                 },
                 VersionSpec::Range(op, version) => {
-                    write!(f, "{}{}", op, version)
+                    write!(f, "{op}{version}")
                 }
                 VersionSpec::Exact(op, version) => {
-                    write!(f, "{}{}", op, version)
+                    write!(f, "{op}{version}")
                 }
                 VersionSpec::Group(op, group) => {
                     let requires_parenthesis = *op == LogicalOperator::And && part_of_or;
@@ -245,7 +245,7 @@ impl Display for VersionSpec {
                     }
                     for (i, spec) in group.iter().enumerate() {
                         if i > 0 {
-                            write!(f, "{}", op)?;
+                            write!(f, "{op}")?;
                         }
                         write(spec, f, *op == LogicalOperator::Or)?;
                     }
@@ -267,7 +267,7 @@ impl Serialize for VersionSpec {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&format!("{}", self))
+        serializer.serialize_str(&format!("{self}"))
     }
 }
 

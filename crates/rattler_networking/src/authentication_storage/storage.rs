@@ -142,8 +142,7 @@ impl AuthenticationStorage {
 
         let entry = Entry::new(&self.store_key, host)?;
         match entry.delete_password() {
-            Ok(_) => {}
-            Err(keyring::Error::NoEntry) => {}
+            Ok(_) | Err(keyring::Error::NoEntry) => {}
             Err(e) => {
                 tracing::warn!("Error deleting credentials for {}: {}", host, e);
             }

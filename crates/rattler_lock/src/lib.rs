@@ -214,7 +214,7 @@ impl From<String> for Channel {
     fn from(url: String) -> Self {
         Self {
             url,
-            used_env_vars: Default::default(),
+            used_env_vars: Vec::default(),
         }
     }
 }
@@ -223,7 +223,7 @@ impl From<&str> for Channel {
     fn from(url: &str) -> Self {
         Self {
             url: url.to_string(),
-            used_env_vars: Default::default(),
+            used_env_vars: Vec::default(),
         }
     }
 }
@@ -246,7 +246,7 @@ impl CondaLock {
     ) -> Result<Vec<RepoDataRecord>, ConversionError> {
         self.get_packages_by_platform(platform)
             .filter(|pkg| pkg.is_conda())
-            .map(|pkg| pkg.try_into())
+            .map(TryInto::try_into)
             .collect()
     }
 }

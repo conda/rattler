@@ -50,7 +50,7 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
 }
 
 /// Retrieves the names of the packages that form the roots of the graph and breaks specified
-/// cycles (e.g. if there is a cycle between A and B and there is a cycle_break (A, B), the edge
+/// cycles (e.g. if there is a cycle between A and B and there is a `cycle_break (A, B)`, the edge
 /// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
@@ -71,8 +71,10 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
                 .filter(|d| {
                     // filter out circular dependencies
                     if let Some(cycle_breaks) = cycle_breaks {
-                        !cycle_breaks
-                            .contains(&(r.as_ref().name.as_normalized().to_owned(), d.to_string()))
+                        !cycle_breaks.contains(&(
+                            r.as_ref().name.as_normalized().to_owned(),
+                            (*d).to_string(),
+                        ))
                     } else {
                         true
                     }
@@ -82,7 +84,7 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
 
     all_packages
         .difference(&dependencies)
-        .map(|name| name.to_string())
+        .map(ToString::to_string)
         .collect()
 }
 

@@ -1,5 +1,5 @@
 /// Implementation of file locks taken from:
-/// https://github.com/rust-lang/cargo/blob/39c13e67a5962466cc7253d41bc1099bbcb224c3/src/cargo/util/flock.rs
+/// <https://github.com/rust-lang/cargo/blob/39c13e67a5962466cc7253d41bc1099bbcb224c3/src/cargo/util/flock.rs>
 ///
 /// Under MIT license:
 ///
@@ -32,7 +32,10 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::Context as _;
-use sys::{error_contended, error_unsupported, lock_exclusive, lock_shared, try_lock_exclusive, try_lock_shared, unlock};
+use sys::{
+    error_contended, error_unsupported, lock_exclusive, lock_shared, try_lock_exclusive,
+    try_lock_shared, unlock,
+};
 
 #[derive(Debug)]
 pub struct LockedFile {
@@ -204,6 +207,30 @@ fn acquire(
     lock_try: &dyn Fn() -> io::Result<()>,
     lock_block: &dyn Fn() -> io::Result<()>,
 ) -> anyhow::Result<()> {
+    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+    fn is_on_nfs_mount(path: &Path) -> bool {
+        use std::ffi::CString;
+        use std::mem;
+        use std::os::unix::prelude::*;
+
+        let path = match CString::new(path.as_os_str().as_bytes()) {
+            Ok(path) => path,
+            Err(_) => return false,
+        };
+
+        unsafe {
+            let mut buf: libc::statfs = mem::zeroed();
+            let r = libc::statfs(path.as_ptr(), &mut buf);
+
+            r == 0 && buf.f_type as u32 == libc::NFS_SUPER_MAGIC as u32
+        }
+    }
+
+    #[cfg(any(not(target_os = "linux"), target_env = "musl"))]
+    fn is_on_nfs_mount(_path: &Path) -> bool {
+        false
+    }
+
     // File locking on Unix is currently implemented via `flock`, which is known
     // to be broken on NFS. We could in theory just ignore errors that happen on
     // NFS, but apparently the failure mode [1] for `flock` on NFS is **blocking
@@ -237,32 +264,7 @@ fn acquire(
 
     tracing::info!("waiting for file lock on {}", msg);
 
-    lock_block().with_context(|| format!("failed to lock file: {}", path.display()))?;
-    return Ok(());
-
-    #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-    fn is_on_nfs_mount(path: &Path) -> bool {
-        use std::ffi::CString;
-        use std::mem;
-        use std::os::unix::prelude::*;
-
-        let path = match CString::new(path.as_os_str().as_bytes()) {
-            Ok(path) => path,
-            Err(_) => return false,
-        };
-
-        unsafe {
-            let mut buf: libc::statfs = mem::zeroed();
-            let r = libc::statfs(path.as_ptr(), &mut buf);
-
-            r == 0 && buf.f_type as u32 == libc::NFS_SUPER_MAGIC as u32
-        }
-    }
-
-    #[cfg(any(not(target_os = "linux"), target_env = "musl"))]
-    fn is_on_nfs_mount(_path: &Path) -> bool {
-        false
-    }
+    lock_block().with_context(|| format!("failed to lock file: {}", path.display()))
 }
 
 #[cfg(unix)]
