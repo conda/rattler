@@ -249,7 +249,7 @@ pub fn compute_package_url(
         .expect("failed to join base_url and filename")
 }
 
-fn add_trailing_slash(url: &Url) -> Cow<Url> {
+fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
     let path = url.path();
     if !path.ends_with('/') {
         let mut url = url.clone();

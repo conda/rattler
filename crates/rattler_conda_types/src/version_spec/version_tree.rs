@@ -134,7 +134,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         /// Parse a single term or a group surrounded by parenthesis.
         fn parse_term<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> Result<(&'a str, VersionTree), nom::Err<E>> {
+        ) -> Result<(&'a str, VersionTree<'a>), nom::Err<E>> {
             alt((
                 delimited(
                     terminated(tag("("), multispace0),
@@ -148,7 +148,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         }
 
         /// Given multiple version tree components, flatten the structure as much as possible.
-        fn flatten_group(operator: LogicalOperator, args: Vec<VersionTree>) -> VersionTree {
+        fn flatten_group(operator: LogicalOperator, args: Vec<VersionTree<'_>>) -> VersionTree<'_> {
             if args.len() == 1 {
                 args.into_iter().next().unwrap()
             } else {
@@ -169,7 +169,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         /// Parses a group of version constraints seperated by ,s
         fn parse_and_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> Result<(&'a str, VersionTree), nom::Err<E>> {
+        ) -> Result<(&'a str, VersionTree<'_>), nom::Err<E>> {
             let (rest, group) =
                 separated_list1(delimited(multispace0, tag(","), multispace0), parse_term)(input)?;
             Ok((rest, flatten_group(LogicalOperator::And, group)))
@@ -178,7 +178,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
         /// Parses a group of version constraints
         fn parse_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
-        ) -> Result<(&'a str, VersionTree), nom::Err<E>> {
+        ) -> Result<(&'a str, VersionTree<'_>), nom::Err<E>> {
             let (rest, group) = separated_list1(
                 delimited(multispace0, tag("|"), multispace0),
                 parse_and_group,

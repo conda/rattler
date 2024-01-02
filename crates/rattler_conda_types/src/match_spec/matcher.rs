@@ -76,13 +76,13 @@ impl FromStr for StringMatcher {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('^') && s.ends_with('$') {
             Ok(StringMatcher::Regex(regex::Regex::new(s).map_err(
-                |_| StringMatcherParseError::InvalidRegex {
+                |_err| StringMatcherParseError::InvalidRegex {
                     regex: s.to_string(),
                 },
             )?))
         } else if s.contains('*') {
             Ok(StringMatcher::Glob(glob::Pattern::new(s).map_err(
-                |_| StringMatcherParseError::InvalidGlob {
+                |_err| StringMatcherParseError::InvalidGlob {
                     glob: s.to_string(),
                 },
             )?))
@@ -95,7 +95,7 @@ impl FromStr for StringMatcher {
 impl Display for StringMatcher {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            StringMatcher::Exact(s) => write!(f, "{}", s),
+            StringMatcher::Exact(s) => write!(f, "{s}"),
             StringMatcher::Glob(s) => write!(f, "{}", s.as_str()),
             StringMatcher::Regex(s) => write!(f, "{}", s.as_str()),
         }

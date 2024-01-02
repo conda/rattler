@@ -106,7 +106,7 @@ impl FromStr for HasPrefixEntry {
         }
 
         /// Parses either a quoted or an unquoted string.
-        fn possibly_quoted_string(buf: &str) -> IResult<&str, Cow<str>> {
+        fn possibly_quoted_string(buf: &str) -> IResult<&str, Cow<'_, str>> {
             alt((
                 map(quoted_string, Cow::Owned),
                 map(take_till1(|c: char| c.is_whitespace()), Cow::Borrowed),

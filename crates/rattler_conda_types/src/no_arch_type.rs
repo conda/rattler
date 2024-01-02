@@ -36,7 +36,7 @@ impl NoArchType {
     pub fn kind(&self) -> Option<NoArchKind> {
         match self.0.as_ref() {
             None => None,
-            Some(RawNoArchType::GenericV1) | Some(RawNoArchType::GenericV2) => {
+            Some(RawNoArchType::GenericV1 | RawNoArchType::GenericV2) => {
                 Some(NoArchKind::Generic)
             }
             Some(RawNoArchType::Python) => Some(NoArchKind::Python),

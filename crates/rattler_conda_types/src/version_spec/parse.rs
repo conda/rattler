@@ -22,7 +22,7 @@ enum ParseVersionOperatorError<'i> {
 }
 
 /// Parses a version operator, returns an error if the operator is not recognized or not found.
-fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError> {
+fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError<'_>> {
     // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
         |_: nom::Err<nom::error::Error<&str>>| {
@@ -157,7 +157,7 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
         ("*" | ".*", Some(VersionOperators::Exact(EqualityOperator::NotEquals))) => {
             VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
         }
-        (glob @ "*" | glob @ ".*", Some(op)) => {
+        (glob @ ("*" | ".*"), Some(op)) => {
             tracing::warn!("Using {glob} with relational operator is superfluous and deprecated and will be removed in a future version of conda.");
             op
         }

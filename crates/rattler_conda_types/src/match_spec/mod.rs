@@ -148,12 +148,12 @@ impl Display for MatchSpec {
         if let Some(channel) = &self.channel {
             if let Some(name) = &channel.name {
                 // TODO: namespace
-                write!(f, "{}", name)?;
+                write!(f, "{name}")?;
             }
         }
 
         if let Some(subdir) = &self.subdir {
-            write!(f, "/{}", subdir)?;
+            write!(f, "/{subdir}")?;
         }
 
         match &self.name {
@@ -162,17 +162,17 @@ impl Display for MatchSpec {
         }
 
         if let Some(namespace) = &self.namespace {
-            write!(f, ":{}:", namespace)?;
+            write!(f, ":{namespace}:")?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
         }
 
         if let Some(version) = &self.version {
-            write!(f, " {}", version)?;
+            write!(f, " {version}")?;
         }
 
         if let Some(build) = &self.build {
-            write!(f, " {}", build)?;
+            write!(f, " {build}")?;
         }
 
         let mut keys = Vec::new();

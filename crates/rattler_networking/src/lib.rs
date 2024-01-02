@@ -86,7 +86,7 @@ impl AuthenticatedClient {
             Ok((url, auth)) => {
                 let url = self.authenticate_url(url, &auth);
                 let request_builder = self.client.request(method, url);
-                self.authenticate_request(request_builder, &auth)
+                Self::authenticate_request(request_builder, &auth)
             }
         }
     }
@@ -113,7 +113,6 @@ impl AuthenticatedClient {
 
     /// Authenticate the given request builder with the given authentication information
     fn authenticate_request(
-        &self,
         builder: reqwest::RequestBuilder,
         auth: &Option<Authentication>,
     ) -> reqwest::RequestBuilder {
@@ -191,13 +190,13 @@ impl AuthenticatedClientBlocking {
     }
 
     /// Authenticate the given URL with the given authentication information
-    fn authenticate_url(&self, url: Url, auth: &Option<Authentication>) -> Url {
+    fn authenticate_url(url: Url, auth: &Option<Authentication>) -> Url {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::CondaToken(token) => {
                     let path = url.path();
                     let mut new_path = String::new();
-                    new_path.push_str(format!("/t/{}", token).as_str());
+                    new_path.push_str(format!("/t/{token}").as_str());
                     new_path.push_str(path);
                     let mut url = url.clone();
                     url.set_path(&new_path);
@@ -212,7 +211,6 @@ impl AuthenticatedClientBlocking {
 
     /// Authenticate the given request builder with the given authentication information
     fn authenticate_request(
-        &self,
         builder: reqwest::blocking::RequestBuilder,
         auth: &Option<Authentication>,
     ) -> reqwest::blocking::RequestBuilder {

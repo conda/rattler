@@ -163,7 +163,7 @@ impl FromStr for VersionSpec {
         let version_tree =
             VersionTree::try_from(s).map_err(ParseVersionSpecError::InvalidVersionTree)?;
 
-        fn parse_tree(tree: VersionTree) -> Result<VersionSpec, ParseVersionSpecError> {
+        fn parse_tree(tree: VersionTree<'_>) -> Result<VersionSpec, ParseVersionSpecError> {
             match tree {
                 VersionTree::Term(str) => Ok(Constraint::from_str(str)
                     .map_err(ParseVersionSpecError::InvalidConstraint)?

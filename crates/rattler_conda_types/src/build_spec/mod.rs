@@ -7,7 +7,7 @@ pub use parse::ParseBuildNumberSpecError;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-/// Named type for the BuildNumber instead of explicit u64 floating about the project
+/// Named type for the build number of a package instead of explicit u64 floating about the project.
 pub type BuildNumber = u64;
 
 /// An operator to compare two versions.
@@ -40,7 +40,7 @@ impl<Operator, Element> OperatorConstraint<Operator, Element> {
     }
 }
 
-/// Define match from OrdOperator and BuildNumber as Element
+/// Define match from [`OrdOperator`] and [`BuildNumber`] as Element
 pub type BuildNumberSpec = OperatorConstraint<OrdOperator, BuildNumber>;
 
 impl Display for OrdOperator {
@@ -64,7 +64,7 @@ impl Display for BuildNumberSpec {
 
 impl BuildNumberSpec {
     /// Returns whether the number matches the specification.
-    /// Expected use is within match_spec::MatchSpec::matches
+    /// Expected use is within [`crate::MatchSpec::matches`]
     pub fn matches(&self, build_num: &BuildNumber) -> bool {
         match self.op {
             OrdOperator::Gt => build_num.gt(&self.rhs),
