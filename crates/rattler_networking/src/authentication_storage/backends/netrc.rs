@@ -94,7 +94,7 @@ impl StorageBackend for NetRcStorage {
                 password,
             })),
             Ok(None) => Ok(None),
-            Err(err) => Err(anyhow::Error::new(err)),   
+            Err(err) => Err(anyhow::Error::new(err)),
         }
     }
 }
