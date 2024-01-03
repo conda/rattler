@@ -75,7 +75,7 @@ impl Channel {
             {
                 let absolute_path = absolute_path(&path);
                 let url = Url::from_directory_path(absolute_path)
-                    .map_err(|_| ParseChannelError::InvalidPath(path))?;
+                    .map_err(|_err| ParseChannelError::InvalidPath(path))?;
                 Self {
                     platforms,
                     base_url: url,
@@ -99,12 +99,12 @@ impl Channel {
         let path = url.path().trim_end_matches('/');
 
         // Ensure that the base_url does always ends in a `/`
-        let base_url = if !url.path().ends_with('/') {
+        let base_url = if url.path().ends_with('/') {
+            url.clone()
+        } else {
             let mut url = url.clone();
             url.set_path(&format!("{path}/"));
             url
-        } else {
-            url.clone()
         };
 
         // Case 1: No path give, channel name is ""
@@ -126,8 +126,7 @@ impl Channel {
             // Case 6: non-otherwise-specified file://-type urls
             let name = path
                 .rsplit_once('/')
-                .map(|(_, path_part)| path_part)
-                .unwrap_or_else(|| base_url.path());
+                .map_or_else(|| base_url.path(), |(_, path_part)| path_part);
             Self {
                 platforms: platforms.map(Into::into),
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
@@ -144,10 +143,10 @@ impl Channel {
     ) -> Self {
         // TODO: custom channels
 
-        let dir_name = if !name.ends_with('/') {
-            Cow::Owned(format!("{name}/"))
-        } else {
+        let dir_name = if name.ends_with('/') {
             Cow::Borrowed(name)
+        } else {
+            Cow::Owned(format!("{name}/"))
         };
 
         let name = name.trim_end_matches('/');

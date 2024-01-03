@@ -1,6 +1,6 @@
 use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
 use rstest::rstest;
-use rstest_reuse::{self, *};
+use rstest_reuse::{self, apply, template};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 

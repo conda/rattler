@@ -36,17 +36,14 @@ pub struct LockFileBuilder {
 
 impl LockFileBuilder {
     /// Generate a new lock file using the builder pattern
-    /// channels, platforms and input_specs need to be provided
+    /// `channels`, `platforms` and `input_specs` need to be provided
     pub fn new(
         channels: impl IntoIterator<Item = impl Into<Channel>>,
         platforms: impl IntoIterator<Item = Platform>,
         input_spec: impl IntoIterator<Item = MatchSpec>,
     ) -> Self {
         Self {
-            channels: channels
-                .into_iter()
-                .map(|into_channel| into_channel.into())
-                .collect(),
+            channels: channels.into_iter().map(Into::into).collect(),
             platforms: platforms.into_iter().collect(),
             input_specs: input_spec.into_iter().collect(),
             ..Default::default()
@@ -56,16 +53,17 @@ impl LockFileBuilder {
     /// Add locked packages per platform
     pub fn add_locked_packages(mut self, locked_packages: LockedPackagesBuilder) -> Self {
         let platform = &locked_packages.platform;
-        if self.locked_packages.contains_key(platform) {
-            panic!("Tried to insert packages for {platform} twice")
-        }
+        assert!(
+            !self.locked_packages.contains_key(platform),
+            "Tried to insert packages for {platform} twice"
+        );
 
         self.locked_packages
             .insert(locked_packages.platform, locked_packages);
         self
     }
 
-    /// Build a conda_lock file
+    /// Build a [`CondaLock`]
     pub fn build(self) -> Result<CondaLock, CalculateContentHashError> {
         let content_hash = self
             .platforms
@@ -92,7 +90,7 @@ impl LockFileBuilder {
             package: self
                 .locked_packages
                 .into_values()
-                .flat_map(|package| package.build())
+                .flat_map(LockedPackagesBuilder::build)
                 .collect(),
         };
         Ok(lock)
@@ -181,7 +179,7 @@ impl LockedPackagesBuilder {
                 LockedDependencyBuilder::Pypi(locked_package) => LockedDependency {
                     platform: self.platform,
                     version: locked_package.version,
-                    name: locked_package.name.to_string(),
+                    name: locked_package.name.clone(),
                     category: super::default_category(),
                     kind: PypiLockedDependency {
                         requires_dist: locked_package.requires_dist,
@@ -199,7 +197,7 @@ impl LockedPackagesBuilder {
     }
 }
 
-/// Short-hand for creating a LockedPackage that transforms into a [`LockedDependency`]
+/// Short-hand for creating a [`CondaLockedDependency`] that transforms into a [`LockedDependency`]
 pub struct CondaLockedDependencyBuilder {
     /// Name of the locked package
     pub name: PackageName,
@@ -407,7 +405,7 @@ impl CondaLockedDependencyBuilder {
         self
     }
 
-    /// Adds a PackageUrl to the package
+    /// Adds a [`PackageUrl`] to the package
     pub fn add_purl(mut self, purl: PackageUrl) -> Self {
         self.purls.push(purl);
         self

@@ -26,7 +26,7 @@ pub fn sorted(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let variants: Vec<&Ident> = data_enum.variants.iter().map(|v| &v.ident).collect();
             check_identifiers_sorted(name, &variants)
         }
-        _ => panic!("This macro only supports structs and enums."),
+        Data::Union(_) => panic!("This macro only supports structs and enums."),
     };
 
     if check_sorted.is_err() {
@@ -43,8 +43,7 @@ fn check_fields_sorted(outer_ident: &Ident, fields: &FieldsNamed) -> Result<(), 
         if let Some(prev) = prev_field {
             if *current_field < *prev {
                 let error = format!(
-                    "The field {} must be sorted before {} in struct {}.",
-                    current_field, prev, outer_ident
+                    "The field {current_field} must be sorted before {prev} in struct {outer_ident}.",
                 );
                 let tokens = quote_spanned! {current_field.span() =>
                     compile_error!(#error);
@@ -63,8 +62,7 @@ fn check_identifiers_sorted(outer_ident: &Ident, idents: &[&Ident]) -> Result<()
         if let Some(prev) = prev_ident {
             if *ident < prev {
                 let error = format!(
-                    "The field {} must be sorted before {} in enum {}.",
-                    ident, prev, outer_ident
+                    "The field {ident} must be sorted before {prev} in enum {outer_ident}.",
                 );
                 let tokens = quote_spanned! {ident.span() =>
                     compile_error!(#error);

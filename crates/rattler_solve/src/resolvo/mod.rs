@@ -54,7 +54,7 @@ impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
-            _marker: Default::default(),
+            _marker: PhantomData::default(),
         }
     }
 }
@@ -147,7 +147,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
                 write!(f, "{}", &rec.package_record)
             }
             SolverPackageRecord::VirtualPackage(rec) => {
-                write!(f, "{}", rec)
+                write!(f, "{rec}")
             }
         }
     }
@@ -330,8 +330,8 @@ impl<'a> CondaDependencyProvider<'a> {
         Self {
             pool,
             records,
-            matchspec_to_highest_version: Default::default(),
-            parse_match_spec_cache: Default::default(),
+            matchspec_to_highest_version: RefCell::default(),
+            parse_match_spec_cache: RefCell::default(),
         }
     }
 }
@@ -357,7 +357,9 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 
     fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
-        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else { return Dependencies::default() };
+        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
+            return Dependencies::default();
+        };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
         let mut dependencies = Dependencies::default();
@@ -383,14 +385,14 @@ pub struct CondaSolvableDisplay;
 impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
     fn display_candidates(
         &self,
-        pool: &Pool<SolverMatchSpec, String>,
+        pool: &Pool<SolverMatchSpec<'_>, String>,
         merged_candidates: &[SolvableId],
     ) -> String {
         merged_candidates
             .iter()
             .map(|&id| pool.resolve_solvable(id).inner().version())
             .sorted()
-            .map(|s| s.to_string())
+            .map(ToString::to_string)
             .join(" | ")
     }
 }
@@ -402,6 +404,7 @@ pub struct Solver;
 impl super::SolverImpl for Solver {
     type RepoData<'a> = RepoData<'a>;
 
+    #[allow(clippy::redundant_closure_for_method_calls)]
     fn solve<
         'a,
         R: IntoRepoData<'a, Self::RepoData<'a>>,
@@ -457,19 +460,18 @@ fn parse_match_spec<'a>(
     spec_str: &'a str,
     parse_match_spec_cache: &mut HashMap<&'a str, VersionSetId>,
 ) -> Result<VersionSetId, ParseMatchSpecError> {
-    Ok(match parse_match_spec_cache.get(spec_str) {
-        Some(spec_id) => *spec_id,
-        None => {
-            let match_spec = MatchSpec::from_str(spec_str)?;
-            let (name, spec) = match_spec.into_nameless();
-            let dependency_name = pool.intern_package_name(
-                name.as_ref()
-                    .expect("match specs without names are not supported")
-                    .as_normalized(),
-            );
-            let version_set_id = pool.intern_version_set(dependency_name, spec.into());
-            parse_match_spec_cache.insert(spec_str, version_set_id);
-            version_set_id
-        }
-    })
+    if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
+        Ok(*spec_id)
+    } else {
+        let match_spec = MatchSpec::from_str(spec_str)?;
+        let (name, spec) = match_spec.into_nameless();
+        let dependency_name = pool.intern_package_name(
+            name.as_ref()
+                .expect("match specs without names are not supported")
+                .as_normalized(),
+        );
+        let version_set_id = pool.intern_version_set(dependency_name, spec.into());
+        parse_match_spec_cache.insert(spec_str, version_set_id);
+        Ok(version_set_id)
+    }
 }

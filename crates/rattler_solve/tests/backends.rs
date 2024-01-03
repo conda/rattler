@@ -124,9 +124,9 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     let solver_task = SolverTask {
         available_packages: &available_packages,
         specs: specs.clone(),
-        locked_packages: Default::default(),
-        pinned_packages: Default::default(),
-        virtual_packages: Default::default(),
+        locked_packages: Vec::default(),
+        pinned_packages: Vec::default(),
+        virtual_packages: Vec::default(),
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
@@ -489,13 +489,20 @@ macro_rules! solver_backend_tests {
 
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
-    use super::*;
+    use super::{
+        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
+        GenericVirtualPackage, SolveError, Version,
+    };
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
+        use super::read_repodata;
+        use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
+        use rattler_solve::{SolverImpl, SolverTask};
+
         let repo_data = read_repodata(&dummy_channel_json_path());
 
         let cached_repo_data = rattler_solve::libsolv_c::cache_repodata(
@@ -562,7 +569,10 @@ mod libsolv_c {
 
 #[cfg(feature = "resolvo")]
 mod resolvo {
-    use super::*;
+    use super::{
+        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
+        GenericVirtualPackage, SolveError, Version,
+    };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
@@ -662,9 +672,9 @@ fn compare_solve(specs: Vec<&str>) {
                     .solve(SolverTask {
                         available_packages: &available_packages,
                         specs: specs.clone(),
-                        locked_packages: Default::default(),
-                        pinned_packages: Default::default(),
-                        virtual_packages: Default::default(),
+                        locked_packages: Vec::default(),
+                        pinned_packages: Vec::default(),
+                        virtual_packages: Vec::default(),
                     })
                     .unwrap(),
             ),
@@ -683,9 +693,9 @@ fn compare_solve(specs: Vec<&str>) {
                     .solve(SolverTask {
                         available_packages: &available_packages,
                         specs: specs.clone(),
-                        locked_packages: Default::default(),
-                        pinned_packages: Default::default(),
-                        virtual_packages: Default::default(),
+                        locked_packages: Vec::default(),
+                        pinned_packages: Vec::default(),
+                        virtual_packages: Vec::default(),
                     })
                     .unwrap(),
             ),
@@ -753,9 +763,9 @@ fn solve_to_get_channel_of_spec(
         .solve(SolverTask {
             available_packages: &available_packages,
             specs: specs.clone(),
-            locked_packages: Default::default(),
-            pinned_packages: Default::default(),
-            virtual_packages: Default::default(),
+            locked_packages: Vec::default(),
+            pinned_packages: Vec::default(),
+            virtual_packages: Vec::default(),
         })
         .unwrap();
 

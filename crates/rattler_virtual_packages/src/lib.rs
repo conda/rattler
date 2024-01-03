@@ -35,7 +35,6 @@ pub mod osx;
 
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{GenericVirtualPackage, PackageName, Platform, Version};
-use std::str::FromStr;
 
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
@@ -72,12 +71,12 @@ impl From<VirtualPackage> for GenericVirtualPackage {
         match package {
             VirtualPackage::Win => GenericVirtualPackage {
                 name: PackageName::new_unchecked("__win"),
-                version: Version::from_str("0").unwrap(),
+                version: Version::major(0),
                 build_string: "0".into(),
             },
             VirtualPackage::Unix => GenericVirtualPackage {
                 name: PackageName::new_unchecked("__unix"),
-                version: Version::from_str("0").unwrap(),
+                version: Version::major(0),
                 build_string: "0".into(),
             },
             VirtualPackage::Linux(linux) => linux.into(),
@@ -129,10 +128,10 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
 
     if platform.is_linux() {
         if let Some(linux_version) = Linux::current()? {
-            result.push(linux_version.into())
+            result.push(linux_version.into());
         }
         if let Some(libc) = LibC::current()? {
-            result.push(libc.into())
+            result.push(libc.into());
         }
     }
 
@@ -143,11 +142,11 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
     }
 
     if let Some(cuda) = Cuda::current() {
-        result.push(cuda.into())
+        result.push(cuda.into());
     }
 
     if let Some(archspec) = Archspec::from_platform(platform) {
-        result.push(archspec.into())
+        result.push(archspec.into());
     }
 
     Ok(result)
@@ -186,7 +185,7 @@ impl From<Linux> for VirtualPackage {
     }
 }
 
-/// LibC virtual package description
+/// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
     /// The family of LibC. This could be glibc for instance.
@@ -197,18 +196,21 @@ pub struct LibC {
 }
 
 impl LibC {
-    /// Returns the LibC family and version of the current platform.
+    /// Returns the `LibC` family and version of the current platform.
     ///
-    /// Returns an error if determining the LibC family and version resulted in an error. Returns
-    /// `None` if the current platform does not have an available version of LibC.
+    /// Returns an error if determining the `LibC` family and version resulted in an error. Returns
+    /// `None` if the current platform does not have an available version of `LibC`.
     pub fn current() -> Result<Option<Self>, DetectLibCError> {
         Ok(libc::libc_family_and_version()?.map(|(family, version)| Self { family, version }))
     }
 }
 
+#[allow(clippy::fallible_impl_from)]
 impl From<LibC> for GenericVirtualPackage {
     fn from(libc: LibC) -> Self {
         GenericVirtualPackage {
+            // TODO: Convert the family to a valid package name. We can simply replace invalid
+            // characters.
             name: format!("__{}", libc.family.to_lowercase())
                 .try_into()
                 .unwrap(),
@@ -283,8 +285,7 @@ impl Archspec {
             Platform::LinuxS390X => "s390x",
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",
-            Platform::OsxArm64 => "arm64",
-            Platform::WinArm64 => "arm64",
+            Platform::WinArm64 | Platform::OsxArm64 => "arm64",
         };
 
         Some(Self {
@@ -297,7 +298,7 @@ impl From<Archspec> for GenericVirtualPackage {
     fn from(archspec: Archspec) -> Self {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__archspec"),
-            version: Version::from_str("1").unwrap(),
+            version: Version::major(1),
             build_string: archspec.spec,
         }
     }
@@ -349,6 +350,6 @@ mod test {
     #[test]
     fn doesnt_crash() {
         let virtual_packages = VirtualPackage::current().unwrap();
-        println!("{:?}", virtual_packages);
+        println!("{virtual_packages:?}");
     }
 }

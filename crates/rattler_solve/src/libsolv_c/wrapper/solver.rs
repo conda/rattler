@@ -17,10 +17,10 @@ impl<'pool> Drop for Solver<'pool> {
     }
 }
 
-impl Solver<'_> {
+impl<'pool> Solver<'pool> {
     /// Constructs a new Solver from the provided libsolv pointer. It is the responsibility of the
     /// caller to ensure the pointer is actually valid.
-    pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver {
+    pub(super) unsafe fn new(_pool: &Pool, ptr: NonNull<ffi::Solver>) -> Solver<'_> {
         Solver(ptr, PhantomData::default())
     }
 
@@ -74,7 +74,7 @@ impl Solver<'_> {
                     self.raw_ptr(),
                     i.try_into().unwrap(),
                     problem_rules.raw_ptr(),
-                )
+                );
             };
             for r in problem_rules.id_iter() {
                 if r != 0 {
@@ -92,7 +92,7 @@ impl Solver<'_> {
                         )
                     };
 
-                    let pool = unsafe { (*self.0.as_ptr()).pool as *mut ffi::Pool };
+                    let pool: *mut ffi::Pool = unsafe { (*self.0.as_ptr()).pool.cast() };
 
                     let nsolvables = unsafe { (*pool).nsolvables };
 
@@ -131,7 +131,7 @@ impl Solver<'_> {
 
     /// Solves all the problems in the `queue` and returns a transaction from the found solution.
     /// Returns an error if problems remain unsolved.
-    pub fn solve(&mut self, queue: &mut SolveGoal) -> Result<Transaction, Vec<String>> {
+    pub fn solve(&mut self, queue: &mut SolveGoal) -> Result<Transaction<'_>, Vec<String>> {
         let result = unsafe {
             // Run the solve method
             ffi::solver_solve(self.raw_ptr(), queue.raw_ptr());

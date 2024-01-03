@@ -23,7 +23,7 @@ use error::{
     FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
     InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
     LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
-    TransactionException,
+    TransactionException, VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
@@ -143,5 +143,7 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
         py.get_type::<ConvertSubdirException>(),
     )
     .unwrap();
+    m.add("VersionBumpError", py.get_type::<VersionBumpException>())
+        .unwrap();
     Ok(())
 }

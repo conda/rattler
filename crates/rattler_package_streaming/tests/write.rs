@@ -19,8 +19,8 @@ fn find_all_archives() -> impl Iterator<Item = PathBuf> {
 fn find_all_package_files(path: &Path) -> Vec<PathBuf> {
     WalkDir::new(path)
         .into_iter()
-        .filter_map(|e| e.ok())
-        .map(|e| e.into_path())
+        .filter_map(std::result::Result::ok)
+        .map(walkdir::DirEntry::into_path)
         .filter(|p| p.is_file())
         .collect::<Vec<_>>()
 }
@@ -120,7 +120,7 @@ fn compare_two_tar_archives<T: Read>(
 }
 
 fn compare_two_conda_archives(p1: &Path, p2: &Path) {
-    println!("Comparing {:?} and {:?}", p1, p2);
+    println!("Comparing {p1:?} and {p2:?}");
     let mut archive1 = File::open(p1).unwrap();
     let mut archive2 = File::open(p2).unwrap();
     // open outer zip file

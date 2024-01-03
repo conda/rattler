@@ -22,6 +22,9 @@ pub(crate) mod parse;
 mod segment;
 mod with_source;
 
+pub(crate) mod bump;
+pub use bump::{VersionBumpError, VersionBumpType};
+
 use flags::Flags;
 use segment::Segment;
 
@@ -166,6 +169,15 @@ type ComponentVec = SmallVec<[Component; 3]>;
 type SegmentVec = SmallVec<[Segment; 4]>;
 
 impl Version {
+    /// Constructs a version with just a major component and no other components, e.g. "1".
+    pub fn major(major: u64) -> Version {
+        Version {
+            components: smallvec::smallvec![Component::Numeral(major)],
+            segments: smallvec::smallvec![Segment::new(1).unwrap()],
+            flags: Flags(0),
+        }
+    }
+
     /// Returns true if this version has an epoch.
     pub fn has_epoch(&self) -> bool {
         self.flags.has_epoch()
@@ -210,7 +222,7 @@ impl Version {
     pub fn segments(
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
-        let mut idx = if self.has_epoch() { 1 } else { 0 };
+        let mut idx = usize::from(self.has_epoch());
         let version_segments = if let Some(local_index) = self.local_segment_index() {
             &self.segments[..local_index]
         } else {
@@ -227,8 +239,8 @@ impl Version {
         })
     }
 
-    /// Returns a new version where the last numerical segment of this version has been bumped.
-    pub fn bump(&self) -> Self {
+    /// Returns a new version after bumping it according to the specified bump type.
+    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
         let mut flags = Flags::default();
@@ -239,6 +251,42 @@ impl Version {
             flags = flags.with_has_epoch(true);
         }
 
+        // Sanity check whether the version has enough segments for this bump type.
+        let segment_count = self.segment_count();
+        match bump_type {
+            VersionBumpType::Major => {
+                if segment_count < 1 {
+                    return Err(VersionBumpError::NoMajorSegment);
+                }
+            }
+            VersionBumpType::Minor => {
+                if segment_count < 2 {
+                    return Err(VersionBumpError::NoMinorSegment);
+                }
+            }
+            VersionBumpType::Patch => {
+                if segment_count < 3 {
+                    return Err(VersionBumpError::NoPatchSegment);
+                }
+            }
+            VersionBumpType::Last => {
+                if segment_count == 0 {
+                    return Err(VersionBumpError::NoLastSegment);
+                }
+            }
+            VersionBumpType::Segment(index) => {
+                let uindex = if index < 0 {
+                    segment_count as i32 + index
+                } else {
+                    index
+                };
+
+                if uindex < 0 || uindex >= segment_count as i32 {
+                    return Err(VersionBumpError::InvalidSegment { index });
+                }
+            }
+        }
+
         // Copy over all the segments and bump the last segment.
         let segment_count = self.segment_count();
         for (idx, segment_iter) in self.segments().enumerate() {
@@ -247,21 +295,34 @@ impl Version {
             let mut segment_components =
                 segment_iter.components().cloned().collect::<ComponentVec>();
 
-            // If this is the last segment of the version bump the last number. Each segment must at
-            // least start with a number so this should always work.
-            if idx == (segment_count - 1) {
+            // Determine whether this is the segment that needs to be bumped.
+            let is_segment_to_bump = match bump_type {
+                VersionBumpType::Major => idx == 0,
+                VersionBumpType::Minor => idx == 1,
+                VersionBumpType::Patch => idx == 2,
+                VersionBumpType::Last => idx == (segment_count - 1),
+                VersionBumpType::Segment(mut index_to_bump) => {
+                    if index_to_bump < 0 {
+                        index_to_bump += segment_count as i32;
+                    }
+
+                    idx == index_to_bump as usize
+                }
+            };
+
+            // Bump the segment if we need to. Each segment must at least start with a number so this should always work.
+            if is_segment_to_bump {
                 let last_numeral_component = segment_components
                     .iter_mut()
                     .filter_map(Component::as_number_mut)
-                    .rev()
-                    .next()
+                    .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
             }
 
             let has_implicit_default =
                 segment.has_implicit_default() && segment_components[0] == Component::default();
-            let start_idx = if has_implicit_default { 1 } else { 0 };
+            let start_idx = usize::from(has_implicit_default);
 
             let component_count = segment_components.len();
             for component in segment_components.into_iter().skip(start_idx) {
@@ -287,14 +348,14 @@ impl Version {
             }
             flags = flags
                 .with_local_segment_index(segment_idx)
-                .expect("this should never fail because no new segments are added")
+                .expect("this should never fail because no new segments are added");
         }
 
-        Self {
+        Ok(Self {
             components,
             segments,
             flags,
-        }
+        })
     }
 
     /// Returns the segments that belong the local part of the version.
@@ -309,7 +370,7 @@ impl Version {
         &self,
     ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
-            let mut idx = if self.has_epoch() { 1 } else { 0 };
+            let mut idx = usize::from(self.has_epoch());
             idx += self.segments[..start]
                 .iter()
                 .map(|segment| segment.len() as usize)
@@ -341,11 +402,11 @@ impl Version {
                 major_segment
                     .components()
                     .next()
-                    .and_then(|c| c.as_number())?,
+                    .and_then(Component::as_number)?,
                 minor_segment
                     .components()
                     .next()
-                    .and_then(|c| c.as_number())?,
+                    .and_then(Component::as_number)?,
             ))
         } else {
             None
@@ -358,7 +419,7 @@ impl Version {
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
-            .any(|component| component.is_dev())
+            .any(Component::is_dev)
     }
 
     /// Check if this version version and local strings start with the same as other.
@@ -628,7 +689,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Debug for SegmentFormatt
 
         write!(f, "[")?;
         if let Some(epoch) = epoch {
-            write!(f, "[{}], ", epoch)?;
+            write!(f, "[{epoch}], ")?;
         }
         for (idx, segment) in iter.enumerate() {
             if idx > 0 {
@@ -650,7 +711,7 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
         };
 
         if let Some(epoch) = epoch {
-            write!(f, "{epoch}!")?
+            write!(f, "{epoch}!")?;
         }
 
         for segment in iter {
@@ -755,6 +816,7 @@ impl Default for Component {
 }
 
 impl Ord for Component {
+    #[allow(clippy::match_same_arms)]
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             // Numbers are always ordered higher than strings
@@ -798,8 +860,8 @@ impl PartialOrd for Component {
 impl Display for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Component::Numeral(n) => write!(f, "{}", n),
-            Component::Iden(s) => write!(f, "{}", s),
+            Component::Numeral(n) => write!(f, "{n}"),
+            Component::Iden(s) => write!(f, "{s}"),
             Component::Post => write!(f, "post"),
             Component::Dev => write!(f, "dev"),
             Component::UnderscoreOrDash { is_dash: true } => write!(f, "-"),
@@ -811,8 +873,8 @@ impl Display for Component {
 impl Debug for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Component::Numeral(n) => write!(f, "{}", n),
-            Component::Iden(s) => write!(f, "'{}'", s),
+            Component::Numeral(n) => write!(f, "{n}"),
+            Component::Iden(s) => write!(f, "'{s}'"),
             Component::Post => write!(f, "inf"),
             Component::Dev => write!(f, "'DEV'"),
             Component::UnderscoreOrDash { .. } => write!(f, "'_'"),
@@ -998,7 +1060,7 @@ mod test {
 
     use rand::seq::SliceRandom;
 
-    use crate::version::StrictVersion;
+    use crate::version::{StrictVersion, VersionBumpError, VersionBumpType};
 
     use super::Version;
 
@@ -1006,6 +1068,12 @@ mod test {
 
     #[test]
     fn valid_versions() {
+        enum CmpOp {
+            Less,
+            Equal,
+            Restart,
+        }
+
         let versions = [
             "   0.4",
             "== 0.4.0",
@@ -1036,12 +1104,6 @@ mod test {
             " < 2!0.4.1", // epoch increased again
         ];
 
-        enum CmpOp {
-            Less,
-            Equal,
-            Restart,
-        }
-
         let ops = versions.iter().map(|&v| {
             let (op, version) = if let Some((op, version)) = v.trim().split_once(' ') {
                 (op, version.trim())
@@ -1062,25 +1124,29 @@ mod test {
             match op {
                 CmpOp::Less => {
                     let comparison = previous.as_ref().map(|previous| previous.cmp(&version));
-                    if Some(Ordering::Less) != comparison {
-                        panic!(
-                            "{} is not less than {}: {:?}",
-                            previous.as_ref().map(|v| v.to_string()).unwrap_or_default(),
-                            version,
-                            comparison
-                        );
-                    }
+                    assert!(
+                        Some(Ordering::Less) == comparison,
+                        "{} is not less than {}: {:?}",
+                        previous
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                        version,
+                        comparison
+                    );
                 }
                 CmpOp::Equal => {
                     let comparison = previous.as_ref().map(|previous| previous.cmp(&version));
-                    if Some(Ordering::Equal) != comparison {
-                        panic!(
-                            "{} is not equal to {}: {:?}",
-                            previous.as_ref().map(|v| v.to_string()).unwrap_or_default(),
-                            version,
-                            comparison
-                        );
-                    }
+                    assert!(
+                        Some(Ordering::Equal) == comparison,
+                        "{} is not equal to {}: {:?}",
+                        previous
+                            .as_ref()
+                            .map(ToString::to_string)
+                            .unwrap_or_default(),
+                        version,
+                        comparison
+                    );
                 }
                 CmpOp::Restart => {}
             }
@@ -1202,17 +1268,26 @@ mod test {
     }
 
     #[test]
-    fn bump() {
+    fn bump_last() {
         assert_eq!(
-            Version::from_str("1.1").unwrap().bump(),
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2").unwrap()
         );
         assert_eq!(
-            Version::from_str("1.1l").unwrap().bump(),
+            Version::from_str("1.1l")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("1.2l").unwrap()
         );
         assert_eq!(
-            Version::from_str("5!1.alpha+3.4").unwrap().bump(),
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Last)
+                .unwrap(),
             Version::from_str("5!1.1alpha+3.4").unwrap()
         );
     }
@@ -1234,7 +1309,7 @@ mod test {
     fn hash() {
         let v1 = Version::from_str("1.2.0").unwrap();
 
-        println!("{:?}", v1);
+        println!("{v1:?}");
 
         let vx2 = Version::from_str("1.2.0").unwrap();
         assert_eq!(get_hash(&v1), get_hash(&vx2));
@@ -1346,5 +1421,165 @@ mod test {
                 .into_owned(),
             Version::from_str("3!4.5a.6b").unwrap()
         );
+    }
+
+    #[test]
+    fn bump_major() {
+        assert_eq!(
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("2.1").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("3.1l").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Major)
+                .unwrap(),
+            Version::from_str("5!2.alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_minor() {
+        assert_eq!(
+            Version::from_str("1.1")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("1.2").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("2.2l").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Minor)
+                .unwrap(),
+            Version::from_str("5!1.1alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_minor_fail() {
+        let err = Version::from_str("1")
+            .unwrap()
+            .bump(VersionBumpType::Minor)
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::NoMinorSegment);
+    }
+
+    #[test]
+    fn bump_patch() {
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("2.1l.5alpha")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("2.1l.6alpha").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("5!1.8.alpha+3.4")
+                .unwrap()
+                .bump(VersionBumpType::Patch)
+                .unwrap(),
+            Version::from_str("5!1.8.1alpha+3.4").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_patch_fail() {
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Patch)
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::NoPatchSegment);
+    }
+
+    #[test]
+    fn bump_segment() {
+        // Positive index
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(0))
+                .unwrap(),
+            Version::from_str("2.1.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(1))
+                .unwrap(),
+            Version::from_str("1.2.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(2))
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        // Negative index
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-1))
+                .unwrap(),
+            Version::from_str("1.1.10").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-2))
+                .unwrap(),
+            Version::from_str("1.2.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump(VersionBumpType::Segment(-3))
+                .unwrap(),
+            Version::from_str("2.1.9").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_segment_fail() {
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Segment(3))
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::InvalidSegment { index: 3 });
+
+        let err = Version::from_str("1.3")
+            .unwrap()
+            .bump(VersionBumpType::Segment(-3))
+            .unwrap_err();
+
+        assert_eq!(err, VersionBumpError::InvalidSegment { index: -3 });
     }
 }

@@ -4,8 +4,8 @@
 //! [RustCrypto/hashes](https://github.com/RustCrypto/hashes) library.
 //!
 //! This module provides several functions that wrap around the hashing algorithms provided by the
-//! RustCrypto library. These functions allow you to easily compute the hash of a file, or a stream
-//! of bytes using a variety of hashing algorithms.
+//! `RustCrypto` library. These functions allow you to easily compute the hash of a file, or a
+//! stream of bytes using a variety of hashing algorithms.
 //!
 //! By utilizing the [`Digest`] trait, any hashing algorithm that implements that trait can be used
 //! with the functions provided in this crate.

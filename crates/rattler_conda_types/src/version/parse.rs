@@ -176,27 +176,24 @@ fn segment_parser<'i>(
                 return Err(e);
             }
         };
-        match component {
-            Some(component) => {
-                components.push(component);
-                component_count = match component_count.checked_add(1) {
-                    Some(length) => length,
-                    None => {
-                        return Err(nom::Err::Failure(
-                            ParseVersionErrorKind::TooManyComponentsInASegment,
-                        ))
-                    }
+        if let Some(component) = component {
+            components.push(component);
+            component_count = match component_count.checked_add(1) {
+                Some(length) => length,
+                None => {
+                    return Err(nom::Err::Failure(
+                        ParseVersionErrorKind::TooManyComponentsInASegment,
+                    ))
                 }
             }
-            None => {
-                let segment = Segment::new(component_count)
-                    .ok_or(nom::Err::Failure(
-                        ParseVersionErrorKind::TooManyComponentsInASegment,
-                    ))?
-                    .with_implicit_default(has_implicit_default);
+        } else {
+            let segment = Segment::new(component_count)
+                .ok_or(nom::Err::Failure(
+                    ParseVersionErrorKind::TooManyComponentsInASegment,
+                ))?
+                .with_implicit_default(has_implicit_default);
 
-                break Ok((remaining, segment));
-            }
+            break Ok((remaining, segment));
         }
         rest = remaining;
     }
@@ -208,7 +205,9 @@ fn trailing_dash_underscore_parser(
     dash_or_underscore: Option<char>,
 ) -> IResult<&str, (Option<Component>, Option<char>), ParseVersionErrorKind> {
     // Parse a - or _. Return early if it cannot be found.
-    let (rest, Some(separator)) = opt(one_of::<_,_,(&str, ErrorKind)>("-_"))(input).map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))? else {
+    let (rest, Some(separator)) = opt(one_of::<_, _, (&str, ErrorKind)>("-_"))(input)
+        .map_err(|e| e.map(|(_, kind)| ParseVersionErrorKind::Nom(kind)))?
+    else {
         return Ok((input, (None, dash_or_underscore)));
     };
 
@@ -414,9 +413,9 @@ pub fn version_parser(input: &str) -> IResult<&str, Version, ParseVersionErrorKi
     Ok((
         rest,
         Version {
-            flags,
             components,
             segments,
+            flags,
         },
     ))
 }
@@ -466,6 +465,13 @@ mod test {
 
     #[test]
     fn test_parse() {
+        #[derive(Debug, Serialize)]
+        #[serde(untagged)]
+        enum VersionOrError {
+            Version(Version),
+            Error(String),
+        }
+
         let versions = [
             "$",
             ".",
@@ -490,13 +496,6 @@ mod test {
             "1-_",
             "1_-",
         ];
-
-        #[derive(Debug, Serialize)]
-        #[serde(untagged)]
-        enum VersionOrError {
-            Version(Version),
-            Error(String),
-        }
 
         let mut index_map: BTreeMap<String, VersionOrError> = BTreeMap::default();
         for version_str in versions {
@@ -535,7 +534,7 @@ mod test {
         .unwrap();
         for line in versions.lines() {
             // Skip comments and empty lines
-            if line.trim_start().starts_with("#") || line.trim().is_empty() {
+            if line.trim_start().starts_with('#') || line.trim().is_empty() {
                 continue;
             }
 

@@ -16,7 +16,7 @@ pub enum CalculateContentHashError {
 }
 
 /// This function tries to replicate the creation of the content-hashes
-/// like conda-lock does https://github.com/conda/conda-lock/blob/83117cb8da89d011a25f643f953822d5c098b246/conda_lock/models/lock_spec.py#L60
+/// like conda-lock does <https://github.com/conda/conda-lock/blob/83117cb8da89d011a25f643f953822d5c098b246/conda_lock/models/lock_spec.py#L60>
 /// so we need to recreate some python data-structures and serialize these to json
 pub fn calculate_content_data(
     _platform: &Platform,
@@ -30,7 +30,7 @@ pub fn calculate_content_data(
         platform: Option<Vec<String>>,
     }
 
-    /// This is the equivalent of an VersionedDependency from
+    /// This is the equivalent of an `VersionedDependency` from
     /// the conda-lock python source code
     /// conda
     #[derive(Serialize, Debug)]
@@ -46,7 +46,7 @@ pub fn calculate_content_data(
         version: String,
     }
 
-    /// Data for which the ContentHash hash has to be constructed
+    /// Data for which the content hash has to be constructed
     /// In python this is just a dictionary
     #[derive(Serialize, Debug)]
     struct ContentHashData {
@@ -70,19 +70,19 @@ pub fn calculate_content_data(
                 manager: "conda".to_string(),
                 optional: false,
                 category: "main".to_string(),
-                extras: Default::default(),
-                selectors: Default::default(),
+                extras: Vec::default(),
+                selectors: Selector::default(),
                 version: spec
                     .version
                     .as_ref()
-                    .map(|v| v.to_string())
+                    .map(ToString::to_string)
                     .ok_or_else(|| {
                         CalculateContentHashError::RequiredAttributeMissing("version".to_string())
                     })?,
                 build: spec.build.clone().map(|b| match b {
                     StringMatcher::Exact(s) => s,
-                    StringMatcher::Glob(g) => format!("{}", g),
-                    StringMatcher::Regex(r) => format!("{}", r),
+                    StringMatcher::Glob(g) => format!("{g}"),
+                    StringMatcher::Regex(r) => format!("{r}"),
                 }),
                 conda_channel: None,
             })
@@ -115,7 +115,7 @@ pub fn calculate_content_hash(
     let content_data = calculate_content_data(platform, input_specs, channels)?;
     let content_hash =
         rattler_digest::compute_bytes_digest::<rattler_digest::Sha256>(&content_data);
-    Ok(format!("{:x}", content_hash))
+    Ok(format!("{content_hash:x}"))
 }
 
 #[cfg(test)]

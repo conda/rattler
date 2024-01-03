@@ -50,7 +50,7 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
 }
 
 /// Retrieves the names of the packages that form the roots of the graph and breaks specified
-/// cycles (e.g. if there is a cycle between A and B and there is a cycle_break (A, B), the edge
+/// cycles (e.g. if there is a cycle between A and B and there is a `cycle_break (A, B)`, the edge
 /// A -> B will be removed)
 fn get_graph_roots<T: AsRef<PackageRecord>>(
     records: &[T],
@@ -71,8 +71,10 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
                 .filter(|d| {
                     // filter out circular dependencies
                     if let Some(cycle_breaks) = cycle_breaks {
-                        !cycle_breaks
-                            .contains(&(r.as_ref().name.as_normalized().to_owned(), d.to_string()))
+                        !cycle_breaks.contains(&(
+                            r.as_ref().name.as_normalized().to_owned(),
+                            (*d).to_string(),
+                        ))
                     } else {
                         true
                     }
@@ -82,7 +84,7 @@ fn get_graph_roots<T: AsRef<PackageRecord>>(
 
     all_packages
         .difference(&dependencies)
-        .map(|name| name.to_string())
+        .map(ToString::to_string)
         .collect()
 }
 
@@ -291,7 +293,7 @@ mod tests {
 
             // All the package's dependencies must have already been installed
             for dep in deps {
-                let dep_name = package_name_from_match_spec(&dep);
+                let dep_name = package_name_from_match_spec(dep);
 
                 if circular_dependencies.contains(&(name, dep_name)) {
                     // Ignore circular dependencies
@@ -344,7 +346,7 @@ mod tests {
         #[case] circular_deps: &[(&str, &str)],
     ) {
         let sorted_packages = sort_topologically(packages.clone());
-        let circular_deps = circular_deps.into_iter().cloned().collect();
+        let circular_deps = circular_deps.iter().cloned().collect();
 
         sanity_check_topological_sort(&sorted_packages, &packages);
         simulate_install(&sorted_packages, &circular_deps);
@@ -354,7 +356,7 @@ mod tests {
         assert_eq!(
             last_package.package_record.name.as_normalized(),
             expected_last_package
-        )
+        );
     }
 
     fn get_resolved_packages_for_two_roots() -> Vec<RepoDataRecord> {
@@ -1829,6 +1831,6 @@ mod tests {
         let mut python = get_resolved_packages_for_python();
         let pip: Vec<RepoDataRecord> = serde_json::from_str(pip).unwrap();
         python.extend(pip);
-        return python;
+        python
     }
 }

@@ -22,8 +22,8 @@ fn sort_paths<'a>(
         .map(|p| p.strip_prefix(base_path).unwrap())
         .partition(|&path| path.starts_with(info));
 
-    let info_paths = sorted(info_paths.into_iter().map(|p| p.to_path_buf()));
-    let other_paths = sorted(other_paths.into_iter().map(|p| p.to_path_buf()));
+    let info_paths = sorted(info_paths.into_iter().map(std::path::Path::to_path_buf));
+    let other_paths = sorted(other_paths.into_iter().map(std::path::Path::to_path_buf));
 
     (info_paths, other_paths)
 }
@@ -49,13 +49,13 @@ impl CompressionLevel {
             CompressionLevel::Highest => Ok(22),
             CompressionLevel::Default => Ok(15),
             CompressionLevel::Numeric(n) => {
-                if !(1..=22).contains(&n) {
+                if (1..=22).contains(&n) {
+                    Ok(n as i32)
+                } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         "zstd compression level must be between 1 and 22",
                     ))
-                } else {
-                    Ok(n as i32)
                 }
             }
         }
@@ -64,16 +64,15 @@ impl CompressionLevel {
     fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
         match self {
             CompressionLevel::Lowest => Ok(bzip2::Compression::new(1)),
-            CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
-            CompressionLevel::Default => Ok(bzip2::Compression::new(9)),
+            CompressionLevel::Default | CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
             CompressionLevel::Numeric(n) => {
-                if !(1..=9).contains(&n) {
+                if (1..=9).contains(&n) {
+                    Ok(bzip2::Compression::new(n))
+                } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
                         "bzip2 compression level must be between 1 and 9",
                     ))
-                } else {
-                    Ok(bzip2::Compression::new(n))
                 }
             }
         }
@@ -110,7 +109,7 @@ impl CompressionLevel {
 ///
 /// # See also
 ///
-/// * [write_conda_package]
+/// * [`write_conda_package`]
 pub fn write_tar_bz2_package<W: Write>(
     writer: W,
     base_path: &Path,
@@ -127,7 +126,7 @@ pub fn write_tar_bz2_package<W: Write>(
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
     for path in info_paths.chain(other_paths) {
-        append_path_to_archive(&mut archive, base_path, &path, &timestamp)?;
+        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
     }
 
     archive.into_inner()?.finish()?;
@@ -141,7 +140,7 @@ fn write_zst_archive<W: Write>(
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
-    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // TODO figure out multi-threading for zstd
     let compression_level = compression_level.to_zstd_level()?;
@@ -202,7 +201,7 @@ pub fn write_conda_package<W: Write + Seek>(
         base_path,
         other_paths,
         compression_level,
-        &timestamp,
+        timestamp,
     )?;
 
     // info paths come last
@@ -212,7 +211,7 @@ pub fn write_conda_package<W: Write + Seek>(
         base_path,
         info_paths,
         compression_level,
-        &timestamp,
+        timestamp,
     )?;
 
     outer_archive.finish()?;
@@ -222,7 +221,7 @@ pub fn write_conda_package<W: Write + Seek>(
 
 fn prepare_header(
     path: &Path,
-    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<tar::Header, std::io::Error> {
     let mut header = tar::Header::new_gnu();
     let name = b"././@LongLink";
@@ -250,7 +249,7 @@ fn append_path_to_archive(
     archive: &mut tar::Builder<impl Write>,
     base_path: &Path,
     path: &Path,
-    timestamp: &Option<&chrono::DateTime<chrono::Utc>>,
+    timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // create a tar header
     let mut header = prepare_header(&base_path.join(path), timestamp)

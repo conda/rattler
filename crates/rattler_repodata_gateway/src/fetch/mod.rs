@@ -30,7 +30,7 @@ pub mod jlap;
 /// Type alias for function to report progress while downloading repodata
 pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
 
-/// RepoData could not be found for given channel and platform
+/// `RepoData` could not be found for given channel and platform
 #[derive(Debug, thiserror::Error)]
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
@@ -179,7 +179,7 @@ pub struct FetchRepoDataOptions {
 impl Default for FetchRepoDataOptions {
     fn default() -> Self {
         Self {
-            cache_action: Default::default(),
+            cache_action: CacheAction::default(),
             variant: Variant::default(),
             jlap_enabled: true,
             zstd_enabled: true,
@@ -281,7 +281,7 @@ async fn repodata_from_file(
 
     Ok(CachedRepoData {
         lock_file,
-        repo_data_json_path: out_path.to_path_buf(),
+        repo_data_json_path: out_path.clone(),
         cache_state: new_cache_state,
         cache_result: CacheResult::CacheHit,
     })
@@ -322,8 +322,8 @@ pub async fn fetch_repo_data(
             .join(options.variant.file_name())
             .expect("file name is valid"),
     );
-    let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
+    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Lock all files that have to do with that cache key
     let lock_file_path = cache_path.join(format!("{}.lock", &cache_key));
@@ -346,7 +346,9 @@ pub async fn fetch_repo_data(
     };
 
     // Validate the current state of the cache
-    let cache_state = if cache_action != CacheAction::NoCache {
+    let cache_state = if cache_action == CacheAction::NoCache {
+        None
+    } else {
         let owned_subdir_url = subdir_url.clone();
         let owned_cache_path = cache_path.clone();
         let owned_cache_key = cache_key.clone();
@@ -366,41 +368,32 @@ pub async fn fetch_repo_data(
                     cache_result: CacheResult::CacheHit,
                 });
             }
-            (ValidatedCacheState::OutOfDate(_), CacheAction::UseCacheOnly) => {
-                // The cache is out of date but we also cant fetch new data
-                return Err(FetchRepoDataError::NoCacheAvailable);
-            }
-            (ValidatedCacheState::OutOfDate(cache_state), _) => {
-                // The cache is out of date but we can still refresh the data
-                Some(cache_state)
-            }
-            (
-                ValidatedCacheState::Mismatched(_),
+            (ValidatedCacheState::OutOfDate(_), CacheAction::UseCacheOnly)
+            | (
+                ValidatedCacheState::Mismatched(_) | ValidatedCacheState::InvalidOrMissing,
                 CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly,
             ) => {
-                // The cache doesn't match the repodata.json that is on disk. This means the cache is
+                // The cache is out of date but we also cant fetch new data
+                // OR, The cache doesn't match the repodata.json that is on disk. This means the cache is
                 // not usable.
+                // OR, No cache available at all, and we cant refresh the data.
                 return Err(FetchRepoDataError::NoCacheAvailable);
             }
-            (ValidatedCacheState::Mismatched(cache_state), _) => {
-                // The cache doesn't match the data that is on disk. but it might contain some other
+            (
+                ValidatedCacheState::OutOfDate(cache_state)
+                | ValidatedCacheState::Mismatched(cache_state),
+                _,
+            ) => {
+                // The cache is out of date but we can still refresh the data
+                // OR, The cache doesn't match the data that is on disk. but it might contain some other
                 // interesting cached data as well...
                 Some(cache_state)
-            }
-            (
-                ValidatedCacheState::InvalidOrMissing,
-                CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly,
-            ) => {
-                // No cache available at all, and we cant refresh the data.
-                return Err(FetchRepoDataError::NoCacheAvailable);
             }
             (ValidatedCacheState::InvalidOrMissing, _) => {
                 // No cache available but we can update it!
                 None
             }
         }
-    } else {
-        None
     };
 
     // Determine the availability of variants based on the cache or by querying the remote.
@@ -500,7 +493,7 @@ pub async fn fetch_repo_data(
 
     // Add previous cache headers if we have them
     if let Some(cache_headers) = cache_state.as_ref().map(|state| &state.cache_headers) {
-        cache_headers.add_to_request(&mut headers)
+        cache_headers.add_to_request(&mut headers);
     }
     // Send the request and wait for a reply
     let response = match request_builder.headers(headers).send().await {
@@ -716,26 +709,17 @@ pub struct VariantAvailability {
 impl VariantAvailability {
     /// Returns true if there is a Zst variant available, regardless of when it was checked
     pub fn has_zst(&self) -> bool {
-        self.has_zst
-            .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+        self.has_zst.as_ref().map_or(false, |state| state.value)
     }
 
     /// Returns true if there is a Bz2 variant available, regardless of when it was checked
     pub fn has_bz2(&self) -> bool {
-        self.has_bz2
-            .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+        self.has_bz2.as_ref().map_or(false, |state| state.value)
     }
 
     /// Returns true if there is a JLAP variant available, regardless of when it was checked
     pub fn has_jlap(&self) -> bool {
-        self.has_jlap
-            .as_ref()
-            .map(|state| state.value)
-            .unwrap_or(false)
+        self.has_jlap.as_ref().map_or(false, |state| state.value)
     }
 }
 
@@ -784,7 +768,11 @@ pub async fn check_variant_availability(
 
     // Create a future to determine if bz2 is available. We only check this if we dont already know that
     // zst is available because if that's available we're going to use that anyway.
-    let bz2_future = if has_zst != Some(true) {
+    let bz2_future = if has_zst == Some(true) {
+        // If we already know that zst is available we simply copy the availability value from the last
+        // time we checked.
+        ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
+    } else {
         // If the zst variant might not be available we need to check whether bz2 is available.
         async {
             match has_bz2 {
@@ -799,10 +787,6 @@ pub async fn check_variant_availability(
             }
         }
         .left_future()
-    } else {
-        // If we already know that zst is available we simply copy the availability value from the last
-        // time we checked.
-        ready(cache_state.and_then(|state| state.has_zst.clone())).right_future()
     };
 
     let jlap_future = match has_jlap {
@@ -902,8 +886,8 @@ fn validate_cached_state(
     subdir_url: &Url,
     cache_key: &str,
 ) -> ValidatedCacheState {
-    let repo_data_json_path = cache_path.join(format!("{}.json", cache_key));
-    let cache_state_path = cache_path.join(format!("{}.info.json", cache_key));
+    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Check if we have cached repodata.json file
     let json_metadata = match std::fs::metadata(&repo_data_json_path) {
@@ -1003,8 +987,8 @@ fn validate_cached_state(
     };
 
     // Parse the cache control header, and determine if the cache is out of date or not.
-    match cache_state.cache_headers.cache_control.as_deref() {
-        Some(cache_control) => match CacheControl::from_value(cache_control) {
+    if let Some(cache_control) = cache_state.cache_headers.cache_control.as_deref() {
+        match CacheControl::from_value(cache_control) {
             None => {
                 tracing::warn!(
                 "could not parse cache_control from repodata cache state. Ignoring cached files..."
@@ -1032,11 +1016,12 @@ fn validate_cached_state(
                 );
                 return ValidatedCacheState::OutOfDate(cache_state);
             }
-        },
-        None => {
-            tracing::warn!("previous cache state does not contain cache_control header. Assuming out of date...");
-            return ValidatedCacheState::OutOfDate(cache_state);
         }
+    } else {
+        tracing::warn!(
+            "previous cache state does not contain cache_control header. Assuming out of date..."
+        );
+        return ValidatedCacheState::OutOfDate(cache_state);
     }
 
     // Well then! If we get here, it means the cache must be up to date!
