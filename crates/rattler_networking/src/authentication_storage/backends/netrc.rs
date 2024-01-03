@@ -79,15 +79,22 @@ impl NetRcStorage {
 }
 
 impl StorageBackend for NetRcStorage {
-    fn store(&self, host: &str, authentication: &Authentication) -> anyhow::Result<()> {
+    fn store(&self, _host: &str, _authentication: &Authentication) -> anyhow::Result<()> {
         anyhow::bail!("NetRcStorage does not support storing credentials")
     }
 
-    fn delete(&self, host: &str) -> anyhow::Result<()> {
+    fn delete(&self, _host: &str) -> anyhow::Result<()> {
         anyhow::bail!("NetRcStorage does not support deleting credentials")
     }
 
     fn get(&self, host: &str) -> anyhow::Result<Option<Authentication>> {
-        self.get(host)
+        match self.get_password(host) {
+            Ok(Some(password)) => Ok(Some(Authentication::BasicHTTP {
+                username: host.to_string(),
+                password,
+            })),
+            Ok(None) => Ok(None),
+            Err(err) => Err(anyhow::Error::new(err)),   
+        }
     }
 }
