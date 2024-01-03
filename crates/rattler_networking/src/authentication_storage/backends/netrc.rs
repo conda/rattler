@@ -1,11 +1,12 @@
-//! Fallback storage for passwords.
+//! Read authentication credentials from `.netrc` files.
 
+use crate::{authentication_storage::StorageBackend, Authentication};
 use netrc_rs::{Machine, Netrc};
 use std::{collections::HashMap, env, io::ErrorKind, path::Path, path::PathBuf};
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NetRcStorage {
     /// The netrc file contents
     machines: HashMap<String, Machine>,
@@ -74,5 +75,19 @@ impl NetRcStorage {
             Some(machine) => Ok(machine.password.clone()),
             None => Ok(None),
         }
+    }
+}
+
+impl StorageBackend for NetRcStorage {
+    fn store(&self, host: &str, authentication: &Authentication) -> anyhow::Result<()> {
+        anyhow::bail!("NetRcStorage does not support storing credentials")
+    }
+
+    fn delete(&self, host: &str) -> anyhow::Result<()> {
+        anyhow::bail!("NetRcStorage does not support deleting credentials")
+    }
+
+    fn get(&self, host: &str) -> anyhow::Result<Option<Authentication>> {
+        self.get(host)
     }
 }
