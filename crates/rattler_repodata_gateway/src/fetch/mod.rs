@@ -962,7 +962,7 @@ fn validate_cached_state(
                     tracing::warn!(
                         "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
                     );
-                    return ValidatedCacheState::Mismatched(cache_state);
+                    return ValidatedCacheState::InvalidOrMissing;
                 }
             }
         }
