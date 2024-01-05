@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+# [0.15.0] - 2024-01-05
+
+### 📃 Details
+
+#### Added
+
+* Add ParseMatchSpecError and ParseMatchSpecError tests by @Johnwillliam ([#434](https://github.com/mamba-org/rattler/pull/434))
+* Add option to force usage of fallback_auth_store by @0xbe7a ([#435](https://github.com/mamba-org/rattler/pull/435))
+* New crate (rattler-index) with index functionality including python bindings by @BenjaminLowry ([#436](https://github.com/mamba-org/rattler/pull/436))
+* Add support for netrc files by @mariusvniekerk ([#395](https://github.com/mamba-org/rattler/pull/395))
+
+#### Changed
+
+* Renamed `behaviour` to `behavior` ([#428](https://github.com/mamba-org/rattler/pull/428))
+* Enabled more clippy lints by @baszalmstra ([#462](https://github.com/mamba-org/rattler/pull/462))
+* Refactor `Version.bump()` to accept bumping `major/minor/patch/last` by @hadim ([#452](https://github.com/mamba-org/rattler/pull/452))
+
+#### Fixed
+
+* Default value for `conda_packages` in repodata.json by @BenjaminLowry ([#441](https://github.com/mamba-org/rattler/pull/441))
+* Wildcard expansion for stored credentials of domains by @0xbe7a ([#442](https://github.com/mamba-org/rattler/pull/442))
+* Use serde default for proper serialization by @ruben-arts ([#443](https://github.com/mamba-org/rattler/pull/443))
+* Better detection of hardlinks and fallback to copy by @baszalmstra ([#461](https://github.com/mamba-org/rattler/pull/461))
+* Re-download the repodata cache if is out of sync/corrupt by @orhun ([#466](https://github.com/mamba-org/rattler/pull/466))
+
 # [0.14.0] - 2023-12-05
 
 ### 📃 Details
