@@ -1,6 +1,6 @@
 //! Functionality for writing conda packages
-use std::fs;
-use std::io::{Seek, Write};
+use std::fs::{self, File};
+use std::io::{self, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use itertools::sorted;
@@ -137,22 +137,35 @@ pub fn write_tar_bz2_package<W: Write>(
 /// Write the contents of a list of paths to a tar zst archive
 fn write_zst_archive<W: Write>(
     writer: W,
+    tar_path: PathBuf,
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
-    // TODO figure out multi-threading for zstd
-    let compression_level = compression_level.to_zstd_level()?;
-    let mut archive = tar::Builder::new(zstd::Encoder::new(writer, compression_level)?);
+    // Create a temporary tar file
+    let tar_file = File::create(&tar_path)?;
+    let mut archive = tar::Builder::new(tar_file);
     archive.follow_symlinks(false);
-
     for path in paths {
         append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
     }
+    archive.finish()?;
 
-    archive.into_inner()?.finish()?;
+    // Compress it as tar.zst
+    let mut tar_file = File::open(&tar_path)?;
+    let compression_level = compression_level.to_zstd_level()?;
+    let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
+    zst_encoder.multithread(num_cpus::get() as u32)?;
+    zst_encoder.set_pledged_src_size(tar_file.metadata().map(|v| v.len()).ok())?;
+    zst_encoder.include_contentsize(true)?;
 
+    // Append tar.zst to the archive
+    io::copy(&mut tar_file, &mut zst_encoder)?;
+    zst_encoder.finish()?;
+
+    // Clean up
+    fs::remove_file(tar_path)?;
     Ok(())
 }
 
@@ -195,9 +208,11 @@ pub fn write_conda_package<W: Write + Seek>(
 
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
-    outer_archive.start_file(format!("pkg-{out_name}.tar.zst"), options)?;
+    let archive_path = format!("pkg-{out_name}.tar.zst");
+    outer_archive.start_file(archive_path.to_string(), options)?;
     write_zst_archive(
         &mut outer_archive,
+        base_path.join(archive_path),
         base_path,
         other_paths,
         compression_level,
@@ -205,9 +220,11 @@ pub fn write_conda_package<W: Write + Seek>(
     )?;
 
     // info paths come last
-    outer_archive.start_file(format!("info-{out_name}.tar.zst"), options)?;
+    let archive_path = format!("info-{out_name}.tar.zst");
+    outer_archive.start_file(archive_path.to_string(), options)?;
     write_zst_archive(
         &mut outer_archive,
+        base_path.join(archive_path),
         base_path,
         info_paths,
         compression_level,
