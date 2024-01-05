@@ -1,6 +1,7 @@
 use crate::utils::serde::DeserializeFromStrUnchecked;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, DeserializeFromStr};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -141,6 +142,12 @@ impl<'de> DeserializeAs<'de, PackageName> for DeserializeFromStrUnchecked {
     {
         let source = String::deserialize(deserializer)?;
         Ok(PackageName::new_unchecked(source))
+    }
+}
+
+impl Borrow<str> for PackageName {
+    fn borrow(&self) -> &str {
+        self.as_normalized()
     }
 }
 
