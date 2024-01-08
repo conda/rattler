@@ -1,5 +1,4 @@
 //! Functionality for writing conda packages
-use std::env;
 use std::fs::{self, File};
 use std::io::{self, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -136,13 +135,12 @@ pub fn write_tar_bz2_package<W: Write>(
 }
 
 /// Write the contents of a list of paths to a tar zst archive
-///
-/// The number of threads can be configured via `ZSTD_NUMTHREADS` environment variable.
 fn write_zst_archive<W: Write>(
     writer: W,
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
+    num_threads: Option<u32>,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // Create a temporary tar file
@@ -158,12 +156,7 @@ fn write_zst_archive<W: Write>(
     let mut tar_file = File::open(&tar_path)?;
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
-    zst_encoder.multithread(
-        env::var("ZSTD_NUMTHREADS")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or_else(|| num_cpus::get() as u32),
-    )?;
+    zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
     zst_encoder.set_pledged_src_size(tar_file.metadata().map(|v| v.len()).ok())?;
     zst_encoder.include_contentsize(true)?;
 
@@ -186,6 +179,8 @@ fn write_zst_archive<W: Write>(
 /// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner zstd encoded files
+/// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
+/// the number of CPU cores if `None`)
 /// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors
@@ -197,6 +192,7 @@ pub fn write_conda_package<W: Write + Seek>(
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
+    compression_num_threads: Option<u32>,
     out_name: &str,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
@@ -220,6 +216,7 @@ pub fn write_conda_package<W: Write + Seek>(
         base_path,
         other_paths,
         compression_level,
+        compression_num_threads,
         timestamp,
     )?;
 
@@ -231,6 +228,7 @@ pub fn write_conda_package<W: Write + Seek>(
         base_path,
         info_paths,
         compression_level,
+        compression_num_threads,
         timestamp,
     )?;
 
