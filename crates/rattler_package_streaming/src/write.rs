@@ -1,6 +1,6 @@
 //! Functionality for writing conda packages
-use std::fs;
-use std::io::{Seek, Write};
+use std::fs::{self, File};
+use std::io::{self, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use itertools::sorted;
@@ -140,18 +140,29 @@ fn write_zst_archive<W: Write>(
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
+    num_threads: Option<u32>,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
-    // TODO figure out multi-threading for zstd
-    let compression_level = compression_level.to_zstd_level()?;
-    let mut archive = tar::Builder::new(zstd::Encoder::new(writer, compression_level)?);
+    // Create a temporary tar file
+    let tar_path = tempfile::Builder::new().tempfile_in(base_path)?;
+    let mut archive = tar::Builder::new(&tar_path);
     archive.follow_symlinks(false);
-
     for path in paths {
         append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
     }
+    archive.finish()?;
 
-    archive.into_inner()?.finish()?;
+    // Compress it as tar.zst
+    let mut tar_file = File::open(&tar_path)?;
+    let compression_level = compression_level.to_zstd_level()?;
+    let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
+    zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
+    zst_encoder.set_pledged_src_size(tar_file.metadata().map(|v| v.len()).ok())?;
+    zst_encoder.include_contentsize(true)?;
+
+    // Append tar.zst to the archive
+    io::copy(&mut tar_file, &mut zst_encoder)?;
+    zst_encoder.finish()?;
 
     Ok(())
 }
@@ -168,6 +179,8 @@ fn write_zst_archive<W: Write>(
 /// * `base_path` - the base path of the package. All paths in `paths` are relative to this path
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner zstd encoded files
+/// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
+/// the number of CPU cores if `None`)
 /// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors
@@ -179,6 +192,7 @@ pub fn write_conda_package<W: Write + Seek>(
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
+    compression_num_threads: Option<u32>,
     out_name: &str,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
@@ -195,22 +209,26 @@ pub fn write_conda_package<W: Write + Seek>(
 
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
-    outer_archive.start_file(format!("pkg-{out_name}.tar.zst"), options)?;
+    let archive_path = format!("pkg-{out_name}.tar.zst");
+    outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,
         base_path,
         other_paths,
         compression_level,
+        compression_num_threads,
         timestamp,
     )?;
 
     // info paths come last
-    outer_archive.start_file(format!("info-{out_name}.tar.zst"), options)?;
+    let archive_path = format!("info-{out_name}.tar.zst");
+    outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,
         base_path,
         info_paths,
         compression_level,
+        compression_num_threads,
         timestamp,
     )?;
 

@@ -217,6 +217,7 @@ fn test_rewrite_conda() {
             &target_dir,
             &paths,
             CompressionLevel::Default,
+            None,
             &name,
             None,
         )
