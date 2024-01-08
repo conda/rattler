@@ -23,7 +23,7 @@ fn try_detect_osx_version() -> Result<Option<Version>, ParseOsxVersionError> {
         .map_err(ParseOsxVersionError::FailedToReadSystemVersion)?;
     let cur = std::io::Cursor::new(file.as_bytes());
     let v =
-        plist::Value::from_reader(cur).map_err(|_| ParseOsxVersionError::CorruptedDictionary)?;
+        plist::Value::from_reader(cur).map_err(|_err| ParseOsxVersionError::CorruptedDictionary)?;
 
     let version = v
         .as_dictionary()

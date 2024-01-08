@@ -32,6 +32,11 @@ pub enum DetectLibCError {
 /// the future.
 #[cfg(unix)]
 fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCError> {
+    // GNU libc writes to stdout
+    static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
+        regex::Regex::new("(?mi)(?:glibc|gnu libc).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
+    });
+
     // Run `ldd --version` to detect the libc version and family on the system. `ldd` is shipped
     // with libc so if an error occured during its execution we can assume no libc is available on
     // the system.
@@ -47,10 +52,6 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    // GNU libc writes to stdout
-    static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-        regex::Regex::new("(?mi)(?:glibc|gnu libc).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
-    });
     if let Some(version_match) = GNU_LIBC_RE
         .captures(&stdout)
         .and_then(|captures| captures.get(1))

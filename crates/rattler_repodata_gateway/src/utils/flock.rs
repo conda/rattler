@@ -302,8 +302,7 @@ mod sys {
             // Unfortunately, depending on the target, these may or may not be the same.
             // For targets in which they are the same, the duplicate pattern causes a warning.
             #[allow(unreachable_patterns)]
-            Some(libc::ENOTSUP | libc::EOPNOTSUPP) => true,
-            Some(libc::ENOSYS) => true,
+            Some(libc::ENOTSUP | libc::EOPNOTSUPP | libc::ENOSYS) => true,
             _ => false,
         }
     }
