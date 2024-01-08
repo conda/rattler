@@ -35,6 +35,7 @@ rattler_conda_types = { version = "0.15.0", path = "../rattler_conda_types" }
 rattler_digest = { version = "0.15.0", path = "../rattler_digest" }
 rattler_networking = { version = "0.15.0", path = "../rattler_networking", default-features = false }
 rattler_package_streaming = { version = "0.15.0", path = "../rattler_package_streaming", features = ["reqwest", "tokio"], default-features = false }
+reflink-copy = "0.1.14"
 regex = "1.9.6"
 reqwest = { version = "0.11.22", default-features = false, features = ["stream", "json", "gzip"] }
 serde = { version = "1.0.188", features = ["derive"] }
@@ -56,7 +57,7 @@ rand = "0.8.5"
 rstest = "0.18.2"
 tracing-test = { version = "0.2.4" }
 insta = { version = "1.33.0", features = ["yaml"] }
-rattler_lock = { path="../rattler_lock"}
+rattler_lock = { path = "../rattler_lock" }
 
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
 axum = "0.6.20"
