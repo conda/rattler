@@ -1,4 +1,5 @@
 //! Functionality for writing conda packages
+use std::env;
 use std::fs::{self, File};
 use std::io::{self, Seek, Write};
 use std::path::{Path, PathBuf};
@@ -135,6 +136,8 @@ pub fn write_tar_bz2_package<W: Write>(
 }
 
 /// Write the contents of a list of paths to a tar zst archive
+///
+/// The number of threads can be configured via `ZSTD_NUMTHREADS` environment variable.
 fn write_zst_archive<W: Write>(
     writer: W,
     base_path: &Path,
@@ -155,7 +158,12 @@ fn write_zst_archive<W: Write>(
     let mut tar_file = File::open(&tar_path)?;
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
-    zst_encoder.multithread(num_cpus::get() as u32)?;
+    zst_encoder.multithread(
+        env::var("ZSTD_NUMTHREADS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or_else(|| num_cpus::get() as u32),
+    )?;
     zst_encoder.set_pledged_src_size(tar_file.metadata().map(|v| v.len()).ok())?;
     zst_encoder.include_contentsize(true)?;
 
