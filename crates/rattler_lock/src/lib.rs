@@ -303,22 +303,22 @@ mod test {
         // Make sure that we have parsed some packages
         assert!(!conda_lock.package.is_empty());
         insta::with_settings!({sort_maps => true}, {
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::Linux64)
-                .collect::<Vec<_>>()
-        );
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::Osx64)
-                .collect::<Vec<_>>()
-        );
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::OsxArm64)
-                .collect::<Vec<_>>()
-        );
-            })
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::Linux64)
+                    .collect::<Vec<_>>()
+            );
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::Osx64)
+                    .collect::<Vec<_>>()
+            );
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::OsxArm64)
+                    .collect::<Vec<_>>()
+            );
+        });
     }
 
     #[test]

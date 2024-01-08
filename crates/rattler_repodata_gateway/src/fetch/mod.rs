@@ -1137,7 +1137,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1167,7 +1167,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.path().to_owned(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1180,7 +1180,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.path().to_owned(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1204,7 +1204,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1233,7 +1233,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1275,7 +1275,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1324,7 +1324,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1375,7 +1375,7 @@ mod test {
             server.url(),
             authenticated_client,
             cache_dir.into_path(),
-            Default::default(),
+            FetchRepoDataOptions::default(),
             None,
         )
         .await
@@ -1408,9 +1408,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            FetchRepoDataOptions {
-                ..Default::default()
-            },
+            FetchRepoDataOptions::default(),
             Some(Box::new(download_progress)),
         )
         .await
@@ -1433,9 +1431,7 @@ mod test {
                 .unwrap(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            FetchRepoDataOptions {
-                ..Default::default()
-            },
+            FetchRepoDataOptions::default(),
             None,
         )
         .await;
@@ -1457,9 +1453,7 @@ mod test {
             server.url(),
             AuthenticatedClient::default(),
             cache_dir.into_path(),
-            FetchRepoDataOptions {
-                ..Default::default()
-            },
+            FetchRepoDataOptions::default(),
             None,
         )
         .await;
