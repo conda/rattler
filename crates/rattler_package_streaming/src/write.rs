@@ -137,15 +137,14 @@ pub fn write_tar_bz2_package<W: Write>(
 /// Write the contents of a list of paths to a tar zst archive
 fn write_zst_archive<W: Write>(
     writer: W,
-    tar_path: PathBuf,
     base_path: &Path,
     paths: impl Iterator<Item = PathBuf>,
     compression_level: CompressionLevel,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
 ) -> Result<(), std::io::Error> {
     // Create a temporary tar file
-    let tar_file = File::create(&tar_path)?;
-    let mut archive = tar::Builder::new(tar_file);
+    let tar_path = tempfile::Builder::new().tempfile_in(base_path)?;
+    let mut archive = tar::Builder::new(&tar_path);
     archive.follow_symlinks(false);
     for path in paths {
         append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
@@ -164,8 +163,6 @@ fn write_zst_archive<W: Write>(
     io::copy(&mut tar_file, &mut zst_encoder)?;
     zst_encoder.finish()?;
 
-    // Clean up
-    fs::remove_file(tar_path)?;
     Ok(())
 }
 
@@ -209,10 +206,9 @@ pub fn write_conda_package<W: Write + Seek>(
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
     let archive_path = format!("pkg-{out_name}.tar.zst");
-    outer_archive.start_file(archive_path.to_string(), options)?;
+    outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,
-        base_path.join(archive_path),
         base_path,
         other_paths,
         compression_level,
@@ -221,10 +217,9 @@ pub fn write_conda_package<W: Write + Seek>(
 
     // info paths come last
     let archive_path = format!("info-{out_name}.tar.zst");
-    outer_archive.start_file(archive_path.to_string(), options)?;
+    outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,
-        base_path.join(archive_path),
         base_path,
         info_paths,
         compression_level,

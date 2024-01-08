@@ -28,6 +28,7 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate", "tim
 zstd = { version = "0.12.4", default-features = false, features = ["zstdmt"] }
 rattler_networking = { version = "0.15.0", path = "../rattler_networking", default-features = false }
 num_cpus = "1.16.0"
+tempfile = "3.8.0"
 
 [features]
 default = ["native-tls", "blocking"]
@@ -38,7 +39,6 @@ blocking = ["rattler_networking/blocking"]
 wasm = ["zstd/wasm"]
 
 [dev-dependencies]
-tempfile = "3.8.0"
 tokio = { version = "1", features = ["rt", "macros"] }
 walkdir = "2.4.0"
 rstest = "0.18.2"
