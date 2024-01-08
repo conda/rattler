@@ -1,6 +1,5 @@
 [project]
 name = "rattler"
-version = "0.14.0"
 description = "Rust library to install conda environments"
 authors = [
     "Wolf Vollprecht <wolf@prefix.dev>",

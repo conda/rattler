@@ -859,6 +859,7 @@ fn normalize_subdir_url(url: Url) -> Url {
 }
 
 /// A value returned from [`validate_cached_state`] which indicates the state of a repodata.json cache.
+#[derive(Debug)]
 enum ValidatedCacheState {
     /// There is no cache, the cache could not be parsed, or the cache does not reference the same
     /// request. We can completely ignore any cached data.
@@ -962,7 +963,7 @@ fn validate_cached_state(
                     tracing::warn!(
                         "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
                     );
-                    return ValidatedCacheState::Mismatched(cache_state);
+                    return ValidatedCacheState::InvalidOrMissing;
                 }
             }
         }

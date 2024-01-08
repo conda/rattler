@@ -2,3 +2,5 @@
 
 pub mod file;
 pub mod keyring;
+
+pub mod netrc;

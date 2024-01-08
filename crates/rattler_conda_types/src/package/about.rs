@@ -15,7 +15,7 @@ use rattler_macros::sorted;
 #[serde_as]
 #[sorted]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct AboutJson {
     /// A list of channels that where used during the build
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

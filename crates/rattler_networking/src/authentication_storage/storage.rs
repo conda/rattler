@@ -10,7 +10,7 @@ use url::Url;
 
 use super::{
     authentication::Authentication,
-    backends::{file::FileStorage, keyring::KeyringAuthenticationStorage},
+    backends::{file::FileStorage, keyring::KeyringAuthenticationStorage, netrc::NetRcStorage},
     StorageBackend,
 };
 
@@ -31,6 +31,12 @@ impl Default for AuthenticationStorage {
 
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
         storage.add_backend(Arc::from(FileStorage::default()));
+        storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
+            |(path, err)| {
+                tracing::warn!("error reading netrc file from {}: {}", path.display(), err);
+                NetRcStorage::default()
+            },
+        )));
 
         storage
     }
