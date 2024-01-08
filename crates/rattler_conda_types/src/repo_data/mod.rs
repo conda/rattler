@@ -453,7 +453,7 @@ mod test {
             conda_packages: FxHashMap::default(),
             removed: ["xyz", "foo", "bar", "baz", "qux", "aux", "quux"]
                 .iter()
-                .map(|s| s.to_string())
+                .map(|s| (*s).to_string())
                 .collect(),
         };
         insta::assert_yaml_snapshot!(repodata);
@@ -540,6 +540,6 @@ mod test {
         let test_data_path =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
         let data_path = test_data_path.join(path);
-        RepoData::from_path(&data_path).unwrap()
+        RepoData::from_path(data_path).unwrap()
     }
 }

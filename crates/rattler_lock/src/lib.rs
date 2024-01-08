@@ -349,7 +349,7 @@ mod test {
         assert_eq!(result.name, "ncurses");
         assert_eq!(result.version.as_str(), "6.4");
 
-        let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
+        let repodata_record = RepoDataRecord::try_from(result).unwrap();
 
         assert_eq!(
             repodata_record.package_record.name.as_normalized(),

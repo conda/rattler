@@ -74,6 +74,6 @@ mod test {
     #[cfg(unix)]
     pub fn doesnt_crash() {
         let version = super::try_detect_libc_version().unwrap();
-        println!("LibC {:?}", version);
+        println!("LibC {version:?}");
     }
 }
