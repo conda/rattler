@@ -11,8 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 📃 Details
 
-## What's Changed
-
 #### Added
 
 * Add `read_package_file` function by @wolfv in ([#472](https://github.com/mamba-org/rattler/pull/472))
