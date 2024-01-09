@@ -7,6 +7,8 @@ use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
     ParseMatchSpecError, ParsePlatformError, ParseVersionError,
 };
+use rattler_lock::ParseCondaLockError;
+use rattler_lock::content_hash::CalculateContentHashError;
 use rattler_repodata_gateway::fetch::FetchRepoDataError;
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;
@@ -48,6 +50,10 @@ pub enum PyRattlerError {
     LinkError(String),
     #[error(transparent)]
     ConverSubdirError(#[from] ConvertSubdirError),
+    #[error(transparent)]
+    ParseCondaLockError(#[from] ParseCondaLockError),
+    #[error(transparent)]
+    CalculateContentHashError(#[from] CalculateContentHashError),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -85,6 +91,7 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::ConverSubdirError(err) => {
                 ConvertSubdirException::new_err(err.to_string())
             }
+            PyRattlerError::ParseCondaLockError(err) => ParseCondaLockException::new_err(err.to_string()),
         }
     }
 }
@@ -105,3 +112,4 @@ create_exception!(exceptions, SolverException, PyException);
 create_exception!(exceptions, TransactionException, PyException);
 create_exception!(exceptions, LinkException, PyException);
 create_exception!(exceptions, ConvertSubdirException, PyException);
+create_exception!(exceptions, ParseCondaLockException, PyException);

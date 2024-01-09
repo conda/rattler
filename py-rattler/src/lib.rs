@@ -3,6 +3,7 @@ mod error;
 mod generic_virtual_package;
 mod index;
 mod linker;
+mod lock;
 mod match_spec;
 mod meta;
 mod nameless_match_spec;
@@ -23,7 +24,7 @@ use error::{
     FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
     InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
     LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
-    TransactionException,
+    TransactionException, ParseCondaLockException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
@@ -141,6 +142,11 @@ fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
     m.add(
         "ConvertSubdirError",
         py.get_type::<ConvertSubdirException>(),
+    )
+    .unwrap();
+    m.add(
+        "ParseCondaLockError",
+        py.get_type::<ParseCondaLockException>(),
     )
     .unwrap();
     Ok(())

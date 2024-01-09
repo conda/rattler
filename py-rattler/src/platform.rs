@@ -53,7 +53,7 @@ impl PyArch {
 ///////////////////////////
 
 #[pyclass]
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PyPlatform {
     pub inner: Platform,
 }
@@ -76,6 +76,18 @@ impl FromStr for PyPlatform {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let platform = Platform::from_str(s).map_err(PyRattlerError::from)?;
         Ok(platform.into())
+    }
+}
+
+impl PartialOrd for PyPlatform {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.inner.partial_cmp(&other.inner)
+    }
+}
+
+impl Ord for PyPlatform {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.inner.cmp(&other.inner)
     }
 }
 

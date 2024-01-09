@@ -1678,6 +1678,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "pep440_rs"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "887f66cc62717ea72caac4f1eb4e6f392224da3ffff3f40ec13ab427802746d6"
+dependencies = [
+ "lazy_static",
+ "regex",
+ "serde",
+ "unicode-width",
+]
+
+[[package]]
+name = "pep508_rs"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4516b53d9ea6112ebb38b4af08d5707d30b994fb7f98ff133c5dcf7ed8fa854"
+dependencies = [
+ "once_cell",
+ "pep440_rs",
+ "regex",
+ "serde",
+ "thiserror",
+ "tracing",
+ "unicode-width",
+ "url",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1855,6 +1883,7 @@ version = "0.2.1"
 dependencies = [
  "anyhow",
  "futures 0.3.28",
+ "indexmap 2.0.2",
  "openssl",
  "pyo3",
  "pyo3-asyncio",
@@ -1862,6 +1891,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_index",
+ "rattler_lock",
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_shell",
@@ -1879,6 +1909,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e681a6cfdc4adcc93b4d3cf993749a4552018ee0a9b65fc0ccfad74352c72a38"
 dependencies = [
  "cfg-if",
+ "indexmap 1.9.3",
  "indoc",
  "inventory",
  "libc",
@@ -2092,6 +2123,26 @@ dependencies = [
  "serde_json",
  "tracing",
  "walkdir",
+]
+
+[[package]]
+name = "rattler_lock"
+version = "0.14.0"
+dependencies = [
+ "chrono",
+ "fxhash",
+ "indexmap 2.0.2",
+ "pep440_rs",
+ "pep508_rs",
+ "rattler_conda_types",
+ "rattler_digest",
+ "serde",
+ "serde-json-python-formatter",
+ "serde_json",
+ "serde_with",
+ "serde_yaml",
+ "thiserror",
+ "url",
 ]
 
 [[package]]
@@ -2540,6 +2591,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-json-python-formatter"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db62ee54077c67a8cff258c919175f0b3cb78d2b6dcafb0d166ff98dcb21aa5d"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -3045,6 +3105,7 @@ version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -3130,6 +3191,12 @@ checksum = "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-width"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 
 [[package]]
 name = "unindent"
