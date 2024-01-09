@@ -2,6 +2,8 @@
 
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
+use std::path::PathBuf;
+
 use rattler_digest::{Md5Hash, Sha256Hash};
 
 pub mod read;
@@ -44,8 +46,8 @@ pub enum ExtractError {
     #[error("the task was cancelled")]
     Cancelled,
 
-    #[error("could not parse archive member {0}")]
-    ArchiveMemberParseError(#[source] std::io::Error),
+    #[error("could not parse archive member {0}: {1}")]
+    ArchiveMemberParseError(PathBuf, #[source] std::io::Error),
 }
 
 #[cfg(feature = "reqwest")]
