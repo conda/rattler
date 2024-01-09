@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+# [0.16.1] - 2024-01-09
+
+### 📃 Details
+
+#### Added
+
+* Add `read_package_file` function by @wolfv in ([#472](https://github.com/mamba-org/rattler/pull/472))
+* implement `Clone` for `AboutJson` by @0xbe7a in ([#467](https://github.com/mamba-org/rattler/pull/467))
+* Allow using `str` in `HashMap`s with a `PackageName` key by @baszalmstra in ([#468](https://github.com/mamba-org/rattler/pull/468))
+
+#### Changed
+
+* Reflink files to destination if supported (instead of hardlinking) by @baszalmstra in ([#463](https://github.com/mamba-org/rattler/pull/463))
+
+#### Fixed
+
+* Automatic clippy fixes by @wolfv in ([#470](https://github.com/mamba-org/rattler/pull/470))
+* Fix getting credentials from keyring error by @0xbe7a in ([#474](https://github.com/mamba-org/rattler/pull/474))
+
+
 # [0.15.0] - 2024-01-05
 
 ### 📃 Details
