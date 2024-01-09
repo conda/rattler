@@ -75,9 +75,8 @@ fn get_file_from_archive(
 ) -> Result<Vec<u8>, ExtractError> {
     for entry in archive.entries()? {
         let mut entry = entry?;
-        println!("entry: {:?}", entry.path()?);
         if entry.path()? == file_name {
-            let mut buf = Vec::new();
+            let mut buf = Vec::with_capacity(entry.size() as usize);
             entry.read_to_end(&mut buf)?;
             return Ok(buf);
         }
@@ -86,6 +85,18 @@ fn get_file_from_archive(
 }
 
 /// Read a package file from archive
+/// Note: If you want to extract multiple `info/*` files then this will be slightly
+///       slower than manually iterating over the archive entries with
+///       custom logic as this skips over the rest of the archive
+///
+/// # Example
+///
+/// ```rust,no_run
+/// use rattler_conda_types::package::AboutJson;
+/// use rattler_package_streaming::seek::read_package_file;
+///
+/// let about_json = read_package_file::<AboutJson>("conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.conda").unwrap();
+/// ```
 pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
     // stream extract the file from a package
     let file = File::open(&path)?;
@@ -94,12 +105,14 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
         ArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, P::package_path())?;
-            return Ok(P::from_str(&String::from_utf8_lossy(&buf)).map_err(ExtractError::ArchiveMemberParseError)?);
+            return Ok(P::from_str(&String::from_utf8_lossy(&buf))
+                .map_err(ExtractError::ArchiveMemberParseError)?);
         }
         ArchiveType::Conda => {
             let mut info_archive = stream_conda_info(file).unwrap();
             let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
-            return Ok(P::from_str(&String::from_utf8_lossy(&buf)).map_err(ExtractError::ArchiveMemberParseError)?);
+            return Ok(P::from_str(&String::from_utf8_lossy(&buf))
+                .map_err(ExtractError::ArchiveMemberParseError)?);
         }
     };
 }

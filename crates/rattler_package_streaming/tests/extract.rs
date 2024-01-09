@@ -1,3 +1,4 @@
+use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
@@ -129,6 +130,21 @@ fn test_stream_info(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &s
     ));
 
     info_stream.unpack(target_dir).unwrap();
+}
+
+#[apply(conda_archives)]
+fn read_package_file(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &str) {
+    let file_path = Path::new(input);
+    let index_json: IndexJson =
+        rattler_package_streaming::seek::read_package_file(&test_data_dir().join(file_path))
+            .unwrap();
+    let name = format!(
+        "{}-{}-{}",
+        index_json.name.as_normalized(),
+        index_json.version,
+        index_json.build
+    );
+    assert!(input.starts_with(&name));
 }
 
 #[apply(tar_bz2_archives)]
