@@ -200,6 +200,7 @@ impl LockedPackagesBuilder {
 }
 
 /// Short-hand for creating a LockedPackage that transforms into a [`LockedDependency`]
+#[derive(Clone)]
 pub struct CondaLockedDependencyBuilder {
     /// Name of the locked package
     pub name: PackageName,

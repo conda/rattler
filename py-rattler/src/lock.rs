@@ -7,7 +7,10 @@ use pyo3::{
 };
 use rattler_conda_types::{MatchSpec, Platform};
 use rattler_lock::{
-    builder::{CondaLockedDependencyBuilder, LockFileBuilder, LockedDependencyBuilder, LockedPackagesBuilder},
+    builder::{
+        CondaLockedDependencyBuilder, LockFileBuilder, LockedDependencyBuilder,
+        LockedPackagesBuilder,
+    },
     Channel, CondaLock, GitMeta, LockMeta, LockedDependency, PackageHashes, TimeMeta,
 };
 
@@ -46,14 +49,14 @@ impl PyCondaLock {
         input_spec: Vec<PyMatchSpec>,
         records: Vec<PyRecord>,
     ) -> PyResult<Self> {
-        let builder = LockFileBuilder::new(
+        let mut builder = LockFileBuilder::new(
             channels
                 .into_iter()
                 .map(Into::<rattler_lock::Channel>::into),
-            platforms.into_iter().map(Into::<Platform>::into),
+            platforms.clone().into_iter().map(Into::<Platform>::into),
             input_spec.into_iter().map(Into::<MatchSpec>::into),
         );
-        let records = records
+        let conda_lock_dep_builder = records
             .into_iter()
             .map(|r| {
                 Ok(
@@ -63,13 +66,20 @@ impl PyCondaLock {
             })
             .collect::<Result<Vec<_>, PyErr>>()?;
 
-        for p in platforms {
-            let locked_package_builder = LockedPackagesBuilder::new(p.inner);
-            for r in records {
-                locked_package_builder.add_locked_package(r);
+        let locked_package_builders = platforms.iter().map(|p| {
+            let mut locked_package_builder = LockedPackagesBuilder::new(p.inner);
+            for b in &conda_lock_dep_builder {
+                locked_package_builder.add_locked_package(b.clone());
             }
+            locked_package_builder
+        }).collect::<Vec<_>>();
+
+
+        for b in locked_package_builders {
+            builder = builder.add_locked_packages(b);
         }
-        todo!()
+
+        Ok(builder.build().map(Into::into).map_err(PyRattlerError::from)?)
     }
 
     pub fn to_path(&self, path: &str) -> PyResult<()> {
