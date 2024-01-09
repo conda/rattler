@@ -23,7 +23,7 @@ fn test_index() {
     .unwrap();
 
     let res = index(temp_dir.path(), Some(&Platform::Win64));
-    assert_eq!(res.is_ok(), true);
+    assert!(res.is_ok());
 
     let repodata_path = temp_dir.path().join(subdir_path).join("repodata.json");
     let repodata_json: Value = serde_json::from_reader(File::open(repodata_path).unwrap()).unwrap();
@@ -41,7 +41,7 @@ fn test_index() {
             .as_str(),
         Some("win-64")
     );
-    assert_eq!(repodata_json.get("packages").is_some(), true);
+    assert!(repodata_json.get("packages").is_some());
     assert_eq!(
         repodata_json
             .get("packages.conda")
@@ -56,6 +56,6 @@ fn test_index() {
 fn test_index_empty_directory() {
     let temp_dir = tempfile::tempdir().unwrap();
     let res = index(temp_dir.path(), None);
-    assert_eq!(res.is_ok(), true);
+    assert!(res.is_ok());
     assert_eq!(fs::read_dir(temp_dir).unwrap().count(), 0);
 }

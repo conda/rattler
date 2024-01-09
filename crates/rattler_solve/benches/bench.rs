@@ -66,7 +66,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     specs: specs.clone(),
                 }))
                 .unwrap()
-        })
+        });
     });
 
     #[cfg(feature = "resolvo")]
@@ -81,7 +81,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     specs: specs.clone(),
                 }))
                 .unwrap()
-        })
+        });
     });
 
     group.finish();

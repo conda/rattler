@@ -750,38 +750,38 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_run_activation_powershell() {
-        test_run_activation(crate::shell::PowerShell::default().into())
+        test_run_activation(crate::shell::PowerShell::default().into());
     }
 
     #[test]
     #[cfg(windows)]
     fn test_run_activation_cmd() {
-        test_run_activation(crate::shell::CmdExe::default().into())
+        test_run_activation(crate::shell::CmdExe::default().into());
     }
 
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash::default().into())
+        test_run_activation(crate::shell::Bash::default().into());
     }
 
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
-        test_run_activation(crate::shell::Zsh::default().into())
+        test_run_activation(crate::shell::Zsh::default().into());
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_fish() {
-        test_run_activation(crate::shell::Fish::default().into())
+        test_run_activation(crate::shell::Fish::default().into());
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_xonsh() {
-        test_run_activation(crate::shell::Xonsh::default().into())
+        test_run_activation(crate::shell::Xonsh::default().into());
     }
 }

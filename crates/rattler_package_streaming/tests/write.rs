@@ -99,7 +99,7 @@ fn compare_two_tar_archives<T: Read>(
                 .filter(|(k, _)| !k.starts_with(&info_licenses))
                 .collect::<HashMap<_, _>>();
         }
-        _ => {}
+        FilterFiles::None => {}
     }
 
     assert_eq!(map1.len(), map2.len());

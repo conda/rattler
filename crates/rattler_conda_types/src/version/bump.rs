@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-/// VersionBumpType is used to specify the type of bump to perform on a version.
+/// `VersionBumpType` is used to specify the type of bump to perform on a version.
 #[derive(Clone)]
 pub enum VersionBumpType {
     /// Bump the major version number.
@@ -15,7 +15,7 @@ pub enum VersionBumpType {
     Segment(i32),
 }
 
-/// VersionBumpError is used to specify the type of error that occurred when bumping a version.
+/// `VersionBumpError` is used to specify the type of error that occurred when bumping a version.
 #[derive(Error, Debug, PartialEq)]
 pub enum VersionBumpError {
     /// Cannot bump the major segment of a version with less than 1 segment.

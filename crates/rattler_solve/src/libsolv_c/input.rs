@@ -307,9 +307,7 @@ pub fn cache_repodata(url: String, data: &[RepoDataRecord]) -> LibcByteSlice {
     let mut stream_ptr = std::ptr::null_mut();
     let mut stream_size = 0;
     let file = unsafe { libc::open_memstream(&mut stream_ptr, &mut stream_size) };
-    if file.is_null() {
-        panic!("unable to open memstream");
-    }
+    assert!(!file.is_null(), "unable to open memstream");
 
     repo.write(&pool, file);
     unsafe { libc::fclose(file) };

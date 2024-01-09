@@ -303,22 +303,22 @@ mod test {
         // Make sure that we have parsed some packages
         assert!(!conda_lock.package.is_empty());
         insta::with_settings!({sort_maps => true}, {
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::Linux64)
-                .collect::<Vec<_>>()
-        );
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::Osx64)
-                .collect::<Vec<_>>()
-        );
-        assert_yaml_snapshot!(
-            conda_lock
-                .packages_for_platform(Platform::OsxArm64)
-                .collect::<Vec<_>>()
-        );
-            })
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::Linux64)
+                    .collect::<Vec<_>>()
+            );
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::Osx64)
+                    .collect::<Vec<_>>()
+            );
+            assert_yaml_snapshot!(
+                conda_lock
+                    .packages_for_platform(Platform::OsxArm64)
+                    .collect::<Vec<_>>()
+            );
+        });
     }
 
     #[test]
@@ -349,7 +349,7 @@ mod test {
         assert_eq!(result.name, "ncurses");
         assert_eq!(result.version.as_str(), "6.4");
 
-        let repodata_record = RepoDataRecord::try_from(result.clone()).unwrap();
+        let repodata_record = RepoDataRecord::try_from(result).unwrap();
 
         assert_eq!(
             repodata_record.package_record.name.as_normalized(),

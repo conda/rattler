@@ -317,7 +317,7 @@ mod test {
         let mut paths = vec![];
         for i in 0..15 {
             paths.push(PathsEntry {
-                relative_path: format!("rel\\path_{}", i).into(),
+                relative_path: format!("rel\\path_{i}").into(),
                 path_type: super::PathType::HardLink,
                 prefix_placeholder: None,
                 no_link: false,
