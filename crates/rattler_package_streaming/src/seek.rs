@@ -1,9 +1,16 @@
 //! Functionality to stream parts of a `.conda` archive for objects that implement both
 //! [`std::io::Read`] and [`std::io::Seek`] like a [`std::fs::File`] or a [`std::io::Cursor<T>`].
 
-use crate::read::stream_tar_zst;
+use crate::read::{stream_tar_bz2, stream_tar_zst};
 use crate::ExtractError;
-use std::io::{Read, Seek, SeekFrom};
+use rattler_conda_types::package::ArchiveType;
+use rattler_conda_types::package::PackageFile;
+use std::fs::File;
+use std::{
+    io::{Read, Seek, SeekFrom},
+    path::Path,
+};
+use tar::Archive;
 use zip::CompressionMethod;
 
 fn stream_conda_zip_entry<'a>(
@@ -60,4 +67,39 @@ pub fn stream_conda_content<'a>(
         .to_owned();
 
     stream_conda_zip_entry(archive, &file_name)
+}
+
+fn get_file_from_archive(
+    archive: &mut Archive<impl Read>,
+    file_name: &Path,
+) -> Result<Vec<u8>, ExtractError> {
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        println!("entry: {:?}", entry.path()?);
+        if entry.path()? == file_name {
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)?;
+            return Ok(buf);
+        }
+    }
+    Err(ExtractError::MissingComponent)
+}
+
+/// Read a package file from archive
+pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, ExtractError> {
+    // stream extract the file from a package
+    let file = File::open(&path)?;
+
+    match ArchiveType::try_from(&path).ok_or(ExtractError::UnsupportedArchiveType)? {
+        ArchiveType::TarBz2 => {
+            let mut archive = stream_tar_bz2(file);
+            let buf = get_file_from_archive(&mut archive, P::package_path())?;
+            return Ok(P::from_str(&String::from_utf8_lossy(&buf)).map_err(ExtractError::ArchiveMemberParseError)?);
+        }
+        ArchiveType::Conda => {
+            let mut info_archive = stream_conda_info(file).unwrap();
+            let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
+            return Ok(P::from_str(&String::from_utf8_lossy(&buf)).map_err(ExtractError::ArchiveMemberParseError)?);
+        }
+    };
 }

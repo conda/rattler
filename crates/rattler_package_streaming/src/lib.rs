@@ -43,6 +43,9 @@ pub enum ExtractError {
 
     #[error("the task was cancelled")]
     Cancelled,
+
+    #[error("could not parse archive member {0}")]
+    ArchiveMemberParseError(#[source] std::io::Error),
 }
 
 #[cfg(feature = "reqwest")]
