@@ -206,7 +206,7 @@ mod test {
         std::fs::write(&file_path, input).unwrap();
         let hash = super::compute_file_digest::<sha2::Sha256>(&file_path).unwrap();
 
-        assert_eq!(format!("{hash:x}"), expected_hash)
+        assert_eq!(format!("{hash:x}"), expected_hash);
     }
 
     #[rstest]
@@ -224,6 +224,6 @@ mod test {
         cursor.read_to_string(&mut cursor_string).unwrap();
         assert_eq!(&cursor_string, input);
         let (_, hash) = cursor.finalize();
-        assert_eq!(format!("{hash:x}"), expected_hash)
+        assert_eq!(format!("{hash:x}"), expected_hash);
     }
 }

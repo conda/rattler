@@ -226,6 +226,6 @@ mod test {
 
     #[test]
     pub fn test_parse_repo_data_state_two() {
-        insta::assert_yaml_snapshot!(RepoDataState::from_str(JSON_STATE_TWO).unwrap())
+        insta::assert_yaml_snapshot!(RepoDataState::from_str(JSON_STATE_TWO).unwrap());
     }
 }

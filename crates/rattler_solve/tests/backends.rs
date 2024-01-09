@@ -680,7 +680,7 @@ fn compare_solve(specs: Vec<&str>) {
             ),
         ));
         let end_solve = Instant::now();
-        println!("libsolv_c took {}ms", (end_solve - start_solve).as_millis())
+        println!("libsolv_c took {}ms", (end_solve - start_solve).as_millis());
     }
 
     #[cfg(feature = "resolvo")]
@@ -701,7 +701,7 @@ fn compare_solve(specs: Vec<&str>) {
             ),
         ));
         let end_solve = Instant::now();
-        println!("resolvo took {}ms", (end_solve - start_solve).as_millis())
+        println!("resolvo took {}ms", (end_solve - start_solve).as_millis());
     }
 
     results.into_iter().fold(None, |previous, current| {

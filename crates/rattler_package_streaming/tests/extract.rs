@@ -1,3 +1,4 @@
+use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
@@ -131,6 +132,21 @@ fn test_stream_info(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &s
     info_stream.unpack(target_dir).unwrap();
 }
 
+#[apply(conda_archives)]
+fn read_package_file(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &str) {
+    let file_path = Path::new(input);
+    let index_json: IndexJson =
+        rattler_package_streaming::seek::read_package_file(test_data_dir().join(file_path))
+            .unwrap();
+    let name = format!(
+        "{}-{}-{}",
+        index_json.name.as_normalized(),
+        index_json.version,
+        index_json.build
+    );
+    assert!(input.starts_with(&name));
+}
+
 #[apply(tar_bz2_archives)]
 fn test_extract_tar_bz2(#[case] input: &str, #[case] sha256: &str, #[case] md5: &str) {
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
@@ -222,6 +238,8 @@ fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) 
 #[apply(url_archives)]
 #[tokio::test]
 async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
+    use rattler_networking::AuthenticatedClient;
+
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
 
@@ -231,10 +249,13 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
 
     let target_dir = temp_dir.join(name);
     let url = url::Url::parse(url).unwrap();
-    let result =
-        rattler_package_streaming::reqwest::tokio::extract(Default::default(), url, &target_dir)
-            .await
-            .unwrap();
+    let result = rattler_package_streaming::reqwest::tokio::extract(
+        AuthenticatedClient::default(),
+        url,
+        &target_dir,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);

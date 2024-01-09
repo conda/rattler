@@ -688,7 +688,7 @@ mod test {
                         install_driver,
                         InstallOptions {
                             python_info: Some(python_version.clone()),
-                            ..Default::default()
+                            ..InstallOptions::default()
                         },
                     )
                     .await
@@ -733,7 +733,7 @@ mod test {
             package_dir.path(),
             environment_dir.path(),
             &InstallDriver::default(),
-            Default::default(),
+            InstallOptions::default(),
         )
         .await
         .unwrap();
