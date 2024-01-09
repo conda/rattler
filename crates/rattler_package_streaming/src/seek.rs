@@ -105,14 +105,14 @@ pub fn read_package_file<P: PackageFile>(path: impl AsRef<Path>) -> Result<P, Ex
         ArchiveType::TarBz2 => {
             let mut archive = stream_tar_bz2(file);
             let buf = get_file_from_archive(&mut archive, P::package_path())?;
-            return Ok(P::from_str(&String::from_utf8_lossy(&buf))
-                .map_err(ExtractError::ArchiveMemberParseError)?);
+            return P::from_str(&String::from_utf8_lossy(&buf))
+                .map_err(ExtractError::ArchiveMemberParseError);
         }
         ArchiveType::Conda => {
             let mut info_archive = stream_conda_info(file).unwrap();
             let buf = get_file_from_archive(&mut info_archive, P::package_path())?;
-            return Ok(P::from_str(&String::from_utf8_lossy(&buf))
-                .map_err(ExtractError::ArchiveMemberParseError)?);
+            return P::from_str(&String::from_utf8_lossy(&buf))
+                .map_err(ExtractError::ArchiveMemberParseError);
         }
     };
 }

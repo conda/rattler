@@ -136,7 +136,7 @@ fn test_stream_info(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &s
 fn read_package_file(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &str) {
     let file_path = Path::new(input);
     let index_json: IndexJson =
-        rattler_package_streaming::seek::read_package_file(&test_data_dir().join(file_path))
+        rattler_package_streaming::seek::read_package_file(test_data_dir().join(file_path))
             .unwrap();
     let name = format!(
         "{}-{}-{}",
@@ -238,6 +238,8 @@ fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) 
 #[apply(url_archives)]
 #[tokio::test]
 async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
+    use rattler_networking::AuthenticatedClient;
+
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
 
@@ -247,10 +249,13 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
 
     let target_dir = temp_dir.join(name);
     let url = url::Url::parse(url).unwrap();
-    let result =
-        rattler_package_streaming::reqwest::tokio::extract(Default::default(), url, &target_dir)
-            .await
-            .unwrap();
+    let result = rattler_package_streaming::reqwest::tokio::extract(
+        AuthenticatedClient::default(),
+        url,
+        &target_dir,
+    )
+    .await
+    .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);

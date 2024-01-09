@@ -415,7 +415,7 @@ mod tests {
         let spec_as_string = spec.to_string();
         let rebuild_spec = MatchSpec::from_str(&spec_as_string).unwrap();
 
-        assert_eq!(spec, rebuild_spec)
+        assert_eq!(spec, rebuild_spec);
     }
 
     #[test]

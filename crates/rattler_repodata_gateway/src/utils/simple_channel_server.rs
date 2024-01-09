@@ -45,7 +45,8 @@ impl SimpleChannelServer {
 
         // Spawn the server. Let go of the JoinHandle, we can use the graceful shutdown trigger to
         // stop the server.
-        let _ = tokio::spawn(server);
+        let future = tokio::spawn(server);
+        std::mem::drop(future);
 
         Self {
             local_addr: addr,
