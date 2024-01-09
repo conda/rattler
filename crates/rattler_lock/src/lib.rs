@@ -18,10 +18,11 @@ mod pypi;
 mod serde;
 mod utils;
 
-use crate::conda::ConversionError;
+pub use crate::conda::ConversionError;
 pub use conda::CondaLockedDependency;
 pub use hash::PackageHashes;
 pub use pypi::PypiLockedDependency;
+pub use content_hash::CalculateContentHashError;
 
 pub use self::serde::ParseCondaLockError;
 

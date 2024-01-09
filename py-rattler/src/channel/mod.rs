@@ -33,18 +33,24 @@ impl PyChannelConfig {
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyChannel {
-    pub(crate) inner: Channel,
+    pub(crate) inner: rattler_conda_types::Channel,
 }
 
-impl From<Channel> for PyChannel {
+impl From<rattler_conda_types::Channel> for PyChannel {
     fn from(value: Channel) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PyChannel> for Channel {
+impl From<PyChannel> for rattler_conda_types::Channel {
     fn from(val: PyChannel) -> Self {
         val.inner
+    }
+}
+
+impl From<PyChannel> for rattler_lock::Channel {
+    fn from(val: PyChannel) -> Self {
+        rattler_lock::Channel::from(val.inner.canonical_name())
     }
 }
 
@@ -52,9 +58,11 @@ impl From<PyChannel> for Channel {
 impl PyChannel {
     #[new]
     pub fn __init__(version: &str, config: &PyChannelConfig) -> pyo3::PyResult<Self> {
-        Ok(Channel::from_str(version, &config.inner)
-            .map(Into::into)
-            .map_err(PyRattlerError::from)?)
+        Ok(
+            rattler_conda_types::Channel::from_str(version, &config.inner)
+                .map(Into::into)
+                .map_err(PyRattlerError::from)?,
+        )
     }
 
     /// Returns the name of the channel.

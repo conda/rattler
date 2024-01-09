@@ -23,8 +23,8 @@ use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
     FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
     InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
-    LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
-    TransactionException, ParseCondaLockException,
+    LinkException, ParseArchException, ParseCondaLockException, ParsePlatformException,
+    PyRattlerError, SolverException, TransactionException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use match_spec::PyMatchSpec;
