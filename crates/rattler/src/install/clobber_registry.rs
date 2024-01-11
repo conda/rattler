@@ -2,6 +2,7 @@
 
 use std::{
     collections::{hash_map::Entry, HashMap},
+    fs,
     path::{Path, PathBuf},
 };
 
@@ -17,6 +18,12 @@ pub struct ClobberRegistry {
     package_names: Vec<PackageName>,
 }
 
+static CLOBBER_TEMPLATE: &str = "__clobber-from-";
+
+fn clobber_template(package_name: &PackageName) -> String {
+    format!("{CLOBBER_TEMPLATE}{}", package_name.as_normalized())
+}
+
 impl ClobberRegistry {
     /// Create a new clobber registry that is initialized with the given prefix records.
     pub fn from_prefix_records(prefix_records: &[PrefixRecord]) -> Self {
@@ -28,26 +35,20 @@ impl ClobberRegistry {
                 .package_names
                 .push(prefix_record.repodata_record.package_record.name.clone());
 
-            let clobber_ending = format!(
-                "__clobber-from-{}",
-                prefix_record
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized()
-            );
+            let clobber_ending =
+                clobber_template(&prefix_record.repodata_record.package_record.name);
+
             for p in &prefix_record.files {
-                println!("Checking path: {}", p.display());
                 if p.to_string_lossy().ends_with(&clobber_ending) {
                     // register a clobbered path
-                    if let Some((filename, originating_package)) = p
-                        .file_name()
-                        .unwrap()
-                        .to_string_lossy()
-                        .split_once("__clobber-from-")
-                    {
-                        let path = p.with_file_name(filename);
-                        temp_clobbers.push((path, originating_package.to_string()));
+                    if let Some(full_file_name) = p.file_name() {
+                        if let Some((file_name, originating_package)) = full_file_name
+                            .to_string_lossy()
+                            .split_once(CLOBBER_TEMPLATE)
+                        {
+                            let path = p.with_file_name(file_name);
+                            temp_clobbers.push((path, originating_package.to_string()));
+                        }
                     }
                 } else {
                     registry
@@ -56,14 +57,12 @@ impl ClobberRegistry {
                 }
             }
         }
-        println!("Temp clobbers: {:#?}", temp_clobbers);
+
         for (path, originating_package) in temp_clobbers.iter() {
-            println!("Clobbering path: {}", path.display());
-            println!("Clobbers: {:#?}", registry.clobbers);
             let idx = registry
                 .package_names
                 .iter()
-                .position(|n| n.as_normalized() == originating_package)
+                .position(|n| n.as_normalized() == *originating_package)
                 .unwrap();
 
             registry
@@ -73,22 +72,21 @@ impl ClobberRegistry {
                 .push(idx);
         }
 
-        println!("Clobber registry: {registry:#?}");
-
         registry
     }
 
-    pub fn clobber_name(path: &Path, package_name: &PackageName) -> PathBuf {
+    fn clobber_name(path: &Path, package_name: &PackageName) -> PathBuf {
         let file_name = path.file_name().unwrap_or_default();
         let mut new_path = path.to_path_buf();
         new_path.set_file_name(format!(
-            "{}__clobber-from-{}",
+            "{}{}",
             file_name.to_string_lossy(),
-            package_name.as_normalized()
+            clobber_template(package_name),
         ));
         new_path
     }
 
+    /// Register the paths of a package when linking the package.
     pub fn register_paths(
         &mut self,
         name: &str,
@@ -131,13 +129,16 @@ impl ClobberRegistry {
         clobber_paths
     }
 
-    /// Unclobber the final paths
-    pub fn post_process(&self, sorted_prefix_records: &[&PrefixRecord], target_prefix: &Path) {
+    /// Unclobber the paths after all installation steps have been completed.
+    pub fn post_process(
+        &self,
+        sorted_prefix_records: &[&PrefixRecord],
+        target_prefix: &Path,
+    ) -> Result<(), std::io::Error> {
         let sorted_names = sorted_prefix_records
             .iter()
             .map(|p| p.repodata_record.package_record.name.clone())
             .collect::<Vec<_>>();
-        println!("Post processing the clobbers");
         let conda_meta = target_prefix.join("conda-meta");
 
         for (path, clobbered_by) in self.clobbers.iter() {
@@ -146,7 +147,6 @@ impl ClobberRegistry {
                 .map(|&idx| self.package_names[idx].clone())
                 .collect::<Vec<_>>();
 
-            println!("Clobbered by: {:?}", clobbered_by_names);
             // extract the subset of clobbered_by that is in sorted_prefix_records
             let sorted_clobbered_by = sorted_names
                 .iter()
@@ -156,11 +156,8 @@ impl ClobberRegistry {
                 .collect::<Vec<_>>();
             let winner = sorted_clobbered_by.last().expect("No winner found");
 
-            println!("Our current winner is: {:?}", winner);
-            println!("sorting: {:?}", sorted_clobbered_by);
-
             if winner.1 == clobbered_by_names[0] {
-                println!(
+                tracing::debug!(
                     "clobbering decision: keep {} from {:?}",
                     path.display(),
                     winner
@@ -171,42 +168,39 @@ impl ClobberRegistry {
                     let loser_name = &clobbered_by_names[0];
                     let loser_path = Self::clobber_name(path, loser_name);
 
-                    std::fs::rename(target_prefix.join(path), target_prefix.join(&loser_path))
-                        .expect("Could not rename file");
+                    fs::rename(target_prefix.join(path), target_prefix.join(&loser_path))?;
 
                     let loser_idx = sorted_clobbered_by
                         .iter()
                         .find(|(_, n)| n == loser_name)
-                        .unwrap()
+                        .expect("loser not found")
                         .0;
 
                     let loser_prefix_record = rename_path_in_prefix_record(
                         sorted_prefix_records[loser_idx],
                         path,
-                        &PathBuf::from(loser_path),
+                        &loser_path,
                     );
 
-                    println!(
+                    tracing::debug!(
                         "clobbering decision: remove {} from {:?}",
                         path.display(),
                         loser_name
                     );
 
                     loser_prefix_record
-                        .write_to_path(conda_meta.join(loser_prefix_record.file_name()), true)
-                        .expect("Could not write prefix record");
+                        .write_to_path(conda_meta.join(loser_prefix_record.file_name()), true)?;
                 }
 
                 let winner_path = Self::clobber_name(path, &winner.1);
 
-                println!(
+                tracing::debug!(
                     "clobbering decision: choose {} from {:?}",
                     path.display(),
                     winner
                 );
 
-                std::fs::rename(target_prefix.join(&winner_path), target_prefix.join(path))
-                    .expect("Could not rename file");
+                std::fs::rename(target_prefix.join(&winner_path), target_prefix.join(path))?;
 
                 let winner_prefix_record = rename_path_in_prefix_record(
                     sorted_prefix_records[winner.0],
@@ -214,10 +208,11 @@ impl ClobberRegistry {
                     path,
                 );
                 winner_prefix_record
-                    .write_to_path(conda_meta.join(winner_prefix_record.file_name()), true)
-                    .expect("Could not write prefix record");
+                    .write_to_path(conda_meta.join(winner_prefix_record.file_name()), true)?;
             }
         }
+
+        Ok(())
     }
 }
 

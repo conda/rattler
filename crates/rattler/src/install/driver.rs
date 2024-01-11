@@ -161,7 +161,8 @@ impl InstallDriver {
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
 
         self.clobber_registry()
-            .post_process(&required_packages, target_prefix);
+            .post_process(&required_packages, target_prefix)
+            .map_err(|e| InstallError::PostProcessFailed(e))?;
 
         Ok(())
     }

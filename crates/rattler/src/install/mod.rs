@@ -87,6 +87,11 @@ pub enum InstallError {
     /// Failed to create a python entry point for a noarch package.
     #[error("failed to create Python entry point")]
     FailedToCreatePythonEntryPoint(#[source] std::io::Error),
+
+    /// When post-processing of the environment fails.
+    /// Post-processing involves removing clobbered paths.
+    #[error("failed to post process the environment (unclobbering)")]
+    PostProcessFailed(#[source] std::io::Error),
 }
 
 impl From<JoinError> for InstallError {

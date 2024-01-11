@@ -27,8 +27,6 @@ pub async fn unlink_package(
     target_prefix: &Path,
     prefix_record: &PrefixRecord,
 ) -> Result<(), UnlinkError> {
-    // TODO: Take into account any clobbered files, they need to be restored.
-
     // Check if package is python noarch
     let is_python_noarch = prefix_record
         .repodata_record

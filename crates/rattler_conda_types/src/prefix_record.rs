@@ -209,7 +209,9 @@ impl PrefixRecord {
         for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
             let entry = entry?;
 
-            if entry.file_type()?.is_file() && entry.file_name().to_string_lossy().ends_with(".json") {
+            if entry.file_type()?.is_file()
+                && entry.file_name().to_string_lossy().ends_with(".json")
+            {
                 let record = Self::from_path(entry.path())?;
                 records.push(record);
             }
