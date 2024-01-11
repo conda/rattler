@@ -7,7 +7,7 @@ pub enum PyComponent {
 }
 
 impl IntoPy<PyObject> for PyComponent {
-    fn into_py(self, py: Python) -> PyObject {
+    fn into_py(self, py: Python<'_>) -> PyObject {
         match self {
             Self::Number(val) => val.into_py(py),
             Self::String(val) => val.into_py(py),

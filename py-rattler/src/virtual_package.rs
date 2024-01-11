@@ -29,12 +29,12 @@ impl PyVirtualPackage {
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {
         Ok(VirtualPackage::current()
-            .map(|vp| vp.iter().map(|v| v.to_owned().into()).collect::<Vec<_>>())
+            .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
             .map_err(PyRattlerError::from)?)
     }
 
     pub fn as_generic(&self) -> PyGenericVirtualPackage {
-        self.to_owned().into()
+        self.clone().into()
     }
 
     /// Returns string representation of virtual package.

@@ -38,7 +38,7 @@ impl PyMatchSpec {
     /// The name of the package
     #[getter]
     pub fn name(&self) -> Option<PyPackageName> {
-        self.inner.name.clone().map(|name| name.into())
+        self.inner.name.clone().map(std::convert::Into::into)
     }
 
     /// The version spec of the package (e.g. `1.2.3`, `>=1.2.3`, `1.2.*`)
@@ -68,7 +68,7 @@ impl PyMatchSpec {
     /// Match the specific filename of the package
     #[getter]
     pub fn file_name(&self) -> Option<String> {
-        self.inner.file_name.to_owned()
+        self.inner.file_name.clone()
     }
 
     /// The channel of the package
@@ -77,7 +77,7 @@ impl PyMatchSpec {
         self.inner
             .channel
             .clone()
-            .map(|mut channel| Arc::<Channel>::make_mut(&mut channel).to_owned().into())
+            .map(|mut channel| Arc::<Channel>::make_mut(&mut channel).clone().into())
     }
 
     /// The subdir of the channel

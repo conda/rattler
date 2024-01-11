@@ -229,6 +229,12 @@ impl PrefixRecord {
     /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
     pub fn collect_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
         let mut records = Vec::new();
+        let conda_meta_path = prefix.join("conda-meta");
+
+        if !conda_meta_path.exists() {
+            return Ok(records);
+        }
+
         for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
             let entry = entry?;
 
