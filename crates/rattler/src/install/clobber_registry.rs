@@ -6,16 +6,31 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use drop_bomb::DropBomb;
 use rattler_conda_types::{package::PathsJson, PackageName, PrefixRecord};
 
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct ClobberRegistry {
     paths_registry: HashMap<PathBuf, usize>,
     clobbers: HashMap<PathBuf, Vec<usize>>,
     package_names: Vec<PackageName>,
+    drop_bomb: DropBomb,
+}
+
+impl Default for ClobberRegistry {
+    fn default() -> Self {
+        Self {
+            paths_registry: HashMap::new(),
+            clobbers: HashMap::new(),
+            package_names: Vec::new(),
+            drop_bomb: DropBomb::new(
+                "did not call post_process on InstallDriver / ClobberRegistry",
+            ),
+        }
+    }
 }
 
 static CLOBBER_TEMPLATE: &str = "__clobber-from-";
@@ -131,10 +146,11 @@ impl ClobberRegistry {
 
     /// Unclobber the paths after all installation steps have been completed.
     pub fn post_process(
-        &self,
+        &mut self,
         sorted_prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
     ) -> Result<(), std::io::Error> {
+        self.drop_bomb.defuse();
         let sorted_names = sorted_prefix_records
             .iter()
             .map(|p| p.repodata_record.package_record.name.clone())

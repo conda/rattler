@@ -714,6 +714,12 @@ mod test {
             })
             .await;
 
+        // test doesn't write conda-meta, so we ignore the post processing
+        let prefix_records = vec![];
+        install_driver
+            .post_process(&prefix_records, target_dir.path())
+            .unwrap();
+
         // Run the python command and validate the version it outputs
         let python_path = if Platform::current().is_windows() {
             "python.exe"
@@ -745,15 +751,21 @@ mod test {
         )
         .unwrap();
 
+        let install_driver = InstallDriver::default();
+
         // Link the package
         let paths = link_package(
             package_dir.path(),
             environment_dir.path(),
-            &InstallDriver::default(),
+            &install_driver,
             InstallOptions::default(),
         )
         .await
         .unwrap();
+
+        install_driver
+            .post_process(&vec![], environment_dir.path())
+            .unwrap();
 
         insta::assert_yaml_snapshot!(paths);
     }

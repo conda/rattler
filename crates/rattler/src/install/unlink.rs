@@ -184,11 +184,12 @@ mod tests {
             ..InstallOptions::default()
         };
 
+        let install_driver = InstallDriver::default();
         // Link the package
         let paths = link_package(
             package_dir.path(),
             target_prefix,
-            &InstallDriver::default(),
+            &install_driver,
             install_options,
         )
         .await
@@ -198,6 +199,10 @@ mod tests {
         // Construct a PrefixRecord for the package
         let prefix_record =
             PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
+
+        install_driver
+            .post_process(&vec![prefix_record.clone()], target_prefix)
+            .unwrap();
 
         return prefix_record;
     }
