@@ -152,7 +152,7 @@ impl ClobberRegistry {
                 .iter()
                 .cloned()
                 .enumerate()
-                .filter(|(_, n)| clobbered_by_names.contains(&n))
+                .filter(|(_, n)| clobbered_by_names.contains(n))
                 .collect::<Vec<_>>();
             let winner = sorted_clobbered_by.last().expect("No winner found");
 
@@ -272,7 +272,7 @@ mod tests {
         package_cache::PackageCache,
     };
 
-    fn repodata_record(filename: &str) -> RepoDataRecord {
+    fn get_repodata_record(filename: &str) -> RepoDataRecord {
         let path = fs::canonicalize(get_test_data_dir().join(filename)).unwrap();
         let index_json = read_package_file::<IndexJson>(&path).unwrap();
 
@@ -304,8 +304,7 @@ mod tests {
         install_driver: &InstallDriver,
         install_options: &InstallOptions,
     ) -> anyhow::Result<()> {
-        // Link the contents of the package into our environment. This returns all the paths that were
-        // linked.
+        // Link the contents of the package into our environment. This returns all the paths that were linked.
         let paths = crate::install::link_package(
             &package_dir,
             target_prefix,
@@ -324,9 +323,7 @@ mod tests {
                 .map(|entry| entry.relative_path.clone())
                 .collect(),
             paths_data: paths.into(),
-            // TODO: Retrieve the requested spec for this package from the request
             requested_spec: None,
-            // TODO: What to do with this?
             link: None,
         };
 
@@ -436,9 +433,9 @@ mod tests {
     }
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 = repodata_record("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_2 = repodata_record("clobber/clobber-2-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_3 = repodata_record("clobber/clobber-3-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_1 = get_repodata_record("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_2 = get_repodata_record("clobber/clobber-2-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_3 = get_repodata_record("clobber/clobber-3-0.1.0-h4616a5c_0.tar.bz2");
 
         vec![
             TransactionOperation::Install(repodata_record_1),

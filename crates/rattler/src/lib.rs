@@ -40,3 +40,36 @@ pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
         .join("rattler/cache"))
 }
+
+#[cfg(test)]
+use rattler_conda_types::RepoDataRecord;
+
+#[cfg(test)]
+pub(crate) fn get_repodata_record(filename: &str) -> RepoDataRecord {
+    use std::fs;
+
+    use rattler_conda_types::{package::IndexJson, PackageRecord};
+    use rattler_digest::{Md5, Sha256};
+    use rattler_package_streaming::seek::read_package_file;
+
+    let path = fs::canonicalize(get_test_data_dir().join(filename)).unwrap();
+    let index_json = read_package_file::<IndexJson>(&path).unwrap();
+
+    // find size and hash
+    let size = fs::metadata(&path).unwrap().len();
+    let sha256 = rattler_digest::compute_file_digest::<Sha256>(&path).unwrap();
+    let md5 = rattler_digest::compute_file_digest::<Md5>(&path).unwrap();
+
+    RepoDataRecord {
+        package_record: PackageRecord::from_index_json(
+            index_json,
+            Some(size),
+            Some(sha256),
+            Some(md5),
+        )
+        .unwrap(),
+        file_name: filename.to_string(),
+        url: url::Url::from_file_path(&path).unwrap(),
+        channel: "test".to_string(),
+    }
+}

@@ -162,7 +162,7 @@ impl InstallDriver {
 
         self.clobber_registry()
             .post_process(&required_packages, target_prefix)
-            .map_err(|e| InstallError::PostProcessFailed(e))?;
+            .map_err(InstallError::PostProcessFailed)?;
 
         Ok(())
     }

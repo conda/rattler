@@ -163,6 +163,29 @@ impl PrefixRecord {
         Self::from_str(&str)
     }
 
+    /// Creates a `PrefixRecord` from a `RepoDataRecord`.
+    pub fn from_repodata_record(
+        repodata_record: RepoDataRecord,
+        package_tarball_full_path: Option<PathBuf>,
+        extracted_package_dir: Option<PathBuf>,
+        paths: Vec<PathsEntry>,
+        requested_spec: Option<String>,
+        link: Option<Link>,
+    ) -> Self {
+        Self {
+            repodata_record,
+            package_tarball_full_path,
+            extracted_package_dir,
+            files: paths
+                .iter()
+                .map(|entry| entry.relative_path.clone())
+                .collect(),
+            paths_data: paths.into(),
+            link,
+            requested_spec,
+        }
+    }
+
     /// Parses a `paths.json` file from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         Self::from_reader(File::open(path.as_ref())?)
