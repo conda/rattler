@@ -375,13 +375,13 @@ fn reflink_to_destination(
             }
             Err(e) => {
                 return if allow_hard_links {
-                    tracing::error!(
+                    tracing::debug!(
                         "failed to reflink {}: {e}, falling back to hard linking.",
                         destination_path.display()
                     );
                     hardlink_to_destination(source_path, destination_path)
                 } else {
-                    tracing::error!(
+                    tracing::debug!(
                         "failed to reflink {}: {e}, falling back to copying.",
                         destination_path.display()
                     );
@@ -407,7 +407,7 @@ fn hardlink_to_destination(
                 })?;
             }
             Err(e) => {
-                tracing::error!(
+                tracing::debug!(
                     "failed to hardlink {}: {e}, falling back to copying.",
                     destination_path.display()
                 );
@@ -436,7 +436,7 @@ fn symlink_to_destination(
                 })?;
             }
             Err(e) => {
-                tracing::error!(
+                tracing::debug!(
                     "failed to symlink {}: {e}, falling back to copying.",
                     destination_path.display()
                 );
