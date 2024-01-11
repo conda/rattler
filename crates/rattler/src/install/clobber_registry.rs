@@ -22,7 +22,7 @@ impl ClobberRegistry {
     pub fn from_prefix_records(prefix_records: &[PrefixRecord]) -> Self {
         let mut registry = Self::default();
 
-        let mut temp_clobbers = HashMap::new();
+        let mut temp_clobbers = Vec::new();
         for prefix_record in prefix_records {
             registry
                 .package_names
@@ -37,6 +37,7 @@ impl ClobberRegistry {
                     .as_normalized()
             );
             for p in &prefix_record.files {
+                println!("Checking path: {}", p.display());
                 if p.to_string_lossy().ends_with(&clobber_ending) {
                     // register a clobbered path
                     if let Some((filename, originating_package)) = p
@@ -46,7 +47,7 @@ impl ClobberRegistry {
                         .split_once("__clobber-from-")
                     {
                         let path = p.with_file_name(filename);
-                        temp_clobbers.insert(path, originating_package.to_string());
+                        temp_clobbers.push((path, originating_package.to_string()));
                     }
                 } else {
                     registry
@@ -55,8 +56,10 @@ impl ClobberRegistry {
                 }
             }
         }
-
+        println!("Temp clobbers: {:#?}", temp_clobbers);
         for (path, originating_package) in temp_clobbers.iter() {
+            println!("Clobbering path: {}", path.display());
+            println!("Clobbers: {:#?}", registry.clobbers);
             let idx = registry
                 .package_names
                 .iter()
@@ -130,7 +133,7 @@ impl ClobberRegistry {
 
     /// Unclobber the final paths
     pub fn post_process(&self, sorted_prefix_records: &[&PrefixRecord], target_prefix: &Path) {
-        let names = sorted_prefix_records
+        let sorted_names = sorted_prefix_records
             .iter()
             .map(|p| p.repodata_record.package_record.name.clone())
             .collect::<Vec<_>>();
@@ -138,59 +141,76 @@ impl ClobberRegistry {
         let conda_meta = target_prefix.join("conda-meta");
 
         for (path, clobbered_by) in self.clobbers.iter() {
-            let mut sorted_clobbered_by = clobbered_by.clone();
-            sorted_clobbered_by.sort_unstable_by_key(|&idx| &names[idx]);
+            let clobbered_by_names = clobbered_by
+                .iter()
+                .map(|&idx| self.package_names[idx].clone())
+                .collect::<Vec<_>>();
 
-            let winner = *sorted_clobbered_by.last().expect("No winner found");
-            println!("Our winner is: {:?}", names[winner]);
+            println!("Clobbered by: {:?}", clobbered_by_names);
+            // extract the subset of clobbered_by that is in sorted_prefix_records
+            let sorted_clobbered_by = sorted_names
+                .iter()
+                .cloned()
+                .enumerate()
+                .filter(|(_, n)| clobbered_by_names.contains(&n))
+                .collect::<Vec<_>>();
+            let winner = sorted_clobbered_by.last().expect("No winner found");
 
-            if winner == clobbered_by[0] {
+            println!("Our current winner is: {:?}", winner);
+            println!("sorting: {:?}", sorted_clobbered_by);
+
+            if winner.1 == clobbered_by_names[0] {
                 println!(
                     "clobbering decision: keep {} from {:?}",
                     path.display(),
-                    names[winner]
+                    winner
                 );
             } else {
                 let full_path = target_prefix.join(path);
                 if full_path.exists() {
-                    let loser = clobbered_by[0];
-                    let loser_path = Self::clobber_name(path, &names[loser]);
-                    let loser_name = loser_path.strip_prefix(target_prefix).unwrap();
+                    let loser_name = &clobbered_by_names[0];
+                    let loser_path = Self::clobber_name(path, loser_name);
 
                     std::fs::rename(target_prefix.join(path), target_prefix.join(&loser_path))
                         .expect("Could not rename file");
 
+                    let loser_idx = sorted_clobbered_by
+                        .iter()
+                        .find(|(_, n)| n == loser_name)
+                        .unwrap()
+                        .0;
+
                     let loser_prefix_record = rename_path_in_prefix_record(
-                        sorted_prefix_records[winner],
-                        &loser_name.to_string_lossy(),
+                        sorted_prefix_records[loser_idx],
                         path,
+                        &PathBuf::from(loser_path),
                     );
 
                     println!(
                         "clobbering decision: remove {} from {:?}",
                         path.display(),
-                        names[loser]
+                        loser_name
                     );
+
                     loser_prefix_record
                         .write_to_path(conda_meta.join(loser_prefix_record.file_name()), true)
                         .expect("Could not write prefix record");
                 }
 
-                let winner_path = Self::clobber_name(path, &names[winner]);
-                let winner_name = winner_path.strip_prefix(target_prefix).unwrap();
+                let winner_path = Self::clobber_name(path, &winner.1);
 
                 println!(
                     "clobbering decision: choose {} from {:?}",
                     path.display(),
-                    names[winner]
+                    winner
                 );
 
                 std::fs::rename(target_prefix.join(&winner_path), target_prefix.join(path))
                     .expect("Could not rename file");
 
                 let winner_prefix_record = rename_path_in_prefix_record(
-                    sorted_prefix_records[winner],
-                    &winner_name.to_string_lossy(),
+                    sorted_prefix_records[winner.0],
+                    &winner_path,
                     path,
                 );
                 winner_prefix_record
@@ -203,7 +223,7 @@ impl ClobberRegistry {
 
 fn rename_path_in_prefix_record(
     record: &PrefixRecord,
-    old_path: &str,
+    old_path: &Path,
     new_path: &Path,
 ) -> PrefixRecord {
     let mut new_record = record.clone();
@@ -242,6 +262,7 @@ mod tests {
     };
 
     use futures::TryFutureExt;
+    use rand::seq::SliceRandom;
     use rattler_conda_types::{
         package::IndexJson, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
     };
@@ -321,16 +342,7 @@ mod tests {
             std::fs::create_dir_all(&conda_meta_path)?;
 
             // Write the conda-meta information
-            let pkg_meta_path = conda_meta_path.join(format!(
-                "{}-{}-{}.json",
-                prefix_record
-                    .repodata_record
-                    .package_record
-                    .name
-                    .as_normalized(),
-                prefix_record.repodata_record.package_record.version,
-                prefix_record.repodata_record.package_record.build
-            ));
+            let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
             prefix_record.write_to_path(pkg_meta_path, true)
         })
         .await
@@ -419,19 +431,53 @@ mod tests {
             .unwrap();
     }
 
-    #[tokio::test]
-    async fn test_transaction_with_clobber() {
-        // Create a transaction
+    fn find_prefix_record<'a>(
+        prefix_records: &'a [PrefixRecord],
+        name: &str,
+    ) -> Option<&'a PrefixRecord> {
+        prefix_records
+            .iter()
+            .find(|r| r.repodata_record.package_record.name.as_normalized() == name)
+    }
+
+    fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
         let repodata_record_1 = repodata_record("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
         let repodata_record_2 = repodata_record("clobber/clobber-2-0.1.0-h4616a5c_0.tar.bz2");
         let repodata_record_3 = repodata_record("clobber/clobber-3-0.1.0-h4616a5c_0.tar.bz2");
 
+        vec![
+            TransactionOperation::Install(repodata_record_1),
+            TransactionOperation::Install(repodata_record_2),
+            TransactionOperation::Install(repodata_record_3),
+        ]
+    }
+
+    fn assert_check_files(target_prefix: &Path, expected_files: &[&str]) {
+        let files = std::fs::read_dir(target_prefix).unwrap();
+        let files = files
+            .filter_map(|f| {
+                let fx = f.unwrap();
+                if fx.file_type().unwrap().is_file() {
+                    Some(fx.path())
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(files.len(), expected_files.len());
+        for file in files {
+            assert!(expected_files.contains(&file.file_name().unwrap().to_string_lossy().as_ref()));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_transaction_with_clobber() {
+        // Create a transaction
+        let operations = test_operations();
+
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![
-                TransactionOperation::Install(repodata_record_1),
-                TransactionOperation::Install(repodata_record_2),
-                TransactionOperation::Install(repodata_record_3),
-            ],
+            operations,
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
@@ -454,49 +500,51 @@ mod tests {
         .await;
 
         // check that the files are there
-        let files = std::fs::read_dir(target_prefix.path()).unwrap();
-        let files = files
-            .filter_map(|f| {
-                let fx = f.unwrap();
-                if fx.file_type().unwrap().is_file() {
-                    Some(fx.path())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "clobber.txt__clobber-from-clobber-2",
+                "clobber.txt__clobber-from-clobber-3",
+            ],
+        );
 
-        assert_eq!(files.len(), 3);
-        let expected_files = vec![
-            "clobber.txt__clobber-from-clobber-3",
-            "clobber.txt__clobber-from-clobber-2",
-            "clobber.txt",
-        ];
-        for file in files {
-            assert!(expected_files.contains(&file.file_name().unwrap().to_string_lossy().as_ref()));
-        }
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+
+        let prefix_record_clobber_1 = find_prefix_record(&prefix_records, "clobber-1").unwrap();
+        assert!(prefix_record_clobber_1.files == vec![PathBuf::from("clobber.txt")]);
+        assert_eq!(prefix_record_clobber_1.paths_data.paths.len(), 1);
+        assert_eq!(
+            prefix_record_clobber_1.paths_data.paths[0].relative_path,
+            PathBuf::from("clobber.txt")
+        );
+        let prefix_record_clobber_2 = find_prefix_record(&prefix_records, "clobber-2").unwrap();
+        assert!(
+            prefix_record_clobber_2.files
+                == vec![PathBuf::from("clobber.txt__clobber-from-clobber-2")]
+        );
+        assert_eq!(prefix_record_clobber_2.paths_data.paths.len(), 1);
+        assert_eq!(
+            prefix_record_clobber_2.paths_data.paths[0].relative_path,
+            PathBuf::from("clobber.txt__clobber-from-clobber-2")
+        );
 
         assert_eq!(
             fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
             "clobber-1\n"
         );
 
-        let records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-
-        let record_clobber = records
-            .iter()
-            .find(|r| r.repodata_record.package_record.name.as_normalized() == "clobber-1")
-            .unwrap();
-
         // remove one of the clobbering files
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
-            operations: vec![TransactionOperation::Remove(record_clobber.clone())],
+            operations: vec![TransactionOperation::Remove(
+                prefix_record_clobber_1.clone(),
+            )],
             python_info: None,
             current_python_info: None,
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&records));
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
 
         execute_transaction(
             transaction,
@@ -508,25 +556,85 @@ mod tests {
         )
         .await;
 
-        // check that the files are there
-        let files = std::fs::read_dir(target_prefix.path()).unwrap();
-        let files = files
-            .filter_map(|f| {
-                let fx = f.unwrap();
-                if fx.file_type().unwrap().is_file() {
-                    Some(fx.path())
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
+        assert_check_files(
+            target_prefix.path(),
+            &["clobber.txt__clobber-from-clobber-3", "clobber.txt"],
+        );
 
-        assert_eq!(files.len(), 2);
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
 
-        let expected_files = vec!["clobber.txt__clobber-from-clobber-3", "clobber.txt"];
+        let prefix_record_clobber_1 = find_prefix_record(&prefix_records, "clobber-1");
+        assert!(prefix_record_clobber_1.is_none());
+        let prefix_record_clobber_2 = find_prefix_record(&prefix_records, "clobber-2").unwrap();
+        assert!(prefix_record_clobber_2.files == vec![PathBuf::from("clobber.txt")]);
+        assert_eq!(prefix_record_clobber_2.paths_data.paths.len(), 1);
+        assert_eq!(
+            prefix_record_clobber_2.paths_data.paths[0].relative_path,
+            PathBuf::from("clobber.txt")
+        );
 
-        for file in files {
-            assert!(expected_files.contains(&file.file_name().unwrap().to_string_lossy().as_ref()));
+        assert_eq!(
+            fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
+            "clobber-2\n"
+        );
+        let prefix_record_clobber_3 = find_prefix_record(&prefix_records, "clobber-3").unwrap();
+        assert!(
+            prefix_record_clobber_3.files
+                == vec![PathBuf::from("clobber.txt__clobber-from-clobber-3")]
+        );
+
+        assert_eq!(prefix_record_clobber_3.paths_data.paths.len(), 1);
+
+        assert_eq!(
+            prefix_record_clobber_3.paths_data.paths[0].relative_path,
+            PathBuf::from("clobber.txt__clobber-from-clobber-3")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_random_clobber() {
+        for _ in 0..3 {
+            let mut operations = test_operations();
+            // randomize the order of the operations
+            operations.shuffle(&mut rand::thread_rng());
+
+            let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+                operations,
+                python_info: None,
+                current_python_info: None,
+                platform: Platform::current(),
+            };
+
+            // execute transaction
+            let target_prefix = tempfile::tempdir().unwrap();
+
+            let packages_dir = tempfile::tempdir().unwrap();
+            let cache = PackageCache::new(packages_dir.path());
+
+            execute_transaction(
+                transaction,
+                target_prefix.path(),
+                &AuthenticatedClient::default(),
+                &cache,
+                &InstallDriver::default(),
+                &InstallOptions::default(),
+            )
+            .await;
+
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
+                "clobber-1\n"
+            );
+
+            // make sure that clobbers are resolved deterministically
+            assert_check_files(
+                target_prefix.path(),
+                &[
+                    "clobber.txt__clobber-from-clobber-3",
+                    "clobber.txt__clobber-from-clobber-2",
+                    "clobber.txt",
+                ],
+            );
         }
     }
 }
