@@ -3,10 +3,21 @@ use digest::Output;
 use rattler_conda_types::{
     package::EntryPoint,
     prefix_record::{PathType, PathsEntry},
+    Platform,
 };
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::{fs::File, io, io::Write, path::Path};
+
+/// Get the bytes of the windows launcher executable.
+pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
+    match platform {
+        Platform::Win32 => todo!("32 bit windows is not supported for entry points"),
+        Platform::Win64 => include_bytes!("../../resources/launcher64.exe"),
+        Platform::WinArm64 => todo!("arm64 windows is not supported for entry points"),
+        _ => panic!("unsupported platform"),
+    }
+}
 
 /// Creates an "entry point" on disk for a Python entrypoint. Entrypoints are executable files that
 /// directly call a certain Python function.
@@ -49,7 +60,7 @@ pub fn create_windows_python_entry_point(
         .join(format!("{}.exe", &entry_point.command));
 
     // Include the bytes of the launcher directly in the binary so we can write it to disk.
-    let launcher_bytes = include_bytes!("../../resources/launcher.exe");
+    let launcher_bytes = get_windows_launcher(&Platform::current());
     std::fs::write(target_dir.join(&relative_path_script_exe), launcher_bytes)?;
 
     let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
