@@ -39,22 +39,22 @@ pub enum CompressionLevel {
     #[default]
     Default,
     /// Use a numeric compression level (zstd: 1-22, bzip2: 1-9)
-    Numeric(u32),
+    Numeric(i32),
 }
 
 impl CompressionLevel {
     fn to_zstd_level(self) -> Result<i32, std::io::Error> {
         match self {
-            CompressionLevel::Lowest => Ok(1),
+            CompressionLevel::Lowest => Ok(-7),
             CompressionLevel::Highest => Ok(22),
             CompressionLevel::Default => Ok(15),
             CompressionLevel::Numeric(n) => {
-                if (1..=22).contains(&n) {
-                    Ok(n as i32)
+                if (-7..=22).contains(&n) {
+                    Ok(n)
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
-                        "zstd compression level must be between 1 and 22",
+                        "zstd compression level must be between -7 and 22",
                     ))
                 }
             }
@@ -67,7 +67,8 @@ impl CompressionLevel {
             CompressionLevel::Default | CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
             CompressionLevel::Numeric(n) => {
                 if (1..=9).contains(&n) {
-                    Ok(bzip2::Compression::new(n))
+                    // this conversion from i32 to u32 cannot panic because of the check above
+                    Ok(bzip2::Compression::new(n.try_into().unwrap()))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
