@@ -43,7 +43,8 @@ pub enum CompressionLevel {
 }
 
 impl CompressionLevel {
-    fn to_zstd_level(self) -> Result<i32, std::io::Error> {
+    /// convert the compression level to a zstd compression level
+    pub fn to_zstd_level(self) -> Result<i32, std::io::Error> {
         match self {
             CompressionLevel::Lowest => Ok(-7),
             CompressionLevel::Highest => Ok(22),
@@ -61,7 +62,8 @@ impl CompressionLevel {
         }
     }
 
-    fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
+    /// convert the compression level to a bzip2 compression level
+    pub fn to_bzip2_level(self) -> Result<bzip2::Compression, std::io::Error> {
         match self {
             CompressionLevel::Lowest => Ok(bzip2::Compression::new(1)),
             CompressionLevel::Default | CompressionLevel::Highest => Ok(bzip2::Compression::new(9)),
