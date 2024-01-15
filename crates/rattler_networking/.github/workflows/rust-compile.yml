@@ -1,0 +1,55 @@
+on:
+  push:
+    branches:
+      - "main"
+  pull_request:
+
+name: Rust
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_LOG: info
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-rustdoc-links:
+    name: Check intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - run: cargo rustdoc --all-features -- -D warnings -W unreachable-pub
+
+  format_and_lint:
+    name: Format and Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: clippy, rustfmt
+      - name: Run rustfmt
+        uses: actions-rust-lang/rustfmt@v1
+      - name: Run clippy
+        run: cargo clippy
+
+  build:
+    name: ubuntu-latest
+    runs-on: ubuntu-latest
+    needs: [ format_and_lint ]
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - name: Build
+        run: cargo build
+      - name: Run tests
+        run: cargo test -- --nocapture
