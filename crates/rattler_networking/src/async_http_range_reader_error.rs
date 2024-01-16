@@ -1,7 +1,7 @@
-//! Error type used for [`AsyncHttpRangeReader`]
+//! Error type used for [`crate::AsyncHttpRangeReader`]
 use std::sync::Arc;
 
-/// Error type used for [`AsyncHttpRangeReader`]
+/// Error type used for [`crate::AsyncHttpRangeReader`]
 #[derive(Clone, Debug, thiserror::Error)]
 pub enum AsyncHttpRangeReaderError {
     /// The server does not support range requests
