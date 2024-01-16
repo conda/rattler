@@ -464,9 +464,12 @@ mod tests {
     }
 
     fn test_operations_nested() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 = get_repodata_record("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_2 = get_repodata_record("clobber/clobber-nested-2-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_3 = get_repodata_record("clobber/clobber-nested-3-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_1 =
+            get_repodata_record("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_2 =
+            get_repodata_record("clobber/clobber-nested-2-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_3 =
+            get_repodata_record("clobber/clobber-nested-3-0.1.0-h4616a5c_0.tar.bz2");
 
         vec![
             TransactionOperation::Install(repodata_record_1),
@@ -692,7 +695,8 @@ mod tests {
             .await;
 
             assert_eq!(
-                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
+                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt"))
+                    .unwrap(),
                 "clobber-2\n"
             );
 
@@ -704,6 +708,61 @@ mod tests {
                     "clobber.txt__clobber-from-clobber-nested-1",
                     "clobber.txt",
                 ],
+            );
+
+            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_record_clobber_2 =
+                find_prefix_record(&prefix_records, "clobber-nested-2").unwrap();
+            let prefix_record_clobber_3 =
+                find_prefix_record(&prefix_records, "clobber-nested-3").unwrap();
+
+            assert_eq!(
+                prefix_record_clobber_3.files,
+                vec![PathBuf::from(
+                    "clobber/bobber/clobber.txt__clobber-from-clobber-nested-3"
+                )]
+            );
+
+            // remove one of the clobbering files
+            let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+                operations: vec![TransactionOperation::Remove(
+                    prefix_record_clobber_2.clone(),
+                )],
+                python_info: None,
+                current_python_info: None,
+                platform: Platform::current(),
+            };
+
+            let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+            execute_transaction(
+                transaction,
+                target_prefix.path(),
+                &AuthenticatedClient::default(),
+                &cache,
+                &install_driver,
+                &InstallOptions::default(),
+            )
+            .await;
+
+            assert_check_files(
+                &target_prefix.path().join("clobber/bobber"),
+                &["clobber.txt__clobber-from-clobber-nested-3", "clobber.txt"],
+            );
+
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt"))
+                    .unwrap(),
+                "clobber-1\n"
+            );
+
+            let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+            let prefix_record_clobber_1 =
+                find_prefix_record(&prefix_records, "clobber-nested-1").unwrap();
+
+            assert_eq!(
+                prefix_record_clobber_1.files,
+                vec![PathBuf::from("clobber/bobber/clobber.txt")]
             );
         }
     }
