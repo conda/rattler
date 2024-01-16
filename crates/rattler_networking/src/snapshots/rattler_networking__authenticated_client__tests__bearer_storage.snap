@@ -1,0 +1,7 @@
+---
+source: crates/rattler_networking/src/authenticated_client.rs
+expression: authentication
+---
+{
+  "BearerToken": "xyztokytoken"
+}

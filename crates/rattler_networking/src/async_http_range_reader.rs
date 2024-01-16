@@ -632,7 +632,7 @@ mod test {
     #[tokio::test]
     async fn async_range_reader_zip(#[case] check_method: CheckSupportMethod) {
         // Spawn a static file server
-        let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("test-data");
+        let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../test-data");
         let server = StaticDirectoryServer::new(&path);
 
         // check that file is there and has the right size
@@ -738,7 +738,7 @@ mod test {
     #[tokio::test]
     async fn async_range_reader(#[case] check_method: CheckSupportMethod) {
         // Spawn a static file server
-        let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("test-data");
+        let path = Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("../../test-data");
         let server = StaticDirectoryServer::new(&path);
 
         // Construct an AsyncRangeReader
