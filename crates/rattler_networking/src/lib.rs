@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 
 //! Networking utilities for Rattler, specifically authenticating requests
-pub use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
+pub use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod};
 pub use authenticated_client::AuthenticatedClient;
 
 #[cfg(feature = "blocking")]
