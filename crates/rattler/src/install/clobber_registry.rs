@@ -1,7 +1,7 @@
 //! Implements a registry for "clobbering" files (files that are appearing in multiple packages)
 
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
 };
@@ -101,7 +101,12 @@ impl ClobberRegistry {
         new_path
     }
 
-    /// Register the paths of a package when linking the package.
+    /// Register the paths of a package before linking a package in
+    /// order to determine which files may clobber other files (clobbering files are
+    /// those that are present in multiple packages).
+    ///
+    /// This function has to run sequentially, and a `post_process` step
+    /// will "unclobber" the files after all packages have been installed.
     pub fn register_paths(
         &mut self,
         name: &str,
@@ -125,19 +130,17 @@ impl ClobberRegistry {
         for entry in paths_json.paths.iter() {
             let path = entry.relative_path.clone();
 
-            if let Entry::Vacant(e) = self.paths_registry.entry(path.clone()) {
-                e.insert(name_idx);
-            } else {
-                // rename to
-                let mut new_path = path.clone();
-                new_path.set_file_name(Self::clobber_name(&path, &self.package_names[name_idx]));
-
+            // if we find an entry, we have a clobbering path!
+            if let Some(e) = self.paths_registry.get(&path) {
+                let new_path = Self::clobber_name(&path, &self.package_names[name_idx]);
                 self.clobbers
                     .entry(path.clone())
-                    .or_insert_with(|| vec![*self.paths_registry.get(&path).unwrap()])
+                    .or_insert_with(|| vec![*e])
                     .push(name_idx);
 
                 clobber_paths.insert(path, new_path);
+            } else {
+                self.paths_registry.insert(path, name_idx);
             }
         }
 
