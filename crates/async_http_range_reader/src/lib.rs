@@ -1,4 +1,6 @@
-pub use crate::async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod};
+pub use crate::async_http_range_reader::{
+    AsyncHttpRangeReader, AsyncHttpRangeReaderError, CheckSupportMethod,
+};
 
 pub mod async_http_range_reader;
 pub mod async_http_range_reader_error;
