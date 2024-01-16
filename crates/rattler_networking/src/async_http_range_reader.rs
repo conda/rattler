@@ -16,18 +16,12 @@
 //! The primary use-case for this library is to be able to sparsely stream a zip archive over HTTP
 //! but its designed in a generic fashion.
 
-mod sparse_range;
-
-mod error;
-#[cfg(test)]
-mod static_directory_server;
-
+use crate::sparse_range::SparseRange;
 use futures::{FutureExt, Stream, StreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes};
 use memmap2::MmapMut;
 use reqwest::header::HeaderMap;
 use reqwest::{Client, Response, Url};
-use sparse_range::SparseRange;
 use std::{
     io::{self, ErrorKind, SeekFrom},
     ops::Range,
@@ -44,7 +38,7 @@ use tokio_stream::wrappers::WatchStream;
 use tokio_util::sync::PollSender;
 use tracing::{info_span, Instrument};
 
-pub use error::AsyncHttpRangeReaderError;
+pub use crate::async_http_range_reader_error::AsyncHttpRangeReaderError;
 
 /// An `AsyncRangeReader` enables reading from a file over HTTP using range requests.
 ///
@@ -60,7 +54,7 @@ pub use error::AsyncHttpRangeReaderError;
 ///
 /// ```rust
 /// # use url::Url;
-/// # use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
+/// # use rattler_networking::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 /// async fn get_reader_cached(
 ///     url: Url,
 /// ) -> Result<Option<AsyncHttpRangeReader>, AsyncHttpRangeReaderError> {
@@ -363,8 +357,8 @@ impl AsyncHttpRangeReader {
         inner.streamer_state.requested_ranges.clone()
     }
 
-    // Prefetches a range of bytes from the remote. When specifying a large range this can
-    // drastically reduce the number of requests required to the server.
+    /// Prefetches a range of bytes from the remote. When specifying a large range this can
+    /// drastically reduce the number of requests required to the server.
     pub async fn prefetch(&mut self, bytes: Range<u64>) {
         let inner = self.inner.get_mut();
 
