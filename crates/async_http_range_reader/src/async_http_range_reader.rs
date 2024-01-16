@@ -54,7 +54,7 @@ pub use crate::async_http_range_reader_error::AsyncHttpRangeReaderError;
 ///
 /// ```rust
 /// # use url::Url;
-/// # use rattler_networking::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
+/// # use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
 /// async fn get_reader_cached(
 ///     url: Url,
 /// ) -> Result<Option<AsyncHttpRangeReader>, AsyncHttpRangeReaderError> {
