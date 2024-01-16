@@ -1,5 +1,5 @@
 ---
-source: crates/rattler_networking/src/lib.rs
+source: crates/rattler_networking/src/authenticated_client.rs
 expression: authentication
 ---
 {
