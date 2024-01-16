@@ -1,0 +1,42 @@
+recipe:
+  name: clobber
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-nested-1
+      version: 0.1.0
+    
+    build:  
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber/bobber
+        - echo "clobber-1" > $PREFIX/clobber/bobber/clobber.txt
+
+    requirements:
+      run:
+        - clobber-nested-3
+
+  - package:
+      name: clobber-nested-2
+      version: 0.1.0
+    
+    build:  
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber/bobber
+        - echo "clobber-2" > $PREFIX/clobber/bobber/clobber.txt
+
+    requirements:
+      run:
+        - clobber-nested-1
+
+  - package:
+      name: clobber-nested-3
+      version: 0.1.0
+    
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/clobber/bobber
+        - echo "clobber-3" > $PREFIX/clobber/bobber/clobber.txt

@@ -463,6 +463,18 @@ mod tests {
         ]
     }
 
+    fn test_operations_nested() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
+        let repodata_record_1 = get_repodata_record("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_2 = get_repodata_record("clobber/clobber-nested-2-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_3 = get_repodata_record("clobber/clobber-nested-3-0.1.0-h4616a5c_0.tar.bz2");
+
+        vec![
+            TransactionOperation::Install(repodata_record_1),
+            TransactionOperation::Install(repodata_record_2),
+            TransactionOperation::Install(repodata_record_3),
+        ]
+    }
+
     fn assert_check_files(target_prefix: &Path, expected_files: &[&str]) {
         let files = std::fs::read_dir(target_prefix).unwrap();
         let files = files
@@ -643,6 +655,53 @@ mod tests {
                 &[
                     "clobber.txt__clobber-from-clobber-3",
                     "clobber.txt__clobber-from-clobber-2",
+                    "clobber.txt",
+                ],
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_random_clobber_nested() {
+        for _ in 0..3 {
+            let mut operations = test_operations_nested();
+            // randomize the order of the operations
+            operations.shuffle(&mut rand::thread_rng());
+
+            let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+                operations,
+                python_info: None,
+                current_python_info: None,
+                platform: Platform::current(),
+            };
+
+            // execute transaction
+            let target_prefix = tempfile::tempdir().unwrap();
+
+            let packages_dir = tempfile::tempdir().unwrap();
+            let cache = PackageCache::new(packages_dir.path());
+
+            execute_transaction(
+                transaction,
+                target_prefix.path(),
+                &AuthenticatedClient::default(),
+                &cache,
+                &InstallDriver::default(),
+                &InstallOptions::default(),
+            )
+            .await;
+
+            assert_eq!(
+                fs::read_to_string(target_prefix.path().join("clobber/bobber/clobber.txt")).unwrap(),
+                "clobber-2\n"
+            );
+
+            // make sure that clobbers are resolved deterministically
+            assert_check_files(
+                &target_prefix.path().join("clobber/bobber"),
+                &[
+                    "clobber.txt__clobber-from-clobber-nested-3",
+                    "clobber.txt__clobber-from-clobber-nested-1",
                     "clobber.txt",
                 ],
             );
