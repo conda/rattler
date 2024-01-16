@@ -2,7 +2,7 @@
 
 //! Networking utilities for Rattler, specifically authenticating requests
 pub use async_http_range_reader::{AsyncHttpRangeReader, AsyncHttpRangeReaderError};
-pub use authenticated_client::{AuthenticatedClient};
+pub use authenticated_client::AuthenticatedClient;
 
 #[cfg(feature = "blocking")]
 pub use authenticated_client::AuthenticatedClientBlocking;
