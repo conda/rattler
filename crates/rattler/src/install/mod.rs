@@ -599,7 +599,7 @@ mod test {
     use itertools::Itertools;
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
-    use rattler_lock::CondaLock;
+    use rattler_lock::LockFile;
     use rattler_networking::AuthenticatedClient;
 
     use std::env::temp_dir;
@@ -632,7 +632,7 @@ mod test {
     pub async fn test_conda_lock() {
         // Load a prepared explicit environment file for the current platform.
         let lock_path = get_test_data_dir().join("conda-lock/python-conda-lock.yml");
-        let lock = CondaLock::from_path(&lock_path).unwrap();
+        let lock = LockFile::from_path(&lock_path).unwrap();
 
         let current_platform = Platform::current();
         assert!(lock.metadata.platforms.iter().contains(&current_platform), "the platform for which the explicit lock file was created does not match the current platform");
