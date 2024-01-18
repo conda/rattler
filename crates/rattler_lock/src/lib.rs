@@ -68,7 +68,7 @@
 //! in a single file.
 
 use fxhash::FxHashMap;
-use rattler_conda_types::{PackageRecord, Platform, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{borrow::Cow, io::Read, path::Path, str::FromStr};
@@ -357,6 +357,23 @@ impl CondaPackage {
     /// Returns the channel of the package.
     pub fn channel(&self) -> Option<Url> {
         self.package_data().channel()
+    }
+
+    /// Returns true if the specified [`MatchSpec`] matches against the package.
+    pub fn matches(&self, spec: &MatchSpec) -> bool {
+        // Check the data in the package record
+        if !spec.matches(self.package_record()) {
+            return false;
+        }
+
+        // Check the the channel
+        if let Some(channel) = &spec.channel {
+            if !self.url().as_str().starts_with(channel.base_url.as_str()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
