@@ -284,6 +284,24 @@ impl Package {
         }
     }
 
+    /// Returns this instance as a [`CondaPackage`] if this instance represents a conda
+    /// package.
+    pub fn into_conda(self) -> Option<CondaPackage> {
+        match self {
+            Self::Conda(value) => Some(value),
+            Self::Pypi(_) => None,
+        }
+    }
+
+    /// Returns this instance as a [`PypiPackage`] if this instance represents a pypi
+    /// package.
+    pub fn into_pypi(self) -> Option<PypiPackage> {
+        match self {
+            Self::Conda(_) => None,
+            Self::Pypi(value) => Some(value),
+        }
+    }
+
     /// Returns the name of the package.
     pub fn name(&self) -> &str {
         match self {
