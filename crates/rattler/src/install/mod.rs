@@ -306,12 +306,17 @@ pub async fn link_package(
                 platform,
                 python_info.as_deref(),
                 options.apple_codesign_behavior,
-                clobber_rename,
+                clobber_rename.as_ref(),
             ) {
                 Ok(result) => Ok((
                     number_of_paths_entries,
                     PathsEntry {
                         relative_path: result.relative_path,
+                        original_path: if clobber_rename.is_some() {
+                            Some(entry.relative_path)
+                        } else {
+                            None
+                        },
                         path_type: entry.path_type.into(),
                         no_link: entry.no_link,
                         sha256: entry.sha256,

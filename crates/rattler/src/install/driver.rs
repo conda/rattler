@@ -81,11 +81,9 @@ impl InstallDriver {
             }
         });
 
-        let clobber_registry = if let Some(prefix_records) = prefix_records {
-            ClobberRegistry::from_prefix_records(prefix_records)
-        } else {
-            ClobberRegistry::default()
-        };
+        let clobber_registry = prefix_records
+            .map(ClobberRegistry::from_prefix_records)
+            .unwrap_or_default();
 
         Self {
             inner: Arc::new(Mutex::new(InstallDriverInner { tx, join_handle })),
@@ -161,7 +159,7 @@ impl InstallDriver {
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
 
         self.clobber_registry()
-            .post_process(&required_packages, target_prefix)
+            .unclobber(&required_packages, target_prefix)
             .map_err(InstallError::PostProcessFailed)?;
 
         Ok(())

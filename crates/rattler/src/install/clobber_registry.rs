@@ -46,29 +46,16 @@ impl ClobberRegistry {
 
         let mut temp_clobbers = Vec::new();
         for prefix_record in prefix_records {
-            registry
-                .package_names
-                .push(prefix_record.repodata_record.package_record.name.clone());
+            let package_name = prefix_record.repodata_record.package_record.name.clone();
+            registry.package_names.push(package_name.clone());
 
-            let clobber_ending =
-                clobber_template(&prefix_record.repodata_record.package_record.name);
-
-            for p in &prefix_record.files {
-                if p.to_string_lossy().ends_with(&clobber_ending) {
-                    // register a clobbered path
-                    if let Some(full_file_name) = p.file_name() {
-                        if let Some((file_name, originating_package)) = full_file_name
-                            .to_string_lossy()
-                            .split_once(CLOBBER_TEMPLATE)
-                        {
-                            let path = p.with_file_name(file_name);
-                            temp_clobbers.push((path, originating_package.to_string()));
-                        }
-                    }
+            for p in &prefix_record.paths_data.paths {
+                if let Some(original_path) = &p.original_path {
+                    temp_clobbers.push((original_path, package_name.clone()));
                 } else {
                     registry
                         .paths_registry
-                        .insert(p.clone(), registry.package_names.len() - 1);
+                        .insert(p.relative_path.clone(), registry.package_names.len() - 1);
                 }
             }
         }
@@ -77,9 +64,10 @@ impl ClobberRegistry {
             let idx = registry
                 .package_names
                 .iter()
-                .position(|n| n.as_normalized() == *originating_package)
+                .position(|n| n == originating_package)
                 .unwrap();
 
+            let path = *path;
             registry
                 .clobbers
                 .entry(path.clone())
@@ -148,7 +136,7 @@ impl ClobberRegistry {
     }
 
     /// Unclobber the paths after all installation steps have been completed.
-    pub fn post_process(
+    pub fn unclobber(
         &mut self,
         sorted_prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
@@ -199,6 +187,7 @@ impl ClobberRegistry {
                         sorted_prefix_records[loser_idx],
                         path,
                         &loser_path,
+                        true,
                     );
 
                     tracing::debug!(
@@ -225,6 +214,7 @@ impl ClobberRegistry {
                     sorted_prefix_records[winner.0],
                     &winner_path,
                     path,
+                    false,
                 );
                 winner_prefix_record
                     .write_to_path(conda_meta.join(winner_prefix_record.file_name()), true)?;
@@ -239,6 +229,7 @@ fn rename_path_in_prefix_record(
     record: &PrefixRecord,
     old_path: &Path,
     new_path: &Path,
+    new_path_is_clobber: bool,
 ) -> PrefixRecord {
     let mut new_record = record.clone();
     let mut new_paths = Vec::new();
@@ -257,6 +248,11 @@ fn rename_path_in_prefix_record(
         if path.relative_path == old_path {
             let mut element = path.clone();
             element.relative_path = new_path.to_path_buf();
+            element.original_path = if new_path_is_clobber {
+                Some(old_path.clone())
+            } else {
+                None
+            };
             new_path_records.push(element);
         } else {
             new_path_records.push(path.clone());

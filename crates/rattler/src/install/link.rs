@@ -142,7 +142,7 @@ pub fn link_file(
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
-    clobber_rename: Option<PathBuf>,
+    clobber_rename: Option<&PathBuf>,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -170,7 +170,7 @@ pub fn link_file(
     // If the file already exists it most likely means that the file is clobbered. This means that
     // different packages are writing to the same file. This function simply reports back to the
     // caller that this is the case but there is no special handling here.
-    let clobbered = destination_path.is_file();
+    let clobbered = clobber_rename.is_some();
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.

@@ -71,6 +71,8 @@ pub fn create_windows_python_entry_point(
     Ok([
         PathsEntry {
             relative_path: relative_path_script_py,
+            // todo: clobbering of entry points not handled yet
+            original_path: None,
             path_type: PathType::WindowsPythonEntryPointScript,
             no_link: false,
             sha256: Some(hash),
@@ -79,6 +81,7 @@ pub fn create_windows_python_entry_point(
         },
         PathsEntry {
             relative_path: relative_path_script_exe,
+            original_path: None,
             path_type: PathType::WindowsPythonEntryPointExe,
             no_link: false,
             sha256: Some(fixed_launcher_digest),
@@ -123,6 +126,8 @@ pub fn create_unix_python_entry_point(
 
     Ok(PathsEntry {
         relative_path,
+        // todo: clobbering of entry points not handled yet
+        original_path: None,
         path_type: PathType::UnixPythonEntryPoint,
         no_link: false,
         sha256: Some(hash),
