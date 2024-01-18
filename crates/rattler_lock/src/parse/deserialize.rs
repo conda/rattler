@@ -1,3 +1,4 @@
+use crate::utils::serde::RawCondaPackageData;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     ParseCondaLockError, PypiPackageData, PypiPackageEnvironmentData,
@@ -13,9 +14,9 @@ use std::sync::Arc;
 use url::Url;
 
 #[derive(Deserialize)]
-struct DeserializableLockFile {
+struct DeserializableLockFile<'d> {
     environments: BTreeMap<String, DeserializableEnvironment>,
-    packages: Vec<DeserializablePackageData>,
+    packages: Vec<DeserializablePackageData<'d>>,
 }
 
 #[derive(Deserialize)]
@@ -26,8 +27,8 @@ struct DeserializableEnvironment {
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-enum DeserializablePackageData {
-    Conda(Box<CondaPackageData>),
+enum DeserializablePackageData<'d> {
+    Conda(Box<RawCondaPackageData<'d>>),
     Pypi(Box<PypiPackageData>),
 }
 
@@ -60,13 +61,13 @@ impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentDa
 
 /// Parses a [`LockFile`] from a [`serde_yaml::Value`].
 pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockError> {
-    let raw: DeserializableLockFile =
+    let raw: DeserializableLockFile<'_> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
     // Split the packages into conda and pypi packages.
     let (conda_packages, pypi_packages): (Vec<_>, Vec<_>) =
         raw.packages.into_iter().partition_map(|p| match p {
-            DeserializablePackageData::Conda(p) => Either::Left(*p),
+            DeserializablePackageData::Conda(p) => Either::Left(CondaPackageData::from(*p)),
             DeserializablePackageData::Pypi(p) => Either::Right(*p),
         });
 

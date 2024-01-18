@@ -1,5 +1,6 @@
 use super::FILE_VERSION;
-use crate::{Channel, CondaPackageData, EnvironmentPackageData, LockFile, PypiPackageData};
+use crate::utils::serde::RawCondaPackageData;
+use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData};
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
@@ -22,10 +23,11 @@ struct SerializableEnvironment<'a> {
     packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Eq, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 enum SerializablePackageData<'a> {
-    Conda(&'a CondaPackageData),
+    Conda(RawCondaPackageData<'a>),
     Pypi(&'a PypiPackageData),
 }
 
@@ -52,14 +54,14 @@ impl<'a> SerializablePackageSelector<'a> {
 }
 
 impl<'a> SerializablePackageData<'a> {
-    fn name(&self) -> &'a str {
+    fn name(&self) -> &str {
         match self {
-            SerializablePackageData::Conda(p) => p.package_record.name.as_normalized(),
+            SerializablePackageData::Conda(p) => p.name.as_normalized(),
             SerializablePackageData::Pypi(p) => &p.name,
         }
     }
 
-    fn url(&self) -> &'a Url {
+    fn url(&self) -> &Url {
         match self {
             SerializablePackageData::Conda(p) => &p.url,
             SerializablePackageData::Pypi(p) => &p.url,
@@ -99,6 +101,7 @@ impl Serialize for LockFile {
         let mut packages = inner
             .conda_packages
             .iter()
+            .map(RawCondaPackageData::from)
             .map(SerializablePackageData::Conda)
             .chain(
                 inner

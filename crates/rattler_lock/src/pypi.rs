@@ -18,13 +18,6 @@ pub struct PypiPackageData {
     /// The version of the package.
     pub version: pep440_rs::Version,
 
-    /// A list of dependencies on other packages that the wheel listed.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub requires_dist: Vec<Requirement>,
-
-    /// The python version that this package requires.
-    pub requires_python: Option<VersionSpecifiers>,
-
     /// The URL that points to where the artifact can be downloaded from.
     pub url: Url,
 
@@ -32,11 +25,12 @@ pub struct PypiPackageData {
     #[serde(flatten)]
     pub hash: Option<PackageHashes>,
 
-    /// ???
-    pub source: Option<Url>,
+    /// A list of dependencies on other packages that the wheel listed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires_dist: Vec<Requirement>,
 
-    /// Build string
-    pub build: Option<String>,
+    /// The python version that this package requires.
+    pub requires_python: Option<VersionSpecifiers>,
 }
 
 /// Additional runtime configuration of a package. Multiple environments/platforms might refer to

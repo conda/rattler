@@ -62,8 +62,9 @@ struct PypiLockedPackageV3 {
     pub runtime: PypiPackageEnvironmentDataV3,
     pub url: Url,
     pub hash: Option<PackageHashes>,
-    pub source: Option<Url>,
-    pub build: Option<String>,
+    // These fields are not used by rattler-lock.
+    // pub source: Option<Url>,
+    // pub build: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Hash, Eq, PartialEq)]
@@ -183,8 +184,6 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
                         requires_python: pkg.requires_python,
                         url: pkg.url,
                         hash: pkg.hash,
-                        source: pkg.source,
-                        build: pkg.build,
                     })
                     .0;
                 EnvironmentPackageData::Pypi(

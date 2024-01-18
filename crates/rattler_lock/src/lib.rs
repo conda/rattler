@@ -175,6 +175,11 @@ impl LockFile {
         })
     }
 
+    /// Returns the environment with the default name as defined by [`DEFAULT_ENVIRONMENT_NAME`].
+    pub fn default_environment(&self) -> Option<Environment> {
+        self.environment(DEFAULT_ENVIRONMENT_NAME)
+    }
+
     /// Returns an iterator over all environments defined in the lock-file.
     pub fn environments(
         &self,

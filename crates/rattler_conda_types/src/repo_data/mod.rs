@@ -69,10 +69,6 @@ pub struct ChannelInfo {
     pub base_url: Option<String>,
 }
 
-fn is_default_build_number(build_number: &BuildNumber) -> bool {
-    *build_number == BuildNumber::default()
-}
-
 /// A single record in the Conda repodata. A single record refers to a single binary distribution
 /// of a package on a Conda channel.
 #[serde_as]
@@ -84,11 +80,9 @@ pub struct PackageRecord {
     pub arch: Option<String>,
 
     /// The build string of the package
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub build: String,
 
     /// The build number of the package
-    #[serde(default, skip_serializing_if = "is_default_build_number")]
     pub build_number: BuildNumber,
 
     /// Additional constraints on packages. `constrains` are different from `depends` in that packages
@@ -99,7 +93,7 @@ pub struct PackageRecord {
     pub constrains: Vec<String>,
 
     /// Specification of packages this package depends on
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub depends: Vec<String>,
 
     /// Features are a deprecated way to specify different feature sets for the conda solver. This is not

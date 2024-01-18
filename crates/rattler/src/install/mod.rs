@@ -596,7 +596,6 @@ mod test {
         package_cache::PackageCache,
     };
     use futures::{stream, StreamExt};
-    use itertools::Itertools;
     use rattler_conda_types::package::ArchiveIdentifier;
     use rattler_conda_types::{ExplicitEnvironmentSpec, Platform, Version};
     use rattler_lock::LockFile;
@@ -620,7 +619,7 @@ mod test {
         assert_eq!(env.platform, Some(current_platform), "the platform for which the explicit lock file was created does not match the current platform");
 
         test_install_python(
-            env.packages.iter().map(|p| &p.url),
+            env.packages.into_iter().map(|p| p.url),
             "explicit",
             current_platform,
         )
@@ -631,15 +630,20 @@ mod test {
     #[tokio::test]
     pub async fn test_conda_lock() {
         // Load a prepared explicit environment file for the current platform.
-        let lock_path = get_test_data_dir().join("conda-lock/python-conda-lock.yml");
+        let lock_path = get_test_data_dir().join("conda-lock/v4/python-lock.yml");
         let lock = LockFile::from_path(&lock_path).unwrap();
 
         let current_platform = Platform::current();
-        assert!(lock.metadata.platforms.iter().contains(&current_platform), "the platform for which the explicit lock file was created does not match the current platform");
+        let lock_env = lock
+            .default_environment()
+            .expect("no default environment in lock file");
+
+        let Some(packages) = lock_env.packages(current_platform) else {
+            panic!("the platform for which the explicit lock file was created does not match the current platform")
+        };
 
         test_install_python(
-            lock.get_packages_by_platform(current_platform)
-                .filter_map(|p| Some(&p.as_conda()?.url)),
+            packages.filter_map(|p| Some(p.as_conda()?.url().clone())),
             "conda-lock",
             current_platform,
         )
@@ -647,7 +651,7 @@ mod test {
     }
 
     pub async fn test_install_python(
-        urls: impl Iterator<Item = &Url>,
+        urls: impl Iterator<Item = Url>,
         cache_name: &str,
         platform: Platform,
     ) {
@@ -675,7 +679,7 @@ mod test {
                 let python_version = &python_version;
                 async move {
                     // Populate the cache
-                    let package_info = ArchiveIdentifier::try_from_url(package_url).unwrap();
+                    let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_dir = package_cache
                         .get_or_fetch_from_url(package_info, package_url.clone(), client.clone())
                         .await
