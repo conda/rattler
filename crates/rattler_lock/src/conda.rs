@@ -1,6 +1,4 @@
-use rattler_conda_types::{
-    InvalidPackageNameError, PackageRecord, ParseMatchSpecError, ParseVersionError, RepoDataRecord,
-};
+use rattler_conda_types::{PackageRecord, RepoDataRecord};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
@@ -14,6 +12,7 @@ use url::Url;
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct CondaPackageData {
+    /// The package record.
     #[serde(flatten)]
     pub package_record: PackageRecord,
 
@@ -68,6 +67,26 @@ impl CondaPackageData {
     }
 }
 
+impl From<RepoDataRecord> for CondaPackageData {
+    fn from(value: RepoDataRecord) -> Self {
+        let derived_file_name = file_name_from_url(&value.url);
+        let file_name = if derived_file_name == Some(value.file_name.as_str()) {
+            None
+        } else {
+            Some(value.file_name)
+        };
+
+        Self {
+            package_record: value.package_record,
+            url: value.url,
+            file_name,
+            // TODO: This is not entirely correct. It should be derived from the `channel` field in
+            // the repodata record.
+            channel: None,
+        }
+    }
+}
+
 impl TryFrom<&CondaPackageData> for RepoDataRecord {
     type Error = ConversionError;
 
@@ -105,16 +124,6 @@ pub enum ConversionError {
     /// This field was found missing during the conversion
     #[error("missing field/fields '{0}'")]
     Missing(String),
-    #[error("the record is not a conda record")]
-    NotACondaRecord,
-    /// Parse error when converting [`MatchSpec`]
-    #[error(transparent)]
-    MatchSpecConversion(#[from] ParseMatchSpecError),
-    /// Error when version parsing fails
-    #[error(transparent)]
-    VersionConversion(#[from] ParseVersionError),
-    #[error(transparent)]
-    InvalidCondaPackageName(#[from] InvalidPackageNameError),
 }
 
 /// Package filename from the url

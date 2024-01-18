@@ -1,8 +1,5 @@
-use crate::{
-    package::{CondaPackageData, PypiPackageData},
-    parse::FILE_VERSION,
-    Channel, LockFile, Package,
-};
+use super::FILE_VERSION;
+use crate::{Channel, CondaPackageData, EnvironmentPackageData, LockFile, PypiPackageData};
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
@@ -15,7 +12,7 @@ use url::Url;
 #[derive(Serialize)]
 struct SerializableLockFile<'a> {
     version: u64,
-    environments: BTreeMap<String, SerializableEnvironment<'a>>,
+    environments: BTreeMap<&'a String, SerializableEnvironment<'a>>,
     packages: Vec<SerializablePackageData<'a>>,
 }
 
@@ -43,20 +40,6 @@ enum SerializablePackageSelector<'a> {
         #[serde(skip_serializing_if = "HashSet::is_empty")]
         extras: &'a HashSet<String>,
     },
-}
-
-impl<'l> From<Package<'l>> for SerializablePackageSelector<'l> {
-    fn from(value: Package<'l>) -> Self {
-        match value {
-            Package::Conda(p) => SerializablePackageSelector::Conda {
-                conda: &p.package.url,
-            },
-            Package::Pypi(p) => SerializablePackageSelector::Pypi {
-                pypi: &p.package.url,
-                extras: &p.runtime.extras,
-            },
-        }
-    }
 }
 
 impl<'a> SerializablePackageSelector<'a> {
@@ -110,33 +93,65 @@ impl Serialize for LockFile {
     where
         S: Serializer,
     {
+        let inner = self.inner.as_ref();
+
         // Get all packages.
-        let mut packages = self
+        let mut packages = inner
             .conda_packages
             .iter()
             .map(SerializablePackageData::Conda)
-            .chain(self.pypi_packages.iter().map(SerializablePackageData::Pypi))
+            .chain(
+                inner
+                    .pypi_packages
+                    .iter()
+                    .map(SerializablePackageData::Pypi),
+            )
             .collect::<Vec<_>>();
 
         // Get all environments
-        let environments = self
-            .environments()
-            .map(|(name, env)| {
+        let environments = inner
+            .environment_lookup
+            .iter()
+            .map(|(name, env_idx)| {
+                let env_data = &inner.environments[*env_idx];
                 (
-                    name.to_string(),
+                    name,
                     SerializableEnvironment {
-                        channels: env.channels(),
-                        packages: env
-                            .platforms()
-                            .filter_map(|platform| {
-                                let packages = env.packages(platform)?;
-                                Some((
-                                    platform,
+                        channels: &env_data.channels,
+                        packages: env_data
+                            .packages
+                            .iter()
+                            .map(|(platform, packages)| {
+                                (
+                                    *platform,
                                     packages
-                                        .sorted_by_key(Package::url)
-                                        .map(Into::into)
+                                        .iter()
+                                        .map(|package_data| match *package_data {
+                                            EnvironmentPackageData::Conda(conda_index) => {
+                                                SerializablePackageSelector::Conda {
+                                                    conda: &inner.conda_packages[conda_index].url,
+                                                }
+                                            }
+                                            EnvironmentPackageData::Pypi(
+                                                pypi_index,
+                                                pypi_runtime_index,
+                                            ) => {
+                                                let pypi_package = &inner.pypi_packages[pypi_index];
+                                                let pypi_runtime = &inner
+                                                    .pypi_environment_package_datas
+                                                    [pypi_runtime_index];
+                                                SerializablePackageSelector::Pypi {
+                                                    pypi: &pypi_package.url,
+                                                    extras: &pypi_runtime.extras,
+                                                }
+                                            }
+                                        })
+                                        .sorted_by_key(|p| match p {
+                                            SerializablePackageSelector::Conda { conda } => *conda,
+                                            SerializablePackageSelector::Pypi { pypi, .. } => *pypi,
+                                        })
                                         .collect(),
-                                ))
+                                )
                             })
                             .collect(),
                     },

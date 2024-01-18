@@ -1,4 +1,6 @@
 use crate::PackageHashes;
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::Requirement;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
@@ -17,11 +19,11 @@ pub struct PypiPackageData {
     pub version: pep440_rs::Version,
 
     /// A list of dependencies on other packages that the wheel listed.
-    #[serde(default, alias = "dependencies", skip_serializing_if = "Vec::is_empty")]
-    pub requires_dist: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires_dist: Vec<Requirement>,
 
     /// The python version that this package requires.
-    pub requires_python: Option<String>,
+    pub requires_python: Option<VersionSpecifiers>,
 
     /// The URL that points to where the artifact can be downloaded from.
     pub url: Url,
@@ -39,9 +41,9 @@ pub struct PypiPackageData {
 
 /// Additional runtime configuration of a package. Multiple environments/platforms might refer to
 /// the same pypi package but with different extras enabled.
-#[derive(Clone, Debug)]
-pub struct PyPiRuntimeConfiguration {
-    /// The extras enabled for the package
+#[derive(Clone, Debug, Default)]
+pub struct PypiPackageEnvironmentData {
+    /// The extras enabled for the package. Note that the order doesn't matter.
     pub extras: HashSet<String>,
 }
 

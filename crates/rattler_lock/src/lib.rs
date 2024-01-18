@@ -3,6 +3,17 @@
 //! Definitions for a lock-file format that stores information about pinned dependencies from both
 //! the Conda and Pypi ecosystem.
 //!
+//! The crate is structured in two API levels.
+//!
+//! 1. The top level API accessible through the [`LockFile`] type that exposes high level access to
+//!    the lock-file. This API is intended to be relatively stable and is the preferred way to
+//!    interact with the lock-file.
+//! 2. The `*Data` types. These are lower level types that expose more of the internal data
+//!    structures used in the crate. These types are not intended to be stable and are subject to
+//!    change over time. These types are used internally by the top level API. Also note that only
+//!    a subset of the `*Data` types are exposed. See `[crate::PyPiPackageData]`,
+//!    `[crate::CondaPackageData]` for examples.
+//!
 //! ## Design goals
 //!
 //! The goal of the lock-file format is:
@@ -22,7 +33,7 @@
 //! * To be statically verifiable. Given the specifications of the packages that went into a
 //!   lock-file it should be possible to cheaply verify whether or not the specifications are still
 //!   satisfied by the packages stored in the lock-file.
-//! * Forward compatible. Older version of lock-files should still be readable by never versions of
+//! * Backward compatible. Older version of lock-files should still be readable by never versions of
 //!   this crate.
 //!
 //! ## Relation to conda-lock
@@ -57,26 +68,26 @@
 //! in a single file.
 
 use fxhash::FxHashMap;
-use rattler_conda_types::Platform;
+use rattler_conda_types::{PackageRecord, Platform, RepoDataRecord};
+use std::collections::HashSet;
+use std::sync::Arc;
 use std::{borrow::Cow, io::Read, path::Path, str::FromStr};
 use url::Url;
 
-pub mod builder;
+mod builder;
 mod channel;
+mod conda;
 mod hash;
-mod package;
 mod parse;
+mod pypi;
 mod utils;
 
+pub use builder::LockFileBuilder;
 pub use channel::Channel;
-
-use crate::package::{CondaPackageData, PypiPackageData, RuntimePackageData};
-
-use crate::builder::LockFileBuilder;
+pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
-pub use package::PyPiRuntimeConfiguration;
-
-pub use self::parse::ParseCondaLockError;
+pub use parse::ParseCondaLockError;
+pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
@@ -85,13 +96,31 @@ pub const DEFAULT_ENVIRONMENT_NAME: &str = "default";
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
 /// Lock-files can store information for multiple platforms and for multiple environments.
-#[derive(Clone, Debug)]
+///
+/// The high-level API provided by this type holds internal references to the data. Its is therefore
+/// cheap to clone this type and any type derived from it (e.g. [`Environment`] or [`Package`]).
+#[derive(Clone)]
 pub struct LockFile {
-    /// Metadata about the different environments stored in the lock file.
-    environments: FxHashMap<String, EnvironmentData>,
+    inner: Arc<LockFileInner>,
+}
 
+/// Internal data structure that stores the lock-file data.
+struct LockFileInner {
+    environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
+    pypi_environment_package_datas: Vec<PypiPackageEnvironmentData>,
+
+    environment_lookup: FxHashMap<String, usize>,
+}
+
+/// An package used in an environment. Selects a type of package based on the enum and might contain
+/// additional data that is specific to the environment. For instance different environments might
+/// select the same Pypi package but with different extras.
+#[derive(Clone, Copy, Debug)]
+enum EnvironmentPackageData {
+    Conda(usize),
+    Pypi(usize, usize),
 }
 
 /// Information about a specific environment in the lock file.
@@ -107,7 +136,7 @@ struct EnvironmentData {
 
     /// For each individual platform this environment supports we store the package identifiers
     /// associated with the environment.
-    packages: FxHashMap<Platform, Vec<RuntimePackageData>>,
+    packages: FxHashMap<Platform, Vec<EnvironmentPackageData>>,
 }
 
 impl LockFile {
@@ -138,83 +167,90 @@ impl LockFile {
     }
 
     /// Returns the environment with the given name.
-    pub fn environment(&self, name: &str) -> Option<Environment<'_>> {
-        self.environments.get(name).map(|env| Environment {
-            lock_file: self,
-            environment: env,
+    pub fn environment(&self, name: &str) -> Option<Environment> {
+        let index = *self.inner.environment_lookup.get(name)?;
+        Some(Environment {
+            inner: self.inner.clone(),
+            index,
         })
     }
 
     /// Returns an iterator over all environments defined in the lock-file.
     pub fn environments(
         &self,
-    ) -> impl Iterator<Item = (&str, Environment<'_>)> + ExactSizeIterator + '_ {
-        self.environments.iter().map(move |(name, env)| {
-            (
-                name.as_str(),
-                Environment {
-                    lock_file: self,
-                    environment: env,
-                },
-            )
-        })
+    ) -> impl Iterator<Item = (&str, Environment)> + ExactSizeIterator + '_ {
+        self.inner
+            .environment_lookup
+            .iter()
+            .map(move |(name, index)| {
+                (
+                    name.as_str(),
+                    Environment {
+                        inner: self.inner.clone(),
+                        index: *index,
+                    },
+                )
+            })
     }
 }
 
 /// Information about a specific environment in the lock-file.
-///
-/// The `'l` lifetime parameter refers to the lifetime of the lock file in which the data is stored.
-#[derive(Copy, Clone)]
-pub struct Environment<'l> {
-    lock_file: &'l LockFile,
-    environment: &'l EnvironmentData,
+#[derive(Clone)]
+pub struct Environment {
+    inner: Arc<LockFileInner>,
+    index: usize,
 }
 
-impl<'l> Environment<'l> {
+impl Environment {
+    /// Returns a reference to the internal data structure.
+    fn data(&self) -> &EnvironmentData {
+        &self.inner.environments[self.index]
+    }
+
     /// Returns all the platforms for which we have a locked-down environment.
     pub fn platforms(&self) -> impl Iterator<Item = Platform> + ExactSizeIterator + '_ {
-        self.environment.packages.keys().copied()
+        self.data().packages.keys().copied()
     }
 
     /// Returns the channels that are used by this environment.
     ///
     /// Note that the order of the channels is significant. The first channel is the highest
     /// priority channel.
-    pub fn channels(&self) -> &'l [Channel] {
-        &self.environment.channels
+    pub fn channels(&self) -> &[Channel] {
+        &self.data().channels
     }
 
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(
         &self,
         platform: Platform,
-    ) -> Option<impl Iterator<Item = Package<'l>> + ExactSizeIterator + '_> {
-        let packages = self.environment.packages.get(&platform)?;
+    ) -> Option<impl Iterator<Item = Package> + ExactSizeIterator + '_> {
+        let packages = self.data().packages.get(&platform)?;
         Some(packages.iter().map(move |package| match package {
-            RuntimePackageData::Conda(idx) => Package::Conda(CondaPackage {
-                package: &self.lock_file.conda_packages[*idx],
+            EnvironmentPackageData::Conda(idx) => Package::Conda(CondaPackage {
+                inner: self.inner.clone(),
+                index: *idx,
             }),
-            RuntimePackageData::Pypi(idx, runtime) => Package::Pypi(PypiPackage {
-                package: &self.lock_file.pypi_packages[*idx],
-                runtime,
+            EnvironmentPackageData::Pypi(idx, runtime) => Package::Pypi(PypiPackage {
+                inner: self.inner.clone(),
+                package_index: *idx,
+                runtime_index: *runtime,
             }),
         }))
     }
 }
 
 /// Data related to a single locked package in an [`Environment`].
-///
-/// The `'l` lifetime parameter refers to the lifetime of the lock file in which the data is stored.
-#[derive(Copy, Clone)]
-pub enum Package<'l> {
+#[derive(Clone)]
+pub enum Package {
     /// A conda package
-    Conda(CondaPackage<'l>),
+    Conda(CondaPackage),
 
     /// A pypi package
-    Pypi(PypiPackage<'l>),
+    Pypi(PypiPackage),
 }
 
-impl<'l> Package<'l> {
+impl Package {
     /// Returns true if this package represents a conda package.
     pub fn is_conda(&self) -> bool {
         matches!(self, Self::Conda(_))
@@ -227,68 +263,122 @@ impl<'l> Package<'l> {
 
     /// Returns this instance as a [`CondaPackage`] if this instance represents a conda
     /// package.
-    pub fn as_conda(&self) -> Option<CondaPackage<'l>> {
+    pub fn as_conda(&self) -> Option<CondaPackage> {
         match self {
-            Self::Conda(value) => Some(*value),
+            Self::Conda(value) => Some(value.clone()),
             Self::Pypi(_) => None,
         }
     }
 
     /// Returns this instance as a [`PypiPackage`] if this instance represents a pypi
     /// package.
-    pub fn as_pypi(&self) -> Option<PypiPackage<'l>> {
+    pub fn as_pypi(&self) -> Option<PypiPackage> {
         match self {
             Self::Conda(_) => None,
-            Self::Pypi(value) => Some(*value),
+            Self::Pypi(value) => Some(value.clone()),
         }
     }
 
     /// Returns the name of the package.
-    pub fn name(&self) -> &'l str {
+    pub fn name(&self) -> &str {
         match self {
-            Self::Conda(value) => value.package.package_record.name.as_normalized(),
-            Self::Pypi(value) => value.package.name.as_str(),
+            Self::Conda(value) => value.package_record().name.as_normalized(),
+            Self::Pypi(value) => value.package_data().name.as_str(),
         }
     }
 
     /// Returns the version string of the package
-    pub fn version(&self) -> Cow<'l, str> {
+    pub fn version(&self) -> Cow<'_, str> {
         match self {
-            Self::Conda(value) => value.package.package_record.version.as_str(),
-            Self::Pypi(value) => value.package.version.to_string().into(),
+            Self::Conda(value) => value.package_record().version.as_str(),
+            Self::Pypi(value) => value.package_data().version.to_string().into(),
         }
     }
 
     /// Returns the URL of the package
-    pub fn url(&self) -> &'l Url {
+    pub fn url(&self) -> &Url {
         match self {
-            Package::Conda(value) => &value.package.url,
-            Package::Pypi(value) => &value.package.url,
+            Package::Conda(value) => value.url(),
+            Package::Pypi(value) => value.url(),
         }
     }
 }
 
 /// Data related to a single locked conda package in an environment.
-///
-/// The `'l` lifetime parameter refers to the lifetime of the lock file in which the data is stored.
-#[derive(Copy, Clone)]
-pub struct CondaPackage<'l> {
-    /// The package data
-    pub package: &'l CondaPackageData,
+#[derive(Clone)]
+pub struct CondaPackage {
+    inner: Arc<LockFileInner>,
+    index: usize,
+}
+
+impl CondaPackage {
+    fn package_data(&self) -> &CondaPackageData {
+        &self.inner.conda_packages[self.index]
+    }
+
+    /// Returns the package data
+    pub fn package_record(&self) -> &PackageRecord {
+        &self.package_data().package_record
+    }
+
+    /// Returns the URL of the package
+    pub fn url(&self) -> &Url {
+        &self.package_data().url
+    }
+
+    /// Returns the filename of the package.
+    pub fn file_name(&self) -> Option<&str> {
+        self.package_data().file_name()
+    }
+
+    /// Returns the channel of the package.
+    pub fn channel(&self) -> Option<Url> {
+        self.package_data().channel()
+    }
+}
+
+impl AsRef<PackageRecord> for CondaPackage {
+    fn as_ref(&self) -> &PackageRecord {
+        self.package_record()
+    }
+}
+
+impl TryInto<RepoDataRecord> for CondaPackage {
+    type Error = ConversionError;
+
+    fn try_into(self) -> Result<RepoDataRecord, Self::Error> {
+        self.package_data().clone().try_into()
+    }
 }
 
 /// Data related to a single locked pypi package in an environment.
-///
-/// The `'l` lifetime parameter refers to the lifetime of the lock file in which the data is stored.
-#[derive(Copy, Clone)]
-pub struct PypiPackage<'l> {
-    /// The package data
-    pub package: &'l PypiPackageData,
+#[derive(Clone)]
+pub struct PypiPackage {
+    inner: Arc<LockFileInner>,
+    package_index: usize,
+    runtime_index: usize,
+}
 
-    /// Additional information for the package that is specific to an environment/platform. E.g.
-    /// different environments might refer to the same pypi package but with different extras
-    /// enabled.
-    pub runtime: &'l PyPiRuntimeConfiguration,
+impl PypiPackage {
+    /// Returns the runtime data from the internal data structure.
+    fn environment_data(&self) -> &PypiPackageEnvironmentData {
+        &self.inner.pypi_environment_package_datas[self.runtime_index]
+    }
+
+    /// Returns the package data from the internal data structure.
+    pub fn package_data(&self) -> &PypiPackageData {
+        &self.inner.pypi_packages[self.package_index]
+    }
+
+    /// Returns the URL of the package
+    pub fn url(&self) -> &Url {
+        &self.package_data().url
+    }
+
+    /// Returns the extras enabled for this package
+    pub fn extras(&self) -> &HashSet<String> {
+        &self.environment_data().extras
+    }
 }
 
 #[cfg(test)]
@@ -329,7 +419,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url())
+            .map(|p| p.url().clone())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -337,7 +427,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url())
+            .map(|p| p.url().clone())
             .collect::<Vec<_>>());
     }
 }

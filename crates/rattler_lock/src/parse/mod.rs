@@ -83,7 +83,8 @@ mod test {
             &Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../test-data/conda-lock/forward-compatible-lock.yml"),
         )
-        .unwrap_err();
+        .err()
+        .unwrap();
 
         insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 4 is supported.");
     }

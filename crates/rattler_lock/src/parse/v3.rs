@@ -1,19 +1,20 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
 use super::ParseCondaLockError;
-use crate::package::{CondaPackageData, PypiPackageData, RuntimePackageData};
 use crate::{
-    Channel, EnvironmentData, LockFile, PackageHashes, PyPiRuntimeConfiguration,
-    DEFAULT_ENVIRONMENT_NAME,
+    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
 };
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
+use pep440_rs::VersionSpecifiers;
+use pep508_rs::Requirement;
 use rattler_conda_types::{
     NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
 };
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use std::collections::HashSet;
+use std::{collections::BTreeSet, sync::Arc};
 use url::Url;
 
 #[derive(Deserialize)]
@@ -42,9 +43,9 @@ struct LockedPackageV3 {
 #[derive(Deserialize, Eq, PartialEq, Clone, Debug)]
 #[serde(tag = "manager", rename_all = "snake_case")]
 enum LockedPackageKindV3 {
-    Conda(CondaLockedPackageV3),
+    Conda(Box<CondaLockedPackageV3>),
     #[serde(alias = "pip")]
-    Pypi(PypiLockedPackageV3),
+    Pypi(Box<PypiLockedPackageV3>),
 }
 
 #[serde_as]
@@ -55,14 +56,28 @@ struct PypiLockedPackageV3 {
     pub version: pep440_rs::Version,
     #[serde(default, alias = "dependencies", skip_serializing_if = "Vec::is_empty")]
     #[serde_as(deserialize_as = "crate::utils::serde::Pep440MapOrVec")]
-    pub requires_dist: Vec<String>,
-    pub requires_python: Option<String>,
-    #[serde(default, skip_serializing_if = "HashSet::is_empty")]
-    pub extras: HashSet<String>,
+    pub requires_dist: Vec<Requirement>,
+    pub requires_python: Option<VersionSpecifiers>,
+    #[serde(flatten)]
+    pub runtime: PypiPackageEnvironmentDataV3,
     pub url: Url,
     pub hash: Option<PackageHashes>,
     pub source: Option<Url>,
     pub build: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Hash, Eq, PartialEq)]
+pub struct PypiPackageEnvironmentDataV3 {
+    #[serde(default)]
+    pub extras: BTreeSet<String>,
+}
+
+impl From<PypiPackageEnvironmentDataV3> for PypiPackageEnvironmentData {
+    fn from(config: PypiPackageEnvironmentDataV3) -> Self {
+        Self {
+            extras: config.extras.into_iter().collect(),
+        }
+    }
 }
 
 #[serde_as]
@@ -108,11 +123,12 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
     // There might be duplicates for noarch packages.
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
-    let mut per_platform: FxHashMap<Platform, Vec<RuntimePackageData>> = FxHashMap::default();
+    let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
+    let mut per_platform: FxHashMap<Platform, Vec<EnvironmentPackageData>> = FxHashMap::default();
     for package in lock_file.package {
         let LockedPackageV3 { platform, kind } = package;
 
-        let pkg: RuntimePackageData = match kind {
+        let pkg: EnvironmentPackageData = match kind {
             LockedPackageKindV3::Conda(value) => {
                 let md5 = match value.hash {
                     PackageHashes::Md5(md5) | PackageHashes::Md5Sha256(md5, _) => Some(md5),
@@ -156,7 +172,7 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
                     })
                     .0;
 
-                RuntimePackageData::Conda(deduplicated_idx)
+                EnvironmentPackageData::Conda(deduplicated_idx)
             }
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
@@ -171,9 +187,9 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
                         build: pkg.build,
                     })
                     .0;
-                RuntimePackageData::Pypi(
+                EnvironmentPackageData::Pypi(
                     deduplicated_index,
-                    PyPiRuntimeConfiguration { extras: pkg.extras },
+                    pypi_runtime_configs.insert_full(pkg.runtime).0,
                 )
             }
         };
@@ -188,10 +204,18 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
     };
 
     Ok(LockFile {
-        conda_packages: conda_packages.into_iter().collect(),
-        pypi_packages: pypi_packages.into_iter().collect(),
-        environments: [(DEFAULT_ENVIRONMENT_NAME.to_string(), default_environment)]
-            .into_iter()
-            .collect(),
+        inner: Arc::new(LockFileInner {
+            conda_packages: conda_packages.into_iter().collect(),
+            pypi_packages: pypi_packages.into_iter().collect(),
+            pypi_environment_package_datas: pypi_runtime_configs
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+
+            environment_lookup: [(DEFAULT_ENVIRONMENT_NAME.to_string(), 0)]
+                .into_iter()
+                .collect(),
+            environments: vec![default_environment],
+        }),
     })
 }

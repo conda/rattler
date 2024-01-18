@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use pep508_rs::VersionOrUrl;
+use pep508_rs::{Requirement, VersionOrUrl};
 use rattler_conda_types::MatchSpec;
 use rattler_conda_types::{NamelessMatchSpec, PackageName};
 use serde::de::Error as _;
@@ -145,8 +145,8 @@ impl<'de> DeserializeAs<'de, Vec<String>> for MatchSpecMapOrVec {
 
 pub(crate) struct Pep440MapOrVec;
 
-impl<'de> DeserializeAs<'de, Vec<String>> for Pep440MapOrVec {
-    fn deserialize_as<D>(deserializer: D) -> Result<Vec<String>, D::Error>
+impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
+    fn deserialize_as<D>(deserializer: D) -> Result<Vec<Requirement>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -154,7 +154,7 @@ impl<'de> DeserializeAs<'de, Vec<String>> for Pep440MapOrVec {
         #[derive(Deserialize)]
         #[serde(untagged)]
         enum MapOrVec {
-            Vec(Vec<String>),
+            Vec(Vec<Requirement>),
             Map(
                 #[serde_as(as = "IndexMap<_, DisplayFromStr, FxBuildHasher>")]
                 IndexMap<String, pep440_rs::VersionSpecifiers, FxBuildHasher>,
@@ -165,18 +165,15 @@ impl<'de> DeserializeAs<'de, Vec<String>> for Pep440MapOrVec {
             MapOrVec::Vec(v) => v,
             MapOrVec::Map(m) => m
                 .into_iter()
-                .map(|(name, spec)| {
-                    pep508_rs::Requirement {
-                        name,
-                        extras: None,
-                        version_or_url: if spec.is_empty() {
-                            None
-                        } else {
-                            Some(VersionOrUrl::VersionSpecifier(spec))
-                        },
-                        marker: None,
-                    }
-                    .to_string()
+                .map(|(name, spec)| pep508_rs::Requirement {
+                    name,
+                    extras: None,
+                    version_or_url: if spec.is_empty() {
+                        None
+                    } else {
+                        Some(VersionOrUrl::VersionSpecifier(spec))
+                    },
+                    marker: None,
                 })
                 .collect(),
         })

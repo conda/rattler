@@ -1,11 +1,15 @@
-use crate::package::{CondaPackageData, PypiPackageData, RuntimePackageData};
-use crate::{Channel, EnvironmentData, LockFile, ParseCondaLockError, PyPiRuntimeConfiguration};
+use crate::{
+    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    ParseCondaLockError, PypiPackageData, PypiPackageEnvironmentData,
+};
 use fxhash::FxHashMap;
+use indexmap::IndexSet;
 use itertools::{Either, Itertools};
 use rattler_conda_types::Platform;
 use serde::Deserialize;
 use serde_yaml::Value;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use url::Url;
 
 #[derive(Deserialize)]
@@ -35,9 +39,23 @@ enum DeserializablePackageSelector {
     },
     Pypi {
         pypi: Url,
-        #[serde(default)]
-        extras: HashSet<String>,
+        #[serde(flatten)]
+        runtime: DeserializablePypiPackageEnvironmentData,
     },
+}
+
+#[derive(Hash, Deserialize, Eq, PartialEq)]
+struct DeserializablePypiPackageEnvironmentData {
+    #[serde(default)]
+    extras: BTreeSet<String>,
+}
+
+impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {
+    fn from(config: DeserializablePypiPackageEnvironmentData) -> Self {
+        Self {
+            extras: config.extras.into_iter().collect(),
+        }
+    }
 }
 
 /// Parses a [`LockFile`] from a [`serde_yaml::Value`].
@@ -63,6 +81,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
         .enumerate()
         .map(|(idx, p)| (&p.url, idx))
         .collect::<FxHashMap<_, _>>();
+    let mut pypi_runtime_lookup = IndexSet::new();
 
     let environments = raw
         .environments
@@ -81,7 +100,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                                 .map(|p| {
                                     Ok(match p {
                                         DeserializablePackageSelector::Conda { conda } => {
-                                            RuntimePackageData::Conda(
+                                            EnvironmentPackageData::Conda(
                                                 *conda_url_lookup.get(&conda).ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         name.clone(),
@@ -91,8 +110,8 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                                                 })?,
                                             )
                                         }
-                                        DeserializablePackageSelector::Pypi { pypi, extras } => {
-                                            RuntimePackageData::Pypi(
+                                        DeserializablePackageSelector::Pypi { pypi, runtime } => {
+                                            EnvironmentPackageData::Pypi(
                                                 *pypi_url_lookup.get(&pypi).ok_or_else(|| {
                                                     ParseCondaLockError::MissingPackage(
                                                         name.clone(),
@@ -100,7 +119,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                                                         pypi,
                                                     )
                                                 })?,
-                                                PyPiRuntimeConfiguration { extras },
+                                                pypi_runtime_lookup.insert_full(runtime).0,
                                             )
                                         }
                                     })
@@ -113,11 +132,24 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                 },
             ))
         })
-        .collect::<Result<_, ParseCondaLockError>>()?;
+        .collect::<Result<BTreeMap<_, _>, ParseCondaLockError>>()?;
+
+    let (environment_lookup, environments) = environments
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (name, env))| ((name, idx), env))
+        .unzip();
 
     Ok(LockFile {
-        environments,
-        conda_packages,
-        pypi_packages,
+        inner: Arc::new(LockFileInner {
+            environments,
+            environment_lookup,
+            conda_packages,
+            pypi_packages,
+            pypi_environment_package_datas: pypi_runtime_lookup
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+        }),
     })
 }
