@@ -68,6 +68,7 @@
 //! in a single file.
 
 use fxhash::FxHashMap;
+use pep508_rs::Requirement;
 use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -359,8 +360,8 @@ impl CondaPackage {
         self.package_data().channel()
     }
 
-    /// Returns true if the specified [`MatchSpec`] matches against the package.
-    pub fn matches(&self, spec: &MatchSpec) -> bool {
+    /// Returns true if this package satisfies the given `spec`.
+    pub fn satisfies(&self, spec: &MatchSpec) -> bool {
         // Check the data in the package record
         if !spec.matches(self.package_record()) {
             return false;
@@ -418,6 +419,37 @@ impl PypiPackage {
     /// Returns the extras enabled for this package
     pub fn extras(&self) -> &HashSet<String> {
         &self.environment_data().extras
+    }
+
+    /// Returns true if this package satisfies the given `spec`.
+    pub fn satisfies(&self, spec: &Requirement) -> bool {
+        let package_data = self.package_data();
+
+        // Check if the name matches
+        if spec.name != package_data.name {
+            return false;
+        }
+
+        // Check if the version of the requirement matches
+        match &spec.version_or_url {
+            None => {}
+            Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
+            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
+                if !spec.contains(&package_data.version) {
+                    return false;
+                }
+            }
+        }
+
+        // Check if the required extras exist
+        let environment_data = self.environment_data();
+        for extra in spec.extras.iter().flat_map(|e| e.iter()) {
+            if !environment_data.extras.contains(extra.as_str()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }
 
