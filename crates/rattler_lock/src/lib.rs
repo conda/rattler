@@ -374,7 +374,7 @@ impl CondaPackage {
             }
         }
 
-        return true;
+        true
     }
 }
 
@@ -449,7 +449,7 @@ impl PypiPackage {
             }
         }
 
-        return true;
+        true
     }
 }
 
