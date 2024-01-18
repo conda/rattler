@@ -268,19 +268,19 @@ impl Package {
 
     /// Returns this instance as a [`CondaPackage`] if this instance represents a conda
     /// package.
-    pub fn as_conda(&self) -> Option<CondaPackage> {
+    pub fn as_conda(&self) -> Option<&CondaPackage> {
         match self {
-            Self::Conda(value) => Some(value.clone()),
+            Self::Conda(value) => Some(value),
             Self::Pypi(_) => None,
         }
     }
 
     /// Returns this instance as a [`PypiPackage`] if this instance represents a pypi
     /// package.
-    pub fn as_pypi(&self) -> Option<PypiPackage> {
+    pub fn as_pypi(&self) -> Option<&PypiPackage> {
         match self {
             Self::Conda(_) => None,
-            Self::Pypi(value) => Some(value.clone()),
+            Self::Pypi(value) => Some(value),
         }
     }
 
