@@ -73,8 +73,9 @@ impl PyRecord {
 
     /// Checks whether if the current record is a `PackageRecord`.
     #[getter]
+    #[allow(clippy::unused_self)]
     pub fn is_package_record(&self) -> bool {
-        // always true, cuz all records are package record
+        // always true, because all records are package records
         true
     }
 
@@ -350,7 +351,7 @@ impl From<PackageRecord> for PyRecord {
 
 impl From<PyRecord> for PackageRecord {
     fn from(value: PyRecord) -> Self {
-        value.as_ref().to_owned()
+        value.as_ref().clone()
     }
 }
 
@@ -378,7 +379,7 @@ impl PyRecord {
     pub fn write_to_path(&self, path: PathBuf, pretty: bool) -> PyResult<()> {
         Ok(self
             .try_as_prefix_record()?
-            .to_owned()
+            .clone()
             .write_to_path(path, pretty)
             .map_err(PyRattlerError::from)?)
     }

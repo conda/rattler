@@ -66,7 +66,7 @@ impl PyActivationVariables {
         self.inner
             .path
             .as_ref()
-            .map(|p| p.iter().map(|p| p.as_path()).collect())
+            .map(|p| p.iter().map(std::path::PathBuf::as_path).collect())
     }
 }
 

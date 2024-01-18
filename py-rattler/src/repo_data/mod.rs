@@ -33,7 +33,7 @@ impl From<RepoData> for PyRepoData {
 impl PyRepoData {
     /// Apply a patch to a repodata file Note that we currently do not handle revoked instructions.
     pub fn apply_patches(&mut self, instructions: &PyPatchInstructions) {
-        self.inner.apply_patches(&instructions.inner)
+        self.inner.apply_patches(&instructions.inner);
     }
 
     /// Gets the string representation of the `PyRepoData`.

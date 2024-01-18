@@ -4,7 +4,10 @@ use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureE
 use indicatif::{HumanBytes, ProgressBar, ProgressState, ProgressStyle};
 use rattler::{
     default_cache_dir,
-    install::{link_package, InstallDriver, InstallOptions, Transaction, TransactionOperation},
+    install::{
+        link_package, unlink_package, InstallDriver, InstallOptions, Transaction,
+        TransactionOperation,
+    },
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
@@ -25,7 +28,6 @@ use std::{
     env,
     fmt::Write,
     future::ready,
-    io::ErrorKind,
     path::{Path, PathBuf},
     str::FromStr,
     time::Duration,
@@ -367,6 +369,14 @@ async fn execute_transaction(
         })
         .await?;
 
+    // Perform any post processing that is required.
+    let prefix_records = find_installed_packages(&target_prefix, 100)
+        .await
+        .context("failed to determine currently installed packages")?;
+    install_driver
+        .post_process(&prefix_records, &target_prefix)
+        .expect("bla");
+
     Ok(())
 }
 
@@ -520,32 +530,7 @@ async fn remove_package_from_environment(
     target_prefix: &Path,
     package: &PrefixRecord,
 ) -> anyhow::Result<()> {
-    // TODO: Take into account any clobbered files, they need to be restored.
-    // TODO: Can we also delete empty directories?
-
-    // Remove all entries
-    for paths in package.paths_data.paths.iter() {
-        match tokio::fs::remove_file(target_prefix.join(&paths.relative_path)).await {
-            Ok(_) => {}
-            Err(e) if e.kind() == ErrorKind::NotFound => {
-                // Simply ignore if the file is already gone.
-            }
-            Err(e) => {
-                return Err(e)
-                    .with_context(|| format!("failed to delete {}", paths.relative_path.display()))
-            }
-        }
-    }
-
-    // Remove the conda-meta file
-    let conda_meta_path = target_prefix.join("conda-meta").join(format!(
-        "{}-{}-{}.json",
-        package.repodata_record.package_record.name.as_normalized(),
-        package.repodata_record.package_record.version,
-        package.repodata_record.package_record.build
-    ));
-    tokio::fs::remove_file(conda_meta_path).await?;
-
+    unlink_package(target_prefix, package).await?;
     Ok(())
 }
 
