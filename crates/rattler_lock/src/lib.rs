@@ -384,11 +384,11 @@ impl AsRef<PackageRecord> for CondaPackage {
     }
 }
 
-impl TryInto<RepoDataRecord> for CondaPackage {
+impl TryFrom<CondaPackage> for RepoDataRecord {
     type Error = ConversionError;
 
-    fn try_into(self) -> Result<RepoDataRecord, Self::Error> {
-        self.package_data().clone().try_into()
+    fn try_from(value: CondaPackage) -> Result<Self, Self::Error> {
+        value.package_data().clone().try_into()
     }
 }
 
