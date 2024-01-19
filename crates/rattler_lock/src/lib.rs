@@ -432,13 +432,21 @@ pub struct PypiPackage {
 }
 
 impl PypiPackage {
+    /// Returns references to the internal data structures.
+    pub fn data(&self) -> PypiPackageDataRef<'_> {
+        PypiPackageDataRef {
+            package: self.package_data(),
+            environment: self.environment_data(),
+        }
+    }
+
     /// Returns the runtime data from the internal data structure.
-    pub fn environment_data(&self) -> &PypiPackageEnvironmentData {
+    fn environment_data(&self) -> &PypiPackageEnvironmentData {
         &self.inner.pypi_environment_package_datas[self.runtime_index]
     }
 
     /// Returns the package data from the internal data structure.
-    pub fn package_data(&self) -> &PypiPackageData {
+    fn package_data(&self) -> &PypiPackageData {
         &self.inner.pypi_packages[self.package_index]
     }
 
@@ -454,26 +462,17 @@ impl PypiPackage {
 
     /// Returns true if this package satisfies the given `spec`.
     pub fn satisfies(&self, spec: &Requirement) -> bool {
-        let package_data = self.package_data();
-
-        // Check if the name matches
-        if spec.name != package_data.name {
-            return false;
-        }
-
-        // Check if the version of the requirement matches
-        match &spec.version_or_url {
-            None => {}
-            Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
-            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
-                if !spec.contains(&package_data.version) {
-                    return false;
-                }
-            }
-        }
-
-        true
+        self.package_data().satisfies(spec)
     }
+}
+
+/// A helper struct to group package and environment data together.
+pub struct PypiPackageDataRef<'p> {
+    /// The package data. This information is deduplicated between environments.
+    pub package: &'p PypiPackageData,
+
+    /// Environment specific data for the package. This information is specific to the environment.
+    pub environment: &'p PypiPackageEnvironmentData,
 }
 
 #[cfg(test)]

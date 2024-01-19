@@ -54,3 +54,26 @@ impl Ord for PypiPackageData {
             .then_with(|| self.version.cmp(&other.version))
     }
 }
+
+impl PypiPackageData {
+    /// Returns true if this package satisfies the given `spec`.
+    pub fn satisfies(&self, spec: &Requirement) -> bool {
+        // Check if the name matches
+        if spec.name != self.name {
+            return false;
+        }
+
+        // Check if the version of the requirement matches
+        match &spec.version_or_url {
+            None => {}
+            Some(pep508_rs::VersionOrUrl::Url(_)) => return false,
+            Some(pep508_rs::VersionOrUrl::VersionSpecifier(spec)) => {
+                if !spec.contains(&self.version) {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+}
