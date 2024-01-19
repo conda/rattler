@@ -442,14 +442,6 @@ impl PypiPackage {
             }
         }
 
-        // Check if the required extras exist
-        let environment_data = self.environment_data();
-        for extra in spec.extras.iter().flat_map(|e| e.iter()) {
-            if !environment_data.extras.contains(extra.as_str()) {
-                return false;
-            }
-        }
-
         true
     }
 }
