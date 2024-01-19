@@ -231,19 +231,34 @@ impl Environment {
     pub fn packages(
         &self,
         platform: Platform,
-    ) -> Option<impl Iterator<Item = Package> + ExactSizeIterator + '_> {
+    ) -> Option<impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_> {
         let packages = self.data().packages.get(&platform)?;
-        Some(packages.iter().map(move |package| match package {
-            EnvironmentPackageData::Conda(idx) => Package::Conda(CondaPackage {
-                inner: self.inner.clone(),
-                index: *idx,
-            }),
-            EnvironmentPackageData::Pypi(idx, runtime) => Package::Pypi(PypiPackage {
-                inner: self.inner.clone(),
-                package_index: *idx,
-                runtime_index: *runtime,
-            }),
-        }))
+        Some(
+            packages
+                .iter()
+                .map(move |package| Package::from_env_package(*package, self.inner.clone())),
+        )
+    }
+
+    /// Returns an iterator over all packages and platforms defined for this environment
+    pub fn packages_by_platform(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            Platform,
+            impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_,
+        ),
+    > + ExactSizeIterator
+           + '_ {
+        let env_data = self.data();
+        env_data.packages.iter().map(move |(platform, packages)| {
+            (
+                *platform,
+                packages
+                    .iter()
+                    .map(move |package| Package::from_env_package(*package, self.inner.clone())),
+            )
+        })
     }
 }
 
@@ -258,6 +273,21 @@ pub enum Package {
 }
 
 impl Package {
+    /// Constructs a new instance from a [`EnvironmentPackageData`] and a reference to the internal
+    /// data structure.
+    fn from_env_package(data: EnvironmentPackageData, inner: Arc<LockFileInner>) -> Self {
+        match data {
+            EnvironmentPackageData::Conda(idx) => {
+                Package::Conda(CondaPackage { inner, index: idx })
+            }
+            EnvironmentPackageData::Pypi(idx, runtime) => Package::Pypi(PypiPackage {
+                inner,
+                package_index: idx,
+                runtime_index: runtime,
+            }),
+        }
+    }
+
     /// Returns true if this package represents a conda package.
     pub fn is_conda(&self) -> bool {
         matches!(self, Self::Conda(_))
