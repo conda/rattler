@@ -433,7 +433,7 @@ pub struct PypiPackage {
 
 impl PypiPackage {
     /// Returns the runtime data from the internal data structure.
-    fn environment_data(&self) -> &PypiPackageEnvironmentData {
+    pub fn environment_data(&self) -> &PypiPackageEnvironmentData {
         &self.inner.pypi_environment_package_datas[self.runtime_index]
     }
 
