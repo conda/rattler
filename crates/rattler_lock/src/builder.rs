@@ -150,10 +150,10 @@ impl LockFileBuilder {
 
     /// Adds an environment to the builder.
     pub fn with_channels(
-        &mut self,
+        mut self,
         environment: impl Into<String>,
         channels: impl IntoIterator<Item = impl Into<Channel>>,
-    ) -> &mut Self {
+    ) -> Self {
         self.set_channels(environment, channels);
         self
     }
