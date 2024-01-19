@@ -467,6 +467,7 @@ impl PypiPackage {
 }
 
 /// A helper struct to group package and environment data together.
+#[derive(Copy, Clone)]
 pub struct PypiPackageDataRef<'p> {
     /// The package data. This information is deduplicated between environments.
     pub package: &'p PypiPackageData,
