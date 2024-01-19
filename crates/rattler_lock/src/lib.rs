@@ -100,12 +100,13 @@ pub const DEFAULT_ENVIRONMENT_NAME: &str = "default";
 ///
 /// The high-level API provided by this type holds internal references to the data. Its is therefore
 /// cheap to clone this type and any type derived from it (e.g. [`Environment`] or [`Package`]).
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct LockFile {
     inner: Arc<LockFileInner>,
 }
 
 /// Internal data structure that stores the lock-file data.
+#[derive(Default)]
 struct LockFileInner {
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
