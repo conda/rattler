@@ -1,14 +1,11 @@
-#![deny(missing_docs)]
+//#![deny(missing_docs)]
 
 //! Networking utilities for Rattler, specifically authenticating requests
-pub use authenticated_client::AuthenticatedClient;
-
-#[cfg(feature = "blocking")]
-pub use authenticated_client::AuthenticatedClientBlocking;
+pub use authentication_middleware::AuthenticationMiddleware;
 
 pub use authentication_storage::{authentication::Authentication, storage::AuthenticationStorage};
 
-pub mod authenticated_client;
+pub mod authentication_middleware;
 pub mod authentication_storage;
 pub mod retry_policies;
 

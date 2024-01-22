@@ -36,6 +36,7 @@ rattler_repodata_gateway = { version = "0.16.2", path = "../rattler_repodata_gat
 rattler_solve = { version = "0.16.2", path = "../rattler_solve", features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { version = "0.16.2", path = "../rattler_virtual_packages" }
 reqwest = { version = "0.11.22", default-features = false }
+reqwest-middleware = { version = "0.2.4" }
 tokio = { version = "1.32.0", features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 

@@ -15,7 +15,6 @@ use crate::{
 };
 use authenticated_client::PyAuthenticatedClient;
 
-pub mod authenticated_client;
 pub mod cached_repo_data;
 
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.

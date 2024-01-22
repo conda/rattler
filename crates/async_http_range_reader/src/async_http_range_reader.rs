@@ -21,7 +21,7 @@ use futures::{FutureExt, Stream, StreamExt};
 use http_content_range::{ContentRange, ContentRangeBytes};
 use memmap2::MmapMut;
 use reqwest::header::HeaderMap;
-use reqwest::{Client, Response, Url};
+use reqwest::{Response, Url};
 use std::{
     io::{self, ErrorKind, SeekFrom},
     ops::Range,
@@ -68,7 +68,7 @@ pub use crate::async_http_range_reader_error::AsyncHttpRangeReaderError;
 ///     if response.status() == reqwest::StatusCode::NOT_MODIFIED {
 ///         Ok(None)
 ///     } else {
-///         let reader = AsyncHttpRangeReader::from_head_response(client, response).await?;
+///         let reader = AsyncHttpRangeReader::from_head_response(client.into(), response).await?;
 ///         Ok(Some(reader))
 ///     }
 /// }
@@ -127,10 +127,16 @@ pub enum CheckSupportMethod {
     Head,
 }
 
+fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
+    response
+        .error_for_status()
+        .map_err(reqwest_middleware::Error::Reqwest)
+}
+
 impl AsyncHttpRangeReader {
     /// Construct a new `AsyncHttpRangeReader`.
     pub async fn new(
-        client: reqwest::Client,
+        client: reqwest_middleware::ClientWithMiddleware,
         url: reqwest::Url,
         check_method: CheckSupportMethod,
     ) -> Result<(Self, HeaderMap), AsyncHttpRangeReaderError> {
@@ -162,7 +168,7 @@ impl AsyncHttpRangeReader {
     /// requests. This will return a number of bytes from the end of the stream. Use the
     /// `initial_chunk_size` parameter to define how many bytes should be requested from the end.
     pub async fn initial_tail_request(
-        client: reqwest::Client,
+        client: reqwest_middleware::ClientWithMiddleware,
         url: reqwest::Url,
         initial_chunk_size: u64,
         extra_headers: HeaderMap,
@@ -176,7 +182,7 @@ impl AsyncHttpRangeReader {
             .headers(extra_headers)
             .send()
             .await
-            .and_then(Response::error_for_status)
+            .and_then(error_for_status)
             .map_err(Arc::new)
             .map_err(AsyncHttpRangeReaderError::HttpError)?;
         Ok(tail_response)
@@ -185,7 +191,7 @@ impl AsyncHttpRangeReader {
     /// Initialize the reader from [`AsyncHttpRangeReader::initial_tail_request`] (or a user
     /// provided response that also has a range of bytes from the end as body)
     pub async fn from_tail_response(
-        client: reqwest::Client,
+        client: reqwest_middleware::ClientWithMiddleware,
         tail_request_response: Response,
     ) -> Result<Self, AsyncHttpRangeReaderError> {
         // Get the size of the file from this initial request
@@ -260,7 +266,7 @@ impl AsyncHttpRangeReader {
     /// Send an initial range request to determine if the remote accepts range
     /// requests and get the content length
     pub async fn initial_head_request(
-        client: reqwest::Client,
+        client: reqwest_middleware::ClientWithMiddleware,
         url: reqwest::Url,
         extra_headers: HeaderMap,
     ) -> Result<Response, AsyncHttpRangeReaderError> {
@@ -270,7 +276,7 @@ impl AsyncHttpRangeReader {
             .headers(extra_headers)
             .send()
             .await
-            .and_then(Response::error_for_status)
+            .and_then(error_for_status)
             .map_err(Arc::new)
             .map_err(AsyncHttpRangeReaderError::HttpError)?;
         Ok(head_response)
@@ -279,7 +285,7 @@ impl AsyncHttpRangeReader {
     /// Initialize the reader from [`AsyncHttpRangeReader::initial_head_request`] (or a user
     /// provided response the)
     pub async fn from_head_response(
-        client: reqwest::Client,
+        client: reqwest_middleware::ClientWithMiddleware,
         head_response: Response,
     ) -> Result<Self, AsyncHttpRangeReaderError> {
         // Are range requests supported?
@@ -387,7 +393,7 @@ impl AsyncHttpRangeReader {
 /// become available.
 #[tracing::instrument(name = "fetch_ranges", skip_all, fields(url))]
 async fn run_streamer(
-    client: Client,
+    client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     initial_tail_response: Option<(Response, u64)>,
     mut memory_map: MmapMut,
@@ -447,7 +453,7 @@ async fn run_streamer(
                 .send()
                 .instrument(span)
                 .await
-                .and_then(Response::error_for_status)
+                .and_then(error_for_status)
                 .map_err(|e| std::io::Error::new(ErrorKind::Other, e))
             {
                 Err(e) => {
@@ -649,7 +655,7 @@ mod test {
 
         // Construct an AsyncRangeReader
         let (mut range, _) = AsyncHttpRangeReader::new(
-            Client::new(),
+            Client::new().into(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
             check_method,
         )
@@ -743,7 +749,7 @@ mod test {
 
         // Construct an AsyncRangeReader
         let (mut range, _) = AsyncHttpRangeReader::new(
-            Client::new(),
+            Client::new().into(),
             server.url().join("andes-1.8.3-pyhd8ed1ab_0.conda").unwrap(),
             check_method,
         )
@@ -784,7 +790,7 @@ mod test {
     async fn test_not_found() {
         let server = StaticDirectoryServer::new(Path::new(env!("CARGO_MANIFEST_DIR")));
         let err = AsyncHttpRangeReader::new(
-            Client::new(),
+            Client::new().into(),
             server.url().join("not-found").unwrap(),
             CheckSupportMethod::Head,
         )
