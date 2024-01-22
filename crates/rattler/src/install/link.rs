@@ -142,6 +142,7 @@ pub fn link_file(
     target_platform: Platform,
     target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
+    clobber_rename: Option<&PathBuf>,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
@@ -153,9 +154,12 @@ pub fn link_file(
             }
             None => return Err(LinkFileError::MissingPythonInfo),
         }
+    } else if let Some(clobber_rename) = clobber_rename {
+        clobber_rename.into()
     } else {
         path_json_entry.relative_path.as_path().into()
     };
+
     let destination_path = target_dir.join(&destination_relative_path);
 
     // Ensure that all directories up to the path exist.
@@ -166,7 +170,7 @@ pub fn link_file(
     // If the file already exists it most likely means that the file is clobbered. This means that
     // different packages are writing to the same file. This function simply reports back to the
     // caller that this is the case but there is no special handling here.
-    let clobbered = destination_path.is_file();
+    let clobbered = clobber_rename.is_some();
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.
@@ -209,7 +213,7 @@ pub fn link_file(
         };
 
         // Replace the prefix placeholder in the file with the new placeholder
-        copy_and_replace_placholders(
+        copy_and_replace_placeholders(
             source.as_ref(),
             &mut destination_writer,
             placeholder,
@@ -361,7 +365,15 @@ fn reflink_to_destination(
 ) -> Result<LinkMethod, LinkFileError> {
     loop {
         match reflink(source_path, destination_path) {
-            Ok(_) => return Ok(LinkMethod::Reflink),
+            Ok(_) => {
+                // Copy over filesystem permissions. We do this to ensure that the destination file has the
+                // same permissions as the source file.
+                let metadata = std::fs::metadata(source_path)
+                    .map_err(LinkFileError::FailedToReadSourceFileMetadata)?;
+                std::fs::set_permissions(destination_path, metadata.permissions())
+                    .map_err(LinkFileError::FailedToUpdateDestinationFilePermissions)?;
+                return Ok(LinkMethod::Reflink);
+            }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => {
                 std::fs::remove_file(destination_path).map_err(|err| {
                     LinkFileError::IoError(String::from("removing clobbered file"), err)
@@ -472,7 +484,7 @@ fn copy_to_destination(
 /// This switches to more specialized functions that handle the replacement of either
 /// textual and binary placeholders, the [`FileMode`] enum switches between the two functions.
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
-pub fn copy_and_replace_placholders(
+pub fn copy_and_replace_placeholders(
     source_bytes: &[u8],
     destination: impl Write,
     prefix_placeholder: &str,

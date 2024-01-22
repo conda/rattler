@@ -89,11 +89,7 @@ impl PyVersion {
     pub fn segments(&self) -> Vec<Vec<PyComponent>> {
         self.inner
             .segments()
-            .map(|s| {
-                s.components()
-                    .map(|c| c.to_owned().into())
-                    .collect::<Vec<_>>()
-            })
+            .map(|s| s.components().map(|c| c.clone().into()).collect::<Vec<_>>())
             .collect::<Vec<_>>()
     }
 
@@ -104,7 +100,7 @@ impl PyVersion {
             .local_segments()
             .map(|s| {
                 s.components()
-                    .map(|c| c.to_owned().into())
+                    .map(|c| c.clone().into())
                     .collect::<Vec<PyComponent>>()
             })
             .collect::<Vec<_>>()

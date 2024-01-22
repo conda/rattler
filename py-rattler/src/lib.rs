@@ -46,7 +46,7 @@ use solver::py_solve;
 use virtual_package::PyVirtualPackage;
 
 #[pymodule]
-fn rattler(py: Python, m: &PyModule) -> PyResult<()> {
+fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVersion>().unwrap();
 
     m.add_class::<PyMatchSpec>().unwrap();

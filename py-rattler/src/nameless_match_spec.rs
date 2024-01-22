@@ -66,7 +66,7 @@ impl PyNamelessMatchSpec {
     /// Match the specific filename of the package
     #[getter]
     pub fn file_name(&self) -> Option<String> {
-        self.inner.file_name.to_owned()
+        self.inner.file_name.clone()
     }
 
     /// The channel of the package
@@ -75,7 +75,7 @@ impl PyNamelessMatchSpec {
         self.inner
             .channel
             .clone()
-            .map(|mut channel| Arc::<Channel>::make_mut(&mut channel).to_owned().into())
+            .map(|mut channel| Arc::<Channel>::make_mut(&mut channel).clone().into())
     }
 
     /// The subdir of the channel

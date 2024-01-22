@@ -14,16 +14,19 @@
 //! also contains a SHA256 hash for each file. This hash is used to verify that the file was not
 //! tampered with.
 pub mod apple_codesign;
+mod clobber_registry;
 mod driver;
 mod entry_point;
 pub mod link;
 mod python;
 mod transaction;
+pub mod unlink;
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
+pub use unlink::unlink_package;
 
 use crate::install::entry_point::{
     create_unix_python_entry_point, create_windows_python_entry_point,
@@ -84,6 +87,11 @@ pub enum InstallError {
     /// Failed to create a python entry point for a noarch package.
     #[error("failed to create Python entry point")]
     FailedToCreatePythonEntryPoint(#[source] std::io::Error),
+
+    /// When post-processing of the environment fails.
+    /// Post-processing involves removing clobbered paths.
+    #[error("failed to post process the environment (unclobbering)")]
+    PostProcessFailed(#[source] std::io::Error),
 }
 
 impl From<JoinError> for InstallError {
@@ -258,6 +266,13 @@ pub async fn link_package(
     // Wrap the python info in an `Arc` so we can more easily share it with async tasks.
     let python_info = options.python_info.map(Arc::new);
 
+    // register all paths in the install driver path registry
+    let clobber_paths = Arc::new(
+        driver
+            .clobber_registry()
+            .register_paths(index_json.name.as_normalized(), &paths_json),
+    );
+
     // Start linking all package files in parallel
     let mut number_of_paths_entries = 0;
     for entry in paths_json.paths {
@@ -266,6 +281,7 @@ pub async fn link_package(
         let target_prefix = target_prefix.clone();
         let python_info = python_info.clone();
 
+        let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
         // driver. So even though we might spawn thousands of tasks they might not all run
         // parallel because the driver dictates that only N tasks can run in parallel at the same
@@ -290,11 +306,17 @@ pub async fn link_package(
                 platform,
                 python_info.as_deref(),
                 options.apple_codesign_behavior,
+                clobber_rename.as_ref(),
             ) {
                 Ok(result) => Ok((
                     number_of_paths_entries,
                     PathsEntry {
                         relative_path: result.relative_path,
+                        original_path: if clobber_rename.is_some() {
+                            Some(entry.relative_path)
+                        } else {
+                            None
+                        },
                         path_type: entry.path_type.into(),
                         no_link: entry.no_link,
                         sha256: entry.sha256,
@@ -701,6 +723,12 @@ mod test {
             })
             .await;
 
+        // test doesn't write conda-meta, so we ignore the post processing
+        let prefix_records = vec![];
+        install_driver
+            .post_process(&prefix_records, target_dir.path())
+            .unwrap();
+
         // Run the python command and validate the version it outputs
         let python_path = if Platform::current().is_windows() {
             "python.exe"
@@ -732,15 +760,21 @@ mod test {
         )
         .unwrap();
 
+        let install_driver = InstallDriver::default();
+
         // Link the package
         let paths = link_package(
             package_dir.path(),
             environment_dir.path(),
-            &InstallDriver::default(),
+            &install_driver,
             InstallOptions::default(),
         )
         .await
         .unwrap();
+
+        install_driver
+            .post_process(&vec![], environment_dir.path())
+            .unwrap();
 
         insta::assert_yaml_snapshot!(paths);
     }

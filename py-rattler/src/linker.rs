@@ -36,27 +36,40 @@ pub fn py_link<'a>(
         .map(|&rdr| PyRecord::try_from(rdr)?.try_into())
         .collect::<PyResult<Vec<PrefixRecord>>>()?;
 
+    let installed_packages_clone = installed_packages.clone();
     let txn = py.allow_threads(move || {
-        let reqired_packages = PackageRecord::sort_topologically(dependencies);
+        let required_packages = PackageRecord::sort_topologically(dependencies);
 
-        Transaction::from_current_and_desired(installed_packages, reqired_packages, platform.inner)
-            .map_err(PyRattlerError::from)
+        Transaction::from_current_and_desired(
+            installed_packages.clone(),
+            required_packages,
+            platform.inner,
+        )
+        .map_err(PyRattlerError::from)
     })?;
 
     future_into_py(py, async move {
-        Ok(execute_transaction(txn, target_prefix, cache_dir, client.inner).await?)
+        Ok(execute_transaction(
+            txn,
+            target_prefix,
+            installed_packages_clone,
+            cache_dir,
+            client.inner,
+        )
+        .await?)
     })
 }
 
 async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
+    installed_packages: Vec<PrefixRecord>,
     cache_dir: PathBuf,
     client: AuthenticatedClient,
 ) -> Result<(), PyRattlerError> {
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
-    let install_driver = InstallDriver::default();
+    let install_driver = InstallDriver::new(100, Some(&installed_packages));
 
     let install_options = InstallOptions {
         python_info: transaction.python_info.clone(),
@@ -85,6 +98,24 @@ async fn execute_transaction(
             }
         })
         .await?;
+
+    let prefix_records = PrefixRecord::collect_from_prefix(&target_prefix).map_err(|e| {
+        PyRattlerError::LinkError(format!(
+            "failed to collect prefix records from {}: {}",
+            target_prefix.display(),
+            e
+        ))
+    })?;
+
+    install_driver
+        .post_process(&prefix_records, &target_prefix)
+        .map_err(|e| {
+            PyRattlerError::LinkError(format!(
+                "failed to post process prefix {}: {}",
+                target_prefix.display(),
+                e,
+            ))
+        })?;
 
     Ok(())
 }
@@ -140,7 +171,7 @@ pub async fn execute_operation(
     Ok(())
 }
 
-// TODO: expose as python seperate function
+// TODO: expose as python separate function
 pub async fn install_package_to_environment(
     target_prefix: PathBuf,
     package_dir: PathBuf,
@@ -170,7 +201,7 @@ pub async fn install_package_to_environment(
         link: None,
     };
 
-    let target_prefix = target_prefix.to_path_buf();
+    let target_prefix = target_prefix.clone();
     match tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
@@ -224,7 +255,11 @@ async fn remove_package_from_environment(
         package.repodata_record.package_record.build
     ));
 
-    tokio::fs::remove_file(&conda_meta_path).await.map_err(|_| {
-        PyRattlerError::LinkError(format!("failed to delete {}", conda_meta_path.display()))
+    tokio::fs::remove_file(&conda_meta_path).await.map_err(|e| {
+        PyRattlerError::LinkError(format!(
+            "failed to delete {}: {:?}",
+            conda_meta_path.display(),
+            e
+        ))
     })
 }

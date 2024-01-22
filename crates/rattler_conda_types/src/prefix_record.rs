@@ -57,6 +57,11 @@ pub struct PathsEntry {
     #[serde_as(as = "crate::utils::serde::NormalizedPath")]
     pub relative_path: PathBuf,
 
+    /// The original path of the file in the package. This is only set if the file was clobbered by
+    /// another package and therefore the original path is not the same as the relative path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub original_path: Option<PathBuf>,
+
     /// How the file was installed into the environment
     pub path_type: PathType,
 
@@ -163,13 +168,51 @@ impl PrefixRecord {
         Self::from_str(&str)
     }
 
+    /// Creates a `PrefixRecord` from a `RepoDataRecord`.
+    pub fn from_repodata_record(
+        repodata_record: RepoDataRecord,
+        package_tarball_full_path: Option<PathBuf>,
+        extracted_package_dir: Option<PathBuf>,
+        paths: Vec<PathsEntry>,
+        requested_spec: Option<String>,
+        link: Option<Link>,
+    ) -> Self {
+        Self {
+            repodata_record,
+            package_tarball_full_path,
+            extracted_package_dir,
+            files: paths
+                .iter()
+                .map(|entry| entry.relative_path.clone())
+                .collect(),
+            paths_data: paths.into(),
+            link,
+            requested_spec,
+        }
+    }
+
     /// Parses a `paths.json` file from a file.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         Self::from_reader(File::open(path.as_ref())?)
     }
 
+    /// Return the canonical file name for a `PrefixRecord`. Takes the form of
+    /// `<package_name>-<version>-<build>.json`.
+    pub fn file_name(&self) -> String {
+        format!(
+            "{}-{}-{}.json",
+            self.repodata_record.package_record.name.as_normalized(),
+            self.repodata_record.package_record.version,
+            self.repodata_record.package_record.build
+        )
+    }
+
     /// Writes the contents of this instance to the file at the specified location.
-    pub fn write_to_path(self, path: impl AsRef<Path>, pretty: bool) -> Result<(), std::io::Error> {
+    pub fn write_to_path(
+        &self,
+        path: impl AsRef<Path>,
+        pretty: bool,
+    ) -> Result<(), std::io::Error> {
         self.write_to(File::create(path)?, pretty)
     }
 
@@ -185,6 +228,29 @@ impl PrefixRecord {
             serde_json::to_writer(BufWriter::new(writer), self)?;
         }
         Ok(())
+    }
+
+    /// Collects all `PrefixRecord`s from the specified prefix. This function will read all files in
+    /// the `$PREFIX/conda-meta` directory and parse them as `PrefixRecord`s.
+    pub fn collect_from_prefix(prefix: &Path) -> Result<Vec<PrefixRecord>, std::io::Error> {
+        let mut records = Vec::new();
+        let conda_meta_path = prefix.join("conda-meta");
+
+        if !conda_meta_path.exists() {
+            return Ok(records);
+        }
+
+        for entry in std::fs::read_dir(prefix.join("conda-meta"))? {
+            let entry = entry?;
+
+            if entry.file_type()?.is_file()
+                && entry.file_name().to_string_lossy().ends_with(".json")
+            {
+                let record = Self::from_path(entry.path())?;
+                records.push(record);
+            }
+        }
+        Ok(records)
     }
 }
 
