@@ -70,7 +70,7 @@
 use fxhash::FxHashMap;
 use pep508_rs::Requirement;
 use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{borrow::Cow, io::Read, path::Path, str::FromStr};
 use url::Url;
@@ -261,10 +261,57 @@ impl Environment {
         })
     }
 
+    /// Returns all pypi packages for all platforms
+    pub fn pypi_packages(
+        &self,
+    ) -> HashMap<Platform, Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
+        let env_data = self.data();
+        env_data
+            .packages
+            .iter()
+            .map(|(platform, packages)| {
+                let records = packages
+                    .iter()
+                    .filter_map(|package| match package {
+                        EnvironmentPackageData::Conda(_) => None,
+                        EnvironmentPackageData::Pypi(idx, _) => Some((
+                            self.inner.pypi_packages[*idx].clone(),
+                            self.inner.pypi_environment_package_datas[*idx].clone(),
+                        )),
+                    })
+                    .collect();
+                (*platform, records)
+            })
+            .collect()
+    }
+
+    /// Returns all conda packages for all platforms and converts them to [`RepoDataRecord`].
+    pub fn conda_packages(
+        &self,
+    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
+        let env_data = self.data();
+        env_data
+            .packages
+            .iter()
+            .map(|(platform, packages)| {
+                packages
+                    .iter()
+                    .filter_map(|package| match package {
+                        EnvironmentPackageData::Conda(idx) => {
+                            Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
+                        }
+                        EnvironmentPackageData::Pypi(_, _) => None,
+                    })
+                    .collect::<Result<_, _>>()
+                    .map(|records| (*platform, records))
+            })
+            .collect()
+    }
+
     /// Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
     /// returns an error if the conversion failed. Returns `None` if the specified platform is not
     /// defined for this environment.
-    pub fn conda_packages(
+    pub fn conda_packages_for_platform(
         &self,
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
@@ -287,7 +334,7 @@ impl Environment {
 
     /// Returns all the pypi packages and their associated environment data for the specified
     /// platform. Returns `None` if the platform is not defined for this environment.
-    pub fn pypi_packages(
+    pub fn pypi_packages_for_platform(
         &self,
         platform: Platform,
     ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
