@@ -260,6 +260,55 @@ impl Environment {
             )
         })
     }
+
+    /// Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
+    /// returns an error if the conversion failed. Returns `None` if the specified platform is not
+    /// defined for this environment.
+    pub fn conda_packages(
+        &self,
+        platform: Platform,
+    ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
+        let Some(packages) = self.data()
+            .packages.get(&platform) else {
+            return Ok(None)
+        };
+
+        packages
+            .iter()
+            .filter_map(|package| match package {
+                EnvironmentPackageData::Conda(idx) => {
+                    Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
+                }
+                EnvironmentPackageData::Pypi(_, _) => None,
+            })
+            .collect::<Result<_, _>>()
+            .map(Some)
+    }
+
+    /// Returns all the pypi packages and their associated environment data for the specified
+    /// platform. Returns `None` if the platform is not defined for this environment.
+    pub fn pypi_packages(
+        &self,
+        platform: Platform,
+    ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
+        let Some(packages) = self.data()
+            .packages.get(&platform) else {
+            return None
+        };
+
+        Some(
+            packages
+                .iter()
+                .filter_map(|package| match package {
+                    EnvironmentPackageData::Conda(_) => None,
+                    EnvironmentPackageData::Pypi(package_idx, env_idx) => Some((
+                        self.inner.pypi_packages[*package_idx].clone(),
+                        self.inner.pypi_environment_package_datas[*env_idx].clone(),
+                    )),
+                })
+                .collect(),
+        )
+    }
 }
 
 /// Data related to a single locked package in an [`Environment`].
