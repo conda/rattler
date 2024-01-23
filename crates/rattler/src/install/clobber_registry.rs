@@ -65,13 +65,19 @@ impl ClobberRegistry {
                 .package_names
                 .iter()
                 .position(|n| n == originating_package)
-                .unwrap();
+                .expect("package not found even though it was just added");
 
             let path = *path;
             registry
                 .clobbers
                 .entry(path.clone())
-                .or_insert_with(|| vec![*registry.paths_registry.get(path).unwrap()])
+                .or_insert_with(|| {
+                    if let Some(other_idx) = registry.paths_registry.get(path) {
+                        vec![*other_idx]
+                    } else {
+                        Vec::new()
+                    }
+                })
                 .push(idx);
         }
 
@@ -97,21 +103,16 @@ impl ClobberRegistry {
     /// will "unclobber" the files after all packages have been installed.
     pub fn register_paths(
         &mut self,
-        name: &str,
+        name: &PackageName,
         paths_json: &PathsJson,
     ) -> HashMap<PathBuf, PathBuf> {
         let mut clobber_paths = HashMap::new();
 
         // check if we have the package name already registered
-        let name_idx = if let Some(idx) = self
-            .package_names
-            .iter()
-            .position(|n| n.as_normalized() == name)
-        {
+        let name_idx = if let Some(idx) = self.package_names.iter().position(|n| n == name) {
             idx
         } else {
-            self.package_names
-                .push(PackageName::try_from(name).unwrap());
+            self.package_names.push(name.clone());
             self.package_names.len() - 1
         };
 

@@ -270,7 +270,7 @@ pub async fn link_package(
     let clobber_paths = Arc::new(
         driver
             .clobber_registry()
-            .register_paths(index_json.name.as_normalized(), &paths_json),
+            .register_paths(&index_json.name, &paths_json),
     );
 
     // Start linking all package files in parallel
