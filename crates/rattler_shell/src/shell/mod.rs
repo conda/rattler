@@ -109,7 +109,11 @@ pub trait Shell {
 
     /// Emits echoing certain text to stdout.
     fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
-        writeln!(f, "echo {}", shlex::quote(text))
+        writeln!(
+            f,
+            "echo {}",
+            shlex::try_quote(text).expect("text should not every contain nul bytes")
+        )
     }
 
     /// Emits writing all current environment variables to stdout.
@@ -360,7 +364,11 @@ impl Shell for CmdExe {
     }
 
     fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
-        writeln!(f, "@ECHO {}", shlex::quote(text))
+        writeln!(
+            f,
+            "@ECHO {}",
+            shlex::try_quote(text).expect("text should not every contain nul bytes")
+        )
     }
 
     /// Emits writing all current environment variables to stdout.
