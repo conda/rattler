@@ -360,7 +360,16 @@ impl Shell for CmdExe {
     }
 
     fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
-        writeln!(f, "@ECHO {}", shlex::try_quote(text).unwrap_or_default())
+        write!(f, "@ECHO ",)?;
+
+        // Escape special characters (see https://ss64.com/nt/syntax-esc.html)
+        let mut text = text;
+        while let Some(idx) = text.find(['^', '&', '|', '\\', '<', '>']) {
+            write!(f, "{}^{}", &text[..idx], &text[idx..idx + 1])?;
+            text = &text[idx + 1..];
+        }
+
+        writeln!(f)
     }
 
     /// Emits writing all current environment variables to stdout.
