@@ -1862,6 +1862,8 @@ dependencies = [
  "rattler_shell",
  "rattler_solve",
  "rattler_virtual_packages",
+ "reqwest",
+ "reqwest-middleware",
  "thiserror",
  "tokio",
  "url",

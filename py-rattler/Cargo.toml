@@ -46,6 +46,9 @@ pyo3 = { version = "0.19", features = [
 pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
 tokio = { version = "1.32" }
 
+reqwest = { version = "0.11.22", default-features = false }
+reqwest-middleware = "0.2.4"
+
 thiserror = "1.0.44"
 url = "2.4.1"
 
