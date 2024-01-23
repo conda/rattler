@@ -274,9 +274,9 @@ impl Environment {
                     .iter()
                     .filter_map(|package| match package {
                         EnvironmentPackageData::Conda(_) => None,
-                        EnvironmentPackageData::Pypi(idx, _) => Some((
-                            self.inner.pypi_packages[*idx].clone(),
-                            self.inner.pypi_environment_package_datas[*idx].clone(),
+                        EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
+                            self.inner.pypi_packages[*pkg_data_idx].clone(),
+                            self.inner.pypi_environment_package_datas[*env_data_idx].clone(),
                         )),
                     })
                     .collect();
