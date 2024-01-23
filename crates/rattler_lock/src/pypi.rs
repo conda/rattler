@@ -25,7 +25,7 @@ pub struct PypiPackageData {
     #[serde(flatten)]
     pub hash: Option<PackageHashes>,
 
-    /// A list of dependencies on other packages that the wheel listed.
+    /// A list of dependencies on other packages.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requires_dist: Vec<Requirement>,
 

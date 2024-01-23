@@ -132,7 +132,7 @@ impl LockFileBuilder {
         self
     }
 
-    /// Adds a conda locked package to a specific environment and platform.
+    /// Adds a pypi locked package to a specific environment and platform.
     ///
     /// This function is similar to [`Self::add_pypi_package`] but differs in that it consumes
     /// `self` instead of taking a mutable reference. This allows for a better interface when
@@ -148,7 +148,7 @@ impl LockFileBuilder {
         self
     }
 
-    /// Adds an environment to the builder.
+    /// Sets the channels of an environment.
     pub fn with_channels(
         mut self,
         environment: impl Into<String>,
@@ -183,7 +183,7 @@ impl LockFileBuilder {
     }
 }
 
-/// Similar to [`HashablePypiPackageEnvironmentData`] but hashable.
+/// Similar to [`PypiPackageEnvironmentData`] but hashable.
 #[derive(Hash, PartialEq, Eq)]
 struct HashablePypiPackageEnvironmentData {
     extras: BTreeSet<String>,

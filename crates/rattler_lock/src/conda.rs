@@ -81,7 +81,7 @@ impl From<RepoDataRecord> for CondaPackageData {
             url: value.url,
             file_name,
             // TODO: This is not entirely correct. It should be derived from the `channel` field in
-            // the repodata record.
+            //  the repodata record.
             channel: None,
         }
     }
