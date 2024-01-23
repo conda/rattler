@@ -109,11 +109,7 @@ pub trait Shell {
 
     /// Emits echoing certain text to stdout.
     fn echo(&self, f: &mut impl Write, text: &str) -> std::fmt::Result {
-        writeln!(
-            f,
-            "echo {}",
-            shlex::try_quote(text).expect("text should not every contain nul bytes")
-        )
+        writeln!(f, "echo {}", shlex::try_quote(text).unwrap_or_default())
     }
 
     /// Emits writing all current environment variables to stdout.
