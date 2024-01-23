@@ -286,7 +286,7 @@ impl Environment {
     }
 
     /// Returns all conda packages for all platforms and converts them to [`RepoDataRecord`].
-    pub fn conda_packages(
+    pub fn conda_repodata_records(
         &self,
     ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
         let env_data = self.data();
@@ -311,7 +311,7 @@ impl Environment {
     /// Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
     /// returns an error if the conversion failed. Returns `None` if the specified platform is not
     /// defined for this environment.
-    pub fn conda_packages_for_platform(
+    pub fn conda_repodata_records_for_platform(
         &self,
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
