@@ -1,5 +1,6 @@
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use serde_with::skip_serializing_none;
 
 /// This implementation of the `Deserialize` trait for the `PackageHashes` struct
 ///
@@ -47,6 +48,7 @@ impl PackageHashes {
     }
 }
 
+#[skip_serializing_none]
 #[derive(Serialize, Deserialize)]
 struct RawPackageHashes {
     md5: Option<SerializableHash<rattler_digest::Md5>>,

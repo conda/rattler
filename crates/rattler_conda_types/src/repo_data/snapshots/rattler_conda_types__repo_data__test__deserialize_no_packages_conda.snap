@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 477
 expression: repodata
 ---
 info:
@@ -182,3 +181,4 @@ packages:
     version: "2.1"
 packages.conda: {}
 repodata_version: 2
+
