@@ -65,8 +65,7 @@ impl SparseRange {
         // Compute the bounds of covered range taking into account existing covered ranges.
         let start = left_slice
             .first()
-            .map(|&left_bound| left_bound.min(range_start))
-            .unwrap_or(range_start);
+            .map_or(range_start, |&left_bound| left_bound.min(range_start));
 
         // Get the ranges that are missing
         let mut bound = start;
@@ -79,8 +78,7 @@ impl SparseRange {
 
         let end = right_slice
             .last()
-            .map(|&right_bound| right_bound.max(range_end))
-            .unwrap_or(range_end);
+            .map_or(range_end, |&right_bound| right_bound.max(range_end));
 
         bound > end
     }
@@ -93,7 +91,7 @@ impl SparseRange {
     }
 
     /// Find the ranges that are uncovered for the specified range together with what the
-    /// SparseRange would look like if we covered that range.
+    /// [`SparseRange`] would look like if we covered that range.
     pub fn cover(&self, range: Range<u64>) -> Option<(SparseRange, Vec<RangeInclusive<u64>>)> {
         let range_start = range.start;
         let range_end = range.end - 1;
@@ -109,12 +107,10 @@ impl SparseRange {
         // Compute the bounds of covered range taking into account existing covered ranges.
         let start = left_slice
             .first()
-            .map(|&left_bound| left_bound.min(range_start))
-            .unwrap_or(range_start);
+            .map_or(range_start, |&left_bound| left_bound.min(range_start));
         let end = right_slice
             .last()
-            .map(|&right_bound| right_bound.max(range_end))
-            .unwrap_or(range_end);
+            .map_or(range_end, |&right_bound| right_bound.max(range_end));
 
         // Get the ranges that are missing
         let mut ranges = Vec::new();
@@ -126,10 +122,12 @@ impl SparseRange {
             bound = right_bound + 1;
         }
         if bound <= end {
-            ranges.push(bound..=end)
+            ranges.push(bound..=end);
         }
 
-        if !ranges.is_empty() {
+        if ranges.is_empty() {
+            None
+        } else {
             let mut new_left = self.left.clone();
             new_left.splice(left_index..right_index, [start]);
             let mut new_right = self.right.clone();
@@ -141,8 +139,6 @@ impl SparseRange {
                 },
                 ranges,
             ))
-        } else {
-            None
         }
     }
 }
