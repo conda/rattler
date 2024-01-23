@@ -734,6 +734,7 @@ mod tests {
 
         // Diff with the current environment
         let current_env = std::env::vars().collect::<HashMap<_, _>>();
+
         let mut env_diff = activation_env
             .into_iter()
             .filter(|(key, value)| current_env.get(key) != Some(value))
