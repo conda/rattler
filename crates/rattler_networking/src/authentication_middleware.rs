@@ -1,4 +1,4 @@
-//! HTTP client that authenticates requests
+//! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
 
 use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
@@ -45,6 +45,7 @@ impl Middleware for AuthenticationMiddleware {
 }
 
 impl AuthenticationMiddleware {
+    /// Create a new authentication middleware with the given authentication storage
     pub fn new(auth_storage: AuthenticationStorage) -> Self {
         Self { auth_storage }
     }

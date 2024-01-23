@@ -1,4 +1,4 @@
-//#![deny(missing_docs)]
+#![deny(missing_docs)]
 
 //! Networking utilities for Rattler, specifically authenticating requests
 pub use authentication_middleware::AuthenticationMiddleware;
