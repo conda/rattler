@@ -195,7 +195,7 @@ impl AsyncHttpRangeReader {
                 .get(reqwest::header::CONTENT_RANGE)
                 .ok_or(AsyncHttpRangeReaderError::ContentRangeMissing)?
                 .to_str()
-                .map_err(|_| AsyncHttpRangeReaderError::ContentRangeMissing)?,
+                .map_err(|_err| AsyncHttpRangeReaderError::ContentRangeMissing)?,
         );
         let (start, finish, complete_length) = match content_range {
             ContentRange::Bytes(ContentRangeBytes {
@@ -297,9 +297,9 @@ impl AsyncHttpRangeReader {
             .get(reqwest::header::CONTENT_LENGTH)
             .ok_or(AsyncHttpRangeReaderError::ContentLengthMissing)?
             .to_str()
-            .map_err(|_| AsyncHttpRangeReaderError::ContentLengthMissing)?
+            .map_err(|_err| AsyncHttpRangeReaderError::ContentLengthMissing)?
             .parse()
-            .map_err(|_| AsyncHttpRangeReaderError::ContentLengthMissing)?;
+            .map_err(|_err| AsyncHttpRangeReaderError::ContentLengthMissing)?;
 
         // Allocate a memory map to hold the data
         let memory_map = memmap2::MmapOptions::new()

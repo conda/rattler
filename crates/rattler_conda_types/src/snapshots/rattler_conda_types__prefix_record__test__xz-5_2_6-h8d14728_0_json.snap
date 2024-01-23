@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
-assertion_line: 266
 expression: prefix_record
 ---
 arch: x86_64
