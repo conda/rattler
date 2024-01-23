@@ -7,8 +7,7 @@ use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
 use rattler_networking::{
-    redact_known_secrets_from_error, redact_known_secrets_from_url, AuthenticatedClient,
-    DEFAULT_REDACTION_STR,
+    redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
 };
 use reqwest::{
     header::{HeaderMap, HeaderValue},
@@ -49,7 +48,7 @@ pub enum FetchRepoDataError {
     FailedToAcquireLock(#[source] anyhow::Error),
 
     #[error(transparent)]
-    HttpError(reqwest::Error),
+    HttpError(reqwest_middleware::Error),
 
     #[error(transparent)]
     IoError(std::io::Error),
@@ -81,7 +80,7 @@ pub enum FetchRepoDataError {
 
 impl From<reqwest::Error> for FetchRepoDataError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(redact_known_secrets_from_error(err))
+        Self::HttpError(redact_known_secrets_from_error(err).into())
     }
 }
 
@@ -309,7 +308,7 @@ async fn repodata_from_file(
 #[instrument(err, skip_all, fields(subdir_url, cache_path = %cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
     cache_path: PathBuf,
     options: FetchRepoDataOptions,
     progress: Option<ProgressFunc>,
@@ -504,7 +503,7 @@ pub async fn fetch_repo_data(
         }
         Ok(response) => response.error_for_status()?,
         Err(e) => {
-            return Err(FetchRepoDataError::from(e));
+            return Err(FetchRepoDataError::HttpError(e));
         }
     };
 
@@ -726,7 +725,7 @@ impl VariantAvailability {
 /// Determine the availability of `repodata.json` variants (like a `.zst` or `.bz2`) by checking
 /// a cache or the internet.
 pub async fn check_variant_availability(
-    client: &AuthenticatedClient,
+    client: &reqwest_middleware::ClientWithMiddleware,
     subdir_url: &Url,
     cache_state: Option<&RepoDataState>,
     filename: &str,
@@ -815,7 +814,10 @@ pub async fn check_variant_availability(
 }
 
 /// Performs a HEAD request on the given URL to see if it is available.
-async fn check_valid_download_target(url: &Url, client: &AuthenticatedClient) -> bool {
+async fn check_valid_download_target(
+    url: &Url,
+    client: &reqwest_middleware::ClientWithMiddleware,
+) -> bool {
     tracing::debug!("checking availability of '{url}'");
 
     if url.scheme() == "file" {
@@ -1039,8 +1041,9 @@ mod test {
     use crate::utils::Encoding;
     use assert_matches::assert_matches;
     use hex_literal::hex;
-    use rattler_networking::{AuthenticatedClient, AuthenticationStorage};
+    use rattler_networking::AuthenticationMiddleware;
     use reqwest::Client;
+    use reqwest_middleware::ClientWithMiddleware;
     use std::path::Path;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
@@ -1135,7 +1138,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1165,7 +1168,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1178,7 +1181,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.path().to_owned(),
             FetchRepoDataOptions::default(),
             None,
@@ -1202,7 +1205,7 @@ mod test {
         // Download the data from the channel with a filled cache.
         let CachedRepoData { cache_result, .. } = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1231,7 +1234,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1273,7 +1276,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1322,7 +1325,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1367,10 +1370,12 @@ mod test {
 
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
-        let client = Client::builder().no_gzip().build().unwrap();
 
-        let authenticated_client =
-            AuthenticatedClient::from_client(client, AuthenticationStorage::default());
+        let client = Client::builder().no_gzip().build().unwrap();
+        let authenticated_client = reqwest_middleware::ClientBuilder::new(client)
+            .with_arc(Arc::new(AuthenticationMiddleware::default()))
+            .build();
+
         let result = fetch_repo_data(
             server.url(),
             authenticated_client,
@@ -1406,7 +1411,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let _result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             Some(Box::new(download_progress)),
@@ -1429,7 +1434,7 @@ mod test {
         let result = fetch_repo_data(
             Url::parse(format!("file://{}", subdir_path.path().to_str().unwrap()).as_str())
                 .unwrap(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,
@@ -1451,7 +1456,7 @@ mod test {
         let cache_dir = TempDir::new().unwrap();
         let result = fetch_repo_data(
             server.url(),
-            AuthenticatedClient::default(),
+            ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
             None,

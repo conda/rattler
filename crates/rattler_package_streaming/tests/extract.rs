@@ -165,7 +165,6 @@ fn test_extract_tar_bz2(#[case] input: &str, #[case] sha256: &str, #[case] md5: 
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(feature = "tokio")]
 #[apply(tar_bz2_archives)]
 #[tokio::test]
 async fn test_extract_tar_bz2_async(#[case] input: &str, #[case] sha256: &str, #[case] md5: &str) {
@@ -187,7 +186,6 @@ async fn test_extract_tar_bz2_async(#[case] input: &str, #[case] sha256: &str, #
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(feature = "tokio")]
 #[apply(conda_archives)]
 #[tokio::test]
 async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[case] md5: &str) {
@@ -210,35 +208,12 @@ async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[c
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(all(feature = "reqwest", feature = "blocking"))]
-#[apply(url_archives)]
-fn test_extract_url(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
-    use rattler_networking::AuthenticatedClientBlocking;
-
-    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    println!("Target dir: {}", temp_dir.display());
-
-    let (_, filename) = url.rsplit_once('/').unwrap();
-    let name = Path::new(filename);
-    println!("Name: {}", name.display());
-
-    let target_dir = temp_dir.join(name);
-    let result = rattler_package_streaming::reqwest::extract(
-        AuthenticatedClientBlocking::default(),
-        url,
-        &target_dir,
-    )
-    .unwrap();
-
-    assert_eq!(&format!("{:x}", result.sha256), sha256);
-    assert_eq!(&format!("{:x}", result.md5), md5);
-}
-
-#[cfg(all(feature = "reqwest", feature = "tokio"))]
+#[cfg(all(feature = "reqwest"))]
 #[apply(url_archives)]
 #[tokio::test]
 async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
-    use rattler_networking::AuthenticatedClient;
+    use reqwest::Client;
+    use reqwest_middleware::ClientWithMiddleware;
 
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
@@ -250,7 +225,7 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
     let target_dir = temp_dir.join(name);
     let url = url::Url::parse(url).unwrap();
     let result = rattler_package_streaming::reqwest::tokio::extract(
-        AuthenticatedClient::default(),
+        ClientWithMiddleware::from(Client::new()),
         url,
         &target_dir,
     )

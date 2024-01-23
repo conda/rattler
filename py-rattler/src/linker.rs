@@ -8,7 +8,8 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{PackageRecord, PrefixRecord, RepoDataRecord};
-use rattler_networking::{retry_policies::default_retry_policy, AuthenticatedClient};
+use rattler_networking::retry_policies::default_retry_policy;
+use reqwest_middleware::ClientWithMiddleware;
 
 use crate::{
     error::PyRattlerError, networking::authenticated_client::PyAuthenticatedClient,
@@ -65,7 +66,7 @@ async fn execute_transaction(
     target_prefix: PathBuf,
     installed_packages: Vec<PrefixRecord>,
     cache_dir: PathBuf,
-    client: AuthenticatedClient,
+    client: ClientWithMiddleware,
 ) -> Result<(), PyRattlerError> {
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
@@ -124,7 +125,7 @@ pub async fn execute_operation(
     op: TransactionOperation<PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
     package_cache: &PackageCache,
-    client: AuthenticatedClient,
+    client: ClientWithMiddleware,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
 ) -> Result<(), PyRattlerError> {

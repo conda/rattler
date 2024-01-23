@@ -20,15 +20,18 @@
 //!
 //! ```no_run
 //! use std::{path::Path};
-//! use rattler_networking::AuthenticatedClient;
+//! use rattler_networking::AuthenticationMiddleware;
 //! use url::Url;
+//! use std::sync::Arc;
 //!
 //! use rattler_repodata_gateway::fetch::jlap::{patch_repo_data, RepoDataState};
 //!
 //! #[tokio::main]
 //! pub async fn main() {
 //!     let subdir_url = Url::parse("https://conda.anaconda.org/conda-forge/osx-64/").unwrap();
-//!     let client = AuthenticatedClient::default();
+//!     let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+//!         .with_arc(Arc::new(AuthenticationMiddleware::default()))
+//!         .build();
 //!     let cache = Path::new("./cache");
 //!     let current_repo_data = cache.join("c93ef9c9.json");
 //!
@@ -80,11 +83,12 @@ use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::{redact_known_secrets_from_error, AuthenticatedClient};
+use rattler_networking::redact_known_secrets_from_error;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
 };
+use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::collections::{BTreeMap, HashMap};
@@ -128,7 +132,7 @@ pub enum JLAPError {
 
     #[error(transparent)]
     /// Pass-thru for HTTP errors encountered while requesting JLAP
-    HTTP(reqwest::Error),
+    HTTP(reqwest_middleware::Error),
 
     #[error(transparent)]
     /// Pass-thru for file system errors encountered while requesting JLAP
@@ -160,9 +164,19 @@ pub enum JLAPError {
     Cancelled,
 }
 
+impl From<reqwest_middleware::Error> for JLAPError {
+    fn from(value: reqwest_middleware::Error) -> Self {
+        Self::HTTP(if let reqwest_middleware::Error::Reqwest(err) = value {
+            reqwest_middleware::Error::Reqwest(redact_known_secrets_from_error(err))
+        } else {
+            value
+        })
+    }
+}
+
 impl From<reqwest::Error> for JLAPError {
     fn from(value: reqwest::Error) -> Self {
-        Self::HTTP(redact_known_secrets_from_error(value))
+        Self::HTTP(redact_known_secrets_from_error(value).into())
     }
 }
 
@@ -396,7 +410,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 ///
 /// The return value is the updated [`JLAPState`] and the Blake2b256 hash of the new file.
 pub async fn patch_repo_data(
-    client: &AuthenticatedClient,
+    client: &ClientWithMiddleware,
     subdir_url: Url,
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
@@ -444,9 +458,9 @@ pub async fn patch_repo_data(
 /// Fetches a JLAP response from server
 async fn fetch_jlap(
     url: &str,
-    client: &AuthenticatedClient,
+    client: &ClientWithMiddleware,
     range: &str,
-) -> Result<Response, reqwest::Error> {
+) -> reqwest_middleware::Result<Response> {
     let request_builder = client.get(url);
     let mut headers = HeaderMap::default();
 
@@ -468,7 +482,7 @@ async fn fetch_jlap(
 /// `JLAPState` accordingly.
 async fn fetch_jlap_with_retry(
     url: &str,
-    client: &AuthenticatedClient,
+    client: &ClientWithMiddleware,
     position: u64,
 ) -> Result<(Response, u64), JLAPError> {
     tracing::info!("fetching JLAP state from {url} (bytes={position}-)");
@@ -624,7 +638,7 @@ mod test {
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
     use rattler_digest::{parse_digest_from_hex, Blake2b256};
-    use rattler_networking::AuthenticatedClient;
+    use reqwest_middleware::ClientWithMiddleware;
     use rstest::rstest;
     use tempfile::TempDir;
     use url::Url;
@@ -804,7 +818,7 @@ mod test {
 
         pub cache_repo_data: PathBuf,
 
-        pub client: AuthenticatedClient,
+        pub client: ClientWithMiddleware,
 
         pub repo_data_state: RepoDataState,
     }
@@ -818,7 +832,7 @@ mod test {
             let (cache_dir, cache_repo_data) =
                 setup_client_environment(&server_url, Some(repo_data)).await;
 
-            let client = AuthenticatedClient::default();
+            let client = reqwest::Client::new().into();
 
             let repo_data_state: RepoDataState = serde_json::from_str(repo_data_state).unwrap();
 

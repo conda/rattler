@@ -278,7 +278,7 @@ mod tests {
         package::IndexJson, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
     };
     use rattler_digest::{Md5, Sha256};
-    use rattler_networking::{retry_policies::default_retry_policy, AuthenticatedClient};
+    use rattler_networking::retry_policies::default_retry_policy;
     use rattler_package_streaming::seek::read_package_file;
     use transaction::{Transaction, TransactionOperation};
 
@@ -368,7 +368,7 @@ mod tests {
 
     async fn execute_operation(
         target_prefix: &Path,
-        download_client: &AuthenticatedClient,
+        download_client: &reqwest_middleware::ClientWithMiddleware,
         package_cache: &PackageCache,
         install_driver: &InstallDriver,
         op: TransactionOperation<PrefixRecord, RepoDataRecord>,
@@ -416,7 +416,7 @@ mod tests {
     async fn execute_transaction(
         transaction: Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
-        download_client: &AuthenticatedClient,
+        download_client: &reqwest_middleware::ClientWithMiddleware,
         package_cache: &PackageCache,
         install_driver: &InstallDriver,
         install_options: &InstallOptions,
@@ -515,7 +515,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -572,7 +572,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -637,7 +637,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 target_prefix.path(),
-                &AuthenticatedClient::default(),
+                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -684,7 +684,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 target_prefix.path(),
-                &AuthenticatedClient::default(),
+                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &InstallDriver::default(),
                 &InstallOptions::default(),
@@ -735,7 +735,7 @@ mod tests {
             execute_transaction(
                 transaction,
                 target_prefix.path(),
-                &AuthenticatedClient::default(),
+                &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
                 &cache,
                 &install_driver,
                 &InstallOptions::default(),

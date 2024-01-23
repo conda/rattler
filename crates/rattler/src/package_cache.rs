@@ -5,10 +5,7 @@ use chrono::Utc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
-use rattler_networking::{
-    retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy},
-    AuthenticatedClient,
-};
+use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::ExtractError;
 use reqwest::StatusCode;
 use std::error::Error;
@@ -186,7 +183,7 @@ impl PackageCache {
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
-        client: AuthenticatedClient,
+        client: reqwest_middleware::ClientWithMiddleware,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy)
             .await
@@ -200,7 +197,7 @@ impl PackageCache {
         &self,
         pkg: impl Into<CacheKey>,
         url: Url,
-        client: AuthenticatedClient,
+        client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static,
     ) -> Result<PathBuf, PackageCacheError> {
         self.get_or_fetch(pkg, move |destination| async move {
@@ -314,10 +311,7 @@ mod test {
         Router,
     };
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
-    use rattler_networking::{
-        retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder},
-        AuthenticatedClient,
-    };
+    use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use std::{fs::File, net::SocketAddr, path::Path, sync::Arc};
     use tempfile::tempdir;
     use tokio::sync::Mutex;
@@ -427,7 +421,7 @@ mod test {
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                AuthenticatedClient::default(),
+                reqwest::Client::default().into(),
                 DoNotRetryPolicy,
             )
             .await;
@@ -444,7 +438,7 @@ mod test {
             .get_or_fetch_from_url_with_retry(
                 ArchiveIdentifier::try_from_filename(archive_name).unwrap(),
                 server_url.join(archive_name).unwrap(),
-                AuthenticatedClient::default(),
+                reqwest::Client::default().into(),
                 ExponentialBackoffBuilder::default().build_with_max_retries(3),
             )
             .await;

@@ -15,7 +15,7 @@ use rattler_conda_types::{
     PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{
-    retry_policies::default_retry_policy, AuthenticatedClient, AuthenticationStorage,
+    retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
 };
 use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
@@ -23,6 +23,7 @@ use rattler_repodata_gateway::fetch::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{libsolv_c, resolvo, SolverImpl, SolverTask};
 use reqwest::Client;
+use std::sync::Arc;
 use std::{
     borrow::Cow,
     env,
@@ -117,8 +118,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .expect("failed to create client");
 
     let authentication_storage = AuthenticationStorage::default();
+    let download_client = reqwest_middleware::ClientBuilder::new(download_client)
+        .with_arc(Arc::new(AuthenticationMiddleware::new(
+            authentication_storage,
+        )))
+        .build();
 
-    let download_client = AuthenticatedClient::from_client(download_client, authentication_storage);
     let multi_progress = global_multi_progress();
 
     let repodata_cache_path = cache_dir.join("repodata");
@@ -297,7 +302,7 @@ async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
     cache_dir: PathBuf,
-    download_client: AuthenticatedClient,
+    download_client: reqwest_middleware::ClientWithMiddleware,
 ) -> anyhow::Result<()> {
     // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
@@ -385,7 +390,7 @@ async fn execute_transaction(
 #[allow(clippy::too_many_arguments)]
 async fn execute_operation(
     target_prefix: &Path,
-    download_client: AuthenticatedClient,
+    download_client: reqwest_middleware::ClientWithMiddleware,
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     download_pb: Option<&ProgressBar>,
@@ -551,7 +556,7 @@ async fn fetch_repo_data_records_with_progress(
     channel: Channel,
     platform: Platform,
     repodata_cache: &Path,
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
     multi_progress: indicatif::MultiProgress,
 ) -> Result<Option<SparseRepoData>, anyhow::Error> {
     // Create a progress bar

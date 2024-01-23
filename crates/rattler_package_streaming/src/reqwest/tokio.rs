@@ -4,7 +4,6 @@
 use crate::{ExtractError, ExtractResult};
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
-use rattler_networking::AuthenticatedClient;
 use reqwest::Response;
 use std::path::Path;
 use tokio::io::BufReader;
@@ -12,9 +11,15 @@ use tokio_util::either::Either;
 use tokio_util::io::StreamReader;
 use url::Url;
 
+fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
+    response
+        .error_for_status()
+        .map_err(reqwest_middleware::Error::Reqwest)
+}
+
 async fn get_reader(
     url: Url,
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
 ) -> Result<impl tokio::io::AsyncRead, ExtractError> {
     if url.scheme() == "file" {
         let file = tokio::fs::File::open(url.to_file_path().expect("..."))
@@ -28,7 +33,7 @@ async fn get_reader(
             .get(url.clone())
             .send()
             .await
-            .and_then(Response::error_for_status)
+            .and_then(error_for_status)
             .map_err(ExtractError::ReqwestError)?;
 
         // Get the response as a stream
@@ -47,10 +52,11 @@ async fn get_reader(
 /// # async fn main() {
 /// # use std::path::Path;
 /// use url::Url;
-/// use rattler_networking::AuthenticatedClient;
+/// use reqwest::Client;
+/// use reqwest_middleware::ClientWithMiddleware;
 /// use rattler_package_streaming::reqwest::tokio::extract_tar_bz2;
 /// let _ = extract_tar_bz2(
-///     AuthenticatedClient::default(),
+///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2").unwrap(),
 ///     Path::new("/tmp"))
 ///     .await
@@ -58,7 +64,7 @@ async fn get_reader(
 /// # }
 /// ```
 pub async fn extract_tar_bz2(
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
@@ -74,10 +80,11 @@ pub async fn extract_tar_bz2(
 /// # async fn main() {
 /// # use std::path::Path;
 /// use rattler_package_streaming::reqwest::tokio::extract_conda;
-/// use rattler_networking::AuthenticatedClient;
+/// use reqwest::Client;
+/// use reqwest_middleware::ClientWithMiddleware;
 /// use url::Url;
 /// let _ = extract_conda(
-///     AuthenticatedClient::default(),
+///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"))
 ///     .await
@@ -85,7 +92,7 @@ pub async fn extract_tar_bz2(
 /// # }
 /// ```
 pub async fn extract_conda(
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
@@ -103,9 +110,10 @@ pub async fn extract_conda(
 /// # use std::path::Path;
 /// use url::Url;
 /// use rattler_package_streaming::reqwest::tokio::extract;
-/// use rattler_networking::AuthenticatedClient;
+/// use reqwest::Client;
+/// use reqwest_middleware::ClientWithMiddleware;
 /// let _ = extract(
-///     AuthenticatedClient::default(),
+///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"))
 ///     .await
@@ -113,7 +121,7 @@ pub async fn extract_conda(
 /// # }
 /// ```
 pub async fn extract(
-    client: AuthenticatedClient,
+    client: reqwest_middleware::ClientWithMiddleware,
     url: Url,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {

@@ -13,7 +13,6 @@ pub mod seek;
 pub mod reqwest;
 
 pub mod fs;
-#[cfg(feature = "tokio")]
 pub mod tokio;
 pub mod write;
 
@@ -38,7 +37,7 @@ pub enum ExtractError {
 
     #[cfg(feature = "reqwest")]
     #[error(transparent)]
-    ReqwestError(::reqwest::Error),
+    ReqwestError(::reqwest_middleware::Error),
 
     #[error("unsupported package archive format")]
     UnsupportedArchiveType,
@@ -53,7 +52,20 @@ pub enum ExtractError {
 #[cfg(feature = "reqwest")]
 impl From<::reqwest::Error> for ExtractError {
     fn from(err: ::reqwest::Error) -> Self {
-        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err))
+        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err).into())
+    }
+}
+
+#[cfg(feature = "reqwest")]
+impl From<::reqwest_middleware::Error> for ExtractError {
+    fn from(err: ::reqwest_middleware::Error) -> Self {
+        let err = if let reqwest_middleware::Error::Reqwest(err) = err {
+            rattler_networking::redact_known_secrets_from_error(err).into()
+        } else {
+            err
+        };
+
+        ExtractError::ReqwestError(err)
     }
 }
 

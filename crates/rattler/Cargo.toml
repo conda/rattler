@@ -36,10 +36,11 @@ pin-project-lite = "0.2.13"
 rattler_conda_types = { version = "0.16.2", path = "../rattler_conda_types" }
 rattler_digest = { version = "0.16.2", path = "../rattler_digest" }
 rattler_networking = { version = "0.16.2", path = "../rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.16.2", path = "../rattler_package_streaming", features = ["reqwest", "tokio"], default-features = false }
+rattler_package_streaming = { version = "0.16.2", path = "../rattler_package_streaming", features = ["reqwest"], default-features = false }
 reflink-copy = "0.1.14"
 regex = "1.9.6"
 reqwest = { version = "0.11.22", default-features = false, features = ["stream", "json", "gzip"] }
+reqwest-middleware = "0.2.4"
 serde = { version = "1.0.188", features = ["derive"] }
 serde_json = { version = "1.0.107", features = ["raw_value"] }
 serde_with = "3.3.0"

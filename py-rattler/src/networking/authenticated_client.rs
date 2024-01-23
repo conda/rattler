@@ -1,11 +1,12 @@
 use pyo3::{pyclass, pymethods};
-use rattler_networking::AuthenticatedClient;
+use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage};
+use reqwest_middleware::ClientWithMiddleware;
 
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
 pub struct PyAuthenticatedClient {
-    pub(crate) inner: AuthenticatedClient,
+    pub(crate) inner: ClientWithMiddleware,
 }
 
 #[pymethods]
@@ -16,13 +17,13 @@ impl PyAuthenticatedClient {
     }
 }
 
-impl From<AuthenticatedClient> for PyAuthenticatedClient {
-    fn from(value: AuthenticatedClient) -> Self {
+impl From<ClientWithMiddleware> for PyAuthenticatedClient {
+    fn from(value: ClientWithMiddleware) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PyAuthenticatedClient> for AuthenticatedClient {
+impl From<PyAuthenticatedClient> for ClientWithMiddleware {
     fn from(value: PyAuthenticatedClient) -> Self {
         value.inner
     }
@@ -30,6 +31,12 @@ impl From<PyAuthenticatedClient> for AuthenticatedClient {
 
 impl Default for PyAuthenticatedClient {
     fn default() -> Self {
-        AuthenticatedClient::default().into()
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(AuthenticationMiddleware::new(
+                AuthenticationStorage::default(),
+            ))
+            .build();
+
+        Self { inner: client }
     }
 }
