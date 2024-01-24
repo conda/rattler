@@ -798,7 +798,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -842,7 +842,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
             &InstallOptions::default(),
@@ -886,7 +886,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &InstallDriver::default(),
             &InstallOptions::default(),
@@ -934,7 +934,7 @@ mod tests {
         execute_transaction(
             transaction,
             target_prefix.path(),
-            &AuthenticatedClient::default(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
             &install_driver,
             &InstallOptions::default(),
