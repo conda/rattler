@@ -160,6 +160,19 @@ impl Channel {
         }
     }
 
+    /// Returns the name of the channel
+    pub fn name(&self) -> &str {
+        match self.base_url().scheme() {
+            // The name of the channel is only defined for http and https channels.
+            // If the name is not defined we return the base url.
+            "https" | "http" => self
+                .name
+                .as_deref()
+                .unwrap_or_else(|| self.base_url.as_str()),
+            _ => self.base_url.as_str(),
+        }
+    }
+
     /// Returns the base Url of the channel. This does not include the platform part.
     pub fn base_url(&self) -> &Url {
         &self.base_url
@@ -442,6 +455,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
+        assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
 
         assert_eq!(channel, Channel::from_name("conda-forge/", None, &config));
@@ -458,6 +472,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
+        assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
         assert_eq!(
             channel.base_url().to_string(),
@@ -471,6 +486,7 @@ mod tests {
 
         let channel = Channel::from_str("file:///var/channels/conda-forge", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
+        assert_eq!(channel.name(), "file:///var/channels/conda-forge/");
         assert_eq!(
             channel.base_url,
             Url::from_str("file:///var/channels/conda-forge/").unwrap()
@@ -484,6 +500,12 @@ mod tests {
         let current_dir = std::env::current_dir().expect("no current dir?");
         let channel = Channel::from_str("./dir/does/not_exist", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
+        assert_eq!(
+            channel.name(),
+            Url::from_directory_path(absolute_path(Path::new("./dir/does/not_exist")))
+                .unwrap()
+                .as_str()
+        );
         assert_eq!(channel.platforms, None);
         assert_eq!(
             channel.base_url().to_file_path().unwrap(),
@@ -502,6 +524,7 @@ mod tests {
         );
         assert_eq!(channel.name, None);
         assert_eq!(channel.platforms, None);
+        assert_eq!(channel.name(), "http://localhost:1234/");
 
         let noarch_url = channel.platform_url(Platform::NoArch);
         assert_eq!(noarch_url.to_string(), "http://localhost:1234/noarch/");
