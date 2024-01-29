@@ -24,3 +24,6 @@ tag-prefix = ""
 
 [profile.bench]
 lto = true
+
+[patch.crates-io]
+resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
