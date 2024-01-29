@@ -1,6 +1,6 @@
 use crate::resolvo::{CondaDependencyProvider, SolverMatchSpec};
 use rattler_conda_types::Version;
-use resolvo::{Dependencies, KnownDependencies, SolvableId, SolverCache, VersionSetId};
+use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
