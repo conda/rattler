@@ -141,7 +141,7 @@ pub fn write_tar_bz2_package<'a, W: Write, F1: Fn(usize), F2: Fn(usize)>(
             } else {
                 // 0 for all other files would mean a huge number of symblinks
                 // or folders will still start with 100% filled progress bar
-                1
+                acc + 1
             })
         })?;
 
