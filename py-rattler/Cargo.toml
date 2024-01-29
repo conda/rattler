@@ -54,5 +54,12 @@ url = "2.4.1"
 
 openssl = { version = "0.10", optional = true }
 
+[build-dependencies]
+pyo3-build-config = "0.20"
+
+
+[patch.crates-io]
+resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
+
 # Prevent package from thinking it's in the workspace
 [workspace]
