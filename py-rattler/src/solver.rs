@@ -1,11 +1,35 @@
-use pyo3::{pyfunction, PyResult, Python};
+use pyo3::{pyclass, pyfunction, pymethods, PyResult, Python};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{resolvo::Solver, SolverImpl, SolverTask};
+use rattler_solve::{resolvo::Solver, SolverImpl, SolverOptions, SolverTask};
 
 use crate::{
     error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage,
     match_spec::PyMatchSpec, record::PyRecord, repo_data::sparse::PySparseRepoData,
 };
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PySolverOptions {
+    pub timeout: Option<std::time::Duration>,
+}
+
+#[pymethods]
+impl PySolverOptions {
+    #[new]
+    pub fn __init__(timeout: Option<u64>) -> Self {
+        Self {
+            timeout: timeout.map(std::time::Duration::from_micros),
+        }
+    }
+}
+
+impl From<PySolverOptions> for SolverOptions {
+    fn from(py_solver_options: PySolverOptions) -> Self {
+        Self {
+            timeout: py_solver_options.timeout,
+        }
+    }
+}
 
 #[pyfunction]
 pub fn py_solve(
@@ -15,6 +39,7 @@ pub fn py_solve(
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
+    solver_options: PySolverOptions,
 ) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
         let package_names = specs
@@ -42,7 +67,7 @@ pub fn py_solve(
         };
 
         Ok(Solver
-            .solve(task)
+            .solve(task, &solver_options.into())
             .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
             .map_err(PyRattlerError::from)?)
     })
