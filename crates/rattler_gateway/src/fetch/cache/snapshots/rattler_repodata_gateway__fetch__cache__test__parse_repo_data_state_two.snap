@@ -1,0 +1,20 @@
+---
+source: crates/rattler_repodata_gateway/src/fetch/cache/mod.rs
+expression: "RepoDataState::from_str(JSON_STATE_TWO).unwrap()"
+---
+url: "https://repo.anaconda.com/pkgs/main/osx-64/repodata.json.zst"
+etag: "W/\"2f8b1ff101d75e40adf28c3fcbcd330b\""
+mod: "Thu, 18 May 2023 13:28:44 GMT"
+cache_control: "public, max-age=30"
+mtime_ns: 1684418349941482000
+size: 38001429
+blake2_hash: a1bb42ccd11d5610189380b8b0a71ca0fa7e3273ff6235ae1d543606041eb3bd
+has_zst:
+  value: true
+  last_checked: "2023-05-18T13:59:07.112638Z"
+has_bz2:
+  value: true
+  last_checked: "2023-05-18T13:59:07.112638Z"
+has_jlap: ~
+jlap: ~
+
