@@ -39,7 +39,7 @@ pub fn py_solve(
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
-    solver_options: PySolverOptions,
+    solver_options: Option<PySolverOptions>,
 ) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
         let package_names = specs
@@ -66,8 +66,10 @@ pub fn py_solve(
             specs: specs.into_iter().map(Into::into).collect(),
         };
 
+        let solver_options = solver_options.map(Into::into).unwrap_or_default();
+
         Ok(Solver
-            .solve(task, &solver_options.into())
+            .solve(task, &solver_options)
             .map(|res| res.into_iter().map(Into::into).collect::<Vec<PyRecord>>())
             .map_err(PyRattlerError::from)?)
     })
