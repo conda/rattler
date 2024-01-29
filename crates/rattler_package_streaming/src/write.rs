@@ -113,12 +113,13 @@ impl CompressionLevel {
 /// # See also
 ///
 /// * [`write_conda_package`]
-pub fn write_tar_bz2_package<W: Write>(
+pub fn write_tar_bz2_package<'a, W: Write, F1: Fn(usize), F2: Fn(usize)>(
     writer: W,
     base_path: &Path,
     paths: &[PathBuf],
     compression_level: CompressionLevel,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    progress_bar_func: Option<(F1, F2)>,
 ) -> Result<(), std::io::Error> {
     let mut archive = tar::Builder::new(bzip2::write::BzEncoder::new(
         writer,
@@ -128,8 +129,36 @@ pub fn write_tar_bz2_package<W: Write>(
 
     // sort paths alphabetically, and sort paths beginning with `info/` first
     let (info_paths, other_paths) = sort_paths(paths, base_path);
-    for path in info_paths.chain(other_paths) {
-        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
+    let paths = info_paths.chain(other_paths).collect::<Vec<_>>();
+
+    let size = paths
+        .iter()
+        .try_fold(0usize, |acc, p| -> std::io::Result<usize> {
+            // make sure to not follow symlinks
+            let meta = p.symlink_metadata()?;
+            Ok(if meta.is_file() {
+                acc + meta.len() as usize
+            } else {
+                // 0 for all other files would mean a huge number of symblinks
+                // or folders will still start with 100% filled progress bar
+                1
+            })
+        })?;
+
+    let mut progress_bar_driver = None;
+    if let Some((progress_bar_start, progress_bar_update)) = progress_bar_func {
+        progress_bar_start(size);
+        _ = progress_bar_driver.insert(progress_bar_update);
+    }
+
+    for path in paths {
+        append_path_to_archive(
+            &mut archive,
+            base_path,
+            &path,
+            timestamp,
+            progress_bar_driver.as_ref(),
+        )?;
     }
 
     archive.into_inner()?.finish()?;
@@ -151,7 +180,7 @@ fn write_zst_archive<W: Write>(
     let mut archive = tar::Builder::new(&tar_path);
     archive.follow_symlinks(false);
     for path in paths {
-        append_path_to_archive(&mut archive, base_path, &path, timestamp)?;
+        append_path_to_archive::<fn(usize)>(&mut archive, base_path, &path, timestamp, None)?;
     }
     archive.finish()?;
 
@@ -266,11 +295,12 @@ fn trace_file_error(path: &Path, err: std::io::Error) -> std::io::Error {
     std::io::Error::new(err.kind(), format!("{}: {}", path.display(), err))
 }
 
-fn append_path_to_archive(
+fn append_path_to_archive<F: Fn(usize)>(
     archive: &mut tar::Builder<impl Write>,
     base_path: &Path,
     path: &Path,
     timestamp: Option<&chrono::DateTime<chrono::Utc>>,
+    progress_bar_driver: Option<F>,
 ) -> Result<(), std::io::Error> {
     // create a tar header
     let mut header = prepare_header(&base_path.join(path), timestamp)
@@ -279,15 +309,20 @@ fn append_path_to_archive(
     if header.entry_type().is_file() {
         let file = fs::File::open(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
-
         archive.append_data(&mut header, path, &file)?;
+
+        // increment the progress bar by the file size
+        let file_metadata = base_path.join(path).symlink_metadata()?;
+        progress_bar_driver.map(|f| f(file_metadata.len() as usize));
     } else if header.entry_type().is_symlink() || header.entry_type().is_hard_link() {
         let target = fs::read_link(base_path.join(path))
             .map_err(|err| trace_file_error(&base_path.join(path), err))?;
 
         archive.append_link(&mut header, path, target)?;
+        progress_bar_driver.map(|f| f(1));
     } else if header.entry_type().is_dir() {
         archive.append_data(&mut header, path, std::io::empty())?;
+        progress_bar_driver.map(|f| f(1));
     } else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
