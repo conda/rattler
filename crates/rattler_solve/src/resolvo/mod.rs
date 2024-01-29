@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
+use crate::{IntoRepoData, SolveError, SolverOptions, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
@@ -165,6 +165,8 @@ pub(crate) struct CondaDependencyProvider<'a> {
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
     parse_match_spec_cache: RefCell<HashMap<&'a str, VersionSetId>>,
+
+    stop_time: Option<std::time::SystemTime>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -174,6 +176,7 @@ impl<'a> CondaDependencyProvider<'a> {
         locked_records: &'a [RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
+        stop_time: Option<std::time::SystemTime>,
     ) -> Self {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -333,8 +336,15 @@ impl<'a> CondaDependencyProvider<'a> {
             records,
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
+            stop_time,
         }
     }
+}
+
+/// The reason why the solver was cancelled
+pub enum CancelReason {
+    /// The solver was cancelled because the timeout was reached
+    Timeout,
 }
 
 impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a> {
@@ -378,6 +388,15 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
 
         Dependencies::Known(dependencies)
     }
+
+    fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
+        if let Some(stop_time) = self.stop_time {
+            if std::time::SystemTime::now() > stop_time {
+                return Some(Box::new(CancelReason::Timeout));
+            }
+        }
+        None
+    }
 }
 
 /// Displays the different candidates by their version and sorted by their version
@@ -413,7 +432,12 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
+        options: &SolverOptions,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
+        let stop_time = options
+            .timeout
+            .map(|timeout| std::time::SystemTime::now() + timeout);
+
         // Construct a provider that can serve the data.
         let provider = CondaDependencyProvider::from_solver_task(
             task.available_packages.into_iter().map(|r| r.into()),
@@ -421,6 +445,7 @@ impl super::SolverImpl for Solver {
             &task.pinned_packages,
             &task.virtual_packages,
             task.specs.clone().as_ref(),
+            stop_time,
         );
 
         // Construct the requirements that the solver needs to satisfy.

@@ -11,6 +11,12 @@ pub mod resolvo;
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
 
+/// Represents the options that can be passed to a [`SolverImpl`] implementation
+#[derive(Clone, Copy, Default)]
+pub struct SolverOptions {
+    /// The timeout for the solver
+    pub timeout: Option<std::time::Duration>,
+}
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
     /// The repo data associated to a channel and platform combination
@@ -25,6 +31,7 @@ pub trait SolverImpl {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
+        options: &SolverOptions,
     ) -> Result<Vec<RepoDataRecord>, SolveError>;
 }
 

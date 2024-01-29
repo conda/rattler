@@ -21,7 +21,10 @@ use rattler_repodata_gateway::fetch::{
     CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{libsolv_c, resolvo, SolverImpl, SolverTask};
+use rattler_solve::{
+    libsolv_c::{self},
+    resolvo, SolverImpl, SolverOptions, SolverTask,
+};
 use reqwest::Client;
 use std::sync::Arc;
 use std::{
@@ -53,7 +56,10 @@ pub struct Opt {
     virtual_package: Option<Vec<String>>,
 
     #[clap(long)]
-    use_experimental_libsolv_rs: bool,
+    use_resolvo: bool,
+
+    #[clap(long)]
+    timeout: Option<u64>,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -225,12 +231,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
-    let use_libsolv_rs = opt.use_experimental_libsolv_rs;
     let required_packages = wrap_in_progress("solving", move || {
-        if use_libsolv_rs {
-            resolvo::Solver.solve(solver_task)
+        if opt.use_resolvo {
+            let timeout = opt.timeout.map(Duration::from_millis);
+            resolvo::Solver.solve(solver_task, &SolverOptions { timeout })
         } else {
-            libsolv_c::Solver.solve(solver_task)
+            libsolv_c::Solver.solve(solver_task, &SolverOptions::default())
         }
     })?;
 

@@ -49,12 +49,14 @@ pub(super) fn compare_candidates<'a>(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_dependencies = solver
-        .get_or_cache_dependencies(a)
-        .expect("should not get here, resolution process aborted");
-    let b_dependencies = solver
-        .get_or_cache_dependencies(b)
-        .expect("should not get here, resolution process aborted");
+    let (a_dependencies, b_dependencies) = match (
+        solver.get_or_cache_dependencies(a),
+        solver.get_or_cache_dependencies(b),
+    ) {
+        (Ok(a_deps), Ok(b_deps)) => (a_deps, b_deps),
+        // If either call fails, it's likely due to solver cancellation; thus, we can't compare dependencies
+        _ => return Ordering::Equal,
+    };
 
     // If the MatchSpecs are known use these
     // map these into a HashMap<PackageName, VersionSetId>
