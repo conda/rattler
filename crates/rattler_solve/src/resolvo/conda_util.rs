@@ -59,7 +59,7 @@ pub(super) fn compare_candidates<'a>(
     // If the MatchSpecs are known use these
     // map these into a HashMap<PackageName, VersionSetId>
     // for comparison later
-    let (a_specs_by_name, b_specs_by_name) = if let Dependencies::Known(a_known) = a_dependencies {
+    let (a_specs_by_name, b_specs_by_name) = if let (Dependencies::Known(a_known), Dependencies::Known(b_known)) = (a_dependencies, b_dependencies) {
         let a_match_specs = a_known
             .requirements
             .iter()
