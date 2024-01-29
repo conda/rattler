@@ -70,17 +70,13 @@ pub(super) fn compare_candidates<'a>(
                 .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
                 .collect::<HashMap<_, _>>();
 
-            if let Dependencies::Known(b_known) = b_dependencies {
-                let b_match_specs = b_known
-                    .requirements
-                    .iter()
-                    .map(|id| (*id, pool.resolve_version_set(*id)))
-                    .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
-                    .collect::<HashMap<_, _>>();
-                (a_match_specs, b_match_specs)
-            } else {
-                (a_match_specs, HashMap::new())
-            }
+            let b_match_specs = b_known
+                .requirements
+                .iter()
+                .map(|id| (*id, pool.resolve_version_set(*id)))
+                .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
+                .collect::<HashMap<_, _>>();
+            (a_match_specs, b_match_specs)
         } else {
             (HashMap::new(), HashMap::new())
         };
