@@ -7,8 +7,9 @@ use rattler_conda_types::{
     RepoDataRecord,
 };
 use resolvo::{
-    Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
-    Solver as LibSolvRsSolver, SolverCache, VersionSet, VersionSetId,
+    Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
+    SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
+    VersionSetId,
 };
 use std::{
     cell::RefCell,
@@ -357,12 +358,12 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 
     fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
+        let mut dependencies = KnownDependencies::default();
         let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
-            return Dependencies::default();
+            return Dependencies::Known(dependencies);
         };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
-        let mut dependencies = Dependencies::default();
         for depends in rec.package_record.depends.iter() {
             let version_set_id =
                 parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache).unwrap();
@@ -375,7 +376,7 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
             dependencies.constrains.push(version_set_id);
         }
 
-        dependencies
+        Dependencies::Known(dependencies)
     }
 }
 
@@ -436,11 +437,20 @@ impl super::SolverImpl for Solver {
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver.solve(root_requirements).map_err(|problem| {
-            SolveError::Unsolvable(vec![problem
-                .display_user_friendly(&solver, &CondaSolvableDisplay)
-                .to_string()])
-        })?;
+        let solvables = solver
+            .solve(root_requirements)
+            .map_err(|unsolvable_or_cancelled| {
+                match unsolvable_or_cancelled {
+                    UnsolvableOrCancelled::Unsolvable(problem) => {
+                        SolveError::Unsolvable(vec![problem
+                            .display_user_friendly(&solver, &CondaSolvableDisplay)
+                            .to_string()])
+                    }
+                    // We are not doing this as of yet
+                    // put a generic message in here for now
+                    UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
+                }
+            })?;
 
         // Get the resulting packages from the solver.
         let required_records = solvables

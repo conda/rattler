@@ -42,6 +42,9 @@ pub enum SolveError {
     /// Error when converting matchspec
     #[error(transparent)]
     ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
+
+    /// To support Resolvo cancellation
+    Cancelled,
 }
 
 impl fmt::Display for SolveError {
@@ -59,6 +62,9 @@ impl fmt::Display for SolveError {
             }
             SolveError::ParseMatchSpecError(e) => {
                 write!(f, "Error parsing match spec: {e}")
+            }
+            SolveError::Cancelled => {
+                write!(f, "Solve operation has been cancelled")
             }
         }
     }

@@ -1,6 +1,6 @@
 use crate::resolvo::{CondaDependencyProvider, SolverMatchSpec};
 use rattler_conda_types::Version;
-use resolvo::{SolvableId, SolverCache, VersionSetId};
+use resolvo::{Dependencies, KnownDependencies, SolvableId, SolverCache, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -49,23 +49,38 @@ pub(super) fn compare_candidates<'a>(
 
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
-    let a_match_specs = solver
+    let a_dependencies = solver
         .get_or_cache_dependencies(a)
-        .requirements
-        .iter()
-        .map(|id| (*id, pool.resolve_version_set(*id)));
-    let b_match_specs = solver
+        .expect("should not get here, resolution process aborted");
+    let b_dependencies = solver
         .get_or_cache_dependencies(b)
-        .requirements
-        .iter()
-        .map(|id| (*id, pool.resolve_version_set(*id)));
+        .expect("should not get here, resolution process aborted");
 
-    let b_specs_by_name: HashMap<_, _> = b_match_specs
-        .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
-        .collect();
+    // If the MatchSpecs are known use these
+    // map these into a HashMap<PackageName, VersionSetId>
+    // for comparison later
+    let (a_specs_by_name, b_specs_by_name) = if let Dependencies::Known(a_known) = a_dependencies {
+        let a_match_specs = a_known
+            .requirements
+            .iter()
+            .map(|id| (*id, pool.resolve_version_set(*id)))
+            .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
+            .collect::<HashMap<_, _>>();
 
-    let a_specs_by_name =
-        a_match_specs.map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id));
+        if let Dependencies::Known(b_known) = b_dependencies {
+            let b_match_specs = b_known
+                .requirements
+                .iter()
+                .map(|id| (*id, pool.resolve_version_set(*id)))
+                .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
+                .collect::<HashMap<_, _>>();
+            (a_match_specs, b_match_specs)
+        } else {
+            (a_match_specs, HashMap::new())
+        }
+    } else {
+        (HashMap::new(), HashMap::new())
+    };
 
     let mut total_score = 0;
     for (a_dep_name, a_spec_id) in a_specs_by_name {
@@ -132,6 +147,14 @@ pub(super) fn find_highest_version<'a>(
         .entry(match_spec_id)
         .or_insert_with(|| {
             let candidates = solver.get_or_cache_matching_candidates(match_spec_id);
+
+            // Err only happens on cancellation, so we will not continue anyways
+            let candidates = if let Ok(candidates) = candidates {
+                candidates
+            } else {
+                return None;
+            };
+
             candidates
                 .iter()
                 .map(|id| solver.pool().resolve_solvable(*id).inner())
