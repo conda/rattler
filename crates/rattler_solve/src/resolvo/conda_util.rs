@@ -59,28 +59,31 @@ pub(super) fn compare_candidates<'a>(
     // If the MatchSpecs are known use these
     // map these into a HashMap<PackageName, VersionSetId>
     // for comparison later
-    let (a_specs_by_name, b_specs_by_name) = if let (Dependencies::Known(a_known), Dependencies::Known(b_known)) = (a_dependencies, b_dependencies) {
-        let a_match_specs = a_known
-            .requirements
-            .iter()
-            .map(|id| (*id, pool.resolve_version_set(*id)))
-            .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
-            .collect::<HashMap<_, _>>();
-
-        if let Dependencies::Known(b_known) = b_dependencies {
-            let b_match_specs = b_known
+    let (a_specs_by_name, b_specs_by_name) =
+        if let (Dependencies::Known(a_known), Dependencies::Known(b_known)) =
+            (a_dependencies, b_dependencies)
+        {
+            let a_match_specs = a_known
                 .requirements
                 .iter()
                 .map(|id| (*id, pool.resolve_version_set(*id)))
                 .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
                 .collect::<HashMap<_, _>>();
-            (a_match_specs, b_match_specs)
+
+            if let Dependencies::Known(b_known) = b_dependencies {
+                let b_match_specs = b_known
+                    .requirements
+                    .iter()
+                    .map(|id| (*id, pool.resolve_version_set(*id)))
+                    .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
+                    .collect::<HashMap<_, _>>();
+                (a_match_specs, b_match_specs)
+            } else {
+                (a_match_specs, HashMap::new())
+            }
         } else {
-            (a_match_specs, HashMap::new())
-        }
-    } else {
-        (HashMap::new(), HashMap::new())
-    };
+            (HashMap::new(), HashMap::new())
+        };
 
     let mut total_score = 0;
     for (a_dep_name, a_spec_id) in a_specs_by_name {
