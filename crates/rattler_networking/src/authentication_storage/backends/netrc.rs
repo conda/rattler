@@ -99,7 +99,6 @@ impl StorageBackend for NetRcStorage {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,14 +111,19 @@ mod tests {
         let path = file.path().join(".testnetrc");
 
         let mut netrc = std::fs::File::create(&path).unwrap();
-        netrc.write_all(b"machine test\nlogin test\npassword password\n").unwrap();
+        netrc
+            .write_all(b"machine test\nlogin test\npassword password\n")
+            .unwrap();
         netrc.flush().unwrap();
 
         let storage = NetRcStorage::from_path(path.as_path()).unwrap();
-        assert_eq!(storage.get("test").unwrap(), Some(Authentication::BasicHTTP {
-            username: "test".to_string(),
-            password: "password".to_string(),
-        }));
+        assert_eq!(
+            storage.get("test").unwrap(),
+            Some(Authentication::BasicHTTP {
+                username: "test".to_string(),
+                password: "password".to_string(),
+            })
+        );
 
         assert_eq!(storage.get("test_unknown").unwrap(), None);
     }
@@ -130,7 +134,9 @@ mod tests {
         let path = file.path().join(".testnetrc2");
 
         let mut netrc = std::fs::File::create(&path).unwrap();
-        netrc.write_all(b"machine test2\nlogin test2\npassword password2\n").unwrap();
+        netrc
+            .write_all(b"machine test2\nlogin test2\npassword password2\n")
+            .unwrap();
         netrc.flush().unwrap();
 
         let old_netrc = env::var("NETRC");
@@ -138,10 +144,13 @@ mod tests {
 
         let storage = NetRcStorage::from_env().unwrap();
 
-        assert_eq!(storage.get("test2").unwrap(), Some(Authentication::BasicHTTP {
-            username: "test2".to_string(),
-            password: "password2".to_string(),
-        }));
+        assert_eq!(
+            storage.get("test2").unwrap(),
+            Some(Authentication::BasicHTTP {
+                username: "test2".to_string(),
+                password: "password2".to_string(),
+            })
+        );
 
         assert_eq!(storage.get("test_unknown").unwrap(), None);
 
