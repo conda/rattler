@@ -1,8 +1,17 @@
 use std::{future::IntoFuture, io::Write, sync::Arc};
 
-use axum::{extract::Path, http::{HeaderMap, StatusCode}, response::IntoResponse, routing::get, Router};
+use axum::{
+    extract::Path,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
 
-use crate::{authentication_storage::backends::netrc::NetRcStorage, AuthenticationMiddleware, AuthenticationStorage};
+use crate::{
+    authentication_storage::backends::netrc::NetRcStorage, AuthenticationMiddleware,
+    AuthenticationStorage,
+};
 
 async fn health_checker_handler() -> impl IntoResponse {
     return "test";
@@ -42,7 +51,6 @@ async fn token_auth(Path(token): Path<String>) -> impl IntoResponse {
     }
     return StatusCode::UNAUTHORIZED;
 }
-
 
 struct SimpleServer {
     shutdown_sender: Option<oneshot::Sender<()>>,
@@ -155,10 +163,14 @@ async fn test_netrc() {
 
     // write netrc file
     let mut netrc_file = tempfile::NamedTempFile::new().unwrap();
-    netrc_file.write_all(b"machine 0.0.0.0\nlogin test\npassword test").unwrap();
+    netrc_file
+        .write_all(b"machine 0.0.0.0\nlogin test\npassword test")
+        .unwrap();
 
     let mut storage = AuthenticationStorage::new();
-    storage.add_backend(Arc::from(NetRcStorage::from_path(netrc_file.path()).unwrap()));
+    storage.add_backend(Arc::from(
+        NetRcStorage::from_path(netrc_file.path()).unwrap(),
+    ));
     let middleware = AuthenticationMiddleware::new(storage);
 
     let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::default())
