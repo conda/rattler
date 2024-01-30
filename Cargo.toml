@@ -26,4 +26,4 @@ tag-prefix = ""
 lto = true
 
 [patch.crates-io]
-resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
+#resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
