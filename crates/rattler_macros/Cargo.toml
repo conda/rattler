@@ -19,8 +19,8 @@ name = "tests"
 path = "tests/tests.rs"
 
 [dependencies]
-syn = "2.0.37"
-quote = "1.0.33"
+syn = { workspace = true }
+quote = { workspace = true }
 
 [dev-dependencies]
 trybuild = { version = "1.0.85", features = ["diff"] }

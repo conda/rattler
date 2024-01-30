@@ -11,12 +11,12 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-libc = { version = "0.2" }
-libz-sys = { version = "1.1.12", default-features = false, features = ["static"] }
-cfg-if = "1.0.0"
+cfg-if = { workspace = true }
+libc = { workspace = true }
+libz-sys = { workspace = true, features = ["static"] }
 
 [build-dependencies]
-anyhow = "1.0.75"
+anyhow = { workspace = true }
 # 1.0.84 would fail to compile this library specifically on macOS. 
 # For now we just pin an older version.
 cc = "=1.0.83"

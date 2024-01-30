@@ -11,43 +11,43 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-async-compression = { version = "0.4.3", features = ["gzip", "tokio", "bzip2", "zstd"] }
-blake2 = "0.10.6"
-cache_control = "0.2.0"
-chrono = { version = "0.4.31", default-features = false, features = ["std", "serde", "alloc", "clock"] }
-humansize = "2.1.3"
-humantime = "2.1.0"
-futures = "0.3.28"
-reqwest = { version = "0.11.22", default-features = false, features = ["stream"] }
-reqwest-middleware = "0.2.4"
-tokio-util = { version = "0.7.9", features = ["codec", "io"] }
-tempfile = "3.8.0"
-tracing = "0.1.37"
-thiserror = "1.0.49"
-url = { version = "2.4.1", features = ["serde"] }
-tokio = { version = "1.32.0", features = ["rt", "io-util"] }
-anyhow = "1.0.75"
-serde = { version = "1.0.188", features = ["derive"] }
-serde_json = { version = "1.0.107" }
-pin-project-lite = "0.2.13"
-md-5 = "0.10.6"
-rattler_digest = { version = "0.16.2", path = "../rattler_digest", features = ["tokio", "serde"] }
-rattler_conda_types = { version = "0.16.2", path = "../rattler_conda_types", optional = true }
-fxhash = { version = "0.2.1", optional = true }
-memmap2 = { version = "0.7.1", optional = true }
-ouroboros = { version = "0.17.2", optional = true }
-serde_with = "3.3.0"
-superslice = { version = "1.0.0", optional = true }
-itertools = { version = "0.11.0", optional = true }
-json-patch = "1.1.0"
-hex = { version = "0.4.3", features = ["serde"] }
-rattler_networking = { version = "0.16.2", path = "../rattler_networking", default-features = false }
+async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
+blake2 = { workspace = true }
+cache_control = { workspace = true }
+chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
+humansize = { workspace = true }
+humantime = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+reqwest-middleware = { workspace = true }
+tokio-util = { workspace = true, features = ["codec", "io"] }
+tempfile = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true, features = ["serde"] }
+tokio = { workspace = true, features = ["rt", "io-util"] }
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+pin-project-lite = { workspace = true }
+md-5 = { workspace = true }
+rattler_digest = { workspace = true, features = ["tokio", "serde"] }
+rattler_conda_types = { workspace = true, optional = true }
+fxhash = { workspace = true, optional = true }
+memmap2 = { workspace = true, optional = true }
+ouroboros = { workspace = true, optional = true }
+serde_with = { workspace = true }
+superslice = { workspace = true, optional = true }
+itertools = { workspace = true, optional = true }
+json-patch = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
+rattler_networking = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2"
+libc = { workspace =true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48.0", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
+windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
 
 [dev-dependencies]
 hex-literal = "0.4.1"
