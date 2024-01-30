@@ -35,16 +35,16 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
-rand = "0.8.5"
-insta = { version = "1.33.0", features = ["yaml", "redactions", "toml"] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
-tempfile = "3.8.0"
-rstest = "0.18.2"
-assert_matches = "1.5.0"
-hex-literal = "0.4.1"
-criterion = { version = "0.5", features = ["html_reports"] }
-pathdiff = "0.2.1"
-dunce = "1.0.4"
+rand = { workspace = true }
+insta = { workspace = true, features = ["yaml", "redactions", "toml"] }
+rattler_package_streaming = { workspace = true, features = ["rustls-tls"] }
+tempfile = { workspace = true }
+rstest = { workspace = true }
+assert_matches = { workspace = true }
+hex-literal = { workspace = true }
+criterion = { workspace = true, features = ["html_reports"] }
+pathdiff = { workspace = true }
+dunce = { workspace = true }
 
 [[bench]]
 name = "parse"

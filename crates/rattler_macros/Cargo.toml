@@ -23,4 +23,4 @@ syn = { workspace = true }
 quote = { workspace = true }
 
 [dev-dependencies]
-trybuild = { version = "1.0.85", features = ["diff"] }
+trybuild = { workspace = true, features = ["diff"] }

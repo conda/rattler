@@ -40,7 +40,7 @@ url = { workspace = true }
 getrandom = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
-anyhow = "1.0.75"
-insta = { version = "1.33.0", features = ["json"] }
-tempfile = "3.8.0"
-tokio = { version = "1.33.0", features = ["macros"] }
+anyhow = { workspace = true }
+insta = { workspace = true, features = ["json"] }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }

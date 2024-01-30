@@ -25,9 +25,6 @@ tag-prefix = ""
 [profile.bench]
 lto = true
 
-[patch.crates-io]
-resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
-
 [workspace.dependencies]
 anyhow = "1.0.75"
 async-compression = { version = "0.4.3", features = ["gzip", "tokio", "bzip2", "zstd"] }
@@ -128,3 +125,30 @@ walkdir = "2.4.0"
 windows-sys = { version = "0.48.0", default-features = false }
 zip = { version = "0.6.6", default-features = false }
 zstd = { version = "0.12.4", default-features = false }
+
+axum = { version = "0.6.20", default-features = false }
+tower-http = { version = "0.4.4", default-features = false }
+async_zip = { version = "0.0.15", default-features = false }
+assert_matches = "1.5.0"
+rstest = { version = "0.18.2" }
+
+rand = "0.8.5"
+tracing-test = { version = "0.2.4" }
+insta = { version = "1.33.0" }
+rattler_lock = { version = "0.16.2", path = "crates/rattler_lock" }
+tower = { version = "0.4.13", default-features = false }
+
+hex-literal = "0.4.1"
+criterion = "0.5"
+pathdiff = "0.2.1"
+dunce = "1.0.4"
+
+cmake = "0.1.50"
+
+similar-asserts = "1.5.0"
+
+trybuild = { version = "1.0.85" }
+
+rstest_reuse = "0.6.0"
+
+test-log = "0.2.12"

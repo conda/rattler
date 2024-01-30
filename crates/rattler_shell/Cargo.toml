@@ -23,5 +23,5 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.33.0", features = ["yaml"] }
-tempdir = "0.3.7"
+insta = { workspace = true, features = ["yaml"] }
+tempdir = { workspace = true }

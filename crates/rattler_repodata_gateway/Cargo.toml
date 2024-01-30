@@ -44,20 +44,20 @@ hex = { workspace = true, features = ["serde"] }
 rattler_networking = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = { workspace =true }
+libc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_System_IO"] }
 
 [dev-dependencies]
-hex-literal = "0.4.1"
-tower-http = { version = "0.4.4", features = ["fs", "compression-gzip", "trace"] }
-tracing-test = { version = "0.2.4" }
-insta = { version = "1.33.0", features = ["yaml"] }
-axum = "0.6.20"
-assert_matches = "1.5.0"
-tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
-rstest = "0.18.2"
+assert_matches = { workspace = true }
+axum = { workspace = true }
+hex-literal = { workspace = true }
+insta = { workspace = true, features = ["yaml"] }
+rstest = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
+tracing-test = { workspace = true }
 
 [features]
 default = ['native-tls']

@@ -22,10 +22,10 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-axum = { version = "0.6.20", default-features = false, features = ["tokio"] }
-tokio = { version = "1.33.0", default-features = false, features = ["macros", "test-util"] }
-tower-http = { version = "0.4.4", default-features = false, features = ["fs"] }
-async_zip = { version = "0.0.15", default-features = false, features = ["tokio"] }
-assert_matches = "1.5.0"
-rstest = { version = "0.18.2" }
-url = { version = "2.4.1" }
+axum = { workspace = true, features = ["tokio"] }
+tokio = { workspace = true, features = ["macros", "test-util"] }
+tower-http = { workspace = true, features = ["fs"] }
+async_zip = { workspace = true, features = ["tokio"] }
+assert_matches = { workspace = true }
+rstest = { workspace = true }
+url = { workspace = true }

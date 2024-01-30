@@ -55,14 +55,14 @@ url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
-rand = "0.8.5"
-rstest = "0.18.2"
-tracing-test = { version = "0.2.4" }
-insta = { version = "1.33.0", features = ["yaml"] }
-rattler_lock = { path = "../rattler_lock" }
+assert_matches = { workspace = true }
+rand = { workspace = true }
+rstest = { workspace = true }
+tracing-test = { workspace = true }
+insta = { workspace = true, features = ["yaml"] }
+rattler_lock = { workspace = true }
 
-tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
-axum = "0.6.20"
-tower-http = { version = "0.4.4", features = ["fs"] }
-tower = { version = "0.4.13", default-features = false, features = ["util"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+axum = { workspace = true }
+tower-http = { workspace = true, features = ["fs"] }
+tower = { workspace = true, features = ["util"] }
