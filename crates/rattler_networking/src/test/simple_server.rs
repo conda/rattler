@@ -1,4 +1,4 @@
-use std::{future::IntoFuture, io::Write, sync::Arc};
+use std::{future::IntoFuture, io::Write, net::SocketAddr, sync::Arc};
 
 use axum::{
     extract::Path,
@@ -18,7 +18,6 @@ async fn health_checker_handler() -> impl IntoResponse {
 }
 
 async fn basic_http_auth(headers: HeaderMap) -> impl IntoResponse {
-    println!("{:?}", headers);
     match headers.get("Authorization") {
         Some(auth) => {
             let auth = auth.to_str().unwrap();
@@ -54,18 +53,20 @@ async fn token_auth(Path(token): Path<String>) -> impl IntoResponse {
 
 struct SimpleServer {
     shutdown_sender: Option<oneshot::Sender<()>>,
-    address: String,
+    local_address: SocketAddr,
 }
 
 async fn spawn() -> SimpleServer {
     let app = Router::new()
-        .route("/api/healthchecker", get(health_checker_handler))
+        .route("/api/health_checker", get(health_checker_handler))
         .route("/api/basic_http_auth", get(basic_http_auth))
         .route("/api/bearer_token_auth", get(bearer_token_auth))
         .route("/api/:token/token_auth", get(token_auth));
 
-    let address = "0.0.0.0:1234".to_string();
+    let address = "0.0.0.0:0".to_string();
     let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
+    let local_address = listener.local_addr().unwrap();
+
     let (tx, rx) = oneshot::channel();
 
     let server = axum::serve(listener, app)
@@ -77,16 +78,17 @@ async fn spawn() -> SimpleServer {
     tokio::spawn(server);
 
     println!("🚀 Server started successfully");
+    println!("🚀 Listening on {}", local_address);
 
     SimpleServer {
         shutdown_sender: Some(tx),
-        address,
+        local_address,
     }
 }
 
 impl SimpleServer {
     pub fn url(&self, path: &str) -> String {
-        format!("http://{}{}", self.address, path)
+        format!("http://{}{}", self.local_address, path)
     }
 }
 
@@ -98,7 +100,7 @@ impl Drop for SimpleServer {
     }
 }
 
-// #[tokio::test]
+#[tokio::test]
 async fn test_server() {
     let server = spawn().await;
 

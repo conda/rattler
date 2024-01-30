@@ -70,17 +70,14 @@ impl NetRcStorage {
     }
 
     /// Retrieve the authentication information for the given host
-    pub fn get_password(&self, host: &str) -> Result<Option<String>, NetRcStorageError> {
-        println!("get_password: {}", host);
-        println!("machines: {:?}", self.machines);
-        let res = match self.machines.get(host) {
-            Some(machine) => Ok(machine.password.clone()),
-            None => Ok(None),
-        };
-
-        println!("res: {:?}", res);
-
-        res
+    pub fn get_password(
+        &self,
+        host: &str,
+    ) -> Result<(Option<String>, Option<String>), NetRcStorageError> {
+        match self.machines.get(host) {
+            Some(machine) => Ok((machine.login.clone(), machine.password.clone())),
+            None => Ok((None, None)),
+        }
     }
 }
 
@@ -95,11 +92,11 @@ impl StorageBackend for NetRcStorage {
 
     fn get(&self, host: &str) -> anyhow::Result<Option<Authentication>> {
         match self.get_password(host) {
-            Ok(Some(password)) => Ok(Some(Authentication::BasicHTTP {
-                username: host.to_string(),
-                password,
+            Ok((Some(user), password)) => Ok(Some(Authentication::BasicHTTP {
+                username: user,
+                password: password.unwrap_or_default(),
             })),
-            Ok(None) => Ok(None),
+            Ok((None, _)) => Ok(None),
             Err(err) => Err(anyhow::Error::new(err)),
         }
     }
