@@ -71,10 +71,16 @@ impl NetRcStorage {
 
     /// Retrieve the authentication information for the given host
     pub fn get_password(&self, host: &str) -> Result<Option<String>, NetRcStorageError> {
-        match self.machines.get(host) {
+        println!("get_password: {}", host);
+        println!("machines: {:?}", self.machines);
+        let res = match self.machines.get(host) {
             Some(machine) => Ok(machine.password.clone()),
             None => Ok(None),
-        }
+        };
+
+        println!("res: {:?}", res);
+
+        res
     }
 }
 
