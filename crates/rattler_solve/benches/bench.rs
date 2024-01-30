@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolverImpl, SolverOptions, SolverTask};
+use rattler_solve::{SolverImpl, SolverTask};
 use std::str::FromStr;
 
 fn conda_json_path() -> String {
@@ -58,16 +58,14 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     group.bench_function("libsolv_c", |b| {
         b.iter(|| {
             rattler_solve::libsolv_c::Solver
-                .solve(
-                    black_box(SolverTask {
-                        available_packages: &available_packages,
-                        locked_packages: vec![],
-                        pinned_packages: vec![],
-                        virtual_packages: vec![],
-                        specs: specs.clone(),
-                    }),
-                    &SolverOptions::default(),
-                )
+                .solve(black_box(SolverTask {
+                    available_packages: &available_packages,
+                    locked_packages: vec![],
+                    pinned_packages: vec![],
+                    virtual_packages: vec![],
+                    specs: specs.clone(),
+                    timeout: None,
+                }))
                 .unwrap()
         });
     });
@@ -76,16 +74,14 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     group.bench_function("resolvo", |b| {
         b.iter(|| {
             rattler_solve::resolvo::Solver
-                .solve(
-                    black_box(SolverTask {
-                        available_packages: &available_packages,
-                        locked_packages: vec![],
-                        pinned_packages: vec![],
-                        virtual_packages: vec![],
-                        specs: specs.clone(),
-                    }),
-                    &SolverOptions::default(),
-                )
+                .solve(black_box(SolverTask {
+                    available_packages: &available_packages,
+                    locked_packages: vec![],
+                    pinned_packages: vec![],
+                    virtual_packages: vec![],
+                    specs: specs.clone(),
+                    timeout: None,
+                }))
                 .unwrap()
         });
     });

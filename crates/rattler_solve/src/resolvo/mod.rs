@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{IntoRepoData, SolveError, SolverOptions, SolverRepoData, SolverTask};
+use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
@@ -432,9 +432,8 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-        options: &SolverOptions,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
-        let stop_time = options
+        let stop_time = task
             .timeout
             .map(|timeout| std::time::SystemTime::now() + timeout);
 

@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
-use crate::{IntoRepoData, SolverOptions, SolverRepoData};
+use crate::{IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
@@ -90,9 +90,8 @@ impl super::SolverImpl for Solver {
     >(
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
-        options: &SolverOptions,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
-        if options.timeout.is_some() {
+        if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
                 "timeout".to_string()
             ]));

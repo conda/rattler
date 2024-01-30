@@ -3,20 +3,10 @@ import datetime
 from typing import List, Optional
 from rattler.match_spec.match_spec import MatchSpec
 
-from rattler.rattler import py_solve, PySolverOptions
+from rattler.rattler import py_solve
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
-
-
-class SolverOptions:
-    def __init__(self, timeout: datetime.timedelta):
-        if not isinstance(timeout, datetime.timedelta):
-            raise TypeError("timeout must be a datetime.timedelta")
-        self.timeout = timeout
-
-    def to_py_solver_options(self) -> PySolverOptions:
-        return PySolverOptions(self.timeout.microseconds)
 
 
 def solve(
@@ -25,7 +15,7 @@ def solve(
     locked_packages: Optional[List[RepoDataRecord]] = None,
     pinned_packages: Optional[List[RepoDataRecord]] = None,
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
-    solver_options: Optional[SolverOptions] = None,
+    timeout: Optional[datetime.timedelta] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -66,6 +56,6 @@ def solve(
                 v_package._generic_virtual_package
                 for v_package in virtual_packages or []
             ],
-            solver_options.to_py_solver_options() if solver_options else None,
+            timeout.microseconds if timeout else None,
         )
     ]

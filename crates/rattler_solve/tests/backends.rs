@@ -4,7 +4,7 @@ use rattler_conda_types::{
     RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolveError, SolverImpl, SolverOptions, SolverTask};
+use rattler_solve::{SolveError, SolverImpl, SolverTask};
 use std::str::FromStr;
 use std::time::Instant;
 use url::Url;
@@ -127,9 +127,10 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         locked_packages: Vec::default(),
         pinned_packages: Vec::default(),
         virtual_packages: Vec::default(),
+        timeout: None,
     };
 
-    let pkgs1 = match T::default().solve(solver_task, &SolverOptions::default()) {
+    let pkgs1 = match T::default().solve(solver_task) {
         Ok(result) => result,
         Err(e) => panic!("{e}"),
     };
@@ -501,7 +502,7 @@ mod libsolv_c {
     fn test_solve_with_cached_solv_file_install_new() {
         use super::read_repodata;
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
-        use rattler_solve::{SolverImpl, SolverOptions, SolverTask};
+        use rattler_solve::{SolverImpl, SolverTask};
 
         let repo_data = read_repodata(&dummy_channel_json_path());
 
@@ -521,16 +522,14 @@ mod libsolv_c {
         let specs: Vec<MatchSpec> = vec!["foo<4".parse().unwrap()];
 
         let pkgs = rattler_solve::libsolv_c::Solver
-            .solve(
-                SolverTask {
-                    locked_packages: Vec::new(),
-                    virtual_packages: Vec::new(),
-                    available_packages: [libsolv_repodata],
-                    specs,
-                    pinned_packages: Vec::new(),
-                },
-                &SolverOptions::default(),
-            )
+            .solve(SolverTask {
+                locked_packages: Vec::new(),
+                virtual_packages: Vec::new(),
+                available_packages: [libsolv_repodata],
+                specs,
+                pinned_packages: Vec::new(),
+                timeout: None,
+            })
             .unwrap();
 
         if pkgs.is_empty() {
@@ -621,9 +620,10 @@ fn solve<T: SolverImpl + Default>(
         available_packages: [&repo_data],
         specs,
         pinned_packages,
+        timeout: None,
     };
 
-    let pkgs = T::default().solve(task, &SolverOptions::default())?;
+    let pkgs = T::default().solve(task)?;
 
     if pkgs.is_empty() {
         println!("No packages in the environment!");
@@ -672,16 +672,14 @@ fn compare_solve(specs: Vec<&str>) {
             "libsolv_c",
             extract_pkgs(
                 rattler_solve::libsolv_c::Solver
-                    .solve(
-                        SolverTask {
-                            available_packages: &available_packages,
-                            specs: specs.clone(),
-                            locked_packages: Vec::default(),
-                            pinned_packages: Vec::default(),
-                            virtual_packages: Vec::default(),
-                        },
-                        &SolverOptions::default(),
-                    )
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Vec::default(),
+                        pinned_packages: Vec::default(),
+                        virtual_packages: Vec::default(),
+                        timeout: None,
+                    })
                     .unwrap(),
             ),
         ));
@@ -696,16 +694,14 @@ fn compare_solve(specs: Vec<&str>) {
             "resolvo",
             extract_pkgs(
                 rattler_solve::resolvo::Solver
-                    .solve(
-                        SolverTask {
-                            available_packages: &available_packages,
-                            specs: specs.clone(),
-                            locked_packages: Vec::default(),
-                            pinned_packages: Vec::default(),
-                            virtual_packages: Vec::default(),
-                        },
-                        &SolverOptions::default(),
-                    )
+                    .solve(SolverTask {
+                        available_packages: &available_packages,
+                        specs: specs.clone(),
+                        locked_packages: Vec::default(),
+                        pinned_packages: Vec::default(),
+                        virtual_packages: Vec::default(),
+                        timeout: None,
+                    })
                     .unwrap(),
             ),
         ));
@@ -769,16 +765,14 @@ fn solve_to_get_channel_of_spec(
         SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
 
     let result = rattler_solve::resolvo::Solver
-        .solve(
-            SolverTask {
-                available_packages: &available_packages,
-                specs: specs.clone(),
-                locked_packages: Vec::default(),
-                pinned_packages: Vec::default(),
-                virtual_packages: Vec::default(),
-            },
-            &SolverOptions::default(),
-        )
+        .solve(SolverTask {
+            available_packages: &available_packages,
+            specs: specs.clone(),
+            locked_packages: Vec::default(),
+            pinned_packages: Vec::default(),
+            virtual_packages: Vec::default(),
+            timeout: None,
+        })
         .unwrap();
 
     let record = result.iter().find(|record| {

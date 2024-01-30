@@ -23,7 +23,7 @@ use rattler_repodata_gateway::fetch::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     libsolv_c::{self},
-    resolvo, SolverImpl, SolverOptions, SolverTask,
+    resolvo, SolverImpl, SolverTask,
 };
 use reqwest::Client;
 use std::sync::Arc;
@@ -227,16 +227,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         virtual_packages,
         specs,
         pinned_packages: Vec::new(),
+        timeout: opt.timeout.map(Duration::from_millis),
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
     let required_packages = wrap_in_progress("solving", move || {
         if opt.use_resolvo {
-            let timeout = opt.timeout.map(Duration::from_millis);
-            resolvo::Solver.solve(solver_task, &SolverOptions { timeout })
+            resolvo::Solver.solve(solver_task)
         } else {
-            libsolv_c::Solver.solve(solver_task, &SolverOptions::default())
+            libsolv_c::Solver.solve(solver_task)
         }
     })?;
 

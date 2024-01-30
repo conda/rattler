@@ -42,7 +42,7 @@ use meta::get_rattler_version;
 use platform::{PyArch, PyPlatform};
 use record::PyRecord;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::{py_solve, PySolverOptions};
+use solver::py_solve;
 use virtual_package::PyVirtualPackage;
 
 #[pymodule]
@@ -79,7 +79,6 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyVirtualPackage>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
 
-    m.add_class::<PySolverOptions>().unwrap();
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
     m.add_function(wrap_pyfunction!(get_rattler_version, m).unwrap())
