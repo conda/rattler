@@ -127,6 +127,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         locked_packages: Vec::default(),
         pinned_packages: Vec::default(),
         virtual_packages: Vec::default(),
+        timeout: None,
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
@@ -527,6 +528,7 @@ mod libsolv_c {
                 available_packages: [libsolv_repodata],
                 specs,
                 pinned_packages: Vec::new(),
+                timeout: None,
             })
             .unwrap();
 
@@ -618,6 +620,7 @@ fn solve<T: SolverImpl + Default>(
         available_packages: [&repo_data],
         specs,
         pinned_packages,
+        timeout: None,
     };
 
     let pkgs = T::default().solve(task)?;
@@ -675,6 +678,7 @@ fn compare_solve(specs: Vec<&str>) {
                         locked_packages: Vec::default(),
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
+                        timeout: None,
                     })
                     .unwrap(),
             ),
@@ -696,6 +700,7 @@ fn compare_solve(specs: Vec<&str>) {
                         locked_packages: Vec::default(),
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
+                        timeout: None,
                     })
                     .unwrap(),
             ),
@@ -766,6 +771,7 @@ fn solve_to_get_channel_of_spec(
             locked_packages: Vec::default(),
             pinned_packages: Vec::default(),
             virtual_packages: Vec::default(),
+            timeout: None,
         })
         .unwrap();
 

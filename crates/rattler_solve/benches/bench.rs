@@ -64,6 +64,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     pinned_packages: vec![],
                     virtual_packages: vec![],
                     specs: specs.clone(),
+                    timeout: None,
                 }))
                 .unwrap()
         });
@@ -79,6 +80,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     pinned_packages: vec![],
                     virtual_packages: vec![],
                     specs: specs.clone(),
+                    timeout: None,
                 }))
                 .unwrap()
         });

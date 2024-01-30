@@ -99,6 +99,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The specs we want to solve
     pub specs: Vec<MatchSpec>,
+
+    /// The timeout after which the solver should stop
+    pub timeout: Option<std::time::Duration>,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
