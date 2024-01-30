@@ -41,6 +41,8 @@ getrandom = { version = "0.2.10", features = ["js"] }
 
 [dev-dependencies]
 anyhow = "1.0.75"
+axum = "0.7.4"
 insta = { version = "1.33.0", features = ["json"] }
 tempfile = "3.8.0"
 tokio = { version = "1.33.0", features = ["macros"] }
+oneshot = "0.1.6"

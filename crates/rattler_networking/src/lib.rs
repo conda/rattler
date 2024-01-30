@@ -14,3 +14,6 @@ mod redaction;
 pub use redaction::{
     redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
 };
+
+#[cfg(test)]
+mod test;
