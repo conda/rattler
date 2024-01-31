@@ -63,7 +63,7 @@ async fn spawn() -> SimpleServer {
         .route("/api/bearer_token_auth", get(bearer_token_auth))
         .route("/api/:token/token_auth", get(token_auth));
 
-    let address = "0.0.0.0:0".to_string();
+    let address = "127.0.0.1:0".to_string();
     let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
     let local_address = listener.local_addr().unwrap();
 
@@ -166,7 +166,7 @@ async fn test_netrc() {
     // write netrc file
     let mut netrc_file = tempfile::NamedTempFile::new().unwrap();
     netrc_file
-        .write_all(b"machine 0.0.0.0\nlogin test\npassword test")
+        .write_all(b"machine 127.0.0.1\nlogin test\npassword test")
         .unwrap();
 
     let mut storage = AuthenticationStorage::new();
