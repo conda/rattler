@@ -102,7 +102,7 @@ use tempfile::NamedTempFile;
 use tokio::task::JoinError;
 use url::Url;
 
-pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
+pub use crate::fetch::cache::{CacheState, JLAPFooter, JLAPState};
 
 /// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
@@ -412,7 +412,7 @@ fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
 pub async fn patch_repo_data(
     client: &ClientWithMiddleware,
     subdir_url: Url,
-    repo_data_state: RepoDataState,
+    repo_data_state: CacheState,
     repo_data_json_path: &Path,
 ) -> Result<(JLAPState, Blake2b256Hash), JLAPError> {
     // Determine what we should use as our starting state
@@ -634,7 +634,7 @@ mod test {
     use super::patch_repo_data;
     use std::path::PathBuf;
 
-    use crate::fetch::cache::RepoDataState;
+    use crate::fetch::cache::CacheState;
     use crate::utils::simple_channel_server::SimpleChannelServer;
 
     use rattler_digest::{parse_digest_from_hex, Blake2b256};
@@ -820,7 +820,7 @@ mod test {
 
         pub client: ClientWithMiddleware,
 
-        pub repo_data_state: RepoDataState,
+        pub repo_data_state: CacheState,
     }
 
     impl TestEnvironment {
@@ -834,7 +834,7 @@ mod test {
 
             let client = reqwest::Client::new().into();
 
-            let repo_data_state: RepoDataState = serde_json::from_str(repo_data_state).unwrap();
+            let repo_data_state: CacheState = serde_json::from_str(repo_data_state).unwrap();
 
             Self {
                 _server: server,

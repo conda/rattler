@@ -9,7 +9,7 @@ use url::Url;
 
 /// Representation of the `.info.json` file alongside a `repodata.json` file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RepoDataState {
+pub struct CacheState {
     /// The URL from where the repodata was downloaded. This is the URL of the `repodata.json`,
     /// `repodata.json.zst`, or another variant. This is different from the subdir url which does
     /// NOT include the final filename.
@@ -63,9 +63,9 @@ pub struct RepoDataState {
     pub jlap: Option<JLAPState>,
 }
 
-impl RepoDataState {
+impl CacheState {
     /// Reads and parses a file from disk.
-    pub fn from_path(path: &Path) -> Result<RepoDataState, std::io::Error> {
+    pub fn from_path(path: &Path) -> Result<CacheState, std::io::Error> {
         let content = fs::read_to_string(path)?;
         Ok(Self::from_str(&content)?)
     }
@@ -77,7 +77,7 @@ impl RepoDataState {
     }
 }
 
-impl FromStr for RepoDataState {
+impl FromStr for CacheState {
     type Err = serde_json::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -184,7 +184,7 @@ fn serialize_blake2_hash<S: Serializer>(
 
 #[cfg(test)]
 mod test {
-    use super::RepoDataState;
+    use super::CacheState;
     use std::str::FromStr;
 
     const JSON_STATE_ONE: &str = r#"{
@@ -221,11 +221,11 @@ mod test {
 
     #[test]
     pub fn test_parse_repo_data_state_one() {
-        insta::assert_yaml_snapshot!(RepoDataState::from_str(JSON_STATE_ONE).unwrap());
+        insta::assert_yaml_snapshot!(CacheState::from_str(JSON_STATE_ONE).unwrap());
     }
 
     #[test]
     pub fn test_parse_repo_data_state_two() {
-        insta::assert_yaml_snapshot!(RepoDataState::from_str(JSON_STATE_TWO).unwrap());
+        insta::assert_yaml_snapshot!(CacheState::from_str(JSON_STATE_TWO).unwrap());
     }
 }

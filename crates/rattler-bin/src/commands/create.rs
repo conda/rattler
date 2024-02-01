@@ -18,7 +18,7 @@ use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
 };
 use rattler_repodata_gateway::fetch::{
-    CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
+    CacheResult, DownloadProgress, FetchError, FetchRepoDataOptions,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{libsolv_c, resolvo, SolverImpl, SolverTask};
@@ -585,7 +585,7 @@ async fn fetch_repo_data_records_with_progress(
     // Error out if an error occurred, but also update the progress bar
     let result = match result {
         Err(e) => {
-            let not_found = matches!(&e, FetchRepoDataError::NotFound(_));
+            let not_found = matches!(&e, FetchError::NotFound(_));
             if not_found && platform != Platform::NoArch {
                 progress_bar.set_style(finished_progress_style());
                 progress_bar.finish_with_message("Not Found");
@@ -605,7 +605,7 @@ async fn fetch_repo_data_records_with_progress(
 
     // Deserialize the data. This is a hefty blocking operation so we spawn it as a tokio blocking
     // task.
-    let repo_data_json_path = result.repo_data_json_path.clone();
+    let repo_data_json_path = result.path.clone();
     match tokio::task::spawn_blocking(move || {
         SparseRepoData::new(
             channel,
