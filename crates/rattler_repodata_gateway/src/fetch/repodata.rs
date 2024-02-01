@@ -6,7 +6,7 @@ use url::Url;
 
 use super::{CachedData, FetchError, Options, ProgressFunc, Variant};
 
-/// dpcs
+/// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 pub type FetchRepoDataOptions = Options<RepoDataVariant>;
 
 /// Defines which type of repodata.json file to download. Usually you want to use the

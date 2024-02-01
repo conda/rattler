@@ -186,5 +186,147 @@ pub async fn load_repo_data_recursively(
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRepoData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
+    SparseData::load_records_recursive(&lazy_repo_data, package_names, patch_function)
+}
+
+#[cfg(test)]
+mod test {
+    use super::super::{repodata::load_repo_data_recursively, PackageFilename};
+    use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
+    use rstest::rstest;
+    use std::path::{Path, PathBuf};
+
+    fn test_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+    }
+
+    async fn load_sparse(
+        package_names: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Vec<Vec<RepoDataRecord>> {
+        load_repo_data_recursively(
+            [
+                (
+                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    "noarch",
+                    test_dir().join("channels/conda-forge/noarch/repodata.json"),
+                ),
+                (
+                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    "linux-64",
+                    test_dir().join("channels/conda-forge/linux-64/repodata.json"),
+                ),
+            ],
+            package_names
+                .into_iter()
+                .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
+            None,
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_empty_sparse_load() {
+        let sparse_empty_data = load_sparse(Vec::<String>::new()).await;
+        assert_eq!(sparse_empty_data, vec![vec![], vec![]]);
+    }
+
+    #[tokio::test]
+    async fn test_sparse_single() {
+        let sparse_empty_data = load_sparse(["_libgcc_mutex"]).await;
+        let total_records = sparse_empty_data
+            .iter()
+            .map(std::vec::Vec::len)
+            .sum::<usize>();
+
+        assert_eq!(total_records, 3);
+    }
+
+    #[tokio::test]
+    async fn test_parse_duplicate() {
+        let sparse_empty_data = load_sparse(["_libgcc_mutex", "_libgcc_mutex"]).await;
+        dbg!(&sparse_empty_data);
+        let total_records = sparse_empty_data
+            .iter()
+            .map(std::vec::Vec::len)
+            .sum::<usize>();
+
+        // Number of records should still be 3. The duplicate package name should be ignored.
+        assert_eq!(total_records, 3);
+    }
+
+    #[tokio::test]
+    async fn test_sparse_jupyterlab_detectron2() {
+        let sparse_empty_data = load_sparse(["jupyterlab", "detectron2"]).await;
+
+        let total_records = sparse_empty_data
+            .iter()
+            .map(std::vec::Vec::len)
+            .sum::<usize>();
+
+        assert_eq!(total_records, 21731);
+    }
+
+    #[tokio::test]
+    async fn test_sparse_numpy_dev() {
+        let sparse_empty_data = load_sparse([
+            "python",
+            "cython",
+            "compilers",
+            "openblas",
+            "nomkl",
+            "pytest",
+            "pytest-cov",
+            "pytest-xdist",
+            "hypothesis",
+            "mypy",
+            "typing_extensions",
+            "sphinx",
+            "numpydoc",
+            "ipython",
+            "scipy",
+            "pandas",
+            "matplotlib",
+            "pydata-sphinx-theme",
+            "pycodestyle",
+            "gitpython",
+            "cffi",
+            "pytz",
+        ])
+        .await;
+
+        let total_records = sparse_empty_data
+            .iter()
+            .map(std::vec::Vec::len)
+            .sum::<usize>();
+
+        assert_eq!(total_records, 16064);
+    }
+
+    #[test]
+    fn load_complete_records() {
+        let mut records = Vec::new();
+        for path in [
+            test_dir().join("channels/conda-forge/noarch/repodata.json"),
+            test_dir().join("channels/conda-forge/linux-64/repodata.json"),
+        ] {
+            let str = std::fs::read_to_string(&path).unwrap();
+            let repo_data: RepoData = serde_json::from_str(&str).unwrap();
+            records.push(repo_data);
+        }
+
+        let total_records = records
+            .iter()
+            .map(|repo| repo.conda_packages.len() + repo.packages.len())
+            .sum::<usize>();
+
+        assert_eq!(total_records, 367595);
+    }
+
+    #[rstest]
+    #[case("clang-format-13.0.1-root_62800_h69bbbaa_1.conda", "clang-format")]
+    #[case("clang-format-13-13.0.1-default_he082bbe_0.tar.bz2", "clang-format-13")]
+    fn test_deserialize_package_name(#[case] filename: &str, #[case] result: &str) {
+        assert_eq!(PackageFilename::try_from(filename).unwrap().package, result);
+    }
 }

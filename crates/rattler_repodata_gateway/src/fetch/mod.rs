@@ -85,13 +85,13 @@ pub enum FetchError {
     #[error("repodata not found")]
     NotFound(#[from] DataNotFoundError),
 
-    #[error("failed to create temporary file for repodata.json")]
+    #[error("failed to create temporary file for data")]
     FailedToCreateTemporaryFile(#[source] std::io::Error),
 
-    #[error("failed to persist temporary repodata.json file")]
+    #[error("failed to persist temporary data file")]
     FailedToPersistTemporaryFile(#[from] tempfile::PersistError),
 
-    #[error("failed to get metadata from repodata.json file")]
+    #[error("failed to get metadata from data file")]
     FailedToGetMetadata(#[source] std::io::Error),
 
     #[error("failed to write cache state")]
@@ -188,7 +188,7 @@ async fn stream_and_decode_to_file(
 
     // Create yet another stream that decodes the bytes yet again but this time using the content
     // encoding.
-    let mut decoded_repo_data_json_bytes =
+    let mut decoded_data_json_bytes =
         tokio::io::BufReader::new(decoded_byte_stream).decode(content_encoding);
 
     tracing::trace!(
@@ -207,7 +207,7 @@ async fn stream_and_decode_to_file(
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.
-    let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
+    let bytes = tokio::io::copy(&mut decoded_data_json_bytes, &mut hashing_file_writer)
         .await
         .map_err(|e| {
             FetchError::FailedToDownload(
@@ -229,7 +229,7 @@ async fn stream_and_decode_to_file(
     Ok((temp_file, hash))
 }
 
-/// Describes the availability of certain `repodata.json`.
+/// Describes the availability of certain `data`.
 #[derive(Debug)]
 pub struct VariantAvailability {
     has_zst: Option<Expiring<bool>>,
@@ -254,7 +254,7 @@ impl VariantAvailability {
     }
 }
 
-/// Determine the availability of `repodata.json` variants (like a `.zst` or `.bz2`) by checking
+/// Determine the availability of `data` variants (like a `.zst` or `.bz2`) by checking
 /// a cache or the internet.
 pub async fn check_variant_availability(
     client: &reqwest_middleware::ClientWithMiddleware,
@@ -398,10 +398,10 @@ pub trait Variant: Default {
     fn file_name(&self) -> &'static str;
 }
 
-/// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 #[derive(Clone)]
+/// Knobs for adjusting fetch and cache
 pub struct Options<V: Variant> {
-    /// How to use the cache. By default it will cache and reuse downloaded repodata.json (if the
+    /// How to use the cache. By default it will cache and reuse downloaded data (if the
     /// server allows it).
     pub cache_action: CacheAction,
 
@@ -433,7 +433,7 @@ impl<V: Variant> Default for Options<V> {
 /// The result of fetch
 #[derive(Debug)]
 pub struct CachedData {
-    /// A lockfile that guards access to any of the repodata.json file or its cache.
+    /// A lockfile that guards access to any of the data file or its cache.
     pub lock_file: LockedFile,
 
     /// The path to the uncompressed data file.
@@ -446,7 +446,7 @@ pub struct CachedData {
     pub cache_result: CacheResult,
 }
 
-/// Indicates whether or not the repodata.json cache was up-to-date or not.
+/// Indicates whether or not the data cache was up-to-date or not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CacheResult {
     /// The cache was hit, the data on disk was already valid.
@@ -516,18 +516,18 @@ async fn cache_from_file(
     })
 }
 
-/// A value returned from [`validate_cached_state`] which indicates the state of a repodata.json cache.
+/// A value returned from [`validate_cached_state`] which indicates the state of a cache.
 #[derive(Debug)]
 enum ValidatedCacheState {
     /// There is no cache, the cache could not be parsed, or the cache does not reference the same
     /// request. We can completely ignore any cached data.
     InvalidOrMissing,
 
-    /// The cache does not match the repodata.json file that is on disk. This usually indicates that the
-    /// repodata.json was modified without updating the cache.
+    /// The cache does not match the data file that is on disk. This usually indicates that the
+    /// data was modified without updating the cache.
     Mismatched(CacheState),
 
-    /// The cache could be read and corresponds to the repodata.json file that is on disk but the cached
+    /// The cache could be read and corresponds to the data file that is on disk but the cached
     /// data is (partially) out of date.
     OutOfDate(CacheState),
 
@@ -535,7 +535,7 @@ enum ValidatedCacheState {
     UpToDate(CacheState),
 }
 
-/// Tries to determine if the cache state for the repodata.json for the given `subdir_url` is
+/// Tries to determine if the cache state for the data for the given `subdir_url` is
 /// considered to be up-to-date.
 ///
 /// This functions reads multiple files from the `cache_path`, it is left up to the user to ensure
@@ -545,16 +545,16 @@ fn validate_cached_state(
     subdir_url: &Url,
     cache_key: &str,
 ) -> ValidatedCacheState {
-    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let data_json_path = cache_path.join(format!("{cache_key}.json"));
     let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
-    // Check if we have cached repodata.json file
-    let json_metadata = match std::fs::metadata(&repo_data_json_path) {
+    // Check if we have cached data file
+    let json_metadata = match std::fs::metadata(&data_json_path) {
         Err(e) if e.kind() == ErrorKind::NotFound => return ValidatedCacheState::InvalidOrMissing,
         Err(e) => {
             tracing::warn!(
-                "failed to get metadata of repodata.json file '{}': {e}. Ignoring cached files...",
-                repo_data_json_path.display()
+                "failed to get metadata of data file '{}': {e}. Ignoring cached files...",
+                data_json_path.display()
             );
             return ValidatedCacheState::InvalidOrMissing;
         }
@@ -590,16 +590,16 @@ fn validate_cached_state(
         url
     };
     if &cached_subdir_url != subdir_url {
-        tracing::warn!(
-            "cache state refers to a different repodata.json url. Ignoring cached files..."
-        );
+        tracing::warn!("cache state refers to a different data url. Ignoring cached files...");
         return ValidatedCacheState::InvalidOrMissing;
     }
 
-    // Determine last modified date of the repodata.json file.
+    // Determine last modified date of the data file.
     let cache_last_modified = match json_metadata.modified() {
         Err(_) => {
-            tracing::warn!("could not determine last modified date of repodata.json file. Ignoring cached files...");
+            tracing::warn!(
+                "could not determine last modified date of data file. Ignoring cached files..."
+            );
             return ValidatedCacheState::Mismatched(cache_state);
         }
         Ok(last_modified) => last_modified,
@@ -607,19 +607,19 @@ fn validate_cached_state(
 
     // Make sure that the repodata state cache refers to the repodata that exists on disk.
     //
-    // Check the blake hash of the repodata.json file if we have a similar hash in the state.
+    // Check the blake hash of the data file if we have a similar hash in the state.
     if let Some(cached_hash) = cache_state.blake2_hash.as_ref() {
-        match compute_file_digest::<Blake2b256>(&repo_data_json_path) {
+        match compute_file_digest::<Blake2b256>(&data_json_path) {
             Err(e) => {
                 tracing::warn!(
-                    "could not compute BLAKE2 hash of repodata.json file: {e}. Ignoring cached files..."
+                    "could not compute BLAKE2 hash of data file: {e}. Ignoring cached files..."
                 );
                 return ValidatedCacheState::Mismatched(cache_state);
             }
             Ok(hash) => {
                 if &hash != cached_hash {
                     tracing::warn!(
-                        "BLAKE2 hash of repodata.json does not match cache state. Ignoring cached files..."
+                        "BLAKE2 hash of data does not match cache state. Ignoring cached files..."
                     );
                     return ValidatedCacheState::InvalidOrMissing;
                 }
@@ -627,7 +627,7 @@ fn validate_cached_state(
         }
     } else {
         // The state cache records the size and last modified date of the original file. If those do
-        // not match, the repodata.json file has been modified.
+        // not match, the data file has been modified.
         if json_metadata.len() != cache_state.cache_size
             || Some(cache_last_modified) != json_metadata.modified().ok()
         {
@@ -703,7 +703,7 @@ async fn _fetch_data<V: Variant>(
             .join(options.variant.file_name())
             .expect("file name is valid"),
     );
-    let repo_data_json_path = cache_path.join(format!("{cache_key}.json"));
+    let data_json_path = cache_path.join(format!("{cache_key}.json"));
     let cache_state_path = cache_path.join(format!("{cache_key}.info.json"));
 
     // Lock all files that have to do with that cache key
@@ -717,7 +717,7 @@ async fn _fetch_data<V: Variant>(
         // If we are dealing with a local file, we can skip the cache entirely.
         return cache_from_file(
             subdir_url.join(options.variant.file_name()).unwrap(),
-            repo_data_json_path,
+            data_json_path,
             cache_state_path,
             lock_file,
         )
@@ -744,7 +744,7 @@ async fn _fetch_data<V: Variant>(
                 // so just immediately return what we have.
                 return Ok(CachedData {
                     lock_file,
-                    path: repo_data_json_path,
+                    path: data_json_path,
                     cache_state,
                     cache_result: CacheResult::CacheHit,
                 });
@@ -755,7 +755,7 @@ async fn _fetch_data<V: Variant>(
                 CacheAction::UseCacheOnly | CacheAction::ForceCacheOnly,
             ) => {
                 // The cache is out of date but we also cant fetch new data
-                // OR, The cache doesn't match the repodata.json that is on disk. This means the cache is
+                // OR, The cache doesn't match the data that is on disk. This means the cache is
                 // not usable.
                 // OR, No cache available at all, and we cant refresh the data.
                 return Err(FetchError::NoCacheAvailable);
@@ -795,12 +795,12 @@ async fn _fetch_data<V: Variant>(
     // We first attempt to make a JLAP request; if it fails for any reason, we continue on with
     // a normal request.
     let jlap_state = if has_jlap && cache_state.is_some() {
-        let repo_data_state = cache_state.as_ref().unwrap();
+        let data_state = cache_state.as_ref().unwrap();
         match crate::fetch::jlap::patch_repo_data(
             &client,
             subdir_url.clone(),
-            repo_data_state.clone(),
-            &repo_data_json_path,
+            data_state.clone(),
+            &data_json_path,
         )
         .await
         {
@@ -826,7 +826,7 @@ async fn _fetch_data<V: Variant>(
 
                 return Ok(CachedData {
                     lock_file,
-                    path: repo_data_json_path,
+                    path: data_json_path,
                     cache_state,
                     cache_result: CacheResult::CacheOutdated,
                 });
@@ -841,7 +841,7 @@ async fn _fetch_data<V: Variant>(
     };
 
     // Determine which variant to download
-    let repo_data_url = if has_zst {
+    let data_url = if has_zst {
         subdir_url
             .join(&format!("{}.zst", options.variant.file_name()))
             .unwrap()
@@ -854,8 +854,8 @@ async fn _fetch_data<V: Variant>(
     };
 
     // Construct the HTTP request
-    tracing::debug!("fetching '{}'", &repo_data_url);
-    let request_builder = client.get(repo_data_url.clone());
+    tracing::debug!("fetching '{}'", &data_url);
+    let request_builder = client.get(data_url.clone());
 
     let mut headers = reqwest::header::HeaderMap::default();
 
@@ -895,7 +895,7 @@ async fn _fetch_data<V: Variant>(
 
         // Update the cache on disk with any new findings.
         let cache_state = CacheState {
-            url: repo_data_url,
+            url: data_url,
             has_zst: variant_availability.has_zst,
             has_bz2: variant_availability.has_bz2,
             has_jlap: variant_availability.has_jlap,
@@ -913,7 +913,7 @@ async fn _fetch_data<V: Variant>(
 
         return Ok(CachedData {
             lock_file,
-            path: repo_data_json_path,
+            path: data_json_path,
             cache_state,
             cache_result: CacheResult::CacheHitAfterFetch,
         });
@@ -924,7 +924,7 @@ async fn _fetch_data<V: Variant>(
 
     // Stream the content to a temporary file
     let (temp_file, blake2_hash) = stream_and_decode_to_file(
-        repo_data_url.clone(),
+        data_url.clone(),
         response,
         if has_zst {
             Encoding::Zst
@@ -939,14 +939,14 @@ async fn _fetch_data<V: Variant>(
     .await?;
 
     // Persist the file to its final destination
-    let repo_data_destination_path = repo_data_json_path.clone();
-    let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
+    let data_destination_path = data_json_path.clone();
+    let data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path)
+            .persist(data_destination_path)
             .map_err(FetchError::FailedToPersistTemporaryFile)?;
 
-        // Determine the last modified date and size of the repodata.json file. We store these values in
-        // the cache to link the cache to the corresponding repodata.json file.
+        // Determine the last modified date and size of the data file. We store these values in
+        // the cache to link the cache to the corresponding data file.
         file.metadata().map_err(FetchError::FailedToGetMetadata)
     })
     .await??;
@@ -954,12 +954,12 @@ async fn _fetch_data<V: Variant>(
     // Update the cache on disk.
     let had_cache = cache_state.is_some();
     let new_cache_state = CacheState {
-        url: repo_data_url,
+        url: data_url,
         cache_headers,
-        cache_last_modified: repo_data_json_metadata
+        cache_last_modified: data_json_metadata
             .modified()
             .map_err(FetchError::FailedToGetMetadata)?,
-        cache_size: repo_data_json_metadata.len(),
+        cache_size: data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
         blake2_hash_nominal: Some(blake2_hash),
         has_zst: variant_availability.has_zst,
@@ -978,7 +978,7 @@ async fn _fetch_data<V: Variant>(
 
     Ok(CachedData {
         lock_file,
-        path: repo_data_json_path,
+        path: data_json_path,
         cache_state: new_cache_state,
         cache_result: if had_cache {
             CacheResult::CacheOutdated
