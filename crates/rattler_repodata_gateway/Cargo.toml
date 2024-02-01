@@ -51,7 +51,7 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem", "Win32
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-axum = { workspace = true }
+axum = { workspace = true, features = ["tokio"] }
 hex-literal = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 rstest = { workspace = true }
