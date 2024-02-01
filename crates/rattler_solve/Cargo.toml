@@ -30,7 +30,7 @@ resolvo = { workspace = true, optional = true }
 criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 once_cell = { workspace = true }
-rattler_repodata_gateway = { workspace = true, features = ["sparse"] }
+rattler_repodata_gateway = { path = "../rattler_repodata_gateway", features = ["sparse"] }
 rstest = { workspace = true }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
