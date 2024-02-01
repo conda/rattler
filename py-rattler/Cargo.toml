@@ -59,7 +59,6 @@ pyo3-build-config = "0.20"
 
 
 [patch.crates-io]
-resolvo = { git = "https://github.com/mamba-org/resolvo.git", branch = "main" }
 
 # Prevent package from thinking it's in the workspace
 [workspace]
