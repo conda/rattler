@@ -30,7 +30,7 @@ anyhow = "1.0.79"
 async-compression = { version = "0.4.6", features = ["gzip", "tokio", "bzip2", "zstd"] }
 async-trait = "0.1.77"
 base64 = "0.21.7"
-bindgen = "0.66.1"
+bindgen = "0.69.2"
 bisection = "0.1.0"
 blake2 = "0.10.6"
 bytes = "1.5.0"
