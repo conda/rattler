@@ -772,7 +772,7 @@ mod test {
         .unwrap();
 
         install_driver
-            .post_process(&vec![], environment_dir.path())
+            .post_process(&[], environment_dir.path())
             .unwrap();
 
         insta::assert_yaml_snapshot!(paths);

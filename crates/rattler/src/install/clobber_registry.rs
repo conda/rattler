@@ -821,7 +821,7 @@ mod tests {
                 .package_record
                 .name
                 .as_normalized()
-                .cmp(&b.repodata_record.package_record.name.as_normalized())
+                .cmp(b.repodata_record.package_record.name.as_normalized())
         });
 
         let update_ops = test_operations_update();
@@ -909,7 +909,7 @@ mod tests {
                 .package_record
                 .name
                 .as_normalized()
-                .cmp(&b.repodata_record.package_record.name.as_normalized())
+                .cmp(b.repodata_record.package_record.name.as_normalized())
         });
 
         let update_ops = test_operations_update();

@@ -190,9 +190,6 @@ mod test {
             Ok((".1", BuildNumberSpec::new(OrdOperator::Ge, 1)))
         );
 
-        assert!(matches!(
-            BuildNumberSpec::parser(">=build3").finish(),
-            Err(_)
-        ));
+        assert!(BuildNumberSpec::parser(">=build3").finish().is_err());
     }
 }

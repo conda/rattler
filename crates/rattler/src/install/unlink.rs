@@ -204,7 +204,7 @@ mod tests {
             .post_process(&vec![prefix_record.clone()], target_prefix)
             .unwrap();
 
-        return prefix_record;
+        prefix_record
     }
 
     #[tokio::test]
@@ -262,7 +262,7 @@ mod tests {
                 "lib/python3.10/site-packages/pytweening/__pycache__/__init__.cpython-310.pyc",
             ))
             .unwrap();
-        file.write_all("some funny bytes".as_bytes()).unwrap();
+        file.write_all(b"some funny bytes").unwrap();
         file.sync_all().unwrap();
 
         // Unlink the package
