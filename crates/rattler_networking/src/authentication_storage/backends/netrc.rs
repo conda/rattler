@@ -70,9 +70,12 @@ impl NetRcStorage {
     }
 
     /// Retrieve the authentication information for the given host
-    pub fn get_password(&self, host: &str) -> Result<Option<String>, NetRcStorageError> {
+    pub fn get_password(&self, host: &str) -> Result<Option<Authentication>, NetRcStorageError> {
         match self.machines.get(host) {
-            Some(machine) => Ok(machine.password.clone()),
+            Some(machine) => Ok(Some(Authentication::BasicHTTP {
+                username: machine.login.clone().unwrap_or_default(),
+                password: machine.password.clone().unwrap_or_default(),
+            })),
             None => Ok(None),
         }
     }
@@ -89,10 +92,7 @@ impl StorageBackend for NetRcStorage {
 
     fn get(&self, host: &str) -> anyhow::Result<Option<Authentication>> {
         match self.get_password(host) {
-            Ok(Some(password)) => Ok(Some(Authentication::BasicHTTP {
-                username: host.to_string(),
-                password,
-            })),
+            Ok(Some(auth)) => Ok(Some(auth)),
             Ok(None) => Ok(None),
             Err(err) => Err(anyhow::Error::new(err)),
         }
@@ -112,13 +112,13 @@ mod tests {
 
         let mut netrc = std::fs::File::create(&path).unwrap();
         netrc
-            .write_all(b"machine test\nlogin test\npassword password\n")
+            .write_all(b"machine mainmachine\nlogin test\npassword password\n")
             .unwrap();
         netrc.flush().unwrap();
 
         let storage = NetRcStorage::from_path(path.as_path()).unwrap();
         assert_eq!(
-            storage.get("test").unwrap(),
+            storage.get("mainmachine").unwrap(),
             Some(Authentication::BasicHTTP {
                 username: "test".to_string(),
                 password: "password".to_string(),
@@ -135,7 +135,7 @@ mod tests {
 
         let mut netrc = std::fs::File::create(&path).unwrap();
         netrc
-            .write_all(b"machine test2\nlogin test2\npassword password2\n")
+            .write_all(b"machine supermachine\nlogin test2\npassword password2\n")
             .unwrap();
         netrc.flush().unwrap();
 
@@ -145,7 +145,7 @@ mod tests {
         let storage = NetRcStorage::from_env().unwrap();
 
         assert_eq!(
-            storage.get("test2").unwrap(),
+            storage.get("supermachine").unwrap(),
             Some(Authentication::BasicHTTP {
                 username: "test2".to_string(),
                 password: "password2".to_string(),
