@@ -66,6 +66,9 @@ Note that all old formats (including the original conda-lock format) can still b
 * Fix self-clobbering when updating a package by @wolfv ([#494](https://github.com/mamba-org/rattler/pull/494))
 * Fix netrc parsing into BasicAuth by @wolfv ([#506](https://github.com/mamba-org/rattler/pull/506))
 
+### New Contributors
+* @vlad-ivanov-name made their first contribution in https://github.com/mamba-org/rattler/pull/482
+
 # [0.16.2] - 2024-01-11
 
 ### 📃 Details 
