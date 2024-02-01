@@ -38,7 +38,7 @@ rattler_virtual_packages = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 
 [package.metadata.release]
 # Dont publish the binary
