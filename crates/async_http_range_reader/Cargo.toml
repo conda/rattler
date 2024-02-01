@@ -1,31 +1,31 @@
 [package]
 name = "async_http_range_reader"
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "A library for streaming reading of files over HTTP using range requests"
 license = "BSD-3"
 repository = "https://github.com/mamba-org/rattler"
 
 [dependencies]
-bisection = { workspace = true }
-futures = { workspace = true }
-http-content-range = { workspace = true }
-itertools = { workspace = true }
-memmap2 = { workspace = true }
-reqwest = { workspace = true, features = ["stream"] }
-reqwest-middleware = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tokio-stream = { workspace = true, features = ["sync"] }
-tokio-util = { workspace = true }
-tracing = { workspace = true }
+futures = "0.3.28"
+http-content-range = "0.1.2"
+itertools = "0.12.0"
+bisection = "0.1.0"
+memmap2 = "0.9.0"
+reqwest = { version = "0.11.22", default-features = false, features = ["stream"] }
+reqwest-middleware = "0.2.4"
+tokio = { version = "1.33.0", default-features = false }
+tokio-stream = { version = "0.1.14", features = ["sync"] }
+tokio-util = "0.7.9"
+thiserror = "1.0.50"
+tracing = "0.1.40"
 
 [dev-dependencies]
-axum = { workspace = true, features = ["tokio"] }
-tokio = { workspace = true, features = ["macros", "test-util"] }
-tower-http = { workspace = true, features = ["fs"] }
-async_zip = { workspace = true, features = ["tokio"] }
-assert_matches = { workspace = true }
-rstest = { workspace = true }
-url = { workspace = true }
+axum = { version = "0.6.20", default-features = false, features = ["tokio"] }
+tokio = { version = "1.33.0", default-features = false, features = ["macros", "test-util"] }
+tower-http = { version = "0.4.4", default-features = false, features = ["fs"] }
+async_zip = { version = "0.0.15", default-features = false, features = ["tokio"] }
+assert_matches = "1.5.0"
+rstest = { version = "0.18.2" }
+url = { version = "2.4.1" }
