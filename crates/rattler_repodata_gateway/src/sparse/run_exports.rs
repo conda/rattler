@@ -17,13 +17,8 @@ impl SparseRunExports {
     /// Returns all the records for the specified package name.
     pub fn load_records(&self, package_name: &PackageName) -> io::Result<Vec<RunExportsJson>> {
         let exports_map = self.inner.borrow_data();
-        let mut exports =
-            parse_run_exports(package_name, &exports_map.packages, self.patch_function)?;
-        let mut conda_exports = parse_run_exports(
-            package_name,
-            &exports_map.conda_packages,
-            self.patch_function,
-        )?;
+        let mut exports = parse_run_exports(package_name, &exports_map.packages)?;
+        let mut conda_exports = parse_run_exports(package_name, &exports_map.conda_packages)?;
         exports.append(&mut conda_exports);
         Ok(exports)
     }
@@ -37,7 +32,6 @@ impl SparseRunExports {
     pub fn load_run_exports_recursively<'a>(
         run_exports: impl IntoIterator<Item = &'a SparseRunExports>,
         package_names: impl IntoIterator<Item = PackageName>,
-        patch_function: Option<fn(&mut RunExportsJson)>,
     ) -> io::Result<Vec<Vec<RunExportsJson>>> {
         let package_names: HashSet<PackageName> = package_names.into_iter().collect();
         let run_exports: Vec<&SparseRunExports> = run_exports.into_iter().collect();
@@ -50,16 +44,9 @@ impl SparseRunExports {
             for (i, run_export) in run_exports.iter().enumerate() {
                 let run_export = run_export as &SparseData<RunExportsJson>;
                 let run_export_packages = run_export.inner.borrow_data();
-                let mut exports = parse_run_exports(
-                    &package_name,
-                    &run_export_packages.packages,
-                    patch_function,
-                )?;
-                let mut conda_run_exports = parse_run_exports(
-                    &package_name,
-                    &run_export_packages.conda_packages,
-                    patch_function,
-                )?;
+                let mut exports = parse_run_exports(&package_name, &run_export_packages.packages)?;
+                let mut conda_run_exports =
+                    parse_run_exports(&package_name, &run_export_packages.conda_packages)?;
                 exports.append(&mut conda_run_exports);
                 result[i].append(&mut exports);
             }
@@ -78,7 +65,6 @@ struct RunExportsWrapper {
 fn parse_run_exports<'i>(
     package_name: &PackageName,
     packages: &[(PackageFilename<'i>, &'i RawValue)],
-    patch_function: Option<fn(&mut RunExportsJson)>,
 ) -> io::Result<Vec<RunExportsJson>> {
     let package_indices =
         packages.equal_range_by(|(package, _)| package.package.cmp(package_name.as_normalized()));
@@ -88,14 +74,6 @@ fn parse_run_exports<'i>(
         let rew: RunExportsWrapper = serde_json::from_str(raw_json.get())?;
         result.push(rew.run_exports);
     }
-
-    // Apply the patch function if one was specified
-    if let Some(patch_fn) = patch_function {
-        for record in &mut result {
-            patch_fn(record);
-        }
-    }
-
     Ok(result)
 }
 
@@ -106,26 +84,23 @@ fn parse_run_exports<'i>(
 pub async fn load_run_exports_recursively(
     run_export_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
-    patch_function: Option<fn(&mut RunExportsJson)>,
 ) -> Result<Vec<Vec<RunExportsJson>>, io::Error> {
     // Open the different files and memory map them to get access to their bytes. Do this in parallel.
     let lazy_run_exports = stream::iter(run_export_paths)
         .map(|(channel, subdir, path)| {
             let path = path.as_ref().to_path_buf();
             let subdir = subdir.into();
-            tokio::task::spawn_blocking(move || {
-                SparseData::new(channel, subdir, path, patch_function)
-            })
-            .unwrap_or_else(|r| match r.try_into_panic() {
-                Ok(panic) => std::panic::resume_unwind(panic),
-                Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
-            })
+            tokio::task::spawn_blocking(move || SparseRunExports::new(channel, subdir, path, None))
+                .unwrap_or_else(|r| match r.try_into_panic() {
+                    Ok(panic) => std::panic::resume_unwind(panic),
+                    Err(err) => Err(io::Error::new(io::ErrorKind::Other, err.to_string())),
+                })
         })
         .buffered(50)
         .try_collect::<Vec<_>>()
         .await?;
 
-    SparseRunExports::load_run_exports_recursively(&lazy_run_exports, package_names, patch_function)
+    SparseRunExports::load_run_exports_recursively(&lazy_run_exports, package_names)
 }
 
 #[cfg(test)]
@@ -173,7 +148,6 @@ mod test {
             package_names
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
-            None,
         )
         .await
         .unwrap()

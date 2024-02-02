@@ -194,7 +194,7 @@ mod test {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -224,7 +224,7 @@ mod test {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -290,7 +290,7 @@ mod test {
         .await
         .unwrap();
 
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -332,7 +332,7 @@ mod test {
         .await
         .unwrap();
 
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -381,7 +381,7 @@ mod test {
         .await
         .unwrap();
 
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -428,7 +428,7 @@ mod test {
         // The server is configured in such a way that if file `a` is requested but a file called
         // `a.gz` is available it will stream the `a.gz` file and report that its a `gzip` encoded
         // stream.
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the data from the channel
         let cache_dir = TempDir::new().unwrap();
@@ -460,7 +460,7 @@ mod test {
         // Create a directory with some repodata.
         let subdir_path = TempDir::new().unwrap();
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         let last_download_progress = Arc::new(AtomicU64::new(0));
         let last_download_progress_captured = last_download_progress.clone();
@@ -510,7 +510,7 @@ mod test {
         ));
 
         // Start a server to test the http error
-        let server = SimpleChannelServer::new(subdir_path.path());
+        let server = SimpleChannelServer::new(subdir_path.path()).await;
 
         // Download the "data" from the channel.
         let cache_dir = TempDir::new().unwrap();
