@@ -826,7 +826,7 @@ mod test {
     impl TestEnvironment {
         pub async fn new(repo_data: &str, jlap_data: &str, repo_data_state: &str) -> Self {
             let subdir_path = setup_server_environment(None, Some(jlap_data)).await;
-            let server = SimpleChannelServer::new(subdir_path.path());
+            let server = SimpleChannelServer::new(subdir_path.path()).await;
             let server_url = server.url();
 
             let (cache_dir, cache_repo_data) =

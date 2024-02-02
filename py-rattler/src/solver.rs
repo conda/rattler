@@ -15,6 +15,7 @@ pub fn py_solve(
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
+    timeout: Option<u64>,
 ) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
         let package_names = specs
@@ -39,6 +40,7 @@ pub fn py_solve(
                 .collect::<PyResult<Vec<_>>>()?,
             virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
             specs: specs.into_iter().map(Into::into).collect(),
+            timeout: timeout.map(std::time::Duration::from_micros),
         };
 
         Ok(Solver

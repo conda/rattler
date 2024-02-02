@@ -7,7 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-# [0.16.2] - 2024-10-11
+# [0.17.0] - 2024-02-01
+
+### ✨ Highlights
+
+This release contains some big changes to rattler:
+
+#### Consistent clobbering
+
+Rattler installs packages in parallel but this was at the cost of not being able to resolve files properly that existed in multiple packages.
+With this release we fixed this issue by creating a consistent clobbering experience. 
+When a file is clobbered (installed by multiple packages) the last package in the topological ordering wins.
+This information is also recorded in the prefix itself which means that even if packages are added or removed from the environment the order remains consistent.
+
+#### reqwest-middleware-client
+
+The `AuthenticatedClient` has been rewritten by @vlad-ivanov-name. 
+Instead of having a custom client for network requests we now use the [`reqwest-middleware`](https://crates.io/crates/reqwest-middleware) crate.
+The rattler implementation adds a middleware that handles authentication.
+This changes makes it easier to integrate with other crates that use `reqwest` for network requests, and it allows users to add their own middleware.
+
+#### Lock-file v4
+
+The lock-file format has been updated to version 4.
+Originally our implementation was semi-compatible with [conda-lock](https://github.com/conda/conda-lock).
+We wanted to stay as close as possible to this format because it was already an established standard.
+However, with version 2 and 3 of the format we started to diverge more and more. 
+We felt like the goals between both formats also started to diverge more and more so with version 4 we decided to completely abandon the conda-lock format and create our own.
+For more information about the lock-file format and the differences between conda-lock you can [read the documentation](https://docs.rs/rattler_lock/0.17.0/rattler_lock).
+Note that all old formats (including the original conda-lock format) can still be parsed by rattler.
+
+### 📃 Details
+
+#### Added
+
+* Add `get_windows_launcher` function by @wolfv ([#477](https://github.com/mamba-org/rattler/pull/477))
+* Expose `get_windows_launcher` function by @wolfv ([#477](https://github.com/mamba-org/rattler/pull/477))
+* Consistent clobbering & removal of `__pycache__` by @wolfv ([#437](https://github.com/mamba-org/rattler/pull/437))
+* Add `name()` to `Channel` by @ruben-arts ([#495](https://github.com/mamba-org/rattler/pull/495))
+* Add timeout parameter to the solver by @wolfv ([#499](https://github.com/mamba-org/rattler/pull/499))
+* Add a very simple basic test to validate that we can at least parse netrc properly by @mariusvniekerk ([#503](https://github.com/mamba-org/rattler/pull/503))
+
+#### Changed
+
+* Allow the full range of compression levels for zstd by @wolfv ([#479](https://github.com/mamba-org/rattler/pull/479))
+* Make compression conversion functions `pub` by @wolfv ([#480](https://github.com/mamba-org/rattler/pull/480))
+* Lock-file v4 by @baszalmstra ([#484](https://github.com/mamba-org/rattler/pull/484))
+* Convert authenticated client to reqwest middleware by @vlad-ivanov-name ([#488](https://github.com/mamba-org/rattler/pull/488))
+* Upgrade to latest resolvo main by @tdejager ([#497](https://github.com/mamba-org/rattler/pull/497))
+* Bump: resolvo 0.3.0 by @baszalmstra ([#500](https://github.com/mamba-org/rattler/pull/500))
+
+#### Fixed
+
+* Copy over file permissions after reflink by @orhun ([#485](https://github.com/mamba-org/rattler/pull/485))
+* Fix clippy and deprecation warnings by @wolfv ([#490](https://github.com/mamba-org/rattler/pull/490))
+* Do not unwrap as much in clobberregistry by @wolfv ([#489](https://github.com/mamba-org/rattler/pull/489))
+* Fix warning for deref on a double reference by @wolfv ([#493](https://github.com/mamba-org/rattler/pull/493))
+* Fix self-clobbering when updating a package by @wolfv ([#494](https://github.com/mamba-org/rattler/pull/494))
+* Fix netrc parsing into BasicAuth by @wolfv ([#506](https://github.com/mamba-org/rattler/pull/506))
+
+### New Contributors
+* @vlad-ivanov-name made their first contribution in https://github.com/mamba-org/rattler/pull/482
+
+# [0.16.2] - 2024-01-11
 
 ### 📃 Details 
 

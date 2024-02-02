@@ -11,21 +11,21 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-digest = "0.10.7"
-tokio = { version = "1.32.0", features = ["io-util"], optional = true }
-hex = "0.4.3"
-serde = { version = "1.0.188", features = ["derive"], optional = true }
-sha2 = "0.10.8"
-md-5 = "0.10.6"
-blake2 = "0.10.6"
-serde_with = "3.3.0"
+blake2 = { workspace = true }
+digest = { workspace = true }
+hex = { workspace = true }
+md-5 = { workspace = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_with = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true, features = ["io-util"], optional = true }
 
 [features]
 tokio = ["dep:tokio"]
 serde = ["dep:serde"]
 
 [dev-dependencies]
-rstest = "0.18.2"
-tempfile = "3.8.0"
-md-5 = "0.10.6"
-serde_json = "1.0.107"
+rstest = { workspace = true }
+tempfile = { workspace = true }
+md-5 = { workspace = true }
+serde_json = { workspace = true }
