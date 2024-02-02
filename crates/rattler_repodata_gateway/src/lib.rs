@@ -56,7 +56,7 @@
 //!     println!("{:?}", result.cache_state);
 //!     println!("{:?}", result.cache_result);
 //!     println!("{:?}", result.lock_file);
-//!     println!("{:?}", result.repo_data_json_path);
+//!     println!("{:?}", result.path);
 //! }
 //! ```
 

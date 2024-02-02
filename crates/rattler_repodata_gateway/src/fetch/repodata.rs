@@ -4,13 +4,28 @@ use std::path::PathBuf;
 use tracing::instrument;
 use url::Url;
 
-use super::{CachedData, FetchError, Options, ProgressFunc, Variant};
+use super::{CacheAction, CacheState, CachedData, FetchError, Options, ProgressFunc, Variant};
 
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 pub type FetchRepoDataOptions = Options<RepoDataVariant>;
 
+impl Default for FetchRepoDataOptions {
+    fn default() -> Self {
+        Self {
+            cache_action: CacheAction::default(),
+            variant: RepoDataVariant::default(),
+            jlap_enabled: true,
+            zstd_enabled: true,
+            bz2_enabled: true,
+        }
+    }
+}
+
 /// The error of [`fetch_repo_data`].
 pub type FetchRepoDataError = FetchError;
+
+/// Type alias to keep API compatibility.
+pub type RepoDataState = CacheState;
 
 /// Defines which type of repodata.json file to download. Usually you want to use the
 /// [`Variant::AfterPatches`] variant because that reflects the repodata with any patches applied.

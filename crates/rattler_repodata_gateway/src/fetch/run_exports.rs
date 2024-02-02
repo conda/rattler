@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 use url::Url;
 
-use super::{CachedData, FetchError, Options, ProgressFunc, Variant, _fetch_data};
+use super::{CacheAction, CachedData, FetchError, Options, ProgressFunc, Variant, _fetch_data};
 
 #[derive(Default)]
 /// run_export variants
@@ -11,6 +11,18 @@ pub struct RunExportsVariants;
 impl Variant for RunExportsVariants {
     fn file_name(&self) -> &'static str {
         "run_exports.json"
+    }
+}
+
+impl Default for Options<RunExportsVariants> {
+    fn default() -> Self {
+        Self {
+            cache_action: CacheAction::default(),
+            variant: RunExportsVariants::default(),
+            jlap_enabled: false,
+            zstd_enabled: true,
+            bz2_enabled: true,
+        }
     }
 }
 

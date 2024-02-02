@@ -29,9 +29,7 @@ pub use repodata::*;
 pub use run_exports::*;
 
 use crate::utils::{AsyncEncoding, Encoding, LockedFile};
-
-use cache::Expiring;
-use jlap::CacheState;
+use cache::{CacheState, Expiring};
 
 use self::cache::CacheHeaders;
 
@@ -416,18 +414,6 @@ pub struct Options<V: Variant> {
 
     /// When enabled, the bz2 variant will be used if available
     pub bz2_enabled: bool,
-}
-
-impl<V: Variant> Default for Options<V> {
-    fn default() -> Self {
-        Self {
-            cache_action: CacheAction::default(),
-            variant: V::default(),
-            jlap_enabled: true,
-            zstd_enabled: true,
-            bz2_enabled: true,
-        }
-    }
 }
 
 /// The result of fetch
