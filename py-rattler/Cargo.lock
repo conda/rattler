@@ -1164,6 +1164,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25db6b064527c5d482d0423354fcd07a89a2dfe07b67892e62411946db7f07b0"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1539,9 +1548,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.18.0"
+version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "opaque-debug"
@@ -1670,6 +1679,34 @@ dependencies = [
  "redox_syscall 0.3.5",
  "smallvec",
  "windows-targets 0.48.5",
+]
+
+[[package]]
+name = "pep440_rs"
+version = "0.3.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "887f66cc62717ea72caac4f1eb4e6f392224da3ffff3f40ec13ab427802746d6"
+dependencies = [
+ "lazy_static",
+ "regex",
+ "serde",
+ "unicode-width",
+]
+
+[[package]]
+name = "pep508_rs"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4516b53d9ea6112ebb38b4af08d5707d30b994fb7f98ff133c5dcf7ed8fa854"
+dependencies = [
+ "once_cell",
+ "pep440_rs",
+ "regex",
+ "serde",
+ "thiserror",
+ "tracing",
+ "unicode-width",
+ "url",
 ]
 
 [[package]]
@@ -1851,12 +1888,14 @@ dependencies = [
  "anyhow",
  "futures",
  "openssl",
+ "pep508_rs",
  "pyo3",
  "pyo3-asyncio",
  "rattler",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_index",
+ "rattler_lock",
  "rattler_networking",
  "rattler_repodata_gateway",
  "rattler_shell",
@@ -2012,7 +2051,7 @@ dependencies = [
  "fxhash",
  "hex",
  "indexmap 2.1.0",
- "itertools",
+ "itertools 0.11.0",
  "memchr",
  "memmap2",
  "nom",
@@ -2049,7 +2088,7 @@ dependencies = [
  "glob",
  "hex",
  "indexmap 2.1.0",
- "itertools",
+ "itertools 0.11.0",
  "lazy-regex",
  "nom",
  "purl",
@@ -2096,6 +2135,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "rattler_lock"
+version = "0.16.2"
+dependencies = [
+ "chrono",
+ "fxhash",
+ "indexmap 2.1.0",
+ "itertools 0.12.0",
+ "pep440_rs",
+ "pep508_rs",
+ "purl",
+ "rattler_conda_types",
+ "rattler_digest",
+ "serde",
+ "serde-json-python-formatter",
+ "serde_json",
+ "serde_with",
+ "serde_yaml",
+ "thiserror",
+ "url",
+]
+
+[[package]]
 name = "rattler_macros"
 version = "0.16.2"
 dependencies = [
@@ -2113,7 +2174,7 @@ dependencies = [
  "dirs",
  "fslock",
  "getrandom",
- "itertools",
+ "itertools 0.11.0",
  "keyring",
  "lazy_static",
  "libc",
@@ -2137,7 +2198,7 @@ dependencies = [
  "bzip2",
  "chrono",
  "futures-util",
- "itertools",
+ "itertools 0.11.0",
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
@@ -2168,7 +2229,7 @@ dependencies = [
  "hex",
  "humansize",
  "humantime",
- "itertools",
+ "itertools 0.11.0",
  "json-patch",
  "libc",
  "md-5",
@@ -2199,7 +2260,7 @@ version = "0.16.2"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.1.0",
- "itertools",
+ "itertools 0.11.0",
  "rattler_conda_types",
  "serde_json",
  "shlex",
@@ -2215,7 +2276,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "hex",
- "itertools",
+ "itertools 0.11.0",
  "rattler_conda_types",
  "rattler_digest",
  "resolvo",
@@ -2284,9 +2345,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.9.6"
+version = "1.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebee201405406dbf528b8b672104ae6d6d63e6d118cb10e4d51abbc7b58044ff"
+checksum = "b62dbe01f0b06f9d8dc7d49e05a0785f153b00b2c227856282f671e0318c9b15"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2296,9 +2357,9 @@ dependencies = [
 
 [[package]]
 name = "regex-automata"
-version = "0.3.9"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59b23e92ee4318893fa3fe3e6fb365258efbfe6ac6ab30f090cdcbb7aa37efa9"
+checksum = "3b7fa1134405e2ec9353fd416b17f8dacd46c473d7d3fd1cf202706a14eb792a"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2307,9 +2368,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.7.5"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbb5fb1acd8a1a18b3dd5be62d25485eb770e05afb408a9627d14d451bae12da"
+checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "reqwest"
@@ -2381,7 +2442,7 @@ checksum = "554db165775d6858d17a9626c327b796d81db95db0a4cd6ca0efdfb7e7e3a264"
 dependencies = [
  "bitvec",
  "elsa",
- "itertools",
+ "itertools 0.11.0",
  "petgraph",
  "tracing",
 ]
@@ -2577,6 +2638,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-json-python-formatter"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db62ee54077c67a8cff258c919175f0b3cb78d2b6dcafb0d166ff98dcb21aa5d"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -3080,6 +3150,7 @@ version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
 dependencies = [
+ "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",
@@ -3165,6 +3236,12 @@ checksum = "5c5713f0fc4b5db668a2ac63cdb7bb4469d8c9fed047b1d0292cc7b0ce2ba921"
 dependencies = [
  "tinyvec",
 ]
+
+[[package]]
+name = "unicode-width"
+version = "0.1.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e51733f11c9c4f72aa0c160008246859e340b00807569a0da0e7a1079b27ba85"
 
 [[package]]
 name = "unindent"

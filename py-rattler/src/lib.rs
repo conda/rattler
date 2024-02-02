@@ -3,6 +3,7 @@ mod error;
 mod generic_virtual_package;
 mod index;
 mod linker;
+mod lock;
 mod match_spec;
 mod meta;
 mod nameless_match_spec;
@@ -26,6 +27,7 @@ use error::{
     TransactionException, VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
+use lock::{PyEnvironment, PyLockChannel, PyLockFile, PyLockPackage, PyPypiPackageData, PyPypiPackageEnvironmentData};
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
@@ -78,6 +80,12 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyGenericVirtualPackage>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
+    m.add_class::<PyLockFile>().unwrap();
+    m.add_class::<PyEnvironment>().unwrap();
+    m.add_class::<PyLockChannel>().unwrap();
+    m.add_class::<PyLockPackage>().unwrap();
+    m.add_class::<PyPypiPackageData>().unwrap();
+    m.add_class::<PyPypiPackageEnvironmentData>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();

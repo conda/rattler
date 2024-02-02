@@ -10,14 +10,8 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["native-tls"]
-native-tls = [
-    "rattler_networking/native-tls",
-    "rattler_repodata_gateway/native-tls",
-]
-rustls-tls = [
-    "rattler_networking/rustls-tls",
-    "rattler_repodata_gateway/rustls-tls",
-]
+native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
@@ -37,6 +31,7 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
     "resolvo",
 ] }
 rattler_index = { path = "../crates/rattler_index" }
+rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 
 pyo3 = { version = "0.19", features = [
     "abi3-py38",
@@ -53,6 +48,7 @@ thiserror = "1.0.44"
 url = "2.4.1"
 
 openssl = { version = "0.10", optional = true }
+pep508_rs = "0.2.3"
 
 # Prevent package from thinking it's in the workspace
 [workspace]
