@@ -9,6 +9,9 @@ use super::{CachedData, FetchError, Options, ProgressFunc, Variant};
 /// Additional knobs that allow you to tweak the behavior of [`fetch_repo_data`].
 pub type FetchRepoDataOptions = Options<RepoDataVariant>;
 
+/// The error of [`fetch_repo_data`].
+pub type FetchRepoDataError = FetchError;
+
 /// Defines which type of repodata.json file to download. Usually you want to use the
 /// [`Variant::AfterPatches`] variant because that reflects the repodata with any patches applied.
 #[derive(Default, Copy, Clone, Debug, PartialEq, Eq)]
@@ -70,7 +73,7 @@ pub async fn fetch_repo_data(
     cache_path: PathBuf,
     options: FetchRepoDataOptions,
     progress: Option<ProgressFunc>,
-) -> Result<CachedData, FetchError> {
+) -> Result<CachedData, FetchRepoDataError> {
     super::_fetch_data(subdir_url, client, cache_path, options, progress).await
 }
 
