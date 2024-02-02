@@ -13,6 +13,9 @@ use rattler_lock::{
 
 use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
 
+/// Represents a lock-file for both Conda packages and Pypi packages.
+///
+/// Lock-files can store information for multiple platforms and for multiple environments.
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
@@ -39,7 +42,7 @@ impl PyLockFile {
         Ok(self.inner.to_path(&path).map_err(PyRattlerError::from)?)
     }
 
-    /// Parses an conda-lock file from a file.
+    /// Parses an rattler-lock file from a file.
     #[staticmethod]
     pub fn from_path(path: PathBuf) -> PyResult<Self> {
         Ok(LockFile::from_path(&path)
@@ -112,7 +115,7 @@ impl PyEnvironment {
         None
     }
 
-    /// Returns an iterator over all packages and platforms defined for this environment
+    /// Returns a list of all packages and platforms defined for this environment
     pub fn packages_by_platform(&self) -> Vec<(PyPlatform, Vec<PyLockPackage>)> {
         self.inner
             .packages_by_platform()
