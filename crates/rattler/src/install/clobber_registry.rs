@@ -121,6 +121,11 @@ impl ClobberRegistry {
 
             // if we find an entry, we have a clobbering path!
             if let Some(e) = self.paths_registry.get(&path) {
+                if e == &name_idx {
+                    // A name cannot appear twice in an environment.
+                    // We get into this case if a package is updated (removed and installed again with a new version)
+                    continue;
+                }
                 let new_path = Self::clobber_name(&path, &self.package_names[name_idx]);
                 self.clobbers
                     .entry(path.clone())
@@ -475,6 +480,14 @@ mod tests {
         ]
     }
 
+    fn test_operations_update() -> Vec<RepoDataRecord> {
+        let repodata_record_1 = get_repodata_record("clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2");
+        let repodata_record_2 = get_repodata_record("clobber/clobber-2-0.2.0-h4616a5c_0.tar.bz2");
+        let repodata_record_3 = get_repodata_record("clobber/clobber-3-0.2.0-h4616a5c_0.tar.bz2");
+
+        vec![repodata_record_1, repodata_record_2, repodata_record_3]
+    }
+
     fn assert_check_files(target_prefix: &Path, expected_files: &[&str]) {
         let files = std::fs::read_dir(target_prefix).unwrap();
         let files = files
@@ -762,5 +775,178 @@ mod tests {
                 vec![PathBuf::from("clobber/bobber/clobber.txt")]
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_clobber_update() {
+        // Create a transaction
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // check that the files are there
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "clobber.txt__clobber-from-clobber-2",
+                "clobber.txt__clobber-from-clobber-3",
+            ],
+        );
+
+        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        prefix_records.sort_by(|a, b| {
+            a.repodata_record
+                .package_record
+                .name
+                .as_normalized()
+                .cmp(&b.repodata_record.package_record.name.as_normalized())
+        });
+
+        let update_ops = test_operations_update();
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Change {
+                old: prefix_records[0].clone(),
+                new: update_ops[0].clone(),
+            }],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "clobber.txt__clobber-from-clobber-2",
+                "clobber.txt__clobber-from-clobber-3",
+            ],
+        );
+
+        // content of  clobber.txt
+        assert_eq!(
+            fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
+            "clobber-1 v2\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clobber_update_and_remove() {
+        // Create a transaction
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // check that the files are there
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "clobber.txt__clobber-from-clobber-2",
+                "clobber.txt__clobber-from-clobber-3",
+            ],
+        );
+
+        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        prefix_records.sort_by(|a, b| {
+            a.repodata_record
+                .package_record
+                .name
+                .as_normalized()
+                .cmp(&b.repodata_record.package_record.name.as_normalized())
+        });
+
+        let update_ops = test_operations_update();
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![
+                TransactionOperation::Change {
+                    old: prefix_records[2].clone(),
+                    new: update_ops[2].clone(),
+                },
+                TransactionOperation::Remove(prefix_records[0].clone()),
+                TransactionOperation::Remove(prefix_records[1].clone()),
+            ],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert_check_files(target_prefix.path(), &["clobber.txt"]);
+
+        // content of  clobber.txt
+        assert_eq!(
+            fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
+            "clobber-3 v2\n"
+        );
     }
 }

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import datetime
 from typing import List, Optional
 from rattler.match_spec.match_spec import MatchSpec
 
@@ -14,6 +15,7 @@ def solve(
     locked_packages: Optional[List[RepoDataRecord]] = None,
     pinned_packages: Optional[List[RepoDataRecord]] = None,
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
+    timeout: Optional[datetime.timedelta] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -54,5 +56,6 @@ def solve(
                 v_package._generic_virtual_package
                 for v_package in virtual_packages or []
             ],
+            timeout.microseconds if timeout else None,
         )
     ]

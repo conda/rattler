@@ -302,6 +302,7 @@ mod test {
     use crate::{get_test_data_dir, validation::validate_package_directory};
     use assert_matches::assert_matches;
     use axum::{
+        body::Body,
         extract::State,
         http::{Request, StatusCode},
         middleware,
@@ -312,7 +313,7 @@ mod test {
     };
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
-    use std::{fs::File, net::SocketAddr, path::Path, sync::Arc};
+    use std::{fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc};
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tower_http::services::ServeDir;
@@ -360,10 +361,10 @@ mod test {
     }
 
     /// A helper middleware function that fails the first two requests.
-    async fn fail_the_first_two_requests<B>(
+    async fn fail_the_first_two_requests(
         State(count): State<Arc<Mutex<i32>>>,
-        req: Request<B>,
-        next: Next<B>,
+        req: Request<Body>,
+        next: Next,
     ) -> Result<Response, StatusCode> {
         let count = {
             let mut count = count.lock().await;
@@ -384,7 +385,7 @@ mod test {
     #[tokio::test]
     pub async fn test_flaky_package_cache() {
         let static_dir = get_test_data_dir();
-
+        println!("Serving files from {}", static_dir.display());
         // Construct a service that serves raw files from the test directory
         let service = get_service(ServeDir::new(static_dir));
 
@@ -402,13 +403,11 @@ mod test {
         // port is very important because it enables creating multiple instances at the same time.
         // We need this to be able to run tests in parallel.
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let server = axum::Server::bind(&addr).serve(router.into_make_service());
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
 
-        // Get the address of the server so we can bind to it at a later stage.
-        let addr = server.local_addr();
-
-        // Spawn the server.
-        tokio::spawn(server);
+        let service = router.into_make_service();
+        tokio::spawn(axum::serve(listener, service).into_future());
 
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());

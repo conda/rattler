@@ -91,6 +91,12 @@ impl super::SolverImpl for Solver {
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
+        if task.timeout.is_some() {
+            return Err(SolveError::UnsupportedOperations(vec![
+                "timeout".to_string()
+            ]));
+        }
+
         // Construct a default libsolv pool
         let pool = Pool::default();
 

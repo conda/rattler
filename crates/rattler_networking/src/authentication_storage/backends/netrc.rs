@@ -70,9 +70,12 @@ impl NetRcStorage {
     }
 
     /// Retrieve the authentication information for the given host
-    pub fn get_password(&self, host: &str) -> Result<Option<String>, NetRcStorageError> {
+    pub fn get_password(&self, host: &str) -> Result<Option<Authentication>, NetRcStorageError> {
         match self.machines.get(host) {
-            Some(machine) => Ok(machine.password.clone()),
+            Some(machine) => Ok(Some(Authentication::BasicHTTP {
+                username: machine.login.clone().unwrap_or_default(),
+                password: machine.password.clone().unwrap_or_default(),
+            })),
             None => Ok(None),
         }
     }
@@ -89,12 +92,72 @@ impl StorageBackend for NetRcStorage {
 
     fn get(&self, host: &str) -> anyhow::Result<Option<Authentication>> {
         match self.get_password(host) {
-            Ok(Some(password)) => Ok(Some(Authentication::BasicHTTP {
-                username: host.to_string(),
-                password,
-            })),
+            Ok(Some(auth)) => Ok(Some(auth)),
             Ok(None) => Ok(None),
             Err(err) => Err(anyhow::Error::new(err)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_file_storage() {
+        let file = tempdir().unwrap();
+        let path = file.path().join(".testnetrc");
+
+        let mut netrc = std::fs::File::create(&path).unwrap();
+        netrc
+            .write_all(b"machine mainmachine\nlogin test\npassword password\n")
+            .unwrap();
+        netrc.flush().unwrap();
+
+        let storage = NetRcStorage::from_path(path.as_path()).unwrap();
+        assert_eq!(
+            storage.get("mainmachine").unwrap(),
+            Some(Authentication::BasicHTTP {
+                username: "test".to_string(),
+                password: "password".to_string(),
+            })
+        );
+
+        assert_eq!(storage.get("test_unknown").unwrap(), None);
+    }
+
+    #[test]
+    fn test_file_storage_from_env() {
+        let file = tempdir().unwrap();
+        let path = file.path().join(".testnetrc2");
+
+        let mut netrc = std::fs::File::create(&path).unwrap();
+        netrc
+            .write_all(b"machine supermachine\nlogin test2\npassword password2\n")
+            .unwrap();
+        netrc.flush().unwrap();
+
+        let old_netrc = env::var("NETRC");
+        env::set_var("NETRC", path.as_os_str());
+
+        let storage = NetRcStorage::from_env().unwrap();
+
+        assert_eq!(
+            storage.get("supermachine").unwrap(),
+            Some(Authentication::BasicHTTP {
+                username: "test2".to_string(),
+                password: "password2".to_string(),
+            })
+        );
+
+        assert_eq!(storage.get("test_unknown").unwrap(), None);
+
+        if let Ok(netrc) = old_netrc {
+            env::set_var("NETRC", netrc);
+        } else {
+            env::remove_var("NETRC");
         }
     }
 }
