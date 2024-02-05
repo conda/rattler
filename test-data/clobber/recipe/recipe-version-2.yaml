@@ -1,0 +1,28 @@
+recipe:
+  name: clobber
+  version: 0.2.0
+
+outputs:
+  - package:
+      name: clobber-1
+    
+    build:  
+      noarch: generic
+      script:
+        - echo "clobber-1 v2" > $PREFIX/clobber.txt
+
+  - package:
+      name: clobber-2
+    
+    build:  
+      noarch: generic
+      script:
+        - echo "clobber-2 v2" > $PREFIX/clobber.txt
+
+  - package:
+      name: clobber-3
+    
+    build:  
+      noarch: generic
+      script:
+        - echo "clobber-3 v2" > $PREFIX/clobber.txt

@@ -101,7 +101,6 @@ fn compare_two_tar_archives<T: Read>(
         }
         FilterFiles::None => {}
     }
-
     assert_eq!(map1.len(), map2.len());
 
     for (path, header1) in map1 {

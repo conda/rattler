@@ -42,6 +42,9 @@ pub enum SolveError {
     /// Error when converting matchspec
     #[error(transparent)]
     ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
+
+    /// To support Resolvo cancellation
+    Cancelled,
 }
 
 impl fmt::Display for SolveError {
@@ -59,6 +62,9 @@ impl fmt::Display for SolveError {
             }
             SolveError::ParseMatchSpecError(e) => {
                 write!(f, "Error parsing match spec: {e}")
+            }
+            SolveError::Cancelled => {
+                write!(f, "Solve operation has been cancelled")
             }
         }
     }
@@ -93,6 +99,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The specs we want to solve
     pub specs: Vec<MatchSpec>,
+
+    /// The timeout after which the solver should stop
+    pub timeout: Option<std::time::Duration>,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]

@@ -98,7 +98,6 @@ impl AuthenticationMiddleware {
                     let mut header_value = reqwest::header::HeaderValue::from_str(&basic_auth)
                         .expect("base64 can always be converted to a header value");
                     header_value.set_sensitive(true);
-
                     req.headers_mut()
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)

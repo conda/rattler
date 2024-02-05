@@ -1,4 +1,5 @@
 use axum::routing::get_service;
+use std::future::IntoFuture;
 use std::net::SocketAddr;
 use std::path::Path;
 use tokio::sync::oneshot;
@@ -18,7 +19,7 @@ impl SimpleChannelServer {
 }
 
 impl SimpleChannelServer {
-    pub fn new(path: impl AsRef<Path>) -> Self {
+    pub async fn new(path: impl AsRef<Path>) -> Self {
         // Define a service to serve the contents of the folder. The `precompressed_gzip` method
         // adds the behavior that a file gzip compressed file called `<path>.gz` is preferred over
         // the original file. This is very useful because we can store gzipped compressed files in
@@ -32,16 +33,19 @@ impl SimpleChannelServer {
         // port is very important because it enables creating multiple instances at the same time.
         // We need this to be able to run tests in parallel.
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
-        let server = axum::Server::bind(&addr).serve(app.into_make_service());
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 
         // Get the address of the server so we can bind to it at a later stage.
-        let addr = server.local_addr();
+        let local_address = listener.local_addr().unwrap();
 
-        // Setup a graceful shutdown trigger which is fired when this instance is dropped.
         let (tx, rx) = oneshot::channel();
-        let server = server.with_graceful_shutdown(async {
-            rx.await.ok();
-        });
+
+        let server = axum::serve(listener, app)
+            // Setup a graceful shutdown trigger which is fired when this instance is dropped.
+            .with_graceful_shutdown(async {
+                rx.await.ok();
+            })
+            .into_future();
 
         // Spawn the server. Let go of the JoinHandle, we can use the graceful shutdown trigger to
         // stop the server.
@@ -49,7 +53,7 @@ impl SimpleChannelServer {
         std::mem::drop(future);
 
         Self {
-            local_addr: addr,
+            local_addr: local_address,
             shutdown_sender: Some(tx),
         }
     }

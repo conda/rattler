@@ -7,8 +7,9 @@ use rattler_conda_types::{
     RepoDataRecord,
 };
 use resolvo::{
-    Candidates, Dependencies, DependencyProvider, NameId, Pool, SolvableDisplay, SolvableId,
-    Solver as LibSolvRsSolver, SolverCache, VersionSet, VersionSetId,
+    Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
+    SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
+    VersionSetId,
 };
 use std::{
     cell::RefCell,
@@ -164,6 +165,8 @@ pub(crate) struct CondaDependencyProvider<'a> {
         RefCell<HashMap<VersionSetId, Option<(rattler_conda_types::Version, bool)>>>,
 
     parse_match_spec_cache: RefCell<HashMap<&'a str, VersionSetId>>,
+
+    stop_time: Option<std::time::SystemTime>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -173,6 +176,7 @@ impl<'a> CondaDependencyProvider<'a> {
         locked_records: &'a [RepoDataRecord],
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
+        stop_time: Option<std::time::SystemTime>,
     ) -> Self {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -332,8 +336,15 @@ impl<'a> CondaDependencyProvider<'a> {
             records,
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
+            stop_time,
         }
     }
+}
+
+/// The reason why the solver was cancelled
+pub enum CancelReason {
+    /// The solver was cancelled because the timeout was reached
+    Timeout,
 }
 
 impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a> {
@@ -357,12 +368,12 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 
     fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
+        let mut dependencies = KnownDependencies::default();
         let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
-            return Dependencies::default();
+            return Dependencies::Known(dependencies);
         };
 
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
-        let mut dependencies = Dependencies::default();
         for depends in rec.package_record.depends.iter() {
             let version_set_id =
                 parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache).unwrap();
@@ -375,7 +386,16 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
             dependencies.constrains.push(version_set_id);
         }
 
-        dependencies
+        Dependencies::Known(dependencies)
+    }
+
+    fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
+        if let Some(stop_time) = self.stop_time {
+            if std::time::SystemTime::now() > stop_time {
+                return Some(Box::new(CancelReason::Timeout));
+            }
+        }
+        None
     }
 }
 
@@ -413,6 +433,10 @@ impl super::SolverImpl for Solver {
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
+        let stop_time = task
+            .timeout
+            .map(|timeout| std::time::SystemTime::now() + timeout);
+
         // Construct a provider that can serve the data.
         let provider = CondaDependencyProvider::from_solver_task(
             task.available_packages.into_iter().map(|r| r.into()),
@@ -420,6 +444,7 @@ impl super::SolverImpl for Solver {
             &task.pinned_packages,
             &task.virtual_packages,
             task.specs.clone().as_ref(),
+            stop_time,
         );
 
         // Construct the requirements that the solver needs to satisfy.
@@ -436,17 +461,26 @@ impl super::SolverImpl for Solver {
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver.solve(root_requirements).map_err(|problem| {
-            SolveError::Unsolvable(vec![problem
-                .display_user_friendly(&solver, &CondaSolvableDisplay)
-                .to_string()])
-        })?;
+        let solvables = solver
+            .solve(root_requirements)
+            .map_err(|unsolvable_or_cancelled| {
+                match unsolvable_or_cancelled {
+                    UnsolvableOrCancelled::Unsolvable(problem) => {
+                        SolveError::Unsolvable(vec![problem
+                            .display_user_friendly(&solver, &CondaSolvableDisplay)
+                            .to_string()])
+                    }
+                    // We are not doing this as of yet
+                    // put a generic message in here for now
+                    UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
+                }
+            })?;
 
         // Get the resulting packages from the solver.
         let required_records = solvables
             .into_iter()
-            .filter_map(|id| match solver.pool().resolve_solvable(id).inner() {
-                SolverPackageRecord::Record(rec) => Some(rec.deref().clone()),
+            .filter_map(|id| match *solver.pool().resolve_solvable(id).inner() {
+                SolverPackageRecord::Record(rec) => Some(rec.clone()),
                 SolverPackageRecord::VirtualPackage(_) => None,
             })
             .collect();

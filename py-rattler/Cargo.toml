@@ -50,5 +50,11 @@ url = "2.4.1"
 openssl = { version = "0.10", optional = true }
 pep508_rs = "0.2.3"
 
+[build-dependencies]
+pyo3-build-config = "0.20"
+
+
+[patch.crates-io]
+
 # Prevent package from thinking it's in the workspace
 [workspace]

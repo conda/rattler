@@ -572,7 +572,7 @@ impl ShellEnum {
     /// Guesses the current shell by checking the name of the parent process.
     #[cfg(feature = "sysinfo")]
     pub fn from_parent_process() -> Option<Self> {
-        use sysinfo::{get_current_pid, ProcessExt, SystemExt};
+        use sysinfo::get_current_pid;
 
         let mut system_info = sysinfo::System::new();
 
