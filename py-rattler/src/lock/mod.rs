@@ -7,7 +7,7 @@ use std::{
 use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_lock::{
-    Channel, Environment, LockFile, Package, PackageHashes, PypiPackageData,
+    Channel, Environment, LockFile, LockFileBuilder, Package, PackageHashes, PypiPackageData,
     PypiPackageEnvironmentData,
 };
 
@@ -37,6 +37,38 @@ impl From<PyLockFile> for LockFile {
 
 #[pymethods]
 impl PyLockFile {
+    #[new]
+    pub fn new(
+        channels: Vec<PyLockFileChannelConfig>,
+        conda_packages: Vec<PyCondaPackageConfig>,
+        pypi_packages: Vec<PyPypiPackageConfig>,
+    ) -> PyResult<Self> {
+        let mut lock_file = LockFileBuilder::new();
+
+        for c in channels {
+            lock_file.set_channels(c.env, c.channels);
+        }
+
+        for pkg in conda_packages {
+            lock_file.add_conda_package(
+                pkg.env,
+                pkg.platform.into(),
+                pkg.locked_package.try_as_repodata_record()?.clone().into(),
+            );
+        }
+
+        for pkg in pypi_packages {
+            lock_file.add_pypi_package(
+                pkg.env,
+                pkg.platform.inner,
+                pkg.locked_package.inner,
+                pkg.env_data.inner,
+            );
+        }
+
+        Ok(lock_file.finish().into())
+    }
+
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: PathBuf) -> PyResult<()> {
         Ok(self.inner.to_path(&path).map_err(PyRattlerError::from)?)
@@ -66,6 +98,80 @@ impl PyLockFile {
             .environments()
             .map(|(name, env)| (name.to_owned(), env.into()))
             .collect()
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyLockFileChannelConfig {
+    #[pyo3(get, set)]
+    env: String,
+    #[pyo3(get, set)]
+    channels: Vec<PyLockChannel>,
+}
+
+#[pymethods]
+impl PyLockFileChannelConfig {
+    #[new]
+    pub fn new(env: String, channels: Vec<PyLockChannel>) -> Self {
+        Self {
+            env,
+            channels,
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyCondaPackageConfig {
+    #[pyo3(get, set)]
+    env: String,
+    #[pyo3(get, set)]
+    platform: PyPlatform,
+    #[pyo3(get, set)]
+    locked_package: PyRecord,
+}
+
+#[pymethods]
+impl PyCondaPackageConfig {
+    #[new]
+    pub fn new(env: String, platform: PyPlatform, locked_package: PyRecord) -> Self {
+        Self {
+            env,
+            platform,
+            locked_package,
+        }
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub struct PyPypiPackageConfig {
+    #[pyo3(get, set)]
+    env: String,
+    #[pyo3(get, set)]
+    platform: PyPlatform,
+    #[pyo3(get, set)]
+    locked_package: PyPypiPackageData,
+    #[pyo3(get, set)]
+    env_data: PyPypiPackageEnvironmentData,
+}
+
+#[pymethods]
+impl PyPypiPackageConfig {
+    #[new]
+    pub fn new(
+        env: String,
+        platform: PyPlatform,
+        locked_package: PyPypiPackageData,
+        env_data: PyPypiPackageEnvironmentData,
+    ) -> Self {
+        Self {
+            env,
+            platform,
+            locked_package,
+            env_data,
+        }
     }
 }
 
@@ -200,6 +306,14 @@ pub struct PyLockChannel {
 impl From<Channel> for PyLockChannel {
     fn from(value: Channel) -> Self {
         Self { inner: value }
+    }
+}
+
+impl From<rattler_conda_types::Channel> for PyLockChannel {
+    fn from(value: rattler_conda_types::Channel) -> Self {
+        Self {
+            inner: Channel::from(value.base_url().to_string()),
+        }
     }
 }
 

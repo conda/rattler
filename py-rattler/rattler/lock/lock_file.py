@@ -1,6 +1,11 @@
 from __future__ import annotations
 import os
 from typing import List, Optional, Tuple
+from rattler.lock.config import (
+    CondaPackageConfig,
+    LockFileChannelConfig,
+    PypiPackageConfig,
+)
 from rattler.lock.environment import Environment
 
 from rattler.rattler import PyLockFile
@@ -13,6 +18,18 @@ class LockFile:
     """
 
     _lock_file: PyLockFile
+
+    def __init__(
+        self,
+        channels: List[LockFileChannelConfig],
+        conda_packages: List[CondaPackageConfig],
+        pypi_packages: List[PypiPackageConfig],
+    ) -> None:
+        self._lock_file = PyLockFile(
+            [c._inner for c in channels],
+            [pkg._inner for pkg in conda_packages],
+            [pkg._inner for pkg in pypi_packages],
+        )
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> LockFile:
