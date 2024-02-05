@@ -23,6 +23,7 @@ chrono = { workspace = true }
 digest = { workspace = true }
 dirs = { workspace = true }
 drop_bomb = { workspace = true }
+fs-err = "2.11.0"
 futures = { workspace = true }
 fxhash = { workspace = true }
 hex = { workspace = true }

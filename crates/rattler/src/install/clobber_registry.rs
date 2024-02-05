@@ -2,12 +2,15 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    fs,
     path::{Path, PathBuf},
 };
 
-use rattler_conda_types::{package::PathsJson, PackageName, PrefixRecord};
+use rattler_conda_types::{
+    package::{IndexJson, PathsEntry},
+    PackageName, PrefixRecord,
+};
 
+use fs_err as fs;
 /// A registry for clobbering files
 /// The registry keeps track of all files that are installed by a package and
 /// can be used to rename files that are already installed by another package.
@@ -88,10 +91,11 @@ impl ClobberRegistry {
     /// will "unclobber" the files after all packages have been installed.
     pub fn register_paths(
         &mut self,
-        name: &PackageName,
-        paths_json: &PathsJson,
+        index_json: &IndexJson,
+        computed_paths: &Vec<(PathsEntry, PathBuf)>,
     ) -> HashMap<PathBuf, PathBuf> {
         let mut clobber_paths = HashMap::new();
+        let name = &index_json.name.clone();
 
         // check if we have the package name already registered
         let name_idx = if let Some(idx) = self.package_names.iter().position(|n| n == name) {
@@ -101,25 +105,51 @@ impl ClobberRegistry {
             self.package_names.len() - 1
         };
 
-        for entry in paths_json.paths.iter() {
-            let path = entry.relative_path.clone();
+        // let entry_points = if index_json.noarch.is_python() {
+        //     let mut res = Vec::new();
+        //     if let (Some(link_json), Some(python_info)) = (link_json, python_info) {
+        //         // register entry points
+        //         if let NoArchLinks::Python(entry_points) = &link_json.noarch {
+        //             for entry_point in &entry_points.entry_points {
+        //                 if python_info.platform.is_windows() {
+        //                     let relative_path_script_py = python_info
+        //                         .bin_dir
+        //                         .join(format!("{}-script.py", &entry_point.command));
+        //                     let relative_path_script_exe = python_info
+        //                         .bin_dir
+        //                         .join(format!("{}.exe", &entry_point.command));
+        //                     res.push(relative_path_script_py);
+        //                     res.push(relative_path_script_exe);
+        //                 } else {
+        //                     let file = python_info.bin_dir.join(&entry_point.command);
+        //                     res.push(file);
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     res
+        // } else {
+        //     Vec::new()
+        // };
 
+        for (_, path) in computed_paths {
             // if we find an entry, we have a clobbering path!
-            if let Some(e) = self.paths_registry.get(&path) {
+            if let Some(e) = self.paths_registry.get(path) {
                 if e == &name_idx {
                     // A name cannot appear twice in an environment.
                     // We get into this case if a package is updated (removed and installed again with a new version)
                     continue;
                 }
-                let new_path = Self::clobber_name(&path, &self.package_names[name_idx]);
+                let new_path = Self::clobber_name(path, &self.package_names[name_idx]);
                 self.clobbers
                     .entry(path.clone())
                     .or_insert_with(|| vec![*e])
                     .push(name_idx);
 
-                clobber_paths.insert(path, new_path);
+                // We insert the non-renamed path here
+                clobber_paths.insert(path.clone(), new_path);
             } else {
-                self.paths_registry.insert(path, name_idx);
+                self.paths_registry.insert(path.clone(), name_idx);
             }
         }
 
@@ -268,13 +298,14 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
+        str::FromStr,
     };
 
     use futures::TryFutureExt;
     use insta::assert_yaml_snapshot;
     use rand::seq::SliceRandom;
     use rattler_conda_types::{
-        package::IndexJson, PackageRecord, Platform, PrefixRecord, RepoDataRecord,
+        package::IndexJson, PackageRecord, Platform, PrefixRecord, RepoDataRecord, Version,
     };
     use rattler_digest::{Md5, Sha256};
     use rattler_networking::retry_policies::default_retry_policy;
@@ -283,12 +314,13 @@ mod tests {
 
     use crate::{
         get_test_data_dir,
-        install::{transaction, unlink_package, InstallDriver, InstallOptions},
+        install::{transaction, unlink_package, InstallDriver, InstallOptions, PythonInfo},
         package_cache::PackageCache,
     };
 
     fn get_repodata_record(filename: &str) -> RepoDataRecord {
         let path = fs::canonicalize(get_test_data_dir().join(filename)).unwrap();
+        print!("{:?}", path);
         let index_json = read_package_file::<IndexJson>(&path).unwrap();
 
         // find size and hash
@@ -458,6 +490,18 @@ mod tests {
         ]
     }
 
+    fn test_python_noarch_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
+        let repodata_record_1 =
+            get_repodata_record("clobber/clobber-pynoarch-1-0.1.0-pyh4616a5c_0.tar.bz2");
+        let repodata_record_2 =
+            get_repodata_record("clobber/clobber-pynoarch-2-0.1.0-pyh4616a5c_0.tar.bz2");
+
+        vec![
+            TransactionOperation::Install(repodata_record_1),
+            TransactionOperation::Install(repodata_record_2),
+        ]
+    }
+
     fn test_operations_nested() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
         let repodata_record_1 =
             get_repodata_record("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2");
@@ -495,6 +539,8 @@ mod tests {
             .collect::<Vec<_>>();
         println!("Files: {:?}", files);
         assert_eq!(files.len(), expected_files.len());
+        println!("{:?}", files);
+
         for file in files {
             assert!(expected_files.contains(&file.file_name().unwrap().to_string_lossy().as_ref()));
         }
@@ -961,6 +1007,7 @@ mod tests {
             platform: Platform::current(),
         };
 
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
         let install_driver = InstallDriver::new(100, Some(&prefix_records));
 
         execute_transaction(
@@ -980,5 +1027,89 @@ mod tests {
             fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
             "clobber-3 v2\n"
         );
+
+        let update_ops = test_operations_update();
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Install(update_ops[0].clone())],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert_check_files(
+            target_prefix.path(),
+            &["clobber.txt", "clobber.txt__clobber-from-clobber-3"],
+        );
+
+        // content of  clobber.txt
+        assert_eq!(
+            fs::read_to_string(target_prefix.path().join("clobber.txt")).unwrap(),
+            "clobber-1 v2\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_clobber_python_noarch() {
+        // Create a transaction
+        let operations = test_python_noarch_operations();
+
+        let python_info =
+            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::current())
+                .unwrap();
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: Some(python_info.clone()),
+            current_python_info: Some(python_info.clone()),
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        let mut install_options = InstallOptions::default();
+        install_options.python_info = Some(python_info.clone());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &install_options,
+        )
+        .await;
+
+        // check that the files are there
+        if cfg!(unix) {
+            assert_check_files(
+                &target_prefix
+                    .path()
+                    .join("lib/python3.11/site-packages/clobber"),
+                &["clobber.py", "clobber.py__clobber-from-clobber-pynoarch-2"],
+            );
+        } else {
+            assert_check_files(
+                &target_prefix.path().join("Lib/site-packages/clobber"),
+                &["clobber.py", "clobber.py__clobber-from-clobber-pynoarch-2"],
+            );
+        }
     }
 }

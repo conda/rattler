@@ -173,7 +173,10 @@ impl InstallDriver {
 
         self.clobber_registry()
             .unclobber(&required_packages, target_prefix)
-            .map_err(InstallError::PostProcessFailed)?;
+            .map_err(|e| {
+                tracing::error!("Error unclobbering packages: {:?}", e);
+                InstallError::PostProcessFailed(e)
+            })?;
 
         Ok(())
     }

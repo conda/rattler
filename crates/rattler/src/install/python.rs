@@ -6,6 +6,9 @@ use std::path::{Path, PathBuf};
 /// a specific Python version that is installed in an environment.
 #[derive(Debug, Clone)]
 pub struct PythonInfo {
+    /// The platform that the python package is installed for
+    pub platform: Platform,
+
     /// The major and minor version
     pub short_version: (u64, u64),
 
@@ -56,6 +59,7 @@ impl PythonInfo {
         };
 
         Ok(Self {
+            platform,
             short_version: (major, minor),
             path,
             site_packages_path,

@@ -1,9 +1,8 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
-use crate::install::python::PythonInfo;
 use memmap2::Mmap;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
-use rattler_conda_types::{NoArchType, Platform};
+use rattler_conda_types::Platform;
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use reflink_copy::reflink;
@@ -131,8 +130,8 @@ pub struct LinkedFile {
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
 #[allow(clippy::too_many_arguments)] // TODO: Fix this properly
 pub fn link_file(
-    noarch_type: NoArchType,
     path_json_entry: &PathsEntry,
+    destination_relative_path: PathBuf,
     package_dir: &Path,
     target_dir: &Path,
     target_prefix: &str,
@@ -140,25 +139,9 @@ pub fn link_file(
     allow_hard_links: bool,
     allow_ref_links: bool,
     target_platform: Platform,
-    target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
-    clobber_rename: Option<&PathBuf>,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
-
-    // Determine the destination path
-    let destination_relative_path = if noarch_type.is_python() {
-        match target_python {
-            Some(python_info) => {
-                python_info.get_python_noarch_target_path(&path_json_entry.relative_path)
-            }
-            None => return Err(LinkFileError::MissingPythonInfo),
-        }
-    } else if let Some(clobber_rename) = clobber_rename {
-        clobber_rename.into()
-    } else {
-        path_json_entry.relative_path.as_path().into()
-    };
 
     let destination_path = target_dir.join(&destination_relative_path);
 
@@ -166,11 +149,6 @@ pub fn link_file(
     if let Some(parent) = destination_path.parent() {
         std::fs::create_dir_all(parent).map_err(LinkFileError::FailedToCreateParentDirectory)?;
     }
-
-    // If the file already exists it most likely means that the file is clobbered. This means that
-    // different packages are writing to the same file. This function simply reports back to the
-    // caller that this is the case but there is no special handling here.
-    let clobbered = clobber_rename.is_some();
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.
@@ -300,10 +278,10 @@ pub fn link_file(
     };
 
     Ok(LinkedFile {
-        clobbered,
+        clobbered: false,
         sha256,
         file_size,
-        relative_path: destination_relative_path.into_owned(),
+        relative_path: destination_relative_path,
         method: link_method,
     })
 }
