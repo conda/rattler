@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, Optional, Self, Tuple
+from typing import List, Optional, Tuple
 from rattler.lock.environment import Environment
 
 from rattler.rattler import PyLockFile
@@ -15,7 +15,7 @@ class LockFile:
     _lock_file: PyLockFile
 
     @staticmethod
-    def from_path(path: os.PathLike[str]) -> Self:
+    def from_path(path: os.PathLike[str]) -> LockFile:
         """
         Parses a rattler-lock file from a file.
         """
@@ -49,7 +49,7 @@ class LockFile:
         return Environment._from_py_environment(self._lock_file.default_environment())
 
     @classmethod
-    def _from_py_lock_file(cls, py_lock_file: PyLockFile) -> Self:
+    def _from_py_lock_file(cls, py_lock_file: PyLockFile) -> LockFile:
         """
         Construct Rattler LockFile from FFI PyLockFile object.
         """

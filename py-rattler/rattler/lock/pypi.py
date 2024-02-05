@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Self, Set
+from typing import List, Optional, Set
 from rattler.lock.hash import PackageHashes
 
 from rattler.rattler import PyPypiPackageData, PyPypiEnvironmentData
@@ -61,7 +61,7 @@ class PypiPackageData:
         return self._data.requires_python()
 
     @classmethod
-    def _from_py_pypi_package_data(cls, pkg_data: PyPypiPackageData) -> Self:
+    def _from_py_pypi_package_data(cls, pkg_data: PyPypiPackageData) -> PypiPackageData:
         """
         Construct Rattler PypiPackageData from FFI PyPypiPackageData object.
         """
@@ -82,7 +82,7 @@ class PypiPackageEnvironmentData:
         return self._data.extras()
 
     @classmethod
-    def _from_py_pypi_env_data(cls, env_data: PyPypiEnvironmentData) -> Self:
+    def _from_py_pypi_env_data(cls, env_data: PyPypiEnvironmentData) -> PypiPackageEnvironmentData:
         """
         Construct Rattler PypiPackageEnvironmentData from FFI PyPypiEnvironmentData object.
         """

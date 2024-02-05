@@ -1,6 +1,5 @@
 from __future__ import annotations
-import os
-from typing import Dict, List, Optional, Self, Tuple
+from typing import Dict, List, Optional, Tuple
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockPackage
 from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
@@ -61,7 +60,7 @@ class Environment:
             str(Platform._from_py_platform(platform)): [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_package_environment_data(
+                    PypiPackageEnvironmentData._from_py_pypi_env_data(
                         env_data
                     ),
                 )
@@ -102,7 +101,7 @@ class Environment:
             return [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_package_environment_data(
+                    PypiPackageEnvironmentData._from_py_pypi_env_data(
                         env_data
                     ),
                 )
@@ -111,7 +110,7 @@ class Environment:
         return None
 
     @classmethod
-    def _from_py_environment(cls, py_environment: PyEnvironment) -> Self:
+    def _from_py_environment(cls, py_environment: PyEnvironment) -> Environment:
         """
         Construct Rattler Environment from FFI PyEnvironment object.
         """

@@ -92,7 +92,7 @@ impl From<PyEnvironment> for Environment {
 impl PyEnvironment {
     /// Returns all the platforms for which we have a locked-down environment.
     pub fn platforms(&self) -> Vec<PyPlatform> {
-        self.inner.platforms().map(|p| p.into()).collect::<Vec<_>>()
+        self.inner.platforms().map(Into::into).collect::<Vec<_>>()
     }
 
     /// Returns the channels that are used by this environment.
@@ -110,7 +110,7 @@ impl PyEnvironment {
     /// Returns all the packages for a specific platform in this environment.
     pub fn packages(&self, platform: PyPlatform) -> Option<Vec<PyLockPackage>> {
         if let Some(packages) = self.inner.packages(platform.inner) {
-            return Some(packages.map(|p| p.into()).collect());
+            return Some(packages.map(std::convert::Into::into).collect());
         }
         None
     }
@@ -150,7 +150,7 @@ impl PyEnvironment {
             .map(|(platform, record_vec)| {
                 (
                     platform.into(),
-                    record_vec.into_iter().map(|rec| rec.into()).collect(),
+                    record_vec.into_iter().map(Into::into).collect(),
                 )
             })
             .collect())
@@ -168,7 +168,7 @@ impl PyEnvironment {
             .conda_repodata_records_for_platform(platform.inner)
             .map_err(PyRattlerError::from)?
         {
-            return Ok(Some(records.into_iter().map(|rec| rec.into()).collect()));
+            return Ok(Some(records.into_iter().map(Into::into).collect()));
         }
         Ok(None)
     }
