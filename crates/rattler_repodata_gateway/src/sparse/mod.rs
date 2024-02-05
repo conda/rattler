@@ -395,9 +395,27 @@ mod test {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
     }
 
+    async fn fetch_repo_data(subdir: &str) -> Result<(), reqwest::Error> {
+        let path = test_dir().join(format!("channels/conda-forge/{}/repodata.json", subdir));
+        if path.exists() {
+            return Ok(());
+        } else {
+            tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+        }
+        let data = reqwest::get(format!("https://rattler-test.pixi.run/test-data/channels/conda-forge/{}/repodata.json", subdir)).await?;
+        tokio::fs::write(path, data.bytes().await?).await.unwrap();
+        Ok(())
+    }
+
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Vec<Vec<RepoDataRecord>> {
+        fetch_repo_data("noarch").await.unwrap();
+        fetch_repo_data("linux-64").await.unwrap();
+
+        //"linux-sha=20021d1dff9941ccf189f27404e296c54bc37fc4600c7027b366c03fc0bfa89e"
+        //"noarch-sha=05e0c4ce7be29f36949c33cce782f21aecfbdd41f9e3423839670fb38fc5d691"
+
         load_repo_data_recursively(
             [
                 (
