@@ -60,9 +60,7 @@ class Environment:
             str(Platform._from_py_platform(platform)): [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_env_data(
-                        env_data
-                    ),
+                    PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
                 )
                 for (pkg_data, env_data) in pypi_tup
             ]
@@ -101,9 +99,7 @@ class Environment:
             return [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
-                    PypiPackageEnvironmentData._from_py_pypi_env_data(
-                        env_data
-                    ),
+                    PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
                 )
                 for (pkg_data, env_data) in data
             ]

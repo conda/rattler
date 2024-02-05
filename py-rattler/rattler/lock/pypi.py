@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Optional, Set
 from rattler.lock.hash import PackageHashes
 
-from rattler.rattler import PyPypiPackageData, PyPypiEnvironmentData
+from rattler.rattler import PyPypiPackageData, PyPypiPackageEnvironmentData
 
 
 class PypiPackageData:
@@ -71,7 +71,7 @@ class PypiPackageData:
 
 
 class PypiPackageEnvironmentData:
-    _data: PyPypiEnvironmentData
+    _data: PyPypiPackageEnvironmentData
 
     @property
     def extras(self) -> Set[str]:
@@ -82,9 +82,11 @@ class PypiPackageEnvironmentData:
         return self._data.extras()
 
     @classmethod
-    def _from_py_pypi_env_data(cls, env_data: PyPypiEnvironmentData) -> PypiPackageEnvironmentData:
+    def _from_py_pypi_env_data(
+        cls, env_data: PyPypiPackageEnvironmentData
+    ) -> PypiPackageEnvironmentData:
         """
-        Construct Rattler PypiPackageEnvironmentData from FFI PyPypiEnvironmentData object.
+        Construct Rattler PypiPackageEnvironmentData from FFI PyPypiPackageEnvironmentData object.
         """
         data = cls.__new__(cls)
         data._data = env_data
