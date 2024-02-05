@@ -1,6 +1,9 @@
 from __future__ import annotations
 import os
 from typing import Dict, List, Optional, Self, Tuple
+from rattler.lock.channel import LockChannel
+from rattler.lock.package import LockPackage
+from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
 from rattler.platform.platform import Platform
 
 from rattler.rattler import PyEnvironment
@@ -71,7 +74,41 @@ class Environment:
         """
         Returns all conda packages for all platforms.
         """
-        return { self._env.conda_repodata_records() }
+        return {
+            str(platform): [RepoDataRecord._from_py_record(r) for r in records]
+            for (platform, records) in self._env.conda_repodata_records().items()
+        }
+
+    def conda_repodata_records_for_platform(
+        self, platform: Platform
+    ) -> Optional[List[RepoDataRecord]]:
+        """
+        Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
+        returns an error if the conversion failed. Returns `None` if the specified platform is not
+        defined for this environment.
+        """
+        if records := self._env.conda_repodata_records_for_platform(platform._inner):
+            return [RepoDataRecord._from_py_record(r) for r in records]
+        return None
+
+    def pypi_packages_for_platform(
+        self, platform: Platform
+    ) -> Optional[List[Tuple[PypiPackageData, PypiPackageEnvironmentData]]]:
+        """
+        Returns all the pypi packages and their associated environment data for the specified
+        platform. Returns `None` if the platform is not defined for this environment.
+        """
+        if data := self._env.pypi_packages_for_platform(platform._inner):
+            return [
+                (
+                    PypiPackageData._from_py_pypi_package_data(pkg_data),
+                    PypiPackageEnvironmentData._from_py_pypi_package_environment_data(
+                        env_data
+                    ),
+                )
+                for (pkg_data, env_data) in data
+            ]
+        return None
 
     @classmethod
     def _from_py_environment(cls, py_environment: PyEnvironment) -> Self:

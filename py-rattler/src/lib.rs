@@ -27,7 +27,10 @@ use error::{
     TransactionException, VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
-use lock::{PyEnvironment, PyLockChannel, PyLockFile, PyLockPackage, PyPypiPackageData, PyPypiPackageEnvironmentData};
+use lock::{
+    PyEnvironment, PyLockChannel, PyLockFile, PyLockPackage, PyPypiPackageData,
+    PyPypiPackageEnvironmentData,
+};
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
