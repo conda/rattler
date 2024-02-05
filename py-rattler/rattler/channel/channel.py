@@ -1,5 +1,8 @@
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rattler.lock.channel import LockChannel
 
 from rattler.rattler import PyChannel
 from rattler.channel.channel_config import ChannelConfig
@@ -7,19 +10,37 @@ from rattler.channel.channel_config import ChannelConfig
 
 class Channel:
     def __init__(
-        self, name: str, channel_configuration: ChannelConfig = ChannelConfig()
+        self, name: str, channel_configuration: Optional[ChannelConfig] = None
     ) -> None:
         """
         Create a new channel.
 
         ```python
-        >>> channel = Channel("conda-forge", ChannelConfig())
+        >>> channel = Channel("conda-forge")
         >>> channel
         Channel(name="conda-forge", base_url="https://conda.anaconda.org/conda-forge/")
         >>>
         ```
         """
+        if not channel_configuration:
+            channel_configuration = ChannelConfig()
+
         self._channel = PyChannel(name, channel_configuration._channel_configuration)
+
+    def to_lock_channel(self) -> LockChannel:
+        """
+        Returns a new [`LockChannel`] from existing channel.
+
+        ```python
+        >>> channel = Channel("conda-forge")
+        >>> type(channel.to_lock_channel())
+        LockChannel("https://conda.anaconda.org/conda-forge/")
+        >>>
+        ```
+        """
+        from rattler.lock.channel import LockChannel
+
+        return LockChannel(self.base_url)
 
     @property
     def name(self) -> Optional[str]:
@@ -29,7 +50,7 @@ class Channel:
         Examples
         --------
         ```python
-        >>> channel = Channel("conda-forge", ChannelConfig())
+        >>> channel = Channel("conda-forge")
         >>> channel.name
         'conda-forge'
         >>>
@@ -45,7 +66,7 @@ class Channel:
         Examples
         --------
         ```python
-        >>> channel = Channel("conda-forge", ChannelConfig())
+        >>> channel = Channel("conda-forge")
         >>> channel.base_url
         'https://conda.anaconda.org/conda-forge/'
         >>>
