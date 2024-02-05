@@ -114,10 +114,7 @@ pub struct PyLockFileChannelConfig {
 impl PyLockFileChannelConfig {
     #[new]
     pub fn new(env: String, channels: Vec<PyLockChannel>) -> Self {
-        Self {
-            env,
-            channels,
-        }
+        Self { env, channels }
     }
 }
 
@@ -320,6 +317,16 @@ impl From<rattler_conda_types::Channel> for PyLockChannel {
 impl From<PyLockChannel> for Channel {
     fn from(value: PyLockChannel) -> Self {
         value.inner
+    }
+}
+
+#[pymethods]
+impl PyLockChannel {
+    #[new]
+    pub fn new(url: String) -> Self {
+        Self {
+            inner: Channel::from(url),
+        }
     }
 }
 

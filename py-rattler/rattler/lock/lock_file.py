@@ -21,14 +21,14 @@ class LockFile:
 
     def __init__(
         self,
-        channels: List[LockFileChannelConfig],
-        conda_packages: List[CondaPackageConfig],
-        pypi_packages: List[PypiPackageConfig],
+        channels: Optional[List[LockFileChannelConfig]] = None,
+        conda_packages: Optional[List[CondaPackageConfig]] = None,
+        pypi_packages: Optional[List[PypiPackageConfig]] = None,
     ) -> None:
         self._lock_file = PyLockFile(
-            [c._inner for c in channels],
-            [pkg._inner for pkg in conda_packages],
-            [pkg._inner for pkg in pypi_packages],
+            [c._inner for c in channels or []],
+            [pkg._inner for pkg in conda_packages or []],
+            [pkg._inner for pkg in pypi_packages or []],
         )
 
     @staticmethod
