@@ -23,42 +23,42 @@ class PypiPackageData:
         """
         The name of the package.
         """
-        return self._data.name()
+        return self._data.name
 
     @property
     def version(self) -> str:
         """
         The version of the package.
         """
-        return self._data.version()
+        return self._data.version
 
     @property
     def url(self) -> str:
         """
         The URL that points to where the artifact can be downloaded from.
         """
-        return self._data.url()
+        return self._data.url
 
     @property
     def hash(self) -> Optional[PackageHashes]:
         """
         Hashes of the file pointed to by `url`.
         """
-        return PackageHashes._from_py_package_hashes(self._data.hash())
+        return PackageHashes._from_py_package_hashes(self._data.hash)
 
     @property
     def requires_dist(self) -> List[str]:
         """
         A list of dependencies on other packages.
         """
-        return self._data.requires_dist()
+        return self._data.requires_dist
 
     @property
     def requires_python(self) -> Optional[str]:
         """
         The python version that this package requires.
         """
-        return self._data.requires_python()
+        return self._data.requires_python
 
     @classmethod
     def _from_py_pypi_package_data(cls, pkg_data: PyPypiPackageData) -> PypiPackageData:
@@ -68,6 +68,12 @@ class PypiPackageData:
         data = cls.__new__(cls)
         data._data = pkg_data
         return data
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the PypiPackageData.
+        """
+        return "PypiPackageData()"
 
 
 class PypiPackageEnvironmentData:
@@ -79,7 +85,7 @@ class PypiPackageEnvironmentData:
         The extras enabled for the package.
         Note that the order doesn't matter.
         """
-        return self._data.extras()
+        return self._data.extras
 
     @classmethod
     def _from_py_pypi_env_data(
@@ -91,3 +97,9 @@ class PypiPackageEnvironmentData:
         data = cls.__new__(cls)
         data._data = env_data
         return data
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the PypiPackageEnvironmentData.
+        """
+        return "PypiPackageEnvironmentData()"

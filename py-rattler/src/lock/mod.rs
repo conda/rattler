@@ -6,6 +6,7 @@ use std::{
 
 use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, PyResult};
+use rattler_conda_types::{MatchSpec, RepoDataRecord};
 use rattler_lock::{
     Channel, Environment, LockFile, LockFileBuilder, Package, PackageHashes, PypiPackageData,
     PypiPackageEnvironmentData,
@@ -350,6 +351,66 @@ impl From<Package> for PyLockPackage {
 impl From<PyLockPackage> for Package {
     fn from(value: PyLockPackage) -> Self {
         value.inner
+    }
+}
+
+#[pymethods]
+impl PyLockPackage {
+    #[getter]
+    pub fn is_conda(&self) -> bool {
+        self.inner.is_conda()
+    }
+
+    #[getter]
+    pub fn is_pypi(&self) -> bool {
+        self.inner.is_conda()
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.inner.name().to_string()
+    }
+
+    #[getter]
+    pub fn version(&self) -> String {
+        self.inner.version().to_string()
+    }
+
+    #[getter]
+    pub fn url(&self) -> String {
+        self.inner.url().to_string()
+    }
+
+    pub fn as_conda(&self) -> Option<PyRecord> {
+        if let Some(pkg) = self.inner.as_conda() {
+            return Some(Into::into(RepoDataRecord {
+                package_record: pkg.package_record().clone(),
+                file_name: pkg.file_name().unwrap_or("").into(),
+                channel: pkg.channel().map_or("".to_string(), |c| c.to_string()),
+                url: pkg.url().clone(),
+            }));
+        }
+        None
+    }
+
+    pub fn as_pypi(&self) -> Option<(PyPypiPackageData, PyPypiPackageEnvironmentData)> {
+        if let Some(pkg) = self.inner.as_pypi() {
+            let pkg = pkg.data();
+            return Some((pkg.package.clone().into(), pkg.environment.clone().into()));
+        }
+        None
+    }
+
+    pub fn satisfies(&self, spec: &str) -> PyResult<bool> {
+        match &self.inner {
+            Package::Conda(pkg) => {
+                Ok(pkg.satisfies(&MatchSpec::from_str(spec).map_err(PyRattlerError::from)?))
+            }
+            Package::Pypi(pkg) => Ok(pkg.satisfies(
+                &Requirement::from_str(spec)
+                    .map_err(|e| PyRattlerError::RequirementError(e.to_string()))?,
+            )),
+        }
     }
 }
 
