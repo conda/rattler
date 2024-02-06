@@ -1,23 +1,29 @@
 # type: ignore
 import os.path
 import subprocess
+import time
 
 import pytest
+from xprocess import ProcessStarter
 from rattler import Channel, ChannelConfig, fetch_repo_data, SparseRepoData, PackageName
 from rattler.platform import Platform
 from rattler.repo_data.record import RepoDataRecord
 
 
 @pytest.fixture(scope="session")
-def serve_repo_data() -> None:
+def serve_repo_data(xprocess) -> None:
     port, repo_name = 8912, "test-repo"
 
     test_data_dir = os.path.join(
         os.path.dirname(__file__), "../../../test-data/test-server"
     )
 
-    with subprocess.Popen(
-        [
+    class Starter(ProcessStarter):
+        # startup pattern
+        pattern = f"Server started at localhost:{port}"
+
+        # command to start process
+        args = [
             "python",
             os.path.join(test_data_dir, "reposerver.py"),
             "-d",
@@ -27,9 +33,14 @@ def serve_repo_data() -> None:
             "-p",
             str(port),
         ]
-    ) as proc:
-        yield port, repo_name
-        proc.terminate()
+
+    # ensure process is running and return its logfile
+    xprocess.ensure("reposerver", Starter)
+
+    yield port, repo_name
+
+    # clean up whole process tree afterwards
+    xprocess.getinfo("reposerver").terminate()
 
 
 @pytest.mark.asyncio

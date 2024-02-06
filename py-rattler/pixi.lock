@@ -7121,6 +7121,94 @@ package:
   size: 26068
   timestamp: 1689174411610
 - platform: linux-64
+  name: pytest-xprocess
+  version: 0.23.0
+  category: main
+  manager: conda
+  dependencies:
+  - psutil
+  - pytest >=2.8
+  - python >=3.8
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-xprocess-0.23.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: c9178b28f47fd191ac0a668b84e8fa18
+    sha256: 29bddec9fe144cd94f6d89ff91e26ec217fbabb839f8dc991d518a43f14d1413
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: linux-64
+  build_number: 0
+  license: MIT
+  license_family: MIT
+  noarch: python
+  size: 19270
+  timestamp: 1695495262467
+- platform: osx-64
+  name: pytest-xprocess
+  version: 0.23.0
+  category: main
+  manager: conda
+  dependencies:
+  - psutil
+  - pytest >=2.8
+  - python >=3.8
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-xprocess-0.23.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: c9178b28f47fd191ac0a668b84e8fa18
+    sha256: 29bddec9fe144cd94f6d89ff91e26ec217fbabb839f8dc991d518a43f14d1413
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: osx-64
+  build_number: 0
+  license: MIT
+  license_family: MIT
+  noarch: python
+  size: 19270
+  timestamp: 1695495262467
+- platform: osx-arm64
+  name: pytest-xprocess
+  version: 0.23.0
+  category: main
+  manager: conda
+  dependencies:
+  - psutil
+  - pytest >=2.8
+  - python >=3.8
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-xprocess-0.23.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: c9178b28f47fd191ac0a668b84e8fa18
+    sha256: 29bddec9fe144cd94f6d89ff91e26ec217fbabb839f8dc991d518a43f14d1413
+  build: pyhd8ed1ab_0
+  arch: aarch64
+  subdir: osx-arm64
+  build_number: 0
+  license: MIT
+  license_family: MIT
+  noarch: python
+  size: 19270
+  timestamp: 1695495262467
+- platform: win-64
+  name: pytest-xprocess
+  version: 0.23.0
+  category: main
+  manager: conda
+  dependencies:
+  - psutil
+  - pytest >=2.8
+  - python >=3.8
+  url: https://conda.anaconda.org/conda-forge/noarch/pytest-xprocess-0.23.0-pyhd8ed1ab_0.conda
+  hash:
+    md5: c9178b28f47fd191ac0a668b84e8fa18
+    sha256: 29bddec9fe144cd94f6d89ff91e26ec217fbabb839f8dc991d518a43f14d1413
+  build: pyhd8ed1ab_0
+  arch: x86_64
+  subdir: win-64
+  build_number: 0
+  license: MIT
+  license_family: MIT
+  noarch: python
+  size: 19270
+  timestamp: 1695495262467
+- platform: linux-64
   name: python
   version: 3.11.6
   category: main
