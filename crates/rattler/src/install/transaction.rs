@@ -13,7 +13,7 @@ pub enum TransactionError {
 }
 
 /// Describes an operation to perform
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionOperation<Old, New> {
     /// The given package record should be installed
     Install(New),
@@ -75,6 +75,24 @@ pub struct Transaction<Old, New> {
 
     /// The target platform of the transaction
     pub platform: Platform,
+}
+
+impl<Old, New> Transaction<Old, New> {
+    /// Return an iterator over the prefix records of all packages that are going to be removed.
+    pub fn removed_packages(&self) -> impl Iterator<Item = &Old> + '_ {
+        self.operations
+            .iter()
+            .filter_map(TransactionOperation::record_to_remove)
+    }
+}
+
+impl<Old: AsRef<New>, New> Transaction<Old, New> {
+    /// Return an iterator over the prefix records of all packages that are going to be installed.
+    pub fn installed_packages(&self) -> impl Iterator<Item = &New> + '_ {
+        self.operations
+            .iter()
+            .filter_map(TransactionOperation::record_to_install)
+    }
 }
 
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {

@@ -1,8 +1,13 @@
 use super::clobber_registry::ClobberRegistry;
-use super::InstallError;
+use super::unlink::{recursively_remove_empty_directories, UnlinkError};
+use super::{InstallError, Transaction};
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use rattler_conda_types::{PackageRecord, PrefixRecord};
+use indexmap::IndexSet;
+use itertools::Itertools;
+use rattler_conda_types::prefix_record::PathType;
+use rattler_conda_types::{PackageRecord, PrefixRecord, RepoDataRecord};
+use std::collections::HashSet;
 use std::future::pending;
 use std::path::Path;
 use std::sync::MutexGuard;
@@ -152,15 +157,81 @@ impl InstallDriver {
     /// and will also execute any `post-link.sh/bat` scripts
     pub fn post_process(
         &self,
-        prefix_records: &[PrefixRecord],
+        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
     ) -> Result<(), InstallError> {
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
+            .map_err(InstallError::PostProcessFailed)?;
+
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
+
+        self.remove_empty_directories(transaction, &prefix_records, target_prefix)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
+            });
 
         self.clobber_registry()
             .unclobber(&required_packages, target_prefix)
             .map_err(InstallError::PostProcessFailed)?;
+
+        Ok(())
+    }
+
+    /// Remove all empty directories that are not part of the new prefix records.
+    pub fn remove_empty_directories(
+        &self,
+        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        new_prefix_records: &[PrefixRecord],
+        target_prefix: &Path,
+    ) -> Result<(), UnlinkError> {
+        let mut keep_directories = HashSet::new();
+
+        // find all forced directories in the prefix records
+        for record in new_prefix_records {
+            for paths in record.paths_data.paths.iter() {
+                if paths.path_type == PathType::Directory {
+                    let path = target_prefix.join(&paths.relative_path);
+                    keep_directories.insert(path);
+                }
+            }
+        }
+
+        // find all removed directories
+        for record in transaction.removed_packages() {
+            let mut removed_directories = HashSet::new();
+
+            for paths in record.paths_data.paths.iter() {
+                if paths.path_type != PathType::Directory {
+                    if let Some(parent) = paths.relative_path.parent() {
+                        removed_directories.insert(parent);
+                    }
+                }
+            }
+
+            let is_python_noarch = record.repodata_record.package_record.noarch.is_python();
+
+            // Sort the directories by length, so that we delete the deepest directories first.
+            let mut directories: IndexSet<_> = removed_directories.into_iter().sorted().collect();
+
+            while let Some(directory) = directories.pop() {
+                let directory_path = target_prefix.join(directory);
+                let removed_until = recursively_remove_empty_directories(
+                    &directory_path,
+                    target_prefix,
+                    is_python_noarch,
+                    &keep_directories,
+                )?;
+
+                // The directory is not empty which means our parent directory is also not empty,
+                // recursively remove the parent directory from the set as well.
+                while let Some(parent) = removed_until.parent() {
+                    if !directories.shift_remove(parent) {
+                        break;
+                    }
+                }
+            }
+        }
 
         Ok(())
     }
