@@ -328,6 +328,10 @@ impl PyLockChannel {
             inner: Channel::from(url),
         }
     }
+
+    pub fn as_str(&self) -> String {
+        self.inner.url.clone()
+    }
 }
 
 #[pyclass]

@@ -33,8 +33,8 @@ class Channel:
 
         ```python
         >>> channel = Channel("conda-forge")
-        >>> type(channel.to_lock_channel())
-        LockChannel("https://conda.anaconda.org/conda-forge/")
+        >>> channel.to_lock_channel()
+        LockChannel(url="https://conda.anaconda.org/conda-forge/")
         >>>
         ```
         """

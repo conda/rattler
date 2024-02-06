@@ -17,3 +17,33 @@ class LockChannel:
         chan = cls.__new__(cls)
         chan._channel = channel
         return chan
+
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the LockChannel.
+
+        Examples
+        --------
+        ```python
+        >>> channel = LockChannel("https://conda.anaconda.org/conda-forge/")
+        >>> str(channel)
+        'https://conda.anaconda.org/conda-forge/'
+        >>>
+        ```
+        """
+        return self._channel.as_str()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the LockChannel.
+
+        Examples
+        --------
+        ```python
+        >>> channel = LockChannel("https://conda.anaconda.org/conda-forge/")
+        >>> channel
+        LockChannel(url="https://conda.anaconda.org/conda-forge/")
+        >>>
+        ```
+        """
+        return f'LockChannel(url="{self._channel.as_str()}")'
