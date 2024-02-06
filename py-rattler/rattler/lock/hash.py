@@ -1,9 +1,24 @@
 from __future__ import annotations
+from typing import Optional
 from rattler.rattler import PyPackageHashes
 
 
 class PackageHashes:
     _hashes: PyPackageHashes
+
+    @property
+    def md5(self) -> Optional[bytes]:
+        """
+        Returns the Sha256 hash.
+        """
+        return self._hashes.md5
+
+    @property
+    def sha256(self) -> Optional[bytes]:
+        """
+        Returns the Sha256 hash.
+        """
+        return self._hashes.sha256
 
     @classmethod
     def _from_py_package_hashes(cls, pkg_hashes: PyPackageHashes) -> PackageHashes:

@@ -5,8 +5,9 @@ use std::{
 };
 
 use pep508_rs::Requirement;
-use pyo3::{pyclass, pymethods, PyResult};
+use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
+use rattler_digest::parse_digest_from_hex;
 use rattler_lock::{
     Channel, Environment, LockFile, LockFileBuilder, Package, PackageHashes, PypiPackageData,
     PypiPackageEnvironmentData,
@@ -535,5 +536,28 @@ impl From<PackageHashes> for PyPackageHashes {
 impl From<PyPackageHashes> for PackageHashes {
     fn from(value: PyPackageHashes) -> Self {
         value.inner
+    }
+}
+
+#[pymethods]
+impl PyPackageHashes {
+    // #[new]
+    // pub fn new(md5: &str, sha256: &str) -> Self {
+    //     let md5_digest = parse_digest_from_hex::<rattler_digest::Md5>(md5);
+    //     let sha256_digest = parse_digest_from_hex::<rattler_digest::Sha256>(sha256);
+
+    //     PackageHashes::from_hashes(md5_digest, sha256_digest)
+    //         .expect("this should never happen since both the hashes were provided")
+    //         .into()
+    // }
+
+    #[getter]
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.sha256().map(|sha256| PyBytes::new(py, &sha256))
+    }
+
+    #[getter]
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.inner.md5().map(|md5| PyBytes::new(py, &md5))
     }
 }
