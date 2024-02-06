@@ -173,7 +173,9 @@ async fn test_extract_tar_bz2_async(#[case] input: Url, #[case] sha256: &str, #[
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
 
-    let file_path = tools::download_and_cache_file_async(input, sha256).await.unwrap();
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
     let result = rattler_package_streaming::tokio::async_read::extract_tar_bz2(
         tokio::fs::File::open(&test_data_dir().join(file_path))
@@ -194,7 +196,9 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("tokio");
     println!("Target dir: {}", temp_dir.display());
 
-    let file_path = tools::download_and_cache_file_async(input, sha256).await.unwrap();
+    let file_path = tools::download_and_cache_file_async(input, sha256)
+        .await
+        .unwrap();
 
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
     let result = rattler_package_streaming::tokio::async_read::extract_conda(

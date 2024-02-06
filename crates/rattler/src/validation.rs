@@ -232,9 +232,7 @@ mod test {
     use assert_matches::assert_matches;
     use rattler_conda_types::package::{PackageFile, PathType, PathsJson};
     use rstest::rstest;
-    use std::{
-        io::Write,
-    };
+    use std::io::Write;
     use url::Url;
 
     #[rstest]

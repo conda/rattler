@@ -400,9 +400,15 @@ mod test {
         if path.exists() {
             return Ok(());
         } else {
-            tokio::fs::create_dir_all(path.parent().unwrap()).await.unwrap();
+            tokio::fs::create_dir_all(path.parent().unwrap())
+                .await
+                .unwrap();
         }
-        let data = reqwest::get(format!("https://rattler-test.pixi.run/test-data/channels/conda-forge/{}/repodata.json", subdir)).await?;
+        let data = reqwest::get(format!(
+            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{}/repodata.json",
+            subdir
+        ))
+        .await?;
         tokio::fs::write(path, data.bytes().await?).await.unwrap();
         Ok(())
     }

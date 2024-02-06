@@ -26,10 +26,10 @@ pub enum Error {
     FailedToCreateCacheDir(String, #[source] std::io::Error),
 
     #[error(transparent)]
-    HttpError(#[from] reqwest::Error),
+    Http(#[from] reqwest::Error),
 
     #[error(transparent)]
-    IoError(#[from] std::io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("hash mismatch. Expected: {0}, Actual: {1}")]
     HashMismatch(String, String),

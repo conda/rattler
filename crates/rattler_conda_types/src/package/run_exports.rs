@@ -54,7 +54,7 @@ mod test {
                 .unwrap(),
             "81592fa07b17ecb26813a3238e198b9d1fe39b77628b3f68744bffbaac505e93",
         )
-            .unwrap();
+        .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let package_dir = package_dir.into_path();

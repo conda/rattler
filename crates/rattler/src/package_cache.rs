@@ -324,8 +324,6 @@ mod test {
         let tar_archive_path =
             get_test_data_dir().join("ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2");
 
-
-
         // Read the paths.json file straight from the tar file.
         let paths = {
             let tar_reader = File::open(&tar_archive_path).unwrap();

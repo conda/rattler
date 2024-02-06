@@ -272,7 +272,7 @@ mod test {
                 .unwrap(),
             "f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97",
         )
-            .unwrap();
+        .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let paths_json = PathsJson::from_package_directory(package_dir.path()).unwrap();
@@ -288,7 +288,7 @@ mod test {
                 .unwrap(),
             "ee9172dbe9ebd158e8e68d6d0f7dc2060f0c8230b44d2e9a3595b7cd7336b915",
         )
-            .unwrap();
+        .unwrap();
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         insta::assert_yaml_snapshot!(PathsJson::from_deprecated_package_directory(
