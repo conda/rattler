@@ -74,7 +74,7 @@ nom = "7.1.3"
 num_cpus = "1.16.0"
 once_cell = "1.19.0"
 ouroboros = "0.18.3"
-pep440_rs = { version = "0.3.12" }
+pep440_rs = { version = "0.4.0" }
 pep508_rs = { version = "0.2.3" }
 pin-project-lite = "0.2.13"
 plist = "1"
