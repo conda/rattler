@@ -113,3 +113,9 @@ class Environment:
         env = cls.__new__(cls)
         env._env = py_environment
         return env
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the Environment.
+        """
+        return "Environment()"

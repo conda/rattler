@@ -17,6 +17,18 @@ from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.linker import link
 from rattler.index import index
+from rattler.lock import (
+    LockFile,
+    Environment,
+    LockChannel,
+    PackageHashes,
+    LockPackage,
+    PypiPackageData,
+    PypiPackageEnvironmentData,
+    LockFileChannelConfig,
+    CondaPackageConfig,
+    PypiPackageConfig,
+)
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -40,6 +52,16 @@ __all__ = [
     "PrefixRecord",
     "PrefixPaths",
     "SparseRepoData",
+    "LockFile",
+    "Environment",
+    "LockChannel",
+    "PackageHashes",
+    "LockPackage",
+    "PypiPackageData",
+    "PypiPackageEnvironmentData",
+    "LockFileChannelConfig",
+    "CondaPackageConfig",
+    "PypiPackageConfig",
     "solve",
     "Platform",
     "link",

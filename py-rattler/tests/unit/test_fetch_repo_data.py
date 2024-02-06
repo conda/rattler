@@ -1,7 +1,5 @@
 # type: ignore
 import os.path
-import subprocess
-import time
 
 import pytest
 from xprocess import ProcessStarter
