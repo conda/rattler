@@ -23,6 +23,7 @@ def serve_repo_data(xprocess) -> None:
         # command to start process
         args = [
             "python",
+            "-u",
             os.path.join(test_data_dir, "reposerver.py"),
             "-d",
             os.path.join(test_data_dir, "repo"),
