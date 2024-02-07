@@ -273,7 +273,7 @@ where
                 return Ok(());
             }
             Ok(Err(e)) => {
-                tracing::warn!("validation failed: {e}",);
+                tracing::warn!("validation for {path:?} failed: {e}");
                 if let Some(cause) = e.source() {
                     tracing::debug!(
                         "  Caused by: {}",
