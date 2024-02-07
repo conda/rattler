@@ -15,6 +15,19 @@ class PypiPackageData:
     def satisfies(self, spec: str) -> bool:
         """
         Returns true if this package satisfies the given `spec`.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.satisfies("charset-normalizer")
+        True
+        >>>
+        ```
         """
         return self._data.satisfies(spec)
 
@@ -22,6 +35,19 @@ class PypiPackageData:
     def name(self) -> str:
         """
         The name of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.name
+        'charset-normalizer'
+        >>>
+        ```
         """
         return self._data.name
 
@@ -29,6 +55,19 @@ class PypiPackageData:
     def version(self) -> str:
         """
         The version of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.version
+        '3.3.2'
+        >>>
+        ```
         """
         return self._data.version
 
@@ -36,6 +75,19 @@ class PypiPackageData:
     def url(self) -> str:
         """
         The URL that points to where the artifact can be downloaded from.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.url
+        'https://files.pythonhosted.org/...'
+        >>>
+        ```
         """
         return self._data.url
 
@@ -43,6 +95,19 @@ class PypiPackageData:
     def hash(self) -> Optional[PackageHashes]:
         """
         Hashes of the file pointed to by `url`.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.hash
+        PackageHashes()
+        >>>
+        ```
         """
         return PackageHashes._from_py_package_hashes(self._data.hash)
 
@@ -50,6 +115,19 @@ class PypiPackageData:
     def requires_dist(self) -> List[str]:
         """
         A list of dependencies on other packages.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.requires_dist
+        []
+        >>>
+        ```
         """
         return self._data.requires_dist
 
@@ -57,6 +135,19 @@ class PypiPackageData:
     def requires_python(self) -> Optional[str]:
         """
         The python version that this package requires.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data.requires_python
+        '>=3.7.0'
+        >>>
+        ```
         """
         return self._data.requires_python
 
@@ -84,6 +175,19 @@ class PypiPackageEnvironmentData:
         """
         The extras enabled for the package.
         Note that the order doesn't matter.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> env_data = pypi_packages["osx-arm64"][0][1]
+        >>> env_data.extras
+        set()
+        >>>
+        ```
         """
         return self._data.extras
 

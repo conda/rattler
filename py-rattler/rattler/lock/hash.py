@@ -28,3 +28,6 @@ class PackageHashes:
         hashes = cls.__new__(cls)
         hashes._hashes = pkg_hashes
         return hashes
+
+    def __repr__(self) -> str:
+        return f'PackageHashes()'

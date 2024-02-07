@@ -7,7 +7,6 @@ use std::{
 use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
-use rattler_digest::parse_digest_from_hex;
 use rattler_lock::{
     Channel, Environment, LockFile, LockFileBuilder, Package, PackageHashes, PypiPackageData,
     PypiPackageEnvironmentData,
@@ -364,7 +363,7 @@ impl PyLockPackage {
 
     #[getter]
     pub fn is_pypi(&self) -> bool {
-        self.inner.is_conda()
+        self.inner.is_pypi()
     }
 
     #[getter]
