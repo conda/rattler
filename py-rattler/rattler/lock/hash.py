@@ -30,4 +30,4 @@ class PackageHashes:
         return hashes
 
     def __repr__(self) -> str:
-        return f'PackageHashes()'
+        return "PackageHashes()"
