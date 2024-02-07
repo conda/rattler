@@ -552,11 +552,11 @@ impl PyPackageHashes {
 
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.sha256().map(|sha256| PyBytes::new(py, &sha256))
+        self.inner.sha256().map(|sha256| PyBytes::new(py, sha256))
     }
 
     #[getter]
     pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.md5().map(|md5| PyBytes::new(py, &md5))
+        self.inner.md5().map(|md5| PyBytes::new(py, md5))
     }
 }
