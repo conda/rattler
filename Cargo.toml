@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 # See: https://docs.rs/insta/latest/insta/#optional-faster-runs
 [profile.dev.package.insta]
@@ -144,3 +145,6 @@ walkdir = "2.4.0"
 windows-sys = { version = "0.52.0", default-features = false }
 zip = { version = "0.6.6", default-features = false }
 zstd = { version = "0.13.0", default-features = false }
+
+[patch.crates-io]
+resolvo = { git = "https://github.com/aochagavia/resolvo.git", branch = "concurrent-metadata-fetching" }

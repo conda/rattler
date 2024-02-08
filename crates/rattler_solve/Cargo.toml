@@ -25,6 +25,8 @@ hex = { workspace = true }
 tempfile = { workspace = true }
 rattler_libsolv_c = { workspace = true, optional = true }
 resolvo = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -41,6 +43,7 @@ url = { workspace = true }
 [features]
 default = ["libsolv_c"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
+resolvo = ["dep:resolvo", "dep:tokio", "dep:futures"]
 
 [[bench]]
 name = "bench"
