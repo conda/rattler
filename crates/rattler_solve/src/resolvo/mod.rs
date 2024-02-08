@@ -11,6 +11,7 @@ use resolvo::{
     SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
     VersionSetId,
 };
+use std::rc::Rc;
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -157,7 +158,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
 /// Dependency provider for conda
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider<'a> {
-    pool: Pool<SolverMatchSpec<'a>, String>,
+    pool: Rc<Pool<SolverMatchSpec<'a>, String>>,
 
     records: HashMap<NameId, Candidates>,
 
@@ -178,7 +179,7 @@ impl<'a> CondaDependencyProvider<'a> {
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
     ) -> Self {
-        let pool = Pool::default();
+        let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
         // Add virtual packages to the records
@@ -348,11 +349,11 @@ pub enum CancelReason {
 }
 
 impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a> {
-    fn pool(&self) -> &Pool<SolverMatchSpec<'a>, String> {
-        &self.pool
+    fn pool(&self) -> Rc<Pool<SolverMatchSpec<'a>, String>> {
+        self.pool.clone()
     }
 
-    fn sort_candidates(
+    async fn sort_candidates(
         &self,
         solver: &SolverCache<SolverMatchSpec<'a>, String, Self>,
         solvables: &mut [SolvableId],
@@ -363,11 +364,11 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
         });
     }
 
-    fn get_candidates(&self, name: NameId) -> Option<Candidates> {
+    async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
         self.records.get(&name).cloned()
     }
 
-    fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
+    async fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
         let mut dependencies = KnownDependencies::default();
         let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
             return Dependencies::Known(dependencies);
@@ -433,6 +434,9 @@ impl super::SolverImpl for Solver {
         &mut self,
         task: SolverTask<TAvailablePackagesIterator>,
     ) -> Result<Vec<RepoDataRecord>, SolveError> {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
         let stop_time = task
             .timeout
             .map(|timeout| std::time::SystemTime::now() + timeout);
@@ -446,6 +450,7 @@ impl super::SolverImpl for Solver {
             task.specs.clone().as_ref(),
             stop_time,
         );
+        let pool = provider.pool.clone();
 
         // Construct the requirements that the solver needs to satisfy.
         let root_requirements = task
@@ -460,14 +465,14 @@ impl super::SolverImpl for Solver {
             .collect();
 
         // Construct a solver and solve the problems in the queue
-        let mut solver = LibSolvRsSolver::new(provider);
+        let mut solver = LibSolvRsSolver::new(provider, runtime);
         let solvables = solver
             .solve(root_requirements)
             .map_err(|unsolvable_or_cancelled| {
                 match unsolvable_or_cancelled {
                     UnsolvableOrCancelled::Unsolvable(problem) => {
                         SolveError::Unsolvable(vec![problem
-                            .display_user_friendly(&solver, &CondaSolvableDisplay)
+                            .display_user_friendly(&solver, pool, &CondaSolvableDisplay)
                             .to_string()])
                     }
                     // We are not doing this as of yet
@@ -479,7 +484,7 @@ impl super::SolverImpl for Solver {
         // Get the resulting packages from the solver.
         let required_records = solvables
             .into_iter()
-            .filter_map(|id| match *solver.pool().resolve_solvable(id).inner() {
+            .filter_map(|id| match *solver.pool.resolve_solvable(id).inner() {
                 SolverPackageRecord::Record(rec) => Some(rec.clone()),
                 SolverPackageRecord::VirtualPackage(_) => None,
             })
