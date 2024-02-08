@@ -56,7 +56,7 @@ impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 }
