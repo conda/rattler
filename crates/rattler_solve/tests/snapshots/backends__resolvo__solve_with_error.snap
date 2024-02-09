@@ -1,14 +1,13 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 530
 expression: err
 ---
 Cannot solve the request because of: The following packages are incompatible
-|-- foobar >=2 can be installed with any of the following options:
-    |-- foobar 2.0 | 2.1 would require
-        |-- bors <2.0, which can be installed with any of the following options:
-            |-- bors 1.2.1
-|-- bors >=2 cannot be installed because there are no viable options:
-    |-- bors 2.1, which conflicts with the versions reported above.
-    |-- bors 2.0, which conflicts with the versions reported above.
+├─ foobar >=2 can be installed with any of the following options:
+│  └─ foobar 2.0 | 2.1 would require
+│     └─ bors <2.0, which can be installed with any of the following options:
+│        └─ bors 1.2.1
+└─ bors >=2 cannot be installed because there are no viable options:
+   ├─ bors 2.1, which conflicts with the versions reported above.
+   └─ bors 2.0, which conflicts with the versions reported above.
 
