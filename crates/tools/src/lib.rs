@@ -61,15 +61,14 @@ pub fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-// run this test not on musl
-// #[cfg(test)]
-// mod test {
-//     use crate::Mode;
+#[cfg(all(test, not(target_env="musl")))]
+mod test {
+    use crate::Mode;
 
-//     #[test]
-//     fn libsolv_bindings_up_to_date() {
-//         if let Err(error) = super::libsolv_bindings::generate(Mode::Verify) {
-//             panic!("{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\nMake sure you run that command both on Windows and on a unix machine!\n");
-//         }
-//     }
-// }
+    #[test]
+    fn libsolv_bindings_up_to_date() {
+        if let Err(error) = super::libsolv_bindings::generate(Mode::Verify) {
+            panic!("{error}\n\nPlease update the bindings by running\n\n\tcargo run --bin tools -- gen-libsolv-bindings\n\nMake sure you run that command both on Windows and on a unix machine!\n");
+        }
+    }
+}
