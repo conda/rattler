@@ -70,7 +70,7 @@ fn sort_paths<'a>(paths: &'a [PathBuf], base_path: &'a Path) -> (Vec<PathBuf>, V
     let (mut info_paths, mut other_paths): (Vec<_>, Vec<_>) = paths
         .iter()
         .map(|p| p.strip_prefix(base_path).unwrap())
-        .map(|p| p.to_path_buf())
+        .map(Path::to_path_buf)
         .partition(|path| path.starts_with(info));
 
     info_paths.sort();
@@ -133,7 +133,7 @@ impl CompressionLevel {
     }
 }
 
-fn total_size<'a>(base_path: &Path, paths: &[PathBuf]) -> u64 {
+fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
     paths
         .iter()
         .map(|p| base_path.join(p).metadata().map(|m| m.len()).unwrap_or(0))
@@ -185,7 +185,7 @@ pub fn write_tar_bz2_package<W: Write>(
     ));
     archive.follow_symlinks(false);
 
-    let total_size = total_size(base_path, &paths);
+    let total_size = total_size(base_path, paths);
     let mut progress_bar_wrapper = ProgressBarReader::new(progress_bar);
     progress_bar_wrapper.set_total(total_size);
 
@@ -195,7 +195,7 @@ pub fn write_tar_bz2_package<W: Write>(
         append_path_to_archive(
             &mut archive,
             base_path,
-            &path,
+            path,
             timestamp,
             &mut progress_bar_wrapper,
         )?;
@@ -207,7 +207,7 @@ pub fn write_tar_bz2_package<W: Write>(
 }
 
 /// Write the contents of a list of paths to a tar zst archive
-fn write_zst_archive<'a, W: Write>(
+fn write_zst_archive<W: Write>(
     writer: W,
     base_path: &Path,
     paths: &Vec<PathBuf>,
@@ -221,14 +221,14 @@ fn write_zst_archive<'a, W: Write>(
     let mut archive = tar::Builder::new(&tar_path);
     archive.follow_symlinks(false);
 
-    let total_size = total_size(base_path, &paths);
+    let total_size = total_size(base_path, paths);
     let mut progress_bar_wrapper = ProgressBarReader::new(progress_bar);
     progress_bar_wrapper.set_total(total_size);
     for path in paths {
         append_path_to_archive(
             &mut archive,
             base_path,
-            &path,
+            path,
             timestamp,
             &mut progress_bar_wrapper,
         )?;
@@ -242,7 +242,7 @@ fn write_zst_archive<'a, W: Write>(
     zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
 
     progress_bar_wrapper.reset_position();
-    if let Some(tar_total_size) = tar_file.metadata().map(|v| v.len()).ok() {
+    if let Ok(tar_total_size) = tar_file.metadata().map(|v| v.len()) {
         zst_encoder.set_pledged_src_size(Some(tar_total_size))?;
         progress_bar_wrapper.set_total(tar_total_size);
     };
@@ -276,6 +276,7 @@ fn write_zst_archive<'a, W: Write>(
 ///
 /// This function will return an error if the writer returns an error, or if the paths are not
 /// relative to the base path.
+#[allow(clippy::too_many_arguments)]
 pub fn write_conda_package<W: Write + Seek>(
     writer: W,
     base_path: &Path,
