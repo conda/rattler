@@ -192,8 +192,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                         name: elems[0].try_into()?,
                         version: elems
                             .get(1)
-                            .map(|s| Version::from_str(s))
-                            .unwrap_or(Version::from_str("0"))
+                            .map_or(Version::from_str("0"), |s| Version::from_str(s))
                             .expect("Could not parse virtual package version"),
                         build_string: (*elems.get(2).unwrap_or(&"")).to_string(),
                     })

@@ -1,9 +1,9 @@
 use crate::resolvo::{CondaDependencyProvider, SolverMatchSpec};
+use futures::future::FutureExt;
 use rattler_conda_types::Version;
 use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compare_candidates<'a>(
@@ -47,11 +47,19 @@ pub(super) fn compare_candidates<'a>(
         Ordering::Equal => {}
     };
 
+    // return Ordering::Equal;
+
     // Otherwise, compare the dependencies of the variants. If there are similar
     // dependencies select the variant that selects the highest version of the dependency.
     let (a_dependencies, b_dependencies) = match (
-        solver.get_or_cache_dependencies(a),
-        solver.get_or_cache_dependencies(b),
+        solver
+            .get_or_cache_dependencies(a)
+            .now_or_never()
+            .expect("get_or_cache_dependencies failed"),
+        solver
+            .get_or_cache_dependencies(b)
+            .now_or_never()
+            .expect("get_or_cache_dependencies failed"),
     ) {
         (Ok(a_deps), Ok(b_deps)) => (a_deps, b_deps),
         // If either call fails, it's likely due to solver cancellation; thus, we can't compare dependencies
@@ -147,7 +155,10 @@ pub(super) fn find_highest_version<'a>(
     match_spec_highest_version
         .entry(match_spec_id)
         .or_insert_with(|| {
-            let candidates = solver.get_or_cache_matching_candidates(match_spec_id);
+            let candidates = solver
+                .get_or_cache_matching_candidates(match_spec_id)
+                .now_or_never()
+                .expect("get_or_cache_matching_candidates failed");
 
             // Err only happens on cancellation, so we will not continue anyways
             let candidates = if let Ok(candidates) = candidates {
@@ -156,9 +167,11 @@ pub(super) fn find_highest_version<'a>(
                 return None;
             };
 
+            let pool = solver.pool();
+
             candidates
                 .iter()
-                .map(|id| solver.pool().resolve_solvable(*id).inner())
+                .map(|id| pool.resolve_solvable(*id).inner())
                 .fold(None, |init, record| {
                     Some(init.map_or_else(
                         || {

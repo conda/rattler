@@ -37,7 +37,7 @@ pub enum Platform {
 
 impl PartialOrd for Platform {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.as_str().partial_cmp(other.as_str())
+        Some(self.cmp(other))
     }
 }
 
@@ -270,7 +270,7 @@ impl FromStr for Platform {
             string => {
                 return Err(ParsePlatformError {
                     string: string.to_owned(),
-                })
+                });
             }
         })
     }
@@ -390,7 +390,7 @@ impl FromStr for Arch {
             string => {
                 return Err(ParseArchError {
                     string: string.to_owned(),
-                })
+                });
             }
         })
     }
