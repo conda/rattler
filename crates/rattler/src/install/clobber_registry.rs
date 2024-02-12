@@ -105,33 +105,6 @@ impl ClobberRegistry {
             self.package_names.len() - 1
         };
 
-        // let entry_points = if index_json.noarch.is_python() {
-        //     let mut res = Vec::new();
-        //     if let (Some(link_json), Some(python_info)) = (link_json, python_info) {
-        //         // register entry points
-        //         if let NoArchLinks::Python(entry_points) = &link_json.noarch {
-        //             for entry_point in &entry_points.entry_points {
-        //                 if python_info.platform.is_windows() {
-        //                     let relative_path_script_py = python_info
-        //                         .bin_dir
-        //                         .join(format!("{}-script.py", &entry_point.command));
-        //                     let relative_path_script_exe = python_info
-        //                         .bin_dir
-        //                         .join(format!("{}.exe", &entry_point.command));
-        //                     res.push(relative_path_script_py);
-        //                     res.push(relative_path_script_exe);
-        //                 } else {
-        //                     let file = python_info.bin_dir.join(&entry_point.command);
-        //                     res.push(file);
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     res
-        // } else {
-        //     Vec::new()
-        // };
-
         for (_, path) in computed_paths {
             // if we find an entry, we have a clobbering path!
             if let Some(e) = self.paths_registry.get(path) {
@@ -156,7 +129,6 @@ impl ClobberRegistry {
         clobber_paths
     }
 
-    /// Unclobber the paths after all installation steps have been completed.
     /// Unclobber the paths after all installation steps have been completed.
     pub fn unclobber(
         &mut self,
