@@ -25,6 +25,7 @@ pub mod unlink;
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
 pub use link::{link_file, LinkFileError};
+use rattler_conda_types::prefix_record::PathsEntry;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::unlink_package;
 
@@ -35,7 +36,7 @@ pub use apple_codesign::AppleCodeSignBehavior;
 use futures::FutureExt;
 pub use python::PythonInfo;
 use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
-use rattler_conda_types::prefix_record::PathsEntry;
+
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
@@ -263,23 +264,31 @@ pub async fn link_package(
     // Construct a channel to will hold the results of the different linking stages
     let (tx, mut rx) = tokio::sync::mpsc::channel(driver.concurrency_limit());
 
-    // Wrap the python info in an `Arc` so we can more easily share it with async tasks.
-    let python_info = options.python_info.map(Arc::new);
+    // compute all path renames
+    let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
     // register all paths in the install driver path registry
     let clobber_paths = Arc::new(
         driver
             .clobber_registry()
-            .register_paths(&index_json.name, &paths_json),
+            .register_paths(&index_json, &final_paths),
     );
+
+    for (_, computed_path) in final_paths.iter_mut() {
+        if let Some(clobber_rename) = clobber_paths.get(computed_path) {
+            *computed_path = clobber_rename.clone();
+        }
+    }
+
+    // Wrap the python info in an `Arc` so we can more easily share it with async tasks.
+    let python_info = options.python_info.map(Arc::new);
 
     // Start linking all package files in parallel
     let mut number_of_paths_entries = 0;
-    for entry in paths_json.paths {
+    for (entry, computed_path) in final_paths {
         let package_dir = package_dir.to_owned();
         let target_dir = target_dir.to_owned();
         let target_prefix = target_prefix.clone();
-        let python_info = python_info.clone();
 
         let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
         // Spawn a task to link the specific file. Note that these tasks are throttled by the
@@ -295,8 +304,8 @@ pub async fn link_package(
             }
 
             let linked_file_result = match link_file(
-                index_json.noarch,
                 &entry,
+                computed_path,
                 &package_dir,
                 &target_dir,
                 &target_prefix,
@@ -304,9 +313,7 @@ pub async fn link_package(
                 allow_hard_links && !entry.no_link,
                 allow_ref_links && !entry.no_link,
                 platform,
-                python_info.as_deref(),
                 options.apple_codesign_behavior,
-                clobber_rename.as_ref(),
             ) {
                 Ok(result) => Ok((
                     number_of_paths_entries,
@@ -457,6 +464,27 @@ pub async fn link_package(
     );
 
     Ok(paths)
+}
+
+fn compute_paths(
+    index_json: &IndexJson,
+    paths_json: &PathsJson,
+    python_info: Option<&PythonInfo>,
+) -> Vec<(rattler_conda_types::package::PathsEntry, PathBuf)> {
+    let mut final_paths = Vec::with_capacity(paths_json.paths.len());
+    for entry in &paths_json.paths {
+        let path = if index_json.noarch.is_python() {
+            python_info
+                .unwrap()
+                .get_python_noarch_target_path(&entry.relative_path)
+                .to_path_buf()
+        } else {
+            entry.relative_path.clone()
+        };
+
+        final_paths.push((entry.clone(), path));
+    }
+    final_paths
 }
 
 /// A helper function that reads the `paths.json` file from a package unless it has already been
