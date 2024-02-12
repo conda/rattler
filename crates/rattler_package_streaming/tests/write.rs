@@ -178,8 +178,15 @@ fn test_rewrite_tar_bz2() {
 
         let writer = File::create(&new_archive).unwrap();
         let paths = find_all_package_files(&target_dir);
-        write_tar_bz2_package(writer, &target_dir, &paths, CompressionLevel::Default, None)
-            .unwrap();
+        write_tar_bz2_package(
+            writer,
+            &target_dir,
+            &paths,
+            CompressionLevel::Default,
+            None,
+            None,
+        )
+        .unwrap();
 
         // compare the two archives
         let mut f1 = File::open(&file_path).unwrap();
@@ -218,6 +225,7 @@ fn test_rewrite_conda() {
             CompressionLevel::Default,
             None,
             &name,
+            None,
             None,
         )
         .unwrap();
