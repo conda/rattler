@@ -96,8 +96,13 @@ jobs:
           cache: false
 
       - uses: taiki-e/setup-cross-toolchain-action@v1
+        if: matrix.target != "x86_64-unknown-linux-musl"
         with:
           target: ${{ matrix.target }}
+
+      - if: matrix.target == x86_64-unknown-linux-musl
+        run: |
+          sudo apt install musl-tools gcc g++
 
       - uses: Swatinem/rust-cache@v2
 
