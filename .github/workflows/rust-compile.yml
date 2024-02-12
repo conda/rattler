@@ -126,6 +126,7 @@ jobs:
           cargo build 
           --all-targets  
           --features ${{ env.DEFAULT_FEATURES }}
+          --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
 
       - name: Disable testing the tools crate if cross compiling
@@ -140,6 +141,7 @@ jobs:
           cargo test 
           --workspace 
           --features ${{ env.DEFAULT_FEATURES }} 
+          --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
           -- 
