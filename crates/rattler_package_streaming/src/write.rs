@@ -165,7 +165,7 @@ fn total_size(base_path: &Path, paths: &[PathBuf]) -> u64 {
 ///
 /// let paths = vec![PathBuf::from("info/recipe/meta.yaml"), PathBuf::from("info/recipe/conda_build_config.yaml")];
 /// let mut file = File::create("test.tar.bz2").unwrap();
-/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, CompressionLevel::Default, None).unwrap();
+/// write_tar_bz2_package(&mut file, &PathBuf::from("test"), &paths, CompressionLevel::Default, None, None).unwrap();
 /// ```
 ///
 /// # See also
