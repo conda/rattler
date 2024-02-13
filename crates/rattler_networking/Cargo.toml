@@ -29,7 +29,7 @@ once_cell = { workspace = true }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 task-local-extensions = { workspace = true }
 thiserror = { workspace = true }
