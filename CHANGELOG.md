@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+# [0.18.0] - 2024-02-13
+
+### 📃 Details
+
+#### Added
+
+* `ProgressBar` trait and progress bar for package writing by @wolfv ([#525](https://github.com/mamba-org/rattler/pull/525))
+
+#### Changed
+
+* improved logging in package validation to include package path by @orhun ([#521](https://github.com/mamba-org/rattler/pull/521))
+* use resolvo 0.4.0 with better error messages by @baszalmstra ([#523](https://github.com/mamba-org/rattler/pull/523))
+
+#### Fixed
+
+* allow multiple clobbers per package by @wolfv ([#526](https://github.com/mamba-org/rattler/pull/526))
+* remove drop-bomb, move empty folder removal to `post_process` by @wolfv ([#519](https://github.com/mamba-org/rattler/pull/519))
+* keep in mind python: noarch packages in clobber calculations by @wolfv ([#511](https://github.com/mamba-org/rattler/pull/511))
+
 # [0.17.0] - 2024-02-01
 
 ### ✨ Highlights
