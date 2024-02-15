@@ -5,9 +5,9 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
+use std::convert::identity;
 use thiserror::Error;
 use url::Url;
-use std::convert::identity;
 
 use super::{ParsePlatformError, Platform};
 
