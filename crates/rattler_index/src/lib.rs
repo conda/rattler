@@ -179,7 +179,9 @@ pub fn index(
                 continue;
             };
             match t {
-                ArchiveType::TarBz2 => repodata.packages.insert(file_name.to_string_lossy().to_string(), record),
+                ArchiveType::TarBz2 => repodata
+                    .packages
+                    .insert(file_name.to_string_lossy().to_string(), record),
                 ArchiveType::Conda => repodata
                     .conda_packages
                     .insert(file_name.to_string_lossy().to_string(), record),

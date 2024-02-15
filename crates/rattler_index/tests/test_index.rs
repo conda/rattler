@@ -21,11 +21,13 @@ fn test_index() {
     fs::copy(
         test_data_dir().join(conda_file_path),
         temp_dir.path().join(subdir_path).join(conda_file_path),
-    ).unwrap();
+    )
+    .unwrap();
     fs::copy(
         test_data_dir().join(tar_bz2_file_path),
         temp_dir.path().join(subdir_path).join(tar_bz2_file_path),
-    ).unwrap();
+    )
+    .unwrap();
 
     let res = index(temp_dir.path(), Some(&Platform::Win64));
     assert!(res.is_ok());
@@ -46,7 +48,11 @@ fn test_index() {
             .as_str(),
         Some("win-64")
     );
-    assert!(repodata_json.get("packages").unwrap().get("conda-22.9.0-py38haa244fe_2.tar.bz2").is_some());
+    assert!(repodata_json
+        .get("packages")
+        .unwrap()
+        .get("conda-22.9.0-py38haa244fe_2.tar.bz2")
+        .is_some());
     assert_eq!(
         repodata_json
             .get("packages.conda")
