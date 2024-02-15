@@ -13,14 +13,19 @@ fn test_data_dir() -> PathBuf {
 fn test_index() {
     let temp_dir = tempfile::tempdir().unwrap();
     let subdir_path = Path::new("win-64");
-    let file_path = Path::new("conda-22.11.1-py38haa244fe_1.conda");
+    let conda_file_path = Path::new("conda-22.11.1-py38haa244fe_1.conda");
     let index_json_path = Path::new("conda-22.11.1-py38haa244fe_1-index.json");
+    let tar_bz2_file_path = Path::new("conda-22.9.0-py38haa244fe_2.tar.bz2");
+
     fs::create_dir(temp_dir.path().join(subdir_path)).unwrap();
     fs::copy(
-        test_data_dir().join(file_path),
-        temp_dir.path().join(subdir_path).join(file_path),
-    )
-    .unwrap();
+        test_data_dir().join(conda_file_path),
+        temp_dir.path().join(subdir_path).join(conda_file_path),
+    ).unwrap();
+    fs::copy(
+        test_data_dir().join(tar_bz2_file_path),
+        temp_dir.path().join(subdir_path).join(tar_bz2_file_path),
+    ).unwrap();
 
     let res = index(temp_dir.path(), Some(&Platform::Win64));
     assert!(res.is_ok());
@@ -41,7 +46,7 @@ fn test_index() {
             .as_str(),
         Some("win-64")
     );
-    assert!(repodata_json.get("packages").is_some());
+    assert!(repodata_json.get("packages").unwrap().get("conda-22.9.0-py38haa244fe_2.tar.bz2").is_some());
     assert_eq!(
         repodata_json
             .get("packages.conda")
