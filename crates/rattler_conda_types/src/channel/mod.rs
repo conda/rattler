@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
+use std::convert::identity;
 
 use super::{ParsePlatformError, Platform};
 
@@ -27,6 +28,41 @@ pub struct ChannelConfig {
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
+
+    /// An optional configuration for the repodata of the channel.
+    ///
+    /// This *SHOULD* be used to configure how metadata is fetched from the channel.
+    ///
+    pub repodata_options: Option<ChannelRepodataConfig>,
+}
+
+fn _serde_is_true(value: &bool) -> bool {
+    *value
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Hash)]
+pub struct ChannelRepodataConfig {
+    /// When enabled repodata can be fetched incrementally using JLAP
+    #[serde(skip_serializing_if = "_serde_is_true")]
+    pub jlap_enabled: bool,
+
+    /// When enabled, the zstd variant will be used if available
+    #[serde(skip_serializing_if = "_serde_is_true")]
+    pub zstd_enabled: bool,
+
+    /// When enabled, the bz2 variant will be used if available
+    #[serde(skip_serializing_if = "_serde_is_true")]
+    pub bz2_enabled: bool,
+}
+
+impl Default for ChannelRepodataConfig {
+    fn default() -> Self {
+        Self {
+            jlap_enabled: true,
+            zstd_enabled: true,
+            bz2_enabled: true,
+        }
+    }
 }
 
 impl Default for ChannelConfig {
@@ -34,6 +70,7 @@ impl Default for ChannelConfig {
         ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org")
                 .expect("could not parse default channel alias"),
+            repodata_options: None,
         }
     }
 }
@@ -51,6 +88,10 @@ pub struct Channel {
 
     /// The name of the channel
     pub name: Option<String>,
+
+    /// The repodata options for this channel
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repodata_options: Option<ChannelRepodataConfig>,
 }
 
 impl Channel {
@@ -80,6 +121,7 @@ impl Channel {
                     platforms,
                     base_url: url,
                     name: Some(channel.to_owned()),
+                    repodata_options: config.repodata_options.clone(),
                 }
             }
         } else {
@@ -121,6 +163,7 @@ impl Channel {
                 platforms: platforms.map(Into::into),
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
+                repodata_options: _config.repodata_options.clone(),
             }
         } else {
             // Case 6: non-otherwise-specified file://-type urls
@@ -131,6 +174,7 @@ impl Channel {
                 platforms: platforms.map(Into::into),
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
+                repodata_options: _config.repodata_options.clone(),
             }
         }
     }
@@ -157,6 +201,7 @@ impl Channel {
                 .join(dir_name.as_ref())
                 .expect("name is not a valid Url"),
             name: (!name.is_empty()).then_some(name).map(str::to_owned),
+            repodata_options: config.repodata_options.clone(),
         }
     }
 

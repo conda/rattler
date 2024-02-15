@@ -571,13 +571,24 @@ async fn fetch_repo_data_records_with_progress(
     );
     progress_bar.enable_steady_tick(Duration::from_millis(100));
 
+    // TODO: Should this be in some utils place?
+    let options = match channel.repodata_options {
+        Some(ref options) => FetchRepoDataOptions {
+            bz2_enabled: options.bz2_enabled,
+            jlap_enabled: options.jlap_enabled,
+            zstd_enabled: options.zstd_enabled,
+            ..Default::default()
+        },
+        None => FetchRepoDataOptions::default(),
+    };
+
     // Download the repodata.json
     let download_progress_progress_bar = progress_bar.clone();
     let result = rattler_repodata_gateway::fetch::fetch_repo_data(
         channel.platform_url(platform),
         client,
         repodata_cache.to_path_buf(),
-        FetchRepoDataOptions::default(),
+        options,
         Some(Box::new(move |DownloadProgress { total, bytes }| {
             download_progress_progress_bar.set_length(total.unwrap_or(bytes));
             download_progress_progress_bar.set_position(bytes);
