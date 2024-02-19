@@ -1,0 +1,19 @@
+---
+source: crates/rattler/src/install/clobber_registry.rs
+expression: prefix_record_clobber_2.paths_data
+---
+paths_version: 1
+paths:
+  - _path: another-clobber.txt__clobber-from-clobber-2
+    original_path: another-clobber.txt
+    path_type: hardlink
+    sha256: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
+    sha256_in_prefix: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
+    size_in_bytes: 10
+  - _path: clobber.txt__clobber-from-clobber-2
+    original_path: clobber.txt
+    path_type: hardlink
+    sha256: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
+    sha256_in_prefix: 39c11e390a978044b876c5cd92b4b429330f2eb2a6ed20b1f1e39791c344ec38
+    size_in_bytes: 10
+

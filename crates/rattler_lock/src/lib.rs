@@ -315,9 +315,8 @@ impl Environment {
         &self,
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
-        let Some(packages) = self.data()
-            .packages.get(&platform) else {
-            return Ok(None)
+        let Some(packages) = self.data().packages.get(&platform) else {
+            return Ok(None);
         };
 
         packages
@@ -338,9 +337,8 @@ impl Environment {
         &self,
         platform: Platform,
     ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
-        let Some(packages) = self.data()
-            .packages.get(&platform) else {
-            return None
+        let Some(packages) = self.data().packages.get(&platform) else {
+            return None;
         };
 
         Some(

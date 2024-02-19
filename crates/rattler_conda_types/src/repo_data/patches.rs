@@ -197,7 +197,7 @@ impl RepoData {
             }
         }
 
-        self.removed.extend(removed.into_iter());
+        self.removed.extend(removed);
     }
 }
 

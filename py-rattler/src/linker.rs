@@ -78,7 +78,7 @@ async fn execute_transaction(
         ..Default::default()
     };
 
-    stream::iter(transaction.operations)
+    stream::iter(transaction.operations.clone())
         .map(Ok)
         .try_for_each_concurrent(50, |op| {
             let target_prefix = target_prefix.clone();
@@ -100,16 +100,8 @@ async fn execute_transaction(
         })
         .await?;
 
-    let prefix_records = PrefixRecord::collect_from_prefix(&target_prefix).map_err(|e| {
-        PyRattlerError::LinkError(format!(
-            "failed to collect prefix records from {}: {}",
-            target_prefix.display(),
-            e
-        ))
-    })?;
-
     install_driver
-        .post_process(&prefix_records, &target_prefix)
+        .post_process(&transaction, &target_prefix)
         .map_err(|e| {
             PyRattlerError::LinkError(format!(
                 "failed to post process prefix {}: {}",

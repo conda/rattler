@@ -1,0 +1,7 @@
+---
+source: crates/rattler/src/install/clobber_registry.rs
+expression: prefix_record_clobber_2.files
+---
+- another-clobber.txt__clobber-from-clobber-2
+- clobber.txt__clobber-from-clobber-2
+
