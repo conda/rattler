@@ -381,8 +381,8 @@ impl MatchSpec {
 /// TODO: This should be refactored so that the front ends are the one setting the channel config,
 /// and rattler only takes care of the url.
 fn deserialize_channel<'de, D>(deserializer: D) -> Result<Option<Arc<Channel>>, D::Error>
-where
-    D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
 {
     let s: Option<String> = Option::deserialize(deserializer)?;
 
@@ -406,6 +406,7 @@ mod tests {
 
     use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
     use std::hash::{Hash, Hasher};
+    use insta::assert_snapshot;
 
     #[test]
     fn test_matchspec_format_eq() {
@@ -492,5 +493,17 @@ mod tests {
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
         assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn test_serialize_matchspec() {
+        let specs = ["mamba 1.0 py37_0",
+            "conda-forge::pytest[version=1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            "conda-forge/linux-64::pytest",
+            "conda-forge/linux-64::pytest[version=1.0]",
+            "conda-forge/linux-64::pytest[version=1.0, build=py37_0]",
+            "conda-forge/linux-64::pytest 1.2.3"];
+
+        assert_snapshot!(specs.into_iter().map(|s| MatchSpec::from_str(s).unwrap()).map(|s| s.to_string()).collect::<Vec<String>>().join("\n"));
     }
 }
