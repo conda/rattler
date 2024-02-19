@@ -146,25 +146,23 @@ pub struct MatchSpec {
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
-            if let Some(name) = &channel.name {
-                // TODO: namespace
-                write!(f, "{name}")?;
+            let name = channel.name();
+            write!(f, "{name}")?;
+
+            if let Some(subdir) = &self.subdir {
+                write!(f, "/{subdir}")?;
             }
-        }
-
-        if let Some(subdir) = &self.subdir {
-            write!(f, "/{subdir}")?;
-        }
-
-        match &self.name {
-            Some(name) => write!(f, "{}", name.as_normalized())?,
-            None => write!(f, "*")?,
         }
 
         if let Some(namespace) = &self.namespace {
             write!(f, ":{namespace}:")?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
+        }
+
+        match &self.name {
+            Some(name) => write!(f, "{}", name.as_normalized())?,
+            None => write!(f, "*")?,
         }
 
         if let Some(version) = &self.version {
@@ -411,7 +409,7 @@ mod tests {
 
     #[test]
     fn test_matchspec_format_eq() {
-        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec = MatchSpec::from_str("conda-forge::mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
         let spec_as_string = spec.to_string();
         let rebuild_spec = MatchSpec::from_str(&spec_as_string).unwrap();
 
