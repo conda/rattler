@@ -53,7 +53,10 @@ impl Ord for Platform {
 pub enum Arch {
     X86,
     X86_64,
+    // aarch64 is only used for linux
     Aarch64,
+    // for historical reasons we also need `arm64` for win-arm64 and osx-arm64
+    Arm64,
     ArmV6l,
     ArmV7l,
     Ppc64le,
@@ -318,7 +321,8 @@ impl Platform {
             Platform::LinuxRiscv64 => Some(Arch::Riscv64),
             Platform::Linux32 | Platform::Win32 => Some(Arch::X86),
             Platform::Linux64 | Platform::Win64 | Platform::Osx64 => Some(Arch::X86_64),
-            Platform::LinuxAarch64 | Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Aarch64),
+            Platform::LinuxAarch64 => Some(Arch::Aarch64),
+            Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Arm64),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
         }
     }
@@ -379,6 +383,7 @@ impl FromStr for Arch {
             "x86" => Arch::X86,
             "x86_64" => Arch::X86_64,
             "aarch64" => Arch::Aarch64,
+            "arm64" => Arch::Arm64,
             "armv6l" => Arch::ArmV6l,
             "armv7l" => Arch::ArmV7l,
             "ppc64le" => Arch::Ppc64le,
@@ -401,6 +406,7 @@ impl From<Arch> for &'static str {
         match arch {
             Arch::X86 => "x86",
             Arch::X86_64 => "x86_64",
+            Arch::Arm64 => "arm64",
             Arch::Aarch64 => "aarch64",
             Arch::ArmV6l => "armv6l",
             Arch::ArmV7l => "armv7l",
@@ -494,10 +500,10 @@ mod tests {
         assert_eq!(Platform::LinuxRiscv32.arch(), Some(Arch::Riscv32));
         assert_eq!(Platform::LinuxRiscv64.arch(), Some(Arch::Riscv64));
         assert_eq!(Platform::Osx64.arch(), Some(Arch::X86_64));
-        assert_eq!(Platform::OsxArm64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::OsxArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::Win32.arch(), Some(Arch::X86));
         assert_eq!(Platform::Win64.arch(), Some(Arch::X86_64));
-        assert_eq!(Platform::WinArm64.arch(), Some(Arch::Aarch64));
+        assert_eq!(Platform::WinArm64.arch(), Some(Arch::Arm64));
         assert_eq!(Platform::EmscriptenWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
