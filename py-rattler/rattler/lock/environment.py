@@ -71,7 +71,7 @@ class Environment:
             return [LockPackage._from_py_lock_package(p) for p in packages]
         return None
 
-    def packages_by_platform(self) -> List[Tuple[Platform, List[LockPackage]]]:
+    def packages_by_platform(self) -> Dict[Platform, List[LockPackage]]:
         """
         Returns a list of all packages and platforms defined for this environment.
 
@@ -87,17 +87,16 @@ class Environment:
         >>>
         ```
         """
-        return [
-            (
-                Platform._from_py_platform(platform),
-                [LockPackage._from_py_lock_package(p) for p in packages],
-            )
+        return {
+            Platform._from_py_platform(platform): [
+                LockPackage._from_py_lock_package(p) for p in packages
+            ]
             for (platform, packages) in self._env.packages_by_platform()
-        ]
+        }
 
     def pypi_packages(
         self,
-    ) -> Dict[str, List[Tuple[PypiPackageData, PypiPackageEnvironmentData]]]:
+    ) -> Dict[Platform, List[Tuple[PypiPackageData, PypiPackageEnvironmentData]]]:
         """
         Returns all pypi packages for all platforms.
 
@@ -114,7 +113,7 @@ class Environment:
         ```
         """
         return {
-            platform.name: [
+            platform: [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
                     PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
@@ -124,7 +123,7 @@ class Environment:
             for (platform, pypi_tup) in self._env.pypi_packages().items()
         }
 
-    def conda_repodata_records(self) -> Dict[str, List[RepoDataRecord]]:
+    def conda_repodata_records(self) -> Dict[Platform, List[RepoDataRecord]]:
         """
         Returns all conda packages for all platforms.
 
