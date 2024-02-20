@@ -2,15 +2,12 @@ from __future__ import annotations
 from typing import Optional, Tuple
 from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
 
-from rattler.rattler import PyLockPackage
+from rattler.rattler import PyLockedPackage
 from rattler.repo_data.record import RepoDataRecord
 
 
-class LockPackage:
-    _package: PyLockPackage
-
-    def satisfies(self, spec: str) -> bool:
-        return self._package.satisfies(spec)
+class LockedPackage:
+    _package: PyLockedPackage
 
     def as_conda(self) -> Optional[RepoDataRecord]:
         """
@@ -157,9 +154,9 @@ class LockPackage:
         return self._package.version
 
     @classmethod
-    def _from_py_lock_package(cls, lock_pkg: PyLockPackage) -> LockPackage:
+    def _from_py_lock_package(cls, lock_pkg: PyLockedPackage) -> LockedPackage:
         """
-        Construct Rattler LockPackage from FFI PyLockPackage object.
+        Construct Rattler LockedPackage from FFI PyLockedPackage object.
         """
         pkg = cls.__new__(cls)
         pkg._package = lock_pkg
@@ -167,6 +164,6 @@ class LockPackage:
 
     def __repr__(self) -> str:
         """
-        Returns a representation of the LockPackage.
+        Returns a representation of the LockedPackage.
         """
-        return "LockPackage()"
+        return "LockedPackage()"

@@ -28,8 +28,7 @@ use error::{
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use lock::{
-    PyCondaPackageConfig, PyEnvironment, PyLockChannel, PyLockFile, PyLockFileChannelConfig,
-    PyLockPackage, PyPackageHashes, PyPypiPackageConfig, PyPypiPackageData,
+    PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
     PyPypiPackageEnvironmentData,
 };
 use match_spec::PyMatchSpec;
@@ -88,14 +87,10 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyLockFile>().unwrap();
     m.add_class::<PyEnvironment>().unwrap();
     m.add_class::<PyLockChannel>().unwrap();
-    m.add_class::<PyLockPackage>().unwrap();
+    m.add_class::<PyLockedPackage>().unwrap();
     m.add_class::<PyPypiPackageData>().unwrap();
     m.add_class::<PyPypiPackageEnvironmentData>().unwrap();
     m.add_class::<PyPackageHashes>().unwrap();
-
-    m.add_class::<PyLockFileChannelConfig>().unwrap();
-    m.add_class::<PyCondaPackageConfig>().unwrap();
-    m.add_class::<PyPypiPackageConfig>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 from rattler.lock.channel import LockChannel
-from rattler.lock.package import LockPackage
+from rattler.lock.package import LockedPackage
 from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
 from rattler.platform.platform import Platform
 
@@ -52,7 +52,7 @@ class Environment:
         """
         return [LockChannel._from_py_lock_channel(c) for c in self._env.channels()]
 
-    def packages(self, platform: Platform) -> Optional[List[LockPackage]]:
+    def packages(self, platform: Platform) -> Optional[List[LockedPackage]]:
         """
         Returns all the packages for a specific platform in this environment.
 
@@ -63,15 +63,15 @@ class Environment:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> env.packages(Platform("osx-arm64"))[0]
-        LockPackage()
+        LockedPackage()
         >>>
         ```
         """
         if packages := self._env.packages(platform._inner):
-            return [LockPackage._from_py_lock_package(p) for p in packages]
+            return [LockedPackage._from_py_lock_package(p) for p in packages]
         return None
 
-    def packages_by_platform(self) -> Dict[Platform, List[LockPackage]]:
+    def packages_by_platform(self) -> Dict[Platform, List[LockedPackage]]:
         """
         Returns a list of all packages and platforms defined for this environment.
 
@@ -89,7 +89,7 @@ class Environment:
         """
         return {
             Platform._from_py_platform(platform): [
-                LockPackage._from_py_lock_package(p) for p in packages
+                LockedPackage._from_py_lock_package(p) for p in packages
             ]
             for (platform, packages) in self._env.packages_by_platform()
         }

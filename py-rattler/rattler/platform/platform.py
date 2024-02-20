@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Literal
+from typing import Dict, Literal
 
 from rattler.rattler import PyPlatform
 from rattler.platform.arch import Arch
@@ -26,14 +26,16 @@ PlatformLiteral = Literal[
 
 
 class PlatformSingleton(type):
-    def __init__(cls, *args, **kwargs):
+    _instances: Dict[str, Platform]
+
+    def __init__(cls) -> None:
         cls._instances = {}
 
-    def __call__(cls, platform, *args, **kwargs):
+    def __call__(cls, platform: str) -> Platform:
         try:
             return cls._instances[platform]
         except KeyError:
-            instance = super().__call__(platform, *args, **kwargs)
+            instance = super().__call__(platform)
             cls._instances[platform] = instance
             return instance
 

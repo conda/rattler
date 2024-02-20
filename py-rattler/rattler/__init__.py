@@ -22,7 +22,7 @@ from rattler.lock import (
     Environment,
     LockChannel,
     PackageHashes,
-    LockPackage,
+    LockedPackage,
     PypiPackageData,
     PypiPackageEnvironmentData,
 )
@@ -53,7 +53,7 @@ __all__ = [
     "Environment",
     "LockChannel",
     "PackageHashes",
-    "LockPackage",
+    "LockedPackage",
     "PypiPackageData",
     "PypiPackageEnvironmentData",
     "solve",
