@@ -25,9 +25,6 @@ from rattler.lock import (
     LockPackage,
     PypiPackageData,
     PypiPackageEnvironmentData,
-    LockFileChannelConfig,
-    CondaPackageConfig,
-    PypiPackageConfig,
 )
 
 __version__ = _get_rattler_version()
@@ -59,9 +56,6 @@ __all__ = [
     "LockPackage",
     "PypiPackageData",
     "PypiPackageEnvironmentData",
-    "LockFileChannelConfig",
-    "CondaPackageConfig",
-    "PypiPackageConfig",
     "solve",
     "Platform",
     "link",

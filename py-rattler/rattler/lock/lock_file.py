@@ -37,7 +37,7 @@ class LockFile:
         Examples
         --------
         ```python
-        >>> lock_file = LockFile()
+        >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.to_path("/tmp/test.lock")
         >>>
         ```
@@ -51,15 +51,9 @@ class LockFile:
         Examples
         --------
         ```python
-        >>> from rattler import LockFileChannelConfig, Channel, ChannelConfig
-        >>> lock_file = LockFile()
+        >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.environments()
-        []
-        >>> default_channel_config = LockFileChannelConfig("default", [Channel("conda-forge").to_lock_channel()])
-        >>> test_channel_config = LockFileChannelConfig("test", [Channel("conda-forge", ChannelConfig("http://localhost:8912/")).to_lock_channel()])
-        >>> lock_file2 = LockFile([default_channel_config, test_channel_config])
-        >>> lock_file2.environments()
-        [('default', Environment()), ('test', Environment())]
+        [('default', Environment())]
         >>>
         ```
         """
@@ -75,11 +69,8 @@ class LockFile:
         Examples
         --------
         ```python
-        >>> from rattler import LockFileChannelConfig, Channel, ChannelConfig
-        >>> default_channel_config = LockFileChannelConfig("default", [Channel("conda-forge").to_lock_channel()])
-        >>> test_channel_config = LockFileChannelConfig("test", [Channel("conda-forge", ChannelConfig("http://localhost:8912/")).to_lock_channel()])
-        >>> lock_file = LockFile([default_channel_config, test_channel_config])
-        >>> lock_file.environment("test")
+        >>> lock_file = LockFile.from_path("./pixi.lock")
+        >>> lock_file.environment("default")
         Environment()
         >>> lock_file.environment("doesnt-exist")
         >>>
@@ -96,10 +87,7 @@ class LockFile:
         Examples
         --------
         ```python
-        >>> from rattler import LockFileChannelConfig, Channel, ChannelConfig
-        >>> default_channel_config = LockFileChannelConfig("default", [Channel("conda-forge").to_lock_channel()])
-        >>> test_channel_config = LockFileChannelConfig("test", [Channel("conda-forge", ChannelConfig("http://localhost:8912/")).to_lock_channel()])
-        >>> lock_file = LockFile([default_channel_config, test_channel_config])
+        >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.default_environment()
         Environment()
         >>>
@@ -119,14 +107,5 @@ class LockFile:
     def __repr__(self) -> str:
         """
         Returns a representation of the LockFile.
-
-        Examples
-        --------
-        ```python
-        >>> lock_file = LockFile()
-        >>> lock_file
-        LockFile()
-        >>>
-        ```
         """
         return "LockFile()"
