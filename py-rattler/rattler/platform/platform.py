@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Literal
+from functools import cache
 
 from rattler.rattler import PyPlatform
 from rattler.platform.arch import Arch
@@ -25,6 +26,7 @@ PlatformLiteral = Literal[
 ]
 
 
+@cache
 class Platform:
     def __init__(self, value: PlatformLiteral):
         self._inner = PyPlatform(value)
