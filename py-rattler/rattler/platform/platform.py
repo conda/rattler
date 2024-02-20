@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Literal
-from functools import cache
 
 from rattler.rattler import PyPlatform
 from rattler.platform.arch import Arch
@@ -26,16 +25,32 @@ PlatformLiteral = Literal[
 ]
 
 
-@cache
-class Platform:
+class PlatformSingleton(type):
+    def __init__(cls, *args, **kwargs):
+        cls._instances = {}
+
+    def __call__(cls, platform, *args, **kwargs):
+        try:
+            return cls._instances[platform]
+        except KeyError:
+            instance = super().__call__(platform, *args, **kwargs)
+            cls._instances[platform] = instance
+            return instance
+
+
+class Platform(metaclass=PlatformSingleton):
     def __init__(self, value: PlatformLiteral):
         self._inner = PyPlatform(value)
 
     @classmethod
     def _from_py_platform(cls, py_platform: PyPlatform) -> Platform:
         """Construct Rattler version from FFI PyArch object."""
-        platform = cls.__new__(cls)
-        platform._inner = py_platform
+        try:
+            platform = cls._instances[py_platform.name]
+        except KeyError:
+            platform = cls.__new__(cls)
+            platform._inner = py_platform
+            cls._instances[str(platform)] = platform
         return platform
 
     def __str__(self) -> str:
