@@ -1,0 +1,10 @@
+---
+source: crates/rattler_conda_types/src/match_spec/mod.rs
+expression: "specs.into_iter().map(|s|\n                    MatchSpec::from_str(s).unwrap()).map(|s|\n                s.to_string()).collect::<Vec<String>>().join(\"\\n\")"
+---
+mamba ==1.0 py37_0
+conda-forge::pytest ==1.0[md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]
+conda-forge/linux-64::pytest
+conda-forge/linux-64::pytest ==1.0
+conda-forge/linux-64::pytest ==1.0 py37_0
+conda-forge/linux-64::pytest ==1.2.3
