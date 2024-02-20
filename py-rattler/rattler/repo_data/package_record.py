@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 from typing import List, Optional
+from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.package_name import PackageName
 
 from rattler.rattler import PyRecord
@@ -15,6 +16,12 @@ class PackageRecord:
     """
 
     _record: PyRecord
+
+    def matches(self, spec: MatchSpec) -> bool:
+        """
+        Match a [`PackageRecord`] against a [`MatchSpec`].
+        """
+        return spec.matches(self)
 
     @staticmethod
     def from_index_json(
