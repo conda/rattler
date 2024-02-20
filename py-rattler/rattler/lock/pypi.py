@@ -19,11 +19,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.satisfies("charset-normalizer")
         True
         >>>
@@ -39,11 +39,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.name
         'charset-normalizer'
         >>>
@@ -59,11 +59,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.version
         '3.3.2'
         >>>
@@ -79,11 +79,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.url
         'https://files.pythonhosted.org/...'
         >>>
@@ -99,11 +99,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.hash
         PackageHashes()
         >>>
@@ -119,11 +119,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.requires_dist
         []
         >>>
@@ -139,11 +139,11 @@ class PypiPackageData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> data = pypi_packages["osx-arm64"][0][0]
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
         >>> data.requires_python
         '>=3.7.0'
         >>>
@@ -179,11 +179,11 @@ class PypiPackageEnvironmentData:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> env_data = pypi_packages["osx-arm64"][0][1]
+        >>> env_data = pypi_packages[Platform("osx-arm64")][0][1]
         >>> env_data.extras
         set()
         >>>

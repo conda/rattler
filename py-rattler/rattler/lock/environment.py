@@ -82,8 +82,8 @@ class Environment:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pkgs = env.packages_by_platform()
-        >>> pkgs[0]
-        (Platform(...), [LockPackage(), ...])
+        >>> list(pkgs.keys())
+        [Platform(...)]
         >>>
         ```
         """
@@ -103,17 +103,17 @@ class Environment:
         Examples
         --------
         ```python
-        >>> from rattler import LockFile
+        >>> from rattler import LockFile, Platform
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
-        >>> pypi_packages["osx-arm64"][0]
+        >>> pypi_packages[Platform("osx-arm64")][0]
         (PypiPackageData(), PypiPackageEnvironmentData())
         >>>
         ```
         """
         return {
-            platform: [
+            Platform._from_py_platform(platform): [
                 (
                     PypiPackageData._from_py_pypi_package_data(pkg_data),
                     PypiPackageEnvironmentData._from_py_pypi_env_data(env_data),
