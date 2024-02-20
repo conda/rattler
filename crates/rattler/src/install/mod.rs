@@ -37,13 +37,15 @@ use futures::FutureExt;
 pub use python::PythonInfo;
 use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
 
+use itertools::Itertools;
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, HashSet};
 use std::io::ErrorKind;
 use std::sync::Arc;
 use std::{
+    fs,
     future::ready,
     path::{Path, PathBuf},
 };
@@ -72,6 +74,10 @@ pub enum InstallError {
     /// A file could not be linked.
     #[error("failed to link '{0}'")]
     FailedToLink(PathBuf, #[source] LinkFileError),
+
+    /// A directory could not be created.
+    #[error("failed to create directory '{0}")]
+    FailedToCreateDirectory(PathBuf, #[source] std::io::Error),
 
     /// The target prefix is not UTF-8.
     #[error("target prefix is not UTF-8")]
@@ -205,7 +211,7 @@ pub struct InstallOptions {
 ///
 /// Returns a [`PathsEntry`] for every file that was linked into the target directory. The entries
 /// are ordered in the same order as they appear in the `paths.json` file of the package.
-#[instrument(skip_all, fields(package_dir = %package_dir.display()))]
+#[instrument(skip_all, fields(package_dir = % package_dir.display()))]
 pub async fn link_package(
     package_dir: &Path,
     target_dir: &Path,
@@ -277,6 +283,27 @@ pub async fn link_package(
     for (_, computed_path) in final_paths.iter_mut() {
         if let Some(clobber_rename) = clobber_paths.get(computed_path) {
             *computed_path = clobber_rename.clone();
+        }
+    }
+
+    // Figure out all the directories that we are going to need
+    let mut directories_to_construct = HashSet::new();
+    for (_, computed_path) in final_paths.iter() {
+        let mut current_path = computed_path.parent();
+        while let Some(path) = current_path {
+            if !path.as_os_str().is_empty() && directories_to_construct.insert(path.to_path_buf()) {
+                current_path = path.parent();
+            } else {
+                break;
+            }
+        }
+    }
+    for directory in directories_to_construct.into_iter().sorted() {
+        let full_path = target_dir.join(directory);
+        match fs::create_dir(&full_path) {
+            Ok(_) => (),
+            Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+            Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
         }
     }
 
