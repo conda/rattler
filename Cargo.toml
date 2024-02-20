@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/*"]
+resolver = "2"
 
 # See: https://docs.rs/insta/latest/insta/#optional-faster-runs
 [profile.dev.package.insta]
@@ -9,7 +10,7 @@ opt-level = 3
 opt-level = 3
 
 [workspace.package]
-version = "0.17.0"
+version = "0.18.0"
 categories = ["conda"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
@@ -33,7 +34,7 @@ async-trait = "0.1.77"
 async_zip = { version = "0.0.16", default-features = false }
 axum = { version = "0.7.4", default-features = false, features = ["tokio", "http1"] }
 base64 = "0.21.7"
-bindgen = "0.66.1"
+bindgen = "0.69.4"
 bisection = "0.1.0"
 blake2 = "0.10.6"
 bytes = "1.5.0"
@@ -90,22 +91,22 @@ plist = "1"
 purl = { version = "0.1.2", features = ["serde"] }
 quote = "1.0.35"
 rand = "0.8.5"
-rattler = { version = "0.17.0", path = "crates/rattler", default-features = false }
-rattler_conda_types = { version = "0.17.0", path = "crates/rattler_conda_types", default-features = false }
-rattler_digest = { version = "0.17.0", path = "crates/rattler_digest", default-features = false }
-rattler_libsolv_c = { version = "0.17.0", path = "crates/rattler_libsolv_c", default-features = false }
-rattler_lock = { version = "0.17.0", path = "crates/rattler_lock" }
-rattler_macros = { version = "0.17.0", path = "crates/rattler_macros", default-features = false }
-rattler_networking = { version = "0.17.0", path = "crates/rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.17.0", path = "crates/rattler_package_streaming", default-features = false }
-rattler_repodata_gateway = { version = "0.17.0", path = "crates/rattler_repodata_gateway", default-features = false }
-rattler_solve = { version = "0.17.0", path = "crates/rattler_solve", default-features = false }
-rattler_virtual_packages = { version = "0.17.0", path = "crates/rattler_virtual_packages", default-features = false }
+rattler = { version = "0.18.0", path = "crates/rattler", default-features = false }
+rattler_conda_types = { version = "0.18.0", path = "crates/rattler_conda_types", default-features = false }
+rattler_digest = { version = "0.18.0", path = "crates/rattler_digest", default-features = false }
+rattler_libsolv_c = { version = "0.18.0", path = "crates/rattler_libsolv_c", default-features = false }
+rattler_lock = { version = "0.18.0", path = "crates/rattler_lock" }
+rattler_macros = { version = "0.18.0", path = "crates/rattler_macros", default-features = false }
+rattler_networking = { version = "0.18.0", path = "crates/rattler_networking", default-features = false }
+rattler_package_streaming = { version = "0.18.0", path = "crates/rattler_package_streaming", default-features = false }
+rattler_repodata_gateway = { version = "0.18.0", path = "crates/rattler_repodata_gateway", default-features = false }
+rattler_solve = { version = "0.18.0", path = "crates/rattler_solve", default-features = false }
+rattler_virtual_packages = { version = "0.18.0", path = "crates/rattler_virtual_packages", default-features = false }
 reflink-copy = "0.1.14"
 regex = "1.10.3"
 reqwest = { version = "0.11.24", default-features = false }
 reqwest-middleware = "0.2.4"
-resolvo = { version = "0.3.0" }
+resolvo = { version = "0.4.0" }
 retry-policies = { version = "0.2.1", default-features = false }
 rstest = { version = "0.18.2" }
 rstest_reuse = "0.6.0"
@@ -144,3 +145,5 @@ walkdir = "2.4.0"
 windows-sys = { version = "0.52.0", default-features = false }
 zip = { version = "0.6.6", default-features = false }
 zstd = { version = "0.13.0", default-features = false }
+
+[patch.crates-io]

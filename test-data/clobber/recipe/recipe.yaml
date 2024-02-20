@@ -11,6 +11,7 @@ outputs:
       noarch: generic
       script:
         - echo "clobber-1" > $PREFIX/clobber.txt
+        - echo "clobber-1" > $PREFIX/another-clobber.txt
 
   - package:
       name: clobber-2
@@ -20,6 +21,7 @@ outputs:
       noarch: generic
       script:
         - echo "clobber-2" > $PREFIX/clobber.txt
+        - echo "clobber-2" > $PREFIX/another-clobber.txt
 
   - package:
       name: clobber-3
@@ -29,3 +31,4 @@ outputs:
       noarch: generic
       script:
         - echo "clobber-3" > $PREFIX/clobber.txt
+        - echo "clobber-3" > $PREFIX/another-clobber.txt

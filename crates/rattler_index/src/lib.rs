@@ -178,9 +178,14 @@ pub fn index(
                 tracing::info!("Could not read package record from {:?}", p);
                 continue;
             };
-            repodata
-                .conda_packages
-                .insert(file_name.to_string_lossy().to_string(), record);
+            match t {
+                ArchiveType::TarBz2 => repodata
+                    .packages
+                    .insert(file_name.to_string_lossy().to_string(), record),
+                ArchiveType::Conda => repodata
+                    .conda_packages
+                    .insert(file_name.to_string_lossy().to_string(), record),
+            };
         }
         let out_file = output_folder.join(platform).join("repodata.json");
         File::create(&out_file)?.write_all(serde_json::to_string_pretty(&repodata)?.as_bytes())?;
