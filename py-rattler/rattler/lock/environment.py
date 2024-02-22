@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage
 from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData
@@ -15,6 +15,16 @@ class Environment:
     """
 
     _env: PyEnvironment
+
+    def __init__(self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]) -> None:
+        self._env = PyEnvironment(
+            name,
+            # TODO: move this logic to rust 
+            {
+                platform._inner: [record._record for record in records]
+                for (platform, records) in requirements.items()
+            }
+        )
 
     def platforms(self) -> List[Platform]:
         """
