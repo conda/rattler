@@ -3,6 +3,7 @@
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
 use std::path::PathBuf;
+use zip::result::ZipError;
 
 use rattler_digest::{Md5Hash, Sha256Hash};
 
@@ -27,7 +28,7 @@ pub enum ExtractError {
     CouldNotCreateDestination(#[source] std::io::Error),
 
     #[error("invalid zip archive")]
-    ZipError(#[from] zip::result::ZipError),
+    ZipError(#[source] zip::result::ZipError),
 
     #[error("a component is missing from the Conda archive")]
     MissingComponent,
@@ -47,6 +48,15 @@ pub enum ExtractError {
 
     #[error("could not parse archive member {0}: {1}")]
     ArchiveMemberParseError(PathBuf, #[source] std::io::Error),
+}
+
+impl From<ZipError> for ExtractError {
+    fn from(value: ZipError) -> Self {
+        match value {
+            ZipError::Io(io) => Self::IoError(io),
+            e => Self::ZipError(e),
+        }
+    }
 }
 
 #[cfg(feature = "reqwest")]
