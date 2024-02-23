@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 
 use rattler_digest::{Md5Hash, Sha256Hash};
+use rattler_networking::Redact;
 
 pub mod read;
 pub mod seek;
@@ -50,22 +51,9 @@ pub enum ExtractError {
 }
 
 #[cfg(feature = "reqwest")]
-impl From<::reqwest::Error> for ExtractError {
-    fn from(err: ::reqwest::Error) -> Self {
-        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err).into())
-    }
-}
-
-#[cfg(feature = "reqwest")]
 impl From<::reqwest_middleware::Error> for ExtractError {
     fn from(err: ::reqwest_middleware::Error) -> Self {
-        let err = if let reqwest_middleware::Error::Reqwest(err) = err {
-            rattler_networking::redact_known_secrets_from_error(err).into()
-        } else {
-            err
-        };
-
-        ExtractError::ReqwestError(err)
+        ExtractError::ReqwestError(err.redact())
     }
 }
 

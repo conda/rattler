@@ -6,9 +6,7 @@ use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
 use humansize::{SizeFormatter, DECIMAL};
 use rattler_digest::{compute_file_digest, Blake2b256, HashingWriter};
-use rattler_networking::{
-    redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
-};
+use rattler_networking::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -34,7 +32,7 @@ pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
     #[error(transparent)]
-    HttpError(reqwest::Error),
+    HttpError(reqwest_middleware::Error),
 
     /// There was a file system error
     #[error(transparent)]
@@ -78,15 +76,27 @@ pub enum FetchRepoDataError {
     Cancelled,
 }
 
+impl From<reqwest_middleware::Error> for FetchRepoDataError {
+    fn from(err: reqwest_middleware::Error) -> Self {
+        Self::HttpError(err.redact())
+    }
+}
+
 impl From<reqwest::Error> for FetchRepoDataError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(redact_known_secrets_from_error(err).into())
+        Self::HttpError(err.redact().into())
+    }
+}
+
+impl From<reqwest_middleware::Error> for RepoDataNotFoundError {
+    fn from(err: reqwest_middleware::Error) -> Self {
+        Self::HttpError(err.redact())
     }
 }
 
 impl From<reqwest::Error> for RepoDataNotFoundError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(redact_known_secrets_from_error(err))
+        Self::HttpError(err.redact().into())
     }
 }
 
@@ -503,7 +513,7 @@ pub async fn fetch_repo_data(
         }
         Ok(response) => response.error_for_status()?,
         Err(e) => {
-            return Err(FetchRepoDataError::HttpError(e));
+            return Err(FetchRepoDataError::from(e));
         }
     };
 
@@ -677,12 +687,7 @@ async fn stream_and_decode_to_file(
     // Decode, hash and write the data to the file.
     let bytes = tokio::io::copy(&mut decoded_repo_data_json_bytes, &mut hashing_file_writer)
         .await
-        .map_err(|e| {
-            FetchRepoDataError::FailedToDownload(
-                redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url),
-                e,
-            )
-        })?;
+        .map_err(|e| FetchRepoDataError::FailedToDownload(url.redact(), e))?;
 
     // Finalize the hash
     let (_, hash) = hashing_file_writer.finalize();

@@ -11,6 +11,4 @@ pub mod retry_policies;
 
 mod redaction;
 
-pub use redaction::{
-    redact_known_secrets_from_error, redact_known_secrets_from_url, DEFAULT_REDACTION_STR,
-};
+pub use redaction::{redact_known_secrets_from_url, Redact, DEFAULT_REDACTION_STR};
