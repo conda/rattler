@@ -83,7 +83,7 @@ use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::redact_known_secrets_from_error;
+use rattler_networking::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
@@ -166,17 +166,13 @@ pub enum JLAPError {
 
 impl From<reqwest_middleware::Error> for JLAPError {
     fn from(value: reqwest_middleware::Error) -> Self {
-        Self::HTTP(if let reqwest_middleware::Error::Reqwest(err) = value {
-            reqwest_middleware::Error::Reqwest(redact_known_secrets_from_error(err))
-        } else {
-            value
-        })
+        Self::HTTP(value.redact())
     }
 }
 
 impl From<reqwest::Error> for JLAPError {
     fn from(value: reqwest::Error) -> Self {
-        Self::HTTP(redact_known_secrets_from_error(value).into())
+        Self::HTTP(value.redact().into())
     }
 }
 
