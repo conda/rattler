@@ -21,10 +21,11 @@ mod virtual_package;
 use channel::{PyChannel, PyChannelConfig};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    FetchRepoDataException, InvalidChannelException, InvalidMatchSpecException,
-    InvalidPackageNameException, InvalidUrlException, InvalidVersionException, IoException,
-    LinkException, ParseArchException, ParsePlatformException, PyRattlerError, SolverException,
-    TransactionException, VersionBumpException,
+    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
+    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
+    InvalidVersionException, IoException, LinkException, ParseArchException,
+    ParsePlatformException, PyRattlerError, SolverException, TransactionException,
+    VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use lock::{
@@ -158,5 +159,12 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     .unwrap();
     m.add("VersionBumpError", py.get_type::<VersionBumpException>())
         .unwrap();
+
+    m.add(
+        "EnvironmentCreationError",
+        py.get_type::<EnvironmentCreationException>(),
+    )
+    .unwrap();
+
     Ok(())
 }

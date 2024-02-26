@@ -81,6 +81,7 @@ nav:
           - ActivationError: activation_error.md
           - CacheDirError: cache_dir_error.md
           - DetectVirtualPackageError: detect_virtual_package_error.md
+          - EnvironmentCreationError: environment_creation_error.md
           - FetchRepoDataError: fetch_repo_data_error.md
           - InvalidChannelError: invalid_channel_error.md
           - InvalidMatchSpecError: invalid_match_spec_error.md

@@ -17,6 +17,7 @@ try:
         SolverError,
         ConvertSubdirError,
         VersionBumpError,
+        EnvironmentCreationError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -73,6 +74,9 @@ except ImportError:
     class VersionBumpError(Exception):  # type: ignore[no-redef]
         """An error that can occur when bumping a version."""
 
+    class EnvironmentCreationError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when creating an environment."""
+
 
 __all__ = [
     "ActivationError",
@@ -92,4 +96,5 @@ __all__ = [
     "TransactionError",
     "ConvertSubdirError",
     "VersionBumpError",
+    "EnvironmentCreationError",
 ]
