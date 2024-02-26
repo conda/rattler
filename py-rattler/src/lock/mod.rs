@@ -5,7 +5,7 @@ use std::{
 };
 
 use pep508_rs::Requirement;
-use pyo3::{pyclass, pymethods, types::PyBytes, PyErr, PyResult, Python};
+use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
 use rattler_conda_types::{MatchSpec, RepoDataRecord};
 use rattler_lock::{
     Channel, Environment, LockFile, Package, PackageHashes, PypiPackageData,
@@ -148,9 +148,9 @@ impl PyEnvironment {
         Ok(lock
             .finish()
             .environment(&name)
-            .ok_or(Into::<PyErr>::into(PyRattlerError::RequirementError(
-                "Temp Placeholder Error".to_owned(),
-            )))?
+            .ok_or(PyRattlerError::EnvironmentCreationError(
+                "Environment creation failed.".into(),
+            ))?
             .into())
     }
 
