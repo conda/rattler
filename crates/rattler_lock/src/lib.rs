@@ -70,7 +70,7 @@
 use fxhash::FxHashMap;
 use pep508_rs::Requirement;
 use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::{borrow::Cow, io::Read, path::Path, str::FromStr};
 use url::Url;
@@ -550,7 +550,7 @@ impl PypiPackage {
     }
 
     /// Returns the extras enabled for this package
-    pub fn extras(&self) -> &HashSet<String> {
+    pub fn extras(&self) -> &BTreeSet<String> {
         &self.environment_data().extras
     }
 
