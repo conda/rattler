@@ -1,0 +1,3 @@
+# LockFile
+
+::: rattler.lock.LockFile

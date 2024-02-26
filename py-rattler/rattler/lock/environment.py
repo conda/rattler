@@ -16,14 +16,16 @@ class Environment:
 
     _env: PyEnvironment
 
-    def __init__(self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]) -> None:
+    def __init__(
+        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]
+    ) -> None:
         self._env = PyEnvironment(
             name,
-            # TODO: move this logic to rust 
+            # TODO: move this logic to rust
             {
                 platform._inner: [record._record for record in records]
                 for (platform, records) in requirements.items()
-            }
+            },
         )
 
     def platforms(self) -> List[Platform]:

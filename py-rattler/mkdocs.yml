@@ -39,6 +39,13 @@ nav:
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
+      - lock:
+          - LockFile: lock_file.md
+          - Environment: environment.md
+          - LockedPackage: locked_package.md
+          - PackageHashes: package_hashes.md
+          - PypiPackageData: pypi_package_data.md
+          - PypiPackageEnvironmentData: pypi_package_environment_data.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md

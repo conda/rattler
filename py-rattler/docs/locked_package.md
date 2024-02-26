@@ -1,0 +1,3 @@
+# LockedPackage
+
+::: rattler.lock.LockedPackage
