@@ -2,7 +2,7 @@
 use anyhow::Result;
 use fslock::LockFile;
 use once_cell::sync::Lazy;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::{path::PathBuf, sync::Mutex};
 
 use crate::authentication_storage::StorageBackend;
@@ -60,9 +60,9 @@ impl FileStorage {
         Ok(lock)
     }
 
-    /// Read the JSON file and deserialize it into a `HashMap`, or return an empty `HashMa`p if the
+    /// Read the JSON file and deserialize it into a `BTreeMap`, or return an empty `BTreeMap` if the
     /// file does not exist
-    fn read_json(&self) -> Result<HashMap<String, Authentication>, FileStorageError> {
+    fn read_json(&self) -> Result<BTreeMap<String, Authentication>, FileStorageError> {
         if !self.path.exists() {
             static WARN_GUARD: Lazy<Mutex<HashSet<PathBuf>>> =
                 Lazy::new(|| Mutex::new(HashSet::new()));
@@ -73,7 +73,7 @@ impl FileStorage {
                     self.path.to_string_lossy()
                 );
             }
-            return Ok(HashMap::new());
+            return Ok(BTreeMap::new());
         }
         let file = std::fs::File::open(&self.path)?;
         let reader = std::io::BufReader::new(file);
@@ -81,8 +81,8 @@ impl FileStorage {
         Ok(dict)
     }
 
-    /// Serialize the given `HashMap` and write it to the JSON file
-    fn write_json(&self, dict: &HashMap<String, Authentication>) -> Result<(), FileStorageError> {
+    /// Serialize the given `BTreeMap` and write it to the JSON file
+    fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
         let file = std::fs::File::create(&self.path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer(writer, dict)?;
@@ -124,7 +124,8 @@ impl Default for FileStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use insta::assert_snapshot;
+    use std::{fs, io::Write};
     use tempfile::tempdir;
 
     #[test]
@@ -143,6 +144,24 @@ mod tests {
             storage.get("test").unwrap(),
             Some(Authentication::CondaToken("password".to_string()))
         );
+
+        storage
+            .store(
+                "bearer",
+                &Authentication::BearerToken("password".to_string()),
+            )
+            .unwrap();
+        storage
+            .store(
+                "basic",
+                &Authentication::BasicHTTP {
+                    username: "user".to_string(),
+                    password: "password".to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_snapshot!(fs::read_to_string(&path).unwrap());
 
         storage.delete("test").unwrap();
         assert_eq!(storage.get("test").unwrap(), None);
