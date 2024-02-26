@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, HashSet},
     path::PathBuf,
     str::FromStr,
 };
@@ -12,7 +12,11 @@ use rattler_lock::{
     PypiPackageEnvironmentData,
 };
 
-use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
+use crate::{
+    error::PyRattlerError,
+    platform::PyPlatform,
+    record::{self, PyRecord},
+};
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
@@ -38,6 +42,31 @@ impl From<PyLockFile> for LockFile {
 
 #[pymethods]
 impl PyLockFile {
+    #[new]
+    pub fn new(envs: HashMap<String, PyEnvironment>) -> PyResult<Self> {
+        let mut lock = LockFile::builder();
+        for (name, env) in envs {
+            lock.set_channels(&name, env.channels());
+            for (platform, records) in env
+                .inner
+                .conda_repodata_records()
+                .map_err(PyRattlerError::from)?
+            {
+                for record in records {
+                    lock.add_conda_package(&name, platform, record.into());
+                }
+            }
+
+            for (platform, records) in env.inner.pypi_packages() {
+                for (pkg_data, pkg_env_data) in records {
+                    lock.add_pypi_package(&name, platform, pkg_data, pkg_env_data);
+                }
+            }
+        }
+
+        Ok(lock.finish().into())
+    }
+
     /// Writes the conda lock to a file
     pub fn to_path(&self, path: PathBuf) -> PyResult<()> {
         Ok(self.inner.to_path(&path).map_err(PyRattlerError::from)?)
@@ -91,6 +120,40 @@ impl From<PyEnvironment> for Environment {
 
 #[pymethods]
 impl PyEnvironment {
+    #[new]
+    pub fn new(name: String, req: HashMap<PyPlatform, Vec<PyRecord>>) -> PyResult<Self> {
+        let mut lock = LockFile::builder();
+        let channels = req
+            .values()
+            .flat_map(|records| {
+                records
+                    .iter()
+                    .map(record::PyRecord::channel)
+                    .collect::<Vec<PyResult<_>>>()
+            })
+            .collect::<PyResult<HashSet<_>>>()?;
+
+        lock.set_channels(&name, channels);
+
+        for (platform, records) in req {
+            for record in records {
+                lock.add_conda_package(
+                    &name,
+                    platform.inner,
+                    record.try_as_repodata_record()?.clone().into(),
+                );
+            }
+        }
+
+        Ok(lock
+            .finish()
+            .environment(&name)
+            .ok_or(PyRattlerError::EnvironmentCreationError(
+                "Environment creation failed.".into(),
+            ))?
+            .into())
+    }
+
     /// Returns all the platforms for which we have a locked-down environment.
     pub fn platforms(&self) -> Vec<PyPlatform> {
         self.inner.platforms().map(Into::into).collect::<Vec<_>>()

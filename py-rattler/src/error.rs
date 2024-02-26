@@ -57,6 +57,8 @@ pub enum PyRattlerError {
     ConversionError(#[from] ConversionError),
     #[error("{0}")]
     RequirementError(String),
+    #[error("{0}")]
+    EnvironmentCreationError(String),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -100,6 +102,9 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::ConversionError(err) => ConversionException::new_err(err.to_string()),
             PyRattlerError::RequirementError(err) => RequirementException::new_err(err),
+            PyRattlerError::EnvironmentCreationError(err) => {
+                EnvironmentCreationException::new_err(err)
+            }
         }
     }
 }
@@ -124,3 +129,4 @@ create_exception!(exceptions, VersionBumpException, PyException);
 create_exception!(exceptions, ParseCondaLockException, PyException);
 create_exception!(exceptions, ConversionException, PyException);
 create_exception!(exceptions, RequirementException, PyException);
+create_exception!(exceptions, EnvironmentCreationException, PyException);

@@ -39,6 +39,13 @@ nav:
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
+      - lock:
+          - LockFile: lock_file.md
+          - Environment: environment.md
+          - LockedPackage: locked_package.md
+          - PackageHashes: package_hashes.md
+          - PypiPackageData: pypi_package_data.md
+          - PypiPackageEnvironmentData: pypi_package_environment_data.md
       - metadata: 
           - AboutJson: about_json.md
       - match_spec:
@@ -76,6 +83,7 @@ nav:
           - ActivationError: activation_error.md
           - CacheDirError: cache_dir_error.md
           - DetectVirtualPackageError: detect_virtual_package_error.md
+          - EnvironmentCreationError: environment_creation_error.md
           - FetchRepoDataError: fetch_repo_data_error.md
           - InvalidChannelError: invalid_channel_error.md
           - InvalidMatchSpecError: invalid_match_spec_error.md
