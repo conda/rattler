@@ -262,4 +262,7 @@ class AboutJson:
         return about_json
 
     def __repr__(self) -> str:
+        """
+        Returns a representation of the AboutJson.
+        """
         return "AboutJson()"

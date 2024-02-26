@@ -39,6 +39,8 @@ nav:
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md
+      - metadata: 
+          - AboutJson: about_json.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
