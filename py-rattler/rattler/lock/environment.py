@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 from rattler.lock.channel import LockChannel
 from rattler.lock.package import LockedPackage
 from rattler.lock.pypi import PypiPackageData, PypiPackageEnvironmentData

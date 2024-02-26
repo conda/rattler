@@ -12,7 +12,11 @@ use rattler_lock::{
     PypiPackageEnvironmentData,
 };
 
-use crate::{error::PyRattlerError, platform::PyPlatform, record::PyRecord};
+use crate::{
+    error::PyRattlerError,
+    platform::PyPlatform,
+    record::{self, PyRecord},
+};
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
@@ -49,13 +53,13 @@ impl PyLockFile {
                 .map_err(PyRattlerError::from)?
             {
                 for record in records {
-                    lock.add_conda_package(&name, platform.clone(), record.into());
+                    lock.add_conda_package(&name, platform, record.into());
                 }
             }
 
             for (platform, records) in env.inner.pypi_packages() {
                 for (pkg_data, pkg_env_data) in records {
-                    lock.add_pypi_package(&name, platform.clone(), pkg_data, pkg_env_data);
+                    lock.add_pypi_package(&name, platform, pkg_data, pkg_env_data);
                 }
             }
         }
@@ -120,17 +124,16 @@ impl PyEnvironment {
     pub fn new(name: String, req: HashMap<PyPlatform, Vec<PyRecord>>) -> PyResult<Self> {
         let mut lock = LockFile::builder();
         let channels = req
-            .iter()
-            .map(|(_, records)| {
+            .values()
+            .flat_map(|records| {
                 records
                     .iter()
-                    .map(|r| r.channel())
+                    .map(record::PyRecord::channel)
                     .collect::<Vec<PyResult<_>>>()
             })
-            .flatten()
             .collect::<PyResult<HashSet<_>>>()?;
 
-        lock.set_channels(&name, channels.into_iter());
+        lock.set_channels(&name, channels);
 
         for (platform, records) in req {
             for record in records {
