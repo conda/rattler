@@ -311,11 +311,16 @@ mod test {
         routing::get_service,
         Router,
     };
+    use bytes::Bytes;
+    use futures::stream;
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
-    use std::{fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc};
+    use std::{
+        convert::Infallible, fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc,
+    };
     use tempfile::tempdir;
     use tokio::sync::Mutex;
+    use tokio_stream::StreamExt;
     use tower_http::services::ServeDir;
     use url::Url;
 
@@ -382,8 +387,50 @@ mod test {
         Ok(next.run(req).await)
     }
 
-    #[tokio::test]
-    pub async fn test_flaky_package_cache() {
+    /// A helper middleware function that fails the first two requests.
+    async fn fail_with_half_package(
+        State((count, bytes)): State<(Arc<Mutex<i32>>, Arc<Mutex<usize>>)>,
+        req: Request<Body>,
+        next: Next,
+    ) -> Result<Response, StatusCode> {
+        let count = {
+            let mut count = count.lock().await;
+            *count += 1;
+            *count
+        };
+
+        println!("Running middleware for request #{count} for {}", req.uri());
+        let response = next.run(req).await;
+
+        if count <= 2 {
+            // println!("Cutting response body in half");
+            let body = response.into_body();
+            let mut body = body.into_data_stream();
+            let mut buffer = Vec::new();
+            while let Some(Ok(chunk)) = body.next().await {
+                buffer.extend(chunk);
+            }
+
+            let byte_count = bytes.lock().await.clone();
+            let bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>();
+            // Create a stream that ends prematurely
+            let stream = stream::iter(vec![
+                Ok::<_, Infallible>(Bytes::from_iter(bytes.into_iter())),
+                // The stream ends after sending partial data, simulating a premature close
+            ]);
+            let body = Body::from_stream(stream);
+            return Ok(Response::new(body));
+        }
+
+        Ok(response)
+    }
+
+    enum Middleware {
+        FailTheFirstTwoRequests,
+        FailAfterBytes(usize),
+    }
+
+    async fn test_flaky_package_cache(archive_name: &str, middleware: Middleware) {
         let static_dir = get_test_data_dir();
         println!("Serving files from {}", static_dir.display());
         // Construct a service that serves raw files from the test directory
@@ -391,13 +438,18 @@ mod test {
 
         // Construct a router that returns data from the static dir but fails the first try.
         let request_count = Arc::new(Mutex::new(0));
-        let router =
-            Router::new()
-                .route_service("/*key", service)
-                .layer(middleware::from_fn_with_state(
-                    request_count.clone(),
-                    fail_the_first_two_requests,
-                ));
+        let router = Router::new().route_service("/*key", service);
+
+        let router = match middleware {
+            Middleware::FailTheFirstTwoRequests => router.layer(middleware::from_fn_with_state(
+                request_count.clone(),
+                fail_the_first_two_requests,
+            )),
+            Middleware::FailAfterBytes(size) => router.layer(middleware::from_fn_with_state(
+                (request_count.clone(), Arc::new(Mutex::new(size))),
+                fail_with_half_package,
+            )),
+        };
 
         // Construct the server that will listen on localhost but with a *random port*. The random
         // port is very important because it enables creating multiple instances at the same time.
@@ -412,7 +464,6 @@ mod test {
         let packages_dir = tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
-        let archive_name = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2";
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 
         // Do the first request without
@@ -447,5 +498,18 @@ mod test {
             let request_count_lock = request_count.lock().await;
             assert_eq!(*request_count_lock, 3, "Expected there to be 3 requests");
         }
+    }
+
+    #[tokio::test]
+    async fn test_flaky() {
+        let tar_bz2 = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2";
+        let conda = "conda-22.11.1-py38haa244fe_1.conda";
+
+        test_flaky_package_cache(tar_bz2, Middleware::FailTheFirstTwoRequests).await;
+        test_flaky_package_cache(conda, Middleware::FailTheFirstTwoRequests).await;
+
+        test_flaky_package_cache(tar_bz2, Middleware::FailAfterBytes(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
+        test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
     }
 }

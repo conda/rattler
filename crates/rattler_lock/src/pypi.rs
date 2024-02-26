@@ -4,7 +4,7 @@ use pep508_rs::Requirement;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use url::Url;
 
 /// A pinned Pypi package
@@ -37,8 +37,8 @@ pub struct PypiPackageData {
 /// the same pypi package but with different extras enabled.
 #[derive(Clone, Debug, Default)]
 pub struct PypiPackageEnvironmentData {
-    /// The extras enabled for the package. Note that the order doesn't matter.
-    pub extras: HashSet<String>,
+    /// The extras enabled for the package. Note that the order doesn't matter here but it does matter for serialization.
+    pub extras: BTreeSet<String>,
 }
 
 impl PartialOrd for PypiPackageData {

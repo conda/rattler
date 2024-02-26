@@ -3,8 +3,12 @@
 //! This crate provides the ability to extract a Conda package archive or specific parts of it.
 
 use std::path::PathBuf;
+use zip::result::ZipError;
 
 use rattler_digest::{Md5Hash, Sha256Hash};
+
+#[cfg(feature = "reqwest")]
+use rattler_networking::Redact;
 
 pub mod read;
 pub mod seek;
@@ -27,7 +31,7 @@ pub enum ExtractError {
     CouldNotCreateDestination(#[source] std::io::Error),
 
     #[error("invalid zip archive")]
-    ZipError(#[from] zip::result::ZipError),
+    ZipError(#[source] zip::result::ZipError),
 
     #[error("a component is missing from the Conda archive")]
     MissingComponent,
@@ -49,23 +53,19 @@ pub enum ExtractError {
     ArchiveMemberParseError(PathBuf, #[source] std::io::Error),
 }
 
-#[cfg(feature = "reqwest")]
-impl From<::reqwest::Error> for ExtractError {
-    fn from(err: ::reqwest::Error) -> Self {
-        Self::ReqwestError(rattler_networking::redact_known_secrets_from_error(err).into())
+impl From<ZipError> for ExtractError {
+    fn from(value: ZipError) -> Self {
+        match value {
+            ZipError::Io(io) => Self::IoError(io),
+            e => Self::ZipError(e),
+        }
     }
 }
 
 #[cfg(feature = "reqwest")]
 impl From<::reqwest_middleware::Error> for ExtractError {
     fn from(err: ::reqwest_middleware::Error) -> Self {
-        let err = if let reqwest_middleware::Error::Reqwest(err) = err {
-            rattler_networking::redact_known_secrets_from_error(err).into()
-        } else {
-            err
-        };
-
-        ExtractError::ReqwestError(err)
+        ExtractError::ReqwestError(err.redact())
     }
 }
 

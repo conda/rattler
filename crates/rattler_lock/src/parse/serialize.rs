@@ -4,10 +4,8 @@ use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData};
 use itertools::Itertools;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, HashSet},
-};
+use std::collections::{BTreeSet, HashSet};
+use std::{cmp::Ordering, collections::BTreeMap};
 use url::Url;
 
 #[derive(Serialize)]
@@ -31,7 +29,7 @@ enum SerializablePackageData<'a> {
     Pypi(&'a PypiPackageData),
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Eq, PartialEq)]
 #[serde(untagged, rename_all = "snake_case")]
 enum SerializablePackageSelector<'a> {
     Conda {
@@ -39,8 +37,8 @@ enum SerializablePackageSelector<'a> {
     },
     Pypi {
         pypi: &'a Url,
-        #[serde(skip_serializing_if = "HashSet::is_empty")]
-        extras: &'a HashSet<String>,
+        #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+        extras: &'a BTreeSet<String>,
     },
 }
 
@@ -49,6 +47,60 @@ impl<'a> SerializablePackageSelector<'a> {
         match self {
             SerializablePackageSelector::Conda { conda } => conda,
             SerializablePackageSelector::Pypi { pypi, .. } => pypi,
+        }
+    }
+}
+
+impl<'a> PartialOrd for SerializablePackageSelector<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for SerializablePackageSelector<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (
+                SerializablePackageSelector::Conda { .. },
+                SerializablePackageSelector::Pypi { .. },
+            ) => {
+                // Sort conda packages before pypi packages
+                Ordering::Less
+            }
+            (
+                SerializablePackageSelector::Pypi { .. },
+                SerializablePackageSelector::Conda { .. },
+            ) => {
+                // Sort Pypi packages after conda packages
+                Ordering::Greater
+            }
+            (
+                SerializablePackageSelector::Conda { conda: a },
+                SerializablePackageSelector::Conda { conda: b },
+            )
+            | (
+                SerializablePackageSelector::Pypi { pypi: a, .. },
+                SerializablePackageSelector::Pypi { pypi: b, .. },
+            ) => {
+                // First sort packages just by their filename. Since most of the time the urls end
+                // in the packages filename this causes the urls to be sorted by package name.
+                if let (Some(a), Some(b)) = (
+                    a.path_segments()
+                        .and_then(Iterator::last)
+                        .map(str::to_lowercase),
+                    b.path_segments()
+                        .and_then(Iterator::last)
+                        .map(str::to_lowercase),
+                ) {
+                    match a.cmp(&b) {
+                        Ordering::Equal => {}
+                        ordering => return ordering,
+                    }
+                }
+
+                // Otherwise just sort by their full URL
+                a.cmp(b)
+            }
         }
     }
 }
@@ -149,10 +201,7 @@ impl Serialize for LockFile {
                                                 }
                                             }
                                         })
-                                        .sorted_by_key(|p| match p {
-                                            SerializablePackageSelector::Conda { conda } => *conda,
-                                            SerializablePackageSelector::Pypi { pypi, .. } => *pypi,
-                                        })
+                                        .sorted()
                                         .collect(),
                                 )
                             })

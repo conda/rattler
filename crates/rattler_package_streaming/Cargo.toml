@@ -43,3 +43,4 @@ tokio = { workspace = true, features = ["rt", "macros"] }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }
+assert_matches = { workspace = true }

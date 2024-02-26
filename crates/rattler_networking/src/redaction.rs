@@ -40,14 +40,39 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
     }
 }
 
-/// Redacts known secrets from a [`reqwest::Error`].
-pub fn redact_known_secrets_from_error(err: reqwest::Error) -> reqwest::Error {
-    if let Some(url) = err.url() {
-        let redacted_url = redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR)
-            .unwrap_or_else(|| url.clone());
-        err.with_url(redacted_url)
-    } else {
-        err
+/// A trait to redact known secrets from a type.
+pub trait Redact {
+    /// Redacts any secrets from this instance.
+    fn redact(self) -> Self;
+}
+
+impl Redact for reqwest_middleware::Error {
+    fn redact(self) -> Self {
+        if let Some(url) = self.url() {
+            let redacted_url = redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR)
+                .unwrap_or_else(|| url.clone());
+            self.with_url(redacted_url)
+        } else {
+            self
+        }
+    }
+}
+
+impl Redact for reqwest::Error {
+    fn redact(self) -> Self {
+        if let Some(url) = self.url() {
+            let redacted_url = redact_known_secrets_from_url(url, DEFAULT_REDACTION_STR)
+                .unwrap_or_else(|| url.clone());
+            self.with_url(redacted_url)
+        } else {
+            self
+        }
+    }
+}
+
+impl Redact for Url {
+    fn redact(self) -> Self {
+        redact_known_secrets_from_url(&self, DEFAULT_REDACTION_STR).unwrap_or(self)
     }
 }
 
