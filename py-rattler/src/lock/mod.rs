@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, BTreeSet},
+    collections::{BTreeSet, HashMap},
     path::PathBuf,
     str::FromStr,
 };
