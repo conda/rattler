@@ -10,6 +10,7 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 default-run = "rattler"
+publish = false
 
 [[bin]]
 name = "rattler"
