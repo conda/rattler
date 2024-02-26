@@ -10,7 +10,7 @@ opt-level = 3
 opt-level = 3
 
 [workspace.package]
-version = "0.18.0"
+version = "0.19.0"
 categories = ["conda"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
@@ -91,17 +91,17 @@ plist = "1"
 purl = { version = "0.1.2", features = ["serde"] }
 quote = "1.0.35"
 rand = "0.8.5"
-rattler = { version = "0.18.0", path = "crates/rattler", default-features = false }
-rattler_conda_types = { version = "0.18.0", path = "crates/rattler_conda_types", default-features = false }
-rattler_digest = { version = "0.18.0", path = "crates/rattler_digest", default-features = false }
-rattler_libsolv_c = { version = "0.18.0", path = "crates/rattler_libsolv_c", default-features = false }
-rattler_lock = { version = "0.18.0", path = "crates/rattler_lock" }
-rattler_macros = { version = "0.18.0", path = "crates/rattler_macros", default-features = false }
-rattler_networking = { version = "0.18.0", path = "crates/rattler_networking", default-features = false }
-rattler_package_streaming = { version = "0.18.0", path = "crates/rattler_package_streaming", default-features = false }
-rattler_repodata_gateway = { version = "0.18.0", path = "crates/rattler_repodata_gateway", default-features = false }
-rattler_solve = { version = "0.18.0", path = "crates/rattler_solve", default-features = false }
-rattler_virtual_packages = { version = "0.18.0", path = "crates/rattler_virtual_packages", default-features = false }
+rattler = { version = "0.19.0", path = "crates/rattler", default-features = false }
+rattler_conda_types = { version = "0.19.0", path = "crates/rattler_conda_types", default-features = false }
+rattler_digest = { version = "0.19.0", path = "crates/rattler_digest", default-features = false }
+rattler_libsolv_c = { version = "0.19.0", path = "crates/rattler_libsolv_c", default-features = false }
+rattler_lock = { version = "0.19.0", path = "crates/rattler_lock" }
+rattler_macros = { version = "0.19.0", path = "crates/rattler_macros", default-features = false }
+rattler_networking = { version = "0.19.0", path = "crates/rattler_networking", default-features = false }
+rattler_package_streaming = { version = "0.19.0", path = "crates/rattler_package_streaming", default-features = false }
+rattler_repodata_gateway = { version = "0.19.0", path = "crates/rattler_repodata_gateway", default-features = false }
+rattler_solve = { version = "0.19.0", path = "crates/rattler_solve", default-features = false }
+rattler_virtual_packages = { version = "0.19.0", path = "crates/rattler_virtual_packages", default-features = false }
 reflink-copy = "0.1.14"
 regex = "1.10.3"
 reqwest = { version = "0.11.24", default-features = false }
