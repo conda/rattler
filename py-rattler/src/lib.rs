@@ -1,3 +1,4 @@
+mod about_json;
 mod channel;
 mod error;
 mod generic_virtual_package;
@@ -18,6 +19,7 @@ mod solver;
 mod version;
 mod virtual_package;
 
+use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
@@ -91,6 +93,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPypiPackageData>().unwrap();
     m.add_class::<PyPypiPackageEnvironmentData>().unwrap();
     m.add_class::<PyPackageHashes>().unwrap();
+
+    m.add_class::<PyAboutJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
