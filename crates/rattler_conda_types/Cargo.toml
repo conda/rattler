@@ -20,8 +20,8 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { workspace = true, features = ["serde"] }
-rattler_macros = { workspace = true }
+rattler_digest = { version = "0.19.0", default-features = false, features = ["serde"] }
+rattler_macros = { version = "0.19.0", default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
