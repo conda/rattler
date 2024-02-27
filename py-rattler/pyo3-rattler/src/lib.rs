@@ -39,7 +39,9 @@ pub use nameless_match_spec::PyNamelessMatchSpec;
 pub use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 pub use package_name::PyPackageName;
 pub use prefix_paths::PyPrefixPaths;
-pub use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
+pub use repo_data::{
+    patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData,
+};
 pub use version::PyVersion;
 
 pub use pyo3::prelude::*;
@@ -52,7 +54,3 @@ pub use record::PyRecord;
 pub use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 pub use solver::py_solve;
 pub use virtual_package::PyVirtualPackage;
-
-pub fn pyo3_rattler_dummy() -> &'static str {
-    "lol"
-}

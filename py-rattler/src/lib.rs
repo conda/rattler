@@ -1,4 +1,18 @@
-use pyo3_rattler::*;
+use pyo3::prelude::*;
+use pyo3_rattler::{
+    get_rattler_version, py_fetch_repo_data, py_index, py_link, py_solve, ActivationException,
+    CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
+    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
+    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
+    InvalidVersionException, IoException, LinkException, ParseArchException,
+    ParsePlatformException, PyAboutJson, PyActivationResult, PyActivationVariables, PyActivator,
+    PyArch, PyAuthenticatedClient, PyChannel, PyChannelConfig, PyEnvironment,
+    PyGenericVirtualPackage, PyLockChannel, PyLockFile, PyLockedPackage, PyMatchSpec, PyModule,
+    PyNamelessMatchSpec, PyPackageHashes, PyPackageName, PyPatchInstructions, PyPlatform,
+    PyPrefixPaths, PyPypiPackageData, PyPypiPackageEnvironmentData, PyRecord, PyRepoData,
+    PyShellEnum, PySparseRepoData, PyVersion, PyVirtualPackage, SolverException,
+    TransactionException, VersionBumpException,
+};
 
 #[pymodule]
 fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
