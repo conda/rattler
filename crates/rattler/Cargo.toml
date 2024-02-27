@@ -14,12 +14,14 @@ readme.workspace = true
 default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
+cli-tools = ['dep:clap']
 
 [dependencies]
 anyhow = { workspace = true }
 async-compression = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
 drop_bomb = { workspace = true }
