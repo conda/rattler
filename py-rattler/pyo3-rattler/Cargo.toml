@@ -1,0 +1,57 @@
+[package]
+name = "pyo3-rattler"
+version.workspace = true
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "pyo3_rattler"
+path = "src/lib.rs"
+
+[features]
+default = ["native-tls"]
+native-tls = [
+    "rattler_networking/native-tls",
+    "rattler_repodata_gateway/native-tls",
+]
+rustls-tls = [
+    "rattler_networking/rustls-tls",
+    "rattler_repodata_gateway/rustls-tls",
+]
+vendored-openssl = ["openssl", "openssl/vendored"]
+
+[dependencies]
+anyhow = "1.0.75"
+futures = "0.3.28"
+
+rattler = { path = "../../crates/rattler", default-features = false }
+rattler_repodata_gateway = { path = "../../crates/rattler_repodata_gateway", default-features = false, features = [
+    "sparse",
+] }
+rattler_conda_types = { path = "../../crates/rattler_conda_types", default-features = false }
+rattler_digest = { path = "../../crates/rattler_digest" }
+rattler_networking = { path = "../../crates/rattler_networking", default-features = false }
+rattler_shell = { path = "../../crates/rattler_shell", default-features = false }
+rattler_virtual_packages = { path = "../../crates/rattler_virtual_packages", default-features = false }
+rattler_solve = { path = "../../crates/rattler_solve", default-features = false, features = [
+    "resolvo",
+] }
+rattler_index = { path = "../../crates/rattler_index" }
+rattler_lock = { path = "../../crates/rattler_lock", default-features = false }
+
+pyo3 = { version = "0.19", features = [
+    "abi3-py38",
+    "extension-module",
+    "multiple-pymethods",
+] }
+pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
+tokio = { version = "1.32" }
+
+reqwest = { version = "0.11.22", default-features = false }
+reqwest-middleware = "0.2.4"
+
+thiserror = "1.0.44"
+url = "2.4.1"
+
+openssl = { version = "0.10", optional = true }
+pep508_rs = "0.3.0"
