@@ -12,6 +12,8 @@
 
 use std::path::PathBuf;
 
+#[cfg(feature = "cli-tools")]
+pub mod cli;
 pub mod install;
 pub mod package_cache;
 pub mod validation;

@@ -14,12 +14,14 @@ readme.workspace = true
 default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
+cli-tools = ['dep:clap']
 
 [dependencies]
 anyhow = { workspace = true }
 async-compression = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+clap = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
 drop_bomb = { workspace = true }
@@ -34,10 +36,10 @@ memmap2 = { workspace = true }
 nom = { workspace = true }
 once_cell = { workspace = true }
 pin-project-lite = { workspace = true }
-rattler_conda_types = { workspace = true }
-rattler_digest = { workspace = true }
-rattler_networking = { workspace = true }
-rattler_package_streaming = { workspace = true, features = ["reqwest"] }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.19.0", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "0.19.0", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.19.0", default-features = false }
+rattler_package_streaming = { path="../rattler_package_streaming", version = "0.19.0", default-features = false, features = ["reqwest"] }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
