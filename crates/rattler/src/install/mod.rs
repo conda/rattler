@@ -298,14 +298,21 @@ pub async fn link_package(
             }
         }
     }
-    for directory in directories_to_construct.into_iter().sorted() {
-        let full_path = target_dir.join(directory);
-        match fs::create_dir(&full_path) {
-            Ok(_) => (),
-            Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
-            Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
-        }
-    }
+
+    let directories_target_dir = target_dir.to_path_buf();
+    driver
+        .spawn_throttled(move || {
+            for directory in directories_to_construct.into_iter().sorted() {
+                let full_path = directories_target_dir.join(directory);
+                match fs::create_dir(&full_path) {
+                    Ok(_) => (),
+                    Err(e) if e.kind() == ErrorKind::AlreadyExists => (),
+                    Err(e) => return Err(InstallError::FailedToCreateDirectory(full_path, e)),
+                }
+            }
+            Ok(())
+        })
+        .await?;
 
     // Wrap the python info in an `Arc` so we can more easily share it with async tasks.
     let python_info = options.python_info.map(Arc::new);
