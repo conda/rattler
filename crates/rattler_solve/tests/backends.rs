@@ -230,6 +230,15 @@ macro_rules! solver_backend_tests {
         }
 
         #[test]
+        fn test_solve_python_numpy() {
+            insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec![
+                "numpy==1.23.2",
+                "scipy==1.8.1",
+                "python=3.9.*"
+            ]));
+        }
+
+        #[test]
         fn test_solve_favored() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),

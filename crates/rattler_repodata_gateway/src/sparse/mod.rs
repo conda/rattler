@@ -458,7 +458,7 @@ mod test {
             .map(std::vec::Vec::len)
             .sum::<usize>();
 
-        assert_eq!(total_records, 21731);
+        assert_eq!(total_records, 21732);
     }
 
     #[tokio::test]
@@ -494,7 +494,7 @@ mod test {
             .map(std::vec::Vec::len)
             .sum::<usize>();
 
-        assert_eq!(total_records, 16064);
+        assert_eq!(total_records, 16065);
     }
 
     #[test]
@@ -514,7 +514,7 @@ mod test {
             .map(|repo| repo.conda_packages.len() + repo.packages.len())
             .sum::<usize>();
 
-        assert_eq!(total_records, 367595);
+        assert_eq!(total_records, 367596);
     }
 
     #[rstest]
