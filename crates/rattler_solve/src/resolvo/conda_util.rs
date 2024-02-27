@@ -183,7 +183,7 @@ pub(super) fn find_highest_version<'a>(
                         |(version, has_tracked_features)| {
                             (
                                 version.max(record.version().clone()),
-                                has_tracked_features && record.track_features().is_empty(),
+                                has_tracked_features && !record.track_features().is_empty(),
                             )
                         },
                     ))
