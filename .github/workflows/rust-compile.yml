@@ -97,7 +97,7 @@ jobs:
           cache: false
 
       - uses: taiki-e/setup-cross-toolchain-action@v1
-        if: matrix.target != 'x86_64-unknown-linux-musl'
+        if: !(matrix.target == 'x86_64-unknown-linux-musl' || matrix.target == 'wasm32-unknown-unknown')
         with:
           target: ${{ matrix.target }}
 
