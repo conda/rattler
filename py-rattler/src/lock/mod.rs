@@ -406,7 +406,7 @@ impl PyPypiPackageData {
     /// The name of the package.
     #[getter]
     pub fn name(&self) -> String {
-        self.inner.name.clone()
+        self.inner.name.to_string()
     }
 
     /// The version of the package.
