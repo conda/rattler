@@ -432,7 +432,7 @@ impl Package {
     pub fn name(&self) -> &str {
         match self {
             Self::Conda(value) => value.package_record().name.as_normalized(),
-            Self::Pypi(value) => value.package_data().name.as_str(),
+            Self::Pypi(value) => value.package_data().name.as_ref(),
         }
     }
 

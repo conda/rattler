@@ -178,7 +178,7 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
                     .insert_full(PypiPackageData {
-                        name: pkg.name,
+                        name: pep508_rs::PackageName::new(pkg.name)?,
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,

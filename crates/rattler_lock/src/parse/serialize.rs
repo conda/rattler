@@ -109,7 +109,7 @@ impl<'a> SerializablePackageData<'a> {
     fn name(&self) -> &str {
         match self {
             SerializablePackageData::Conda(p) => p.name.as_normalized(),
-            SerializablePackageData::Pypi(p) => &p.name,
+            SerializablePackageData::Pypi(p) => p.name.as_ref(),
         }
     }
 
