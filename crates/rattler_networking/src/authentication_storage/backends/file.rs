@@ -1,5 +1,6 @@
 //! file storage for passwords.
 use anyhow::Result;
+#[cfg(not(feature = "wasm"))]
 use fslock::LockFile;
 use once_cell::sync::Lazy;
 use std::collections::{BTreeMap, HashSet};
@@ -38,6 +39,7 @@ impl FileStorage {
         Self { path }
     }
 
+    #[cfg(not(feature = "wasm"))]
     /// Lock the file storage file for reading and writing. This will block until the lock is
     /// acquired.
     fn lock(&self) -> Result<LockFile, FileStorageError> {
@@ -58,6 +60,12 @@ impl FileStorage {
         }
 
         Ok(lock)
+    }
+
+    #[cfg(feature = "wasm")]
+    /// Fake lock
+    fn lock(&self) -> Result<(), FileStorageError> {
+        Ok(())
     }
 
     /// Read the JSON file and deserialize it into a `BTreeMap`, or return an empty `BTreeMap` if the

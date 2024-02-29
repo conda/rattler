@@ -239,6 +239,7 @@ fn write_zst_archive<W: Write>(
     let tar_file = File::open(&tar_path)?;
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
+    #[cfg(feature = "zstdmt")]
     zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
 
     progress_bar_wrapper.reset_position();

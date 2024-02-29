@@ -16,7 +16,8 @@ pub struct AuthenticationMiddleware {
     auth_storage: AuthenticationStorage,
 }
 
-#[async_trait]
+#[cfg_attr(not(feature = "wasm"), async_trait)]
+#[cfg_attr(feature = "wasm", async_trait(?Send))]
 impl Middleware for AuthenticationMiddleware {
     async fn handle(
         &self,

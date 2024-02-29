@@ -25,17 +25,18 @@ serde_json = { workspace = true }
 tar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["fs"] }
+tokio = { workspace = true, default-features = false }
 tokio-util = { workspace = true, features = ["io-util"] }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
-zstd = { workspace = true, features = ["zstdmt"] }
+zstd = { workspace = true }
 
 [features]
-default = ["native-tls"]
+default = ["native-tls", "tokio/fs", "zstdmt"]
+zstdmt = ["zstd/zstdmt"]
 native-tls = ["rattler_networking/native-tls"]
 rustls-tls = ["rattler_networking/rustls-tls"]
-wasm = ["zstd/wasm"]
+wasm = ["zstd/wasm", "rattler_networking/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
 [dev-dependencies]
