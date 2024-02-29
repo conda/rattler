@@ -1,6 +1,6 @@
 //! file storage for passwords.
 use anyhow::Result;
-#[cfg(feature="fslock")]
+#[cfg(feature = "fslock")]
 use fslock::LockFile;
 use once_cell::sync::Lazy;
 use std::collections::{BTreeMap, HashSet};
@@ -39,7 +39,7 @@ impl FileStorage {
         Self { path }
     }
 
-    #[cfg(feature="fslock")]
+    #[cfg(feature = "fslock")]
     /// Lock the file storage file for reading and writing. This will block until the lock is
     /// acquired.
     fn lock(&self) -> Result<LockFile, FileStorageError> {
@@ -62,7 +62,7 @@ impl FileStorage {
         Ok(lock)
     }
 
-    #[cfg(not(feature="fslock"))]
+    #[cfg(not(feature = "fslock"))]
     /// Fake lock
     fn lock(&self) -> Result<(), FileStorageError> {
         Ok(())
