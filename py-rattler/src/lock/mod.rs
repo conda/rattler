@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     path::PathBuf,
     str::FromStr,
 };
@@ -474,8 +474,8 @@ impl From<PyPypiPackageEnvironmentData> for PypiPackageEnvironmentData {
 impl PyPypiPackageEnvironmentData {
     /// The extras enabled for the package. Note that the order doesn't matter.
     #[getter]
-    pub fn extras(&self) -> BTreeSet<String> {
-        self.inner.extras.clone()
+    pub fn extras(&self) -> Vec<String> {
+        self.inner.extras.iter().map(|e| e.to_string()).collect()
     }
 }
 

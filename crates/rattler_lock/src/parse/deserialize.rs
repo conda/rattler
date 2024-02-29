@@ -6,6 +6,7 @@ use crate::{
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
+use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use serde::Deserialize;
 use serde_yaml::Value;
@@ -48,7 +49,7 @@ enum DeserializablePackageSelector {
 #[derive(Hash, Deserialize, Eq, PartialEq)]
 struct DeserializablePypiPackageEnvironmentData {
     #[serde(default)]
-    extras: BTreeSet<String>,
+    extras: BTreeSet<ExtraName>,
 }
 
 impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {
