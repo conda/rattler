@@ -133,7 +133,7 @@ impl Ord for SerializablePackageData<'_> {
         use SerializablePackageData::{Conda, Pypi};
         // First sort by name, then by package type specific attributes
         self.source_name()
-            .cmp(&other.source_name())
+            .cmp(other.source_name())
             .then_with(|| match (self, other) {
                 (Conda(a), Conda(b)) => a.cmp(b),
                 (Pypi(a), Pypi(b)) => a.cmp(b),
