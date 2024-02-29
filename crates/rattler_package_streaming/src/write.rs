@@ -241,6 +241,9 @@ fn write_zst_archive<W: Write>(
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
     #[cfg(feature = "zstdmt")]
     zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
+    // mark as "used" to avoid "unused" warning
+    #[cfg(not(feature = "zstdmt"))]
+    let _ = num_threads;
 
     progress_bar_wrapper.reset_position();
     if let Ok(tar_total_size) = tar_file.metadata().map(|v| v.len()) {

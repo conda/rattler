@@ -37,7 +37,7 @@ url = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 rand = { workspace = true }
 insta = { workspace = true, features = ["yaml", "redactions", "toml"] }
-rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
+rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls", "zstdmt"] }
 tempfile = { workspace = true }
 rstest = { workspace = true }
 assert_matches = { workspace = true }

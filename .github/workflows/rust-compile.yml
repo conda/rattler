@@ -81,6 +81,7 @@ jobs:
 
           - { name: "Windows-x86_64",    target: x86_64-pc-windows-msvc,           os: windows-latest }
           - { name: "Windows-aarch64",   target: aarch64-pc-windows-msvc,          os: windows-latest,                  skip-tests: true }
+          - { name: "Webassembly",       target: wasm32-unknown-unknown,           os: ubuntu-latest,                   skip-tests: true }
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -123,12 +124,22 @@ jobs:
           echo "CARGO_BUILD_OPTIONS=${CARGO_BUILD_OPTIONS} --no-default-features --features rustls-tls" >> $GITHUB_OUTPUT
 
       - name: Build
+        if: matrix.target != 'wasm32-unknown-unknown'
         run: >
           cargo build 
           --all-targets  
           --features ${{ env.DEFAULT_FEATURES }}
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}}
+
+      - name: Build
+        if: matrix.target == 'wasm32-unknown-unknown'
+        run: |
+          cd crates/rattler_package_streaming
+          cargo build                     \
+            --all-targets                 \
+            --features wasm               \
+            --target ${{ matrix.target }}
 
       - name: Disable testing the tools crate if cross compiling
         id: test-options
