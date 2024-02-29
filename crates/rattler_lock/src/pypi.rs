@@ -1,6 +1,6 @@
 use crate::PackageHashes;
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::Requirement;
+use pep508_rs::{ExtraName, PackageName, Requirement};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
@@ -13,7 +13,7 @@ use url::Url;
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
 pub struct PypiPackageData {
     /// The name of the package.
-    pub name: String,
+    pub name: PackageName,
 
     /// The version of the package.
     pub version: pep440_rs::Version,
@@ -38,7 +38,7 @@ pub struct PypiPackageData {
 #[derive(Clone, Debug, Default)]
 pub struct PypiPackageEnvironmentData {
     /// The extras enabled for the package. Note that the order doesn't matter here but it does matter for serialization.
-    pub extras: BTreeSet<String>,
+    pub extras: BTreeSet<ExtraName>,
 }
 
 impl PartialOrd for PypiPackageData {

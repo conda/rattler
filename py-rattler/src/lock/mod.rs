@@ -406,7 +406,7 @@ impl PyPypiPackageData {
     /// The name of the package.
     #[getter]
     pub fn name(&self) -> String {
-        self.inner.name.clone()
+        self.inner.name.to_string()
     }
 
     /// The version of the package.
@@ -475,7 +475,7 @@ impl PyPypiPackageEnvironmentData {
     /// The extras enabled for the package. Note that the order doesn't matter.
     #[getter]
     pub fn extras(&self) -> BTreeSet<String> {
-        self.inner.extras.clone()
+        self.inner.extras.iter().map(|e| e.to_string()).collect()
     }
 }
 

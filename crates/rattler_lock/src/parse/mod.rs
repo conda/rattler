@@ -32,6 +32,9 @@ pub enum ParseCondaLockError {
 
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
     MissingPackage(String, Platform, Url),
+
+    #[error(transparent)]
+    InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),
 }
 
 impl FromStr for LockFile {

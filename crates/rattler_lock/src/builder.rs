@@ -6,6 +6,7 @@ use crate::{
 };
 use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
+use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -186,7 +187,7 @@ impl LockFileBuilder {
 /// Similar to [`PypiPackageEnvironmentData`] but hashable.
 #[derive(Hash, PartialEq, Eq)]
 struct HashablePypiPackageEnvironmentData {
-    extras: BTreeSet<String>,
+    extras: BTreeSet<ExtraName>,
 }
 
 impl From<HashablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {
