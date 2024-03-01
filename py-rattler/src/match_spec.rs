@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, PackageName};
+use rattler_conda_types::{Channel, MatchSpec, PackageName, ParseStrictness};
 use std::sync::Arc;
 
 use crate::{
