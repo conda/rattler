@@ -26,9 +26,17 @@ lto = true
 [workspace.dependencies]
 anyhow = "1.0.79"
 assert_matches = "1.5.0"
-async-compression = { version = "0.4.6", features = ["gzip", "tokio", "bzip2", "zstd"] }
+async-compression = { version = "0.4.6", features = [
+    "gzip",
+    "tokio",
+    "bzip2",
+    "zstd",
+] }
 async-trait = "0.1.77"
-axum = { version = "0.7.4", default-features = false, features = ["tokio", "http1"] }
+axum = { version = "0.7.4", default-features = false, features = [
+    "tokio",
+    "http1",
+] }
 base64 = "0.21.7"
 bindgen = "0.69.4"
 blake2 = "0.10.6"
@@ -36,7 +44,11 @@ bytes = "1.5.0"
 bzip2 = "0.4.4"
 cache_control = "0.2.0"
 cfg-if = "1.0"
-chrono = { version = "0.4.33", default-features = false, features = ["std", "serde", "alloc"] }
+chrono = { version = "0.4.33", default-features = false, features = [
+    "std",
+    "serde",
+    "alloc",
+] }
 clap = { version = "4.4.18", features = ["derive"] }
 cmake = "0.1.50"
 console = { version = "0.15.8", features = ["windows-console-colors"] }
@@ -76,6 +88,7 @@ netrc-rs = "0.1.2"
 nom = "7.1.3"
 num_cpus = "1.16.0"
 once_cell = "1.19.0"
+openssl = "0.10"
 ouroboros = "0.18.3"
 pathdiff = "0.2.1"
 pep440_rs = { version = "0.4.0" }
@@ -83,6 +96,12 @@ pep508_rs = { version = "0.3.0" }
 pin-project-lite = "0.2.13"
 plist = "1"
 purl = { version = "0.1.2", features = ["serde"] }
+pyo3 = { version = "0.19.0", features = [
+    "abi3-py38",
+    "extension-module",
+    "multiple-pymethods",
+] }
+pyo3-asyncio = { version = "0.19.0", features = ["tokio-runtime"] }
 quote = "1.0.35"
 rand = "0.8.5"
 reflink-copy = "0.1.14"
@@ -102,7 +121,12 @@ serde_yaml = "0.9.31"
 sha2 = "0.10.8"
 shlex = "1.3.0"
 similar-asserts = "1.5.0"
-smallvec = { version = "1.13.1", features = ["serde", "const_new", "const_generics", "union"] }
+smallvec = { version = "1.13.1", features = [
+    "serde",
+    "const_new",
+    "const_generics",
+    "union",
+] }
 strum = { version = "0.26.1", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.48"
