@@ -87,13 +87,11 @@ fn regex_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstr
     let (_rest, (preceder, _, terminator)) =
         tuple((opt(char('^')), take_while(|c| c != '$'), opt(char('$'))))(input)?;
     match (preceder, terminator) {
-        (None, None) => Err(nom::Err::Error(
-            ParseConstraintError::UnterminatedRegex,
+        (None, None) => Err(nom::Err::Error(ParseConstraintError::UnterminatedRegex)),
+        (_, None) | (None, _) => Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex)),
+        _ => Err(nom::Err::Failure(
+            ParseConstraintError::RegexConstraintsNotSupported,
         )),
-        (_, None)|(None, _) => Err(nom::Err::Failure(
-            ParseConstraintError::UnterminatedRegex,
-        )),
-        _ => Err(nom::Err::Failure(ParseConstraintError::RegexConstraintsNotSupported))
     }
 }
 
