@@ -3,6 +3,7 @@ use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverImpl, SolverTask};
 use std::str::FromStr;
+use rattler_conda_types::ParseStrictness::Strict;
 
 fn conda_json_path() -> String {
     format!(
@@ -39,7 +40,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
     let specs = specs
         .iter()
-        .map(|s| MatchSpec::from_str(s).unwrap())
+        .map(|s| MatchSpec::from_str(s, Strict).unwrap())
         .collect::<Vec<MatchSpec>>();
 
     let json_file = conda_json_path();
