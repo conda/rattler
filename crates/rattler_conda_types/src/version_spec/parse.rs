@@ -51,8 +51,8 @@ fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionO
 
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseConstraintError {
-    #[error("'.' is incompatible with '{0}' operator'")]
-    GlobVersionIncompatibleWithOperator(RangeOperator),
+    #[error("'*' is incompatible with '{0}' operator'")]
+    GlobVersionIncompatibleWithOperator(VersionOperators),
     #[error("regex constraints are not supported")]
     RegexConstraintsNotSupported,
     #[error("unterminated unsupported regular expression")]
@@ -84,13 +84,14 @@ impl<'i> ParseError<&'i str> for ParseConstraintError {
 
 /// Parses a regex constraint. Returns an error if no terminating `$` is found.
 fn regex_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseConstraintError> {
-    let (_rest, (_, _, terminator)) =
-        tuple((char('^'), take_while(|c| c != '$'), opt(char('$'))))(input)?;
-    match terminator {
-        Some(_) => Err(nom::Err::Failure(
+    let (_rest, (preceder, _, terminator)) =
+        tuple((opt(char('^')), take_while(|c| c != '$'), opt(char('$'))))(input)?;
+    match (preceder, terminator) {
+        (None, None) => Err(nom::Err::Error(ParseConstraintError::UnterminatedRegex)),
+        (_, None) | (None, _) => Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex)),
+        _ => Err(nom::Err::Failure(
             ParseConstraintError::RegexConstraintsNotSupported,
         )),
-        None => Err(nom::Err::Failure(ParseConstraintError::UnterminatedRegex)),
     }
 }
 
@@ -128,8 +129,30 @@ fn logical_constraint_parser(input: &str) -> IResult<&str, Constraint, ParseCons
         }))
     })?;
 
+    // Handle the case where no version was specified. These cases don't make any sense (e.g.
+    // ``>=*``) but they do exist in the wild. This code here tries to map it to something that at
+    // least makes some sort of sense. But this is not the case for everything, for instance what
+    // what is ment with `!=*` or `<*`?
+    // See: https://github.com/AnacondaRecipes/repodata-hotfixes/issues/220
+    if version_str == "*" {
+        return match op.expect(
+            "if no operator was specified for the star then this is not a logical constraint",
+        ) {
+            VersionOperators::Range(RangeOperator::GreaterEquals | RangeOperator::LessEquals)
+            | VersionOperators::StrictRange(
+                StrictRangeOperator::Compatible | StrictRangeOperator::StartsWith,
+            )
+            | VersionOperators::Exact(EqualityOperator::Equals) => Ok((rest, Constraint::Any)),
+            op => {
+                return Err(nom::Err::Error(
+                    ParseConstraintError::GlobVersionIncompatibleWithOperator(op),
+                ));
+            }
+        };
+    }
+
     // Parse the string as a version
-    let (version_rest, version) = version_parser(input).map_err(|e| {
+    let (version_rest, version) = version_parser(version_str).map_err(|e| {
         e.map(|e| {
             ParseConstraintError::InvalidVersion(ParseVersionError {
                 kind: e,

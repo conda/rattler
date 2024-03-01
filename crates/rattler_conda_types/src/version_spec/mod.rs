@@ -182,6 +182,16 @@ impl FromStr for VersionSpec {
     }
 }
 
+impl Display for VersionOperators {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionOperators::Range(r) => write!(f, "{r}"),
+            VersionOperators::StrictRange(r) => write!(f, "{r}"),
+            VersionOperators::Exact(r) => write!(f, "{r}"),
+        }
+    }
+}
+
 impl Display for RangeOperator {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -307,7 +317,12 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
-    use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator};
+    use assert_matches::assert_matches;
+
+    use crate::version_spec::parse::ParseConstraintError;
+    use crate::version_spec::{
+        EqualityOperator, LogicalOperator, ParseVersionSpecError, RangeOperator,
+    };
     use crate::{Version, VersionSpec};
     use std::str::FromStr;
 
@@ -414,6 +429,49 @@ mod tests {
         assert_eq!(
             VersionSpec::from_str(">2.10*").unwrap(),
             VersionSpec::from_str(">=2.10").unwrap()
+        );
+    }
+
+    #[test]
+    fn issue_star_operator() {
+        assert_eq!(
+            VersionSpec::from_str(">=*").unwrap(),
+            VersionSpec::from_str("*").unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("==*").unwrap(),
+            VersionSpec::from_str("*").unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("=*").unwrap(),
+            VersionSpec::from_str("*").unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("~=*").unwrap(),
+            VersionSpec::from_str("*").unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("<=*").unwrap(),
+            VersionSpec::from_str("*").unwrap()
+        );
+
+        assert_matches!(
+            VersionSpec::from_str(">*").unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("!=*").unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("<*").unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
         );
     }
 }
