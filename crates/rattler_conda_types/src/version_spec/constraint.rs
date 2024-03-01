@@ -247,7 +247,7 @@ mod test {
         );
         assert_eq!(
             Constraint::from_str("1.2.3$"),
-            Err(ParseConstraintError::RegexConstraintsNotSupported)
+            Err(ParseConstraintError::UnterminatedRegex)
         );
         assert_eq!(
             Constraint::from_str("1.*.3"),

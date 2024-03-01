@@ -103,6 +103,18 @@ pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a st
     )))(input)
 }
 
+/// Recognize a version followed by a .* or *, or just a *
+pub(crate) fn recognize_version_with_star<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    input: &'a str,
+) -> Result<(&'a str, &'a str), nom::Err<E>> {
+    alt((
+        // A version with an optional * or .*.
+        terminated(recognize_version, opt(alt((tag(".*"), tag("*"))))),
+        // Just a *
+        tag("*"),
+    ))(input)
+}
+
 /// A parser that recognized a constraint but does not actually parse it.
 pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     input: &'a str,
@@ -111,18 +123,15 @@ pub(crate) fn recognize_constraint<'a, E: ParseError<&'a str> + ContextError<&'a
         // Any (* or *.*)
         terminated(tag("*"), cut(opt(tag(".*")))),
         // Regex
-        recognize(delimited(tag("^"), not(tag("$")), tag("$"))),
+        recognize(delimited(opt(tag("^")), not(tag("$")), tag("$"))),
         // Version with optional operator followed by optional glob.
-        recognize(terminated(
-            preceded(
-                opt(delimited(
-                    opt(multispace0),
-                    parse_operator,
-                    opt(multispace0),
-                )),
-                cut(context("version", recognize_version)),
-            ),
-            opt(alt((tag(".*"), tag("*")))),
+        recognize(preceded(
+            opt(delimited(
+                opt(multispace0),
+                parse_operator,
+                opt(multispace0),
+            )),
+            cut(context("version", recognize_version_with_star)),
         )),
     ))(input)
 }
