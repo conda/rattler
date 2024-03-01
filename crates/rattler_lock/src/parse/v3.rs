@@ -8,7 +8,7 @@ use crate::{
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::Requirement;
+use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{
     NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
 };
@@ -70,7 +70,7 @@ struct PypiLockedPackageV3 {
 #[derive(Clone, Debug, Deserialize, Hash, Eq, PartialEq)]
 pub struct PypiPackageEnvironmentDataV3 {
     #[serde(default)]
-    pub extras: BTreeSet<String>,
+    pub extras: BTreeSet<ExtraName>,
 }
 
 impl From<PypiPackageEnvironmentDataV3> for PypiPackageEnvironmentData {
@@ -178,7 +178,7 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
                     .insert_full(PypiPackageData {
-                        name: pkg.name,
+                        name: pep508_rs::PackageName::new(pkg.name)?,
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,

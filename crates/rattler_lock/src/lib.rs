@@ -68,7 +68,7 @@
 //! in a single file.
 
 use fxhash::FxHashMap;
-use pep508_rs::Requirement;
+use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
@@ -429,10 +429,10 @@ impl Package {
     }
 
     /// Returns the name of the package.
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Cow<'_, str> {
         match self {
-            Self::Conda(value) => value.package_record().name.as_normalized(),
-            Self::Pypi(value) => value.package_data().name.as_str(),
+            Self::Conda(value) => value.package_record().name.as_normalized().into(),
+            Self::Pypi(value) => value.package_data().name.as_dist_info_name(),
         }
     }
 
@@ -550,7 +550,7 @@ impl PypiPackage {
     }
 
     /// Returns the extras enabled for this package
-    pub fn extras(&self) -> &BTreeSet<String> {
+    pub fn extras(&self) -> &BTreeSet<ExtraName> {
         &self.environment_data().extras
     }
 
