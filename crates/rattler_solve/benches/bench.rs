@@ -1,9 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
+use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverImpl, SolverTask};
 use std::str::FromStr;
-use rattler_conda_types::ParseStrictness::Strict;
 
 fn conda_json_path() -> String {
     format!(
