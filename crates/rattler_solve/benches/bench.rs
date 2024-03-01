@@ -3,7 +3,6 @@ use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverImpl, SolverTask};
-use std::str::FromStr;
 
 fn conda_json_path() -> String {
     format!(
