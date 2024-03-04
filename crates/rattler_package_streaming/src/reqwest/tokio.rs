@@ -22,9 +22,10 @@ async fn get_reader(
     client: reqwest_middleware::ClientWithMiddleware,
 ) -> Result<impl tokio::io::AsyncRead, ExtractError> {
     if url.scheme() == "file" {
-        let file = tokio::fs::File::open(url.to_file_path().expect("..."))
-            .await
-            .map_err(ExtractError::IoError)?;
+        let file =
+            tokio::fs::File::open(url.to_file_path().expect("Could not convert to file path"))
+                .await
+                .map_err(ExtractError::IoError)?;
 
         Ok(Either::Left(BufReader::new(file)))
     } else {

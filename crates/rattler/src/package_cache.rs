@@ -38,6 +38,14 @@ pub struct CacheKey {
     name: String,
     version: String,
     build_string: String,
+    sha256: Option<String>,
+}
+
+impl CacheKey {
+    /// Return the sha256 hash of the package if it is known.
+    pub fn sha256(&self) -> Option<&str> {
+        self.sha256.as_deref()
+    }
 }
 
 impl From<ArchiveIdentifier> for CacheKey {
@@ -46,6 +54,7 @@ impl From<ArchiveIdentifier> for CacheKey {
             name: pkg.name,
             version: pkg.version,
             build_string: pkg.build_string,
+            sha256: None,
         }
     }
 }
@@ -56,6 +65,7 @@ impl From<&PackageRecord> for CacheKey {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
             build_string: record.build.clone(),
+            sha256: record.sha256.map(|s| format!("{s:x}")).clone(),
         }
     }
 }
