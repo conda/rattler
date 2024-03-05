@@ -273,7 +273,7 @@ macro_rules! solver_backend_tests {
             assert!(result.is_err());
 
             let err = result.err().unwrap();
-            insta::assert_display_snapshot!(err);
+            insta::assert_snapshot!(err);
         }
 
         #[test]
@@ -605,7 +605,7 @@ mod resolvo {
         );
 
         // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
-        insta::assert_display_snapshot!(result.unwrap_err());
+        insta::assert_snapshot!(result.unwrap_err());
     }
 }
 
