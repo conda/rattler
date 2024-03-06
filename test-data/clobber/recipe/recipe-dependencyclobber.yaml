@@ -1,0 +1,15 @@
+recipe:
+  name: clobber
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: clobber-python
+      version: 0.1.0
+
+    build:
+      string: cpython
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/bin
+        - echo "cpython" > $PREFIX/bin/python

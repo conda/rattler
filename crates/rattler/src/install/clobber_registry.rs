@@ -155,12 +155,18 @@ impl ClobberRegistry {
                 .map(|&idx| self.package_names[idx].clone())
                 .collect::<Vec<_>>();
 
+            for pfx in sorted_prefix_records {
+                println!("{}: {:?}", pfx.repodata_record.package_record.name.as_normalized(), pfx.paths_data);
+            }
+
             // extract the subset of clobbered_by that is in sorted_prefix_records
             let sorted_clobbered_by = sorted_names
                 .iter()
                 .cloned()
                 .enumerate()
                 .filter(|(_, n)| clobbered_by_names.contains(n))
+                // make sure that the file is actually in the package (because it could have been removed in the meantime)
+                .filter(|(idx, _)| sorted_prefix_records[*idx].files.contains(path))
                 .collect::<Vec<_>>();
 
             let winner = match sorted_clobbered_by.last() {
@@ -1014,5 +1020,70 @@ mod tests {
         .await;
 
         assert_check_files(target_prefix.path(), &[]);
+    }
+
+    // This used to hit an expect in the clobbering code
+    #[tokio::test]
+    async fn test_dependency_clobber() {
+        // Create a transaction
+        let repodata_record_1 = get_repodata_record("clobber/clobber-python-0.1.0-cpython.tar.bz2");
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Install(repodata_record_1)],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        let repodata_record_2 = get_repodata_record("clobber/clobber-python-0.1.0-pypy.tar.bz2");
+        let repodata_record_3 =
+            get_repodata_record("clobber/clobber-pypy-0.1.0-h4616a5c_0.tar.bz2");
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![
+                TransactionOperation::Remove(prefix_records[0].clone()),
+                TransactionOperation::Install(repodata_record_2),
+                TransactionOperation::Install(repodata_record_3),
+            ],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        let path = target_prefix.into_path();
+        println!("{:?}", path);
+
+        // assert_check_files(target_prefix.path(), &["bin/python"]);
+        assert_check_files(&path, &["bin/python"]);
     }
 }
