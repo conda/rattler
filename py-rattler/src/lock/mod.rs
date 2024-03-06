@@ -6,7 +6,7 @@ use std::{
 
 use pep508_rs::Requirement;
 use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
-use rattler_conda_types::{MatchSpec, RepoDataRecord};
+use rattler_conda_types::{MatchSpec, ParseStrictness, RepoDataRecord};
 use rattler_lock::{
     Channel, Environment, LockFile, Package, PackageHashes, PypiPackageData,
     PypiPackageEnvironmentData,
@@ -363,9 +363,10 @@ impl PyLockedPackage {
 
     pub fn satisfies(&self, spec: &str) -> PyResult<bool> {
         match &self.inner {
-            Package::Conda(pkg) => {
-                Ok(pkg.satisfies(&MatchSpec::from_str(spec).map_err(PyRattlerError::from)?))
-            }
+            Package::Conda(pkg) => Ok(pkg.satisfies(
+                &MatchSpec::from_str(spec, ParseStrictness::Lenient)
+                    .map_err(PyRattlerError::from)?,
+            )),
             Package::Pypi(pkg) => Ok(pkg.satisfies(
                 &Requirement::from_str(spec)
                     .map_err(|e| PyRattlerError::RequirementError(e.to_string()))?,
