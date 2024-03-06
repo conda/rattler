@@ -6,4 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1](https://github.com/mamba-org/rattler/compare/rattler_digest-v0.19.0...rattler_digest-v0.19.1) - 2024-03-06
+
+### Other
+- every crate should have its own version ([#557](https://github.com/mamba-org/rattler/pull/557))
+
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler_digest-v0.18.0...rattler_digest-v0.19.0) - 2024-02-26
