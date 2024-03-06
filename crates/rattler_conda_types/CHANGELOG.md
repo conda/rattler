@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.19.0...rattler_conda_types-v0.20.0) - 2024-03-06
+
+### Added
+- [**breaking**] optional strict parsing of matchspec and versionspec ([#552](https://github.com/mamba-org/rattler/pull/552))
+
+### Fixed
+- patch unsupported glob operators ([#551](https://github.com/mamba-org/rattler/pull/551))
+- dont use workspace dependencies for local crates ([#546](https://github.com/mamba-org/rattler/pull/546))
+
+### Other
+- every crate should have its own version ([#557](https://github.com/mamba-org/rattler/pull/557))
+
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.18.0...rattler_conda_types-v0.19.0) - 2024-02-26
 
 ### Fixed
