@@ -2,6 +2,7 @@ pub use encoding::{AsyncEncoding, Encoding};
 pub use flock::LockedFile;
 use std::fmt::Write;
 use url::Url;
+pub use barrier_cell::BarrierCell;
 
 mod encoding;
 
@@ -9,6 +10,7 @@ mod encoding;
 pub(crate) mod simple_channel_server;
 
 mod flock;
+mod barrier_cell;
 
 /// Convert a URL to a cache filename
 pub(crate) fn url_to_cache_filename(url: &Url) -> String {

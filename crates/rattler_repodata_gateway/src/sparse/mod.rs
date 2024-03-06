@@ -462,6 +462,18 @@ mod test {
     }
 
     #[tokio::test]
+    async fn test_sparse_rubin_env() {
+        let sparse_empty_data = load_sparse(["rubin-env"]).await;
+
+        let total_records = sparse_empty_data
+            .iter()
+            .map(std::vec::Vec::len)
+            .sum::<usize>();
+
+        assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
     async fn test_sparse_numpy_dev() {
         let sparse_empty_data = load_sparse([
             "python",

@@ -160,6 +160,21 @@ impl Channel {
         }
     }
 
+    /// Constructs a channel from a directory path.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the path is not a valid url.
+    pub fn from_directory(path: &Path) -> Self {
+        let path = absolute_path(path);
+        let url = Url::from_directory_path(&path).expect("path is a valid url");
+        Self {
+            platforms: None,
+            base_url: url,
+            name: None,
+        }
+    }
+
     /// Returns the name of the channel
     pub fn name(&self) -> &str {
         match self.base_url().scheme() {

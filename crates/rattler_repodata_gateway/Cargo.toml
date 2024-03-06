@@ -11,10 +11,13 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+async-trait = "0.1.77"
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 blake2 = { workspace = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
+dashmap = "5.5.3"
+elsa = "1.10.0"
 humansize = { workspace = true }
 humantime = { workspace = true }
 futures = { workspace = true }

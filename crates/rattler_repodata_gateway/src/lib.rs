@@ -65,3 +65,5 @@ pub mod fetch;
 pub mod sparse;
 
 mod utils;
+mod gateway;
+mod error;
