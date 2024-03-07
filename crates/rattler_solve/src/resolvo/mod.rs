@@ -4,7 +4,7 @@ use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
-    RepoDataRecord,
+    ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
@@ -19,7 +19,6 @@ use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
     ops::Deref,
-    str::FromStr,
 };
 
 use itertools::Itertools;
@@ -499,7 +498,7 @@ fn parse_match_spec<'a>(
     if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
         Ok(*spec_id)
     } else {
-        let match_spec = MatchSpec::from_str(spec_str)?;
+        let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
         let (name, spec) = match_spec.into_nameless();
         let dependency_name = pool.intern_package_name(
             name.as_ref()

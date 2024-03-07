@@ -1,6 +1,6 @@
 [package]
 name = "rattler_libsolv_c"
-version.workspace = true
+version = "0.19.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Bindings for libsolv"

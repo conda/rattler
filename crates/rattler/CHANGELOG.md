@@ -6,5 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1](https://github.com/mamba-org/rattler/compare/rattler-v0.19.0...rattler-v0.19.1) - 2024-03-06
+
+### Added
+- generalised CLI authentication ([#537](https://github.com/mamba-org/rattler/pull/537))
+
+### Fixed
+- removal of multiple packages that clobber each other ([#556](https://github.com/mamba-org/rattler/pull/556))
+- dont use workspace dependencies for local crates ([#546](https://github.com/mamba-org/rattler/pull/546))
+
+### Other
+- every crate should have its own version ([#557](https://github.com/mamba-org/rattler/pull/557))
+
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler-v0.18.0...rattler-v0.19.0) - 2024-02-26
 

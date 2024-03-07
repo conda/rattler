@@ -1,7 +1,7 @@
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord, RepoData,
-    RepoDataRecord, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
+    ParseStrictness, RepoData, RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolveError, SolverImpl, SolverTask};
@@ -112,7 +112,7 @@ fn installed_package(
 fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
     let specs = specs
         .iter()
-        .map(|s| MatchSpec::from_str(s).unwrap())
+        .map(|s| MatchSpec::from_str(s, ParseStrictness::Lenient).unwrap())
         .collect::<Vec<_>>();
 
     let sparse_repo_datas = read_real_world_repo_data();
@@ -273,7 +273,7 @@ macro_rules! solver_backend_tests {
             assert!(result.is_err());
 
             let err = result.err().unwrap();
-            insta::assert_display_snapshot!(err);
+            insta::assert_snapshot!(err);
         }
 
         #[test]
@@ -605,7 +605,7 @@ mod resolvo {
         );
 
         // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
-        insta::assert_display_snapshot!(result.unwrap_err());
+        insta::assert_snapshot!(result.unwrap_err());
     }
 }
 
@@ -620,7 +620,7 @@ fn solve<T: SolverImpl + Default>(
 
     let specs: Vec<_> = match_specs
         .iter()
-        .map(|m| MatchSpec::from_str(m).unwrap())
+        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
         .collect();
 
     let task = SolverTask {
@@ -644,7 +644,7 @@ fn solve<T: SolverImpl + Default>(
 fn compare_solve(specs: Vec<&str>) {
     let specs = specs
         .iter()
-        .map(|s| MatchSpec::from_str(s).unwrap())
+        .map(|s| MatchSpec::from_str(s, ParseStrictness::Lenient).unwrap())
         .collect::<Vec<_>>();
 
     let sparse_repo_datas = read_real_world_repo_data();
@@ -766,7 +766,7 @@ fn solve_to_get_channel_of_spec(
     expected_channel: &str,
     repo_data: Vec<&SparseRepoData>,
 ) {
-    let spec = MatchSpec::from_str(spec_str).unwrap();
+    let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
     let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
 

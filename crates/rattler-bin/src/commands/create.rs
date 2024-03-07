@@ -11,8 +11,8 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, Platform,
-    PrefixRecord, RepoDataRecord, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
+    Platform, PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
@@ -80,7 +80,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let specs = opt
         .specs
         .iter()
-        .map(|spec| MatchSpec::from_str(spec))
+        .map(|spec| MatchSpec::from_str(spec, ParseStrictness::Strict))
         .collect::<Result<Vec<_>, _>>()?;
 
     // Find the default cache directory. Create it if it doesnt exist yet.

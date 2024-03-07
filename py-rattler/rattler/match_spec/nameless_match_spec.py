@@ -16,9 +16,9 @@ class NamelessMatchSpec:
     (e.g. `foo = "3.4.1 *cuda"`).
     """
 
-    def __init__(self, spec: str) -> None:
+    def __init__(self, spec: str, strict: bool = False) -> None:
         if isinstance(spec, str):
-            self._nameless_match_spec = PyNamelessMatchSpec(spec)
+            self._nameless_match_spec = PyNamelessMatchSpec(spec, strict)
         else:
             raise TypeError(
                 "NamelessMatchSpec constructor received unsupported type"
