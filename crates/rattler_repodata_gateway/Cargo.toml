@@ -34,6 +34,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 pin-project-lite = { workspace = true }
 md-5 = { workspace = true }
+dirs = { workspace = true }
 rattler_digest = { path="../rattler_digest", version = "0.19.1", default-features = false, features = ["tokio", "serde"] }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.20.0", default-features = false, optional = true }
 fxhash = { workspace = true, optional = true }
@@ -61,9 +62,11 @@ rstest = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.20.0", default-features = false }
 
 [features]
 default = ['native-tls']
 native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
+gateway = ["sparse"]

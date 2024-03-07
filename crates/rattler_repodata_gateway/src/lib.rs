@@ -49,7 +49,7 @@
 //!     let result = match result {
 //!         Err(err) => {
 //!             panic!("{:?}", err);
-//!         },
+//!         }
 //!         Ok(result) => result
 //!     };
 //!
@@ -63,6 +63,10 @@
 pub mod fetch;
 #[cfg(feature = "sparse")]
 pub mod sparse;
-
 mod utils;
+
+#[cfg(feature = "gateway")]
 mod gateway;
+
+#[cfg(feature = "gateway")]
+pub use gateway::{ChannelConfig, Gateway, GatewayBuilder, GatewayError, SourceConfig};

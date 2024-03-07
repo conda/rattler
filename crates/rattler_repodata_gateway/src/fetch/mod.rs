@@ -36,7 +36,7 @@ pub enum RepoDataNotFoundError {
 
     /// There was a file system error
     #[error(transparent)]
-    FileSystemError(std::io::Error),
+    FileSystemError(#[from] std::io::Error),
 }
 
 #[allow(missing_docs)]

@@ -1,25 +1,86 @@
+mod barrier_cell;
+mod channel_config;
 mod error;
 mod local_subdir;
+mod remote_subdir;
 mod subdir;
 
+pub use barrier_cell::BarrierCell;
+pub use channel_config::{ChannelConfig, SourceConfig};
 pub use error::GatewayError;
 
-use crate::utils::BarrierCell;
+use crate::fetch::FetchRepoDataError;
 use dashmap::{mapref::entry::Entry, DashMap};
 use futures::{select_biased, stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
+use reqwest::Client;
+use reqwest_middleware::ClientWithMiddleware;
 use std::{
     borrow::Borrow,
     collections::HashSet,
+    path::PathBuf,
     sync::{Arc, Weak},
 };
-use subdir::Subdir;
+use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 
 // TODO: Instead of using `Channel` it would be better if we could use just the base url. Maybe we
 //  can wrap that in a type. Mamba has the CondaUrl class.
+
+#[derive(Default)]
+pub struct GatewayBuilder {
+    channel_config: ChannelConfig,
+    client: Option<ClientWithMiddleware>,
+    cache: Option<PathBuf>,
+}
+
+impl GatewayBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    #[must_use]
+    pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
+        self.client = Some(client);
+        self
+    }
+
+    #[must_use]
+    pub fn with_channel_config(mut self, channel_config: ChannelConfig) -> Self {
+        self.channel_config = channel_config;
+        self
+    }
+
+    #[must_use]
+    pub fn with_cache_dir(mut self, cache: impl Into<PathBuf>) -> Self {
+        self.cache = Some(cache.into());
+        self
+    }
+
+    /// Finish the construction of the gateway returning a constructed gateway.
+    pub fn finish(self) -> Gateway {
+        let client = self
+            .client
+            .unwrap_or_else(|| ClientWithMiddleware::from(Client::new()));
+
+        let cache = self.cache.unwrap_or_else(|| {
+            dirs::cache_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("rattler/cache")
+        });
+
+        Gateway {
+            inner: Arc::new(GatewayInner {
+                subdirs: Default::default(),
+                client,
+                channel_config: self.channel_config,
+                cache,
+            }),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Gateway {
@@ -27,10 +88,15 @@ pub struct Gateway {
 }
 
 impl Gateway {
+    /// Constructs a simple gateway with the default configuration. Use [`Gateway::builder`] if you
+    /// want more control over how the gateway is constructed.
     pub fn new() -> Self {
-        Self {
-            inner: Arc::default(),
-        }
+        Gateway::builder().finish()
+    }
+
+    /// Constructs a new gateway with the given client and channel configuration.
+    pub fn builder() -> GatewayBuilder {
+        GatewayBuilder::default()
     }
 
     /// Recursively loads all repodata records for the given channels, platforms and package names.
@@ -115,9 +181,14 @@ impl Gateway {
                     pending_records.push(async move {
                         let barrier_cell = subdir.clone();
                         let subdir = barrier_cell.wait().await;
-                        subdir
-                            .get_or_fetch_package_records(&pending_package_name)
-                            .await
+                        match subdir.as_ref() {
+                            Subdir::Found(subdir) => {
+                                subdir
+                                    .get_or_fetch_package_records(&pending_package_name)
+                                    .await
+                            }
+                            Subdir::NotFound => Ok(Arc::from(vec![])),
+                        }
                     });
                 }
             }
@@ -164,10 +235,18 @@ impl Gateway {
     }
 }
 
-#[derive(Default)]
 struct GatewayInner {
     /// A map of subdirectories for each channel and platform.
     subdirs: DashMap<(Channel, Platform), PendingOrFetched<Arc<Subdir>>>,
+
+    /// The client to use to fetch repodata.
+    client: ClientWithMiddleware,
+
+    /// The channel configuration
+    channel_config: ChannelConfig,
+
+    /// The directory to store any cache
+    cache: PathBuf,
 }
 
 impl GatewayInner {
@@ -259,15 +338,44 @@ impl GatewayInner {
         platform: Platform,
     ) -> Result<Subdir, GatewayError> {
         let url = channel.platform_url(platform);
-        if url.scheme() == "file" {
+        let subdir_data = if url.scheme() == "file" {
             if let Ok(path) = url.to_file_path() {
-                return Ok(Subdir::from_client(
-                    LocalSubdirClient::from_directory(&path).await?,
+                LocalSubdirClient::from_directory(&path)
+                    .await
+                    .map(SubdirData::from_client)
+            } else {
+                return Err(GatewayError::UnsupportedUrl(
+                    "unsupported file based url".to_string(),
                 ));
             }
-        }
+        } else if url.scheme() == "http" || url.scheme() == "https" {
+            remote_subdir::RemoteSubdirClient::new(
+                channel.clone(),
+                platform,
+                self.client.clone(),
+                self.cache.clone(),
+                self.channel_config.get(channel).clone(),
+            )
+            .await
+            .map(SubdirData::from_client)
+        } else {
+            return Err(GatewayError::UnsupportedUrl(format!(
+                "'{}' is not a supported scheme",
+                url.scheme()
+            )));
+        };
 
-        Err(GatewayError::UnsupportedScheme(url.scheme().to_string()))
+        match subdir_data {
+            Ok(client) => Ok(Subdir::Found(client)),
+            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(_)))
+                if platform != Platform::NoArch =>
+            {
+                // If the subdir was not found and the platform is not `noarch` we assume its just
+                // empty.
+                Ok(Subdir::NotFound)
+            }
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -278,19 +386,10 @@ enum PendingOrFetched<T> {
     Fetched(T),
 }
 
-/// A client that can be used to fetch repodata for a specific subdirectory.
-#[async_trait::async_trait]
-trait SubdirClient: Send + Sync {
-    /// Fetches all repodata records for the package with the given name in a channel subdirectory.
-    async fn fetch_package_records(
-        &self,
-        name: &PackageName,
-    ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
-}
-
 #[cfg(test)]
 mod test {
     use crate::gateway::Gateway;
+    use crate::utils::simple_channel_server::SimpleChannelServer;
     use rattler_conda_types::{Channel, PackageName, Platform};
     use std::path::Path;
     use std::str::FromStr;
@@ -301,14 +400,39 @@ mod test {
         )
     }
 
+    async fn remote_conda_forge() -> SimpleChannelServer {
+        SimpleChannelServer::new(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
+        )
+        .await
+    }
+
     #[tokio::test]
-    async fn test_gateway() {
+    async fn test_local_gateway() {
         let gateway = Gateway::new();
 
         let records = gateway
             .load_records_recursive(
                 vec![local_conda_forge()],
-                vec![Platform::Linux64, Platform::NoArch],
+                vec![Platform::Linux64, Platform::Win32, Platform::NoArch],
+                vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(records.len(), 45060);
+    }
+
+    #[tokio::test]
+    async fn test_remote_gateway() {
+        let gateway = Gateway::new();
+
+        let index = remote_conda_forge().await;
+
+        let records = gateway
+            .load_records_recursive(
+                vec![index.channel()],
+                vec![Platform::Linux64, Platform::Win32, Platform::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )
             .await

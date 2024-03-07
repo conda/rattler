@@ -64,7 +64,7 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
-            Channel::from_url(url, platforms, config)
+            Channel::from_url(url, platforms.into_iter().flatten())
         } else if is_path(channel) {
             let path = PathBuf::from(channel);
 
@@ -90,11 +90,7 @@ impl Channel {
     }
 
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(
-        url: Url,
-        platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
-        _config: &ChannelConfig,
-    ) -> Self {
+    pub fn from_url(url: Url, platforms: impl IntoIterator<Item = Platform>) -> Self {
         // Get the path part of the URL but trim the directory suffix
         let path = url.path().trim_end_matches('/');
 
@@ -114,11 +110,18 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
+        let mut platforms = platforms.into_iter().peekable();
+        let platforms = if platforms.peek().is_none() {
+            None
+        } else {
+            Some(platforms.collect())
+        };
+
         if base_url.has_host() {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
-                platforms: platforms.map(Into::into),
+                platforms,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -128,7 +131,7 @@ impl Channel {
                 .rsplit_once('/')
                 .map_or_else(|| base_url.path(), |(_, path_part)| path_part);
             Self {
-                platforms: platforms.map(Into::into),
+                platforms,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -167,7 +170,7 @@ impl Channel {
     /// Panics if the path is not a valid url.
     pub fn from_directory(path: &Path) -> Self {
         let path = absolute_path(path);
-        let url = Url::from_directory_path(&path).expect("path is a valid url");
+        let url = Url::from_directory_path(path).expect("path is a valid url");
         Self {
             platforms: None,
             base_url: url,

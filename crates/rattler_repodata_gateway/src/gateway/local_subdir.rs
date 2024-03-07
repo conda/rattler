@@ -1,9 +1,11 @@
-use std::sync::Arc;
-use std::path::Path;
-use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
-use tokio::task::JoinError;
-use crate::gateway::{GatewayError, SubdirClient};
+use crate::fetch::FetchRepoDataError;
+use crate::gateway::subdir::SubdirClient;
+use crate::gateway::GatewayError;
 use crate::sparse::SparseRepoData;
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
+use std::path::Path;
+use std::sync::Arc;
+use tokio::task::JoinError;
 
 /// A client that can be used to fetch repodata for a specific subdirectory from a local directory.
 ///
@@ -13,22 +15,20 @@ pub struct LocalSubdirClient {
 }
 
 impl LocalSubdirClient {
-    pub async fn from_directory(subdir: &Path) -> Result<Self, GatewayError> {
-        let subdir_name = subdir
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        // Determine the channel from the directory path
-        let channel_dir = subdir.parent().unwrap_or(subdir);
-        let channel = Channel::from_directory(channel_dir);
-
-        // Load the sparse repodata
-        let repodata_path = subdir.join("repodata.json");
+    pub async fn from_channel_subdir(
+        repodata_path: &Path,
+        channel: Channel,
+        subdir: &str,
+    ) -> Result<Self, GatewayError> {
+        let repodata_path = repodata_path.to_path_buf();
+        let subdir = subdir.to_string();
         let sparse = match tokio::task::spawn_blocking(move || {
-            SparseRepoData::new(channel, subdir_name, &repodata_path, None).map_err(|err| {
-                GatewayError::IoError("failed to parse repodata.json".to_string(), err)
+            SparseRepoData::new(channel, subdir, &repodata_path, None).map_err(|err| {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err.into()))
+                } else {
+                    GatewayError::IoError("failed to parse repodata.json".to_string(), err)
+                }
             })
         })
         .await
@@ -47,6 +47,22 @@ impl LocalSubdirClient {
         Ok(Self {
             sparse: Arc::new(sparse),
         })
+    }
+
+    pub async fn from_directory(subdir: &Path) -> Result<Self, GatewayError> {
+        let subdir_name = subdir
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        // Determine the channel from the directory path
+        let channel_dir = subdir.parent().unwrap_or(subdir);
+        let channel = Channel::from_directory(channel_dir);
+
+        // Load the sparse repodata
+        let repodata_path = subdir.join("repodata.json");
+        Self::from_channel_subdir(&repodata_path, channel, &subdir_name).await
     }
 }
 

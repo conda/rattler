@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{AtomicU8, Ordering},
 };
 use thiserror::Error;
-use tokio::sync::{Notify};
+use tokio::sync::Notify;
 
 /// A synchronization primitive that can be used to wait for a value to become available.
 ///

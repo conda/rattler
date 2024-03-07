@@ -1,13 +1,21 @@
 use super::GatewayError;
-use crate::gateway::{PendingOrFetched, SubdirClient};
+use crate::gateway::PendingOrFetched;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use rattler_conda_types::{PackageName, RepoDataRecord};
 use std::sync::Arc;
 use tokio::{sync::broadcast, task::JoinError};
 
-/// Represents a subdirectory of a repodata directory.
-pub struct Subdir {
+pub enum Subdir {
+    /// The subdirectory is missing from the channel, it is considered empty.
+    NotFound,
+
+    /// A subdirectory and the data associated with it.
+    Found(SubdirData),
+}
+
+/// Fetches and caches repodata records by package name for a specific subdirectory of a channel.
+pub struct SubdirData {
     /// The client to use to fetch repodata.
     client: Arc<dyn SubdirClient>,
 
@@ -15,7 +23,7 @@ pub struct Subdir {
     records: DashMap<PackageName, PendingOrFetched<Arc<[RepoDataRecord]>>>,
 }
 
-impl Subdir {
+impl SubdirData {
     pub fn from_client<C: SubdirClient + 'static>(client: C) -> Self {
         Self {
             client: Arc::new(client),
@@ -113,4 +121,14 @@ impl Subdir {
 
         Ok(records)
     }
+}
+
+/// A client that can be used to fetch repodata for a specific subdirectory.
+#[async_trait::async_trait]
+pub trait SubdirClient: Send + Sync {
+    /// Fetches all repodata records for the package with the given name in a channel subdirectory.
+    async fn fetch_package_records(
+        &self,
+        name: &PackageName,
+    ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
 }
