@@ -315,7 +315,7 @@ async fn repodata_from_file(
 ///
 /// The checks to see if a `.zst` and/or `.bz2` file exist are performed by doing a HEAD request to
 /// the respective URLs. The result of these are cached.
-#[instrument(err, skip_all, fields(subdir_url, cache_path = %cache_path.display()))]
+#[instrument(err, skip_all, fields(subdir_url, cache_path = % cache_path.display()))]
 pub async fn fetch_repo_data(
     subdir_url: Url,
     client: reqwest_middleware::ClientWithMiddleware,
@@ -441,7 +441,7 @@ pub async fn fetch_repo_data(
                     has_bz2: variant_availability.has_bz2,
                     has_jlap: variant_availability.has_jlap,
                     jlap: Some(state),
-                    .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+                    ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
                 };
 
                 let cache_state = tokio::task::spawn_blocking(move || {
@@ -528,7 +528,7 @@ pub async fn fetch_repo_data(
             has_bz2: variant_availability.has_bz2,
             has_jlap: variant_availability.has_jlap,
             jlap: jlap_state,
-            .. cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
+            ..cache_state.expect("we must have had a cache, otherwise we wouldn't know the previous state of the cache")
         };
 
         let cache_state = tokio::task::spawn_blocking(move || {
@@ -737,7 +737,7 @@ pub async fn check_variant_availability(
 ) -> VariantAvailability {
     // Determine from the cache which variant are available. This is currently cached for a maximum
     // of 14 days.
-    let expiration_duration = chrono::Duration::days(14);
+    let expiration_duration = chrono::TimeDelta::try_days(14).expect("14 days is a valid duration");
     let has_zst = cache_state
         .and_then(|state| state.has_zst.as_ref())
         .and_then(|value| value.value(expiration_duration))
