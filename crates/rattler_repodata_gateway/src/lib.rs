@@ -66,4 +66,3 @@ pub mod sparse;
 
 mod utils;
 mod gateway;
-mod error;
