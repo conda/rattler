@@ -24,19 +24,36 @@ impl Gateway {
         }
     }
 
-    pub async fn load_records_recursive<C, CI, PI, N, PN>(
+    /// Recursively loads all repodata records for the given channels, platforms and package names.
+    ///
+    /// This function will asynchronously load the repodata from all subdirectories (combination of
+    /// channels and platforms) and recursively load all repodata records and the dependencies of
+    /// the those records.
+    ///
+    /// Most processing will happen on the background so downloading and parsing can happen
+    /// simultaneously.
+    ///
+    /// Repodata is cached by the [`Gateway`] so calling this function twice with the same channels
+    /// will not result in the repodata being fetched twice.
+    pub async fn load_records_recursive<
+        AsChannel,
+        ChannelIter,
+        PlatformIter,
+        PackageNameIter,
+        IntoPackageName,
+    >(
         &self,
-        channels: CI,
-        platforms: PI,
-        names: N,
+        channels: ChannelIter,
+        platforms: PlatformIter,
+        names: PackageNameIter,
     ) -> Result<Vec<RepoDataRecord>, GatewayError>
     where
-        C: Borrow<Channel> + Clone,
-        CI: IntoIterator<Item = C>,
-        PI: IntoIterator<Item = Platform>,
-        <PI as IntoIterator>::IntoIter: Clone,
-        N: IntoIterator<Item = PN>,
-        PN: Into<PackageName>,
+        AsChannel: Borrow<Channel> + Clone,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        PlatformIter: IntoIterator<Item = Platform>,
+        <PlatformIter as IntoIterator>::IntoIter: Clone,
+        PackageNameIter: IntoIterator<Item = IntoPackageName>,
+        IntoPackageName: Into<PackageName>,
     {
         // Collect all the channels and platforms together
         let channels_and_platforms = channels
@@ -63,13 +80,23 @@ impl Gateway {
             });
         }
 
+        // Package names that we still need to fetch.
         let mut pending_package_names = names.into_iter().map(Into::into).collect_vec();
+
+        // Package names that we have or will issue requests for.
         let mut seen = pending_package_names
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
+
+        // A list of futures to fetch the records for the pending package names. The main task
+        // awaits these futures.
         let mut pending_records = FuturesUnordered::new();
+
+        // The resulting list of repodata records.
         let mut result = Vec::new();
+
+        // Loop until all pending package names have been fetched.
         loop {
             // Iterate over all pending package names and create futures to fetch them from all
             // subdirs.
@@ -94,11 +121,13 @@ impl Gateway {
                         return Err(subdir_result);
                     }
                 }
+
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
                     let records = records?;
 
-                    // Extract the dependencies from the records
+                    // Extract the dependencies from the records and recursively add them to the
+                    // list of package names that we need to fetch.
                     for record in records.iter() {
                         for dependency in &record.package_record.depends {
                             let dependency_name = PackageName::new_unchecked(
@@ -114,7 +143,8 @@ impl Gateway {
                     result.extend_from_slice(&records);
                 }
 
-                // All futures have been handled
+                // All futures have been handled, all subdirectories have been loaded and all
+                // repodata records have been fetched.
                 complete => {
                     break;
                 }
@@ -132,6 +162,12 @@ struct GatewayInner {
 }
 
 impl GatewayInner {
+    /// Returns the [`Subdir`] for the given channel and platform. This function will create the
+    /// [`Subdir`] if it does not exist yet, otherwise it will return the previously created subdir.
+    ///
+    /// If multiple threads request the same subdir their requests will be coalesced, and they will
+    /// all receive the same subdir. If an error occurs while creating the subdir all waiting tasks
+    /// will also return an error.
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
