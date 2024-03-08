@@ -135,35 +135,104 @@ pub(crate) fn create_404_response(url: &Url, body: &str) -> Response {
 
 #[cfg(test)]
 mod test {
-    use std::io::Write;
+    use std::{future::IntoFuture, net::SocketAddr};
 
-    use super::*;
+    use axum::{extract::State, http::StatusCode, routing::get, Router};
+    use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
+    use url::Url;
 
-    // #[tokio::test]
-    // async fn test_mirror_middleware() {
-    //     let mut mirror_map = HashMap::new();
-    //     mirror_map.insert(
-    //         "conda.anaconda.org".to_string(),
-    //         vec![
-    //             "https://conda.anaconda.org/conda-forge".to_string(),
-    //             "https://conda.anaconda.org/conda-forge".to_string(),
-    //         ],
-    //     );
+    use crate::MirrorMiddleware;
 
-    //     let middleware = MirrorMiddleware::from_map(mirror_map);
+    async fn count(State(name): State<String>) -> String {
+        format!("Hi from counter: {}", name)
+    }
 
-    //     let client = reqwest::Client::new();
-    //     let mut extensions = Extensions::new();
+    async fn broken_return() -> StatusCode {
+        StatusCode::INTERNAL_SERVER_ERROR
+    }
 
-    //     let response = middleware
-    //         .handle(
-    //             client.get("https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2"),
-    //             &mut extensions,
-    //             |req, _| async { Ok(req.send().await.unwrap()) },
-    //         )
-    //         .await
-    //         .unwrap();
+    async fn test_server(name: &str, broken: bool) -> Url {
+        let state = String::from(name);
 
-    //     assert_eq!(response.status(), 200);
-    // }
+        // Construct a router that returns data from the static dir but fails the first try.
+        let router = if !broken {
+            Router::new().route("/count", get(count)).with_state(state)
+        } else {
+            Router::new().route("/count", get(broken_return))
+        };
+
+        let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);
+        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let service = router.into_make_service();
+        tokio::spawn(axum::serve(listener, service).into_future());
+        format!("http://{}:{}", addr.ip(), addr.port())
+            .parse()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware() {
+        let addr_1 = test_server("server 1", false).await;
+        let addr_2 = test_server("server 2", false).await;
+
+        let mut mirror_map = std::collections::HashMap::new();
+
+        mirror_map.insert(
+            "http://bla.com".to_string(),
+            vec![addr_1.to_string(), addr_2.to_string()],
+        );
+
+        let middleware = crate::MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        let res = client.get("http://bla.com/count").send().await.unwrap();
+        assert!(res.status().is_success());
+        let res = res.text().await.unwrap();
+        println!("{}", res);
+        // should always take the first element from the list
+        assert!(res == "Hi from counter: server 1")
+    }
+
+    #[tokio::test]
+    async fn test_mirror_middleware_broken() {
+        let addr_1 = test_server("server 1", true).await;
+        let addr_2 = test_server("server 2", false).await;
+
+        let mut mirror_map = std::collections::HashMap::new();
+
+        mirror_map.insert(
+            "http://bla.com".to_string(),
+            vec![addr_1.to_string(), addr_2.to_string()],
+        );
+
+        let middleware = MirrorMiddleware::from_map(mirror_map.clone());
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            .with(middleware)
+            .build();
+
+        let res = client.get("http://bla.com/count").send().await.unwrap();
+        assert!(res.status().is_server_error());
+        // only the second server should be used
+        let res = client.get("http://bla.com/count").send().await.unwrap();
+        assert!(res.status().is_success());
+        assert!(res.text().await.unwrap() == "Hi from counter: server 2");
+
+        // add retry handler
+        let retry_policy = ExponentialBackoff::builder().build_with_max_retries(3);
+
+        let middleware = MirrorMiddleware::from_map(mirror_map);
+        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
+            // retry middleware has to come before the mirror middleware
+            .with(RetryTransientMiddleware::new_with_policy(retry_policy))
+            .with(middleware)
+            .build();
+
+        let res = client.get("http://bla.com/count").send().await.unwrap();
+        assert!(res.status().is_success());
+        assert!(res.text().await.unwrap() == "Hi from counter: server 2");
+    }
 }

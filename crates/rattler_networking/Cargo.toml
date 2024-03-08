@@ -19,6 +19,7 @@ rustls-tls = ['reqwest/rustls-tls']
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+chrono = { workspace = true }
 dirs = { workspace = true }
 fslock = { workspace = true }
 http = "0.2"
@@ -46,3 +47,5 @@ anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
+axum = { workspace = true }
+reqwest-retry = { workspace = true }

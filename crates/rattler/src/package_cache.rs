@@ -210,6 +210,7 @@ impl PackageCache {
         client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static,
     ) -> Result<PathBuf, PackageCacheError> {
+        let request_start = Utc::now();
         self.get_or_fetch(pkg, move |destination| async move {
             let mut current_try = 0;
             loop {
@@ -240,7 +241,7 @@ impl PackageCache {
                 }
 
                 // Determine whether or not to retry based on the retry policy
-                let execute_after = match retry_policy.should_retry(current_try) {
+                let execute_after = match retry_policy.should_retry(request_start, current_try) {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),
                 };
