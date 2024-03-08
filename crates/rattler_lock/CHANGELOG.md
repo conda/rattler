@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.20.0...rattler_lock-v0.20.1) - 2024-03-08
+
+### Fixed
+- chrono deprecation warnings ([#558](https://github.com/mamba-org/rattler/pull/558))
+
 ## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.19.0...rattler_lock-v0.20.0) - 2024-03-06
 
 ### Added
