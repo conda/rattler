@@ -417,6 +417,8 @@ impl<T: Shell + Clone> Activator<T> {
         // activation script followed by again emitting all environment variables. Any changes
         // should then become visible.
         let mut activation_detection_script = String::new();
+        self.shell_type
+            .force_utf8(&mut activation_detection_script)?;
         self.shell_type.env(&mut activation_detection_script)?;
         self.shell_type
             .echo(&mut activation_detection_script, ENV_START_SEPERATOR)?;
