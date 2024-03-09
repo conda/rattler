@@ -150,6 +150,8 @@ impl OCIUrl {
                 res.media_type = "application/vnd.conda.repodata.v1+json+bz2".to_string();
             } else if filename.ends_with(".zst") {
                 res.media_type = "application/vnd.conda.repodata.v1+json+zst".to_string();
+            } else if filename.ends_with(".jlap") {
+                res.media_type = "application/vnd.conda.jlap.v1".to_string();
             }
         }
 

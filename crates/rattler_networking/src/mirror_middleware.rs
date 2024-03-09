@@ -16,6 +16,8 @@ struct MirrorSettings {
     no_zstd: bool,
     /// Disable bz2 support (for repodata.json.bz2 files)
     no_bz2: bool,
+    /// Disable jlap support (for repodata.jlap files)
+    no_jlap: bool,
     /// Allowed number of failures before the mirror is considered dead
     max_failures: Option<usize>,
 }
@@ -60,6 +62,7 @@ impl MirrorMiddleware {
                             settings: MirrorSettings {
                                 no_zstd: false,
                                 no_bz2: false,
+                                no_jlap: false,
                                 max_failures: Some(3),
                             },
                         }
@@ -129,6 +132,12 @@ impl Middleware for MirrorMiddleware {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support bz2",
+                    ));
+                }
+                if url_rest.ends_with(".jlap") && settings.no_jlap {
+                    return Ok(create_404_response(
+                        &selected_url,
+                        "Mirror does not support jlap",
                     ));
                 }
 
