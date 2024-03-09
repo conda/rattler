@@ -181,7 +181,7 @@ impl OCIUrl {
             .get("X-ExpectedSha256")
             .and_then(|s| s.to_str().ok())
         {
-            *req.url_mut() = oci_url.blob_url(&format!("sha256:{}", expected_sha_hash))?;
+            *req.url_mut() = oci_url.blob_url(&format!("sha256:{expected_sha_hash}"))?;
         } else {
             // get the tag from the URL retrieve the manifest
             let manifest_url = oci_url.manifest_url()?; // TODO: handle error
@@ -208,7 +208,7 @@ impl OCIUrl {
             *req.url_mut() = oci_url.blob_url(&layer.digest)?;
         }
 
-        return Ok(());
+        Ok(())
     }
 }
 
