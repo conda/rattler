@@ -10,12 +10,13 @@ use reqwest_middleware::{Middleware, Next, Result};
 use task_local_extensions::Extensions;
 use url::Url;
 
-#[allow(dead_code)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
 struct MirrorSettings {
+    /// Disable zstd support (for repodata.json.zst files)
     no_zstd: bool,
+    /// Disable bz2 support (for repodata.json.bz2 files)
     no_bz2: bool,
-    no_gz: bool,
+    /// Allowed number of failures before the mirror is considered dead
     max_failures: Option<usize>,
 }
 
@@ -59,7 +60,6 @@ impl MirrorMiddleware {
                             settings: MirrorSettings {
                                 no_zstd: false,
                                 no_bz2: false,
-                                no_gz: false,
                                 max_failures: Some(3),
                             },
                         }
@@ -73,19 +73,26 @@ impl MirrorMiddleware {
     }
 }
 
-fn select_mirror(mirrors: &[MirrorState]) -> &MirrorState {
+fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
     let mut min_failures = usize::MAX;
-    let mut min_failures_index = 0;
+    let mut min_failures_index = usize::MAX;
 
     for (i, mirror) in mirrors.iter().enumerate() {
         let failures = mirror.failures.load(atomic::Ordering::Relaxed);
-        if failures < min_failures {
+        if failures < min_failures
+            && mirror
+                .settings
+                .max_failures
+                .map_or(true, |max| failures < max)
+        {
             min_failures = failures;
             min_failures_index = i;
         }
     }
-
-    &mirrors[min_failures_index]
+    if min_failures_index == usize::MAX {
+        return None;
+    }
+    Some(&mirrors[min_failures_index])
 }
 
 #[async_trait::async_trait]
@@ -103,7 +110,28 @@ impl Middleware for MirrorMiddleware {
                 let url_rest = url_rest.trim_start_matches('/');
                 // replace the key with the mirror
                 let selected_mirror = select_mirror(mirrors);
+
+                let Some(selected_mirror) = selected_mirror else {
+                    return Ok(create_404_response(req.url(), "All mirrors are dead"));
+                };
+
                 let selected_url = selected_mirror.url.join(url_rest).unwrap();
+
+                let settings = &selected_mirror.settings;
+                // Short-circuit if the mirror does not support the file type
+                if url_rest.ends_with(".json.zst") && settings.no_zstd {
+                    return Ok(create_404_response(
+                        &selected_url,
+                        "Mirror does not support zstd",
+                    ));
+                }
+                if url_rest.ends_with(".json.bz2") && settings.no_bz2 {
+                    return Ok(create_404_response(
+                        &selected_url,
+                        "Mirror does not support bz2",
+                    ));
+                }
+
                 *req.url_mut() = selected_url;
                 let res = next.run(req, extensions).await;
 

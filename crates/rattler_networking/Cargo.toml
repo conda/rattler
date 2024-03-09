@@ -49,3 +49,4 @@ tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 axum = { workspace = true }
 reqwest-retry = { workspace = true }
+sha2 = { workspace = true }
