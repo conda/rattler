@@ -229,7 +229,6 @@ struct Layer {
 #[serde(rename_all = "camelCase")]
 struct Manifest {
     schema_version: u64,
-    media_type: String,
     layers: Vec<Layer>,
     config: Layer,
     annotations: Option<HashMap<String, String>>,
