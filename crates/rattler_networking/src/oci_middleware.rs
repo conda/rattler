@@ -180,7 +180,7 @@ impl OCIUrl {
         // if we don't, we need to pull the manifest and then pull the artifact
         if let Some(expected_sha_hash) = req
             .headers()
-            .get("X-ExpectedSha256")
+            .get("X-Expected-Sha256")
             .and_then(|s| s.to_str().ok())
         {
             *req.url_mut() = oci_url.blob_url(&format!("sha256:{expected_sha_hash}"))?;
@@ -295,7 +295,7 @@ mod tests {
         let response = client_with_middleware
             .get("oci://ghcr.io/channel-mirrors/conda-forge/osx-arm64/xtensor-0.25.0-h2ffa867_0.conda")
             .header(
-                "X-ExpectedSha256",
+                "X-Expected-Sha256",
                 "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd",
             )
             .send()
