@@ -248,6 +248,17 @@ impl Middleware for OciMiddleware {
             return next.run(req, extensions).await;
         }
 
+        // return 404 for the moment as these are not supported
+        if req.url().path().ends_with(".jlap")
+            || req.url().path().ends_with(".json.zst")
+            || req.url().path().ends_with(".json.bz2")
+        {
+            return Ok(create_404_response(
+                req.url(),
+                "Mirror does not support this file type",
+            ));
+        }
+
         let res = OCIUrl::get_blob_url(&mut req).await;
 
         match res {

@@ -5,30 +5,31 @@ use std::{
 };
 
 use http::StatusCode;
+use itertools::Itertools;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Middleware, Next, Result};
 use task_local_extensions::Extensions;
 use url::Url;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// Settings for the specific mirror (e.g. no zstd or bz2 support)
-struct MirrorSettings {
+pub struct Mirror {
+    /// The url of this mirror
+    pub url: Url,
     /// Disable zstd support (for repodata.json.zst files)
-    no_zstd: bool,
+    pub no_zstd: bool,
     /// Disable bz2 support (for repodata.json.bz2 files)
-    no_bz2: bool,
+    pub no_bz2: bool,
     /// Disable jlap support (for repodata.jlap files)
-    no_jlap: bool,
+    pub no_jlap: bool,
     /// Allowed number of failures before the mirror is considered dead
-    max_failures: Option<usize>,
+    pub max_failures: Option<usize>,
 }
 
 #[allow(dead_code)]
 struct MirrorState {
-    url: Url,
-
     failures: AtomicUsize,
-
-    settings: MirrorSettings,
+    mirror: Mirror,
 }
 
 impl MirrorState {
@@ -39,40 +40,44 @@ impl MirrorState {
 
 /// Middleware to handle mirrors
 pub struct MirrorMiddleware {
-    mirror_map: HashMap<String, Vec<MirrorState>>,
+    mirror_map: HashMap<Url, Vec<MirrorState>>,
+    sorted_keys: Vec<(String, Url)>,
 }
 
 impl MirrorMiddleware {
     /// Create a new `MirrorMiddleware` from a map of mirrors
-    pub fn from_map(map: HashMap<String, Vec<String>>) -> Self {
-        let mirror_map = map
+    pub fn from_map(mirror_map: HashMap<Url, Vec<Mirror>>) -> Self {
+        let mirror_map: HashMap<Url, Vec<MirrorState>> = mirror_map
             .into_iter()
-            .map(|(k, v)| {
-                let v = v
+            .map(|(url, mirrors)| {
+                let mirrors = mirrors
                     .into_iter()
-                    .map(|url| {
-                        let url = if url.ends_with('/') {
-                            url
-                        } else {
-                            format!("{url}/")
-                        };
-                        MirrorState {
-                            url: Url::parse(&url).unwrap(),
-                            failures: AtomicUsize::new(0),
-                            settings: MirrorSettings {
-                                no_zstd: false,
-                                no_bz2: false,
-                                no_jlap: false,
-                                max_failures: Some(3),
-                            },
-                        }
+                    .map(|mirror| MirrorState {
+                        failures: AtomicUsize::new(0),
+                        mirror,
                     })
                     .collect();
-                (k, v)
+                (url, mirrors)
             })
             .collect();
 
-        Self { mirror_map }
+        let sorted_keys = mirror_map
+            .keys()
+            .cloned()
+            .sorted_by(|a, b| b.path().len().cmp(&a.path().len()))
+            .map(|k| (k.to_string(), k.clone()))
+            .collect::<Vec<(String, Url)>>();
+
+        Self {
+            mirror_map,
+            sorted_keys,
+        }
+    }
+
+    /// Get sorted keys. The keys are sorted by length of the path,
+    /// so the longest path comes first.
+    pub fn keys(&self) -> &[(String, Url)] {
+        &self.sorted_keys
     }
 }
 
@@ -84,7 +89,7 @@ fn select_mirror(mirrors: &[MirrorState]) -> Option<&MirrorState> {
         let failures = mirror.failures.load(atomic::Ordering::Relaxed);
         if failures < min_failures
             && mirror
-                .settings
+                .mirror
                 .max_failures
                 .map_or(true, |max| failures < max)
         {
@@ -108,33 +113,34 @@ impl Middleware for MirrorMiddleware {
     ) -> Result<Response> {
         let url_str = req.url().to_string();
 
-        for (key, mirrors) in self.mirror_map.iter() {
+        for (key, url) in self.keys() {
             if let Some(url_rest) = url_str.strip_prefix(key) {
                 let url_rest = url_rest.trim_start_matches('/');
                 // replace the key with the mirror
+                let mirrors = self.mirror_map.get(url).unwrap();
                 let selected_mirror = select_mirror(mirrors);
 
                 let Some(selected_mirror) = selected_mirror else {
                     return Ok(create_404_response(req.url(), "All mirrors are dead"));
                 };
 
-                let selected_url = selected_mirror.url.join(url_rest).unwrap();
+                let mirror = &selected_mirror.mirror;
+                let selected_url = mirror.url.join(url_rest).unwrap();
 
-                let settings = &selected_mirror.settings;
                 // Short-circuit if the mirror does not support the file type
-                if url_rest.ends_with(".json.zst") && settings.no_zstd {
+                if url_rest.ends_with(".json.zst") && mirror.no_zstd {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support zstd",
                     ));
                 }
-                if url_rest.ends_with(".json.bz2") && settings.no_bz2 {
+                if url_rest.ends_with(".json.bz2") && mirror.no_bz2 {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support bz2",
                     ));
                 }
-                if url_rest.ends_with(".jlap") && settings.no_jlap {
+                if url_rest.ends_with(".jlap") && mirror.no_jlap {
                     return Ok(create_404_response(
                         &selected_url,
                         "Mirror does not support jlap",
@@ -180,6 +186,8 @@ mod test {
 
     use crate::MirrorMiddleware;
 
+    use super::Mirror;
+
     async fn count(State(name): State<String>) -> String {
         format!("Hi from counter: {}", name)
     }
@@ -217,8 +225,8 @@ mod test {
         let mut mirror_map = std::collections::HashMap::new();
 
         mirror_map.insert(
-            "http://bla.com".to_string(),
-            vec![addr_1.to_string(), addr_2.to_string()],
+            "http://bla.com".parse().unwrap(),
+            vec![mirror_setting(addr_1), mirror_setting(addr_2)],
         );
 
         let middleware = crate::MirrorMiddleware::from_map(mirror_map);
@@ -234,6 +242,16 @@ mod test {
         assert!(res == "Hi from counter: server 1")
     }
 
+    fn mirror_setting(url: Url) -> Mirror {
+        Mirror {
+            url,
+            no_zstd: false,
+            no_bz2: false,
+            no_jlap: false,
+            max_failures: Some(3),
+        }
+    }
+
     #[tokio::test]
     async fn test_mirror_middleware_broken() {
         let addr_1 = test_server("server 1", true).await;
@@ -242,8 +260,8 @@ mod test {
         let mut mirror_map = std::collections::HashMap::new();
 
         mirror_map.insert(
-            "http://bla.com".to_string(),
-            vec![addr_1.to_string(), addr_2.to_string()],
+            "http://bla.com".parse().unwrap(),
+            vec![mirror_setting(addr_1), mirror_setting(addr_2)],
         );
 
         let middleware = MirrorMiddleware::from_map(mirror_map.clone());
@@ -271,5 +289,23 @@ mod test {
         let res = client.get("http://bla.com/count").send().await.unwrap();
         assert!(res.status().is_success());
         assert!(res.text().await.unwrap() == "Hi from counter: server 2");
+    }
+
+    #[test]
+    fn test_mirror_sort() {
+        let keys: Vec<Url> = vec![
+            "http://bla.com/abc/def".parse().unwrap(),
+            "http://bla.com/abc".parse().unwrap(),
+            "http://bla.com/abc/def/ghi".parse().unwrap(),
+        ];
+
+        let mirror_middleware =
+            MirrorMiddleware::from_map(keys.into_iter().map(|k| (k.clone(), vec![])).collect());
+
+        let mut len = mirror_middleware.keys()[0].0.len();
+        for path in mirror_middleware.keys().iter() {
+            assert!(path.0.len() <= len);
+            len = path.0.len();
+        }
     }
 }
