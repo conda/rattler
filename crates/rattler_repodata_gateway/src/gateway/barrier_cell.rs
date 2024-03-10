@@ -81,3 +81,33 @@ impl<T> BarrierCell<T> {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::BarrierCell;
+    use std::sync::Arc;
+
+    /// Test that setting the barrier cell works, and we can wait on the value
+    #[tokio::test]
+    pub async fn test_barrier_cell() {
+        let barrier = Arc::new(BarrierCell::new());
+        let barrier_clone = barrier.clone();
+
+        let handle = tokio::spawn(async move {
+            let value = barrier_clone.wait().await;
+            assert_eq!(*value, 42);
+        });
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        barrier.set(42).unwrap();
+        handle.await.unwrap();
+    }
+
+    /// Test that we cannot set the barrier cell twice
+    #[tokio::test]
+    pub async fn test_barrier_cell_set_twice() {
+        let barrier = Arc::new(BarrierCell::new());
+        barrier.set(42).unwrap();
+        assert!(barrier.set(42).is_err());
+    }
+}

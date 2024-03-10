@@ -29,6 +29,7 @@ use tokio::sync::broadcast;
 // TODO: Instead of using `Channel` it would be better if we could use just the base url. Maybe we
 //  can wrap that in a type. Mamba has the CondaUrl class.
 
+/// A builder for constructing a [`Gateway`].
 #[derive(Default)]
 pub struct GatewayBuilder {
     channel_config: ChannelConfig,
@@ -37,22 +38,26 @@ pub struct GatewayBuilder {
 }
 
 impl GatewayBuilder {
+    /// New instance of the builder.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the client to use for fetching repodata.
     #[must_use]
     pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
         self.client = Some(client);
         self
     }
 
+    /// Set the channel configuration to use for fetching repodata.
     #[must_use]
     pub fn with_channel_config(mut self, channel_config: ChannelConfig) -> Self {
         self.channel_config = channel_config;
         self
     }
 
+    /// Set the directory to use for caching repodata.
     #[must_use]
     pub fn with_cache_dir(mut self, cache: impl Into<PathBuf>) -> Self {
         self.cache = Some(cache.into());
@@ -82,6 +87,7 @@ impl GatewayBuilder {
     }
 }
 
+/// Central access point for fetching repodata records.
 #[derive(Clone)]
 pub struct Gateway {
     inner: Arc<GatewayInner>,
