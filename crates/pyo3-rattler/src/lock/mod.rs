@@ -85,7 +85,7 @@ impl PyLockFile {
         self.inner.environment(name).map(Into::into)
     }
 
-    /// Returns the environment with the default name as defined by [`DEFAULT_ENVIRONMENT_NAME`].
+    /// Returns the environment with the default name.
     pub fn default_environment(&self) -> Option<PyEnvironment> {
         self.inner.default_environment().map(Into::into)
     }
