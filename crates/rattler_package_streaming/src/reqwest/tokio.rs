@@ -96,9 +96,9 @@ pub async fn extract_tar_bz2(
 /// use url::Url;
 /// let _ = extract_conda(
 ///     ClientWithMiddleware::from(Client::new()),
-///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda",
-///     None).unwrap(),
-///     Path::new("/tmp"))
+///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
+///     Path::new("/tmp"),
+///     None)
 ///     .await
 ///     .unwrap();
 /// # }
@@ -128,7 +128,8 @@ pub async fn extract_conda(
 /// let _ = extract(
 ///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
-///     Path::new("/tmp"))
+///     Path::new("/tmp"),
+///     None)
 ///     .await
 ///     .unwrap();
 /// # }

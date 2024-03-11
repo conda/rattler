@@ -39,7 +39,7 @@ wasm = ["zstd/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }
