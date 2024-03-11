@@ -19,6 +19,7 @@ impl SimpleChannelServer {
         Url::parse(&format!("http://localhost:{}", self.local_addr.port())).unwrap()
     }
 
+    #[allow(dead_code)]
     pub fn channel(&self) -> Channel {
         Channel::from_url(self.url(), iter::empty())
     }
