@@ -32,6 +32,11 @@ use thiserror::Error;
 /// ```
 #[enum_dispatch(ShellEnum)]
 pub trait Shell {
+    /// Write a command to the script that forces the usage of UTF8-encoding for the shell script.
+    fn force_utf8(&self, _f: &mut impl Write) -> std::fmt::Result {
+        Ok(())
+    }
+
     /// Set an env var by `export`-ing it.
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result;
 
@@ -321,6 +326,10 @@ impl Shell for Xonsh {
 pub struct CmdExe;
 
 impl Shell for CmdExe {
+    fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
+        writeln!(f, "@chcp 65001")
+    }
+
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
         writeln!(f, "@SET \"{env_var}={value}\"")
     }
@@ -385,6 +394,16 @@ pub struct PowerShell {
 }
 
 impl Shell for PowerShell {
+    fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
+        // Taken from https://stackoverflow.com/questions/51933189/character-encoding-utf-8-in-powershell-session
+        writeln!(f, "$OutputEncoding = [System.Text.Encoding]::UTF8")?;
+        writeln!(
+            f,
+            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8"
+        )?;
+        writeln!(f, "chcp 65001")
+    }
+
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
         writeln!(f, "${{Env:{env_var}}} = \"{value}\"")
     }

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version.workspace = true
+version = "0.20.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -20,8 +20,8 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path="../rattler_digest", version = "0.19.0", default-features = false, features = ["serde"] }
-rattler_macros = { path="../rattler_macros", version = "0.19.0", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "0.19.1", default-features = false, features = ["serde"] }
+rattler_macros = { path="../rattler_macros", version = "0.19.1", default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }

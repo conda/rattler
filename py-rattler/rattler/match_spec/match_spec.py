@@ -80,9 +80,9 @@ class MatchSpec:
     - build
     """
 
-    def __init__(self, spec: str) -> None:
+    def __init__(self, spec: str, strict: bool = False) -> None:
         if isinstance(spec, str):
-            self._match_spec = PyMatchSpec(spec)
+            self._match_spec = PyMatchSpec(spec, strict)
         else:
             raise TypeError(
                 "MatchSpec constructor received unsupported type"

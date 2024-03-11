@@ -160,7 +160,12 @@ impl ClobberRegistry {
                 .enumerate()
                 .filter(|(_, n)| clobbered_by_names.contains(n))
                 .collect::<Vec<_>>();
-            let winner = sorted_clobbered_by.last().expect("No winner found");
+
+            let winner = match sorted_clobbered_by.last() {
+                Some(winner) => winner,
+                // In this case, all files have been removed and we can skip any unclobbering
+                None => continue,
+            };
 
             if winner.1 == clobbered_by_names[0] {
                 tracing::info!(
@@ -1083,5 +1088,61 @@ mod tests {
                 &["clobber.py", "clobber.py__clobber-from-clobber-pynoarch-2"],
             );
         }
+    }
+
+    // This used to hit an expect in the clobbering code
+    #[tokio::test]
+    async fn test_transaction_with_clobber_remove_all() {
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: prefix_records
+                .iter()
+                .map(|r| TransactionOperation::Remove(r.clone()))
+                .collect(),
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert_check_files(target_prefix.path(), &[]);
     }
 }
