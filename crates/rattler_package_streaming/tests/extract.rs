@@ -230,6 +230,7 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
         ClientWithMiddleware::from(Client::new()),
         url,
         &target_dir,
+        None,
     )
     .await
     .unwrap();
