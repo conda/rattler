@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-default = ["rustls-tls"]
+default = ["native-tls"]
 native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
 
@@ -22,7 +22,7 @@ base64 = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
 fslock = { workspace = true }
-http = "0.2"
+http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true }
 lazy_static = { workspace = true }

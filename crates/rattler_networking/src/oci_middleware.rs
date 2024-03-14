@@ -283,6 +283,7 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     // test pulling an image from OCI registry
+    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
         let middleware = OciMiddleware::default();
@@ -315,6 +316,7 @@ mod tests {
     }
 
     // test pulling an image from OCI registry
+    #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
         let middleware = OciMiddleware::default();
