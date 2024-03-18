@@ -95,11 +95,7 @@ pep508_rs = { version = "0.4.2" }
 pin-project-lite = "0.2.13"
 plist = "1"
 purl = { version = "0.1.2", features = ["serde"] }
-pyo3 = { version = "0.19.0", features = [
-    "abi3-py38",
-    "extension-module",
-    "multiple-pymethods",
-] }
+pyo3 = { version = "0.19.0", features = ["abi3-py38", "multiple-pymethods"] }
 pyo3-asyncio = { version = "0.19.0", features = ["tokio-runtime"] }
 quote = "1.0.35"
 rand = "0.8.5"

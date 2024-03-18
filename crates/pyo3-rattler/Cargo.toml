@@ -39,11 +39,7 @@ anyhow = { workspace = true }
 futures = { workspace = true }
 openssl = { workspace = true, optional = true }
 pep508_rs = { workspace = true }
-pyo3 = { workspace = true, features = [
-    "abi3-py38",
-    "extension-module",
-    "multiple-pymethods",
-] }
+pyo3 = { workspace = true, features = ["abi3-py38", "multiple-pymethods"] }
 pyo3-asyncio = { workspace = true, features = ["tokio-runtime"] }
 reqwest = { workspace = true, default-features = false }
 reqwest-middleware = { workspace = true }
