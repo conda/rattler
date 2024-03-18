@@ -41,6 +41,7 @@ use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data
 use package_name::PyPackageName;
 use prefix_paths::PyPrefixPaths;
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
+use run_exports_json::PyRunExportsJson;
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -97,6 +98,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPackageHashes>().unwrap();
 
     m.add_class::<PyAboutJson>().unwrap();
+
+    m.add_class::<PyRunExportsJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
