@@ -49,6 +49,7 @@ nav:
       - metadata: 
           - AboutJson: about_json.md
           - RunExportsJson: run_exports_json.md
+          - IndexJson: index_json.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
