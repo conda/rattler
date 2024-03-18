@@ -15,6 +15,18 @@ class RunExportsJson:
     _inner: PyRunExportsJson
 
     @staticmethod
+    def from_package_archive(path: os.PathLike[str]) -> RunExportsJson:
+        """
+        Parses the package file from archive.
+        Note: If you want to extract multiple `info/*` files then this will be slightly
+              slower than manually iterating over the archive entries with
+              custom logic as this skips over the rest of the archive
+        """
+        return RunExportsJson._from_py_run_exports_json(
+            PyRunExportsJson.from_package_archive(path)
+        )
+
+    @staticmethod
     def from_path(path: os.PathLike[str]) -> RunExportsJson:
         """
         Parses the object from a file specified by a `path`, using a format

@@ -1,5 +1,6 @@
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::package::{PackageFile, RunExportsJson};
+use rattler_package_streaming::seek::read_package_file;
 use std::path::PathBuf;
 
 use crate::error::PyRattlerError;
@@ -28,6 +29,17 @@ impl From<PyRunExportsJson> for RunExportsJson {
 
 #[pymethods]
 impl PyRunExportsJson {
+    /// Parses the package file from archive.
+    /// Note: If you want to extract multiple `info/*` files then this will be slightly
+    ///       slower than manually iterating over the archive entries with
+    ///       custom logic as this skips over the rest of the archive
+    #[staticmethod]
+    pub fn from_package_archive(path: PathBuf) -> PyResult<Self> {
+        Ok(read_package_file::<RunExportsJson>(path)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
     /// Parses the object from a file specified by a `path`, using a format appropriate for the file
     /// type.
     ///

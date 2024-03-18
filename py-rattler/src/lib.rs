@@ -24,9 +24,9 @@ use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
-    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
-    InvalidVersionException, IoException, LinkException, ParseArchException,
+    EnvironmentCreationException, ExtractException, FetchRepoDataException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
     VersionBumpException,
 };
@@ -173,6 +173,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py.get_type::<EnvironmentCreationException>(),
     )
     .unwrap();
+
+    m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
 
     Ok(())
 }
