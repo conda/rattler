@@ -19,6 +19,7 @@ mod solver;
 mod version;
 mod virtual_package;
 
+mod run_exports_json;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig};
 use error::{
