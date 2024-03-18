@@ -109,7 +109,7 @@ impl PyPathsEntry {
     /// Determines how to include the file when installing the package
     #[getter]
     pub fn path_type(&self) -> PyPathType {
-        self.inner.path_type.clone().into()
+        self.inner.path_type.into()
     }
 
     /// Optionally the placeholder prefix used in the file. If this value is `None` the prefix is not
@@ -164,28 +164,19 @@ impl PyPathType {
     /// The path should be hard linked (the default)
     #[getter]
     pub fn hardlink(&self) -> bool {
-        match &self.inner {
-            PathType::HardLink => true,
-            _ => false,
-        }
+        matches!(&self.inner, PathType::HardLink)
     }
 
     /// The path should be soft linked
     #[getter]
     pub fn softlink(&self) -> bool {
-        match &self.inner {
-            PathType::SoftLink => true,
-            _ => false,
-        }
+        matches!(&self.inner, PathType::SoftLink)
     }
 
     /// This should explicitly create an empty directory
     #[getter]
     pub fn directory(&self) -> bool {
-        match &self.inner {
-            PathType::SoftLink => true,
-            _ => false,
-        }
+        matches!(&self.inner, PathType::Directory)
     }
 }
 
@@ -216,7 +207,7 @@ impl PyPrefixPlaceholder {
     /// replacement is performed or CString replacement.
     #[getter]
     pub fn file_mode(&self) -> PyFileMode {
-        self.inner.file_mode.clone().into()
+        self.inner.file_mode.into()
     }
 
     /// The placeholder prefix used in the file. This is the path of the prefix when the package

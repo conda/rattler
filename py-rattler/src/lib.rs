@@ -10,6 +10,7 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod package_name;
+mod paths_json;
 mod platform;
 mod prefix_paths;
 mod record;
@@ -18,7 +19,6 @@ mod shell;
 mod solver;
 mod version;
 mod virtual_package;
-mod paths_json;
 
 mod run_exports_json;
 use about_json::PyAboutJson;
