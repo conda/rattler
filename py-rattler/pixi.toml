@@ -26,7 +26,7 @@ build-docs = { cmd = "mkdocs build" }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
-fmt-python-check = "black . --check"
+fmt-python-check = "ruff check . --diff"
 fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 
 [dependencies]
