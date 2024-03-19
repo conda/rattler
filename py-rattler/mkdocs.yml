@@ -48,6 +48,7 @@ nav:
           - PypiPackageEnvironmentData: pypi_package_environment_data.md
       - metadata: 
           - AboutJson: about_json.md
+          - RunExportsJson: run_exports_json.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
