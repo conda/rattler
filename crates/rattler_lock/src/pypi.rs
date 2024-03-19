@@ -1,11 +1,10 @@
-use crate::PackageHashes;
+use crate::{PackageHashes, PathOrUrl};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, PackageName, Requirement};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use url::Url;
 
 /// A pinned Pypi package
 #[serde_as]
@@ -19,7 +18,7 @@ pub struct PypiPackageData {
     pub version: pep440_rs::Version,
 
     /// The URL that points to where the artifact can be downloaded from.
-    pub url: Url,
+    pub url: PathOrUrl,
 
     /// Hashes of the file pointed to by `url`.
     #[serde(flatten)]

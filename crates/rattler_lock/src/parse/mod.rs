@@ -2,12 +2,11 @@ mod deserialize;
 mod serialize;
 mod v3;
 
-use super::LockFile;
+use super::{LockFile, PathOrUrl};
 use rattler_conda_types::Platform;
 use serde::de::Error;
 use serde_yaml::Value;
 use std::str::FromStr;
-use url::Url;
 use v3::parse_v3_or_lower;
 
 // Version 2: dependencies are now arrays instead of maps
@@ -31,7 +30,7 @@ pub enum ParseCondaLockError {
     },
 
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, Platform, Url),
+    MissingPackage(String, Platform, PathOrUrl),
 
     #[error(transparent)]
     InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),

@@ -81,6 +81,7 @@ mod conda;
 mod hash;
 mod parse;
 mod pypi;
+mod path_or_url;
 mod utils;
 
 pub use builder::LockFileBuilder;
@@ -89,6 +90,7 @@ pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
+pub use path_or_url::PathOrUrl;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
@@ -444,11 +446,11 @@ impl Package {
         }
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
+    /// Returns the URL or relative path to the package
+    pub fn url_or_path(&self) -> Cow<'_, PathOrUrl> {
         match self {
-            Package::Conda(value) => value.url(),
-            Package::Pypi(value) => value.url(),
+            Self::Conda(value) => Cow::Owned(PathOrUrl::Url(value.url().clone())),
+            Self::Pypi(value) => Cow::Borrowed(value.url()),
         }
     }
 }
@@ -545,7 +547,7 @@ impl PypiPackage {
     }
 
     /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
+    pub fn url(&self) -> &PathOrUrl {
         &self.package_data().url
     }
 
@@ -608,7 +610,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -616,7 +618,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
     }
 }

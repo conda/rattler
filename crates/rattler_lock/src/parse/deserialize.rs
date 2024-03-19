@@ -1,7 +1,7 @@
 use crate::utils::serde::RawCondaPackageData;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiPackageData, PypiPackageEnvironmentData,
+    ParseCondaLockError, PathOrUrl, PypiPackageData, PypiPackageEnvironmentData,
 };
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
@@ -40,7 +40,7 @@ enum DeserializablePackageSelector {
         conda: Url,
     },
     Pypi {
-        pypi: Url,
+        pypi: PathOrUrl,
         #[serde(flatten)]
         runtime: DeserializablePypiPackageEnvironmentData,
     },
@@ -107,7 +107,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                                                     ParseCondaLockError::MissingPackage(
                                                         name.clone(),
                                                         platform,
-                                                        conda,
+                                                        PathOrUrl::Url(conda),
                                                     )
                                                 })?,
                                             )
