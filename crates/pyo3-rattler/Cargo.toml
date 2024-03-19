@@ -6,6 +6,7 @@ edition.workspace = true
 [lib]
 name = "pyo3_rattler"
 path = "src/lib.rs"
+test = false
 
 [features]
 default = ["native-tls"]
