@@ -80,8 +80,8 @@ mod channel;
 mod conda;
 mod hash;
 mod parse;
-mod pypi;
 mod path_or_url;
+mod pypi;
 mod utils;
 
 pub use builder::LockFileBuilder;
@@ -89,8 +89,8 @@ pub use channel::Channel;
 pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
-pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
 pub use path_or_url::PathOrUrl;
+pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
