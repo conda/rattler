@@ -2,7 +2,7 @@ mod deserialize;
 mod serialize;
 mod v3;
 
-use super::{LockFile, PathOrUrl};
+use super::{LockFile, UrlOrPath};
 use rattler_conda_types::Platform;
 use serde::de::Error;
 use serde_yaml::Value;
@@ -30,7 +30,7 @@ pub enum ParseCondaLockError {
     },
 
     #[error("environment {0} and platform {1} refers to a package that does not exist: {2}")]
-    MissingPackage(String, Platform, PathOrUrl),
+    MissingPackage(String, Platform, UrlOrPath),
 
     #[error(transparent)]
     InvalidPypiPackageName(#[from] pep508_rs::InvalidNameError),

@@ -14,9 +14,9 @@ license = "BSD-3-Clause"
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
-fmt-python = "black ."
+fmt-python = "ruff format rattler"
 fmt-rust = "cargo fmt --all"
-lint-python = "ruff ."
+lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
@@ -33,8 +33,7 @@ fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
 pytest = "~=7.4.0"
-black = "~=23.7.0"
-ruff = "~=0.0.285"
+ruff = ">=0.3.3,<0.4"
 mypy = "~=1.5.1"
 pytest-asyncio = "0.21.1.*"
 pytest-xprocess = ">=0.23.0,<0.24"
@@ -44,7 +43,7 @@ mkdocs = "1.5.3.*"
 mkdocstrings-python = "1.7.1.*"
 mkdocstrings = "0.23.0.*"
 mkdocs-material = "9.4.4.*"
-pillow = ">=9.4.0.*"
+pillow = ">=9.4.0"
 cairosvg = "2.7.1.*"
 
 [target.linux-64.dependencies]

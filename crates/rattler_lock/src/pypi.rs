@@ -1,4 +1,4 @@
-use crate::{PackageHashes, PathOrUrl};
+use crate::{PackageHashes, UrlOrPath};
 use pep440_rs::VersionSpecifiers;
 use pep508_rs::{ExtraName, PackageName, Requirement};
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,8 @@ pub struct PypiPackageData {
     pub version: pep440_rs::Version,
 
     /// The URL that points to where the artifact can be downloaded from.
-    pub url: PathOrUrl,
+    #[serde(with = "crate::utils::serde::url_or_path", flatten)]
+    pub url_or_path: UrlOrPath,
 
     /// Hashes of the file pointed to by `url`.
     #[serde(flatten)]

@@ -1,6 +1,6 @@
 use super::FILE_VERSION;
 use crate::utils::serde::RawCondaPackageData;
-use crate::{Channel, EnvironmentPackageData, LockFile, PathOrUrl, PypiPackageData};
+use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData, UrlOrPath};
 use itertools::Itertools;
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
@@ -38,17 +38,17 @@ enum SerializablePackageSelector<'a> {
         conda: &'a Url,
     },
     Pypi {
-        pypi: &'a PathOrUrl,
+        pypi: &'a UrlOrPath,
         #[serde(skip_serializing_if = "BTreeSet::is_empty")]
         extras: &'a BTreeSet<ExtraName>,
     },
 }
 
 impl<'a> SerializablePackageSelector<'a> {
-    fn url(&self) -> Cow<'_, PathOrUrl> {
+    fn url(&self) -> Cow<'_, UrlOrPath> {
         match self {
             SerializablePackageSelector::Conda { conda } => {
-                Cow::Owned(PathOrUrl::Url((*conda).clone()))
+                Cow::Owned(UrlOrPath::Url((*conda).clone()))
             }
             SerializablePackageSelector::Pypi { pypi, .. } => Cow::Borrowed(pypi),
         }
@@ -86,10 +86,10 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
             ) => match (a, b) {
-                (PathOrUrl::Url(a), PathOrUrl::Url(b)) => compare_url_by_filename(a, b),
-                (PathOrUrl::Url(_), PathOrUrl::Path(_)) => Ordering::Less,
-                (PathOrUrl::Path(_), PathOrUrl::Url(_)) => Ordering::Greater,
-                (PathOrUrl::Path(a), PathOrUrl::Path(b)) => a.cmp(b),
+                (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
+                (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
+                (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
+                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.cmp(b),
             },
         }
     }
@@ -124,12 +124,12 @@ impl<'a> SerializablePackageData<'a> {
         }
     }
 
-    fn url(&self) -> Cow<'_, PathOrUrl> {
+    fn url(&self) -> Cow<'_, UrlOrPath> {
         match self {
             SerializablePackageData::Conda(p) => {
-                Cow::Owned(PathOrUrl::Url(p.url.clone().into_owned()))
+                Cow::Owned(UrlOrPath::Url(p.url.clone().into_owned()))
             }
-            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.url),
+            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.url_or_path),
         }
     }
 }
@@ -209,7 +209,7 @@ impl Serialize for LockFile {
                                                     .pypi_environment_package_datas
                                                     [pypi_runtime_index];
                                                 SerializablePackageSelector::Pypi {
-                                                    pypi: &pypi_package.url,
+                                                    pypi: &pypi_package.url_or_path,
                                                     extras: &pypi_runtime.extras,
                                                 }
                                             }

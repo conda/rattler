@@ -3,7 +3,7 @@
 use super::ParseCondaLockError;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PathOrUrl, PypiPackageData, PypiPackageEnvironmentData,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
     DEFAULT_ENVIRONMENT_NAME,
 };
 use fxhash::FxHashMap;
@@ -183,7 +183,7 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
-                        url: PathOrUrl::Url(pkg.url),
+                        url_or_path: UrlOrPath::Url(pkg.url),
                         hash: pkg.hash,
                     })
                     .0;

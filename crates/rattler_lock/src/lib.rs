@@ -80,8 +80,8 @@ mod channel;
 mod conda;
 mod hash;
 mod parse;
-mod path_or_url;
 mod pypi;
+mod url_or_path;
 mod utils;
 
 pub use builder::LockFileBuilder;
@@ -89,8 +89,8 @@ pub use channel::Channel;
 pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
-pub use path_or_url::PathOrUrl;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
+pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
@@ -447,9 +447,9 @@ impl Package {
     }
 
     /// Returns the URL or relative path to the package
-    pub fn url_or_path(&self) -> Cow<'_, PathOrUrl> {
+    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            Self::Conda(value) => Cow::Owned(PathOrUrl::Url(value.url().clone())),
+            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
             Self::Pypi(value) => Cow::Borrowed(value.url()),
         }
     }
@@ -547,8 +547,8 @@ impl PypiPackage {
     }
 
     /// Returns the URL of the package
-    pub fn url(&self) -> &PathOrUrl {
-        &self.package_data().url
+    pub fn url(&self) -> &UrlOrPath {
+        &self.package_data().url_or_path
     }
 
     /// Returns the extras enabled for this package
