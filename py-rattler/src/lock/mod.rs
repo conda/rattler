@@ -476,7 +476,11 @@ impl PyPypiPackageEnvironmentData {
     /// The extras enabled for the package. Note that the order doesn't matter.
     #[getter]
     pub fn extras(&self) -> BTreeSet<String> {
-        self.inner.extras.iter().map(ToString::to_string).collect()
+        self.inner
+            .extras
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 }
 

@@ -543,34 +543,41 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
-    // Compute the padding required when replacing the old prefix with the new one. If the old
-    // prefix is longer than the new one we need to add padding to ensure that the entire part
-    // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
-    // ensures that the text will remain a valid nul-terminated string.
-    let padding = vec![b'\0'; old_prefix.len().saturating_sub(new_prefix.len())];
-
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
+            // write all bytes up to the old prefix, followed by the new prefix.
+            destination.write_all(&source_bytes[..index])?;
+
             // Find the end of the c-style string. The nul terminator basically.
             let mut end = index + old_prefix.len();
             while end < source_bytes.len() && source_bytes[end] != b'\0' {
                 end += 1;
             }
 
-            // Determine the total length of the c-string.
-            let len = end - index;
+            let mut out = Vec::new();
+            let mut old_bytes = &source_bytes[index..end];
+            let old_len = old_bytes.len();
 
-            // Get the suffix part (this is the text after the prefix by up until the nul
-            // terminator). E.g. in `old-prefix/some/path\0` the suffix would be `/some/path`.
-            let suffix = &source_bytes[index + old_prefix.len()..end];
+            // replace all occurrences of the old prefix with the new prefix
+            while let Some(index) = memchr::memmem::find(old_bytes, old_prefix) {
+                out.write_all(&old_bytes[..index])?;
+                out.write_all(new_prefix)?;
+                old_bytes = &old_bytes[index + old_prefix.len()..];
+            }
+            out.write_all(old_bytes)?;
+            // write everything up to the old length
+            if out.len() > old_len {
+                destination.write_all(&out[..old_len])?;
+            } else {
+                destination.write_all(&out)?;
+            }
 
-            // Write all bytes up to the old prefix, then the new prefix followed by suffix and
-            // padding.
-            destination.write_all(&source_bytes[..index])?;
-            destination.write_all(&new_prefix[..len.min(new_prefix.len())])?;
-            destination
-                .write_all(&suffix[..len.saturating_sub(new_prefix.len()).min(suffix.len())])?;
-            destination.write_all(&padding)?;
+            // Compute the padding required when replacing the old prefix(es) with the new one. If the old
+            // prefix is longer than the new one we need to add padding to ensure that the entire part
+            // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
+            // ensures that the text will remain a valid nul-terminated string.
+            let padding = old_len.saturating_sub(out.len());
+            destination.write_all(&vec![0; padding])?;
 
             // Continue with the rest of the bytes.
             source_bytes = &source_bytes[end..];
@@ -661,5 +668,17 @@ mod test {
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[test]
+    fn replace_binary_path_var() {
+        let input =
+            b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder(input, &mut output, "/placeholder", "/target")
+            .unwrap();
+        let out = &output.into_inner();
+        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
+        assert_eq!(out.len(), input.len());
     }
 }
