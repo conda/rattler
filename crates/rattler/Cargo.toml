@@ -38,6 +38,7 @@ pin-project-lite = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.20.4", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "0.19.2", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.20.0", default-features = false }
+rattler_shell = { path="../rattler_shell", version = "0.19.3", default-features = false }
 rattler_package_streaming = { path="../rattler_package_streaming", version = "0.20.2", default-features = false, features = ["reqwest"] }
 reflink-copy = { workspace = true }
 regex = { workspace = true }

@@ -18,6 +18,7 @@ mod clobber_registry;
 mod driver;
 mod entry_point;
 pub mod link;
+pub mod link_script;
 mod python;
 mod transaction;
 pub mod unlink;

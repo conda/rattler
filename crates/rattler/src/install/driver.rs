@@ -150,6 +150,18 @@ impl InstallDriver {
         self.clobber_registry.lock().unwrap()
     }
 
+    /// Call this before any packages are installed to perform any pre processing that is required.
+    pub fn pre_process(
+        &self,
+        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        target_prefix: &Path,
+    ) -> Result<(), InstallError> {
+        self.run_pre_unlink_scripts(transaction, target_prefix)
+            .unwrap();
+
+        Ok(())
+    }
+
     /// Call this after all packages have been installed to perform any post processing that is
     /// required.
     ///
@@ -177,6 +189,9 @@ impl InstallDriver {
                 tracing::error!("Error unclobbering packages: {:?}", e);
                 InstallError::PostProcessFailed(e)
             })?;
+
+        self.run_post_link_scripts(transaction, &required_packages, target_prefix)
+            .unwrap();
 
         Ok(())
     }

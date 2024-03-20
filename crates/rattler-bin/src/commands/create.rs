@@ -315,6 +315,9 @@ async fn execute_transaction(
     // Create an install driver which helps limit the number of concurrent fileystem operations
     let install_driver = InstallDriver::default();
 
+    // Run pre-process (pre-unlink, mainly)
+    install_driver.pre_process(&transaction, &target_prefix)?;
+
     // Define default installation options.
     let install_options = InstallOptions {
         python_info: transaction.python_info.clone(),
@@ -381,9 +384,7 @@ async fn execute_transaction(
         .await?;
 
     // Perform any post processing that is required.
-    install_driver
-        .post_process(&transaction, &target_prefix)
-        .expect("bla");
+    install_driver.post_process(&transaction, &target_prefix)?;
 
     Ok(())
 }
