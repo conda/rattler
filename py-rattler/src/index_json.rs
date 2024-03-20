@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use pyo3::{pyclass, pymethods, PyResult};
 use rattler_conda_types::package::{IndexJson, PackageFile};
+use rattler_package_streaming::seek::read_package_file;
 
 use crate::{error::PyRattlerError, package_name::PyPackageName};
 
@@ -26,6 +27,17 @@ impl From<PyIndexJson> for IndexJson {
 
 #[pymethods]
 impl PyIndexJson {
+    /// Parses the package file from archive.
+    /// Note: If you want to extract multiple `info/*` files then this will be slightly
+    ///       slower than manually iterating over the archive entries with
+    ///       custom logic as this skips over the rest of the archive
+    #[staticmethod]
+    pub fn from_package_archive(path: PathBuf) -> PyResult<Self> {
+        Ok(read_package_file::<IndexJson>(path)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
     /// Parses the object by looking up the appropriate file from the root of the specified Conda
     /// archive directory, using a format appropriate for the file type.
     ///

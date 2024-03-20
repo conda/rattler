@@ -11,6 +11,27 @@ class IndexJson:
     _inner: PyIndexJson
 
     @staticmethod
+    def from_package_archive(path: os.PathLike[str]) -> IndexJson:
+        """
+        Parses the package file from archive.
+        Note: If you want to extract multiple `info/*` files then this will be slightly
+              slower than manually iterating over the archive entries with
+              custom logic as this skips over the rest of the archive
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json
+        IndexJson()
+        >>>
+        ```
+        """
+        return IndexJson._from_py_index_json(PyIndexJson.from_package_archive(path))
+
+    @staticmethod
     def from_package_directory(path: os.PathLike[str]) -> IndexJson:
         """
         Parses the object by looking up the appropriate file from the root of the
@@ -52,6 +73,17 @@ class IndexJson:
     def arch(self) -> Optional[str]:
         """
         Optionally, the architecture the package is build for.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.arch
+        'ppc64le'
+        >>>
+        ```
         """
         if arch := self._inner.arch:
             return arch
@@ -62,6 +94,17 @@ class IndexJson:
     def build(self) -> str:
         """
         The build string of the package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.build
+        'h2c4edbf_0_cpython'
+        >>>
+        ```
         """
         return self._inner.build
 
@@ -70,6 +113,17 @@ class IndexJson:
         """
         The build number of the package.
         This is also included in the build string.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.build_number
+        0
+        >>>
+        ```
         """
         return self._inner.build_number
 
@@ -77,6 +131,17 @@ class IndexJson:
     def constrains(self) -> List[str]:
         """
         The package constraints of the package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.constrains
+        ['python_abi 3.10.* *_cp310']
+        >>>
+        ```
         """
         return self._inner.constrains
 
@@ -84,6 +149,17 @@ class IndexJson:
     def depends(self) -> List[str]:
         """
         The dependencies of the package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.depends
+        ['bzip2 >=1.0.8,<2.0a0', ..., 'xz >=5.2.6,<5.3.0a0']
+        >>>
+        ```
         """
         return self._inner.depends
 
@@ -93,6 +169,16 @@ class IndexJson:
         Features are a deprecated way to specify different feature sets for the conda solver. This is not
         supported anymore and should not be used. Instead, `mutex` packages should be used to specify
         mutually exclusive features.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.features
+        >>>
+        ```
         """
         if features := self._inner.features:
             return features
@@ -103,6 +189,17 @@ class IndexJson:
     def license(self) -> Optional[str]:
         """
         Optionally, the license.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.license
+        'Python-2.0'
+        >>>
+        ```
         """
         if license := self._inner.license:
             return license
@@ -113,6 +210,16 @@ class IndexJson:
     def license_family(self) -> Optional[str]:
         """
         Optionally, the license.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.license_family
+        >>>
+        ```
         """
         if license_family := self._inner.license_family:
             return license_family
@@ -123,6 +230,17 @@ class IndexJson:
     def name(self) -> PackageName:
         """
         The lowercase name of the package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.name
+        PackageName("python")
+        >>>
+        ```
         """
         return PackageName._from_py_package_name(self._inner.name)
 
@@ -130,6 +248,17 @@ class IndexJson:
     def platform(self) -> Optional[str]:
         """
         Optionally, the OS the package is build for.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.platform
+        'linux'
+        >>>
+        ```
         """
         if platform := self._inner.platform:
             return platform
@@ -140,6 +269,17 @@ class IndexJson:
     def subdir(self) -> Optional[str]:
         """
         The subdirectory that contains this package.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.subdir
+        'linux-ppc64le'
+        >>>
+        ```
         """
         if subdir := self._inner.subdir:
             return subdir
@@ -150,6 +290,17 @@ class IndexJson:
     def timestamp(self) -> Optional[int]:
         """
         The timestamp when this package was created
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.timestamp
+        1661200742
+        >>>
+        ```
         """
         if timestamp := self._inner.timestamp:
             return timestamp
@@ -162,6 +313,17 @@ class IndexJson:
         Track features are nowadays only used to downweight packages (ie. give them less priority). To
         that effect, the number of track features is counted (number of commas) and the package is downweighted
         by the number of track_features.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> idx_json.track_features
+        []
+        >>>
+        ```
         """
         return self._inner.track_features
 
