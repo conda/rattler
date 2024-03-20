@@ -1,7 +1,9 @@
 use std::path::PathBuf;
 
 use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
-use rattler_conda_types::package::{FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder};
+use rattler_conda_types::package::{
+    FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
+};
 use rattler_package_streaming::seek::read_package_file;
 
 use crate::error::PyRattlerError;
