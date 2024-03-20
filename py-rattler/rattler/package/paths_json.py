@@ -404,14 +404,38 @@ class PrefixPlaceholder:
     def file_mode(self) -> FileMode:
         """
         The type of the file, either binary or text.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.file_mode
+        FileMode()
+        >>>
+        ```
         """
-        return self._inner.file_mode
+        return FileMode._from_py_file_mode(self._inner.file_mode)
 
     @property
     def placeholder(self) -> str:
         """
         The placeholder prefix used in the file. This is the path of the
         prefix when the package was build.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> entry.prefix_placeholder.placeholder
+        'D:\\\\bld\\\\conda_1667595064120\\\\_h_env'
+        >>>
+        ```
         """
         return self._inner.placeholder
 
@@ -442,6 +466,19 @@ class FileMode:
     def binary(self) -> bool:
         """
         The file is a binary file (needs binary prefix replacement).
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> file_mode = entry.prefix_placeholder.file_mode
+        >>> file_mode.binary
+        False
+        >>>
+        ```
         """
         return self._inner.binary
 
@@ -449,6 +486,19 @@ class FileMode:
     def text(self) -> bool:
         """
         The file is a text file (needs text prefix replacement).
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[-1]
+        >>> file_mode = entry.prefix_placeholder.file_mode
+        >>> file_mode.text
+        True
+        >>>
+        ```
         """
         return self._inner.text
 
