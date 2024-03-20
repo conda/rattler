@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+from pathlib import Path
 from typing import List, Optional
 from rattler.rattler import (
     PyPathsJson,
@@ -17,6 +18,78 @@ class PathsJson:
     """
 
     _inner: PyPathsJson
+
+    @staticmethod
+    def from_package_archive(path: os.PathLike[str]) -> PathsJson:
+        """
+        Parses the package file from archive.
+        Note: If you want to extract multiple `info/*` files then this will be slightly
+              slower than manually iterating over the archive entries with
+              custom logic as this skips over the rest of the archive
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> paths_json
+        PathsJson()
+        >>>
+        ```
+        """
+        return PathsJson._from_py_paths_json(PyPathsJson.from_package_archive(path))
+
+    @staticmethod
+    def from_path(path: os.PathLike[str]) -> PathsJson:
+        """
+        Parses the object from a file specified by a `path`, using a format
+        appropriate for the file type.
+
+        For example, if the file is in JSON format, this function reads the data
+        from the file at the specified path, parse the JSON string and return the
+        resulting object. If the file is not in a parsable format or if the file
+        could not read, this function returns an error.
+        """
+        return PathsJson._from_py_paths_json(PyPathsJson.from_path(Path(path)))
+
+    @staticmethod
+    def from_package_directory(path: os.PathLike[str]) -> PathsJson:
+        """
+        Parses the object by looking up the appropriate file from the root of the
+        specified Conda archive directory, using a format appropriate for the file
+        type.
+
+        For example, if the file is in JSON format, this function reads the
+        appropriate file from the archive, parse the JSON string and return the
+        resulting object. If the file is not in a parsable format or if the file
+        could not be read, this function returns an error.
+        """
+        return PathsJson._from_py_paths_json(
+            PyPathsJson.from_package_directory(Path(path))
+        )
+
+    @staticmethod
+    def from_str(string: str) -> PathsJson:
+        """
+        Parses the object from a string, using a format appropriate for the file
+        type.
+
+        For example, if the file is in JSON format, this function parses the JSON
+        string and returns the resulting object. If the file is not in a parsable
+        format, this function returns an error.
+        """
+        return PathsJson._from_py_paths_json(PyPathsJson.from_str(string))
+
+    @staticmethod
+    def package_path() -> str:
+        """
+        Returns the path to the file within the Conda archive.
+
+        The path is relative to the root of the archive and includes any necessary
+        directories.
+        """
+        return PathsJson.package_path()
 
     @staticmethod
     def from_deprecated_package_directory(path: os.PathLike[str]) -> PathsJson:
@@ -49,6 +122,17 @@ class PathsJson:
     def paths(self) -> List[PathsEntry]:
         """
         All entries included in the package.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> paths_json.paths
+        [PathsEntry(), ...]
+        >>>
+        ```
         """
         return [PathsEntry._from_py_paths_entry(path) for path in self._inner.paths]
 
@@ -56,6 +140,17 @@ class PathsJson:
     def paths_version(self) -> int:
         """
         The version of the file.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> paths_json.paths_version
+        1
+        >>>
+        ```
         """
         return self._inner.paths_version
 
@@ -84,6 +179,18 @@ class PathsEntry:
     def relative_path(self) -> str:
         """
         The relative path from the root of the package.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.relative_path
+        'bin/2to3'
+        >>>
+        ```
         """
         return self._inner.relative_path
 
@@ -91,6 +198,18 @@ class PathsEntry:
     def no_link(self) -> bool:
         """
         Whether or not this file should be linked or not when installing the package.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.no_link
+        False
+        >>>
+        ```
         """
         return self._inner.no_link
 
@@ -98,6 +217,18 @@ class PathsEntry:
     def path_type(self) -> PathType:
         """
         Determines how to include the file when installing the package.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.path_type
+        PathType()
+        >>>
+        ```
         """
         return PathType._from_py_path_type(self._inner.path_type)
 
@@ -106,6 +237,17 @@ class PathsEntry:
         """
         Optionally the placeholder prefix used in the file. If this value is `None`
         the prefix is not present in the file.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.prefix_placeholder
+        >>>
+        ```
         """
         if placeholder := self._inner.prefix_placeholder:
             return PrefixPlaceholder._from_py_prefix_placeholder(placeholder)
@@ -117,6 +259,18 @@ class PathsEntry:
         """
         A hex representation of the SHA256 hash of the contents of the file.
         This entry is only present in version 1 of the paths.json file.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.sha256.hex()
+        '863589436be82be20e3efbe0e36f20510747b1892b3cbcb398c4c48ad7e96fcc'
+        >>>
+        ```
         """
         return self._inner.sha256
 
@@ -125,6 +279,18 @@ class PathsEntry:
         """
         The size of the file in bytes.
         This entry is only present in version 1 of the paths.json file.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> entry.size_in_bytes
+        347
+        >>>
+        ```
         """
         if size := self._inner.size_in_bytes:
             return size
@@ -156,6 +322,19 @@ class PathType:
     def hardlink(self) -> bool:
         """
         The path should be hard linked (the default).
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> path_type = entry.path_type
+        >>> path_type.hardlink
+        False
+        >>>
+        ```
         """
         return self._inner.hardlink
 
@@ -163,6 +342,19 @@ class PathType:
     def softlink(self) -> bool:
         """
         The path should be soft linked.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> path_type = entry.path_type
+        >>> path_type.softlink
+        True
+        >>>
+        ```
         """
         return self._inner.softlink
 
@@ -170,6 +362,19 @@ class PathType:
     def directory(self) -> bool:
         """
         This should explicitly create an empty directory.
+
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[0]
+        >>> path_type = entry.path_type
+        >>> path_type.directory
+        False
+        >>>
+        ```
         """
         return self._inner.directory
 
