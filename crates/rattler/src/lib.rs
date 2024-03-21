@@ -6,7 +6,7 @@
 //! Rattler is an attempt at reimplementing a lot of the machinery supporting Conda but making it
 //! available to a wider range of languages. The goal is to be able to integrate the Conda ecosystem
 //! in a wide variaty of tools that do not rely on Python. Rust has excellent support for
-//! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefor a good
+//! interfacing with many other languages (WASM, Javascript, Python, C, etc) and is therefore a good
 //! candidate for a reimplementation.
 #![deny(missing_docs)]
 

@@ -45,9 +45,7 @@ class PackageRecord:
         >>>
         ```
         """
-        return PackageRecord._from_py_record(
-            PyRecord.from_index_json(path, size, sha256, md5)
-        )
+        return PackageRecord._from_py_record(PyRecord.from_index_json(path, size, sha256, md5))
 
     @staticmethod
     def sort_topologically(records: List[PackageRecord]) -> List[PackageRecord]:
@@ -74,10 +72,7 @@ class PackageRecord:
         >>>
         ```
         """
-        return [
-            PackageRecord._from_py_record(p)
-            for p in PyRecord.sort_topologically(records)
-        ]
+        return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:

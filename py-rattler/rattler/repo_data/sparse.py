@@ -86,10 +86,7 @@ class SparseRepoData:
         ```
         """
         # maybe change package_name to Union[str, PackageName]
-        return [
-            RepoDataRecord._from_py_record(record)
-            for record in self._sparse.load_records(package_name._name)
-        ]
+        return [RepoDataRecord._from_py_record(record) for record in self._sparse.load_records(package_name._name)]
 
     @property
     def subdir(self) -> str:
@@ -146,9 +143,7 @@ class SparseRepoData:
         ]
 
     @classmethod
-    def _from_py_sparse_repo_data(
-        cls, py_sparse_repo_data: PySparseRepoData
-    ) -> SparseRepoData:
+    def _from_py_sparse_repo_data(cls, py_sparse_repo_data: PySparseRepoData) -> SparseRepoData:
         """
         Construct Rattler SparseRepoData from FFI PySparseRepoData object.
         """

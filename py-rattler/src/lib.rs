@@ -19,17 +19,20 @@ mod solver;
 mod version;
 mod virtual_package;
 
+mod index_json;
+mod run_exports_json;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
-    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
-    InvalidVersionException, IoException, LinkException, ParseArchException,
+    EnvironmentCreationException, ExtractException, FetchRepoDataException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
     VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
+use index_json::PyIndexJson;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
     PyPypiPackageEnvironmentData,
@@ -40,6 +43,7 @@ use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data
 use package_name::PyPackageName;
 use prefix_paths::PyPrefixPaths;
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
+use run_exports_json::PyRunExportsJson;
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -96,6 +100,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPackageHashes>().unwrap();
 
     m.add_class::<PyAboutJson>().unwrap();
+
+    m.add_class::<PyRunExportsJson>().unwrap();
+    m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
@@ -169,6 +176,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py.get_type::<EnvironmentCreationException>(),
     )
     .unwrap();
+
+    m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
 
     Ok(())
 }
