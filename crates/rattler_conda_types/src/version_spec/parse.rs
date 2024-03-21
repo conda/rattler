@@ -210,7 +210,13 @@ fn logical_constraint_parser(
                 )),
                 Lenient,
             ) => VersionOperators::Range(RangeOperator::GreaterEquals),
-            ("*" | ".*", Some(VersionOperators::Exact(EqualityOperator::NotEquals)), Lenient) => {
+            (
+                "*" | ".*",
+                Some(VersionOperators::Exact(EqualityOperator::NotEquals)),
+                Lenient | Strict,
+            ) => {
+                // !=1.2.3.* is the only way to express a version should not start with 1.2.3 so
+                // even in strict mode we allow this.
                 VersionOperators::StrictRange(StrictRangeOperator::NotStartsWith)
             }
             ("*" | ".*", Some(op), Lenient) => {
