@@ -192,7 +192,7 @@ mod tests {
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
         let repodata_record_1 =
-            get_repodata_record("link-scripts/link-scripts-0.1.0-h4616a5c_0.tar.bz2");
+            get_repodata_record("link-scripts/link-scripts-0.1.0-h4616a5c_0.conda");
 
         vec![TransactionOperation::Install(repodata_record_1)]
     }
