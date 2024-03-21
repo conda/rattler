@@ -28,6 +28,7 @@ pub struct InstallDriver {
     inner: Arc<Mutex<InstallDriverInner>>,
     concurrency_limit: usize,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
+    disable_link_scripts: bool,
 }
 
 struct InstallDriverInner {
@@ -39,7 +40,7 @@ type Task = Box<dyn FnOnce() + Send + 'static>;
 
 impl Default for InstallDriver {
     fn default() -> Self {
-        Self::new(100, None)
+        Self::new(100, None, false)
     }
 }
 
@@ -47,7 +48,11 @@ impl InstallDriver {
     /// Constructs a new [`InstallDriver`] with a given maximum number of concurrent tasks. This is
     /// the number of tasks spawned through the driver that can run concurrently. This is especially
     /// useful to make sure no filesystem limits are encountered.
-    pub fn new(concurrency_limit: usize, prefix_records: Option<&[PrefixRecord]>) -> Self {
+    pub fn new(
+        concurrency_limit: usize,
+        prefix_records: Option<&[PrefixRecord]>,
+        disable_link_scripts: bool,
+    ) -> Self {
         let (tx, mut rx) = unbounded_channel::<Task>();
         let join_handle = tokio::spawn(async move {
             let mut pending_futures = FuturesUnordered::new();
@@ -94,6 +99,7 @@ impl InstallDriver {
             inner: Arc::new(Mutex::new(InstallDriverInner { tx, join_handle })),
             concurrency_limit,
             clobber_registry: Arc::new(Mutex::new(clobber_registry)),
+            disable_link_scripts,
         }
     }
 
@@ -156,8 +162,14 @@ impl InstallDriver {
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
     ) -> Result<(), InstallError> {
-        self.run_pre_unlink_scripts(transaction, target_prefix)
-            .expect("Could not run pre-unlink scripts");
+        if !self.disable_link_scripts {
+            match self.run_pre_unlink_scripts(transaction, target_prefix) {
+                Ok(()) => {}
+                Err(e) => {
+                    tracing::error!("Error running pre-unlink scripts: {:?}", e);
+                }
+            }
+        }
         Ok(())
     }
 
@@ -184,13 +196,16 @@ impl InstallDriver {
 
         self.clobber_registry()
             .unclobber(&required_packages, target_prefix)
-            .map_err(|e| {
+            .unwrap_or_else(|e| {
                 tracing::error!("Error unclobbering packages: {:?}", e);
-                InstallError::PostProcessFailed(e)
-            })?;
+            });
 
-        self.run_post_link_scripts(transaction, &required_packages, target_prefix)
-            .unwrap();
+        if !self.disable_link_scripts {
+            self.run_post_link_scripts(transaction, &required_packages, target_prefix)
+                .unwrap_or_else(|e| {
+                    tracing::error!("Error running post-link scripts: {:?}", e);
+                });
+        }
 
         Ok(())
     }
