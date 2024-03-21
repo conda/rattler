@@ -236,9 +236,12 @@ mod test {
             Constraint::from_str("=1.2.*", Strict),
             Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(_))
         );
-        assert_matches!(
-            Constraint::from_str("!=1.2.*", Strict),
-            Err(ParseConstraintError::GlobVersionIncompatibleWithOperator(_))
+        assert_eq!(
+            Constraint::from_str("!=1.2.*", Lenient),
+            Ok(Constraint::StrictComparison(
+                StrictRangeOperator::NotStartsWith,
+                Version::from_str("1.2").unwrap(),
+            ))
         );
         assert_matches!(
             Constraint::from_str(">=1.2.*", Strict),
