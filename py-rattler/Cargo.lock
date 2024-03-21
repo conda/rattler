@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "anyhow",
  "async-compression",
