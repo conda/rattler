@@ -548,8 +548,8 @@ mod tests {
         let pkg1 = env_var_d.join("pkg1.json");
         let pkg2 = env_var_d.join("pkg2.json");
 
-        fs::write(&pkg1, content_pkg_1).expect("could not write file");
-        fs::write(&pkg2, content_pkg_2).expect("could not write file");
+        fs::write(pkg1, content_pkg_1).expect("could not write file");
+        fs::write(pkg2, content_pkg_2).expect("could not write file");
 
         let quotes = r#"{"env_vars": {"Hallo": "myval", "TEST": "itsatest", "AAA": "abcdef"}}"#;
         fs::write(&state_path, quotes).unwrap();
@@ -708,8 +708,8 @@ mod tests {
         let pkg1 = env_var_d.join("pkg1.json");
         let pkg2 = env_var_d.join("pkg2.json");
 
-        fs::write(&pkg1, content_pkg_1).expect("could not write file");
-        fs::write(&pkg2, content_pkg_2).expect("could not write file");
+        fs::write(pkg1, content_pkg_1).expect("could not write file");
+        fs::write(pkg2, content_pkg_2).expect("could not write file");
 
         // Write a script that emits a random environment variable via a shell
         let mut activation_script = String::new();
@@ -765,26 +765,26 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash::default().into());
+        test_run_activation(crate::shell::Bash.into());
     }
 
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
-        test_run_activation(crate::shell::Zsh::default().into());
+        test_run_activation(crate::shell::Zsh.into());
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_fish() {
-        test_run_activation(crate::shell::Fish::default().into());
+        test_run_activation(crate::shell::Fish.into());
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_xonsh() {
-        test_run_activation(crate::shell::Xonsh::default().into());
+        test_run_activation(crate::shell::Xonsh.into());
     }
 }
