@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.19.2...rattler_networking-v0.20.0) - 2024-03-21
+
+### Fixed
+- implement cache for authentication filestorage backend ([#573](https://github.com/mamba-org/rattler/pull/573))
+
 ## [0.19.2](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.19.1...rattler_networking-v0.19.2) - 2024-03-14
 
 ### Added
