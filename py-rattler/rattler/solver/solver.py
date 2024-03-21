@@ -52,10 +52,7 @@ def solve(
             [package._sparse for package in available_packages],
             [package._record for package in locked_packages or []],
             [package._record for package in pinned_packages or []],
-            [
-                v_package._generic_virtual_package
-                for v_package in virtual_packages or []
-            ],
+            [v_package._generic_virtual_package for v_package in virtual_packages or []],
             timeout.microseconds if timeout else None,
         )
     ]

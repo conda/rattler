@@ -33,9 +33,7 @@ class RunExportsJson:
         >>>
         ```
         """
-        return RunExportsJson._from_py_run_exports_json(
-            PyRunExportsJson.from_package_archive(path)
-        )
+        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_package_archive(path))
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> RunExportsJson:
@@ -48,9 +46,7 @@ class RunExportsJson:
         resulting object. If the file is not in a parsable format or if the file
         could not read, this function returns an error.
         """
-        return RunExportsJson._from_py_run_exports_json(
-            PyRunExportsJson.from_path(Path(path))
-        )
+        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_path(Path(path)))
 
     @staticmethod
     def from_package_directory(path: os.PathLike[str]) -> RunExportsJson:
@@ -64,9 +60,7 @@ class RunExportsJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return RunExportsJson._from_py_run_exports_json(
-            PyRunExportsJson.from_package_directory(Path(path))
-        )
+        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_package_directory(Path(path)))
 
     @staticmethod
     def from_str(string: str) -> RunExportsJson:
@@ -78,9 +72,7 @@ class RunExportsJson:
         string and returns the resulting object. If the file is not in a parsable
         format, this function returns an error.
         """
-        return RunExportsJson._from_py_run_exports_json(
-            PyRunExportsJson.from_str(string)
-        )
+        return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_str(string))
 
     @staticmethod
     def package_path() -> str:
@@ -185,9 +177,7 @@ class RunExportsJson:
         return self._inner.strong_constrains
 
     @classmethod
-    def _from_py_run_exports_json(
-        cls, py_run_exports_json: PyRunExportsJson
-    ) -> RunExportsJson:
+    def _from_py_run_exports_json(cls, py_run_exports_json: PyRunExportsJson) -> RunExportsJson:
         run_exports_json = cls.__new__(cls)
         run_exports_json._inner = py_run_exports_json
 

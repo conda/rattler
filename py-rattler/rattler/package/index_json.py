@@ -43,9 +43,7 @@ class IndexJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return IndexJson._from_py_index_json(
-            PyIndexJson.from_package_directory(Path(path))
-        )
+        return IndexJson._from_py_index_json(PyIndexJson.from_package_directory(Path(path)))
 
     @staticmethod
     def from_str(string: str) -> IndexJson:
