@@ -366,16 +366,8 @@ fn reflink_to_destination(
             }
             Err(e) => {
                 return if allow_hard_links {
-                    tracing::debug!(
-                        "failed to reflink {}: {e}, falling back to hard linking.",
-                        destination_path.display()
-                    );
                     hardlink_to_destination(source_path, destination_path)
                 } else {
-                    tracing::debug!(
-                        "failed to reflink {}: {e}, falling back to copying.",
-                        destination_path.display()
-                    );
                     copy_to_destination(source_path, destination_path)
                 }
             }
