@@ -19,6 +19,7 @@ mod solver;
 mod version;
 mod virtual_package;
 
+mod index_json;
 mod run_exports_json;
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig};
@@ -31,6 +32,7 @@ use error::{
     VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
+use index_json::PyIndexJson;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
     PyPypiPackageEnvironmentData,
@@ -100,6 +102,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyAboutJson>().unwrap();
 
     m.add_class::<PyRunExportsJson>().unwrap();
+    m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
