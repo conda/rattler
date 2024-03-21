@@ -364,7 +364,7 @@ fn reflink_to_destination(
             Err(e) if e.kind() == ErrorKind::Unsupported && !allow_hard_links => {
                 return copy_to_destination(source_path, destination_path)
             }
-            Err(e) => {
+            Err(_) => {
                 return if allow_hard_links {
                     hardlink_to_destination(source_path, destination_path)
                 } else {
