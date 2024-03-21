@@ -176,7 +176,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
 
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
@@ -191,7 +191,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
 
         let host = "conda.example.com";
 
@@ -245,7 +245,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
         let host = "bearer.example.com";
 
         // Make sure the keyring is empty
@@ -305,7 +305,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
         let host = "basic.example.com";
 
         // Make sure the keyring is empty
@@ -383,7 +383,7 @@ mod tests {
             let mut storage = AuthenticationStorage::new();
             storage.add_backend(Arc::from(FileStorage::new(
                 tdir.path().to_path_buf().join("auth.json"),
-            )));
+            )?));
 
             let authentication = Authentication::BearerToken("testtoken".to_string());
 
