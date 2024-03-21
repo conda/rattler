@@ -107,7 +107,12 @@ pub fn run_link_scripts<'a>(
                 shell,
                 &env,
             ) {
-                Ok(_) => {}
+                Ok(o) if o.status.success() => {}
+                Ok(o) => {
+                    tracing::warn!("Error running post-link script. Status: {:?}", o.status);
+                    tracing::warn!("  stdout: {}", String::from_utf8_lossy(&o.stdout));
+                    tracing::warn!("  stderr: {}", String::from_utf8_lossy(&o.stderr));
+                }
                 Err(e) => {
                     tracing::error!("Error running post-link script: {:?}", e);
                 }

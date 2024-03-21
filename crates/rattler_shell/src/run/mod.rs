@@ -55,20 +55,28 @@ pub fn run_in_environment(
 
     writeln!(shell_script.contents, "{}", host_activation.script)?;
 
-    match shell {
+    let tempfile = match shell {
         ShellEnum::Bash(_) => {
             writeln!(shell_script.contents, ". {}", args.join(" "))?;
+            tempfile::Builder::new().suffix(".sh").tempfile()?
         }
         ShellEnum::CmdExe(_) => {
             writeln!(shell_script.contents, "@call {}", args.join(" "))?;
+            tempfile::Builder::new().suffix(".bat").tempfile()?
         }
         _ => unimplemented!("Unsupported shell: {:?}", shell),
-    }
+    };
 
-    let tempfile = tempfile::NamedTempFile::new()?;
     std::fs::write(tempfile.path(), shell_script.contents)?;
 
-    Ok(Command::new(shell.executable())
-        .arg(tempfile.path())
-        .output()?)
+    match shell {
+        ShellEnum::Bash(_) => Ok(Command::new(shell.executable())
+            .arg(tempfile.path())
+            .output()?),
+        ShellEnum::CmdExe(_) => Ok(Command::new(shell.executable())
+            .arg("/c")
+            .arg(tempfile.path())
+            .output()?),
+        _ => unimplemented!("Unsupported shell: {:?}", shell),
+    }
 }
