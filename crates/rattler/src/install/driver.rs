@@ -157,8 +157,7 @@ impl InstallDriver {
         target_prefix: &Path,
     ) -> Result<(), InstallError> {
         self.run_pre_unlink_scripts(transaction, target_prefix)
-            .unwrap();
-
+            .expect("Could not run pre-unlink scripts");
         Ok(())
     }
 

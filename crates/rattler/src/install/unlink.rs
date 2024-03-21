@@ -185,7 +185,7 @@ mod tests {
         let prefix_record =
             PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
 
-        return prefix_record;
+        prefix_record
     }
 
     #[tokio::test]
@@ -257,7 +257,7 @@ mod tests {
                 "lib/python3.10/site-packages/pytweening/__pycache__/__init__.cpython-310.pyc",
             ))
             .unwrap();
-        file.write_all("some funny bytes".as_bytes()).unwrap();
+        file.write_all(b"some funny bytes").unwrap();
         file.sync_all().unwrap();
 
         // Unlink the package

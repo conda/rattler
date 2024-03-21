@@ -426,7 +426,7 @@ mod test {
                 buffer.extend(chunk);
             }
 
-            let byte_count = bytes.lock().await.clone();
+            let byte_count = *bytes.lock().await;
             let bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>();
             // Create a stream that ends prematurely
             let stream = stream::iter(vec![

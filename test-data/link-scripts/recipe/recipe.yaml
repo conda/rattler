@@ -1,0 +1,18 @@
+recipe:
+  name: link-scripts
+  version: 0.1.0
+
+outputs:
+  - package:
+      name: link-scripts
+      version: 0.1.0
+
+    build:
+      noarch: generic
+      script:
+        - mkdir -p $PREFIX/bin
+        - mkdir -p $PREFIX/Scripts
+        - cp $RECIPE_DIR/post-link.sh $PREFIX/bin/.${PKG_NAME}-post-link.sh
+        - cp $RECIPE_DIR/pre-unlink.sh $PREFIX/bin/.${PKG_NAME}-pre-unlink.sh
+        # - cp $RECIPE_DIR/pre-link.bat $PREFIX/Scripts/.${PKG_NAME}-pre-link.bat
+        # - cp $RECIPE_DIR/post-link.bat $PREFIX/Scripts/.${PKG_NAME}-post-link.bat
