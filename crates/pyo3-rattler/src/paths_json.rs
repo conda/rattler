@@ -74,6 +74,7 @@ impl PyPathsJson {
     /// For example, if the file is in JSON format, this function parses the JSON string and returns
     /// the resulting object. If the file is not in a parsable format, this function returns an
     /// error.
+    #[allow(clippy::should_implement_trait)]
     #[staticmethod]
     pub fn from_str(str: &str) -> PyResult<Self> {
         Ok(PathsJson::from_str(str)
