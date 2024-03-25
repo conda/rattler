@@ -560,6 +560,11 @@ impl PypiPackage {
     pub fn satisfies(&self, spec: &Requirement) -> bool {
         self.package_data().satisfies(spec)
     }
+
+    /// Returns true if this package should be installed in "editable" mode.
+    pub fn is_editable(&self) -> bool {
+        self.package_data().editable
+    }
 }
 
 /// A helper struct to group package and environment data together.

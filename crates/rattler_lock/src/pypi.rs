@@ -31,6 +31,10 @@ pub struct PypiPackageData {
 
     /// The python version that this package requires.
     pub requires_python: Option<VersionSpecifiers>,
+
+    /// Whether the projects should be installed in editable mode or not.
+    #[serde(default, skip_serializing_if = "should_skip_serializing_editable")]
+    pub editable: bool,
 }
 
 /// Additional runtime configuration of a package. Multiple environments/platforms might refer to
@@ -76,4 +80,9 @@ impl PypiPackageData {
 
         true
     }
+}
+
+/// Used in `skip_serializing_if` to skip serializing the `editable` field if it is `false`.
+fn should_skip_serializing_editable(editable: &bool) -> bool {
+    !*editable
 }
