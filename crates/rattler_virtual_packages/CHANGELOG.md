@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.4](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.3...rattler_virtual_packages-v0.19.4) - 2024-03-21
+
+### Other
+- updated the following local packages: rattler_conda_types
+
+## [0.19.3](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.2...rattler_virtual_packages-v0.19.3) - 2024-03-14
+
+### Other
+- add pixi badge ([#563](https://github.com/mamba-org/rattler/pull/563))
+
 ## [0.19.2](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.1...rattler_virtual_packages-v0.19.2) - 2024-03-08
 
 ### Other

@@ -81,6 +81,7 @@ mod conda;
 mod hash;
 mod parse;
 mod pypi;
+mod url_or_path;
 mod utils;
 
 pub use builder::LockFileBuilder;
@@ -89,6 +90,7 @@ pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
+pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
@@ -444,11 +446,11 @@ impl Package {
         }
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
+    /// Returns the URL or relative path to the package
+    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            Package::Conda(value) => value.url(),
-            Package::Pypi(value) => value.url(),
+            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
+            Self::Pypi(value) => Cow::Borrowed(value.url()),
         }
     }
 }
@@ -545,8 +547,8 @@ impl PypiPackage {
     }
 
     /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
-        &self.package_data().url
+    pub fn url(&self) -> &UrlOrPath {
+        &self.package_data().url_or_path
     }
 
     /// Returns the extras enabled for this package
@@ -586,6 +588,7 @@ mod test {
     #[case("v4/python-lock.yml")]
     #[case("v4/pypi-matplotlib-lock.yml")]
     #[case("v4/turtlesim-lock.yml")]
+    #[case("v4/path-based-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -608,7 +611,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -616,7 +619,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
     }
 }

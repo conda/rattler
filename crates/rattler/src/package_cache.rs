@@ -5,6 +5,7 @@ use chrono::Utc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
+use rattler_digest::Sha256Hash;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::ExtractError;
 use reqwest::StatusCode;
@@ -38,6 +39,14 @@ pub struct CacheKey {
     name: String,
     version: String,
     build_string: String,
+    sha256: Option<Sha256Hash>,
+}
+
+impl CacheKey {
+    /// Return the sha256 hash of the package if it is known.
+    pub fn sha256(&self) -> Option<Sha256Hash> {
+        self.sha256
+    }
 }
 
 impl From<ArchiveIdentifier> for CacheKey {
@@ -46,6 +55,7 @@ impl From<ArchiveIdentifier> for CacheKey {
             name: pkg.name,
             version: pkg.version,
             build_string: pkg.build_string,
+            sha256: None,
         }
     }
 }
@@ -56,6 +66,7 @@ impl From<&PackageRecord> for CacheKey {
             name: record.name.as_normalized().to_string(),
             version: record.version.to_string(),
             build_string: record.build.clone(),
+            sha256: record.sha256,
         }
     }
 }
@@ -200,7 +211,10 @@ impl PackageCache {
         client: reqwest_middleware::ClientWithMiddleware,
         retry_policy: impl RetryPolicy + Send + 'static,
     ) -> Result<PathBuf, PackageCacheError> {
-        self.get_or_fetch(pkg, move |destination| async move {
+        let request_start = Utc::now();
+        let cache_key = pkg.into();
+        let sha256 = cache_key.sha256();
+        self.get_or_fetch(cache_key, move |destination| async move {
             let mut current_try = 0;
             loop {
                 current_try += 1;
@@ -209,6 +223,7 @@ impl PackageCache {
                     client.clone(),
                     url.clone(),
                     &destination,
+                    sha256,
                 )
                 .await;
 
@@ -230,7 +245,7 @@ impl PackageCache {
                 }
 
                 // Determine whether or not to retry based on the retry policy
-                let execute_after = match retry_policy.should_retry(current_try) {
+                let execute_after = match retry_policy.should_retry(request_start, current_try) {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),
                 };

@@ -68,7 +68,7 @@ class LockedPackage:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> lock_packages = env.packages(Platform("osx-arm64"))
-        >>> conda_pkgs = [pkg for pkg in lock_packages if pkg.url.startswith("https://conda.anaconda.org/")]
+        >>> conda_pkgs = [pkg for pkg in lock_packages if pkg.url_or_path.startswith("https://conda.anaconda.org/")]
         >>> conda_pkgs[0].is_conda
         True
         >>>
@@ -88,7 +88,7 @@ class LockedPackage:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> lock_packages = env.packages(Platform("osx-arm64"))
-        >>> pypi_pkgs = [pkg for pkg in lock_packages if pkg.url.startswith("https://files.pythonhosted.org/")]
+        >>> pypi_pkgs = [pkg for pkg in lock_packages if pkg.url_or_path.startswith("https://files.pythonhosted.org/")]
         >>> pypi_pkgs[0].is_pypi
         True
         >>>
@@ -116,7 +116,7 @@ class LockedPackage:
         return self._package.name
 
     @property
-    def url(self) -> str:
+    def url_or_path(self) -> str:
         """
         Returns the URL of the package
 
@@ -127,12 +127,12 @@ class LockedPackage:
         >>> lock_file = LockFile.from_path("../test-data/test.lock")
         >>> env = lock_file.default_environment()
         >>> lock_package = env.packages(Platform("osx-arm64"))[0]
-        >>> lock_package.url
+        >>> lock_package.url_or_path
         'https://conda.anaconda.org/...'
         >>>
         ```
         """
-        return self._package.url
+        return self._package.url_or_path
 
     @property
     def version(self) -> str:

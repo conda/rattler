@@ -2,16 +2,17 @@ use pyo3::prelude::*;
 use pyo3_rattler::{
     get_rattler_version, py_fetch_repo_data, py_index, py_link, py_solve, ActivationException,
     CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
-    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
-    InvalidVersionException, IoException, LinkException, ParseArchException,
+    EnvironmentCreationException, ExtractException, FetchRepoDataException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyAboutJson, PyActivationResult, PyActivationVariables, PyActivator,
-    PyArch, PyAuthenticatedClient, PyChannel, PyChannelConfig, PyEnvironment,
-    PyGenericVirtualPackage, PyLockChannel, PyLockFile, PyLockedPackage, PyMatchSpec, PyModule,
-    PyNamelessMatchSpec, PyPackageHashes, PyPackageName, PyPatchInstructions, PyPlatform,
-    PyPrefixPaths, PyPypiPackageData, PyPypiPackageEnvironmentData, PyRecord, PyRepoData,
-    PyShellEnum, PySparseRepoData, PyVersion, PyVirtualPackage, SolverException,
-    TransactionException, VersionBumpException,
+    PyArch, PyAuthenticatedClient, PyChannel, PyChannelConfig, PyEnvironment, PyFileMode,
+    PyGenericVirtualPackage, PyIndexJson, PyLockChannel, PyLockFile, PyLockedPackage, PyMatchSpec,
+    PyModule, PyNamelessMatchSpec, PyPackageHashes, PyPackageName, PyPatchInstructions, PyPathType,
+    PyPathsEntry, PyPathsJson, PyPlatform, PyPrefixPaths, PyPrefixPlaceholder, PyPypiPackageData,
+    PyPypiPackageEnvironmentData, PyRecord, PyRepoData, PyRunExportsJson, PyShellEnum,
+    PySparseRepoData, PyVersion, PyVirtualPackage, SolverException, TransactionException,
+    VersionBumpException,
 };
 
 #[pymodule]
@@ -57,6 +58,14 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPackageHashes>().unwrap();
 
     m.add_class::<PyAboutJson>().unwrap();
+
+    m.add_class::<PyRunExportsJson>().unwrap();
+    m.add_class::<PyPathsJson>().unwrap();
+    m.add_class::<PyPathsEntry>().unwrap();
+    m.add_class::<PyPathType>().unwrap();
+    m.add_class::<PyPrefixPlaceholder>().unwrap();
+    m.add_class::<PyFileMode>().unwrap();
+    m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
@@ -130,6 +139,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py.get_type::<EnvironmentCreationException>(),
     )
     .unwrap();
+
+    m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
 
     Ok(())
 }

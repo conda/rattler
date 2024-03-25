@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2](https://github.com/mamba-org/rattler/compare/rattler_macros-v0.19.1...rattler_macros-v0.19.2) - 2024-03-14
+
+### Other
+- add pixi badge ([#563](https://github.com/mamba-org/rattler/pull/563))
+
 ## [0.19.1](https://github.com/mamba-org/rattler/compare/rattler_macros-v0.19.0...rattler_macros-v0.19.1) - 2024-03-06
 
 ### Other
