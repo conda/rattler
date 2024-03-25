@@ -10,7 +10,16 @@ from rattler.repo_data import (
 from rattler.channel import Channel, ChannelConfig
 from rattler.networking import AuthenticatedClient, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage
-from rattler.package import PackageName, AboutJson, RunExportsJson, IndexJson
+from rattler.package import (
+    PackageName,
+    AboutJson,
+    RunExportsJson,
+    PathsJson,
+    PathsEntry,
+    PathType,
+    PrefixPlaceholder,
+    FileMode,
+)
 from rattler.prefix import PrefixRecord, PrefixPaths
 from rattler.solver import solve
 from rattler.platform import Platform
@@ -62,5 +71,10 @@ __all__ = [
     "index",
     "AboutJson",
     "RunExportsJson",
+    "PathsJson",
+    "PathsEntry",
+    "PathType",
+    "PrefixPlaceholder",
+    "FileMode",
     "IndexJson",
 ]

@@ -10,6 +10,7 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod package_name;
+mod paths_json;
 mod platform;
 mod prefix_paths;
 mod record;
@@ -41,6 +42,7 @@ use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
+use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use prefix_paths::PyPrefixPaths;
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
 use run_exports_json::PyRunExportsJson;
@@ -102,6 +104,11 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyAboutJson>().unwrap();
 
     m.add_class::<PyRunExportsJson>().unwrap();
+    m.add_class::<PyPathsJson>().unwrap();
+    m.add_class::<PyPathsEntry>().unwrap();
+    m.add_class::<PyPathType>().unwrap();
+    m.add_class::<PyPrefixPlaceholder>().unwrap();
+    m.add_class::<PyFileMode>().unwrap();
     m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
