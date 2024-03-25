@@ -89,7 +89,7 @@ pub use channel::Channel;
 pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
-pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
+pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
