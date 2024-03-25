@@ -92,7 +92,7 @@ fn should_skip_serializing_editable(editable: &bool) -> bool {
 
 /// A struct that wraps the hashable part of a source package.
 ///
-/// This struct the relevant parts of a source package that are used to compute a [`PackageHash`].
+/// This struct the relevant parts of a source package that are used to compute a [`PackageHashes`].
 pub struct PypiSourceTreeHashable {
     /// The contents of an optional pyproject.toml file.
     pub pyproject_toml: Option<String>,
@@ -129,7 +129,7 @@ impl PypiSourceTreeHashable {
         })
     }
 
-    /// Determine the [`PackageHash`] of this source package.
+    /// Determine the [`PackageHashes`] of this source package.
     pub fn hash(&self) -> PackageHashes {
         let mut hasher = Sha256::new();
 
