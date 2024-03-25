@@ -337,8 +337,8 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn url(&self) -> String {
-        self.inner.url().to_string()
+    pub fn url_or_path(&self) -> String {
+        self.inner.url_or_path().to_string()
     }
 
     pub fn as_conda(&self) -> Option<PyRecord> {
@@ -418,8 +418,8 @@ impl PyPypiPackageData {
 
     /// The URL that points to where the artifact can be downloaded from.
     #[getter]
-    pub fn url(&self) -> String {
-        self.inner.url.to_string()
+    pub fn url_or_path(&self) -> String {
+        self.inner.url_or_path.to_string()
     }
 
     /// Hashes of the file pointed to by `url`.

@@ -54,7 +54,7 @@ nav:
           - PathType: path_type.md
           - PrefixPlaceholder: prefix_placeholder.md
           - FileMode: file_mode.md
-
+          - IndexJson: index_json.md
       - match_spec:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md

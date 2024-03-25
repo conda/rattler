@@ -65,9 +65,7 @@ class PathsJson:
         resulting object. If the file is not in a parsable format or if the file
         could not be read, this function returns an error.
         """
-        return PathsJson._from_py_paths_json(
-            PyPathsJson.from_package_directory(Path(path))
-        )
+        return PathsJson._from_py_paths_json(PyPathsJson.from_package_directory(Path(path)))
 
     @staticmethod
     def from_str(string: str) -> PathsJson:
@@ -102,9 +100,7 @@ class PathsJson:
 
         This function reads the different files and tries to reconstruct a `paths.json` from it.
         """
-        return PathsJson._from_py_paths_json(
-            PyPathsJson.from_deprecated_package_directory(path)
-        )
+        return PathsJson._from_py_paths_json(PyPathsJson.from_deprecated_package_directory(path))
 
     @staticmethod
     def from_package_directory_with_deprecated_fallback(
@@ -114,9 +110,7 @@ class PathsJson:
         Reads the file from a package archive directory. If the `paths.json` file could not be found
         use the `from_deprecated_package_directory` method as a fallback.
         """
-        return PathsJson._from_py_paths_json(
-            PyPathsJson.from_package_directory_with_deprecated_fallback(path)
-        )
+        return PathsJson._from_py_paths_json(PyPathsJson.from_package_directory_with_deprecated_fallback(path))
 
     @property
     def paths(self) -> List[PathsEntry]:
@@ -440,9 +434,7 @@ class PrefixPlaceholder:
         return self._inner.placeholder
 
     @classmethod
-    def _from_py_prefix_placeholder(
-        cls, py_prefix_placeholder: PyPrefixPlaceholder
-    ) -> PrefixPlaceholder:
+    def _from_py_prefix_placeholder(cls, py_prefix_placeholder: PyPrefixPlaceholder) -> PrefixPlaceholder:
         prefix_placeholder = cls.__new__(cls)
         prefix_placeholder._inner = py_prefix_placeholder
 

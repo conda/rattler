@@ -8,6 +8,7 @@ from rattler.package.paths_json import (
     PrefixPlaceholder,
     FileMode,
 )
+from rattler.package.index_json import IndexJson
 
 __all__ = [
     "PackageName",
@@ -18,4 +19,5 @@ __all__ = [
     "PathType",
     "PrefixPlaceholder",
     "FileMode",
+    "IndexJson",
 ]

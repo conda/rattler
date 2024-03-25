@@ -2180,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2224,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.20.2"
+version = "0.20.3"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2266,7 +2266,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.20.2"
+version = "0.21.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2309,7 +2309,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.19.2"
+version = "0.20.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2338,7 +2338,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2363,7 +2363,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2401,7 +2401,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.5",
@@ -2416,7 +2416,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.20.2"
+version = "0.20.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2435,7 +2435,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.19.3"
+version = "0.19.4"
 dependencies = [
  "cfg-if",
  "libloading",

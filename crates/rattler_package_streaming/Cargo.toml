@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version = "0.20.0"
+version = "0.20.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -16,9 +16,9 @@ chrono = { workspace = true }
 futures-util = { workspace = true }
 itertools = { workspace = true }
 num_cpus = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.20.2", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.20.3", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "0.19.2", default-features = false }
-rattler_networking = { path="../rattler_networking", version = "0.19.2", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.0", default-features = false }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 serde_json = { workspace = true }

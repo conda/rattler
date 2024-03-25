@@ -76,4 +76,5 @@ __all__ = [
     "PathType",
     "PrefixPlaceholder",
     "FileMode",
+    "IndexJson",
 ]

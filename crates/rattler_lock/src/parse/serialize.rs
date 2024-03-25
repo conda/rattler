@@ -1,10 +1,11 @@
 use super::FILE_VERSION;
 use crate::utils::serde::RawCondaPackageData;
-use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData};
+use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData, UrlOrPath};
 use itertools::Itertools;
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashSet};
 use std::{cmp::Ordering, collections::BTreeMap};
 use url::Url;
@@ -37,17 +38,19 @@ enum SerializablePackageSelector<'a> {
         conda: &'a Url,
     },
     Pypi {
-        pypi: &'a Url,
+        pypi: &'a UrlOrPath,
         #[serde(skip_serializing_if = "BTreeSet::is_empty")]
         extras: &'a BTreeSet<ExtraName>,
     },
 }
 
 impl<'a> SerializablePackageSelector<'a> {
-    fn url(&self) -> &Url {
+    fn url(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            SerializablePackageSelector::Conda { conda } => conda,
-            SerializablePackageSelector::Pypi { pypi, .. } => pypi,
+            SerializablePackageSelector::Conda { conda } => {
+                Cow::Owned(UrlOrPath::Url((*conda).clone()))
+            }
+            SerializablePackageSelector::Pypi { pypi, .. } => Cow::Borrowed(pypi),
         }
     }
 }
@@ -78,32 +81,39 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
             (
                 SerializablePackageSelector::Conda { conda: a },
                 SerializablePackageSelector::Conda { conda: b },
-            )
-            | (
+            ) => compare_url_by_filename(a, b),
+            (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
-            ) => {
-                // First sort packages just by their filename. Since most of the time the urls end
-                // in the packages filename this causes the urls to be sorted by package name.
-                if let (Some(a), Some(b)) = (
-                    a.path_segments()
-                        .and_then(Iterator::last)
-                        .map(str::to_lowercase),
-                    b.path_segments()
-                        .and_then(Iterator::last)
-                        .map(str::to_lowercase),
-                ) {
-                    match a.cmp(&b) {
-                        Ordering::Equal => {}
-                        ordering => return ordering,
-                    }
-                }
-
-                // Otherwise just sort by their full URL
-                a.cmp(b)
-            }
+            ) => match (a, b) {
+                (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
+                (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
+                (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
+                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.cmp(b),
+            },
         }
     }
+}
+
+/// First sort packages just by their filename. Since most of the time the urls end
+/// in the packages filename this causes the urls to be sorted by package name.
+fn compare_url_by_filename(a: &Url, b: &Url) -> Ordering {
+    if let (Some(a), Some(b)) = (
+        a.path_segments()
+            .and_then(Iterator::last)
+            .map(str::to_lowercase),
+        b.path_segments()
+            .and_then(Iterator::last)
+            .map(str::to_lowercase),
+    ) {
+        match a.cmp(&b) {
+            Ordering::Equal => {}
+            ordering => return ordering,
+        }
+    }
+
+    // Otherwise just sort by their full URL
+    a.cmp(b)
 }
 
 impl<'a> SerializablePackageData<'a> {
@@ -114,10 +124,12 @@ impl<'a> SerializablePackageData<'a> {
         }
     }
 
-    fn url(&self) -> &Url {
+    fn url(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            SerializablePackageData::Conda(p) => &p.url,
-            SerializablePackageData::Pypi(p) => &p.url,
+            SerializablePackageData::Conda(p) => {
+                Cow::Owned(UrlOrPath::Url(p.url.clone().into_owned()))
+            }
+            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.url_or_path),
         }
     }
 }
@@ -197,7 +209,7 @@ impl Serialize for LockFile {
                                                     .pypi_environment_package_datas
                                                     [pypi_runtime_index];
                                                 SerializablePackageSelector::Pypi {
-                                                    pypi: &pypi_package.url,
+                                                    pypi: &pypi_package.url_or_path,
                                                     extras: &pypi_runtime.extras,
                                                 }
                                             }
