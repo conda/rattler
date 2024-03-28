@@ -112,6 +112,12 @@ fn ignore_not_found<C>(result: std::io::Result<C>) -> std::io::Result<Option<C>>
     }
 }
 
+/// Ensure that line endings are normalized to `\n` this ensures that if files are checked out on
+/// windows through git they still have the same hash as on linux.
+fn normalize_file_contents(contents: &str) -> String {
+    contents.replace("\r\n", "\n")
+}
+
 impl PypiSourceTreeHashable {
     /// Creates a new [`PypiSourceTreeHashable`] from a directory containing a source package.
     pub fn from_directory(directory: impl AsRef<Path>) -> std::io::Result<Self> {
@@ -123,9 +129,9 @@ impl PypiSourceTreeHashable {
         let setup_cfg = ignore_not_found(fs::read_to_string(directory.join("setup.cfg")))?;
 
         Ok(Self {
-            pyproject_toml,
-            setup_py,
-            setup_cfg,
+            pyproject_toml: pyproject_toml.as_deref().map(normalize_file_contents),
+            setup_py: setup_py.as_deref().map(normalize_file_contents),
+            setup_cfg: setup_cfg.as_deref().map(normalize_file_contents),
         })
     }
 
