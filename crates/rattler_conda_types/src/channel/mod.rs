@@ -1,5 +1,6 @@
 use itertools::Itertools;
 use std::borrow::Cow;
+use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
@@ -27,6 +28,76 @@ pub struct ChannelConfig {
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
+}
+
+impl ChannelConfig {
+    /// Returns the canonical name of a channel with the given base url.
+    pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
+        if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
+            NamedChannelOrUrl::Name(stripped.trim_matches('/').to_string())
+        } else {
+            NamedChannelOrUrl::Url(base_url.clone())
+        }
+    }
+}
+
+/// Represents a channel description as either a name (e.g. `conda-forge`) or a base url.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum NamedChannelOrUrl {
+    /// A named channel
+    Name(String),
+
+    /// A url
+    Url(Url),
+}
+
+impl NamedChannelOrUrl {
+    /// Returns the string representation of the channel.
+    ///
+    /// This method ensures that if the channel is a url, it does not end with a `/`.
+    pub fn as_str(&self) -> &str {
+        match self {
+            NamedChannelOrUrl::Name(name) => name,
+            NamedChannelOrUrl::Url(url) => url.as_str().trim_end_matches('/'),
+        }
+    }
+
+    /// Converts the channel to a base url using the given configuration.
+    pub fn into_base_url(self, config: &ChannelConfig) -> Url {
+        match self {
+            NamedChannelOrUrl::Name(name) => {
+                let mut base_url = config.channel_alias.clone();
+                if let Ok(mut segments) = base_url.path_segments_mut() {
+                    segments.push(&name);
+                }
+                base_url
+            }
+            NamedChannelOrUrl::Url(url) => url,
+        }
+    }
+
+    /// Converts this instance into a channel.
+    pub fn into_channel(self, config: &ChannelConfig) -> Channel {
+        let name = match &self {
+            NamedChannelOrUrl::Name(name) => Some(name.clone()),
+            NamedChannelOrUrl::Url(base_url) => match config.canonical_name(base_url) {
+                NamedChannelOrUrl::Name(name) => Some(name),
+                NamedChannelOrUrl::Url(_) => None,
+            },
+        };
+        let base_url = self.into_base_url(config);
+        Channel {
+            platforms: None,
+            base_url,
+            name,
+        }
+    }
+}
+
+impl Display for NamedChannelOrUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 impl Default for ChannelConfig {
@@ -582,5 +653,24 @@ mod tests {
         assert!(is_path("C:/foo"));
 
         assert!(!is_path("conda-forge/label/rust_dev"));
+    }
+
+    #[test]
+    fn config_canonical_name() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+        };
+        assert_eq!(
+            channel_config
+                .canonical_name(&Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap())
+                .as_str(),
+            "conda-forge"
+        );
+        assert_eq!(
+            channel_config
+                .canonical_name(&Url::from_str("https://prefix.dev/conda-forge/").unwrap())
+                .as_str(),
+            "https://prefix.dev/conda-forge"
+        );
     }
 }
