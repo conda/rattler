@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 597
+assertion_line: 602
 expression: conda_lock
 ---
 version: 4
@@ -251,6 +251,7 @@ packages:
     name: minimal-project
     version: "0.1"
     path: "./minimal_project"
+    editable: true
   - kind: conda
     name: openssl
     version: 3.2.1

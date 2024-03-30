@@ -151,6 +151,26 @@ class PypiPackageData:
         """
         return self._data.requires_python
 
+    @property
+    def is_editable(self) -> bool:
+        """
+        Whether the package should be installed in editable mode or not.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile, Platform
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
+        >>> data.is_editable
+        False
+        >>>
+        ```
+        """
+        return self._data.is_editable
+
     @classmethod
     def _from_py_pypi_package_data(cls, pkg_data: PyPypiPackageData) -> PypiPackageData:
         """

@@ -422,6 +422,12 @@ impl PyPypiPackageData {
         self.inner.url_or_path.to_string()
     }
 
+    /// Whether the package is installed in editable mode or not.
+    #[getter]
+    pub fn is_editable(&self) -> bool {
+        self.inner.editable
+    }
+
     /// Hashes of the file pointed to by `url`.
     #[getter]
     pub fn hash(&self) -> Option<PyPackageHashes> {

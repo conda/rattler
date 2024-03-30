@@ -185,6 +185,7 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
                         requires_python: pkg.requires_python,
                         url_or_path: UrlOrPath::Url(pkg.url),
                         hash: pkg.hash,
+                        editable: false,
                     })
                     .0;
                 EnvironmentPackageData::Pypi(
