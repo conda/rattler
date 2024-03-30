@@ -415,6 +415,8 @@ fn matchspec_parser(
     };
 
     nameless_match_spec.namespace = namespace
+        .map(str::trim)
+        .filter(|namespace| !namespace.is_empty())
         .map(ToOwned::to_owned)
         .or(nameless_match_spec.namespace);
 
@@ -794,5 +796,11 @@ mod tests {
     fn test_missing_package_name() {
         let package_name = strip_package_name("");
         assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+    }
+
+    #[test]
+    fn test_empty_namespace() {
+        let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
+        assert!(spec.namespace.is_none());
     }
 }
