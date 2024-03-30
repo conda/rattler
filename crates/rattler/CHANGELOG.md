@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.6](https://github.com/mamba-org/rattler/compare/rattler-v0.19.5...rattler-v0.19.6) - 2024-03-30
+
+### Other
+- remove unused dependencies ([#585](https://github.com/mamba-org/rattler/pull/585))
+
 ## [0.19.5](https://github.com/mamba-org/rattler/compare/rattler-v0.19.4...rattler-v0.19.5) - 2024-03-21
 
 ### Fixed
