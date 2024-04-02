@@ -481,6 +481,8 @@ pub fn copy_and_replace_placeholders(
             )?;
         }
         FileMode::Binary => {
+            // conda does not replace the prefix in the binary files on windows
+            // DLLs are loaded quite differently anyways (there is no rpath, for example).
             if !target_platform.is_windows() {
                 copy_and_replace_cstring_placeholder(
                     source_bytes,
