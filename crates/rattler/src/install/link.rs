@@ -196,6 +196,7 @@ pub fn link_file(
             &mut destination_writer,
             placeholder,
             &target_prefix,
+            &target_platform,
             *file_mode,
         )
         .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
@@ -467,6 +468,7 @@ pub fn copy_and_replace_placeholders(
     destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    target_platform: &Platform,
     file_mode: FileMode,
 ) -> Result<(), std::io::Error> {
     match file_mode {
@@ -479,12 +481,16 @@ pub fn copy_and_replace_placeholders(
             )?;
         }
         FileMode::Binary => {
-            copy_and_replace_cstring_placeholder(
-                source_bytes,
-                destination,
-                prefix_placeholder,
-                target_prefix,
-            )?;
+            // conda does not replace the prefix in the binary files on windows
+            // DLLs are loaded quite differently anyways (there is no rpath, for example).
+            if !target_platform.is_windows() {
+                copy_and_replace_cstring_placeholder(
+                    source_bytes,
+                    destination,
+                    prefix_placeholder,
+                    target_prefix,
+                )?;
+            }
         }
     }
     Ok(())
