@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler-v0.20.0...rattler-v0.20.1) - 2024-04-02
+
+### Fixed
+- copy windows dll without replacements ([#590](https://github.com/mamba-org/rattler/pull/590))
+
 ## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler-v0.19.6...rattler-v0.20.0) - 2024-04-02
 
 ### Fixed
