@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.21.0...rattler_lock-v0.22.0) - 2024-03-30
+
+### Added
+- editable pypi packages ([#581](https://github.com/mamba-org/rattler/pull/581))
+
 ## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.20.2...rattler_lock-v0.21.0) - 2024-03-21
 
 ### Added

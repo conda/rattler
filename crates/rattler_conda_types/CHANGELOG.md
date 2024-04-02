@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.4](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.3...rattler_conda_types-v0.20.4) - 2024-03-30
+
+### Fixed
+- matchspec empty namespace and channel cannonical name ([#582](https://github.com/mamba-org/rattler/pull/582))
+
 ## [0.20.3](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.2...rattler_conda_types-v0.20.3) - 2024-03-21
 
 ### Fixed
