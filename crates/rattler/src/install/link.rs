@@ -465,7 +465,7 @@ fn copy_to_destination(
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
 pub fn copy_and_replace_placeholders(
     source_bytes: &[u8],
-    destination: impl Write,
+    mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
     target_platform: &Platform,
@@ -490,6 +490,8 @@ pub fn copy_and_replace_placeholders(
                     prefix_placeholder,
                     target_prefix,
                 )?;
+            } else {
+                destination.write_all(source_bytes)?;
             }
         }
     }
