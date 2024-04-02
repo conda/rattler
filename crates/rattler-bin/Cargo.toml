@@ -30,7 +30,7 @@ futures = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.20.0", default-features = false }
+rattler = { path="../rattler", version = "0.20.1", default-features = false }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.20.4", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.20.0", default-features = false }
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.19.5", default-features = false, features = ["sparse"] }
