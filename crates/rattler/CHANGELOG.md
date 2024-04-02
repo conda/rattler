@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler-v0.19.6...rattler-v0.20.0) - 2024-04-02
+
+### Fixed
+- do not do cstring replacement on windows ([#589](https://github.com/mamba-org/rattler/pull/589))
+
 ## [0.19.6](https://github.com/mamba-org/rattler/compare/rattler-v0.19.5...rattler-v0.19.6) - 2024-03-30
 
 ### Other
