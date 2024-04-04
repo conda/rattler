@@ -92,7 +92,7 @@ impl AuthenticationStorage {
                     return Ok(Some(auth));
                 }
                 Ok(None) => {
-                    return Ok(None);
+                    continue;
                 }
                 Err(e) => {
                     tracing::warn!("Error retrieving credentials from backend: {}", e);
