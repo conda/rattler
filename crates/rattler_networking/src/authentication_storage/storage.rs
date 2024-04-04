@@ -100,7 +100,7 @@ impl AuthenticationStorage {
             }
         }
 
-        Err(anyhow!("All backends failed to retrieve credentials"))
+        Ok(None)
     }
 
     /// Retrieve the authentication information for the given URL
