@@ -26,6 +26,7 @@ pub fn py_link<'a>(
     installed_packages: Vec<&'a PyAny>,
     platform: &PyPlatform,
     client: PyAuthenticatedClient,
+    execute_link_scripts: bool,
 ) -> PyResult<&'a PyAny> {
     let dependencies = dependencies
         .into_iter()
@@ -67,10 +68,11 @@ async fn execute_transaction(
     installed_packages: Vec<PrefixRecord>,
     cache_dir: PathBuf,
     client: ClientWithMiddleware,
+    execute_link_scripts: bool,
 ) -> Result<(), PyRattlerError> {
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
-    let install_driver = InstallDriver::new(100, Some(&installed_packages));
+    let install_driver = InstallDriver::new(100, Some(&installed_packages), !execute_link_scripts);
 
     let install_options = InstallOptions {
         python_info: transaction.python_info.clone(),

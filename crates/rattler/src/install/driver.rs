@@ -28,7 +28,7 @@ pub struct InstallDriver {
     inner: Arc<Mutex<InstallDriverInner>>,
     concurrency_limit: usize,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
-    disable_link_scripts: bool,
+    execute_link_scripts: bool,
 }
 
 struct InstallDriverInner {
@@ -40,7 +40,7 @@ type Task = Box<dyn FnOnce() + Send + 'static>;
 
 impl Default for InstallDriver {
     fn default() -> Self {
-        Self::new(100, None, false)
+        Self::new(100, None, true)
     }
 }
 
@@ -51,7 +51,7 @@ impl InstallDriver {
     pub fn new(
         concurrency_limit: usize,
         prefix_records: Option<&[PrefixRecord]>,
-        disable_link_scripts: bool,
+        execute_link_scripts: bool,
     ) -> Self {
         let (tx, mut rx) = unbounded_channel::<Task>();
         let join_handle = tokio::spawn(async move {
@@ -99,7 +99,7 @@ impl InstallDriver {
             inner: Arc::new(Mutex::new(InstallDriverInner { tx, join_handle })),
             concurrency_limit,
             clobber_registry: Arc::new(Mutex::new(clobber_registry)),
-            disable_link_scripts,
+            execute_link_scripts,
         }
     }
 
@@ -162,7 +162,7 @@ impl InstallDriver {
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
     ) -> Result<(), InstallError> {
-        if !self.disable_link_scripts {
+        if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(()) => {}
                 Err(e) => {
@@ -200,7 +200,7 @@ impl InstallDriver {
                 tracing::error!("Error unclobbering packages: {:?}", e);
             });
 
-        if !self.disable_link_scripts {
+        if self.execute_link_scripts {
             self.run_post_link_scripts(transaction, &required_packages, target_prefix)
                 .unwrap_or_else(|e| {
                     tracing::error!("Error running post-link scripts: {:?}", e);
