@@ -57,6 +57,7 @@ pub fn py_link<'a>(
             installed_packages_clone,
             cache_dir,
             client.inner,
+            execute_link_scripts,
         )
         .await?)
     })
@@ -72,7 +73,7 @@ async fn execute_transaction(
 ) -> Result<(), PyRattlerError> {
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
-    let install_driver = InstallDriver::new(100, Some(&installed_packages), !execute_link_scripts);
+    let install_driver = InstallDriver::new(100, Some(&installed_packages), execute_link_scripts);
 
     let install_options = InstallOptions {
         python_info: transaction.python_info.clone(),
