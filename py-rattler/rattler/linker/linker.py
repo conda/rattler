@@ -16,6 +16,7 @@ async def link(
     cache_dir: os.PathLike[str],
     installed_packages: Optional[List[PrefixRecord]] = None,
     platform: Optional[Platform] = None,
+    execute_link_scripts: bool = True,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in
@@ -34,6 +35,8 @@ async def link(
                                       `{target_prefix}/conda-meta/`.
         platform: Target platform to create and link the
                             environment. Defaults to current platform.
+        execute_link_scripts: Wether to execute the post-link and pre-unlink scripts
+                              that may be part of a package. Defaults to True.
     """
     platform = platform or Platform.current()
     client = AuthenticatedClient()
@@ -45,4 +48,5 @@ async def link(
         installed_packages or [],
         platform._inner,
         client._client,
+        execute_link_scripts,
     )

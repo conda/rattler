@@ -66,6 +66,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0952808a6c2afd1aa8947271f3a60f1a6763c7b912d210184c5149b5cf147247"
 
 [[package]]
+name = "archspec"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9db67cd9cf4f56a10d2cbae6a3b552e5bd36701fd37b74a18c14a231bdf446c7"
+dependencies = [
+ "cfg-if",
+ "itertools",
+ "libc",
+ "serde",
+ "serde_json",
+ "sysctl",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -590,12 +604,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "drop_bomb"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bda8e21c04aca2ae33ffc2fd8c23134f3cac46db123ba97bd9d3f3b8a4a85e1"
-
-[[package]]
 name = "either"
 version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -617,6 +625,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7268b386296a025e474d5140678f75d6de9493ae55a5d709eeb9dd08149945e1"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "enum-as-inner"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ffccbb6966c05b32ef8fbac435df276c4ae4d3dc55a8cd0eb9745e6c12f546a"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.53",
 ]
 
 [[package]]
@@ -2180,7 +2200,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.19.5"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2188,7 +2208,6 @@ dependencies = [
  "chrono",
  "digest",
  "dirs",
- "drop_bomb",
  "fs-err",
  "futures",
  "fxhash",
@@ -2204,6 +2223,7 @@ dependencies = [
  "rattler_digest",
  "rattler_networking",
  "rattler_package_streaming",
+ "rattler_shell",
  "reflink-copy",
  "regex",
  "reqwest",
@@ -2224,7 +2244,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2266,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2279,7 +2299,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2338,7 +2358,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.20.1"
+version = "0.20.2"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2363,7 +2383,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2401,7 +2421,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.5",
@@ -2416,7 +2436,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2435,8 +2455,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.19.4"
+version = "0.19.5"
 dependencies = [
+ "archspec",
  "cfg-if",
  "libloading",
  "nom",
@@ -3055,6 +3076,20 @@ name = "sync_wrapper"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
+
+[[package]]
+name = "sysctl"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec7dddc5f0fee506baf8b9fdb989e242f17e4b11c61dfbb0635b705217199eea"
+dependencies = [
+ "bitflags 2.5.0",
+ "byteorder",
+ "enum-as-inner",
+ "libc",
+ "thiserror",
+ "walkdir",
+]
 
 [[package]]
 name = "system-configuration"

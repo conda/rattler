@@ -18,9 +18,13 @@ mod clobber_registry;
 mod driver;
 mod entry_point;
 pub mod link;
+pub mod link_script;
 mod python;
 mod transaction;
 pub mod unlink;
+
+#[cfg(test)]
+mod test_utils;
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;

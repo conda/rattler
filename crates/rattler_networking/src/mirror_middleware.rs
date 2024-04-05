@@ -189,7 +189,7 @@ mod test {
     use super::Mirror;
 
     async fn count(State(name): State<String>) -> String {
-        format!("Hi from counter: {}", name)
+        format!("Hi from counter: {name}")
     }
 
     async fn broken_return() -> StatusCode {
@@ -237,9 +237,9 @@ mod test {
         let res = client.get("http://bla.com/count").send().await.unwrap();
         assert!(res.status().is_success());
         let res = res.text().await.unwrap();
-        println!("{}", res);
+        println!("{res}");
         // should always take the first element from the list
-        assert!(res == "Hi from counter: server 1")
+        assert!(res == "Hi from counter: server 1");
     }
 
     fn mirror_setting(url: Url) -> Mirror {

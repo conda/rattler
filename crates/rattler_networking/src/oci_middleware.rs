@@ -286,7 +286,7 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware() {
-        let middleware = OciMiddleware::default();
+        let middleware = OciMiddleware;
 
         let client = reqwest::Client::new();
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
@@ -310,7 +310,7 @@ mod tests {
         std::io::copy(&mut response.bytes().await.unwrap().as_ref(), &mut hasher).unwrap();
         let hash = hasher.finalize();
         assert_eq!(
-            format!("{:x}", hash),
+            format!("{hash:x}"),
             "8485a64911c7011c0270b8266ab2bffa1da41c59ac4f0a48000c31d4f4a966dd"
         );
     }
@@ -319,7 +319,7 @@ mod tests {
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]
     #[tokio::test]
     async fn test_oci_middleware_repodata() {
-        let middleware = OciMiddleware::default();
+        let middleware = OciMiddleware;
 
         let client = reqwest::Client::new();
         let client_with_middleware = reqwest_middleware::ClientBuilder::new(client)
