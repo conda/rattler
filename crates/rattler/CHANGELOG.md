@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/baszalmstra/rattler/compare/rattler-v0.20.1...rattler-v0.21.0) - 2024-04-05
+
+### Fixed
+- replace long shebangs with `/usr/bin/env` ([#594](https://github.com/baszalmstra/rattler/pull/594))
+- run post-link scripts ([#574](https://github.com/baszalmstra/rattler/pull/574))
+
 ## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler-v0.20.0...rattler-v0.20.1) - 2024-04-02
 
 ### Fixed
