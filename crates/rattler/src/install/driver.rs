@@ -1,4 +1,5 @@
 use super::clobber_registry::ClobberRegistry;
+use super::link_script::PrePostLinkResult;
 use super::unlink::{recursively_remove_empty_directories, UnlinkError};
 use super::{InstallError, Transaction};
 use futures::stream::FuturesUnordered;
@@ -161,16 +162,19 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
-    ) -> Result<(), InstallError> {
+    ) -> Result<Option<PrePostLinkResult>, InstallError> {
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
-                Ok(()) => {}
+                Ok(res) => {
+                    return Ok(Some(res));
+                }
                 Err(e) => {
                     tracing::error!("Error running pre-unlink scripts: {:?}", e);
                 }
             }
         }
-        Ok(())
+
+        Ok(None)
     }
 
     /// Call this after all packages have been installed to perform any post processing that is
@@ -182,7 +186,7 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
-    ) -> Result<(), InstallError> {
+    ) -> Result<Option<PrePostLinkResult>, InstallError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
             .map_err(InstallError::PostProcessFailed)?;
 
@@ -201,13 +205,17 @@ impl InstallDriver {
             });
 
         if self.execute_link_scripts {
-            self.run_post_link_scripts(transaction, &required_packages, target_prefix)
-                .unwrap_or_else(|e| {
+            match self.run_post_link_scripts(transaction, &required_packages, target_prefix) {
+                Ok(res) => {
+                    return Ok(Some(res));
+                }
+                Err(e) => {
                     tracing::error!("Error running post-link scripts: {:?}", e);
-                });
+                }
+            }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Remove all empty directories that are not part of the new prefix records.

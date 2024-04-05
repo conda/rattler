@@ -4,7 +4,7 @@ use std::{
     path::Path,
 };
 
-use rattler_conda_types::{PackageRecord, Platform, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord, RepoDataRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 
 use super::{InstallDriver, Transaction};
@@ -62,13 +62,21 @@ impl ToString for LinkScriptType {
     }
 }
 
+/// Records the results of running pre/post link scripts
+pub struct PrePostLinkResult {
+    /// Messages from the link scripts
+    pub messages: HashMap<PackageName, String>,
+    /// Packages that failed to run the link scripts
+    pub failed_packages: Vec<PackageName>,
+}
+
 /// Run the link scripts for a given package
 pub fn run_link_scripts<'a>(
     link_script_type: LinkScriptType,
     prefix_records: impl Iterator<Item = &'a PrefixRecord>,
     target_prefix: &Path,
     platform: &Platform,
-) -> Result<(), LinkScriptError> {
+) -> Result<PrePostLinkResult, LinkScriptError> {
     let mut env = HashMap::new();
     env.insert(
         "PREFIX".to_string(),
@@ -77,6 +85,8 @@ pub fn run_link_scripts<'a>(
 
     // prefix records are topologically sorted, so we can be sure that all dependencies are
     // installed before the package itself.
+    let mut failed_packages = Vec::new();
+    let mut messages = HashMap::<PackageName, String>::new();
     for record in prefix_records {
         let prec = &record.repodata_record.package_record;
         let link_file = target_prefix.join(&link_script_type.get_path(prec, platform));
@@ -109,11 +119,13 @@ pub fn run_link_scripts<'a>(
             ) {
                 Ok(o) if o.status.success() => {}
                 Ok(o) => {
+                    failed_packages.push(prec.name.clone());
                     tracing::warn!("Error running post-link script. Status: {:?}", o.status);
                     tracing::warn!("  stdout: {}", String::from_utf8_lossy(&o.stdout));
                     tracing::warn!("  stderr: {}", String::from_utf8_lossy(&o.stderr));
                 }
                 Err(e) => {
+                    failed_packages.push(prec.name.clone());
                     tracing::error!("Error running post-link script: {:?}", e);
                 }
             }
@@ -127,13 +139,19 @@ pub fn run_link_scripts<'a>(
                     prec.name.as_normalized(),
                     message
                 );
+                messages.insert(prec.name.clone(), message);
                 // Remove the message file
                 std::fs::remove_file(&message_file)?;
+            } else {
+                messages.insert(prec.name.clone(), "".to_string());
             }
         }
     }
 
-    Ok(())
+    Ok(PrePostLinkResult {
+        messages,
+        failed_packages,
+    })
 }
 
 impl InstallDriver {
@@ -143,7 +161,7 @@ impl InstallDriver {
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
-    ) -> Result<(), LinkScriptError> {
+    ) -> Result<PrePostLinkResult, LinkScriptError> {
         let to_install = transaction
             .installed_packages()
             .map(|r| &r.package_record.name)
@@ -167,7 +185,7 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<PrefixRecord, RepoDataRecord>,
         target_prefix: &Path,
-    ) -> Result<(), LinkScriptError> {
+    ) -> Result<PrePostLinkResult, LinkScriptError> {
         run_link_scripts(
             LinkScriptType::PreUnlink,
             transaction.removed_packages(),
