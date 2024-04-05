@@ -18,6 +18,7 @@ use crate::{
 
 // TODO: Accept functions to report progress
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 pub fn py_link<'a>(
     py: Python<'a>,
     dependencies: Vec<&'a PyAny>,
