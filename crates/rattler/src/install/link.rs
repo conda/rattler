@@ -1,6 +1,7 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
 use memmap2::Mmap;
+use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
 use rattler_digest::HashingWriter;
@@ -479,6 +480,7 @@ pub fn copy_and_replace_placeholders(
                 destination,
                 prefix_placeholder,
                 target_prefix,
+                target_platform,
             )?;
         }
         FileMode::Binary => {
@@ -498,10 +500,8 @@ pub fn copy_and_replace_placeholders(
     }
     Ok(())
 }
-use once_cell::sync::Lazy;
 
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
     // ^(#!      // pretty much the whole match string
     // (?:[ ]*)  // allow spaces between #! and beginning of
     //           // the executable path
@@ -511,6 +511,7 @@ static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
     //                         // whitespace character
     // (.*))$    // the rest of the line can contain option
     //           // flags and end whole_shebang group
+    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
 });
 
 /// The maximum length of a shebang line. If the shebang is longer than this it will be replaced
@@ -525,7 +526,7 @@ fn replace_long_shebang(shebang: &str) -> String {
         assert!(shebang.starts_with("#!"));
         if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
             let shebang_path = Path::new(&captures[2]);
-            tracing::info!("New shebang path {}", shebang_path.display());
+            tracing::debug!("New shebang path {}", shebang_path.display());
             format!(
                 "#!/usr/bin/env {}{}",
                 shebang_path.file_name().unwrap().to_str().unwrap(),
@@ -550,13 +551,15 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    target_platform: &Platform,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
     // check if we have a shebang. We need to handle it differently because it has a maximum length
-    if source_bytes.starts_with(b"!#") {
+    // that can be exceeded in very long target prefix's.
+    if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
         // extract first line
         let (first, rest) =
             source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
@@ -666,6 +669,7 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
 
 #[cfg(test)]
 mod test {
+    use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -689,6 +693,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
+            &Platform::Linux64,
         )
         .unwrap();
         assert_eq!(
@@ -757,5 +762,31 @@ mod test {
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
         let replaced = super::replace_long_shebang(shebang);
         assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
+    }
+
+    #[test]
+    fn test_replace_long_prefix_in_text_file() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_file = test_data_dir.join("shebang_test.txt");
+        let prefix_placeholder = "/this/is/placeholder";
+        let mut target_prefix = "/super/long/".to_string();
+        for _ in 0..15 {
+            target_prefix.push_str("verylongstring/");
+        }
+        let input = std::fs::read(&test_file).unwrap();
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            &target_prefix,
+            &Platform::Linux64,
+        )
+        .unwrap();
+
+        let output = output.into_inner();
+        let replaced = String::from_utf8_lossy(&output);
+        insta::assert_snapshot!(replaced);
     }
 }
