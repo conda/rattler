@@ -66,10 +66,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/mergedeep-1.3.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-1.5.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-autorefs-0.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.4.4-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.5.17-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-extensions-1.3.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.23.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.7.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.24.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/mypy-1.5.1-py311h459d7ec_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mypy_extensions-1.0.0-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/ncurses-6.4-h59595ed_2.conda
@@ -186,10 +186,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/mergedeep-1.3.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-1.5.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-autorefs-0.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.4.4-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.5.17-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-extensions-1.3.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.23.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.7.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.24.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/mypy-1.5.1-py311h2725bcf_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mypy_extensions-1.0.0-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/ncurses-6.4-h93d8f39_2.conda
@@ -296,10 +296,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/mergedeep-1.3.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-1.5.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-autorefs-0.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.4.4-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.5.17-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-extensions-1.3.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.23.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.7.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.24.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/mypy-1.5.1-py311heffc1b2_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mypy_extensions-1.0.0-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/ncurses-6.4-h463b476_2.conda
@@ -410,10 +410,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/mergedeep-1.3.4-pyhd8ed1ab_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-1.5.3-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-autorefs-0.5.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.4.4-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.5.17-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-extensions-1.3.1-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.23.0-pyhd8ed1ab_0.conda
-      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.7.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.24.1-pyhd8ed1ab_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.9.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/win-64/msys2-conda-epoch-20160418-1.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/win-64/mypy-1.5.1-py311ha68e1ae_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/mypy_extensions-1.0.0-pyha770c72_0.conda
@@ -2830,20 +2830,20 @@ packages:
   timestamp: 1691023192300
 - kind: conda
   name: mkdocs-material
-  version: 9.4.4
+  version: 9.5.17
   build: pyhd8ed1ab_0
   subdir: noarch
   noarch: python
-  url: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.4.4-pyhd8ed1ab_0.conda
-  sha256: 9bcf1aeae9c9fd79c8a0d9445c0ec4d5d4bae45a824b61762446486f3d6e1742
-  md5: 28d85ea8a0afd0fc07029ed11b103dbc
+  url: https://conda.anaconda.org/conda-forge/noarch/mkdocs-material-9.5.17-pyhd8ed1ab_0.conda
+  sha256: ad1add464323711e650de959642f50360b334f5310985d0bbeed9ea7ab7dfab1
+  md5: 3001e36f01de62d90d3cad7d81333aae
   depends:
   - babel ~=2.10
   - colorama ~=0.4
   - jinja2 ~=3.0
   - markdown ~=3.2
-  - mkdocs ~=1.5
-  - mkdocs-material-extensions ~=1.1
+  - mkdocs ~=1.5,>=1.5.3
+  - mkdocs-material-extensions ~=1.3
   - paginate ~=0.5
   - pygments ~=2.16
   - pymdown-extensions ~=10.2
@@ -2852,8 +2852,8 @@ packages:
   - requests ~=2.26
   license: MIT
   license_family: MIT
-  size: 4723013
-  timestamp: 1696558178032
+  size: 4972531
+  timestamp: 1712056002854
 - kind: conda
   name: mkdocs-material-extensions
   version: 1.3.1
@@ -2873,44 +2873,47 @@ packages:
   timestamp: 1700695213251
 - kind: conda
   name: mkdocstrings
-  version: 0.23.0
+  version: 0.24.1
   build: pyhd8ed1ab_0
   subdir: noarch
   noarch: python
-  url: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.23.0-pyhd8ed1ab_0.conda
-  sha256: b830bc018d96b23aa4edcbd3d6ea1946fcad85eab15d26f9bd8524ac55bf2fe3
-  md5: 76b6dde6060f62882bb1bc287e761937
+  url: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-0.24.1-pyhd8ed1ab_0.conda
+  sha256: a19b5488de2c8b1318a8504a58557831a05b8d3800ae7b881a1f1eebe8efe5d9
+  md5: e6bbb71645a2615b80636d4d357e3ed7
   depends:
+  - click >=7.0
   - importlib-metadata >=4.6
   - jinja2 >=2.11.1
   - markdown >=3.3
   - markupsafe >=1.1
-  - mkdocs >=1.2
+  - mkdocs >=1.4
   - mkdocs-autorefs >=0.3.1
+  - platformdirs >=2.2.0
   - pymdown-extensions >=6.3
-  - python >=3.7,<4.0
+  - python >=3.8,<4.0
   - typing-extensions >=4.1
   license: MIT
   license_family: MIT
-  size: 27463
-  timestamp: 1693677802214
+  size: 29513
+  timestamp: 1709176856161
 - kind: conda
   name: mkdocstrings-python
-  version: 1.7.1
+  version: 1.9.1
   build: pyhd8ed1ab_0
   subdir: noarch
   noarch: python
-  url: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.7.1-pyhd8ed1ab_0.conda
-  sha256: 9b06a3508e7e99895caded31cf0238ee81c065875bc05ecb5776785901df3af9
-  md5: 1371264878dc8c7444dc531ef28b988b
+  url: https://conda.anaconda.org/conda-forge/noarch/mkdocstrings-python-1.9.1-pyhd8ed1ab_0.conda
+  sha256: 3e414ea02d5592fb9be75f0eaac1a1f8af1d17747f394895b1f7d63f511ca36e
+  md5: add056dd9c1528f27c2cdf3f67634135
   depends:
-  - griffe >=0.35
+  - griffe >=0.37
+  - markdown <3.6,>=3.3
   - mkdocstrings >=0.20
   - python >=3.8
   license: MIT
   license_family: MIT
-  size: 33588
-  timestamp: 1695913202240
+  size: 36774
+  timestamp: 1712087058968
 - kind: conda
   name: msys2-conda-epoch
   version: '20160418'
