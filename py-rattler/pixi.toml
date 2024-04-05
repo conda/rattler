@@ -40,9 +40,9 @@ pytest-xprocess = ">=0.23.0,<0.24"
 
 # docs dependencies
 mkdocs = "1.5.3.*"
-mkdocstrings-python = "1.7.1.*"
-mkdocstrings = "0.23.0.*"
-mkdocs-material = "9.4.4.*"
+mkdocstrings-python = ">=1.9.0,<1.10"
+mkdocstrings = ">=0.24.1,<0.25"
+mkdocs-material = ">=9.5.17"
 pillow = ">=9.4.0"
 cairosvg = "2.7.1.*"
 
