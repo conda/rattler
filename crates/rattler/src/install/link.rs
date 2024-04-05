@@ -529,13 +529,11 @@ fn replace_long_shebang(shebang: &str, platform: &Platform) -> String {
     } else {
         assert!(shebang.starts_with("#!"));
         if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
-            let shebang_path = Path::new(&captures[2]);
-            tracing::debug!("New shebang path {}", shebang_path.display());
-            format!(
-                "#!/usr/bin/env {}{}",
-                shebang_path.file_name().unwrap().to_str().unwrap(),
-                &captures[3]
-            )
+            let shebang_path = &captures[2];
+            let filename = shebang_path
+                .rsplit_once('/')
+                .map_or(shebang_path, |(_, f)| f);
+            format!("#!/usr/bin/env {}{}", filename, &captures[3])
         } else {
             tracing::warn!("Could not replace shebang ({})", shebang);
             shebang.to_string()
