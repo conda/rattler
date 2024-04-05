@@ -48,4 +48,5 @@ async def link(
         installed_packages or [],
         platform._inner,
         client._client,
+        execute_link_scripts,
     )
