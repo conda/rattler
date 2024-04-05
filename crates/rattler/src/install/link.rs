@@ -1,11 +1,13 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
 use memmap2::Mmap;
+use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use reflink_copy::reflink;
+use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
@@ -470,6 +472,7 @@ pub fn copy_and_replace_placeholders(
                 destination,
                 prefix_placeholder,
                 target_prefix,
+                target_platform,
             )?;
         }
         FileMode::Binary => {
@@ -490,6 +493,54 @@ pub fn copy_and_replace_placeholders(
     Ok(())
 }
 
+static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
+    // ^(#!      // pretty much the whole match string
+    // (?:[ ]*)  // allow spaces between #! and beginning of
+    //           // the executable path
+    // (/(?:\\ |[^ \n\r\t])*)  // the executable is the next
+    //                         // text block without an
+    //                         // escaped space or non-space
+    //                         // whitespace character
+    // (.*))$    // the rest of the line can contain option
+    //           // flags and end whole_shebang group
+    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
+});
+
+/// Finds if the shebang line length is valid.
+fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+    const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
+    const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
+
+    if platform.is_linux() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
+    } else if platform.is_osx() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
+    } else {
+        true
+    }
+}
+
+/// Long shebangs are invalid (longer than 127 on Linux / 512 on macOS characters).
+/// This function replaces long shebangs with a shebang that uses `/usr/bin/env` to find the
+/// executable.
+fn replace_long_shebang(shebang: &str, platform: &Platform) -> String {
+    if is_valid_shebang_length(shebang, platform) {
+        shebang.to_string()
+    } else {
+        assert!(shebang.starts_with("#!"));
+        if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
+            let shebang_path = &captures[2];
+            let filename = shebang_path
+                .rsplit_once('/')
+                .map_or(shebang_path, |(_, f)| f);
+            format!("#!/usr/bin/env {}{}", filename, &captures[3])
+        } else {
+            tracing::warn!("Could not replace shebang ({})", shebang);
+            shebang.to_string()
+        }
+    }
+}
+
 /// Given the contents of a file copy it to the `destination` and in the process replace the
 /// `prefix_placeholder` text with the `target_prefix` text.
 ///
@@ -502,10 +553,23 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    target_platform: &Platform,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
+
+    // check if we have a shebang. We need to handle it differently because it has a maximum length
+    // that can be exceeded in very long target prefix's.
+    if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
+        // extract first line
+        let (first, rest) =
+            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
+        let first_line = String::from_utf8_lossy(first);
+        let replaced = first_line.replace(prefix_placeholder, target_prefix);
+        destination.write_all(replace_long_shebang(&replaced, target_platform).as_bytes())?;
+        source_bytes = rest;
+    }
 
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
@@ -519,7 +583,6 @@ pub fn copy_and_replace_textual_placeholder(
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
             destination.write_all(source_bytes)?;
-
             return Ok(());
         }
     }
@@ -608,6 +671,7 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
 
 #[cfg(test)]
 mod test {
+    use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -631,6 +695,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
+            &Platform::Linux64,
         )
         .unwrap();
         assert_eq!(
@@ -680,5 +745,53 @@ mod test {
         let out = &output.into_inner();
         assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
         assert_eq!(out.len(), input.len());
+    }
+
+    #[test]
+    fn test_replace_long_shebang() {
+        let short_shebang = "#!/path/to/python -x 123";
+        let replaced = super::replace_long_shebang(short_shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/path/to/python -x 123");
+
+        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/python -o test -x";
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env python -o test -x");
+
+        let replaced = super::replace_long_shebang(shebang, &Platform::Osx64);
+        assert_eq!(replaced, shebang);
+
+        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/pyt\\ hon -o test -x";
+        let replaced = super::replace_long_shebang(shebang_with_escapes, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o test -x");
+
+        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
+    }
+
+    #[test]
+    fn test_replace_long_prefix_in_text_file() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_file = test_data_dir.join("shebang_test.txt");
+        let prefix_placeholder = "/this/is/placeholder";
+        let mut target_prefix = "/super/long/".to_string();
+        for _ in 0..15 {
+            target_prefix.push_str("verylongstring/");
+        }
+        let input = std::fs::read(&test_file).unwrap();
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            &target_prefix,
+            &Platform::Linux64,
+        )
+        .unwrap();
+
+        let output = output.into_inner();
+        let replaced = String::from_utf8_lossy(&output);
+        insta::assert_snapshot!(replaced);
     }
 }
