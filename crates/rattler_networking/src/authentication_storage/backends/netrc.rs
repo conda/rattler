@@ -39,6 +39,9 @@ impl NetRcStorage {
             Ok(val) => PathBuf::from(val),
             Err(_) => match dirs::home_dir() {
                 Some(mut path) => {
+                    #[cfg(windows)]
+                    path.push("_netrc");
+                    #[cfg(not(windows))]
                     path.push(".netrc");
                     path
                 }
