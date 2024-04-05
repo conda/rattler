@@ -514,13 +514,25 @@ static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
 });
 
-/// The maximum length of a shebang line. If the shebang is longer than this it will be replaced
-/// with a new shebang that uses `/usr/bin/env` to find the executable.
-/// Note: on macOS this is 512
-const MAX_SHEBANG_LENGTH: usize = 127;
+/// Finds if the shebang line length is valid.
+fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+    const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
+    const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
 
-fn replace_long_shebang(shebang: &str) -> String {
-    if shebang.len() <= MAX_SHEBANG_LENGTH {
+    if platform.is_linux() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
+    } else if platform.is_osx() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
+    } else {
+        true
+    }
+}
+
+/// Long shebangs are invalid (longer than 127 on Linux / 512 on macOS characters).
+/// This function replaces long shebangs with a shebang that uses `/usr/bin/env` to find the
+/// executable.
+fn replace_long_shebang(shebang: &str, platform: &Platform) -> String {
+    if is_valid_shebang_length(shebang, platform) {
         shebang.to_string()
     } else {
         assert!(shebang.starts_with("#!"));
@@ -565,7 +577,7 @@ pub fn copy_and_replace_textual_placeholder(
             source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
         let first_line = String::from_utf8_lossy(first);
         let replaced = first_line.replace(prefix_placeholder, target_prefix);
-        destination.write_all(replace_long_shebang(&replaced).as_bytes())?;
+        destination.write_all(replace_long_shebang(&replaced, target_platform).as_bytes())?;
         source_bytes = rest;
     }
 
@@ -748,19 +760,22 @@ mod test {
     #[test]
     fn test_replace_long_shebang() {
         let short_shebang = "#!/path/to/python -x 123";
-        let replaced = super::replace_long_shebang(short_shebang);
+        let replaced = super::replace_long_shebang(short_shebang, &Platform::Linux64);
         assert_eq!(replaced, "#!/path/to/python -x 123");
 
         let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/python -o test -x";
-        let replaced = super::replace_long_shebang(shebang);
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env python -o test -x");
 
+        let replaced = super::replace_long_shebang(shebang, &Platform::Osx64);
+        assert_eq!(replaced, shebang);
+
         let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/pyt\\ hon -o test -x";
-        let replaced = super::replace_long_shebang(shebang_with_escapes);
+        let replaced = super::replace_long_shebang(shebang_with_escapes, &Platform::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o test -x");
 
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
-        let replaced = super::replace_long_shebang(shebang);
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
     }
 
