@@ -6,6 +6,7 @@ use rattler_conda_types::Platform;
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use reflink_copy::reflink;
+use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
@@ -497,6 +498,45 @@ pub fn copy_and_replace_placeholders(
     }
     Ok(())
 }
+use once_cell::sync::Lazy;
+
+static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
+    // ^(#!      // pretty much the whole match string
+    // (?:[ ]*)  // allow spaces between #! and beginning of
+    //           // the executable path
+    // (/(?:\\ |[^ \n\r\t])*)  // the executable is the next
+    //                         // text block without an
+    //                         // escaped space or non-space
+    //                         // whitespace character
+    // (.*))$    // the rest of the line can contain option
+    //           // flags and end whole_shebang group
+});
+
+/// The maximum length of a shebang line. If the shebang is longer than this it will be replaced
+/// with a new shebang that uses `/usr/bin/env` to find the executable.
+/// Note: on macOS this is 512
+const MAX_SHEBANG_LENGTH: usize = 127;
+
+fn replace_long_shebang(shebang: &str) -> String {
+    if shebang.len() <= MAX_SHEBANG_LENGTH {
+        shebang.to_string()
+    } else {
+        assert!(shebang.starts_with("#!"));
+        if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
+            let shebang_path = Path::new(&captures[2]);
+            tracing::info!("New shebang path {}", shebang_path.display());
+            format!(
+                "#!/usr/bin/env {}{}",
+                shebang_path.file_name().unwrap().to_str().unwrap(),
+                &captures[3]
+            )
+        } else {
+            tracing::warn!("Could not replace shebang ({})", shebang);
+            shebang.to_string()
+        }
+    }
+}
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
 /// `prefix_placeholder` text with the `target_prefix` text.
@@ -515,6 +555,17 @@ pub fn copy_and_replace_textual_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
+    // check if we have a shebang. We need to handle it differently because it has a maximum length
+    if source_bytes.starts_with(b"!#") {
+        // extract first line
+        let (first, rest) =
+            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
+        let first_line = String::from_utf8_lossy(first);
+        let replaced = first_line.replace(prefix_placeholder, target_prefix);
+        destination.write_all(replace_long_shebang(&replaced).as_bytes())?;
+        source_bytes = rest;
+    }
+
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
             // Write all bytes up to the old prefix, followed by the new prefix.
@@ -527,7 +578,6 @@ pub fn copy_and_replace_textual_placeholder(
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
             destination.write_all(source_bytes)?;
-
             return Ok(());
         }
     }
@@ -688,5 +738,24 @@ mod test {
         let out = &output.into_inner();
         assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
         assert_eq!(out.len(), input.len());
+    }
+
+    #[test]
+    fn test_replace_long_shebang() {
+        let short_shebang = "#!/path/to/python -x 123";
+        let replaced = super::replace_long_shebang(short_shebang);
+        assert_eq!(replaced, "#!/path/to/python -x 123");
+
+        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/python -o test -x";
+        let replaced = super::replace_long_shebang(shebang);
+        assert_eq!(replaced, "#!/usr/bin/env python -o test -x");
+
+        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/pyt\\ hon -o test -x";
+        let replaced = super::replace_long_shebang(shebang_with_escapes);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o test -x");
+
+        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
+        let replaced = super::replace_long_shebang(shebang);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
     }
 }
