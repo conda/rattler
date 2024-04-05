@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1](https://github.com/baszalmstra/rattler/compare/rattler_networking-v0.20.0...rattler_networking-v0.20.1) - 2024-04-05
+
+### Fixed
+- run post-link scripts ([#574](https://github.com/baszalmstra/rattler/pull/574))
+- properly fall back to netrc file ([#592](https://github.com/baszalmstra/rattler/pull/592))
+
 ## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.19.2...rattler_networking-v0.20.0) - 2024-03-21
 
 ### Fixed
