@@ -57,7 +57,7 @@ def solve(
             [package._record for package in locked_packages or []],
             [package._record for package in pinned_packages or []],
             [v_package._generic_virtual_package for v_package in virtual_packages or []],
-            timeout.microseconds if timeout else None,
             strict_channel_priority,
+            timeout.microseconds if timeout else None,
         )
     ]
