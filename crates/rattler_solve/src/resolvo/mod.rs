@@ -285,9 +285,11 @@ impl<'a> CondaDependencyProvider<'a> {
 
                 // Enforce channel priority
                 // This functions makes the assumtion that the records are given in order of the channels.
-                if let (Some(first_channel), true) = (package_name_found_in_channel
-                    .get(&record.package_record.name.as_normalized().to_string()), strict_channel_priority)
-                {
+                if let (Some(first_channel), true) = (
+                    package_name_found_in_channel
+                        .get(&record.package_record.name.as_normalized().to_string()),
+                    strict_channel_priority,
+                ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
                         tracing::debug!(

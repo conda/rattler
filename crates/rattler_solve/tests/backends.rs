@@ -869,6 +869,6 @@ fn channel_order_not_strict() {
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
-        false
+        false,
     );
 }
