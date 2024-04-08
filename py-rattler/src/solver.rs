@@ -7,6 +7,7 @@ use crate::{
     match_spec::PyMatchSpec, record::PyRecord, repo_data::sparse::PySparseRepoData,
 };
 
+#[allow(clippy::too_many_arguments)]
 #[pyfunction]
 pub fn py_solve(
     py: Python<'_>,
@@ -15,8 +16,8 @@ pub fn py_solve(
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
-    timeout: Option<u64>,
     strict_channel_priority: bool,
+    timeout: Option<u64>,
 ) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
         let package_names = specs
