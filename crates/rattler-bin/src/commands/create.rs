@@ -227,6 +227,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         specs,
         pinned_packages: Vec::new(),
         timeout: opt.timeout.map(Duration::from_millis),
+        strict_channel_priority: true,
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations

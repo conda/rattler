@@ -102,6 +102,10 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
+
+    /// When `True` the channel that the package is first found in will be used as the only
+    /// channel for that package. When `False` it will search for every package in every channel.
+    pub strict_channel_priority: bool,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]

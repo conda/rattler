@@ -96,6 +96,12 @@ impl super::SolverImpl for Solver {
                 "timeout".to_string()
             ]));
         }
+        // Could ignore the strict_channel_priority flag here or do something like below maybe?
+        // if task.strict_channel_priority {
+        //     return Err(SolveError::UnsupportedOperations(
+        //         vec!["strict_channel_priority = true".to_string()]
+        //     ))
+        // }
 
         // Construct a default libsolv pool
         let pool = Pool::default();

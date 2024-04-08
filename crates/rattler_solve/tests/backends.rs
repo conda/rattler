@@ -128,6 +128,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         pinned_packages: Vec::default(),
         virtual_packages: Vec::default(),
         timeout: None,
+        strict_channel_priority: true,
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
@@ -538,6 +539,7 @@ mod libsolv_c {
                 specs,
                 pinned_packages: Vec::new(),
                 timeout: None,
+                strict_channel_priority: false,
             })
             .unwrap();
 
@@ -630,6 +632,7 @@ fn solve<T: SolverImpl + Default>(
         specs,
         pinned_packages,
         timeout: None,
+        strict_channel_priority: true,
     };
 
     let pkgs = T::default().solve(task)?;
@@ -688,6 +691,7 @@ fn compare_solve(specs: Vec<&str>) {
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
                         timeout: None,
+                        strict_channel_priority: false,
                     })
                     .unwrap(),
             ),
@@ -710,6 +714,7 @@ fn compare_solve(specs: Vec<&str>) {
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
                         timeout: None,
+                        strict_channel_priority: true,
                     })
                     .unwrap(),
             ),
@@ -765,6 +770,7 @@ fn solve_to_get_channel_of_spec(
     spec_str: &str,
     expected_channel: &str,
     repo_data: Vec<&SparseRepoData>,
+    strict_channel_priority: bool,
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
@@ -781,6 +787,7 @@ fn solve_to_get_channel_of_spec(
             pinned_packages: Vec::default(),
             virtual_packages: Vec::default(),
             timeout: None,
+            strict_channel_priority,
         })
         .unwrap();
 
@@ -800,11 +807,25 @@ fn channel_specific_requirement() {
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
+        true,
+    );
+    solve_to_get_channel_of_spec(
+        "conda-forge::pytorch-cpu",
+        "https://conda.anaconda.org/conda-forge/",
+        repodata.clone(),
+        false,
+    );
+    solve_to_get_channel_of_spec(
+        "pytorch::pytorch-cpu",
+        "https://conda.anaconda.org/pytorch/",
+        repodata.clone(),
+        true,
     );
     solve_to_get_channel_of_spec(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
+        false,
     );
 }
 
@@ -819,6 +840,7 @@ fn channel_order_strict() {
         "pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata,
+        true,
     );
 
     // Solve with pytorch as the first channel
@@ -830,5 +852,23 @@ fn channel_order_strict() {
         "pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
+        true,
+    );
+}
+
+#[test]
+fn channel_order_not_strict() {
+    // This solve fails if strict channel priority is enabled because pytorch-cpu 0.4.1 only exists
+    // in the pytorch channel and yet conda forge has other versions of pytorch, but this will
+    // pass in this test with strict channel priority disabled.
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        false
     );
 }
