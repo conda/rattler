@@ -185,7 +185,10 @@ impl super::SolverImpl for Solver {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
-        solver.set_flag(SolverFlag::strict_channel_priority(), task.channel_priority == ChannelPriority::Strict);
+        solver.set_flag(
+            SolverFlag::strict_channel_priority(),
+            task.channel_priority == ChannelPriority::Strict,
+        );
 
         let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
