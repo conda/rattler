@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingM
 use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolverImpl, SolverTask};
+use rattler_solve::{ChannelPriority, SolverImpl, SolverTask};
 
 fn conda_json_path() -> String {
     format!(
@@ -65,7 +65,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     virtual_packages: vec![],
                     specs: specs.clone(),
                     timeout: None,
-                    strict_channel_priority: true,
+                    channel_priority: ChannelPriority::Strict,
                 }))
                 .unwrap()
         });
@@ -82,7 +82,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
                     virtual_packages: vec![],
                     specs: specs.clone(),
                     timeout: None,
-                    strict_channel_priority: true,
+                    channel_priority: ChannelPriority::Strict,
                 }))
                 .unwrap()
         });

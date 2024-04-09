@@ -1,5 +1,6 @@
 use pyo3::{pyclass, pymethods};
 use rattler_conda_types::{Channel, ChannelConfig};
+use rattler_solve::ChannelPriority;
 use url::Url;
 
 use crate::{error::PyRattlerError, platform::PyPlatform};
@@ -72,5 +73,34 @@ impl PyChannel {
     /// Returns the Urls for the given platform.
     pub fn platform_url(&self, platform: &PyPlatform) -> String {
         self.inner.platform_url(platform.clone().into()).into()
+    }
+}
+
+#[pyclass]
+#[derive(Clone)]
+pub enum PyChannelPriority {
+    /// The channel that the package is first found in will be used as the only channel
+    /// for that package.
+    Strict,
+
+    /// Packages can be retrieved from any channel as package version takes precedence.
+    Disabled,
+}
+
+impl From<ChannelPriority> for PyChannelPriority {
+    fn from(channel_priority: ChannelPriority) -> Self {
+        match channel_priority {
+            ChannelPriority::Strict => PyChannelPriority::Strict,
+            ChannelPriority::Disabled => PyChannelPriority::Disabled,
+        }
+    }
+}
+
+impl From<PyChannelPriority> for ChannelPriority {
+    fn from(py_channel_priority: PyChannelPriority) -> Self {
+        match py_channel_priority {
+            PyChannelPriority::Strict => ChannelPriority::Strict,
+            PyChannelPriority::Disabled => ChannelPriority::Disabled,
+        }
     }
 }

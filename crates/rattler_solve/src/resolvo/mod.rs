@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
+use crate::{ChannelPriority, IntoRepoData, SolveError, SolverRepoData, SolverTask};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
@@ -177,7 +177,7 @@ impl<'a> CondaDependencyProvider<'a> {
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
-        strict_channel_priority: bool,
+        channel_priority: ChannelPriority,
     ) -> Self {
         let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -284,11 +284,11 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Enforce channel priority
-                // This functions makes the assumtion that the records are given in order of the channels.
-                if let (Some(first_channel), true) = (
+                // This function makes the assumption that the records are given in order of the channels.
+                if let (Some(first_channel), ChannelPriority::Strict) = (
                     package_name_found_in_channel
                         .get(&record.package_record.name.as_normalized().to_string()),
-                    strict_channel_priority,
+                    channel_priority,
                 ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
@@ -448,7 +448,7 @@ impl super::SolverImpl for Solver {
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,
-            task.strict_channel_priority,
+            task.channel_priority,
         );
         let pool = provider.pool.clone();
 

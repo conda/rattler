@@ -3,8 +3,9 @@ use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, SolverImpl, SolverTask};
 
 use crate::{
-    error::PyRattlerError, generic_virtual_package::PyGenericVirtualPackage,
-    match_spec::PyMatchSpec, record::PyRecord, repo_data::sparse::PySparseRepoData,
+    channel::PyChannelPriority, error::PyRattlerError,
+    generic_virtual_package::PyGenericVirtualPackage, match_spec::PyMatchSpec, record::PyRecord,
+    repo_data::sparse::PySparseRepoData,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -16,7 +17,7 @@ pub fn py_solve(
     locked_packages: Vec<PyRecord>,
     pinned_packages: Vec<PyRecord>,
     virtual_packages: Vec<PyGenericVirtualPackage>,
-    strict_channel_priority: bool,
+    channel_priority: PyChannelPriority,
     timeout: Option<u64>,
 ) -> PyResult<Vec<PyRecord>> {
     py.allow_threads(move || {
@@ -43,7 +44,7 @@ pub fn py_solve(
             virtual_packages: virtual_packages.into_iter().map(Into::into).collect(),
             specs: specs.into_iter().map(Into::into).collect(),
             timeout: timeout.map(std::time::Duration::from_micros),
-            strict_channel_priority,
+            channel_priority: channel_priority.into(),
         };
 
         Ok(Solver

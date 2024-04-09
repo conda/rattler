@@ -4,7 +4,7 @@ use rattler_conda_types::{
     ParseStrictness, RepoData, RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{SolveError, SolverImpl, SolverTask};
+use rattler_solve::{ChannelPriority, SolveError, SolverImpl, SolverTask};
 use std::str::FromStr;
 use std::time::Instant;
 use url::Url;
@@ -128,7 +128,7 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         pinned_packages: Vec::default(),
         virtual_packages: Vec::default(),
         timeout: None,
-        strict_channel_priority: true,
+        channel_priority: ChannelPriority::Strict,
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
@@ -504,6 +504,7 @@ mod libsolv_c {
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SolveError, Version,
     };
+    use rattler_solve::ChannelPriority;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
@@ -539,7 +540,7 @@ mod libsolv_c {
                 specs,
                 pinned_packages: Vec::new(),
                 timeout: None,
-                strict_channel_priority: false,
+                channel_priority: ChannelPriority::Strict,
             })
             .unwrap();
 
@@ -632,7 +633,7 @@ fn solve<T: SolverImpl + Default>(
         specs,
         pinned_packages,
         timeout: None,
-        strict_channel_priority: true,
+        channel_priority: ChannelPriority::Strict,
     };
 
     let pkgs = T::default().solve(task)?;
@@ -691,7 +692,7 @@ fn compare_solve(specs: Vec<&str>) {
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
                         timeout: None,
-                        strict_channel_priority: false,
+                        channel_priority: ChannelPriority::Strict,
                     })
                     .unwrap(),
             ),
@@ -714,7 +715,7 @@ fn compare_solve(specs: Vec<&str>) {
                         pinned_packages: Vec::default(),
                         virtual_packages: Vec::default(),
                         timeout: None,
-                        strict_channel_priority: true,
+                        channel_priority: ChannelPriority::Strict,
                     })
                     .unwrap(),
             ),
@@ -770,7 +771,7 @@ fn solve_to_get_channel_of_spec(
     spec_str: &str,
     expected_channel: &str,
     repo_data: Vec<&SparseRepoData>,
-    strict_channel_priority: bool,
+    channel_priority: ChannelPriority,
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
@@ -787,7 +788,7 @@ fn solve_to_get_channel_of_spec(
             pinned_packages: Vec::default(),
             virtual_packages: Vec::default(),
             timeout: None,
-            strict_channel_priority,
+            channel_priority,
         })
         .unwrap();
 
@@ -807,30 +808,30 @@ fn channel_specific_requirement() {
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
-        true,
+        ChannelPriority::Strict,
     );
     solve_to_get_channel_of_spec(
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
-        false,
+        ChannelPriority::Disabled,
     );
     solve_to_get_channel_of_spec(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata.clone(),
-        true,
+        ChannelPriority::Strict,
     );
     solve_to_get_channel_of_spec(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
-        false,
+        ChannelPriority::Disabled,
     );
 }
 
 #[test]
-fn channel_order_strict() {
+fn channel_priority_strict() {
     // Solve with conda-forge as the first channel
     let repodata = vec![
         read_conda_forge_sparse_repo_data(),
@@ -840,7 +841,7 @@ fn channel_order_strict() {
         "pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata,
-        true,
+        ChannelPriority::Strict,
     );
 
     // Solve with pytorch as the first channel
@@ -852,12 +853,12 @@ fn channel_order_strict() {
         "pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
-        true,
+        ChannelPriority::Strict,
     );
 }
 
 #[test]
-fn channel_order_not_strict() {
+fn channel_priority_disabled() {
     // This solve fails if strict channel priority is enabled because pytorch-cpu 0.4.1 only exists
     // in the pytorch channel and yet conda forge has other versions of pytorch, but this will
     // pass in this test with strict channel priority disabled.
@@ -869,6 +870,6 @@ fn channel_order_not_strict() {
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
-        false,
+        ChannelPriority::Disabled,
     );
 }

@@ -23,7 +23,7 @@ use rattler_repodata_gateway::fetch::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     libsolv_c::{self},
-    resolvo, SolverImpl, SolverTask,
+    resolvo, ChannelPriority, SolverImpl, SolverTask,
 };
 use reqwest::Client;
 use std::sync::Arc;
@@ -227,7 +227,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         specs,
         pinned_packages: Vec::new(),
         timeout: opt.timeout.map(Duration::from_millis),
-        strict_channel_priority: true,
+        channel_priority: ChannelPriority::Strict,
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations

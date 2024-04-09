@@ -3,6 +3,7 @@ import datetime
 from typing import List, Optional
 from rattler.match_spec.match_spec import MatchSpec
 
+from rattler.channel import ChannelPriority
 from rattler.rattler import py_solve
 from rattler.repo_data.record import RepoDataRecord
 from rattler.repo_data.sparse import SparseRepoData
@@ -16,7 +17,7 @@ def solve(
     pinned_packages: Optional[List[RepoDataRecord]] = None,
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
-    strict_channel_priority: bool = True,
+    channel_priority: ChannelPriority = ChannelPriority.Strict,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -41,9 +42,10 @@ def solve(
                          will always select that version no matter what even if that
                          means other packages have to be downgraded.
         virtual_packages: A list of virtual packages considered active.
-        strict_channel_priority: (Default = True) When `True` the channel that the package
-                         is first found in will be used as the only channel for that package.
-                         When `False` it will search for every package in every channel.
+        channel_priority: (Default = ChannelPriority.Strict) When `ChannelPriority.Strict`
+                         the channel that the package is first found in will be used as
+                         the only channel for that package. When `ChannelPriority.Disabled`
+                         it will search for every package in every channel.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -57,7 +59,7 @@ def solve(
             [package._record for package in locked_packages or []],
             [package._record for package in pinned_packages or []],
             [v_package._generic_virtual_package for v_package in virtual_packages or []],
-            strict_channel_priority,
+            channel_priority.value,
             timeout.microseconds if timeout else None,
         )
     ]

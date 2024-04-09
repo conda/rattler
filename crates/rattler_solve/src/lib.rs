@@ -70,6 +70,22 @@ impl fmt::Display for SolveError {
     }
 }
 
+/// Represents the channel priority option to use during solves.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ChannelPriority {
+    /// The channel that the package is first found in will be used as the only channel
+    /// for that package.
+    Strict,
+
+    /// Conda also has "Flexible" as an option, where packages present in multiple channels
+    /// are only taken from lower-priority channels when this prevents unsatisfiable environment
+    /// errors, but this would need implementation in the solvers.
+    /// Flexible,
+
+    /// Packages can be retrieved from any channel as package version takes precedence.
+    Disabled,
+}
+
 /// Represents a dependency resolution task, to be solved by one of the backends (currently only
 /// libsolv is supported)
 pub struct SolverTask<TAvailablePackagesIterator> {
@@ -103,9 +119,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
-    /// When `True` the channel that the package is first found in will be used as the only
-    /// channel for that package. When `False` it will search for every package in every channel.
-    pub strict_channel_priority: bool,
+    /// The channel priority to solve with, either [`ChannelPriority::Strict`] or
+    /// [`ChannelPriority::Disabled`]
+    pub channel_priority: ChannelPriority,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
