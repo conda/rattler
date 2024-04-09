@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
-use crate::{IntoRepoData, SolverRepoData};
+use crate::{ChannelPriority, IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
@@ -185,6 +185,7 @@ impl super::SolverImpl for Solver {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
+        solver.set_flag(SolverFlag::strict_channel_priority(), task.channel_priority == ChannelPriority::Strict);
 
         let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
