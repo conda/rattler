@@ -504,6 +504,8 @@ mod libsolv_c {
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SolveError, Version,
     };
+    #[allow(unused_imports)] // For some reason windows thinks this is an unused import.
+    use rattler_solve::ChannelPriority;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
