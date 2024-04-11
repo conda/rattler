@@ -9,6 +9,9 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
+use google_cloud_auth::project::Config;
+use google_cloud_auth::project::create_token_source;
+use tracing::debug;
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
@@ -37,7 +40,7 @@ impl Middleware for AuthenticationMiddleware {
                 let mut req = req;
                 *req.url_mut() = url;
 
-                let req = Self::authenticate_request(req, &auth)?;
+                let req = self.authenticate_request(req, &auth).await?;
                 next.run(req, extensions).await
             }
         }
@@ -73,7 +76,8 @@ impl AuthenticationMiddleware {
     }
 
     /// Authenticate the given request with the given authentication information
-    fn authenticate_request(
+    async fn authenticate_request(
+        &self,
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {
@@ -90,6 +94,38 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
+                Authentication::GoogleCloud => {
+                    // Define your audience and scopes based on your requirements
+                    debug!("in google cloud function.");
+
+                    let audience = "https://storage.googleapis.com/";
+                    let scopes = [
+                        "https://www.googleapis.com/auth/cloud-platform",
+                        "https://www.googleapis.com/auth/spanner.data",
+                        "https://storage.googleapis.com/"
+                    ];
+    
+                    // Manually handling the Result to convert errors
+                    match create_token_source(Config { audience: Some(audience), scopes: Some(&scopes), sub: None }).await {
+                        Ok(ts) => {
+                            match ts.token().await {
+                                Ok(token) => {
+                                    let bearer_auth = format!("Bearer {}", token.access_token);
+                                    let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                                        .map_err(reqwest_middleware::Error::middleware)?;
+                                    req.headers_mut().insert(reqwest::header::AUTHORIZATION, header_value);
+                                    Ok(req)
+                                },
+                                Err(e) => {
+                                    Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
+                                }
+                            }
+                        },
+                        Err(e) => {
+                            Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
+                        }
+                    }
+                },
                 Authentication::BasicHTTP { username, password } => {
                     let basic_auth = format!("{username}:{password}");
                     let basic_auth = BASE64_STANDARD.encode(basic_auth);
@@ -365,6 +401,34 @@ mod tests {
 
         storage.delete(host)?;
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_google_cloud_credentials_setup() -> anyhow::Result<()> {
+        // Check for GOOGLE_APPLICATION_CREDENTIALS environment variable
+        let credentials_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS");
+    
+        let credentials_exist = if let Ok(path) = credentials_env {
+            // Check if the file specified by GOOGLE_APPLICATION_CREDENTIALS exists
+            Path::new(&path).exists()
+        } else {
+            // Alternatively, check for the default credentials file location
+            let default_path = if cfg!(target_os = "windows") {
+                let app_data = std::env::var("APPDATA").expect("APPDATA environment variable not found");
+                PathBuf::from(app_data).join("gcloud").join("application_default_credentials.json")
+            } else {
+                home::home_dir().expect("Failed to find home directory")
+                    .join(".config")
+                    .join("gcloud")
+                    .join("application_default_credentials.json")
+            };
+            default_path.exists()
+        };
+    
+        assert!(
+            credentials_exist,
+            "Google Cloud credentials not properly set up. Ensure GOOGLE_APPLICATION_CREDENTIALS is set or the default credentials file exists."
+        );
     }
 
     #[test]

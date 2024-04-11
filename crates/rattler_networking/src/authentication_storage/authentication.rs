@@ -19,6 +19,8 @@ pub enum Authentication {
     },
     /// A conda token is sent in the URL as `/t/{TOKEN}/...`
     CondaToken(String),
+    /// Use google cloud credentials
+    GoogleCloud, 
 }
 
 /// An error that can occur when parsing an authentication string
