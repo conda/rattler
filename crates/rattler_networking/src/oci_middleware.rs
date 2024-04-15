@@ -249,7 +249,6 @@ impl Middleware for OciMiddleware {
 
         // return 404 for the moment as these are not supported
         if req.url().path().ends_with(".jlap")
-            || req.url().path().ends_with(".json.zst")
             || req.url().path().ends_with(".json.bz2")
         {
             return Ok(create_404_response(
