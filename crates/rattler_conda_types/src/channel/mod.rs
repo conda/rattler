@@ -28,6 +28,10 @@ pub struct ChannelConfig {
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
+
+    /// For local channels, the root directory from which to resolve relative paths.
+    /// Most of the time you would initialize this with the current working directory.
+    pub root_dir: PathBuf,
 }
 
 impl ChannelConfig {
@@ -105,6 +109,7 @@ impl Default for ChannelConfig {
         ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org")
                 .expect("could not parse default channel alias"),
+            root_dir: std::env::current_dir().expect("could not get current directory"),
         }
     }
 }
@@ -144,7 +149,7 @@ impl Channel {
 
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let absolute_path = absolute_path(&path);
+                let absolute_path = absolute_path(&path, &config.root_dir);
                 let url = Url::from_directory_path(absolute_path)
                     .map_err(|_err| ParseChannelError::InvalidPath(path))?;
                 Self {
@@ -417,13 +422,12 @@ fn normalize_path(path: &Path) -> PathBuf {
 }
 
 /// Returns the specified path as an absolute path
-fn absolute_path(path: &Path) -> Cow<'_, Path> {
+fn absolute_path<'a>(path: &'a Path, root_dir: &Path) -> Cow<'a, Path> {
     if path.is_absolute() {
         return Cow::Borrowed(path);
     }
 
-    let current_dir = std::env::current_dir().expect("missing current directory?");
-    let absolute_dir = current_dir.join(path);
+    let absolute_dir = root_dir.join(path);
     Cow::Owned(normalize_path(&absolute_dir))
 }
 
