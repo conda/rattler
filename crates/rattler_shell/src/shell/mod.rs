@@ -327,7 +327,7 @@ pub struct CmdExe;
 
 impl Shell for CmdExe {
     fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "@chcp 65001")
+        writeln!(f, "chcp 65001 > nul")
     }
 
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
@@ -377,6 +377,7 @@ impl Shell for CmdExe {
             write!(f, "{}^{}", &text[..idx], &text[idx..idx + 1])?;
             text = &text[idx + 1..];
         }
+        write!(f, "{}", text)?;
 
         writeln!(f)
     }
@@ -421,7 +422,17 @@ impl Shell for PowerShell {
     }
 
     fn executable(&self) -> &str {
-        self.executable_path.as_deref().unwrap_or("pwsh")
+        if let Some(executable_path) = self.executable_path.as_deref() {
+            return executable_path;
+        } else {
+            // check if `powershell` is available, if not, use `pwsh`
+            let powershell = Command::new("powershell").arg("-Help").output().is_ok();
+            if powershell {
+                return "powershell";
+            } else {
+                return "pwsh";
+            }
+        }
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {

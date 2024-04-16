@@ -13,7 +13,7 @@ use crate::shell::Shell;
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
-const ENV_START_SEPERATOR: &str = "<=== RATTLER ENV START ===>";
+const ENV_START_SEPERATOR: &str = "____RATTLER_ENV_START____";
 
 /// Type of modification done to the `PATH` variable
 #[derive(Default, Clone)]
@@ -433,7 +433,16 @@ impl<T: Shell + Clone> Activator<T> {
         let activation_script_path = activation_script_dir
             .path()
             .join(format!("activation.{}", self.shell_type.extension()));
-        fs::write(&activation_script_path, &activation_detection_script)?;
+
+        // Use CRLF line endings on Windows batch scripts
+        if self.shell_type.extension() == "bat" {
+            activation_detection_script = activation_detection_script.replace("\n", "\r\n");
+        }
+
+        fs::write(
+            &activation_script_path,
+            &activation_detection_script.as_bytes(),
+        )?;
 
         // Get only the path to the temporary file
         let activation_result = self
@@ -689,11 +698,17 @@ mod tests {
         insta::assert_snapshot!(script);
     }
 
-    fn test_run_activation(shell: ShellEnum) {
+    fn test_run_activation(shell: ShellEnum, with_unicode: bool) {
         let environment_dir = tempfile::TempDir::new().unwrap();
 
+        let env = if with_unicode {
+            environment_dir.path().join("🦀")
+        } else {
+            environment_dir.path().to_path_buf()
+        };
+
         // Write some environment variables to the `conda-meta/state` folder.
-        let state_path = environment_dir.path().join("conda-meta/state");
+        let state_path = env.join("conda-meta/state");
         fs::create_dir_all(state_path.parent().unwrap()).unwrap();
         let quotes = r#"{"env_vars": {"STATE": "Hello, world!"}}"#;
         fs::write(&state_path, quotes).unwrap();
@@ -702,7 +717,7 @@ mod tests {
         let content_pkg_1 = r#"{"PKG1": "Hello, world!"}"#;
         let content_pkg_2 = r#"{"PKG2": "Hello, world!"}"#;
 
-        let env_var_d = environment_dir.path().join("etc/conda/env_vars.d");
+        let env_var_d = env.join("etc/conda/env_vars.d");
         fs::create_dir_all(&env_var_d).expect("Could not create env vars directory");
 
         let pkg1 = env_var_d.join("pkg1.json");
@@ -717,7 +732,7 @@ mod tests {
             .set_env_var(&mut activation_script, "SCRIPT_ENV", "Hello, world!")
             .unwrap();
 
-        let activation_script_dir = environment_dir.path().join("etc/conda/activate.d");
+        let activation_script_dir = env.join("etc/conda/activate.d");
         fs::create_dir_all(&activation_script_dir).unwrap();
 
         fs::write(
@@ -727,9 +742,7 @@ mod tests {
         .unwrap();
 
         // Create an activator for the environment
-        let activator =
-            Activator::from_path(environment_dir.path(), shell.clone(), Platform::current())
-                .unwrap();
+        let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
         let activation_env = activator
             .run_activation(ActivationVariables::default())
             .unwrap();
@@ -747,44 +760,46 @@ mod tests {
         env_diff.remove("Path");
         env_diff.remove("PATH");
 
-        insta::assert_yaml_snapshot!(shell.executable(), env_diff);
+        insta::assert_yaml_snapshot!("after_activation", env_diff);
     }
 
     #[test]
     #[cfg(windows)]
     fn test_run_activation_powershell() {
-        test_run_activation(crate::shell::PowerShell::default().into());
+        test_run_activation(crate::shell::PowerShell::default().into(), false);
+        test_run_activation(crate::shell::PowerShell::default().into(), true);
     }
 
     #[test]
     #[cfg(windows)]
     fn test_run_activation_cmd() {
-        test_run_activation(crate::shell::CmdExe::default().into());
+        test_run_activation(crate::shell::CmdExe::default().into(), false);
+        test_run_activation(crate::shell::CmdExe::default().into(), true);
     }
 
     #[test]
     #[cfg(unix)]
     fn test_run_activation_bash() {
-        test_run_activation(crate::shell::Bash.into());
+        test_run_activation(crate::shell::Bash.into(), false);
     }
 
     #[test]
     #[cfg(target_os = "macos")]
     fn test_run_activation_zsh() {
-        test_run_activation(crate::shell::Zsh.into());
+        test_run_activation(crate::shell::Zsh.into(), false);
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_fish() {
-        test_run_activation(crate::shell::Fish.into());
+        test_run_activation(crate::shell::Fish.into(), false);
     }
 
     #[test]
     #[cfg(unix)]
     #[ignore]
     fn test_run_activation_xonsh() {
-        test_run_activation(crate::shell::Xonsh.into());
+        test_run_activation(crate::shell::Xonsh.into(), false);
     }
 }
