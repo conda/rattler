@@ -377,7 +377,7 @@ impl Shell for CmdExe {
             write!(f, "{}^{}", &text[..idx], &text[idx..idx + 1])?;
             text = &text[idx + 1..];
         }
-        write!(f, "{}", text)?;
+        write!(f, "{text}")?;
 
         writeln!(f)
     }
@@ -423,14 +423,14 @@ impl Shell for PowerShell {
 
     fn executable(&self) -> &str {
         if let Some(executable_path) = self.executable_path.as_deref() {
-            return executable_path;
+            executable_path
         } else {
             // check if `powershell` is available, if not, use `pwsh`
             let powershell = Command::new("powershell").arg("-Help").output().is_ok();
             if powershell {
-                return "powershell";
+                "powershell"
             } else {
-                return "pwsh";
+                "pwsh"
             }
         }
     }

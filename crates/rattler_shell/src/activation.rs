@@ -436,12 +436,12 @@ impl<T: Shell + Clone> Activator<T> {
 
         // Use CRLF line endings on Windows batch scripts
         if self.shell_type.extension() == "bat" {
-            activation_detection_script = activation_detection_script.replace("\n", "\r\n");
+            activation_detection_script = activation_detection_script.replace('\n', "\r\n");
         }
 
         fs::write(
             &activation_script_path,
-            &activation_detection_script.as_bytes(),
+            activation_detection_script.as_bytes(),
         )?;
 
         // Get only the path to the temporary file
