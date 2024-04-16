@@ -170,7 +170,6 @@ mod tests {
     fn test_file_storage() {
         let file = tempdir().unwrap();
         let path = file.path().join("test.json");
-        println!("in storage file.rs.");
 
         let storage = FileStorage::new(path.clone()).unwrap();
 
@@ -188,13 +187,6 @@ mod tests {
             .store(
                 "bearer",
                 &Authentication::BearerToken("password".to_string()),
-            )
-            .unwrap();
-
-        storage
-            .store(
-                "bearer",
-                &&Authentication::GoogleCloud
             )
             .unwrap();
 

@@ -120,7 +120,6 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
     }
 
-    println!("Authentication method in login: {} {:?}",host, auth);
     storage
         .store(&host, &auth)
         .map_err(AuthenticationCLIError::StorageError)?;

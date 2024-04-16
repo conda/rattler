@@ -29,8 +29,7 @@ impl Middleware for AuthenticationMiddleware {
         let url = req.url().clone();
 
         match self.auth_storage.get_by_url(url) {
-            Err(e) => {
-                tracing::warn!("Error retrieving authentication for URL {}", e);
+            Err(_) => {
                 // Forward error to caller (invalid URL)
                 next.run(req, extensions).await
             }
@@ -81,7 +80,6 @@ impl AuthenticationMiddleware {
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {
-        println!("Authentication method in authenticate request function: {:?}, req:{:?}", auth, req);
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => {
@@ -111,11 +109,9 @@ impl AuthenticationMiddleware {
                 Authentication::CondaToken(_) => Ok(req),
             }
         } else if req.url().host_str() == Some("storage.googleapis.com") {
-            println!("in google cloud function.");
             let audience = "https://storage.googleapis.com/";
             let scopes = [
                 "https://www.googleapis.com/auth/cloud-platform",
-                "https://www.googleapis.com/auth/spanner.data",
                 "https://www.googleapis.com/auth/devstorage.full_control",
             ];
 
