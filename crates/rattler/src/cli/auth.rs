@@ -96,14 +96,8 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;
-    println!("Authenticating with {}", host);
-    
-    let auth = if host == "GoogleCloud" {
-        // If the host is "GoogleCloud", use GoogleCloud authentication without requiring additional parameters
-        println!("Using Google Cloud authentication for {}", host);
-        Authentication::GoogleCloud
-    } else if let Some(conda_token) = args.conda_token {
+    let host = get_url(&args.host)?;    
+    let auth =  if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
         if args.password.is_none() {
@@ -126,6 +120,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
         return Err(AuthenticationCLIError::AnacondaOrgBadMethod);
     }
 
+    println!("Authentication method in login: {} {:?}",host, auth);
     storage
         .store(&host, &auth)
         .map_err(AuthenticationCLIError::StorageError)?;

@@ -11,7 +11,6 @@ use std::sync::OnceLock;
 use url::Url;
 use google_cloud_auth::project::Config;
 use google_cloud_auth::project::create_token_source;
-use tracing::debug;
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
@@ -30,7 +29,8 @@ impl Middleware for AuthenticationMiddleware {
         let url = req.url().clone();
 
         match self.auth_storage.get_by_url(url) {
-            Err(_) => {
+            Err(e) => {
+                tracing::warn!("Error retrieving authentication for URL {}", e);
                 // Forward error to caller (invalid URL)
                 next.run(req, extensions).await
             }
@@ -81,9 +81,11 @@ impl AuthenticationMiddleware {
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {
+        println!("Authentication method in authenticate request function: {:?}, req:{:?}", auth, req);
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => {
+                    println!("in token function.");
                     let bearer_auth = format!("Bearer {token}");
 
                     let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
@@ -94,38 +96,6 @@ impl AuthenticationMiddleware {
                         .insert(reqwest::header::AUTHORIZATION, header_value);
                     Ok(req)
                 }
-                Authentication::GoogleCloud => {
-                    // Define your audience and scopes based on your requirements
-                    debug!("in google cloud function.");
-
-                    let audience = "https://storage.googleapis.com/";
-                    let scopes = [
-                        "https://www.googleapis.com/auth/cloud-platform",
-                        "https://www.googleapis.com/auth/spanner.data",
-                        "https://storage.googleapis.com/"
-                    ];
-    
-                    // Manually handling the Result to convert errors
-                    match create_token_source(Config { audience: Some(audience), scopes: Some(&scopes), sub: None }).await {
-                        Ok(ts) => {
-                            match ts.token().await {
-                                Ok(token) => {
-                                    let bearer_auth = format!("Bearer {}", token.access_token);
-                                    let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
-                                        .map_err(reqwest_middleware::Error::middleware)?;
-                                    req.headers_mut().insert(reqwest::header::AUTHORIZATION, header_value);
-                                    Ok(req)
-                                },
-                                Err(e) => {
-                                    Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
-                                }
-                            }
-                        },
-                        Err(e) => {
-                            Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
-                        }
-                    }
-                },
                 Authentication::BasicHTTP { username, password } => {
                     let basic_auth = format!("{username}:{password}");
                     let basic_auth = BASE64_STANDARD.encode(basic_auth);
@@ -139,6 +109,30 @@ impl AuthenticationMiddleware {
                     Ok(req)
                 }
                 Authentication::CondaToken(_) => Ok(req),
+            }
+        } else if req.url().host_str() == Some("storage.googleapis.com") {
+            println!("in google cloud function.");
+            let audience = "https://storage.googleapis.com/";
+            let scopes = [
+                "https://www.googleapis.com/auth/cloud-platform",
+                "https://www.googleapis.com/auth/spanner.data",
+                "https://www.googleapis.com/auth/devstorage.full_control",
+            ];
+
+            match create_token_source(Config { audience: Some(audience), scopes: Some(&scopes), sub: None }).await {
+                Ok(ts) => {
+                    match ts.token().await {
+                        Ok(token) => {
+                            let bearer_auth = format!("Bearer {}", token.access_token);
+                            let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                                .map_err(reqwest_middleware::Error::middleware)?;
+                            req.headers_mut().insert(reqwest::header::AUTHORIZATION, header_value);
+                            Ok(req)
+                        },
+                        Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
+                    }
+                },
+                Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
             }
         } else {
             Ok(req)
@@ -405,6 +399,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_google_cloud_credentials_setup() -> anyhow::Result<()> {
+        println!("in test gcloud creds");
         // Check for GOOGLE_APPLICATION_CREDENTIALS environment variable
         let credentials_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS");
     
