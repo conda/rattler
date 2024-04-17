@@ -16,8 +16,8 @@ rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
-anyhow = "1.0.75"
-futures = "0.3.28"
+anyhow = "1.0.82"
+futures = "0.3.30"
 
 rattler = { path = "../crates/rattler", default-features = false }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
@@ -35,25 +35,25 @@ rattler_index = { path = "../crates/rattler_index" }
 rattler_lock = { path = "../crates/rattler_lock", default-features = false }
 rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
 
-pyo3 = { version = "0.19", features = [
+pyo3 = { version = "0.20", features = [
     "abi3-py38",
     "extension-module",
     "multiple-pymethods",
 ] }
-pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
-tokio = { version = "1.32" }
+pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
+tokio = { version = "1.37" }
 
-reqwest = { version = "0.11.22", default-features = false }
-reqwest-middleware = "0.2.4"
+reqwest = { version = "0.12.3", default-features = false }
+reqwest-middleware = "0.3.0"
 
-thiserror = "1.0.44"
-url = "2.4.1"
+thiserror = "1.0.58"
+url = "2.5.0"
 
 openssl = { version = "0.10", optional = true }
 pep508_rs = "0.4.2"
 
 [build-dependencies]
-pyo3-build-config = "0.20"
+pyo3-build-config = "0.21"
 
 
 [patch.crates-io]
