@@ -29,7 +29,7 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 netrc-rs = { workspace = true }
 once_cell = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
