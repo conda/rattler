@@ -656,20 +656,22 @@ mod tests {
     fn test_activation_script_cmd() {
         let script = get_script(shell::CmdExe, PathModificationBehavior::Append);
         assert!(script.contains("\r\n"));
+        let script = script.replace("\r\n", "\n");
         // Filter out the \r\n line endings for the snapshot so that insta + git works smoothly
         insta::assert_snapshot!(
             "test_activation_script_cmd_append",
-            script.replace("\r\n", "\n")
+            script
         );
-        let script = get_script(shell::CmdExe, PathModificationBehavior::Replace);
+        let script = get_script(shell::CmdExe, PathModificationBehavior::Replace)
+            .replace("\r\n", "\n");
         insta::assert_snapshot!(
             "test_activation_script_cmd_replace",
-            script.replace("\r\n", "\n")
+            script,
         );
-        let script = get_script(shell::CmdExe, PathModificationBehavior::Prepend);
+        let script = get_script(shell::CmdExe, PathModificationBehavior::Prepend).replace("\r\n", "\n");
         insta::assert_snapshot!(
             "test_activation_script_cmd_prepend",
-            script.replace("\r\n", "\n")
+            script
         );
     }
 
