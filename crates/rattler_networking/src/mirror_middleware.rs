@@ -4,11 +4,10 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use http::StatusCode;
+use http::{StatusCode, Extensions};
 use itertools::Itertools;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Middleware, Next, Result};
-use task_local_extensions::Extensions;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

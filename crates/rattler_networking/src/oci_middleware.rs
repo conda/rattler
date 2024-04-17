@@ -5,8 +5,8 @@ use http::header::{ACCEPT, AUTHORIZATION};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
-use task_local_extensions::Extensions;
 use url::{ParseError, Url};
+use http::Extensions;
 
 use crate::mirror_middleware::create_404_response;
 
