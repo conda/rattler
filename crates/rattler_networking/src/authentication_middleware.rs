@@ -83,7 +83,6 @@ impl AuthenticationMiddleware {
         if let Some(credentials) = auth {
             match credentials {
                 Authentication::BearerToken(token) => {
-                    println!("in token function.");
                     let bearer_auth = format!("Bearer {token}");
 
                     let mut header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
