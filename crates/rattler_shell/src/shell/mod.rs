@@ -388,7 +388,7 @@ impl Shell for CmdExe {
             write!(f, "{}^{}", &text[..idx], &text[idx..idx + 1])?;
             text = &text[idx + 1..];
         }
-        write!(f, "{text}")
+        writeln!(f, "{text}")
     }
 
     fn write_script(&self, f: &mut impl std::io::Write, script: &str) -> std::io::Result<()> {
@@ -397,7 +397,7 @@ impl Shell for CmdExe {
     }
 
     fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
-        write!(f, "@SET")
+        writeln!(f, "@SET")
     }
 
     fn line_ending(&self) -> &str {
