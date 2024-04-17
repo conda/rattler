@@ -2,10 +2,10 @@
 use std::collections::HashMap;
 
 use http::header::{ACCEPT, AUTHORIZATION};
+use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
-use task_local_extensions::Extensions;
 use url::{ParseError, Url};
 
 use crate::mirror_middleware::create_404_response;

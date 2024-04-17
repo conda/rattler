@@ -14,7 +14,6 @@ readme.workspace = true
 bzip2 = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
-itertools = { workspace = true }
 num_cpus = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.20.5", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "0.19.2", default-features = false }

@@ -15,7 +15,6 @@ chrono = { workspace = true }
 fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
-indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
@@ -27,7 +26,6 @@ serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
-serde_yaml = { workspace = true }
 smallvec = { workspace = true, features = ["serde", "const_new", "const_generics", "union"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
