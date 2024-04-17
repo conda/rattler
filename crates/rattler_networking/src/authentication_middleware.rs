@@ -4,13 +4,13 @@ use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use google_cloud_auth::project::create_token_source;
+use google_cloud_auth::project::Config;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
-use google_cloud_auth::project::Config;
-use google_cloud_auth::project::create_token_source;
 
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
@@ -74,6 +74,37 @@ impl AuthenticationMiddleware {
         }
     }
 
+    ///Authenticate with Google Cloud
+    async fn authenticate_with_google_cloud(
+        mut req: reqwest::Request,
+    ) -> reqwest_middleware::Result<reqwest::Request> {
+        let audience = "https://storage.googleapis.com/";
+        let scopes = [
+            "https://www.googleapis.com/auth/cloud-platform",
+            "https://www.googleapis.com/auth/devstorage.full_control",
+        ];
+        match create_token_source(Config {
+            audience: Some(audience),
+            scopes: Some(&scopes),
+            sub: None,
+        })
+        .await
+        {
+            Ok(ts) => match ts.token().await {
+                Ok(token) => {
+                    let bearer_auth = format!("Bearer {}", token.access_token);
+                    let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
+                        .map_err(reqwest_middleware::Error::middleware)?;
+                    req.headers_mut()
+                        .insert(reqwest::header::AUTHORIZATION, header_value);
+                    Ok(req)
+                }
+                Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
+            },
+            Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
+        }
+    }
+
     /// Authenticate the given request with the given authentication information
     async fn authenticate_request(
         mut req: reqwest::Request,
@@ -107,27 +138,7 @@ impl AuthenticationMiddleware {
                 Authentication::CondaToken(_) => Ok(req),
             }
         } else if req.url().host_str() == Some("storage.googleapis.com") {
-            let audience = "https://storage.googleapis.com/";
-            let scopes = [
-                "https://www.googleapis.com/auth/cloud-platform",
-                "https://www.googleapis.com/auth/devstorage.full_control",
-            ];
-
-            match create_token_source(Config { audience: Some(audience), scopes: Some(&scopes), sub: None }).await {
-                Ok(ts) => {
-                    match ts.token().await {
-                        Ok(token) => {
-                            let bearer_auth = format!("Bearer {}", token.access_token);
-                            let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
-                                .map_err(reqwest_middleware::Error::middleware)?;
-                            req.headers_mut().insert(reqwest::header::AUTHORIZATION, header_value);
-                            Ok(req)
-                        },
-                        Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
-                    }
-                },
-                Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e)))
-            }
+            Self::authenticate_with_google_cloud(req).await
         } else {
             Ok(req)
         }
@@ -388,29 +399,6 @@ mod tests {
         );
 
         storage.delete(host)?;
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_google_cloud_credentials_setup() -> anyhow::Result<()> {
-
-        // Create a temporary directory and mock file
-        let dir = tempdir()?;
-        let credentials_file = dir.path().join("application_default_credentials.json");
-        let mut file = File::create(&credentials_file)?;
-        writeln!(file, "{{\"type\": \"service_account\", \"project_id\": \"mock-project-id\"}}")?;
-    
-        let credentials_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS");    
-        let credentials_exist = if let Ok(path) = credentials_env {
-            Path::new(&path).exists()
-        } else {
-            false
-        };
-    
-        assert!(
-            credentials_exist,
-            "Google Cloud credentials not properly set up. Ensure GOOGLE_APPLICATION_CREDENTIALS is set or the default credentials file exists."
-        );
         Ok(())
     }
 
