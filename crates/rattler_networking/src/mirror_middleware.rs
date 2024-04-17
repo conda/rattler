@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{self, AtomicUsize},
 };
 
-use http::{StatusCode, Extensions};
+use http::{Extensions, StatusCode};
 use itertools::Itertools;
 use reqwest::{Request, Response, ResponseBuilderExt};
 use reqwest_middleware::{Middleware, Next, Result};
