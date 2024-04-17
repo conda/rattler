@@ -106,7 +106,7 @@ resolvo = { version = "0.4.0" }
 retry-policies = { version = "0.3.0", default-features = false }
 rstest = { version = "0.19.0" }
 rstest_reuse = "0.6.0"
-serde = { version = "1.0.197" }
+serde = { version = "1.0.198" }
 serde-json-python-formatter = "0.1.0"
 serde_json = { version = "1.0.116" }
 serde_repr = "0.1"
