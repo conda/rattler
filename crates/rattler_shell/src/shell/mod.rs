@@ -118,8 +118,14 @@ pub trait Shell {
     }
 
     /// Emits writing all current environment variables to stdout.
-    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, "/usr/bin/env")
+    }
+
+    /// Write the script to the writer and do some post-processing for line-endings.
+    /// Only really relevant for cmd.exe scripts.
+    fn write_script(&self, f: &mut impl std::io::Write, script: &str) -> std::io::Result<()> {
+        f.write_all(script.as_bytes())
     }
 
     /// Parses environment variables emitted by the `Shell::env` command.
@@ -131,6 +137,11 @@ pub trait Shell {
                     .map(|(key, value)| (key, value.trim_matches('"')))
             })
             .collect()
+    }
+
+    /// Get the line ending for this shell. Only `CmdExe` uses `\r\n`.
+    fn line_ending(&self) -> &str {
+        "\n"
     }
 }
 
@@ -377,14 +388,20 @@ impl Shell for CmdExe {
             write!(f, "{}^{}", &text[..idx], &text[idx..idx + 1])?;
             text = &text[idx + 1..];
         }
-        write!(f, "{text}")?;
-
-        writeln!(f)
+        write!(f, "{text}")
     }
 
-    /// Emits writing all current environment variables to stdout.
-    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "@SET")
+    fn write_script(&self, f: &mut impl std::io::Write, script: &str) -> std::io::Result<()> {
+        let script = script.replace('\n', "\r\n");
+        f.write_all(script.as_bytes())
+    }
+
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
+        write!(f, "@SET")
+    }
+
+    fn line_ending(&self) -> &str {
+        "\r\n"
     }
 }
 
@@ -446,7 +463,7 @@ impl Shell for PowerShell {
     }
 
     /// Emits writing all current environment variables to stdout.
-    fn env(&self, f: &mut impl Write) -> std::fmt::Result {
+    fn print_env(&self, f: &mut impl Write) -> std::fmt::Result {
         writeln!(f, r##"dir env: | %{{"{{0}}={{1}}" -f $_.Name,$_.Value}}"##)
     }
 }
@@ -703,12 +720,12 @@ pub struct ShellScript<T: Shell> {
     /// The shell class to generate the script for.
     shell: T,
     /// The contents of the script.
-    pub contents: String,
+    contents: String,
     /// The platform for which the script will be generated
     platform: Platform,
 }
 
-impl<T: Shell> ShellScript<T> {
+impl<T: Shell + 'static> ShellScript<T> {
     /// Create a new [`ShellScript`] for the given shell.
     pub fn new(shell: T, platform: Platform) -> Self {
         Self {
@@ -719,19 +736,19 @@ impl<T: Shell> ShellScript<T> {
     }
 
     /// Export an environment variable.
-    pub fn set_env_var(&mut self, env_var: &str, value: &str) -> &mut Self {
-        self.shell
-            .set_env_var(&mut self.contents, env_var, value)
-            .unwrap();
-        self
+    pub fn set_env_var(
+        &mut self,
+        env_var: &str,
+        value: &str,
+    ) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.set_env_var(&mut self.contents, env_var, value)?;
+        Ok(self)
     }
 
     /// Unset an environment variable.
-    pub fn unset_env_var(&mut self, env_var: &str) -> &mut Self {
-        self.shell
-            .unset_env_var(&mut self.contents, env_var)
-            .unwrap();
-        self
+    pub fn unset_env_var(&mut self, env_var: &str) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.unset_env_var(&mut self.contents, env_var)?;
+        Ok(self)
     }
 
     /// Set the PATH environment variable to the given paths.
@@ -739,22 +756,53 @@ impl<T: Shell> ShellScript<T> {
         &mut self,
         paths: &[PathBuf],
         path_modification_behavior: PathModificationBehavior,
-    ) -> &mut Self {
-        self.shell
-            .set_path(
-                &mut self.contents,
-                paths,
-                path_modification_behavior,
-                &self.platform,
-            )
-            .unwrap();
-        self
+    ) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.set_path(
+            &mut self.contents,
+            paths,
+            path_modification_behavior,
+            &self.platform,
+        )?;
+        Ok(self)
     }
 
     /// Run a script in the generated shell script.
-    pub fn run_script(&mut self, path: &Path) -> &mut Self {
-        self.shell.run_script(&mut self.contents, path).unwrap();
+    pub fn run_script(&mut self, path: &Path) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.run_script(&mut self.contents, path)?;
+        Ok(self)
+    }
+
+    /// Add contents to the script. The contents will be added as is, so make sure to format it
+    /// correctly for the shell.
+    pub fn append_script(&mut self, script: &Self) -> &mut Self {
+        self.contents.push('\n');
+        self.contents.push_str(&script.contents);
         self
+    }
+
+    /// Return the contents of the script.
+    pub fn contents(&self) -> Result<String, std::fmt::Error> {
+        let mut final_contents = String::new();
+        self.shell.force_utf8(&mut final_contents)?;
+        final_contents.push_str(&self.contents);
+
+        if self.shell.line_ending() == "\n" {
+            Ok(final_contents)
+        } else {
+            Ok(final_contents.replace('\n', self.shell.line_ending()))
+        }
+    }
+
+    /// Print all environment variables to stdout during execution.
+    pub fn print_env(&mut self) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.print_env(&mut self.contents)?;
+        Ok(self)
+    }
+
+    /// Run `echo` in the shell script.
+    pub fn echo(&mut self, text: &str) -> Result<&mut Self, std::fmt::Error> {
+        self.shell.echo(&mut self.contents, text)?;
+        Ok(self)
     }
 }
 
@@ -770,8 +818,11 @@ mod tests {
 
         script
             .set_env_var("FOO", "bar")
+            .unwrap()
             .unset_env_var("FOO")
-            .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
+            .unwrap()
+            .run_script(&PathBuf::from_str("foo.sh").unwrap())
+            .unwrap();
 
         insta::assert_snapshot!(script.contents);
     }
@@ -782,8 +833,11 @@ mod tests {
 
         script
             .set_env_var("FOO", "bar")
+            .unwrap()
             .unset_env_var("FOO")
-            .run_script(&PathBuf::from_str("foo.sh").expect("blah"));
+            .unwrap()
+            .run_script(&PathBuf::from_str("foo.sh").expect("blah"))
+            .unwrap();
 
         insta::assert_snapshot!(script.contents);
     }
@@ -792,7 +846,9 @@ mod tests {
     fn test_xonsh_bash() {
         let mut script = ShellScript::new(Xonsh, Platform::Linux64);
 
-        script.run_script(&PathBuf::from_str("foo.sh").unwrap());
+        script
+            .run_script(&PathBuf::from_str("foo.sh").unwrap())
+            .unwrap();
 
         insta::assert_snapshot!(script.contents);
     }
@@ -802,8 +858,11 @@ mod tests {
         let mut script = ShellScript::new(Xonsh, Platform::Linux64);
         script
             .set_env_var("FOO", "bar")
+            .unwrap()
             .unset_env_var("FOO")
-            .run_script(&PathBuf::from_str("foo.xsh").unwrap());
+            .unwrap()
+            .run_script(&PathBuf::from_str("foo.xsh").unwrap())
+            .unwrap();
 
         insta::assert_snapshot!(script.contents);
     }
@@ -824,17 +883,21 @@ mod tests {
     #[test]
     fn test_path_seperator() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
-        script.set_path(
-            &[PathBuf::from("/foo"), PathBuf::from("/bar")],
-            PathModificationBehavior::Prepend,
-        );
+        script
+            .set_path(
+                &[PathBuf::from("/foo"), PathBuf::from("/bar")],
+                PathModificationBehavior::Prepend,
+            )
+            .unwrap();
         assert!(script.contents.contains("/foo:/bar"));
 
         let mut script = ShellScript::new(Bash, Platform::Win64);
-        script.set_path(
-            &[PathBuf::from("/foo"), PathBuf::from("/bar")],
-            PathModificationBehavior::Prepend,
-        );
+        script
+            .set_path(
+                &[PathBuf::from("/foo"), PathBuf::from("/bar")],
+                PathModificationBehavior::Prepend,
+            )
+            .unwrap();
         assert!(script.contents.contains("/foo;/bar"));
     }
 

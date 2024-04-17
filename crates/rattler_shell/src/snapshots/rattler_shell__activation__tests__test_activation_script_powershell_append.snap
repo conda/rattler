@@ -2,6 +2,8 @@
 source: crates/rattler_shell/src/activation.rs
 expression: script
 ---
+$OutputEncoding = [System.Text.Encoding]::UTF8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001
 ${Env:PATH} = "$Env:PATH:__PREFIX__/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin"
 ${Env:CONDA_PREFIX} = "__PREFIX__"
-

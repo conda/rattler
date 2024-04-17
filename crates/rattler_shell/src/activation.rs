@@ -9,7 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::shell::Shell;
+use crate::shell::{Shell, ShellScript};
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
 
@@ -55,7 +55,7 @@ impl ActivationVariables {
 /// A struct that holds values for the activation and deactivation
 /// process of an environment, e.g. activation scripts to execute or environment variables to set.
 #[derive(Debug)]
-pub struct Activator<T: Shell> {
+pub struct Activator<T: Shell + 'static> {
     /// The path to the root of the conda environment
     pub target_prefix: PathBuf,
 
@@ -279,10 +279,10 @@ fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
 /// The result of a activation. It contains the activation script and the new path entries.
 /// The activation script already sets the PATH environment variable, but for "environment stacking"
 /// purposes it's useful to have the new path entries separately.
-pub struct ActivationResult {
+pub struct ActivationResult<T: Shell + 'static> {
     /// The activation script that sets the environment variables, runs activation/deactivation scripts
     /// and sets the new PATH environment variable
-    pub script: String,
+    pub script: ShellScript<T>,
     /// The new path entries that are added to the PATH environment variable
     pub path: Vec<PathBuf>,
 }
@@ -342,8 +342,8 @@ impl<T: Shell + Clone> Activator<T> {
     pub fn activation(
         &self,
         variables: ActivationVariables,
-    ) -> Result<ActivationResult, ActivationError> {
-        let mut script = String::new();
+    ) -> Result<ActivationResult<T>, ActivationError> {
+        let mut script = ShellScript::new(self.shell_type.clone(), self.platform);
 
         let mut path = variables.path.clone().unwrap_or_default();
         if let Some(conda_prefix) = variables.conda_prefix {
@@ -354,15 +354,11 @@ impl<T: Shell + Clone> Activator<T> {
             )?;
 
             for (key, _) in &deactivate.env_vars {
-                self.shell_type
-                    .unset_env_var(&mut script, key)
-                    .map_err(ActivationError::FailedToWriteActivationScript)?;
+                script.unset_env_var(key)?;
             }
 
             for deactivation_script in &deactivate.deactivation_scripts {
-                self.shell_type
-                    .run_script(&mut script, deactivation_script)
-                    .map_err(ActivationError::FailedToWriteActivationScript)?;
+                script.run_script(deactivation_script)?;
             }
 
             path.retain(|x| !deactivate.paths.contains(x));
@@ -371,34 +367,17 @@ impl<T: Shell + Clone> Activator<T> {
         // prepend new paths
         let path = [self.paths.clone(), path].concat();
 
-        self.shell_type
-            .set_path(
-                &mut script,
-                path.as_slice(),
-                variables.path_modification_behavior,
-                &self.platform,
-            )
-            .map_err(ActivationError::FailedToWriteActivationScript)?;
+        script.set_path(path.as_slice(), variables.path_modification_behavior)?;
 
         // deliberately not taking care of `CONDA_SHLVL` or any other complications at this point
-        self.shell_type
-            .set_env_var(
-                &mut script,
-                "CONDA_PREFIX",
-                &self.target_prefix.to_string_lossy(),
-            )
-            .map_err(ActivationError::FailedToWriteActivationScript)?;
+        script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
         for (key, value) in &self.env_vars {
-            self.shell_type
-                .set_env_var(&mut script, key, value)
-                .map_err(ActivationError::FailedToWriteActivationScript)?;
+            script.set_env_var(key, value)?;
         }
 
         for activation_script in &self.activation_scripts {
-            self.shell_type
-                .run_script(&mut script, activation_script)
-                .map_err(ActivationError::FailedToWriteActivationScript)?;
+            script.run_script(activation_script)?;
         }
 
         Ok(ActivationResult { script, path })
@@ -406,7 +385,6 @@ impl<T: Shell + Clone> Activator<T> {
 
     /// Runs the activation script and returns the environment variables changed in the environment
     /// after running the script.
-    /// TODO: This only handles UTF-8 formatted strings..
     pub fn run_activation(
         &self,
         variables: ActivationVariables,
@@ -416,17 +394,15 @@ impl<T: Shell + Clone> Activator<T> {
         // Create a script that starts by emitting all environment variables, then runs the
         // activation script followed by again emitting all environment variables. Any changes
         // should then become visible.
-        let mut activation_detection_script = String::new();
-        self.shell_type
-            .force_utf8(&mut activation_detection_script)?;
-        self.shell_type.env(&mut activation_detection_script)?;
-        self.shell_type
-            .echo(&mut activation_detection_script, ENV_START_SEPERATOR)?;
-        activation_detection_script =
-            format!("{}{}", &activation_detection_script, &activation_script);
-        self.shell_type
-            .echo(&mut activation_detection_script, ENV_START_SEPERATOR)?;
-        self.shell_type.env(&mut activation_detection_script)?;
+        let mut activation_detection_script =
+            ShellScript::new(self.shell_type.clone(), self.platform);
+        activation_detection_script
+            .print_env()?
+            .echo(ENV_START_SEPERATOR)?;
+        activation_detection_script.append_script(&activation_script);
+        activation_detection_script
+            .echo(ENV_START_SEPERATOR)?
+            .print_env()?;
 
         // Create a temporary file that we can execute with our shell.
         let activation_script_dir = tempfile::TempDir::new()?;
@@ -434,16 +410,11 @@ impl<T: Shell + Clone> Activator<T> {
             .path()
             .join(format!("activation.{}", self.shell_type.extension()));
 
-        // Use CRLF line endings on Windows batch scripts
-        if self.shell_type.extension() == "bat" {
-            activation_detection_script = activation_detection_script.replace('\n', "\r\n");
-        }
-
+        // Write the activation script to the temporary file, closing the file afterwards
         fs::write(
             &activation_script_path,
-            activation_detection_script.as_bytes(),
+            activation_detection_script.contents()?,
         )?;
-
         // Get only the path to the temporary file
         let activation_result = self
             .shell_type
@@ -452,7 +423,7 @@ impl<T: Shell + Clone> Activator<T> {
 
         if !activation_result.status.success() {
             return Err(ActivationError::FailedToRunActivationScript {
-                script: activation_detection_script,
+                script: activation_detection_script.contents()?,
                 stdout: String::from_utf8_lossy(&activation_result.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&activation_result.stderr).into_owned(),
                 status: activation_result.status,
@@ -606,7 +577,7 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn get_script<T: Shell>(
+    fn get_script<T: Shell + 'static>(
         shell_type: T,
         path_modification_behavior: PathModificationBehavior,
     ) -> String
@@ -631,8 +602,8 @@ mod tests {
             })
             .unwrap();
         let prefix = tdir.path().to_str().unwrap();
-
-        result.script.replace(prefix, "__PREFIX__")
+        let script = result.script.contents().unwrap();
+        script.replace(prefix, "__PREFIX__")
     }
 
     #[test]
@@ -684,11 +655,22 @@ mod tests {
     #[cfg(unix)]
     fn test_activation_script_cmd() {
         let script = get_script(shell::CmdExe, PathModificationBehavior::Append);
-        insta::assert_snapshot!("test_activation_script_cmd_append", script);
+        assert!(script.contains("\r\n"));
+        // Filter out the \r\n line endings for the snapshot so that insta + git works smoothly
+        insta::assert_snapshot!(
+            "test_activation_script_cmd_append",
+            script.replace("\r\n", "\n")
+        );
         let script = get_script(shell::CmdExe, PathModificationBehavior::Replace);
-        insta::assert_snapshot!("test_activation_script_cmd_replace", script);
+        insta::assert_snapshot!(
+            "test_activation_script_cmd_replace",
+            script.replace("\r\n", "\n")
+        );
         let script = get_script(shell::CmdExe, PathModificationBehavior::Prepend);
-        insta::assert_snapshot!("test_activation_script_cmd_prepend", script);
+        insta::assert_snapshot!(
+            "test_activation_script_cmd_prepend",
+            script.replace("\r\n", "\n")
+        );
     }
 
     #[test]
