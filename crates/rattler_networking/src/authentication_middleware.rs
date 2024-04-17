@@ -39,7 +39,7 @@ impl Middleware for AuthenticationMiddleware {
                 let mut req = req;
                 *req.url_mut() = url;
 
-                let req = self.authenticate_request(req, &auth).await?;
+                let req = Self::authenticate_request(req, &auth).await?;
                 next.run(req, extensions).await
             }
         }
@@ -76,7 +76,6 @@ impl AuthenticationMiddleware {
 
     /// Authenticate the given request with the given authentication information
     async fn authenticate_request(
-        &self,
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {
