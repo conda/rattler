@@ -96,8 +96,10 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 }
 
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
-    let host = get_url(&args.host)?;    
-    let auth =  if let Some(conda_token) = args.conda_token {
+    let host = get_url(&args.host)?;
+    println!("Authenticating with {}", host);
+
+    let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
     } else if let Some(username) = args.username {
         if args.password.is_none() {

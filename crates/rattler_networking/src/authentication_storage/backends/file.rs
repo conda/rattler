@@ -189,7 +189,6 @@ mod tests {
                 &Authentication::BearerToken("password".to_string()),
             )
             .unwrap();
-
         storage
             .store(
                 "basic",

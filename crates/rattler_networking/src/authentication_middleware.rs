@@ -395,7 +395,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_google_cloud_credentials_setup() -> anyhow::Result<()> {
-        println!("in test gcloud creds");
         // Check for GOOGLE_APPLICATION_CREDENTIALS environment variable
         let credentials_env = std::env::var("GOOGLE_APPLICATION_CREDENTIALS");
     
