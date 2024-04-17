@@ -489,19 +489,24 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
         assert_eq!(
-            absolute_path(Path::new("foo")).as_ref(),
+            absolute_path(Path::new("."), &current_dir).as_ref(),
+            &current_dir
+        );
+        assert_eq!(
+            absolute_path(Path::new("foo"), &current_dir).as_ref(),
             &current_dir.join("foo")
         );
 
-        let mut parent_dir = current_dir;
+        let mut parent_dir = current_dir.clone();
         assert!(parent_dir.pop());
 
-        assert_eq!(absolute_path(Path::new("..")).as_ref(), &parent_dir);
         assert_eq!(
-            absolute_path(Path::new("../foo")).as_ref(),
+            absolute_path(Path::new(".."), &current_dir).as_ref(),
+            &parent_dir
+        );
+        assert_eq!(
+            absolute_path(Path::new("../foo"), &current_dir).as_ref(),
             &parent_dir.join("foo")
         );
     }
@@ -577,9 +582,12 @@ mod tests {
         assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
         assert_eq!(
             channel.name(),
-            Url::from_directory_path(absolute_path(Path::new("./dir/does/not_exist")))
-                .unwrap()
-                .as_str()
+            Url::from_directory_path(absolute_path(
+                Path::new("./dir/does/not_exist"),
+                &current_dir
+            ))
+            .unwrap()
+            .as_str()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
@@ -663,6 +671,7 @@ mod tests {
     fn config_canonical_name() {
         let channel_config = ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
         };
         assert_eq!(
             channel_config
