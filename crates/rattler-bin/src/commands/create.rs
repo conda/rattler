@@ -11,7 +11,9 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    prefix_record::{Link, LinkType}, Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness, Platform, PrefixRecord, RepoDataRecord, Version
+    prefix_record::{Link, LinkType},
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
+    Platform, PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
@@ -505,7 +507,7 @@ async fn install_package_to_environment(
         link: Some(Link {
             source: package_dir,
             // TODO: compute the right value here based on the options and `can_hard_link` ...
-            link_type: Some(LinkType::HardLink)
+            link_type: Some(LinkType::HardLink),
         }),
     };
 
