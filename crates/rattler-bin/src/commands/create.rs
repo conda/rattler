@@ -385,6 +385,10 @@ async fn execute_transaction(
     // Perform any post processing that is required.
     install_driver.post_process(&transaction, &target_prefix)?;
 
+    // Create a history file (empty) for compatibility with conda.
+    let history_file = target_prefix.join("conda-meta/history");
+    std::fs::write(history_file, "").context("failed to create history file")?;
+
     Ok(())
 }
 
@@ -489,7 +493,7 @@ async fn install_package_to_environment(
     let prefix_record = PrefixRecord {
         repodata_record,
         package_tarball_full_path: None,
-        extracted_package_dir: Some(package_dir),
+        extracted_package_dir: Some(package_dir.clone()),
         files: paths
             .iter()
             .map(|entry| entry.relative_path.clone())
