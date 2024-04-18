@@ -112,12 +112,12 @@ pub enum PyShellEnum {
 impl PyShellEnum {
     pub fn to_shell_enum(&self) -> ShellEnum {
         match self {
-            PyShellEnum::Bash => Bash::default().into(),
-            PyShellEnum::Zsh => Zsh::default().into(),
-            PyShellEnum::Xonsh => Xonsh::default().into(),
-            PyShellEnum::CmdExe => CmdExe::default().into(),
+            PyShellEnum::Bash => Bash.into(),
+            PyShellEnum::Zsh => Zsh.into(),
+            PyShellEnum::Xonsh => Xonsh.into(),
+            PyShellEnum::CmdExe => CmdExe.into(),
             PyShellEnum::PowerShell => PowerShell::default().into(),
-            PyShellEnum::Fish => Fish::default().into(),
+            PyShellEnum::Fish => Fish.into(),
         }
     }
 }
@@ -138,8 +138,8 @@ impl PyActivator {
         let shell = shell.to_shell_enum();
         let platform = platform.inner;
 
-        let activation_result = Activator::from_path(prefix.as_path(), shell, platform.into())?
-            .activation(activation_vars)?;
+        let activation_result =
+            Activator::from_path(prefix.as_path(), shell, platform)?.activation(activation_vars)?;
 
         Ok(activation_result.into())
     }
