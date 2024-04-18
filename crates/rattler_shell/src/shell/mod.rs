@@ -406,9 +406,24 @@ impl Shell for CmdExe {
 }
 
 /// A [`Shell`] implementation for `PowerShell`.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PowerShell {
-    executable_path: Option<String>,
+    executable_path: String,
+}
+
+impl Default for PowerShell {
+    fn default() -> Self {
+        let test_powershell = Command::new("powershell").arg("-Help").output().is_ok();
+        let exe = if test_powershell {
+            "powershell"
+        } else {
+            "pwsh"
+        };
+
+        PowerShell {
+            executable_path: exe.to_string(),
+        }
+    }
 }
 
 impl Shell for PowerShell {
@@ -434,17 +449,7 @@ impl Shell for PowerShell {
     }
 
     fn executable(&self) -> &str {
-        if let Some(executable_path) = self.executable_path.as_deref() {
-            executable_path
-        } else {
-            // check if `powershell` is available, if not, use `pwsh`
-            let powershell = Command::new("pwsh").arg("-Help").output().is_ok();
-            if powershell {
-                "pwsh"
-            } else {
-                "powershell"
-            }
-        }
+        &self.executable_path
     }
 
     fn create_run_script_command(&self, path: &Path) -> Command {
@@ -653,7 +658,7 @@ impl ShellEnum {
             {
                 Some(
                     PowerShell {
-                        executable_path: Some(parent_process_name.clone()),
+                        executable_path: parent_process_name.clone(),
                     }
                     .into(),
                 )
