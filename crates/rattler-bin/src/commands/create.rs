@@ -11,8 +11,7 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
-    Platform, PrefixRecord, RepoDataRecord, Version,
+    prefix_record::{Link, LinkType}, Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness, Platform, PrefixRecord, RepoDataRecord, Version
 };
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
@@ -498,8 +497,12 @@ async fn install_package_to_environment(
         paths_data: paths.into(),
         // TODO: Retrieve the requested spec for this package from the request
         requested_spec: None,
-        // TODO: What to do with this?
-        link: None,
+
+        link: Some(Link {
+            source: package_dir,
+            // TODO: compute the right value here based on the options and `can_hard_link` ...
+            link_type: Some(LinkType::HardLink)
+        }),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
