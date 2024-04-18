@@ -113,7 +113,7 @@ def activate(
     Examples
     --------
     ```python
-    >>> from rattler.shell.shell import Shell, activate, ActivationVariables
+    >>> from rattler.shell import Shell, activate, ActivationVariables
     >>> from rattler.platform import Platform
     >>> from pathlib import Path
     >>> import sys

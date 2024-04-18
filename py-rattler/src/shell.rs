@@ -3,7 +3,7 @@ use crate::platform::PyPlatform;
 use pyo3::{exceptions::PyValueError, pyclass, pymethods, FromPyObject, PyAny, PyResult};
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
-    shell::{Bash, CmdExe, Fish, PowerShell, Xonsh, Zsh},
+    shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
 };
 use std::path::{Path, PathBuf};
 
@@ -72,11 +72,11 @@ impl PyActivationVariables {
 
 #[pyclass]
 pub struct PyActivationResult {
-    pub inner: ActivationResult,
+    pub inner: ActivationResult<ShellEnum>,
 }
 
-impl From<ActivationResult> for PyActivationResult {
-    fn from(value: ActivationResult) -> Self {
+impl From<ActivationResult<ShellEnum>> for PyActivationResult {
+    fn from(value: ActivationResult<ShellEnum>) -> Self {
         PyActivationResult { inner: value }
     }
 }
@@ -89,8 +89,12 @@ impl PyActivationResult {
     }
 
     #[getter]
-    pub fn script(&self) -> String {
-        self.inner.script.clone()
+    pub fn script(&self) -> PyResult<String> {
+        Ok(self
+            .inner
+            .script
+            .contents()
+            .map_err(PyRattlerError::ActivationScriptFormatError)?)
     }
 }
 
@@ -103,6 +107,19 @@ pub enum PyShellEnum {
     CmdExe,
     PowerShell,
     Fish,
+}
+
+impl PyShellEnum {
+    pub fn to_shell_enum(&self) -> ShellEnum {
+        match self {
+            PyShellEnum::Bash => Bash::default().into(),
+            PyShellEnum::Zsh => Zsh::default().into(),
+            PyShellEnum::Xonsh => Xonsh::default().into(),
+            PyShellEnum::CmdExe => CmdExe::default().into(),
+            PyShellEnum::PowerShell => PowerShell::default().into(),
+            PyShellEnum::Fish => Fish::default().into(),
+        }
+    }
 }
 
 #[pyclass]
@@ -118,34 +135,11 @@ impl PyActivator {
         shell: PyShellEnum,
     ) -> Result<PyActivationResult, PyRattlerError> {
         let activation_vars = activation_vars.inner;
-        let activation_result = match shell {
-            PyShellEnum::Bash => {
-                Activator::<Bash>::from_path(prefix.as_path(), Bash, platform.into())?
-                    .activation(activation_vars)?
-            }
-            PyShellEnum::Zsh => {
-                Activator::<Zsh>::from_path(prefix.as_path(), Zsh, platform.into())?
-                    .activation(activation_vars)?
-            }
-            PyShellEnum::Xonsh => {
-                Activator::<Xonsh>::from_path(prefix.as_path(), Xonsh, platform.into())?
-                    .activation(activation_vars)?
-            }
-            PyShellEnum::CmdExe => {
-                Activator::<CmdExe>::from_path(prefix.as_path(), CmdExe, platform.into())?
-                    .activation(activation_vars)?
-            }
-            PyShellEnum::PowerShell => Activator::<PowerShell>::from_path(
-                prefix.as_path(),
-                PowerShell::default(),
-                platform.into(),
-            )?
-            .activation(activation_vars)?,
-            PyShellEnum::Fish => {
-                Activator::<Fish>::from_path(prefix.as_path(), Fish, platform.into())?
-                    .activation(activation_vars)?
-            }
-        };
+        let shell = shell.to_shell_enum();
+        let platform = platform.inner;
+
+        let activation_result = Activator::from_path(prefix.as_path(), shell, platform.into())?
+            .activation(activation_vars)?;
 
         Ok(activation_result.into())
     }
