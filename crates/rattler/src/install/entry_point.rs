@@ -8,7 +8,7 @@ use rattler_conda_types::{
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
 use std::{
-    fs::File,
+    fs::{self, File},
     io::{self, Cursor, Write},
     path::{Path, PathBuf},
 };
@@ -24,7 +24,7 @@ pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
     }
 }
 
-const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'P', b'I', b'X', b'I'];
+const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'U', b'V', b'U', b'V'];
 
 /// Creates an "entry point" on disk for a Python entrypoint. Entrypoints are executable files that
 /// directly call a certain Python function.
@@ -74,6 +74,7 @@ pub fn create_windows_python_entry_point(
 
     let python = PathBuf::from(target_prefix).join(&python_info.path);
     let python_path = dunce::simplified(&python).display().to_string();
+    println!("Python path: {}", python_path);
 
     let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bytes.len() + payload.len());
     launcher.extend_from_slice(launcher_bytes);
@@ -86,7 +87,9 @@ pub fn create_windows_python_entry_point(
     );
     launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
 
-    let (sha256, size) = write_and_hash(&target_dir.join(&relative_path_script_exe), launcher)?;
+    let target_location = target_dir.join(&relative_path_script_exe);
+    fs::create_dir_all(target_location.parent().unwrap())?;
+    let (sha256, size) = write_and_hash(&target_location, launcher)?;
 
     Ok([PathsEntry {
         relative_path: relative_path_script_exe,

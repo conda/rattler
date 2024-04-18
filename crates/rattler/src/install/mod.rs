@@ -396,7 +396,7 @@ pub async fn link_package(
                         }
                     }
                 });
-                number_of_paths_entries += 2;
+                number_of_paths_entries += 1;
             } else {
                 driver.spawn_throttled_and_forget(move || {
                     // Return immediately if the receiver was closed. This can happen if a previous step

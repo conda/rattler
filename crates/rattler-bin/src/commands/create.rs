@@ -26,7 +26,6 @@ use rattler_solve::{
     resolvo, SolverImpl, SolverTask,
 };
 use reqwest::Client;
-use std::sync::Arc;
 use std::{
     borrow::Cow,
     env,
@@ -36,6 +35,7 @@ use std::{
     str::FromStr,
     time::Duration,
 };
+use std::{fs, sync::Arc};
 use tokio::task::JoinHandle;
 
 #[derive(Debug, clap::Parser)]
@@ -60,12 +60,23 @@ pub struct Opt {
 
     #[clap(long)]
     timeout: Option<u64>,
+
+    #[clap(long)]
+    target_prefix: Option<PathBuf>,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
-    let target_prefix = env::current_dir()?.join(".prefix");
-
+    let target_prefix = opt.target_prefix.unwrap_or_else(|| {
+        env::current_dir()
+            .expect("could not find current dir")
+            .join(".prefix")
+    });
+    // First create the target prefix if it doesn't exist yet.
+    fs::create_dir_all(&target_prefix).expect("could not create target prefix");
+    // Canonicalize the target prefix so we can use it in the future.
+    let target_prefix =
+        fs::canonicalize(target_prefix).context("could not canonicalize target prefix")?;
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
         Platform::from_str(&platform)?
