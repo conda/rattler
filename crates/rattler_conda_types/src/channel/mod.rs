@@ -39,11 +39,11 @@ pub struct ChannelConfig {
 impl ChannelConfig {
     /// Create a new `ChannelConfig` with the default values.
     pub fn default_with_root_dir(root_dir: PathBuf) -> Self {
-        return Self {
+        Self {
             root_dir,
             channel_alias: Url::from_str(DEFAULT_CHANNEL_ALIAS)
                 .expect("could not parse default channel alias"),
-        };
+        }
     }
 
     /// Returns the canonical name of a channel with the given base url.
