@@ -413,11 +413,13 @@ pub struct PowerShell {
 
 impl Default for PowerShell {
     fn default() -> Self {
-        let test_powershell = Command::new("powershell").arg("-Help").output().is_ok();
+        // Check if the modern "pwsh" PowerShell Core is available
+        let test_powershell = Command::new("pwsh").arg("-v").output().is_ok();
         let exe = if test_powershell {
-            "powershell"
-        } else {
             "pwsh"
+        } else {
+            // Fall back to older "Windows PowerShell"
+            "powershell"
         };
 
         PowerShell {
