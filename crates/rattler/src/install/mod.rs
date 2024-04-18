@@ -386,9 +386,8 @@ pub async fn link_package(
                         &python_info,
                         &platform,
                     ) {
-                        Ok([a, b]) => {
+                        Ok([a]) => {
                             let _ = tx.blocking_send(Ok((number_of_paths_entries, a)));
-                            let _ = tx.blocking_send(Ok((number_of_paths_entries + 1, b)));
                         }
                         Err(e) => {
                             let _ = tx.blocking_send(Err(

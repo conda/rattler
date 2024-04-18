@@ -7,17 +7,24 @@ use rattler_conda_types::{
 };
 use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
-use std::{fs::File, io, io::Write, path::Path};
+use std::{
+    fs::File,
+    io::{self, Cursor, Write},
+    path::{Path, PathBuf},
+};
+use zip::{write::FileOptions, ZipWriter};
 
 /// Get the bytes of the windows launcher executable.
 pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
     match platform {
         Platform::Win32 => unimplemented!("32 bit windows is not supported for entry points"),
-        Platform::Win64 => include_bytes!("../../resources/launcher64.exe"),
-        Platform::WinArm64 => unimplemented!("arm64 windows is not supported for entry points"),
+        Platform::Win64 => include_bytes!("../../resources/uv-trampoline-x86_64-console.exe"),
+        Platform::WinArm64 => include_bytes!("../../resources/uv-trampoline-aarch64-console.exe"),
         _ => panic!("unsupported platform"),
     }
 }
+
+const LAUNCHER_MAGIC_NUMBER: [u8; 4] = [b'P', b'I', b'X', b'I'];
 
 /// Creates an "entry point" on disk for a Python entrypoint. Entrypoints are executable files that
 /// directly call a certain Python function.
@@ -39,21 +46,8 @@ pub fn create_windows_python_entry_point(
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
     target_platform: &Platform,
-) -> Result<[PathsEntry; 2], std::io::Error> {
-    // Construct the path to where we will be creating the python entry point script.
-    let relative_path_script_py = python_info
-        .bin_dir
-        .join(format!("{}-script.py", &entry_point.command));
-
-    // Write the contents of the launcher script to disk
-    let script_path = target_dir.join(&relative_path_script_py);
-    std::fs::create_dir_all(
-        script_path
-            .parent()
-            .expect("since we joined with target_dir there must be a parent"),
-    )?;
+) -> Result<[PathsEntry; 1], std::io::Error> {
     let script_contents = python_entry_point_template(target_prefix, entry_point, python_info);
-    let (hash, size) = write_and_hash(&script_path, script_contents)?;
 
     // Construct a path to where we will create the python launcher executable.
     let relative_path_script_exe = python_info
@@ -62,34 +56,47 @@ pub fn create_windows_python_entry_point(
 
     // Include the bytes of the launcher directly in the binary so we can write it to disk.
     let launcher_bytes = get_windows_launcher(target_platform);
-    std::fs::write(target_dir.join(&relative_path_script_exe), launcher_bytes)?;
 
-    let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
-        "28b001bb9a72ae7a24242bfab248d767a1ac5dec981c672a3944f7a072375e9a",
-    )
-    .unwrap();
+    let mut payload: Vec<u8> = Vec::new();
+    {
+        // We're using the zip writer, but with stored compression
+        // https://github.com/njsmith/posy/blob/04927e657ca97a5e35bb2252d168125de9a3a025/src/trampolines/mod.rs#L75-L82
+        // https://github.com/pypa/distlib/blob/8ed03aab48add854f377ce392efffb79bb4d6091/PC/launcher.c#L259-L271
+        let stored = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let mut archive = ZipWriter::new(Cursor::new(&mut payload));
+        let error_msg = "Writing to Vec<u8> should never fail";
+        archive.start_file("__main__.py", stored).expect(error_msg);
+        archive
+            .write_all(script_contents.as_bytes())
+            .expect(error_msg);
+        archive.finish().expect(error_msg);
+    }
 
-    Ok([
-        PathsEntry {
-            relative_path: relative_path_script_py,
-            // todo: clobbering of entry points not handled yet
-            original_path: None,
-            path_type: PathType::WindowsPythonEntryPointScript,
-            no_link: false,
-            sha256: Some(hash),
-            sha256_in_prefix: None,
-            size_in_bytes: Some(size as _),
-        },
-        PathsEntry {
-            relative_path: relative_path_script_exe,
-            original_path: None,
-            path_type: PathType::WindowsPythonEntryPointExe,
-            no_link: false,
-            sha256: Some(fixed_launcher_digest),
-            sha256_in_prefix: None,
-            size_in_bytes: Some(launcher_bytes.len() as u64),
-        },
-    ])
+    let python = PathBuf::from(target_prefix).join(&python_info.path);
+    let python_path = dunce::simplified(&python).display().to_string();
+
+    let mut launcher: Vec<u8> = Vec::with_capacity(launcher_bytes.len() + payload.len());
+    launcher.extend_from_slice(launcher_bytes);
+    launcher.extend_from_slice(&payload);
+    launcher.extend_from_slice(python_path.as_bytes());
+    launcher.extend_from_slice(
+        &u32::try_from(python_path.as_bytes().len())
+            .expect("File Path to be smaller than 4GB")
+            .to_le_bytes(),
+    );
+    launcher.extend_from_slice(&LAUNCHER_MAGIC_NUMBER);
+
+    let (sha256, size) = write_and_hash(&target_dir.join(&relative_path_script_exe), launcher)?;
+
+    Ok([PathsEntry {
+        relative_path: relative_path_script_exe,
+        original_path: None,
+        path_type: PathType::WindowsPythonEntryPointExe,
+        no_link: false,
+        sha256: Some(sha256),
+        sha256_in_prefix: None,
+        size_in_bytes: Some(size as u64),
+    }])
 }
 
 /// Creates an "entry point" on disk for a Python entrypoint. Entrypoints are executable files that
