@@ -11,6 +11,8 @@ use url::Url;
 
 use super::{ParsePlatformError, Platform};
 
+const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
+
 /// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
 /// channel URLs.
 ///
@@ -35,6 +37,15 @@ pub struct ChannelConfig {
 }
 
 impl ChannelConfig {
+    /// Create a new `ChannelConfig` with the default values.
+    pub fn default_with_root_dir(root_dir: PathBuf) -> Self {
+        return Self {
+            root_dir,
+            channel_alias: Url::from_str(DEFAULT_CHANNEL_ALIAS)
+                .expect("could not parse default channel alias"),
+        };
+    }
+
     /// Returns the canonical name of a channel with the given base url.
     pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
         if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
@@ -101,16 +112,6 @@ impl NamedChannelOrUrl {
 impl Display for NamedChannelOrUrl {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_str())
-    }
-}
-
-impl Default for ChannelConfig {
-    fn default() -> Self {
-        ChannelConfig {
-            channel_alias: Url::from_str("https://conda.anaconda.org")
-                .expect("could not parse default channel alias"),
-            root_dir: std::env::current_dir().expect("could not get current directory"),
-        }
     }
 }
 
@@ -527,7 +528,7 @@ mod tests {
 
     #[test]
     fn parse_by_name() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(
@@ -543,7 +544,7 @@ mod tests {
 
     #[test]
     fn parse_from_url() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel =
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
@@ -562,7 +563,7 @@ mod tests {
 
     #[test]
     fn parse_from_file_path() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("file:///var/channels/conda-forge", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
@@ -598,7 +599,7 @@ mod tests {
 
     #[test]
     fn parse_url_only() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(
@@ -621,7 +622,7 @@ mod tests {
     #[test]
     fn parse_platform() {
         let platform = Platform::Linux32;
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/conda-forge[{platform}]"),

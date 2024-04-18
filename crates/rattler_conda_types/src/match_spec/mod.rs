@@ -388,7 +388,9 @@ where
 
     match s {
         Some(str_val) => {
-            let config = ChannelConfig::default();
+            let config = ChannelConfig::default_with_root_dir(
+                std::env::current_dir().expect("Could not determine current directory"),
+            );
 
             Channel::from_str(str_val, &config)
                 .map(|channel| Some(Arc::new(channel)))
