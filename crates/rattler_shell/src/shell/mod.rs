@@ -338,7 +338,7 @@ pub struct CmdExe;
 
 impl Shell for CmdExe {
     fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
-        writeln!(f, "chcp 65001 > nul")
+        writeln!(f, "@chcp 65001 > nul")
     }
 
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
@@ -443,11 +443,11 @@ impl Shell for PowerShell {
             executable_path
         } else {
             // check if `powershell` is available, if not, use `pwsh`
-            let powershell = Command::new("powershell").arg("-Help").output().is_ok();
+            let powershell = Command::new("pwsh").arg("-Help").output().is_ok();
             if powershell {
-                "powershell"
-            } else {
                 "pwsh"
+            } else {
+                "powershell"
             }
         }
     }
