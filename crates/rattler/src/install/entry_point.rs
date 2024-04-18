@@ -38,6 +38,7 @@ pub fn create_windows_python_entry_point(
     target_prefix: &str,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
+    target_platform: &Platform,
 ) -> Result<[PathsEntry; 2], std::io::Error> {
     // Construct the path to where we will be creating the python entry point script.
     let relative_path_script_py = python_info
@@ -60,7 +61,7 @@ pub fn create_windows_python_entry_point(
         .join(format!("{}.exe", &entry_point.command));
 
     // Include the bytes of the launcher directly in the binary so we can write it to disk.
-    let launcher_bytes = get_windows_launcher(&Platform::current());
+    let launcher_bytes = get_windows_launcher(target_platform);
     std::fs::write(target_dir.join(&relative_path_script_exe), launcher_bytes)?;
 
     let fixed_launcher_digest = rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
