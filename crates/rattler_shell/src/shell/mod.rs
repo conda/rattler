@@ -413,13 +413,8 @@ pub struct PowerShell {
 
 impl Shell for PowerShell {
     fn force_utf8(&self, f: &mut impl Write) -> std::fmt::Result {
-        // Taken from https://stackoverflow.com/questions/51933189/character-encoding-utf-8-in-powershell-session
-        writeln!(f, "$OutputEncoding = [System.Text.Encoding]::UTF8")?;
-        writeln!(
-            f,
-            "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8"
-        )?;
-        writeln!(f, "chcp 65001")
+        // Taken from https://stackoverflow.com/a/49481797
+        writeln!(f, "$OutputEncoding = [System.Console]::OutputEncoding = [System.Console]::InputEncoding = [System.Text.Encoding]::UTF8")
     }
 
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
