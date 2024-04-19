@@ -11,6 +11,7 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
+    prefix_record::{Link, LinkType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
     Platform, PrefixRecord, RepoDataRecord, Version,
 };
@@ -393,6 +394,10 @@ async fn execute_transaction(
     // Perform any post processing that is required.
     install_driver.post_process(&transaction, &target_prefix)?;
 
+    // Create a history file (empty) for compatibility with conda.
+    let history_file = target_prefix.join("conda-meta/history");
+    std::fs::write(history_file, "").context("failed to create history file")?;
+
     Ok(())
 }
 
@@ -497,7 +502,7 @@ async fn install_package_to_environment(
     let prefix_record = PrefixRecord {
         repodata_record,
         package_tarball_full_path: None,
-        extracted_package_dir: Some(package_dir),
+        extracted_package_dir: Some(package_dir.clone()),
         files: paths
             .iter()
             .map(|entry| entry.relative_path.clone())
@@ -505,8 +510,12 @@ async fn install_package_to_environment(
         paths_data: paths.into(),
         // TODO: Retrieve the requested spec for this package from the request
         requested_spec: None,
-        // TODO: What to do with this?
-        link: None,
+
+        link: Some(Link {
+            source: package_dir,
+            // TODO: compute the right value here based on the options and `can_hard_link` ...
+            link_type: Some(LinkType::HardLink),
+        }),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.
