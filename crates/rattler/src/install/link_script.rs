@@ -111,12 +111,7 @@ pub fn run_link_scripts<'a>(
                 prec.name.as_normalized()
             );
 
-            match rattler_shell::run_in_environment(
-                target_prefix,
-                &[&link_file.to_string_lossy()],
-                shell,
-                &env,
-            ) {
+            match rattler_shell::run_in_environment(target_prefix, &link_file, shell, &env) {
                 Ok(o) if o.status.success() => {}
                 Ok(o) => {
                     failed_packages.push(prec.name.clone());

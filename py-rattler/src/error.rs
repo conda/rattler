@@ -62,6 +62,8 @@ pub enum PyRattlerError {
     EnvironmentCreationError(String),
     #[error(transparent)]
     ExtractError(#[from] ExtractError),
+    #[error(transparent)]
+    ActivationScriptFormatError(std::fmt::Error),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -109,6 +111,9 @@ impl From<PyRattlerError> for PyErr {
                 EnvironmentCreationException::new_err(err)
             }
             PyRattlerError::ExtractError(err) => ExtractException::new_err(err.to_string()),
+            PyRattlerError::ActivationScriptFormatError(err) => {
+                ActivationScriptFormatException::new_err(err.to_string())
+            }
         }
     }
 }
@@ -135,3 +140,4 @@ create_exception!(exceptions, ConversionException, PyException);
 create_exception!(exceptions, RequirementException, PyException);
 create_exception!(exceptions, EnvironmentCreationException, PyException);
 create_exception!(exceptions, ExtractException, PyException);
+create_exception!(exceptions, ActivationScriptFormatException, PyException);

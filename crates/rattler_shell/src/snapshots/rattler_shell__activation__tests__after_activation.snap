@@ -6,4 +6,3 @@ PKG1: "Hello, world!"
 PKG2: "Hello, world!"
 SCRIPT_ENV: "Hello, world!"
 STATE: "Hello, world!"
-
