@@ -197,11 +197,20 @@ mod test {
     fn test_entry_point_script() {
         let script = super::python_entry_point_template(
             "/prefix",
-            true,
+            false,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
             &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::Linux64)
                 .unwrap(),
         );
         insta::assert_snapshot!(script);
+
+        let script = super::python_entry_point_template(
+            "/prefix",
+            true,
+            &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
+            &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::Linux64)
+                .unwrap(),
+        );
+        insta::assert_snapshot!("windows", script);
     }
 }

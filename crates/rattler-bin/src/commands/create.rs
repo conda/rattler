@@ -68,7 +68,10 @@ pub struct Opt {
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
     let current_dir = env::current_dir()?;
-    let target_prefix = opt.target_prefix.unwrap_or_else(|| current_dir.join(".prefix"));
+    let target_prefix = opt
+        .target_prefix
+        .unwrap_or_else(|| current_dir.join(".prefix"));
+    println!("target prefix: {target_prefix:?}");
 
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
