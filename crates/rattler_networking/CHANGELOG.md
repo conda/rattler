@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.1...rattler_networking-v0.20.2) - 2024-04-19
+
+### Added
+- enable zst support for OCI registry ([#601](https://github.com/mamba-org/rattler/pull/601))
+
+### Other
+- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+
 ## [0.20.1](https://github.com/baszalmstra/rattler/compare/rattler_networking-v0.20.0...rattler_networking-v0.20.1) - 2024-04-05
 
 ### Fixed
