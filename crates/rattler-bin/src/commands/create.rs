@@ -60,11 +60,15 @@ pub struct Opt {
 
     #[clap(long)]
     timeout: Option<u64>,
+
+    #[clap(long)]
+    target_prefix: Option<PathBuf>,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let channel_config = ChannelConfig::default();
-    let target_prefix = env::current_dir()?.join(".prefix");
+    let current_dir = env::current_dir()?;
+    let target_prefix = opt.target_prefix.unwrap_or_else(|| current_dir.join(".prefix"));
 
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
