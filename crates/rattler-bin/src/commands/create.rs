@@ -67,7 +67,7 @@ pub struct Opt {
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
-    let channel_config = ChannelConfig::default();
+    let channel_config = ChannelConfig::default_with_root_dir(env::current_dir()?);
     let current_dir = env::current_dir()?;
     let target_prefix = opt
         .target_prefix

@@ -421,13 +421,15 @@ fn matchspec_parser(
         .or(nameless_match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
+        let channel_config = ChannelConfig::default_with_root_dir(
+            std::env::current_dir().expect("Could not get current directory"),
+        );
         if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            nameless_match_spec.channel =
-                Some(Channel::from_str(channel, &ChannelConfig::default())?.into());
+            nameless_match_spec.channel = Some(Channel::from_str(channel, &channel_config)?.into());
             nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
             nameless_match_spec.channel =
-                Some(Channel::from_str(channel_str, &ChannelConfig::default())?.into());
+                Some(Channel::from_str(channel_str, &channel_config)?.into());
         }
     }
 
@@ -505,6 +507,12 @@ mod tests {
     use crate::match_spec::parse::parse_bracket_list;
     use crate::{BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, VersionSpec};
     use smallvec::smallvec;
+
+    fn channel_config() -> ChannelConfig {
+        ChannelConfig::default_with_root_dir(
+            std::env::current_dir().expect("Could not get current directory"),
+        )
+    }
 
     #[test]
     fn test_strip_brackets() {
@@ -600,7 +608,7 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
@@ -615,7 +623,7 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
@@ -634,7 +642,7 @@ mod tests {
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
