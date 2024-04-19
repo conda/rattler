@@ -282,6 +282,7 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
         metadata.len()
     };
+
     let prefix_placeholder: Option<String> = path_json_entry
         .prefix_placeholder
         .as_ref()
