@@ -297,10 +297,14 @@ pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
 /// Note: this function relies on primitives that are only available on unix-like operating systems,
 /// and will panic if called from another platform (e.g. Windows)
 #[cfg(target_family = "unix")]
-pub fn cache_repodata(url: String, data: &[RepoDataRecord]) -> LibcByteSlice {
+pub fn cache_repodata(
+    url: String,
+    data: &[RepoDataRecord],
+    channel_priority: Option<i32>,
+) -> LibcByteSlice {
     // Add repodata to a new pool + repo
     let pool = Pool::default();
-    let repo = Repo::new(&pool, url);
+    let repo = Repo::new(&pool, url, channel_priority.unwrap_or(0));
     add_repodata_records(&pool, &repo, data);
 
     // Export repo to .solv in memory

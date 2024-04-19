@@ -7,7 +7,7 @@ use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::mem::ManuallyDrop;
 use wrapper::{
@@ -113,7 +113,7 @@ impl super::SolverImpl for Solver {
         pool.set_debug_level(Verbosity::Low);
 
         // Add virtual packages
-        let repo = Repo::new(&pool, "virtual_packages");
+        let repo = Repo::new(&pool, "virtual_packages", 0);
         add_virtual_packages(&pool, &repo, &task.virtual_packages);
 
         // Mark the virtual packages as installed.
@@ -122,15 +122,53 @@ impl super::SolverImpl for Solver {
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
-        for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
+
+        let repodatas: Vec<Self::RepoData<'_>> = task
+            .available_packages
+            .into_iter()
+            .map(IntoRepoData::into)
+            .collect();
+
+        let channel_priority: HashMap<String, i32> =
+            if task.channel_priority == ChannelPriority::Strict {
+                let mut seen_channels = HashSet::new();
+                let mut channel_order: Vec<String> = Vec::new();
+                for channel in repodatas
+                    .iter()
+                    .filter(|&r| !r.records.is_empty())
+                    .map(|r| r.records[0].channel.clone())
+                {
+                    if !seen_channels.contains(&channel) {
+                        channel_order.push(channel.clone());
+                        seen_channels.insert(channel);
+                    }
+                }
+                let mut channel_priority = HashMap::new();
+                for (index, channel) in channel_order.iter().enumerate() {
+                    let reverse_index = channel_order.len() - index;
+                    channel_priority.insert(channel.clone(), reverse_index as i32);
+                }
+                channel_priority
+            } else {
+                HashMap::new()
+            };
+
+        for repodata in repodatas.iter() {
             if repodata.records.is_empty() {
                 continue;
             }
-
             let channel_name = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
-            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name));
+            // let repo = ManuallyDrop::new(Repo::new(&pool, channel_name));
+            let priority: i32 = if task.channel_priority == ChannelPriority::Strict {
+                // TODO we need to fill in the correct values here, derived from some channel -> priority map
+                // Higher values take precedence.
+                *channel_priority.get(channel_name).unwrap()
+            } else {
+                0
+            };
+            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name, priority));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
@@ -140,11 +178,11 @@ impl super::SolverImpl for Solver {
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo.id(), repo_mapping.len());
-            all_repodata_records.push(repodata.records);
+            all_repodata_records.push(repodata.records.clone());
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo = Repo::new(&pool, "locked");
+        let repo = Repo::new(&pool, "locked", 0);
         let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
 
         // Also add the installed records to the repodata
@@ -152,7 +190,7 @@ impl super::SolverImpl for Solver {
         all_repodata_records.push(task.locked_packages.iter().collect());
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo = Repo::new(&pool, "pinned");
+        let repo = Repo::new(&pool, "pinned", 0);
         let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
 
         // Also add the installed records to the repodata

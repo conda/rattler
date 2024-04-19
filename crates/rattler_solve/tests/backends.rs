@@ -524,6 +524,7 @@ mod libsolv_c {
                 .platform_url(rattler_conda_types::Platform::Linux64)
                 .to_string(),
             &repo_data,
+            None,
         );
 
         let libsolv_repodata = rattler_solve::libsolv_c::RepoData {
@@ -773,6 +774,7 @@ fn solve_to_get_channel_of_spec(
     expected_channel: &str,
     repo_data: Vec<&SparseRepoData>,
     channel_priority: ChannelPriority,
+    use_resolvo: bool,
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
@@ -781,17 +783,31 @@ fn solve_to_get_channel_of_spec(
     let available_packages =
         SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
 
-    let result = rattler_solve::resolvo::Solver
-        .solve(SolverTask {
-            available_packages: &available_packages,
-            specs: specs.clone(),
-            locked_packages: Vec::default(),
-            pinned_packages: Vec::default(),
-            virtual_packages: Vec::default(),
-            timeout: None,
-            channel_priority,
-        })
-        .unwrap();
+    let result = if use_resolvo {
+        rattler_solve::resolvo::Solver
+            .solve(SolverTask {
+                available_packages: &available_packages,
+                specs: specs.clone(),
+                locked_packages: Vec::default(),
+                pinned_packages: Vec::default(),
+                virtual_packages: Vec::default(),
+                timeout: None,
+                channel_priority,
+            })
+            .unwrap()
+    } else {
+        rattler_solve::libsolv_c::Solver
+            .solve(SolverTask {
+                available_packages: &available_packages,
+                specs: specs.clone(),
+                locked_packages: Vec::default(),
+                pinned_packages: Vec::default(),
+                virtual_packages: Vec::default(),
+                timeout: None,
+                channel_priority,
+            })
+            .unwrap()
+    };
 
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
@@ -810,24 +826,28 @@ fn channel_specific_requirement() {
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
         ChannelPriority::Strict,
+        true,
     );
     solve_to_get_channel_of_spec(
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
         ChannelPriority::Disabled,
+        true,
     );
     solve_to_get_channel_of_spec(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata.clone(),
         ChannelPriority::Strict,
+        true,
     );
     solve_to_get_channel_of_spec(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
+        true,
     );
 }
 
@@ -843,6 +863,7 @@ fn channel_priority_strict() {
         "https://conda.anaconda.org/conda-forge/",
         repodata,
         ChannelPriority::Strict,
+        true,
     );
 
     // Solve with pytorch as the first channel
@@ -855,14 +876,33 @@ fn channel_priority_strict() {
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Strict,
+        true,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"The following packages \
+    are incompatible\\n└─ pytorch-cpu ==0.4.1 py36_cpu_1 cannot be installed because there are no \
+    viable options:\\n   └─ pytorch-cpu 0.4.1 is excluded because due to strict channel priority \
+    not using this option from: 'https://conda.anaconda.org/pytorch/'\\n\"])"
+)]
+fn channel_priority_strict_panic() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        ChannelPriority::Strict,
+        true,
     );
 }
 
 #[test]
 fn channel_priority_disabled() {
-    // This solve fails if strict channel priority is enabled because pytorch-cpu 0.4.1 only exists
-    // in the pytorch channel and yet conda forge has other versions of pytorch, but this will
-    // pass in this test with strict channel priority disabled.
     let repodata = vec![
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
@@ -872,44 +912,42 @@ fn channel_priority_disabled() {
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
+        true,
+    );
+}
+
+#[test]
+#[should_panic(
+    expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"package \
+    pytorch-cpu-0.4.1-py36_cpu_1 is excluded by strict repo priority\"])"
+)]
+fn channel_priority_strict_libsolv_c() {
+    let repodata = vec![
+        read_conda_forge_sparse_repo_data(),
+        read_pytorch_sparse_repo_data(),
+    ];
+
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        ChannelPriority::Strict,
+        false,
     );
 }
 
 #[test]
 fn channel_priority_disabled_libsolv_c() {
-    // This solve fails if strict channel priority is enabled because pytorch-cpu 0.4.1 only exists
-    // in the pytorch channel and yet conda forge has other versions of pytorch, but this will
-    // pass in this test with strict channel priority disabled.
-    let repo_data = vec![
+    let repodata = vec![
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
     ];
-    let spec_str = "pytorch-cpu=0.4.1=py36_cpu_1";
-    let expected_channel = "https://conda.anaconda.org/pytorch/";
 
-    let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
-    let specs = vec![spec.clone()];
-    let names = specs.iter().filter_map(|s| s.name.as_ref().cloned());
-
-    let available_packages =
-        SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
-
-    let channel_priority = ChannelPriority::Strict;
-    let result = rattler_solve::libsolv_c::Solver
-        .solve(SolverTask {
-            available_packages: &available_packages,
-            specs: specs.clone(),
-            locked_packages: Vec::default(),
-            pinned_packages: Vec::default(),
-            virtual_packages: Vec::default(),
-            timeout: None,
-            channel_priority,
-        })
-        .unwrap();
-
-    assert_eq!(channel_priority == ChannelPriority::Strict, true);
-    let record = result.iter().find(|record| {
-        record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
-    });
-    assert_eq!(record.unwrap().channel, expected_channel.to_string());
+    solve_to_get_channel_of_spec(
+        "pytorch-cpu=0.4.1=py36_cpu_1",
+        "https://conda.anaconda.org/pytorch/",
+        repodata,
+        ChannelPriority::Disabled,
+        false,
+    );
 }
