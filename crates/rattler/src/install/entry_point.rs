@@ -80,6 +80,8 @@ pub fn create_windows_python_entry_point(
             sha256: Some(hash),
             sha256_in_prefix: None,
             size_in_bytes: Some(size as _),
+            prefix_placeholder: None,
+            file_mode: None,
         },
         PathsEntry {
             relative_path: relative_path_script_exe,
@@ -89,6 +91,8 @@ pub fn create_windows_python_entry_point(
             sha256: Some(fixed_launcher_digest),
             sha256_in_prefix: None,
             size_in_bytes: Some(launcher_bytes.len() as u64),
+            prefix_placeholder: None,
+            file_mode: None
         },
     ])
 }
@@ -136,6 +140,8 @@ pub fn create_unix_python_entry_point(
         sha256: Some(hash),
         sha256_in_prefix: None,
         size_in_bytes: Some(size as _),
+        prefix_placeholder: None,
+        file_mode: None,
     })
 }
 

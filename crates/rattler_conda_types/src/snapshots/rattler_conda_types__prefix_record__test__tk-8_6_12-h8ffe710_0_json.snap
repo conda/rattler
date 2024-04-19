@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/prefix_record.rs
+assertion_line: 344
 expression: prefix_record
 ---
 arch: x86_64
@@ -1131,6 +1132,8 @@ paths_data:
       sha256: d9ad2cbf80850fbdacab735ded03e83edc71089ec115307bff3be58bf55cef1e
       sha256_in_prefix: d9ad2cbf80850fbdacab735ded03e83edc71089ec115307bff3be58bf55cef1e
       size_in_bytes: 1711616
+      file_mode: binary
+      prefix_placeholder: "D:\\bld\\tk_1645032569673\\_h_env"
     - _path: Library/bin/tclsh.exe
       path_type: hardlink
       sha256: bbde6d63c5f16fd17476ae144fd6475641d93e1f8ceed20759a16bb3adda26e5
@@ -5586,6 +5589,8 @@ paths_data:
       sha256: 1bba23ef9c21a2a9befbaf11dc751236f66efeb3c84d0bb1b3ed4f1065c8f791
       sha256_in_prefix: af0e03028d2d594f8ff285b9892b5802d18a72e7622953d208e0ad1ca88ed095
       size_in_bytes: 7876
+      file_mode: text
+      prefix_placeholder: "D:\\bld\\tk_1645032569673\\_h_env"
     - _path: Library/lib/tclooConfig.sh
       path_type: hardlink
       sha256: 9a3210c14cba9aead381e376ff4bb454cc3dfd96f9d112fc66d8770e5197c17d
@@ -5621,6 +5626,8 @@ paths_data:
       sha256: 96ee03106a57ecf7cbcb568392b682c7c9e435d0eb03848a2b3aeb5655bf1ce0
       sha256_in_prefix: dcf2d84c37c9f3c63be5a09dad166945464bce9664fe93aee875d9d18c43308f
       size_in_bytes: 3978
+      file_mode: text
+      prefix_placeholder: "D:\\bld\\tk_1645032569673\\_h_env"
     - _path: Library/lib/tdbc1.1.3/tdbc_connection.n
       path_type: hardlink
       sha256: bbda03d846bfe392b8ebbfe3b5cc2c69c2a2d5c49b05730b40ac254429ea322a
@@ -6625,4 +6632,3 @@ link:
   source: "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
   type: 1
 requested_spec: "conda-forge/win-64::tk==8.6.12=h8ffe710_0[md5=c69a5047cc9291ae40afd4a1ad6f0c0f]"
-
