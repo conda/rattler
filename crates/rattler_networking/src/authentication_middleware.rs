@@ -4,14 +4,14 @@ use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use google_cloud_auth::project::create_token_source;
 use google_cloud_auth::project::Config;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
-
+#[cfg(feature = "google-cloud-auth")]
+use google_cloud_auth::project::create_token_source;
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
 pub struct AuthenticationMiddleware {
@@ -81,7 +81,7 @@ impl AuthenticationMiddleware {
         let audience = "https://storage.googleapis.com/";
         let scopes = [
             "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/devstorage.full_control",
+            "https://www.googleapis.com/auth/devstorage.read_only",
         ];
         match create_token_source(Config {
             audience: Some(audience),
@@ -137,7 +137,12 @@ impl AuthenticationMiddleware {
                 }
                 Authentication::CondaToken(_) => Ok(req),
             }
-        } else if req.url().host_str() == Some("storage.googleapis.com") {
+        } else if req.url().scheme() == "gcs" {
+            let mut url = req.url().clone();
+            let bucket_name = url.host_str().expect("Host should be present in GCS URL");
+            let new_url = format!("https://storage.googleapis.com/{}{}",bucket_name, url.path());
+            url = Url::parse(&new_url).expect("Failed to parse URL");
+            *req.url_mut() = url;
             Self::authenticate_with_google_cloud(req).await
         } else {
             Ok(req)
