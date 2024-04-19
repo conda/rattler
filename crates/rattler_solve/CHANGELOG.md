@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.6](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.20.5...rattler_solve-v0.20.6) - 2024-04-19
+
+### Added
+- make root dir configurable in channel config ([#602](https://github.com/mamba-org/rattler/pull/602))
+
+### Other
+- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+
 ## [0.20.5](https://github.com/baszalmstra/rattler/compare/rattler_solve-v0.20.4...rattler_solve-v0.20.5) - 2024-04-05
 
 ### Other

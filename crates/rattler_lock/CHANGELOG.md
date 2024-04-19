@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.2](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.1...rattler_lock-v0.22.2) - 2024-04-19
+
+### Other
+- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+
 ## [0.22.1](https://github.com/baszalmstra/rattler/compare/rattler_lock-v0.22.0...rattler_lock-v0.22.1) - 2024-04-05
 
 ### Other
