@@ -52,7 +52,8 @@ pub fn create_windows_python_entry_point(
             .parent()
             .expect("since we joined with target_dir there must be a parent"),
     )?;
-    let script_contents = python_entry_point_template(target_prefix, entry_point, python_info);
+    let script_contents =
+        python_entry_point_template(target_prefix, true, entry_point, python_info);
     let (hash, size) = write_and_hash(&script_path, script_contents)?;
 
     // Construct a path to where we will create the python launcher executable.
@@ -115,7 +116,8 @@ pub fn create_unix_python_entry_point(
             .parent()
             .expect("since we joined with target_dir there must be a parent"),
     )?;
-    let script_contents = python_entry_point_template(target_prefix, entry_point, python_info);
+    let script_contents =
+        python_entry_point_template(target_prefix, false, entry_point, python_info);
     let (hash, size) = write_and_hash(&script_path, script_contents)?;
 
     // Make the script executable. This is only supported on Unix based filesystems.
@@ -141,11 +143,18 @@ pub fn create_unix_python_entry_point(
 /// [`EntryPoint`].
 pub fn python_entry_point_template(
     target_prefix: &str,
+    for_windows: bool,
     entry_point: &EntryPoint,
     python_info: &PythonInfo,
 ) -> String {
     // Construct a shebang for the python interpreter
-    let shebang = python_info.shebang(target_prefix);
+    let shebang = if for_windows {
+        // On windows we don't need a shebang. Adding a shebang actually breaks the launcher
+        // for prefixes with spaces.
+        String::new()
+    } else {
+        python_info.shebang(target_prefix)
+    };
 
     // The name of the module to import to be able to call the function
     let (import_name, _) = entry_point
@@ -188,6 +197,7 @@ mod test {
     fn test_entry_point_script() {
         let script = super::python_entry_point_template(
             "/prefix",
+            true,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
             &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::Linux64)
                 .unwrap(),
