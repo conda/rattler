@@ -96,12 +96,6 @@ impl super::SolverImpl for Solver {
                 "timeout".to_string()
             ]));
         }
-        // Could ignore the strict_channel_priority flag here or do something like below maybe?
-        // if task.strict_channel_priority {
-        //     return Err(SolveError::UnsupportedOperations(
-        //         vec!["strict_channel_priority = true".to_string()]
-        //     ))
-        // }
 
         // Construct a default libsolv pool
         let pool = Pool::default();
@@ -112,23 +106,18 @@ impl super::SolverImpl for Solver {
         });
         pool.set_debug_level(Verbosity::Low);
 
-        // Add virtual packages
-        let repo = Repo::new(&pool, "virtual_packages", 0);
-        add_virtual_packages(&pool, &repo, &task.virtual_packages);
-
-        // Mark the virtual packages as installed.
-        pool.set_installed(&repo);
-
-        // Create repos for all channel + platform combinations
-        let mut repo_mapping = HashMap::new();
-        let mut all_repodata_records = Vec::new();
-
         let repodatas: Vec<Self::RepoData<'_>> = task
             .available_packages
             .into_iter()
             .map(IntoRepoData::into)
             .collect();
 
+        // Determine the channel priority for each channel in the repodata in the order in which
+        // the repodatas are passed, where the first channel will have the highest priority value
+        // and each successive channel will descend in priority value. If not strict, the highest
+        // priority value will be 0 and the channel priority map will not be populated as it will
+        // not be used.
+        let mut highest_priority: i32 = 0;
         let channel_priority: HashMap<String, i32> =
             if task.channel_priority == ChannelPriority::Strict {
                 let mut seen_channels = HashSet::new();
@@ -146,6 +135,9 @@ impl super::SolverImpl for Solver {
                 let mut channel_priority = HashMap::new();
                 for (index, channel) in channel_order.iter().enumerate() {
                     let reverse_index = channel_order.len() - index;
+                    if index == 0 {
+                        highest_priority = reverse_index as i32;
+                    }
                     channel_priority.insert(channel.clone(), reverse_index as i32);
                 }
                 channel_priority
@@ -153,6 +145,16 @@ impl super::SolverImpl for Solver {
                 HashMap::new()
             };
 
+        // Add virtual packages
+        let repo = Repo::new(&pool, "virtual_packages", highest_priority);
+        add_virtual_packages(&pool, &repo, &task.virtual_packages);
+
+        // Mark the virtual packages as installed.
+        pool.set_installed(&repo);
+
+        // Create repos for all channel + platform combinations
+        let mut repo_mapping = HashMap::new();
+        let mut all_repodata_records = Vec::new();
         for repodata in repodatas.iter() {
             if repodata.records.is_empty() {
                 continue;
@@ -182,7 +184,7 @@ impl super::SolverImpl for Solver {
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo = Repo::new(&pool, "locked", 0);
+        let repo = Repo::new(&pool, "locked", highest_priority);
         let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
 
         // Also add the installed records to the repodata
@@ -190,7 +192,7 @@ impl super::SolverImpl for Solver {
         all_repodata_records.push(task.locked_packages.iter().collect());
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo = Repo::new(&pool, "pinned", 0);
+        let repo = Repo::new(&pool, "pinned", highest_priority);
         let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
 
         // Also add the installed records to the repodata
