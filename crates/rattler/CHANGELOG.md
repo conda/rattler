@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler-v0.21.0...rattler-v0.22.0) - 2024-04-19
+
+### Added
+- make root dir configurable in channel config ([#602](https://github.com/mamba-org/rattler/pull/602))
+
+### Fixed
+- unicode activation issues on windows ([#604](https://github.com/mamba-org/rattler/pull/604))
+- no shebang on windows to make spaces in prefix work ([#611](https://github.com/mamba-org/rattler/pull/611))
+- use correct platform to decide the windows launcher ([#608](https://github.com/mamba-org/rattler/pull/608))
+
+### Other
+- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+
 ## [0.21.0](https://github.com/baszalmstra/rattler/compare/rattler-v0.20.1...rattler-v0.21.0) - 2024-04-05
 
 ### Fixed

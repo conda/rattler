@@ -9,6 +9,10 @@ use std::str::FromStr;
 use std::time::Instant;
 use url::Url;
 
+fn channel_config() -> ChannelConfig {
+    ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap())
+}
+
 fn conda_json_path() -> String {
     format!(
         "{}/{}",
@@ -56,14 +60,12 @@ fn dummy_sha256_hash() -> rattler_digest::Sha256Hash {
 fn read_repodata(path: &str) -> Vec<RepoDataRecord> {
     let repo_data: RepoData =
         serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-    repo_data.into_repo_data_records(
-        &Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
-    )
+    repo_data.into_repo_data_records(&Channel::from_str("conda-forge", &channel_config()).unwrap())
 }
 
 fn read_sparse_repodata(path: &str) -> SparseRepoData {
     SparseRepoData::new(
-        Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
+        Channel::from_str("dummy", &channel_config()).unwrap(),
         "dummy".to_string(),
         path,
         None,
@@ -176,7 +178,7 @@ fn read_pytorch_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let pytorch = pytorch_json_path();
         SparseRepoData::new(
-            Channel::from_str("pytorch", &ChannelConfig::default()).unwrap(),
+            Channel::from_str("pytorch", &channel_config()).unwrap(),
             "pytorch".to_string(),
             pytorch,
             None,
@@ -191,7 +193,7 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
     static REPO_DATA: Lazy<SparseRepoData> = Lazy::new(|| {
         let conda_forge = conda_json_path();
         SparseRepoData::new(
-            Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+            Channel::from_str("conda-forge", &channel_config()).unwrap(),
             "conda-forge".to_string(),
             conda_forge,
             None,
@@ -519,10 +521,13 @@ mod libsolv_c {
         let repo_data = read_repodata(&dummy_channel_json_path());
 
         let cached_repo_data = rattler_solve::libsolv_c::cache_repodata(
-            Channel::from_str("conda-forge", &ChannelConfig::default())
-                .unwrap()
-                .platform_url(rattler_conda_types::Platform::Linux64)
-                .to_string(),
+            Channel::from_str(
+                "conda-forge",
+                &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
+            )
+            .unwrap()
+            .platform_url(rattler_conda_types::Platform::Linux64)
+            .to_string(),
             &repo_data,
             None,
         );

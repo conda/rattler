@@ -398,15 +398,16 @@ mod test {
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Vec<Vec<RepoDataRecord>> {
+        let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
         load_repo_data_recursively(
             [
                 (
-                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    Channel::from_str("conda-forge", &channel_config).unwrap(),
                     "noarch",
                     test_dir().join("channels/conda-forge/noarch/repodata.json"),
                 ),
                 (
-                    Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap(),
+                    Channel::from_str("conda-forge", &channel_config).unwrap(),
                     "linux-64",
                     test_dir().join("channels/conda-forge/linux-64/repodata.json"),
                 ),

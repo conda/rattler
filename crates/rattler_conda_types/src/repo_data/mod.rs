@@ -491,7 +491,7 @@ mod test {
             url::Url::from_directory_path(data_path.parent().unwrap().parent().unwrap())
                 .unwrap()
                 .as_str(),
-            &ChannelConfig::default(),
+            &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
         )
         .unwrap();
 
@@ -512,7 +512,11 @@ mod test {
 
     #[test]
     fn test_base_url() {
-        let channel = Channel::from_str("conda-forge", &ChannelConfig::default()).unwrap();
+        let channel = Channel::from_str(
+            "conda-forge",
+            &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
+        )
+        .unwrap();
         let base_url = channel.base_url().join("linux-64/").unwrap();
         assert_eq!(
             compute_package_url(&base_url, None, "bla.conda").to_string(),

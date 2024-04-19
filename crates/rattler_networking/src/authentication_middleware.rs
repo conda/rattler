@@ -21,7 +21,7 @@ impl Middleware for AuthenticationMiddleware {
     async fn handle(
         &self,
         req: Request,
-        extensions: &mut task_local_extensions::Extensions,
+        extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
         let url = req.url().clone();
@@ -142,7 +142,7 @@ mod tests {
         async fn handle(
             &self,
             req: Request,
-            _: &mut task_local_extensions::Extensions,
+            _: &mut http::Extensions,
             _: Next<'_>,
         ) -> reqwest_middleware::Result<Response> {
             self.captured_tx

@@ -1,7 +1,6 @@
 //! Helpers to run commands in an activated environment.
 
 use rattler_conda_types::Platform;
-use std::fmt::Write;
 use std::process::{Command, Output};
 use std::{collections::HashMap, path::Path};
 
@@ -25,17 +24,17 @@ pub enum RunError {
     IoError(#[from] std::io::Error),
 }
 
-/// blast the environment with the given command
+/// Execute a script in an activated environment.
 pub fn run_in_environment(
     prefix: &Path,
-    args: &[&str],
+    script: &Path,
     shell: ShellEnum,
     env_vars: &HashMap<String, String>,
 ) -> Result<Output, RunError> {
     let mut shell_script = shell::ShellScript::new(shell.clone(), Platform::current());
 
     for (k, v) in env_vars.iter() {
-        shell_script.set_env_var(k, v);
+        shell_script.set_env_var(k, v)?;
     }
 
     let activator = Activator::from_path(prefix, shell.clone(), Platform::current())?;
@@ -53,29 +52,19 @@ pub fn run_in_environment(
 
     let host_activation = activator.activation(activation_vars)?;
 
-    writeln!(shell_script.contents, "{}", host_activation.script)?;
+    shell_script.append_script(&host_activation.script);
 
-    let tempfile = match shell {
-        ShellEnum::Bash(_) => {
-            writeln!(shell_script.contents, ". {}", args.join(" "))?;
-            tempfile::Builder::new().suffix(".sh").tempfile()?
-        }
-        ShellEnum::CmdExe(_) => {
-            writeln!(shell_script.contents, "@call {}", args.join(" "))?;
-            tempfile::Builder::new().suffix(".bat").tempfile()?
-        }
-        _ => unimplemented!("Unsupported shell: {:?}", shell),
-    };
-
-    std::fs::write(tempfile.path(), shell_script.contents)?;
+    shell_script.run_script(script)?;
+    let file = tempfile::Builder::new()
+        .suffix(&format!(".{}", shell.extension()))
+        .tempfile()?;
+    std::fs::write(file.path(), shell_script.contents()?)?;
 
     match shell {
-        ShellEnum::Bash(_) => Ok(Command::new(shell.executable())
-            .arg(tempfile.path())
-            .output()?),
+        ShellEnum::Bash(_) => Ok(Command::new(shell.executable()).arg(file.path()).output()?),
         ShellEnum::CmdExe(_) => Ok(Command::new(shell.executable())
             .arg("/c")
-            .arg(tempfile.path())
+            .arg(file.path())
             .output()?),
         _ => unimplemented!("Unsupported shell: {:?}", shell),
     }

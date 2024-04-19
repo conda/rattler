@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.7](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.6...rattler_index-v0.19.7) - 2024-04-19
+
+### Other
+- update Cargo.toml dependencies
+
 ## [0.19.6](https://github.com/baszalmstra/rattler/compare/rattler_index-v0.19.5...rattler_index-v0.19.6) - 2024-04-05
 
 ### Other

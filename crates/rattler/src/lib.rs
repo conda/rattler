@@ -26,7 +26,9 @@ pub fn empty_channel() -> rattler_conda_types::Channel {
     let channel_path = manifest_dir.join("../../test-data/channels/empty");
     rattler_conda_types::Channel::from_str(
         format!("file://{}[noarch]", channel_path.display()),
-        &rattler_conda_types::ChannelConfig::default(),
+        &rattler_conda_types::ChannelConfig::default_with_root_dir(
+            std::env::current_dir().unwrap(),
+        ),
     )
     .unwrap()
 }

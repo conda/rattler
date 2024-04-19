@@ -68,10 +68,11 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel, ParseStrictness::*};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel, ChannelConfig, ParseStrictness::*};
 /// use std::str::FromStr;
 /// use std::sync::Arc;
 ///
+/// let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 /// let spec = MatchSpec::from_str("foo 1.0 py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0", Strict).unwrap()));
@@ -85,18 +86,18 @@ use matcher::StringMatcher;
 /// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#, Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 ///
 /// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("*", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("*", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
 /// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#, Strict).unwrap();
@@ -388,7 +389,9 @@ where
 
     match s {
         Some(str_val) => {
-            let config = ChannelConfig::default();
+            let config = ChannelConfig::default_with_root_dir(
+                std::env::current_dir().expect("Could not determine current directory"),
+            );
 
             Channel::from_str(str_val, &config)
                 .map(|channel| Some(Arc::new(channel)))

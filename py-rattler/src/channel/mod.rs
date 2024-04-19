@@ -15,10 +15,11 @@ pub struct PyChannelConfig {
 #[pymethods]
 impl PyChannelConfig {
     #[new]
-    pub fn __init__(channel_alias: &str) -> pyo3::PyResult<Self> {
+    pub fn __init__(channel_alias: &str, root_dir: &str) -> pyo3::PyResult<Self> {
         Ok(Self {
             inner: ChannelConfig {
                 channel_alias: Url::parse(channel_alias).map_err(PyRattlerError::from)?,
+                root_dir: root_dir.into(),
             },
         })
     }
@@ -27,6 +28,12 @@ impl PyChannelConfig {
     #[getter]
     fn channel_alias(&self) -> String {
         self.inner.channel_alias.to_string()
+    }
+
+    /// Returns the root directory for local channels
+    #[getter]
+    fn root_dir(&self) -> String {
+        self.inner.root_dir.to_string_lossy().into()
     }
 }
 

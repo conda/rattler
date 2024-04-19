@@ -152,11 +152,13 @@ pub struct PrefixRecord {
     #[serde(default)]
     pub paths_data: PrefixPaths,
 
-    /// TODO: I dont understand this field
+    /// This field contains a reference to the package cache from where the package was linked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Link>,
 
     /// The spec that was used when this package was installed. Note that this field is not updated if the
-    /// currently another spec was used.
+    /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_spec: Option<String>,
 }
 
@@ -266,7 +268,7 @@ impl FromStr for PrefixRecord {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct Link {
     /// The path to the file source that was installed
-    pub source: String,
+    pub source: PathBuf,
 
     /// The link type that was used to install the file
     #[serde(rename = "type")]

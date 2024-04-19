@@ -2,10 +2,10 @@
 use std::collections::HashMap;
 
 use http::header::{ACCEPT, AUTHORIZATION};
+use http::Extensions;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
-use task_local_extensions::Extensions;
 use url::{ParseError, Url};
 
 use crate::mirror_middleware::create_404_response;
@@ -248,10 +248,7 @@ impl Middleware for OciMiddleware {
         }
 
         // return 404 for the moment as these are not supported
-        if req.url().path().ends_with(".jlap")
-            || req.url().path().ends_with(".json.zst")
-            || req.url().path().ends_with(".json.bz2")
-        {
+        if req.url().path().ends_with(".jlap") || req.url().path().ends_with(".json.bz2") {
             return Ok(create_404_response(
                 req.url(),
                 "Mirror does not support this file type",
