@@ -4,9 +4,6 @@ use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-#[cfg(feature = "google-cloud-auth")]
-use google_cloud_auth::project::create_token_source;
-use google_cloud_auth::project::Config;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
@@ -74,37 +71,6 @@ impl AuthenticationMiddleware {
         }
     }
 
-    ///Authenticate with Google Cloud
-    async fn authenticate_with_google_cloud(
-        mut req: reqwest::Request,
-    ) -> reqwest_middleware::Result<reqwest::Request> {
-        let audience = "https://storage.googleapis.com/";
-        let scopes = [
-            "https://www.googleapis.com/auth/cloud-platform",
-            "https://www.googleapis.com/auth/devstorage.read_only",
-        ];
-        match create_token_source(Config {
-            audience: Some(audience),
-            scopes: Some(&scopes),
-            sub: None,
-        })
-        .await
-        {
-            Ok(ts) => match ts.token().await {
-                Ok(token) => {
-                    let bearer_auth = format!("Bearer {}", token.access_token);
-                    let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
-                        .map_err(reqwest_middleware::Error::middleware)?;
-                    req.headers_mut()
-                        .insert(reqwest::header::AUTHORIZATION, header_value);
-                    Ok(req)
-                }
-                Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
-            },
-            Err(e) => Err(reqwest_middleware::Error::Middleware(anyhow::Error::new(e))),
-        }
-    }
-
     /// Authenticate the given request with the given authentication information
     async fn authenticate_request(
         mut req: reqwest::Request,
@@ -137,17 +103,17 @@ impl AuthenticationMiddleware {
                 }
                 Authentication::CondaToken(_) => Ok(req),
             }
-        } else if req.url().scheme() == "gcs" {
-            let mut url = req.url().clone();
-            let bucket_name = url.host_str().expect("Host should be present in GCS URL");
-            let new_url = format!(
-                "https://storage.googleapis.com/{}{}",
-                bucket_name,
-                url.path()
-            );
-            url = Url::parse(&new_url).expect("Failed to parse URL");
-            *req.url_mut() = url;
-            Self::authenticate_with_google_cloud(req).await
+        // } else if req.url().scheme() == "gcs" {
+        //     let mut url = req.url().clone();
+        //     let bucket_name = url.host_str().expect("Host should be present in GCS URL");
+        //     let new_url = format!(
+        //         "https://storage.googleapis.com/{}{}",
+        //         bucket_name,
+        //         url.path()
+        //     );
+        //     url = Url::parse(&new_url).expect("Failed to parse URL");
+        //     *req.url_mut() = url;
+        //     Self::authenticate_with_google_cloud(req).await
         } else {
             Ok(req)
         }
