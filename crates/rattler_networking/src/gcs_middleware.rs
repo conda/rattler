@@ -1,8 +1,8 @@
 //! Middleware to handle `gcs://` URLs to pull artifacts from an GCS
 use async_trait::async_trait;
+use google_cloud_auth::project::{create_token_source, Config};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
-use google_cloud_auth::project::{create_token_source, Config};
 use url::Url;
 
 /// GCS middleware to authenticate requests
@@ -17,7 +17,6 @@ impl Middleware for GCSMiddleware {
         extensions: &mut task_local_extensions::Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
-        println!("in gcs middleware {:?}",req);
         if req.url().scheme() == "gcs" {
             let mut url = req.url().clone();
             let bucket_name = url.host_str().expect("Host should be present in GCS URL");
@@ -35,15 +34,12 @@ impl Middleware for GCSMiddleware {
 }
 
 /// Auth to GCS
-async fn authenticate_with_google_cloud(
-    mut req: Request,
-) -> MiddlewareResult<Request> {
+async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Request> {
     let audience = "https://storage.googleapis.com/";
     let scopes = [
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/devstorage.read_only",
     ];
-    println!("in gcs auth {:?}", req);
     match create_token_source(Config {
         audience: Some(audience),
         scopes: Some(&scopes),
