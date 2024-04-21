@@ -102,17 +102,6 @@ impl AuthenticationMiddleware {
                 }
                 Authentication::CondaToken(_) => Ok(req),
             }
-        // } else if req.url().scheme() == "gcs" {
-        //     let mut url = req.url().clone();
-        //     let bucket_name = url.host_str().expect("Host should be present in GCS URL");
-        //     let new_url = format!(
-        //         "https://storage.googleapis.com/{}{}",
-        //         bucket_name,
-        //         url.path()
-        //     );
-        //     url = Url::parse(&new_url).expect("Failed to parse URL");
-        //     *req.url_mut() = url;
-        //     Self::authenticate_with_google_cloud(req).await
         } else {
             Ok(req)
         }
