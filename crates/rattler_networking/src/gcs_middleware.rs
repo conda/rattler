@@ -14,7 +14,7 @@ impl Middleware for GCSMiddleware {
     async fn handle(
         &self,
         mut req: Request,
-        extensions: &mut task_local_extensions::Extensions,
+        extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
         if req.url().scheme() == "gcs" {
