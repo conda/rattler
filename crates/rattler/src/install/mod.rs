@@ -384,6 +384,7 @@ pub async fn link_package(
                         &target_prefix,
                         &entry_point,
                         &python_info,
+                        &platform,
                     ) {
                         Ok([a, b]) => {
                             let _ = tx.blocking_send(Ok((number_of_paths_entries, a)));

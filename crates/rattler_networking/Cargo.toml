@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.20.1"
+version = "0.20.2"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -26,16 +26,12 @@ fslock = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true }
-lazy_static = { workspace = true }
-libc = { workspace = true }
 netrc-rs = { workspace = true }
-once_cell = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-task-local-extensions = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }

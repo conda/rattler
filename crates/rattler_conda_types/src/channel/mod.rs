@@ -11,6 +11,8 @@ use url::Url;
 
 use super::{ParsePlatformError, Platform};
 
+const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
+
 /// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
 /// channel URLs.
 ///
@@ -28,9 +30,22 @@ pub struct ChannelConfig {
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
+
+    /// For local channels, the root directory from which to resolve relative paths.
+    /// Most of the time you would initialize this with the current working directory.
+    pub root_dir: PathBuf,
 }
 
 impl ChannelConfig {
+    /// Create a new `ChannelConfig` with the default values.
+    pub fn default_with_root_dir(root_dir: PathBuf) -> Self {
+        Self {
+            root_dir,
+            channel_alias: Url::from_str(DEFAULT_CHANNEL_ALIAS)
+                .expect("could not parse default channel alias"),
+        }
+    }
+
     /// Returns the canonical name of a channel with the given base url.
     pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
         if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
@@ -100,15 +115,6 @@ impl Display for NamedChannelOrUrl {
     }
 }
 
-impl Default for ChannelConfig {
-    fn default() -> Self {
-        ChannelConfig {
-            channel_alias: Url::from_str("https://conda.anaconda.org")
-                .expect("could not parse default channel alias"),
-        }
-    }
-}
-
 /// `Channel`s are the primary source of package information.
 #[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct Channel {
@@ -144,7 +150,7 @@ impl Channel {
 
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let absolute_path = absolute_path(&path);
+                let absolute_path = absolute_path(&path, &config.root_dir);
                 let url = Url::from_directory_path(absolute_path)
                     .map_err(|_err| ParseChannelError::InvalidPath(path))?;
                 Self {
@@ -417,13 +423,12 @@ fn normalize_path(path: &Path) -> PathBuf {
 }
 
 /// Returns the specified path as an absolute path
-fn absolute_path(path: &Path) -> Cow<'_, Path> {
+fn absolute_path<'a>(path: &'a Path, root_dir: &Path) -> Cow<'a, Path> {
     if path.is_absolute() {
         return Cow::Borrowed(path);
     }
 
-    let current_dir = std::env::current_dir().expect("missing current directory?");
-    let absolute_dir = current_dir.join(path);
+    let absolute_dir = root_dir.join(path);
     Cow::Owned(normalize_path(&absolute_dir))
 }
 
@@ -485,19 +490,24 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
         assert_eq!(
-            absolute_path(Path::new("foo")).as_ref(),
+            absolute_path(Path::new("."), &current_dir).as_ref(),
+            &current_dir
+        );
+        assert_eq!(
+            absolute_path(Path::new("foo"), &current_dir).as_ref(),
             &current_dir.join("foo")
         );
 
-        let mut parent_dir = current_dir;
+        let mut parent_dir = current_dir.clone();
         assert!(parent_dir.pop());
 
-        assert_eq!(absolute_path(Path::new("..")).as_ref(), &parent_dir);
         assert_eq!(
-            absolute_path(Path::new("../foo")).as_ref(),
+            absolute_path(Path::new(".."), &current_dir).as_ref(),
+            &parent_dir
+        );
+        assert_eq!(
+            absolute_path(Path::new("../foo"), &current_dir).as_ref(),
             &parent_dir.join("foo")
         );
     }
@@ -518,7 +528,7 @@ mod tests {
 
     #[test]
     fn parse_by_name() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(
@@ -534,7 +544,7 @@ mod tests {
 
     #[test]
     fn parse_from_url() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel =
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
@@ -553,7 +563,7 @@ mod tests {
 
     #[test]
     fn parse_from_file_path() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("file:///var/channels/conda-forge", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
@@ -573,9 +583,12 @@ mod tests {
         assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
         assert_eq!(
             channel.name(),
-            Url::from_directory_path(absolute_path(Path::new("./dir/does/not_exist")))
-                .unwrap()
-                .as_str()
+            Url::from_directory_path(absolute_path(
+                Path::new("./dir/does/not_exist"),
+                &current_dir
+            ))
+            .unwrap()
+            .as_str()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(
@@ -586,7 +599,7 @@ mod tests {
 
     #[test]
     fn parse_url_only() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(
@@ -609,7 +622,7 @@ mod tests {
     #[test]
     fn parse_platform() {
         let platform = Platform::Linux32;
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/conda-forge[{platform}]"),
@@ -659,6 +672,7 @@ mod tests {
     fn config_canonical_name() {
         let channel_config = ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
         };
         assert_eq!(
             channel_config
