@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next, Result as MiddlewareResult};
 use google_cloud_auth::project::{create_token_source, Config};
+use url::Url;
 
 /// GCS middleware to authenticate requests
 pub struct GCSMiddleware;
@@ -16,8 +17,17 @@ impl Middleware for GCSMiddleware {
         extensions: &mut task_local_extensions::Extensions,
         next: Next<'_>,
     ) -> MiddlewareResult<Response> {
+        println!("in gcs middleware {:?}",req);
         if req.url().scheme() == "gcs" {
-            // Authenticate the request
+            let mut url = req.url().clone();
+            let bucket_name = url.host_str().expect("Host should be present in GCS URL");
+            let new_url = format!(
+                "https://storage.googleapis.com/{}{}",
+                bucket_name,
+                url.path()
+            );
+            url = Url::parse(&new_url).expect("Failed to parse URL");
+            *req.url_mut() = url;
             req = authenticate_with_google_cloud(req).await?;
         }
         next.run(req, extensions).await
@@ -33,6 +43,7 @@ async fn authenticate_with_google_cloud(
         "https://www.googleapis.com/auth/cloud-platform",
         "https://www.googleapis.com/auth/devstorage.read_only",
     ];
+    println!("in gcs auth {:?}", req);
     match create_token_source(Config {
         audience: Some(audience),
         scopes: Some(&scopes),

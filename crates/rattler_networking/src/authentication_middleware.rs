@@ -1,5 +1,4 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-
 use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
