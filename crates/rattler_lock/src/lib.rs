@@ -602,6 +602,16 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    /// Absolute paths on Windows are not properly parsed.
+    /// See: <https://github.com/mamba-org/rattler/issues/615>
+    #[test]
+    fn test_issue_615() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/absolute-path-lock.yml");
+        let conda_lock = LockFile::from_path(&path);
+        assert!(conda_lock.is_ok());
+    }
+
     #[test]
     fn packages_for_platform() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
