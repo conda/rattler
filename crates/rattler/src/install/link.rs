@@ -282,7 +282,10 @@ pub fn link_file(
             .map_err(LinkFileError::FailedToOpenDestinationFile)?;
         metadata.len()
     };
-    let prefix_placeholder: Option<String> = path_json_entry.prefix_placeholder.as_ref().map(|p| p.placeholder.clone());
+    let prefix_placeholder: Option<String> = path_json_entry
+        .prefix_placeholder
+        .as_ref()
+        .map(|p| p.placeholder.clone());
 
     Ok(LinkedFile {
         clobbered: false,
@@ -290,7 +293,7 @@ pub fn link_file(
         file_size,
         relative_path: destination_relative_path,
         method: link_method,
-        prefix_placeholder
+        prefix_placeholder,
     })
 }
 

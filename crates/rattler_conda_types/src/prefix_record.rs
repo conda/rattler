@@ -1,8 +1,8 @@
 //! Defines the `[PrefixRecord]` struct.
 
+use crate::package::FileMode;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
-use crate::package::FileMode;
 use rattler_digest::serde::SerializableHash;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -44,7 +44,6 @@ impl From<Vec<PathsEntry>> for PrefixPaths {
         }
     }
 }
-
 
 /// Information about a single file installed for a package.
 ///

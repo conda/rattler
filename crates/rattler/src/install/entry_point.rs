@@ -92,7 +92,7 @@ pub fn create_windows_python_entry_point(
             sha256_in_prefix: None,
             size_in_bytes: Some(launcher_bytes.len() as u64),
             prefix_placeholder: None,
-            file_mode: None
+            file_mode: None,
         },
     ])
 }
