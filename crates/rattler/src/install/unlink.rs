@@ -182,10 +182,8 @@ mod tests {
 
         let repodata_record = get_repodata_record(package);
         // Construct a PrefixRecord for the package
-        let prefix_record =
-            PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None);
 
-        prefix_record
+        PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
     }
 
     #[tokio::test]

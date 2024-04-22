@@ -1,5 +1,7 @@
 use itertools::Itertools;
+use percent_encoding::percent_decode;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use std::borrow::Cow;
 use std::hash::Hash;
 use std::path::Path;
 use std::{
@@ -7,8 +9,6 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
-use std::borrow::Cow;
-use percent_encoding::percent_decode;
 use thiserror::Error;
 use url::{Host, Url};
 
@@ -33,14 +33,14 @@ fn is_windows_drive_letter_segment(segment: &str) -> Option<String> {
     // Segment is a simple drive letter: X:
     if let Some((drive_letter, ':')) = segment.chars().collect_tuple() {
         if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{}:\\", drive_letter).into());
+            return Some(format!("{drive_letter}:\\"));
         }
     }
 
     // Segment is a simple drive letter but the colon is percent escaped: E.g. X%3A
     if let Some((drive_letter, '%', '3', 'a' | 'A')) = segment.chars().collect_tuple() {
         if drive_letter.is_ascii_alphabetic() {
-            return Some(format!("{}:\\", drive_letter).into());
+            return Some(format!("{drive_letter}:\\"));
         }
     }
 
@@ -184,6 +184,13 @@ impl FromStr for UrlOrPath {
     type Err = PathOrUrlError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn scheme_is_drive_letter(scheme: &str) -> bool {
+            let Some((drive_letter,)) = scheme.chars().collect_tuple() else {
+                return false;
+            };
+            drive_letter.is_ascii_alphabetic()
+        }
+
         // First try to parse the string as a path.
         return match Url::from_str(s) {
             Ok(url) => Ok(if scheme_is_drive_letter(url.scheme()) {
@@ -194,14 +201,6 @@ impl FromStr for UrlOrPath {
             Err(url::ParseError::RelativeUrlWithoutBase) => Ok(UrlOrPath::Path(PathBuf::from(s))),
             Err(e) => Err(PathOrUrlError::InvalidUrl(e)),
         };
-
-
-        fn scheme_is_drive_letter(scheme: &str) -> bool {
-            let Some((drive_letter, )) = scheme.chars().collect_tuple() else {
-                return false;
-            };
-            drive_letter.is_ascii_alphabetic()
-        }
     }
 }
 
@@ -217,7 +216,6 @@ mod test {
             ("file:///C:/Test/Foo.txt", "C:\\Test\\Foo.txt"),
             ("file:///c:/temp/test-file.txt", "c:\\temp\\test-file.txt"),
             ("file:///c:\\temp\\test-file.txt", "c:\\temp\\test-file.txt"),
-
             // Percent encoding
             ("file:///foo/ba%20r", "/foo/ba r"),
             ("file:///C%3A/Test/Foo.txt", "C:\\Test\\Foo.txt"),
@@ -267,8 +265,10 @@ mod test {
         ];
 
         for (a, b) in &tests {
-            assert_eq!(UrlOrPath::from_str(a).unwrap(),
-                       UrlOrPath::from_str(b).unwrap());
+            assert_eq!(
+                UrlOrPath::from_str(a).unwrap(),
+                UrlOrPath::from_str(b).unwrap()
+            );
         }
     }
 
