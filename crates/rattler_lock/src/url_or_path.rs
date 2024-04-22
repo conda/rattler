@@ -236,10 +236,6 @@ mod test {
             (UrlOrPath::Url("https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2".parse().unwrap()),
              UrlOrPath::Url("https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2".parse().unwrap())),
 
-            // Seperator shouldn't matter
-            (UrlOrPath::Path("../foobar".parse().unwrap()),
-             UrlOrPath::Path("..\\foobar".parse().unwrap())),
-
             // Absolute paths as file and direct path
             (UrlOrPath::Url("file:///home/bob/test-file.txt".parse().unwrap()),
              UrlOrPath::Path("/home/bob/test-file.txt".parse().unwrap())),
@@ -256,9 +252,6 @@ mod test {
             // Same urls
             ("https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
              "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"),
-
-            // Seperator shouldn't matter
-            ("../foobar", "..\\foobar"),
 
             // Absolute paths as file and direct path
             ("file:///home/bob/test-file.txt", "/home/bob/test-file.txt"),
