@@ -52,23 +52,23 @@ class PrefixPathType:
         return self._inner.windows_python_entry_point_script
 
     @property
-    def windows_python_entry_point_exe(self):
+    def windows_python_entry_point_exe(self) -> bool:
         """
         A Windows entry point python script (a <entrypoint>.exe executable)
         """
         return self._inner.windows_python_entry_point_exe
 
     @property
-    def unix_python_entrypoint(self):
+    def unix_python_entrypoint(self) -> bool:
         """
         A Unix entry point python script (a <entrypoint> Python script file)
         """
         return self._inner.unix_python_entrypoint
 
 
-class PrefixPathsEntry(os.PathLike):
+class PrefixPathsEntry(os.PathLike[str]):
     _inner: PyPrefixPathsEntry
-    
+
     def __fspath__(self) -> str:
         return str(self._inner.path)
 
@@ -202,8 +202,8 @@ class PrefixPathsEntry(os.PathLike):
         ```
         """
         return self._inner.sha256_in_prefix
-   
-    @property 
+
+    @property
     def size_in_bytes(self) -> int:
         """
         The size of the path in bytes.

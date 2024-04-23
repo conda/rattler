@@ -1,11 +1,11 @@
 import os
-
+from pathlib import Path
 from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode
 
 
 def test_load_prefix_record() -> None:
     r = PrefixRecord.from_path(
-        "../../test-data/conda-meta/tk-8.6.12-h8ffe710_0.json"
+        Path("../../test-data/conda-meta/tk-8.6.12-h8ffe710_0.json")
     )
     assert r.arch == "x86_64"
     assert r.build == "h8ffe710_0"
@@ -13,7 +13,7 @@ def test_load_prefix_record() -> None:
     assert r.channel == "https://conda.anaconda.org/conda-forge/win-64"
     assert len(r.constrains) == 0
     assert len(r.depends) == 2
-    assert r.extracted_package_dir == "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
+    assert str(r.extracted_package_dir) == "C:\\Users\\bas\\micromamba\\envs\\conda\\pkgs\\tk-8.6.12-h8ffe710_0"
     assert r.features is None
     assert r.file_name == "tk-8.6.12-h8ffe710_0.tar.bz2"
     assert len(r.files) == len(r.paths_data.paths) == 1099

@@ -57,6 +57,8 @@ __all__ = [
     "PackageName",
     "PrefixRecord",
     "PrefixPaths",
+    "PrefixPathsEntry",
+    "PrefixPathType",
     "SparseRepoData",
     "LockFile",
     "Environment",
