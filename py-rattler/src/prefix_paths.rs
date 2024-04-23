@@ -117,7 +117,7 @@ impl PyPathsEntry {
     /// If a file has a placeholder, the method by which the placeholder was replaced
     #[getter]
     pub fn file_mode(&self) -> Option<PyFileMode> {
-        if let Some(file_mode) = self.inner.file_mode.clone() {
+        if let Some(file_mode) = self.inner.file_mode {
             return Some(file_mode.into());
         }
         None
