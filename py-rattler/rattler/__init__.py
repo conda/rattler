@@ -20,7 +20,7 @@ from rattler.package import (
     PrefixPlaceholder,
     FileMode,
 )
-from rattler.prefix import PrefixRecord, PrefixPaths
+from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
 from rattler.solver import solve
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version

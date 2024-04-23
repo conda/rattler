@@ -28,18 +28,18 @@ impl From<PrefixPaths> for PyPrefixPaths {
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyPathsEntry {
+pub struct PyPrefixPathsEntry {
     pub(crate) inner: PathsEntry,
 }
 
-impl From<PathsEntry> for PyPathsEntry {
+impl From<PathsEntry> for PyPrefixPathsEntry {
     fn from(value: PathsEntry) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PyPathsEntry> for PathsEntry {
-    fn from(value: PyPathsEntry) -> Self {
+impl From<PyPrefixPathsEntry> for PathsEntry {
+    fn from(value: PyPrefixPathsEntry) -> Self {
         value.inner
     }
 }
@@ -50,24 +50,24 @@ impl From<PyPathsEntry> for PathsEntry {
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyPathType {
+pub struct PyPrefixPathType {
     pub(crate) inner: PathType,
 }
 
-impl From<PathType> for PyPathType {
+impl From<PathType> for PyPrefixPathType {
     fn from(value: PathType) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PyPathType> for PathType {
-    fn from(value: PyPathType) -> Self {
+impl From<PyPrefixPathType> for PathType {
+    fn from(value: PyPrefixPathType) -> Self {
         value.inner
     }
 }
 
 #[pymethods]
-impl PyPathType {
+impl PyPrefixPathType {
     /// The path should be hard linked (the default)
     #[getter]
     pub fn hardlink(&self) -> bool {
@@ -85,17 +85,42 @@ impl PyPathType {
     pub fn directory(&self) -> bool {
         matches!(&self.inner, PathType::Directory)
     }
+
+    /// A file compiled from Python code when a noarch package was installed
+    #[getter]
+    pub fn pyc_file(&self) -> bool {
+        matches!(&self.inner, PathType::PycFile)
+    }
+
+    /// A Windows entry point python script (a <entrypoint>-script.py Python script file)
+    #[getter]
+    pub fn windows_python_entrypoint_script(&self) -> bool {
+        matches!(&self.inner, PathType::WindowsPythonEntryPointScript)
+    }
+
+    /// A Windows Python entry point executable (a <entrypoint>.exe file)
+    #[getter]
+    pub fn windows_python_entrypoint_exe(&self) -> bool {
+        matches!(&self.inner, PathType::WindowsPythonEntryPointExe)
+    }
+
+    /// This file is a Python entry point executable for Unix (a `<entrypoint>` Python script file)
+    /// Entry points are created in the `bin/...` directory when installing Python noarch packages
+    #[getter]
+    pub fn unix_python_entrypoint(&self) -> bool {
+        matches!(&self.inner, PathType::UnixPythonEntryPoint)
+    }
 }
 
 #[pymethods]
-impl PyPathsEntry {
+impl PyPrefixPathsEntry {
     /// The relative path from the root of the package
     #[getter]
     pub fn relative_path(&self) -> PathBuf {
         self.inner.relative_path.clone()
     }
 
-    /// Whether or not this file should be linked or not when installing the package.
+    /// Whether this file should be linked when installing the package.
     #[getter]
     pub fn no_link(&self) -> bool {
         self.inner.no_link
@@ -103,7 +128,7 @@ impl PyPathsEntry {
 
     /// Determines how to include the file when installing the package
     #[getter]
-    pub fn path_type(&self) -> PyPathType {
+    pub fn path_type(&self) -> PyPrefixPathType {
         self.inner.path_type.into()
     }
 
@@ -124,7 +149,7 @@ impl PyPathsEntry {
     }
 
     /// A hex representation of the SHA256 hash of the contents of the file
-    /// If sha256_in_prefix is present, this represents the hash of the file *before*
+    /// If prefix_placeholder is present, this represents the hash of the file *before*
     /// any placeholders were replaced
     #[getter]
     pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
@@ -132,7 +157,7 @@ impl PyPathsEntry {
     }
 
     /// A hex representation of the SHA256 hash of the contents of the file as installed
-    /// This will be present only if original_placeholder is defined. In this case,
+    /// This will be present only if prefix_placeholder is defined. In this case,
     /// this is the hash of the file after the placeholder has been replaced.
     #[getter]
     pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
@@ -163,7 +188,7 @@ impl PyPrefixPaths {
 
     /// All entries included in the package.
     #[getter]
-    pub fn paths(&self) -> Vec<PyPathsEntry> {
+    pub fn paths(&self) -> Vec<PyPrefixPathsEntry> {
         self.inner
             .paths
             .clone()
