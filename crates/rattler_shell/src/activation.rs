@@ -749,8 +749,8 @@ mod tests {
     #[test]
     #[cfg(windows)]
     fn test_run_activation_cmd() {
-        test_run_activation(crate::shell::CmdExe::default().into(), false);
-        test_run_activation(crate::shell::CmdExe::default().into(), true);
+        test_run_activation(crate::shell::CmdExe.into(), false);
+        test_run_activation(crate::shell::CmdExe.into(), true);
     }
 
     #[test]

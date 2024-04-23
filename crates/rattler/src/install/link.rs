@@ -787,7 +787,7 @@ mod test {
         for _ in 0..15 {
             target_prefix.push_str("verylongstring/");
         }
-        let input = std::fs::read(&test_file).unwrap();
+        let input = std::fs::read(test_file).unwrap();
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_textual_placeholder(
             &input,
