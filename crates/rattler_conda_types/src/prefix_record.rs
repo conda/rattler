@@ -1,5 +1,6 @@
 //! Defines the `[PrefixRecord]` struct.
 
+use crate::package::FileMode;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
 use rattler_digest::serde::SerializableHash;
@@ -85,6 +86,14 @@ pub struct PathsEntry {
     /// The size of the file in bytes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_in_bytes: Option<u64>,
+
+    /// The file mode of the entry. This is used in conjunction with a prefix_placeholder
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_mode: Option<FileMode>,
+
+    /// The original sentinel value used for prefix-replacement from the package
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix_placeholder: Option<String>,
 }
 
 /// Information about a single file installed for a package.
