@@ -5,7 +5,7 @@ from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType,
 
 def test_load_prefix_record() -> None:
     r = PrefixRecord.from_path(
-        Path("../../test-data/conda-meta/tk-8.6.12-h8ffe710_0.json")
+        Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
     )
     assert r.arch == "x86_64"
     assert r.build == "h8ffe710_0"

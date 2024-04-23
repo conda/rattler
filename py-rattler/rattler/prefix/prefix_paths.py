@@ -89,7 +89,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/tk-8.6.12-h8ffe710_0.json"
+        ...     "../test-data/conda-meta/tk-8.6.12-h8ffe710_0.json"
         ... )
         >>> paths = r.paths_data
         >>> relative_path = paths.paths[0].relative_path
@@ -109,7 +109,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> no_link = paths.paths[0].no_link
@@ -127,7 +127,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> path_type = paths.paths[0].path_type
@@ -146,7 +146,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> prefix_placeholder = paths.paths[0].prefix_placeholder
@@ -165,7 +165,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> file_mode = paths.paths[0].file_mode
@@ -183,7 +183,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> sha256 = paths.paths[0].sha256
@@ -201,7 +201,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> sha256_in_prefix = paths.paths[0].sha256_in_prefix
@@ -220,7 +220,7 @@ class PrefixPathsEntry(os.PathLike[str]):
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> size_in_bytes = paths.paths[0].size_in_bytes
@@ -250,7 +250,7 @@ class PrefixPaths:
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> paths.paths_version
@@ -270,7 +270,7 @@ class PrefixPaths:
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> paths = r.paths_data
         >>> paths.paths # doctest:+ELLIPSIS
@@ -289,7 +289,7 @@ class PrefixPaths:
         ```python
         >>> from rattler.prefix.prefix_record import PrefixRecord
         >>> r = PrefixRecord.from_path(
-        ...     "../../../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
+        ...     "../test-data/conda-meta/requests-2.28.2-pyhd8ed1ab_0.json"
         ... )
         >>> r.paths_data # doctest:+ELLIPSIS
         PrefixPaths(paths=[...])
