@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 629
 expression: conda_lock
 ---
-version: 4
+version: 5
 environments:
   default:
     channels:
@@ -12192,4 +12193,3 @@ packages:
       - libcxx >=14.0.6
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
-
