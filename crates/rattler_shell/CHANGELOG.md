@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_shell-v0.20.0...rattler_shell-v0.20.1) - 2024-04-25
+
+### Fixed
+- compare `UrlOrPath` ([#618](https://github.com/mamba-org/rattler/pull/618))
+
 ## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_shell-v0.19.6...rattler_shell-v0.20.0) - 2024-04-19
 
 ### Fixed

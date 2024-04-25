@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/mamba-org/rattler/compare/rattler-v0.22.0...rattler-v0.23.0) - 2024-04-25
+
+### Added
+- Expose paths_data as PathEntry in py-rattler ([#620](https://github.com/mamba-org/rattler/pull/620))
+- add support for extracting prefix placeholder data to PathsEntry ([#614](https://github.com/mamba-org/rattler/pull/614))
+
+### Fixed
+- compare `UrlOrPath` ([#618](https://github.com/mamba-org/rattler/pull/618))
+
 ## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler-v0.21.0...rattler-v0.22.0) - 2024-04-19
 
 ### Added
