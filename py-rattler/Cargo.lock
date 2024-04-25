@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -2224,10 +2224,9 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.21.0"
+version = "0.23.0"
 dependencies = [
  "anyhow",
- "async-compression",
  "bytes",
  "chrono",
  "digest",
@@ -2235,14 +2234,11 @@ dependencies = [
  "fs-err",
  "futures",
  "fxhash",
- "hex",
  "indexmap 2.2.6",
  "itertools",
  "memchr",
  "memmap2",
- "nom",
  "once_cell",
- "pin-project-lite",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
@@ -2252,15 +2248,11 @@ dependencies = [
  "regex",
  "reqwest",
  "reqwest-middleware",
- "serde",
- "serde_json",
- "serde_with",
  "smallvec",
  "tempfile",
  "thiserror",
  "tokio",
  "tokio-stream",
- "tokio-util",
  "tracing",
  "url",
  "uuid",
@@ -2268,13 +2260,12 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.20.5"
+version = "0.22.0"
 dependencies = [
  "chrono",
  "fxhash",
  "glob",
  "hex",
- "indexmap 2.2.6",
  "itertools",
  "lazy-regex",
  "nom",
@@ -2286,7 +2277,6 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "serde_with",
- "serde_yaml",
  "smallvec",
  "strum",
  "thiserror",
@@ -2296,7 +2286,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "0.19.2"
+version = "0.19.3"
 dependencies = [
  "blake2",
  "digest",
@@ -2310,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.6"
+version = "0.19.8"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2323,7 +2313,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.1"
+version = "0.22.3"
 dependencies = [
  "chrono",
  "fxhash",
@@ -2331,11 +2321,11 @@ dependencies = [
  "itertools",
  "pep440_rs",
  "pep508_rs",
+ "percent-encoding",
  "purl",
  "rattler_conda_types",
  "rattler_digest",
  "serde",
- "serde-json-python-formatter",
  "serde_json",
  "serde_with",
  "serde_yaml",
@@ -2345,7 +2335,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_macros"
-version = "0.19.2"
+version = "0.19.3"
 dependencies = [
  "quote",
  "syn 2.0.59",
@@ -2353,7 +2343,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.20.1"
+version = "0.20.2"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2365,10 +2355,7 @@ dependencies = [
  "http",
  "itertools",
  "keyring",
- "lazy_static",
- "libc",
  "netrc-rs",
- "once_cell",
  "reqwest",
  "reqwest-middleware",
  "retry-policies",
@@ -2381,12 +2368,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.20.3"
+version = "0.20.5"
 dependencies = [
  "bzip2",
  "chrono",
  "futures-util",
- "itertools",
  "num_cpus",
  "rattler_conda_types",
  "rattler_digest",
@@ -2406,7 +2392,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.19.6"
+version = "0.19.8"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2420,7 +2406,6 @@ dependencies = [
  "itertools",
  "json-patch",
  "libc",
- "md-5",
  "memmap2",
  "ouroboros",
  "pin-project-lite",
@@ -2444,7 +2429,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.19.6"
+version = "0.20.1"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
@@ -2459,17 +2444,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.20.5"
+version = "0.20.7"
 dependencies = [
- "anyhow",
  "chrono",
  "futures",
- "hex",
  "itertools",
  "rattler_conda_types",
  "rattler_digest",
  "resolvo",
- "serde",
  "tempfile",
  "thiserror",
  "tracing",
@@ -2478,10 +2460,9 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.19.6"
+version = "0.19.8"
 dependencies = [
  "archspec",
- "cfg-if",
  "libloading",
  "nom",
  "once_cell",
@@ -2821,15 +2802,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9846a40c979031340571da2545a4e5b7c4163bdae79b301d5f86d03979451fcc"
 dependencies = [
  "serde_derive",
-]
-
-[[package]]
-name = "serde-json-python-formatter"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db62ee54077c67a8cff258c919175f0b3cb78d2b6dcafb0d166ff98dcb21aa5d"
-dependencies = [
- "serde_json",
 ]
 
 [[package]]

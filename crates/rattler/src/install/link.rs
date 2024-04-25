@@ -121,6 +121,9 @@ pub struct LinkedFile {
 
     /// The way the file was linked
     pub method: LinkMethod,
+
+    /// The original prefix placeholder that was replaced
+    pub prefix_placeholder: Option<String>,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -280,12 +283,18 @@ pub fn link_file(
         metadata.len()
     };
 
+    let prefix_placeholder: Option<String> = path_json_entry
+        .prefix_placeholder
+        .as_ref()
+        .map(|p| p.placeholder.clone());
+
     Ok(LinkedFile {
         clobbered: false,
         sha256,
         file_size,
         relative_path: destination_relative_path,
         method: link_method,
+        prefix_placeholder,
     })
 }
 
@@ -779,7 +788,7 @@ mod test {
         for _ in 0..15 {
             target_prefix.push_str("verylongstring/");
         }
-        let input = std::fs::read(&test_file).unwrap();
+        let input = std::fs::read(test_file).unwrap();
         let mut output = Cursor::new(Vec::new());
         super::copy_and_replace_textual_placeholder(
             &input,

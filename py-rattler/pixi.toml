@@ -1,6 +1,6 @@
 [project]
 name = "py-rattler"
-version = "0.3.0"
+version = "0.4.0"
 description = "Add a short description here"
 authors = [
     "Bas Zalmstra <bas@prefix.dev>",
@@ -11,8 +11,32 @@ platforms = ["win-64", "linux-64", "osx-64", "osx-arm64"]
 license = "BSD-3-Clause"
 
 [tasks]
+
+[dependencies]
+
+[feature.build.dependencies]
+maturin = "~=1.2.2"
+pip = "~=23.2.1"
+
+[feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
 build-release = "PIP_REQUIRE_VIRTUALENV=false maturin develop --release"
+
+[feature.build.target.linux-64.dependencies]
+patchelf = "~=0.17.2"
+
+[feature.test.dependencies]
+# Python 3.8 is the minimum supported version, so we use that for testing
+python = "3.8.*"
+
+ruff = ">=0.3.3,<0.4"
+mypy = "~=1.5.1"
+
+pytest = "~=7.4.0"
+pytest-asyncio = "0.21.1.*"
+pytest-xprocess = ">=0.23.0,<0.24"
+
+[feature.test.tasks]
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "ruff format rattler"
 fmt-rust = "cargo fmt --all"
@@ -21,30 +45,25 @@ lint-rust = "cargo clippy --all"
 fmt = { depends_on = ["fmt-python", "fmt-rust"] }
 lint = { depends_on = ["type-check", "lint-python", "lint-rust"] }
 type-check = { cmd = "mypy", depends_on = ["build"] }
-docs = { cmd = "mkdocs serve" }
-build-docs = { cmd = "mkdocs build" }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
 fmt-python-check = "ruff format rattler --diff"
 fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 
-[dependencies]
-maturin = "~=1.2.2"
-pip = "~=23.2.1"
-pytest = "~=7.4.0"
-ruff = ">=0.3.3,<0.4"
-mypy = "~=1.5.1"
-pytest-asyncio = "0.21.1.*"
-pytest-xprocess = ">=0.23.0,<0.24"
-
-# docs dependencies
+[feature.docs.dependencies]
 mkdocs = "1.5.3.*"
 mkdocstrings-python = ">=1.9.0,<1.10"
 mkdocstrings = ">=0.24.1,<0.25"
 mkdocs-material = ">=9.5.17"
-pillow = ">=9.4.0"
 cairosvg = "2.7.1.*"
+pillow = ">=9.4.0"
 
-[target.linux-64.dependencies]
-patchelf = "~=0.17.2"
+[feature.docs.tasks]
+docs = { cmd = "mkdocs serve" }
+build-docs = { cmd = "mkdocs build" }
+
+[environments]
+build = [ "build" ]
+test = [ "test" ]
+docs = [ "docs" ]

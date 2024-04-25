@@ -28,7 +28,7 @@ mod test_utils;
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
-pub use link::{link_file, LinkFileError};
+pub use link::{link_file, LinkFileError, LinkMethod};
 use rattler_conda_types::prefix_record::PathsEntry;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::unlink_package;
@@ -333,6 +333,14 @@ pub async fn link_package(
                         sha256: entry.sha256,
                         sha256_in_prefix: Some(result.sha256),
                         size_in_bytes: Some(result.file_size),
+                        file_mode: match result.method {
+                            LinkMethod::Patched(file_mode) => Some(file_mode),
+                            _ => None,
+                        },
+                        prefix_placeholder: entry
+                            .prefix_placeholder
+                            .as_ref()
+                            .map(|p| p.placeholder.clone()),
                     },
                 )),
                 Err(e) => Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
