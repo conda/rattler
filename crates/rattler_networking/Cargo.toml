@@ -14,7 +14,7 @@ readme.workspace = true
 default = ["native-tls"]
 native-tls = ['reqwest/native-tls', "google-cloud-auth/default-tls"]
 rustls-tls = ['reqwest/rustls-tls', "google-cloud-auth/rustls-tls"]
-google-cloud-auth = []
+gcs = ["google-cloud-auth"]
 
 [dependencies]
 anyhow = { workspace = true }
