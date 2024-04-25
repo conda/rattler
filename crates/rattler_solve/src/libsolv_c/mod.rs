@@ -162,10 +162,7 @@ impl super::SolverImpl for Solver {
             let channel_name = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
-            // let repo = ManuallyDrop::new(Repo::new(&pool, channel_name));
             let priority: i32 = if task.channel_priority == ChannelPriority::Strict {
-                // TODO we need to fill in the correct values here, derived from some channel -> priority map
-                // Higher values take precedence.
                 *channel_priority.get(channel_name).unwrap()
             } else {
                 0
