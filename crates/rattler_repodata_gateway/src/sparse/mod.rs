@@ -406,7 +406,7 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     //
     // Since (in most cases) the repodata is already ordered by filename which does closely resemble
     // ordering by package name this sort operation will most likely be very fast.
-    entries.sort_by(|(a, _), (b, _)| a.package.cmp(b.package));
+    entries.sort_unstable_by(|(a, _), (b, _)| a.package.cmp(b.package));
 
     Ok(entries)
 }
