@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.19.8"
+version = "0.19.9"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -39,7 +39,7 @@ superslice = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
-rattler_networking = { path="../rattler_networking", version = "0.20.2", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.3", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

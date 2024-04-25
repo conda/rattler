@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.3](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.2...rattler_networking-v0.20.3) - 2024-04-25
+
+### Added
+- Add GCS support for rattler auth ([#605](https://github.com/mamba-org/rattler/pull/605))
+
 ## [0.20.2](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.1...rattler_networking-v0.20.2) - 2024-04-19
 
 ### Added
