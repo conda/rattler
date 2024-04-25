@@ -13,6 +13,7 @@ readme.workspace = true
 [dependencies]
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 blake2 = { workspace = true }
+bytes = { workspae = true, optional = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 humansize = { workspace = true }
@@ -61,4 +62,4 @@ tracing-test = { workspace = true }
 default = ['native-tls']
 native-tls = ['reqwest/native-tls']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
+sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value", "bytes"]
