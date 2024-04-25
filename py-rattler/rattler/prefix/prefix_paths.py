@@ -1,9 +1,15 @@
 from __future__ import annotations
 import os
-from typing import List
+from typing import List, TYPE_CHECKING
 
 from rattler.package.paths_json import FileMode
 from rattler.rattler import PyPrefixPaths, PyPrefixPathsEntry, PyPrefixPathType
+
+# `os.PathLike` started to be generic from Python 3.9
+if TYPE_CHECKING:
+    BasePathLike = os.PathLike[str]
+else:
+    BasePathLike = os.PathLike
 
 
 class PrefixPathType:
@@ -66,7 +72,7 @@ class PrefixPathType:
         return self._inner.unix_python_entrypoint
 
 
-class PrefixPathsEntry(os.PathLike[str]):
+class PrefixPathsEntry(BasePathLike):
     _inner: PyPrefixPathsEntry
 
     def __fspath__(self) -> str:
