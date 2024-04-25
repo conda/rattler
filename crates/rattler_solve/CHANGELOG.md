@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.20.7...rattler_solve-v0.21.0) - 2024-04-25
+
+### Added
+- add channel priority to solve task and expose to python solve ([#598](https://github.com/mamba-org/rattler/pull/598))
+
 ## [0.20.7](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.20.6...rattler_solve-v0.20.7) - 2024-04-25
 
 ### Other

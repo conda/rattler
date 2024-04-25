@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1](https://github.com/mamba-org/rattler/compare/rattler-v0.23.0...rattler-v0.23.1) - 2024-04-25
+
+### Other
+- updated the following local packages: rattler_networking
+
 ## [0.23.0](https://github.com/mamba-org/rattler/compare/rattler-v0.22.0...rattler-v0.23.0) - 2024-04-25
 
 ### Added
