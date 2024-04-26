@@ -23,7 +23,7 @@ mod virtual_package;
 mod index_json;
 mod run_exports_json;
 use about_json::PyAboutJson;
-use channel::{PyChannel, PyChannelConfig};
+use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
     EnvironmentCreationException, ExtractException, FetchRepoDataException,
@@ -70,6 +70,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyChannel>().unwrap();
     m.add_class::<PyChannelConfig>().unwrap();
+    m.add_class::<PyChannelPriority>().unwrap();
     m.add_class::<PyPlatform>().unwrap();
     m.add_class::<PyArch>().unwrap();
 

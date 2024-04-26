@@ -1,5 +1,4 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-
 use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
@@ -9,7 +8,6 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
-
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
 pub struct AuthenticationMiddleware {
@@ -37,7 +35,7 @@ impl Middleware for AuthenticationMiddleware {
                 let mut req = req;
                 *req.url_mut() = url;
 
-                let req = Self::authenticate_request(req, &auth)?;
+                let req = Self::authenticate_request(req, &auth).await?;
                 next.run(req, extensions).await
             }
         }
@@ -73,7 +71,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Authenticate the given request with the given authentication information
-    fn authenticate_request(
+    async fn authenticate_request(
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {

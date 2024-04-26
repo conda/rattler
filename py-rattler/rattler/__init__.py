@@ -7,7 +7,7 @@ from rattler.repo_data import (
     PatchInstructions,
     SparseRepoData,
 )
-from rattler.channel import Channel, ChannelConfig
+from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import AuthenticatedClient, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage
 from rattler.package import (
@@ -47,6 +47,7 @@ __all__ = [
     "PackageRecord",
     "Channel",
     "ChannelConfig",
+    "ChannelPriority",
     "AuthenticatedClient",
     "PatchInstructions",
     "RepoDataRecord",
