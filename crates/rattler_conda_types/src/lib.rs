@@ -23,7 +23,7 @@ mod package_name;
 pub mod prefix_record;
 
 pub use build_spec::{BuildNumber, BuildNumberSpec, ParseBuildNumberSpecError};
-pub use channel::{Channel, ChannelConfig, ParseChannelError};
+pub use channel::{Channel, ChannelConfig, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,

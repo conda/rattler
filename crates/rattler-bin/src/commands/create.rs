@@ -11,6 +11,7 @@ use rattler::{
     package_cache::PackageCache,
 };
 use rattler_conda_types::{
+    prefix_record::{Link, LinkType},
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
     Platform, PrefixRecord, RepoDataRecord, Version,
 };
@@ -23,7 +24,7 @@ use rattler_repodata_gateway::fetch::{
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{
     libsolv_c::{self},
-    resolvo, SolverImpl, SolverTask,
+    resolvo, ChannelPriority, SolverImpl, SolverTask,
 };
 use reqwest::Client;
 use std::sync::Arc;
@@ -60,11 +61,18 @@ pub struct Opt {
 
     #[clap(long)]
     timeout: Option<u64>,
+
+    #[clap(long)]
+    target_prefix: Option<PathBuf>,
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
-    let channel_config = ChannelConfig::default();
-    let target_prefix = env::current_dir()?.join(".prefix");
+    let channel_config = ChannelConfig::default_with_root_dir(env::current_dir()?);
+    let current_dir = env::current_dir()?;
+    let target_prefix = opt
+        .target_prefix
+        .unwrap_or_else(|| current_dir.join(".prefix"));
+    println!("target prefix: {target_prefix:?}");
 
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
@@ -227,6 +235,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         specs,
         pinned_packages: Vec::new(),
         timeout: opt.timeout.map(Duration::from_millis),
+        channel_priority: ChannelPriority::Strict,
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
@@ -312,8 +321,11 @@ async fn execute_transaction(
     // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
-    // Create an install driver which helps limit the number of concurrent fileystem operations
+    // Create an install driver which helps limit the number of concurrent filesystem operations
     let install_driver = InstallDriver::default();
+
+    // Run pre-process (pre-unlink, mainly)
+    install_driver.pre_process(&transaction, &target_prefix)?;
 
     // Define default installation options.
     let install_options = InstallOptions {
@@ -381,9 +393,11 @@ async fn execute_transaction(
         .await?;
 
     // Perform any post processing that is required.
-    install_driver
-        .post_process(&transaction, &target_prefix)
-        .expect("bla");
+    install_driver.post_process(&transaction, &target_prefix)?;
+
+    // Create a history file (empty) for compatibility with conda.
+    let history_file = target_prefix.join("conda-meta/history");
+    std::fs::write(history_file, "").context("failed to create history file")?;
 
     Ok(())
 }
@@ -489,7 +503,7 @@ async fn install_package_to_environment(
     let prefix_record = PrefixRecord {
         repodata_record,
         package_tarball_full_path: None,
-        extracted_package_dir: Some(package_dir),
+        extracted_package_dir: Some(package_dir.clone()),
         files: paths
             .iter()
             .map(|entry| entry.relative_path.clone())
@@ -497,8 +511,12 @@ async fn install_package_to_environment(
         paths_data: paths.into(),
         // TODO: Retrieve the requested spec for this package from the request
         requested_spec: None,
-        // TODO: What to do with this?
-        link: None,
+
+        link: Some(Link {
+            source: package_dir,
+            // TODO: compute the right value here based on the options and `can_hard_link` ...
+            link_type: Some(LinkType::HardLink),
+        }),
     };
 
     // Create the conda-meta directory if it doesnt exist yet.

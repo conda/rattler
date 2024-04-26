@@ -56,14 +56,11 @@ class LockFile:
         ```python
         >>> lock_file = LockFile.from_path("./pixi.lock")
         >>> lock_file.environments()
-        [('default', Environment())]
+        [('default', Environment()), ('docs', Environment()), ('build', Environment()), ('test', Environment())]
         >>>
         ```
         """
-        return [
-            (name, Environment._from_py_environment(e))
-            for (name, e) in self._lock_file.environments()
-        ]
+        return [(name, Environment._from_py_environment(e)) for (name, e) in self._lock_file.environments()]
 
     def environment(self, name: str) -> Optional[Environment]:
         """

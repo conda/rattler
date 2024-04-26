@@ -337,8 +337,8 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn url(&self) -> String {
-        self.inner.url().to_string()
+    pub fn url_or_path(&self) -> String {
+        self.inner.url_or_path().to_string()
     }
 
     pub fn as_conda(&self) -> Option<PyRecord> {
@@ -418,8 +418,14 @@ impl PyPypiPackageData {
 
     /// The URL that points to where the artifact can be downloaded from.
     #[getter]
-    pub fn url(&self) -> String {
-        self.inner.url.to_string()
+    pub fn url_or_path(&self) -> String {
+        self.inner.url_or_path.to_string()
+    }
+
+    /// Whether the package is installed in editable mode or not.
+    #[getter]
+    pub fn is_editable(&self) -> bool {
+        self.inner.editable
     }
 
     /// Hashes of the file pointed to by `url`.
@@ -476,7 +482,11 @@ impl PyPypiPackageEnvironmentData {
     /// The extras enabled for the package. Note that the order doesn't matter.
     #[getter]
     pub fn extras(&self) -> BTreeSet<String> {
-        self.inner.extras.iter().map(|e| e.to_string()).collect()
+        self.inner
+            .extras
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect()
     }
 }
 

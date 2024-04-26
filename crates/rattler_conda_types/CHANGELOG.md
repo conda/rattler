@@ -6,6 +6,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.21.0...rattler_conda_types-v0.22.0) - 2024-04-25
+
+### Added
+- add support for extracting prefix placeholder data to PathsEntry ([#614](https://github.com/mamba-org/rattler/pull/614))
+
+## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.5...rattler_conda_types-v0.21.0) - 2024-04-19
+
+### Added
+- make root dir configurable in channel config ([#602](https://github.com/mamba-org/rattler/pull/602))
+
+### Fixed
+- better value for `link` field ([#610](https://github.com/mamba-org/rattler/pull/610))
+
+### Other
+- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+
+## [0.20.5](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.20.4...rattler_conda_types-v0.20.5) - 2024-04-05
+
+### Fixed
+- run post-link scripts ([#574](https://github.com/baszalmstra/rattler/pull/574))
+
+## [0.20.4](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.3...rattler_conda_types-v0.20.4) - 2024-03-30
+
+### Fixed
+- matchspec empty namespace and channel cannonical name ([#582](https://github.com/mamba-org/rattler/pull/582))
+
+## [0.20.3](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.2...rattler_conda_types-v0.20.3) - 2024-03-21
+
+### Fixed
+- allow not starts with in strict mode ([#577](https://github.com/mamba-org/rattler/pull/577))
+
+## [0.20.2](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.1...rattler_conda_types-v0.20.2) - 2024-03-14
+
+### Other
+- add pixi badge ([#563](https://github.com/mamba-org/rattler/pull/563))
+
+## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.20.0...rattler_conda_types-v0.20.1) - 2024-03-08
+
+### Fixed
+- chrono deprecation warnings ([#558](https://github.com/mamba-org/rattler/pull/558))
+
 ## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.19.0...rattler_conda_types-v0.20.0) - 2024-03-06
 
 ### Added

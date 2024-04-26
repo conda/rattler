@@ -72,7 +72,7 @@ class PypiPackageData:
         return self._data.version
 
     @property
-    def url(self) -> str:
+    def url_or_path(self) -> str:
         """
         The URL that points to where the artifact can be downloaded from.
 
@@ -84,12 +84,12 @@ class PypiPackageData:
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
         >>> data = pypi_packages[Platform("osx-arm64")][0][0]
-        >>> data.url
+        >>> data.url_or_path
         'https://files.pythonhosted.org/...'
         >>>
         ```
         """
-        return self._data.url
+        return self._data.url_or_path
 
     @property
     def hash(self) -> Optional[PackageHashes]:
@@ -151,6 +151,26 @@ class PypiPackageData:
         """
         return self._data.requires_python
 
+    @property
+    def is_editable(self) -> bool:
+        """
+        Whether the package should be installed in editable mode or not.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import LockFile, Platform
+        >>> lock_file = LockFile.from_path("../test-data/test.lock")
+        >>> env = lock_file.default_environment()
+        >>> pypi_packages = env.pypi_packages()
+        >>> data = pypi_packages[Platform("osx-arm64")][0][0]
+        >>> data.is_editable
+        False
+        >>>
+        ```
+        """
+        return self._data.is_editable
+
     @classmethod
     def _from_py_pypi_package_data(cls, pkg_data: PyPypiPackageData) -> PypiPackageData:
         """
@@ -192,9 +212,7 @@ class PypiPackageEnvironmentData:
         return self._data.extras
 
     @classmethod
-    def _from_py_pypi_env_data(
-        cls, env_data: PyPypiPackageEnvironmentData
-    ) -> PypiPackageEnvironmentData:
+    def _from_py_pypi_env_data(cls, env_data: PyPypiPackageEnvironmentData) -> PypiPackageEnvironmentData:
         """
         Construct Rattler PypiPackageEnvironmentData from FFI PyPypiPackageEnvironmentData object.
         """

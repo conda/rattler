@@ -1,0 +1,8 @@
+#!/this/is/placeholder/python -m 123123
+
+# just a comment
+
+import sys
+import re
+
+main(...)

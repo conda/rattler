@@ -329,7 +329,7 @@ jobs:
           path: py-rattler/dist
 
   macos-x86_64:
-    runs-on: macos-latest
+    runs-on: macos-13   # x86_64 runner
     name: Build x86_64-macos
     steps:
       - uses: actions/checkout@v4

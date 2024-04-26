@@ -1,5 +1,6 @@
 //! Defines the `[PrefixRecord]` struct.
 
+use crate::package::FileMode;
 use crate::repo_data_record::RepoDataRecord;
 use crate::PackageRecord;
 use rattler_digest::serde::SerializableHash;
@@ -85,6 +86,14 @@ pub struct PathsEntry {
     /// The size of the file in bytes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size_in_bytes: Option<u64>,
+
+    /// The file mode of the entry. This is used in conjunction with a prefix_placeholder
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_mode: Option<FileMode>,
+
+    /// The original sentinel value used for prefix-replacement from the package
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prefix_placeholder: Option<String>,
 }
 
 /// Information about a single file installed for a package.
@@ -152,11 +161,13 @@ pub struct PrefixRecord {
     #[serde(default)]
     pub paths_data: PrefixPaths,
 
-    /// TODO: I dont understand this field
+    /// This field contains a reference to the package cache from where the package was linked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub link: Option<Link>,
 
     /// The spec that was used when this package was installed. Note that this field is not updated if the
-    /// currently another spec was used.
+    /// currently another spec was used. Note: conda seems to serialize a "None" string value instead of `null`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_spec: Option<String>,
 }
 
@@ -266,7 +277,7 @@ impl FromStr for PrefixRecord {
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
 pub struct Link {
     /// The path to the file source that was installed
-    pub source: String,
+    pub source: PathBuf,
 
     /// The link type that was used to install the file
     #[serde(rename = "type")]

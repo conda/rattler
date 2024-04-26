@@ -92,7 +92,7 @@ impl AuthenticationStorage {
                     return Ok(Some(auth));
                 }
                 Ok(None) => {
-                    return Ok(None);
+                    continue;
                 }
                 Err(e) => {
                     tracing::warn!("Error retrieving credentials from backend: {}", e);
@@ -100,7 +100,7 @@ impl AuthenticationStorage {
             }
         }
 
-        Err(anyhow!("All backends failed to retrieve credentials"))
+        Ok(None)
     }
 
     /// Retrieve the authentication information for the given URL

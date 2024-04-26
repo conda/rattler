@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.19.1"
+version = "0.19.9"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -35,9 +35,9 @@ serde_json = { workspace = true }
 pin-project-lite = { workspace = true }
 md-5 = { workspace = true }
 dirs = { workspace = true }
-rattler_digest = { path="../rattler_digest", version = "0.19.1", default-features = false, features = ["tokio", "serde"] }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.20.0", default-features = false, optional = true }
 fxhash = { workspace = true, optional = true }
+rattler_digest = { path="../rattler_digest", version = "0.19.3", default-features = false, features = ["tokio", "serde"] }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.22.0", default-features = false, optional = true }
 memmap2 = { workspace = true, optional = true }
 ouroboros = { workspace = true, optional = true }
 serde_with = { workspace = true }
@@ -45,7 +45,7 @@ superslice = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
-rattler_networking = { path="../rattler_networking", version = "0.19.1", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.3", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
@@ -62,7 +62,7 @@ rstest = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.20.0", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.22.0", default-features = false }
 
 [features]
 default = ['native-tls']

@@ -18,6 +18,7 @@ try:
         ConvertSubdirError,
         VersionBumpError,
         EnvironmentCreationError,
+        ExtractError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -77,6 +78,9 @@ except ImportError:
     class EnvironmentCreationError(Exception):  # type: ignore[no-redef]
         """An error that can occur when creating an environment."""
 
+    class ExtractError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when extracting an archive."""
+
 
 __all__ = [
     "ActivationError",
@@ -97,4 +101,5 @@ __all__ = [
     "ConvertSubdirError",
     "VersionBumpError",
     "EnvironmentCreationError",
+    "ExtractError",
 ]

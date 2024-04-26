@@ -18,13 +18,17 @@ mod clobber_registry;
 mod driver;
 mod entry_point;
 pub mod link;
+pub mod link_script;
 mod python;
 mod transaction;
 pub mod unlink;
 
+#[cfg(test)]
+mod test_utils;
+
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
-pub use link::{link_file, LinkFileError};
+pub use link::{link_file, LinkFileError, LinkMethod};
 use rattler_conda_types::prefix_record::PathsEntry;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
 pub use unlink::unlink_package;
@@ -329,6 +333,14 @@ pub async fn link_package(
                         sha256: entry.sha256,
                         sha256_in_prefix: Some(result.sha256),
                         size_in_bytes: Some(result.file_size),
+                        file_mode: match result.method {
+                            LinkMethod::Patched(file_mode) => Some(file_mode),
+                            _ => None,
+                        },
+                        prefix_placeholder: entry
+                            .prefix_placeholder
+                            .as_ref()
+                            .map(|p| p.placeholder.clone()),
                     },
                 )),
                 Err(e) => Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
@@ -380,6 +392,7 @@ pub async fn link_package(
                         &target_prefix,
                         &entry_point,
                         &python_info,
+                        &platform,
                     ) {
                         Ok([a, b]) => {
                             let _ = tx.blocking_send(Ok((number_of_paths_entries, a)));

@@ -40,7 +40,4 @@ async def fetch_repo_data(
         callback,
     )
 
-    return [
-        SparseRepoData._from_py_sparse_repo_data(repo_data)
-        for repo_data in repo_data_list
-    ]
+    return [SparseRepoData._from_py_sparse_repo_data(repo_data) for repo_data in repo_data_list]

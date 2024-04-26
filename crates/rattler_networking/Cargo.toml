@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.19.1"
+version = "0.20.3"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -11,30 +11,30 @@ license.workspace = true
 readme.workspace = true
 
 [features]
-native-tls = ['reqwest/native-tls']
-rustls-tls = ['reqwest/rustls-tls']
+default = ["native-tls"]
+native-tls = ['reqwest/native-tls', "google-cloud-auth?/default-tls"]
+rustls-tls = ['reqwest/rustls-tls', "google-cloud-auth?/rustls-tls"]
 
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+chrono = { workspace = true }
 dirs = { workspace = true }
 fslock = { workspace = true }
+http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true }
-lazy_static = { workspace = true }
-libc = { workspace = true }
 netrc-rs = { workspace = true }
-once_cell = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-task-local-extensions = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
+google-cloud-auth = { workspace = true, default-features = false, optional = true }
 
 [target.'cfg( target_arch = "wasm32" )'.dependencies]
 getrandom = { workspace = true, features = ["js"] }
@@ -44,3 +44,6 @@ anyhow = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
+axum = { workspace = true }
+reqwest-retry = { workspace = true }
+sha2 = { workspace = true }

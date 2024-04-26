@@ -81,6 +81,7 @@ mod conda;
 mod hash;
 mod parse;
 mod pypi;
+mod url_or_path;
 mod utils;
 
 pub use builder::LockFileBuilder;
@@ -88,7 +89,8 @@ pub use channel::Channel;
 pub use conda::{CondaPackageData, ConversionError};
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
-pub use pypi::{PypiPackageData, PypiPackageEnvironmentData};
+pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
+pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
 /// when no explicit environment name is specified.
@@ -444,11 +446,11 @@ impl Package {
         }
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
+    /// Returns the URL or relative path to the package
+    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            Package::Conda(value) => value.url(),
-            Package::Pypi(value) => value.url(),
+            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
+            Self::Pypi(value) => Cow::Borrowed(value.url()),
         }
     }
 }
@@ -545,8 +547,8 @@ impl PypiPackage {
     }
 
     /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
-        &self.package_data().url
+    pub fn url(&self) -> &UrlOrPath {
+        &self.package_data().url_or_path
     }
 
     /// Returns the extras enabled for this package
@@ -557,6 +559,11 @@ impl PypiPackage {
     /// Returns true if this package satisfies the given `spec`.
     pub fn satisfies(&self, spec: &Requirement) -> bool {
         self.package_data().satisfies(spec)
+    }
+
+    /// Returns true if this package should be installed in "editable" mode.
+    pub fn is_editable(&self) -> bool {
+        self.package_data().editable
     }
 }
 
@@ -586,12 +593,23 @@ mod test {
     #[case("v4/python-lock.yml")]
     #[case("v4/pypi-matplotlib-lock.yml")]
     #[case("v4/turtlesim-lock.yml")]
+    #[case("v4/path-based-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
             .join(file_name);
         let conda_lock = LockFile::from_path(&path).unwrap();
         insta::assert_yaml_snapshot!(file_name, conda_lock);
+    }
+
+    /// Absolute paths on Windows are not properly parsed.
+    /// See: <https://github.com/mamba-org/rattler/issues/615>
+    #[test]
+    fn test_issue_615() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../test-data/conda-lock/absolute-path-lock.yml");
+        let conda_lock = LockFile::from_path(&path);
+        assert!(conda_lock.is_ok());
     }
 
     #[test]
@@ -608,7 +626,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -616,7 +634,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url().clone())
+            .map(|p| p.url_or_path().into_owned())
             .collect::<Vec<_>>());
     }
 }

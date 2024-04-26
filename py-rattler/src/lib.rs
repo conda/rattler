@@ -10,6 +10,7 @@ mod meta;
 mod nameless_match_spec;
 mod networking;
 mod package_name;
+mod paths_json;
 mod platform;
 mod prefix_paths;
 mod record;
@@ -19,17 +20,20 @@ mod solver;
 mod version;
 mod virtual_package;
 
+mod index_json;
+mod run_exports_json;
 use about_json::PyAboutJson;
-use channel::{PyChannel, PyChannelConfig};
+use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
     ActivationException, CacheDirException, ConvertSubdirException, DetectVirtualPackageException,
-    EnvironmentCreationException, FetchRepoDataException, InvalidChannelException,
-    InvalidMatchSpecException, InvalidPackageNameException, InvalidUrlException,
-    InvalidVersionException, IoException, LinkException, ParseArchException,
+    EnvironmentCreationException, ExtractException, FetchRepoDataException,
+    InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
+    InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
     VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
+use index_json::PyIndexJson;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
     PyPypiPackageEnvironmentData,
@@ -38,8 +42,10 @@ use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use package_name::PyPackageName;
-use prefix_paths::PyPrefixPaths;
+use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
+use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
+use run_exports_json::PyRunExportsJson;
 use version::PyVersion;
 
 use pyo3::prelude::*;
@@ -64,6 +70,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<PyChannel>().unwrap();
     m.add_class::<PyChannelConfig>().unwrap();
+    m.add_class::<PyChannelPriority>().unwrap();
     m.add_class::<PyPlatform>().unwrap();
     m.add_class::<PyArch>().unwrap();
 
@@ -85,6 +92,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         .unwrap();
     m.add_class::<PyGenericVirtualPackage>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
+    m.add_class::<PyPrefixPathsEntry>().unwrap();
+    m.add_class::<PyPrefixPathType>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
 
     m.add_class::<PyLockFile>().unwrap();
@@ -96,6 +105,14 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPackageHashes>().unwrap();
 
     m.add_class::<PyAboutJson>().unwrap();
+
+    m.add_class::<PyRunExportsJson>().unwrap();
+    m.add_class::<PyPathsJson>().unwrap();
+    m.add_class::<PyPathsEntry>().unwrap();
+    m.add_class::<PyPathType>().unwrap();
+    m.add_class::<PyPrefixPlaceholder>().unwrap();
+    m.add_class::<PyFileMode>().unwrap();
+    m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
         .unwrap();
@@ -169,6 +186,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         py.get_type::<EnvironmentCreationException>(),
     )
     .unwrap();
+
+    m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
 
     Ok(())
 }

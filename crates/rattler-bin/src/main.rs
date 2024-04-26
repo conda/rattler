@@ -38,6 +38,7 @@ struct Opt {
 #[derive(Debug, clap::Subcommand)]
 enum Command {
     Create(commands::create::Opt),
+    VirtualPackages(commands::virtual_packages::Opt),
 }
 
 /// Entry point of the `rattler` cli.
@@ -70,5 +71,6 @@ async fn main() -> anyhow::Result<()> {
     // Dispatch the selected comment
     match opt.command {
         Command::Create(opts) => commands::create::create(opts).await,
+        Command::VirtualPackages(opts) => commands::virtual_packages::virtual_packages(opts),
     }
 }

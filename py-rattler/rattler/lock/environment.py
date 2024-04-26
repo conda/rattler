@@ -16,16 +16,11 @@ class Environment:
 
     _env: PyEnvironment
 
-    def __init__(
-        self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]
-    ) -> None:
+    def __init__(self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]) -> None:
         self._env = PyEnvironment(
             name,
             # TODO: move this logic to rust
-            {
-                platform._inner: [record._record for record in records]
-                for (platform, records) in requirements.items()
-            },
+            {platform._inner: [record._record for record in records] for (platform, records) in requirements.items()},
         )
 
     def platforms(self) -> List[Platform]:
@@ -100,9 +95,7 @@ class Environment:
         ```
         """
         return {
-            Platform._from_py_platform(platform): [
-                LockedPackage._from_py_lock_package(p) for p in packages
-            ]
+            Platform._from_py_platform(platform): [LockedPackage._from_py_lock_package(p) for p in packages]
             for (platform, packages) in self._env.packages_by_platform()
         }
 
@@ -155,9 +148,7 @@ class Environment:
             for (platform, records) in self._env.conda_repodata_records().items()
         }
 
-    def conda_repodata_records_for_platform(
-        self, platform: Platform
-    ) -> Optional[List[RepoDataRecord]]:
+    def conda_repodata_records_for_platform(self, platform: Platform) -> Optional[List[RepoDataRecord]]:
         """
         Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
         returns an error if the conversion failed. Returns `None` if the specified platform is not

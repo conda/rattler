@@ -8,6 +8,7 @@ use rattler_conda_types::{
     ParseMatchSpecError, ParsePlatformError, ParseVersionError, VersionBumpError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
+use rattler_package_streaming::ExtractError;
 use rattler_repodata_gateway::fetch::FetchRepoDataError;
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;
@@ -59,6 +60,10 @@ pub enum PyRattlerError {
     RequirementError(String),
     #[error("{0}")]
     EnvironmentCreationError(String),
+    #[error(transparent)]
+    ExtractError(#[from] ExtractError),
+    #[error(transparent)]
+    ActivationScriptFormatError(std::fmt::Error),
 }
 
 impl From<PyRattlerError> for PyErr {
@@ -105,6 +110,10 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::EnvironmentCreationError(err) => {
                 EnvironmentCreationException::new_err(err)
             }
+            PyRattlerError::ExtractError(err) => ExtractException::new_err(err.to_string()),
+            PyRattlerError::ActivationScriptFormatError(err) => {
+                ActivationScriptFormatException::new_err(err.to_string())
+            }
         }
     }
 }
@@ -130,3 +139,5 @@ create_exception!(exceptions, ParseCondaLockException, PyException);
 create_exception!(exceptions, ConversionException, PyException);
 create_exception!(exceptions, RequirementException, PyException);
 create_exception!(exceptions, EnvironmentCreationException, PyException);
+create_exception!(exceptions, ExtractException, PyException);
+create_exception!(exceptions, ActivationScriptFormatException, PyException);
