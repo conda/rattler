@@ -621,6 +621,7 @@ mod test {
     #[case("v4/pypi-matplotlib-lock.yml")]
     #[case("v4/turtlesim-lock.yml")]
     #[case("v4/path-based-lock.yml")]
+    #[case("v5/flat-index-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

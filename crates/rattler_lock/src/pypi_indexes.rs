@@ -13,7 +13,11 @@ pub struct PypiIndexes {
 
     /// Flat indexes also called `--find-links` in pip
     /// These are flat listings of distributions
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "Vec::is_empty",
+        with = "serde_yaml::with::singleton_map_recursive"
+    )]
     pub flat_indexes: Vec<FlatIndexUrlOrPath>,
 }
 
