@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::task::JoinError;
 use url::Url;
 
 pub struct ShardedSubdir {
@@ -89,66 +88,69 @@ impl SubdirClient for ShardedSubdir {
 
         // Check if we already have the shard in the cache.
         let shard_cache_path = self.cache_dir.join(&format!("{}.msgpack", shard.sha256));
-        if shard_cache_path.is_file() {
-            // Read the cached shard
-            let cached_bytes = tokio::fs::read(&shard_cache_path)
+
+        // Read the cached shard
+        match tokio::fs::read(&shard_cache_path).await {
+            Ok(cached_bytes) => {
+                // Decode the cached shard
+                return parse_records(
+                    cached_bytes,
+                    self.channel.canonical_name(),
+                    self.sharded_repodata.info.base_url.clone(),
+                )
                 .await
-                .map_err(FetchRepoDataError::IoError)?;
-
-            // Decode the cached shard
-            parse_records(
-                cached_bytes,
-                self.channel.canonical_name(),
-                self.sharded_repodata.info.base_url.clone(),
-            )
-            .await
-            .map(Arc::from)
-        } else {
-            // Download the shard
-            let shard_url = self
-                .shard_base_url
-                .join(&format!("shards/{}.msgpack.zst", shard.sha256))
-                .expect("invalid shard url");
-
-            let shard_response = self
-                .client
-                .get(shard_url.clone())
-                .send()
-                .await
-                .and_then(|r| r.error_for_status().map_err(Into::into))
-                .map_err(FetchRepoDataError::from)?;
-
-            let shard_bytes = shard_response
-                .bytes()
-                .await
-                .map_err(FetchRepoDataError::from)?;
-
-            let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
-
-            // Create a future to write the cached bytes to disk
-            let write_to_cache_fut = tokio::fs::write(&shard_cache_path, shard_bytes.clone())
-                .map_err(FetchRepoDataError::IoError)
-                .map_err(GatewayError::from);
-
-            // Create a future to parse the records from the shard
-            let parse_records_fut = parse_records(
-                shard_bytes,
-                self.channel.canonical_name(),
-                self.sharded_repodata.info.base_url.clone(),
-            );
-
-            // Await both futures concurrently.
-            let (_, records) = tokio::try_join!(write_to_cache_fut, parse_records_fut)?;
-
-            Ok(records.into())
+                .map(Arc::from);
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                // The file is missing from the cache, we need to download it.
+            }
+            Err(err) => return Err(FetchRepoDataError::IoError(err).into()),
         }
+
+        // Download the shard
+        let shard_url = self
+            .shard_base_url
+            .join(&format!("shards/{}.msgpack.zst", shard.sha256))
+            .expect("invalid shard url");
+
+        let shard_response = self
+            .client
+            .get(shard_url.clone())
+            .send()
+            .await
+            .and_then(|r| r.error_for_status().map_err(Into::into))
+            .map_err(FetchRepoDataError::from)?;
+
+        let shard_bytes = shard_response
+            .bytes()
+            .await
+            .map_err(FetchRepoDataError::from)?;
+
+        let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;
+
+        // Create a future to write the cached bytes to disk
+        let write_to_cache_fut = tokio::fs::write(&shard_cache_path, shard_bytes.clone())
+            .map_err(FetchRepoDataError::IoError)
+            .map_err(GatewayError::from);
+
+        // Create a future to parse the records from the shard
+        let parse_records_fut = parse_records(
+            shard_bytes,
+            self.channel.canonical_name(),
+            self.sharded_repodata.info.base_url.clone(),
+        );
+
+        // Await both futures concurrently.
+        let (_, records) = tokio::try_join!(write_to_cache_fut, parse_records_fut)?;
+
+        Ok(records.into())
     }
 }
 
 async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
 ) -> Result<Vec<u8>, GatewayError> {
-    match tokio::task::spawn_blocking(move || match zstd::decode_all(bytes.as_ref()) {
+    tokio_rayon::spawn(move || match zstd::decode_all(bytes.as_ref()) {
         Ok(decoded) => Ok(decoded),
         Err(err) => Err(GatewayError::IoError(
             "failed to decode zstd shard".to_string(),
@@ -156,16 +158,6 @@ async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
         )),
     })
     .await
-    .map_err(JoinError::try_into_panic)
-    {
-        Ok(Ok(bytes)) => Ok(bytes),
-        Ok(Err(err)) => Err(err),
-        Err(Ok(panic)) => std::panic::resume_unwind(panic),
-        Err(Err(_)) => Err(GatewayError::IoError(
-            "loading of the records was cancelled".to_string(),
-            std::io::ErrorKind::Interrupted.into(),
-        )),
-    }
 }
 
 async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
@@ -173,10 +165,11 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     channel_name: String,
     base_url: Url,
 ) -> Result<Vec<RepoDataRecord>, GatewayError> {
-    match tokio::task::spawn_blocking(move || {
+    tokio_rayon::spawn(move || {
         // let shard = serde_json::from_slice::<Shard>(bytes.as_ref()).map_err(std::io::Error::from)?;
         let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+            .map_err(FetchRepoDataError::IoError)?;
         let packages =
             itertools::chain(shard.packages.into_iter(), shard.packages_conda.into_iter());
         Ok(packages
@@ -189,19 +182,6 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             .collect())
     })
     .await
-    .map_err(JoinError::try_into_panic)
-    {
-        Ok(Ok(records)) => Ok(records),
-        Ok(Err(err)) => Err(GatewayError::IoError(
-            "failed to parse repodata records from repodata shard".to_string(),
-            err,
-        )),
-        Err(Ok(panic)) => std::panic::resume_unwind(panic),
-        Err(Err(_)) => Err(GatewayError::IoError(
-            "loading of the records was cancelled".to_string(),
-            std::io::ErrorKind::Interrupted.into(),
-        )),
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

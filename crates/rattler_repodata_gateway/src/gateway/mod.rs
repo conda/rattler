@@ -473,14 +473,13 @@ mod test {
                 )],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![
-                    // PackageName::from_str("rubin-env").unwrap(),
-
+                    PackageName::from_str("rubin-env").unwrap(),
                     // PackageName::from_str("jupyterlab").unwrap(),
                     // PackageName::from_str("detectron2").unwrap(),
 
-                    PackageName::from_str("python").unwrap(),
-                    PackageName::from_str("boto3").unwrap(),
-                    PackageName::from_str("requests").unwrap(),
+                    // PackageName::from_str("python").unwrap(),
+                    // PackageName::from_str("boto3").unwrap(),
+                    // PackageName::from_str("requests").unwrap(),
                 ]
                 .into_iter(),
             )

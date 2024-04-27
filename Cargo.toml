@@ -138,6 +138,7 @@ tokio-stream = "0.1.15"
 tokio-util = "0.7.10"
 tower = { version = "0.4.13", default-features = false }
 tower-http = { version = "0.5.2", default-features = false }
+tokio-rayon = { version = "2.1.0" }
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false }
 tracing-test = { version = "0.2.4" }
