@@ -1,9 +1,6 @@
 use axum::routing::get_service;
 use rattler_conda_types::Channel;
-use std::future::IntoFuture;
-use std::iter;
-use std::net::SocketAddr;
-use std::path::Path;
+use std::{future::IntoFuture, net::SocketAddr, path::Path};
 use tokio::sync::oneshot;
 use tower_http::services::ServeDir;
 use url::Url;
@@ -21,7 +18,7 @@ impl SimpleChannelServer {
 
     #[allow(dead_code)]
     pub fn channel(&self) -> Channel {
-        Channel::from_url(self.url(), iter::empty())
+        Channel::from_url(self.url())
     }
 }
 

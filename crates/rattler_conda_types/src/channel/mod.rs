@@ -5,7 +5,6 @@ use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use thiserror::Error;
 use url::Url;
 
@@ -121,7 +120,7 @@ pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
     /// specified.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub platforms: Option<SmallVec<[Platform; 2]>>,
+    pub platforms: Option<Vec<Platform>>,
 
     /// Base URL of the channel, everything is relative to this url.
     pub base_url: Url,
@@ -141,7 +140,10 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
-            Channel::from_url(url, platforms.into_iter().flatten())
+            Channel {
+                platforms,
+                ..Channel::from_url(url)
+            }
         } else if is_path(channel) {
             let path = PathBuf::from(channel);
 
@@ -160,14 +162,25 @@ impl Channel {
                 }
             }
         } else {
-            Channel::from_name(channel, platforms, config)
+            Channel {
+                platforms,
+                ..Channel::from_name(channel, config)
+            }
         };
 
         Ok(channel)
     }
 
+    /// Set the explicit platforms of the channel.
+    pub fn with_explicit_platforms(self, platforms: impl IntoIterator<Item = Platform>) -> Self {
+        Self {
+            platforms: Some(platforms.into_iter().collect()),
+            ..self
+        }
+    }
+
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(url: Url, platforms: impl IntoIterator<Item = Platform>) -> Self {
+    pub fn from_url(url: Url) -> Self {
         // Get the path part of the URL but trim the directory suffix
         let path = url.path().trim_end_matches('/');
 
@@ -187,18 +200,11 @@ impl Channel {
         // Case 4: custom_channels matches
         // Case 5: channel_alias match
 
-        let mut platforms = platforms.into_iter().peekable();
-        let platforms = if platforms.peek().is_none() {
-            None
-        } else {
-            Some(platforms.collect())
-        };
-
         if base_url.has_host() {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
-                platforms,
+                platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -208,7 +214,7 @@ impl Channel {
                 .rsplit_once('/')
                 .map_or_else(|| base_url.path(), |(_, path_part)| path_part);
             Self {
-                platforms,
+                platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -216,11 +222,7 @@ impl Channel {
     }
 
     /// Construct a channel from a name, platform and configuration.
-    pub fn from_name(
-        name: &str,
-        platforms: Option<SmallVec<[Platform; 2]>>,
-        config: &ChannelConfig,
-    ) -> Self {
+    pub fn from_name(name: &str, config: &ChannelConfig) -> Self {
         // TODO: custom channels
 
         let dir_name = if name.ends_with('/') {
@@ -231,7 +233,7 @@ impl Channel {
 
         let name = name.trim_end_matches('/');
         Self {
-            platforms,
+            platforms: None,
             base_url: config
                 .channel_alias
                 .join(dir_name.as_ref())
@@ -342,18 +344,16 @@ impl From<url::ParseError> for ParseChannelError {
 
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
-fn parse_platforms(
-    channel: &str,
-) -> Result<(Option<SmallVec<[Platform; 2]>>, &str), ParsePlatformError> {
+fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
     if channel.rfind(']').is_some() {
         if let Some(start_platform_idx) = channel.find('[') {
             let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms: SmallVec<_> = platform_part
+            let platforms = platform_part
                 .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(FromStr::from_str)
-                .collect::<Result<_, _>>()?;
+                .collect::<Result<Vec<_>, _>>()?;
             let platforms = if platforms.is_empty() {
                 None
             } else {

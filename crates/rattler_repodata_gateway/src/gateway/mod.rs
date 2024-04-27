@@ -3,6 +3,7 @@ mod channel_config;
 mod error;
 mod local_subdir;
 mod remote_subdir;
+mod sharded_subdir;
 mod subdir;
 
 pub use barrier_cell::BarrierCell;
@@ -355,15 +356,25 @@ impl GatewayInner {
                 ));
             }
         } else if url.scheme() == "http" || url.scheme() == "https" {
-            remote_subdir::RemoteSubdirClient::new(
-                channel.clone(),
-                platform,
-                self.client.clone(),
-                self.cache.clone(),
-                self.channel_config.get(channel).clone(),
-            )
-            .await
-            .map(SubdirData::from_client)
+            if url.as_str().starts_with("https://conda.anaconda.org/conda-forge/") {
+                sharded_subdir::ShardedSubdir::new(
+                    channel.clone(),
+                    platform.to_string(),
+                    self.client.clone(),
+                )
+                .await
+                .map(SubdirData::from_client)
+            } else {
+                remote_subdir::RemoteSubdirClient::new(
+                    channel.clone(),
+                    platform,
+                    self.client.clone(),
+                    self.cache.clone(),
+                    self.channel_config.get(channel).clone(),
+                )
+                .await
+                .map(SubdirData::from_client)
+            }
         } else {
             return Err(GatewayError::UnsupportedUrl(format!(
                 "'{}' is not a supported scheme",
@@ -399,6 +410,8 @@ mod test {
     use rattler_conda_types::{Channel, PackageName, Platform};
     use std::path::Path;
     use std::str::FromStr;
+    use std::time::Instant;
+    use url::Url;
 
     fn local_conda_forge() -> Channel {
         Channel::from_directory(
@@ -445,5 +458,29 @@ mod test {
             .unwrap();
 
         assert_eq!(records.len(), 45060);
+    }
+
+    #[tokio::test(flavor="multi_thread")]
+    async fn test_sharded_gateway() {
+        let gateway = Gateway::new();
+
+        let start = Instant::now();
+        let records = gateway
+            .load_records_recursive(
+                vec![Channel::from_url(
+                    Url::parse("https://conda.anaconda.org/conda-forge").unwrap(),
+                )],
+                vec![Platform::OsxArm64, Platform::NoArch],
+                vec![
+                    PackageName::from_str("rubin-env").unwrap(),
+                    PackageName::from_str("rubin-env").unwrap()
+                ].into_iter(),
+            )
+            .await
+            .unwrap();
+        let end = Instant::now();
+        println!("{} records in {:?}", records.len(), end - start);
+
+        assert_eq!(records.len(), 84242);
     }
 }
