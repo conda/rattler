@@ -65,7 +65,7 @@ futures-util = "0.3.30"
 fxhash = "0.2.1"
 getrandom = { version = "0.2.14", default-features = false }
 glob = "0.3.1"
-google-cloud-auth = { version = "0.13.2", default-features = false}
+google-cloud-auth = { version = "0.13.2", default-features = false }
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "1.1"
@@ -106,8 +106,10 @@ reqwest-middleware = "0.3.0"
 reqwest-retry = "0.5.0"
 resolvo = { version = "0.4.0" }
 retry-policies = { version = "0.3.0", default-features = false }
+rmp-serde = { version = "1.2.0" }
 rstest = { version = "0.19.0" }
 rstest_reuse = "0.6.0"
+rayon = { version = "1.10.0", default-features = false }
 serde = { version = "1.0.198" }
 serde_json = { version = "1.0.116" }
 serde_repr = "0.1"

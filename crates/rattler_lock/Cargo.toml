@@ -27,6 +27,7 @@ thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 purl = { workspace = true, features = ["serde"] }
 percent-encoding = {  workspace = true }
+rayon = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }

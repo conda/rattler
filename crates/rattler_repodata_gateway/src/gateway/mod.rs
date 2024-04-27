@@ -162,14 +162,11 @@ impl Gateway {
             });
         }
 
-        // Package names that we still need to fetch.
-        let mut pending_package_names = names.into_iter().map(Into::into).collect_vec();
-
         // Package names that we have or will issue requests for.
-        let mut seen = pending_package_names
-            .iter()
-            .cloned()
-            .collect::<HashSet<_>>();
+        let mut seen = names.into_iter().map(Into::into).collect::<HashSet<_>>();
+
+        // Package names that we still need to fetch.
+        let mut pending_package_names = seen.iter().cloned().collect::<Vec<_>>();
 
         // A list of futures to fetch the records for the pending package names. The main task
         // awaits these futures.
@@ -356,11 +353,15 @@ impl GatewayInner {
                 ));
             }
         } else if url.scheme() == "http" || url.scheme() == "https" {
-            if url.as_str().starts_with("https://conda.anaconda.org/conda-forge/") {
+            if url
+                .as_str()
+                .starts_with("https://conda.anaconda.org/conda-forge/")
+            {
                 sharded_subdir::ShardedSubdir::new(
                     channel.clone(),
                     platform.to_string(),
                     self.client.clone(),
+                    self.cache.clone(),
                 )
                 .await
                 .map(SubdirData::from_client)
@@ -460,7 +461,7 @@ mod test {
         assert_eq!(records.len(), 45060);
     }
 
-    #[tokio::test(flavor="multi_thread")]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_sharded_gateway() {
         let gateway = Gateway::new();
 
@@ -470,11 +471,18 @@ mod test {
                 vec![Channel::from_url(
                     Url::parse("https://conda.anaconda.org/conda-forge").unwrap(),
                 )],
-                vec![Platform::OsxArm64, Platform::NoArch],
+                vec![Platform::Linux64, Platform::NoArch],
                 vec![
-                    PackageName::from_str("rubin-env").unwrap(),
-                    PackageName::from_str("rubin-env").unwrap()
-                ].into_iter(),
+                    // PackageName::from_str("rubin-env").unwrap(),
+
+                    // PackageName::from_str("jupyterlab").unwrap(),
+                    // PackageName::from_str("detectron2").unwrap(),
+
+                    PackageName::from_str("python").unwrap(),
+                    PackageName::from_str("boto3").unwrap(),
+                    PackageName::from_str("requests").unwrap(),
+                ]
+                .into_iter(),
             )
             .await
             .unwrap();

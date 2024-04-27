@@ -32,6 +32,7 @@ tokio = { workspace = true, features = ["rt", "io-util"] }
 anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+rmp-serde = {  workspace = true }
 pin-project-lite = { workspace = true }
 md-5 = { workspace = true }
 dirs = { workspace = true }
@@ -47,6 +48,7 @@ json-patch = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 rattler_networking = { path = "../rattler_networking", version = "0.20.3", default-features = false }
 zstd = { workspace = true }
+bytes = "1.6.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
