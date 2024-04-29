@@ -33,6 +33,7 @@ pub struct CacheHeader {
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
 
+/// Write the shard index cache to disk.
 async fn write_cache(
     cache_file: &Path,
     cache_header: CacheHeader,
@@ -51,6 +52,8 @@ async fn write_cache(
     tokio::fs::write(&cache_file, content).await
 }
 
+/// Read the cache header - returns the cache header and the reader that can be
+/// used to read the rest of the file.
 async fn read_cache_header(
     cache_file: &Path,
 ) -> Result<(CacheHeader, tokio::io::BufReader<tokio::fs::File>), std::io::Error> {
@@ -124,17 +127,23 @@ impl ShardedSubdir {
                         cache_data = Some((cache_header, file));
                     } else {
                         tracing::info!("Using cached sharded repodata - cache still valid");
-                        // read the rest of the file
-                        file.read_to_end(&mut rest)
-                            .await
-                            .map_err(FetchRepoDataError::IoError)?;
-                        return Ok(Self {
-                            channel,
-                            client,
-                            sharded_repodata: rmp_serde::from_slice(&rest).unwrap(),
-                            shard_base_url,
-                            cache_dir,
-                        });
+                        match file.read_to_end(&mut rest).await {
+                            Ok(_) => {
+                                let sharded_repodata = rmp_serde::from_slice(&rest).unwrap();
+                                return Ok(Self {
+                                    channel,
+                                    client,
+                                    sharded_repodata,
+                                    shard_base_url,
+                                    cache_dir,
+                                });
+                            }
+                            Err(e) => {
+                                tracing::info!("failed to read cache data: {:?}", e);
+                                // remove the file and try to fetch it again, ignore any error here
+                                tokio::fs::remove_file(&sharded_repodata_path).await.ok();
+                            }
+                        }
                     }
                 }
             }
@@ -161,17 +170,24 @@ impl ShardedSubdir {
             if found_etag == cache_header.etag.as_deref() {
                 // The cached file is up to date
                 tracing::info!("Using cached sharded repodata - etag match");
-                let mut data = Vec::new();
-                file.read_to_end(&mut data)
-                    .await
-                    .map_err(FetchRepoDataError::IoError)?;
-                return Ok(Self {
-                    channel,
-                    client,
-                    sharded_repodata: rmp_serde::from_slice(&data).unwrap(),
-                    shard_base_url,
-                    cache_dir,
-                });
+                let mut rest = Vec::new();
+                match file.read_to_end(&mut rest).await {
+                    Ok(_) => {
+                        let sharded_repodata = rmp_serde::from_slice(&rest).unwrap();
+                        return Ok(Self {
+                            channel,
+                            client,
+                            sharded_repodata,
+                            shard_base_url,
+                            cache_dir,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::info!("failed to read cache data: {:?}", e);
+                        // remove the file and try to fetch it again, ignore any error here
+                        tokio::fs::remove_file(&sharded_repodata_path).await.ok();
+                    }
+                }
             }
         }
 
