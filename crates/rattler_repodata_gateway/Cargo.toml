@@ -14,6 +14,7 @@ readme.workspace = true
 async-trait = "0.1.77"
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 blake2 = { workspace = true }
+bytes = { workspace = true, optional = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 dashmap = "5.5.3"
@@ -48,7 +49,6 @@ json-patch = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 rattler_networking = { path = "../rattler_networking", version = "0.20.3", default-features = false }
 zstd = { workspace = true }
-bytes = "1.6.0"
 rayon = { workspace = true }
 tokio-rayon = { workspace = true }
 
@@ -73,5 +73,5 @@ rattler_conda_types = { path = "../rattler_conda_types", version = "0.22.0", def
 default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
+sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value", "bytes"]
 gateway = ["sparse"]
