@@ -4,7 +4,7 @@ use std::{
 };
 
 use pyo3::{basic::CompareOp, pyclass, pymethods};
-use rattler_conda_types::{NoArchType};
+use rattler_conda_types::NoArchType;
 
 #[pyclass]
 #[derive(Clone)]
@@ -26,7 +26,6 @@ impl From<PyNoArchType> for NoArchType {
 
 #[pymethods]
 impl PyNoArchType {
-
     /// Constructs a new `NoArchType` of type `python`.
     #[staticmethod]
     pub fn python() -> Self {

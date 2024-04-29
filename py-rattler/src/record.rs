@@ -201,7 +201,7 @@ impl PyRecord {
     /// The noarch type this package implements, if any.
     #[getter]
     pub fn noarch(&self) -> PyNoArchType {
-        self.as_package_record().noarch.clone().into()
+        self.as_package_record().noarch.into()
     }
 
     /// The date this entry was created.

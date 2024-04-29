@@ -7,7 +7,7 @@ from rattler.rattler import PyNoArchType
 class NoArchType:
     _noarch: PyNoArchType
 
-    def __init__(self, noarch: Optional[str] = None) -> NoArchType:
+    def __init__(self, noarch: Optional[str] = None) -> None:
         if noarch is None:
             self._noarch = PyNoArchType.none()
             self._source = None
@@ -19,8 +19,7 @@ class NoArchType:
             self._source = "generic"
         else:
             raise ValueError(
-                "NoArchType constructor received unsupported value "
-                f"{noarch} for the `noarch` parameter"
+                "NoArchType constructor received unsupported value " f"{noarch} for the `noarch` parameter"
             )
 
     @classmethod
