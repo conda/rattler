@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 blake2 = { workspace = true }
-bytes = { workspae = true, optional = true }
+bytes = { workspace = true, optional = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 humansize = { workspace = true }
