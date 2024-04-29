@@ -10,9 +10,9 @@ mod subdir;
 pub use barrier_cell::BarrierCell;
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use error::GatewayError;
+pub use repo_data::RepoData;
 
 use crate::fetch::FetchRepoDataError;
-use crate::gateway::repo_data::RepoData;
 use dashmap::{mapref::entry::Entry, DashMap};
 use futures::{select_biased, stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;

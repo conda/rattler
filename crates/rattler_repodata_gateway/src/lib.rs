@@ -69,4 +69,4 @@ mod utils;
 mod gateway;
 
 #[cfg(feature = "gateway")]
-pub use gateway::{ChannelConfig, Gateway, GatewayBuilder, GatewayError, SourceConfig};
+pub use gateway::{ChannelConfig, Gateway, GatewayBuilder, GatewayError, SourceConfig, RepoData};
