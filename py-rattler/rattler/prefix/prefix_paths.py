@@ -180,6 +180,7 @@ class PrefixPathsEntry(BasePathLike):
         """
         return FileMode._from_py_file_mode(self._inner.file_mode)
 
+    @property
     def sha256(self) -> bytes:
         """
         The sha256 of the path.
@@ -198,6 +199,7 @@ class PrefixPathsEntry(BasePathLike):
         """
         return self._inner.sha256
 
+    @property
     def sha256_in_prefix(self) -> bytes:
         """
         The sha256 of the path in the prefix.
