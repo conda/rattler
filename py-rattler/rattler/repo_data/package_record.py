@@ -2,8 +2,8 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 from rattler.match_spec.match_spec import MatchSpec
+from rattler.package.no_arch_type import NoArchType
 from rattler.package.package_name import PackageName
-
 from rattler.rattler import PyRecord
 from rattler.version.version import Version
 
@@ -286,6 +286,35 @@ class PackageRecord:
         ```
         """
         return PackageName._from_py_package_name(self._record.name)
+
+    @property
+    def noarch(self) -> Optional[str]:
+        """
+        The noarch type of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.noarch
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/pip-23.0-pyhd8ed1ab_0.json"
+        ... )
+        >>> record.noarch
+        'python'
+        >>>
+        ```
+        """
+        noarchtype =  NoArchType._from_py_no_arch_type(self._record.noarch)
+        if noarchtype.none:
+            return None
+        if noarchtype.python:
+            return "python"
+        if noarchtype.generic:
+            return "generic"
 
     @property
     def platform(self) -> Optional[str]:
