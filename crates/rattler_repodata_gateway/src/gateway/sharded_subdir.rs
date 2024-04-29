@@ -183,11 +183,16 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
         let packages =
             itertools::chain(shard.packages.into_iter(), shard.packages_conda.into_iter());
         Ok(packages
-            .map(|(file_name, package_record)| RepoDataRecord {
-                url: base_url.join(&file_name).unwrap(),
-                channel: channel_name.clone(),
-                package_record,
-                file_name,
+            .map(|(file_name, package_record)| {
+                // TODO: use compute_package_url ?
+                let subdir = &package_record.subdir;
+                let url = base_url.join(&format!("{subdir}/{file_name}")).unwrap();
+                RepoDataRecord {
+                    url,
+                    channel: channel_name.clone(),
+                    package_record,
+                    file_name,
+                }
             })
             .collect())
     })
