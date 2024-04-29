@@ -31,13 +31,14 @@ once_cell = { workspace = true }
 rattler = { path="../rattler", version = "0.23.1", default-features = false }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.22.0", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.20.3", default-features = false }
-rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.19.9", default-features = false, features = ["sparse"] }
+rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.19.9", default-features = false, features = ["gateway"] }
 rattler_solve = { path="../rattler_solve", version = "0.21.0", default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { path="../rattler_virtual_packages", version = "0.19.8", default-features = false }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+itertools = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary

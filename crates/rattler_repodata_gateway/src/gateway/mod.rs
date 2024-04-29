@@ -3,6 +3,7 @@ mod channel_config;
 mod error;
 mod local_subdir;
 mod remote_subdir;
+mod repo_data;
 mod sharded_subdir;
 mod subdir;
 
@@ -11,11 +12,12 @@ pub use channel_config::{ChannelConfig, SourceConfig};
 pub use error::GatewayError;
 
 use crate::fetch::FetchRepoDataError;
+use crate::gateway::repo_data::RepoData;
 use dashmap::{mapref::entry::Entry, DashMap};
 use futures::{select_biased, stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use local_subdir::LocalSubdirClient;
-use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
+use rattler_conda_types::{Channel, PackageName, Platform};
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::{
@@ -128,7 +130,7 @@ impl Gateway {
         channels: ChannelIter,
         platforms: PlatformIter,
         names: PackageNameIter,
-    ) -> Result<Vec<RepoDataRecord>, GatewayError>
+    ) -> Result<Vec<RepoData>, GatewayError>
     where
         AsChannel: Borrow<Channel> + Clone,
         ChannelIter: IntoIterator<Item = AsChannel>,
@@ -138,8 +140,11 @@ impl Gateway {
         IntoPackageName: Into<PackageName>,
     {
         // Collect all the channels and platforms together
+        let channels = channels.into_iter().collect_vec();
+        let channel_count = channels.len();
         let channels_and_platforms = channels
             .into_iter()
+            .enumerate()
             .cartesian_product(platforms.into_iter())
             .collect_vec();
 
@@ -147,10 +152,10 @@ impl Gateway {
         // becomes available.
         let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
-        for (channel, platform) in channels_and_platforms.into_iter() {
+        for ((channel_idx, channel), platform) in channels_and_platforms.into_iter() {
             // Create a barrier so work that need this subdir can await it.
             let barrier = Arc::new(BarrierCell::new());
-            subdirs.push(barrier.clone());
+            subdirs.push((channel_idx, barrier.clone()));
 
             let inner = self.inner.clone();
             pending_subdirs.push(async move {
@@ -173,25 +178,24 @@ impl Gateway {
         let mut pending_records = FuturesUnordered::new();
 
         // The resulting list of repodata records.
-        let mut result = Vec::new();
+        let mut result = vec![RepoData::default(); channel_count];
 
         // Loop until all pending package names have been fetched.
         loop {
             // Iterate over all pending package names and create futures to fetch them from all
             // subdirs.
             for pending_package_name in pending_package_names.drain(..) {
-                for subdir in subdirs.iter().cloned() {
+                for (channel_idx, subdir) in subdirs.iter().cloned() {
                     let pending_package_name = pending_package_name.clone();
                     pending_records.push(async move {
                         let barrier_cell = subdir.clone();
                         let subdir = barrier_cell.wait().await;
                         match subdir.as_ref() {
-                            Subdir::Found(subdir) => {
-                                subdir
-                                    .get_or_fetch_package_records(&pending_package_name)
-                                    .await
-                            }
-                            Subdir::NotFound => Ok(Arc::from(vec![])),
+                            Subdir::Found(subdir) => subdir
+                                .get_or_fetch_package_records(&pending_package_name)
+                                .await
+                                .map(|records| (channel_idx, records)),
+                            Subdir::NotFound => Ok((channel_idx, Arc::from(vec![]))),
                         }
                     });
                 }
@@ -208,7 +212,7 @@ impl Gateway {
 
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
-                    let records = records?;
+                    let (channel_idx, records) = records?;
 
                     // Extract the dependencies from the records and recursively add them to the
                     // list of package names that we need to fetch.
@@ -224,7 +228,11 @@ impl Gateway {
                     }
 
                     // Add the records to the result
-                    result.extend_from_slice(&records);
+                    if records.len() > 0 {
+                        let result = &mut result[channel_idx];
+                        result.len += records.len();
+                        result.shards.push(records);
+                    }
                 }
 
                 // All futures have been handled, all subdirectories have been loaded and all
@@ -440,7 +448,8 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(records.len(), 45060);
+        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        assert_eq!(total_records, 45060);
     }
 
     #[tokio::test]
@@ -458,7 +467,8 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(records.len(), 45060);
+        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        assert_eq!(total_records, 45060);
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -488,6 +498,7 @@ mod test {
         let end = Instant::now();
         println!("{} records in {:?}", records.len(), end - start);
 
-        assert_eq!(records.len(), 84242);
+        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        assert_eq!(total_records, 84242);
     }
 }

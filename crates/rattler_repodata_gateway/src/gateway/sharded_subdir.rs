@@ -3,6 +3,7 @@ use crate::gateway::subdir::SubdirClient;
 use crate::GatewayError;
 use futures::TryFutureExt;
 use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
+use rattler_digest::Sha256Hash;
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
@@ -30,11 +31,12 @@ impl ShardedSubdir {
         let channel =
             Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
 
-        let shard_base_url = Url::parse(&format!("https://fast.prefiks.dev/{subdir}/")).unwrap();
+        let shard_base_url =
+            Url::parse(&format!("https://fast.prefiks.dev/conda-forge/{subdir}/")).unwrap();
 
         // Fetch the sharded repodata from the remote server
         let repodata_shards_url = shard_base_url
-            .join("repodata_shards.json")
+            .join("repodata_shards.msgpack.zst")
             .expect("invalid shard base url");
         let response = client
             .get(repodata_shards_url.clone())
@@ -56,8 +58,16 @@ impl ShardedSubdir {
             .map_err(FetchRepoDataError::from)?;
 
         // Parse the sharded repodata from the response
-        let sharded_repodata: ShardedRepodata =
-            response.json().await.map_err(FetchRepoDataError::from)?;
+        let sharded_repodata_compressed_bytes =
+            response.bytes().await.map_err(FetchRepoDataError::from)?;
+        let sharded_repodata_bytes =
+            decode_zst_bytes_async(sharded_repodata_compressed_bytes).await?;
+        let sharded_repodata = tokio_rayon::spawn(move || {
+            rmp_serde::from_slice::<ShardedRepodata>(&sharded_repodata_bytes)
+        })
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+        .map_err(FetchRepoDataError::IoError)?;
 
         // Determine the cache directory and make sure it exists.
         let cache_dir = cache_dir.join("shards_v1");
@@ -87,7 +97,7 @@ impl SubdirClient for ShardedSubdir {
         };
 
         // Check if we already have the shard in the cache.
-        let shard_cache_path = self.cache_dir.join(&format!("{}.msgpack", shard.sha256));
+        let shard_cache_path = self.cache_dir.join(&format!("{:x}.msgpack", shard));
 
         // Read the cached shard
         match tokio::fs::read(&shard_cache_path).await {
@@ -110,7 +120,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shard_base_url
-            .join(&format!("shards/{}.msgpack.zst", shard.sha256))
+            .join(&format!("shards/{:x}.msgpack.zst", shard))
             .expect("invalid shard url");
 
         let shard_response = self
@@ -188,16 +198,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
 pub struct ShardedRepodata {
     pub info: ShardedSubdirInfo,
     /// The individual shards indexed by package name.
-    pub shards: HashMap<String, ShardRef>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShardRef {
-    // The sha256 hash of the shard
-    pub sha256: String,
-
-    // The size of the shard.
-    pub size: u64,
+    pub shards: HashMap<String, Sha256Hash>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -109,6 +109,17 @@ impl<'de, T: Digest + Default> DeserializeAs<'de, Output<T>> for SerializableHas
     }
 }
 
+// pub mod bytes {
+//     use serde::Serializer;
+//
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//         where
+//             S: Serializer,
+//     {
+//         crate::serde::serialize::<S, T>(&self.0, serializer)
+//     }
+// }
+
 #[cfg(test)]
 mod test {
     use crate::serde::SerializableHash;
