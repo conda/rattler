@@ -139,6 +139,67 @@ impl Gateway {
         PackageNameIter: IntoIterator<Item = IntoPackageName>,
         IntoPackageName: Into<PackageName>,
     {
+        self.load_records_inner(channels, platforms, names, true)
+            .await
+    }
+
+    /// Loads all repodata records for the given channels, platforms and package names.
+    ///
+    /// This function will asynchronously load the repodata from all subdirectories (combination of
+    /// channels and platforms).
+    ///
+    /// Most processing will happen on the background so downloading and parsing can happen
+    /// simultaneously.
+    ///
+    /// Repodata is cached by the [`Gateway`] so calling this function twice with the same channels
+    /// will not result in the repodata being fetched twice.
+    ///
+    /// To also fetch the dependencies of the packages use [`Gateway::load_records_recursive`].
+    pub async fn load_records<
+        AsChannel,
+        ChannelIter,
+        PlatformIter,
+        PackageNameIter,
+        IntoPackageName,
+    >(
+        &self,
+        channels: ChannelIter,
+        platforms: PlatformIter,
+        names: PackageNameIter,
+    ) -> Result<Vec<RepoData>, GatewayError>
+    where
+        AsChannel: Borrow<Channel> + Clone,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        PlatformIter: IntoIterator<Item = Platform>,
+        <PlatformIter as IntoIterator>::IntoIter: Clone,
+        PackageNameIter: IntoIterator<Item = IntoPackageName>,
+        IntoPackageName: Into<PackageName>,
+    {
+        self.load_records_inner(channels, platforms, names, false)
+            .await
+    }
+
+    async fn load_records_inner<
+        AsChannel,
+        ChannelIter,
+        PlatformIter,
+        PackageNameIter,
+        IntoPackageName,
+    >(
+        &self,
+        channels: ChannelIter,
+        platforms: PlatformIter,
+        names: PackageNameIter,
+        recursive: bool,
+    ) -> Result<Vec<RepoData>, GatewayError>
+    where
+        AsChannel: Borrow<Channel> + Clone,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        PlatformIter: IntoIterator<Item = Platform>,
+        <PlatformIter as IntoIterator>::IntoIter: Clone,
+        PackageNameIter: IntoIterator<Item = IntoPackageName>,
+        IntoPackageName: Into<PackageName>,
+    {
         // Collect all the channels and platforms together
         let channels = channels.into_iter().collect_vec();
         let channel_count = channels.len();
@@ -214,15 +275,17 @@ impl Gateway {
                 records = pending_records.select_next_some() => {
                     let (channel_idx, records) = records?;
 
-                    // Extract the dependencies from the records and recursively add them to the
-                    // list of package names that we need to fetch.
-                    for record in records.iter() {
-                        for dependency in &record.package_record.depends {
-                            let dependency_name = PackageName::new_unchecked(
-                                dependency.split_once(' ').unwrap_or((dependency, "")).0,
-                            );
-                            if seen.insert(dependency_name.clone()) {
-                                pending_package_names.push(dependency_name.clone());
+                    if recursive {
+                        // Extract the dependencies from the records and recursively add them to the
+                        // list of package names that we need to fetch.
+                        for record in records.iter() {
+                            for dependency in &record.package_record.depends {
+                                let dependency_name = PackageName::new_unchecked(
+                                    dependency.split_once(' ').unwrap_or((dependency, "")).0,
+                                );
+                                if seen.insert(dependency_name.clone()) {
+                                    pending_package_names.push(dependency_name.clone());
+                                }
                             }
                         }
                     }

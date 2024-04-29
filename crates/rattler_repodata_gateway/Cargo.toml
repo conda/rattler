@@ -17,8 +17,7 @@ blake2 = { workspace = true }
 bytes = { workspace = true, optional = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
-dashmap = "5.5.3"
-elsa = "1.10.0"
+dashmap = { workspace = true }
 humansize = { workspace = true }
 humantime = { workspace = true }
 futures = { workspace = true }

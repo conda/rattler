@@ -27,6 +27,11 @@ impl RepoData {
     pub fn len(&self) -> usize {
         self.len
     }
+
+    /// Returns true if there are no records stored in this instance.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 impl<'r> IntoIterator for &'r RepoData {
