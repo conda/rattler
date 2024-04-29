@@ -42,10 +42,10 @@ use lock::{
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
+use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
-use no_arch_type::PyNoArchType;
 use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
 use run_exports_json::PyRunExportsJson;
 use version::PyVersion;
@@ -97,7 +97,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPrefixPathsEntry>().unwrap();
     m.add_class::<PyPrefixPathType>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
-    
+
     m.add_class::<PyNoArchType>().unwrap();
 
     m.add_class::<PyLockFile>().unwrap();

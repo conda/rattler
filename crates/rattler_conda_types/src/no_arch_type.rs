@@ -53,7 +53,7 @@ impl NoArchType {
 
     /// Returns true if this instance is a Generic noarch type
     pub fn is_generic(&self) -> bool {
-        self.kind() ==  Some(NoArchKind::Generic)
+        self.kind() == Some(NoArchKind::Generic)
     }
 
     /// Constructs a Python noarch instance.

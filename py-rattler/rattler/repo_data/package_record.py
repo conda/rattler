@@ -308,7 +308,7 @@ class PackageRecord:
         >>>
         ```
         """
-        noarchtype =  NoArchType._from_py_no_arch_type(self._record.noarch)
+        noarchtype = NoArchType._from_py_no_arch_type(self._record.noarch)
         if noarchtype.none:
             return None
         if noarchtype.python:

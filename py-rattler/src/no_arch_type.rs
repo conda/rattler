@@ -1,5 +1,5 @@
 use pyo3::{pyclass, pymethods};
-use rattler_conda_types::{NoArchType};
+use rattler_conda_types::NoArchType;
 
 #[pyclass]
 #[derive(Clone)]

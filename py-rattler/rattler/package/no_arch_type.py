@@ -3,8 +3,7 @@ from __future__ import annotations
 from rattler.rattler import PyNoArchType
 
 
-class NoArchType():
-
+class NoArchType:
     _noarch: PyNoArchType
 
     @classmethod
@@ -13,7 +12,7 @@ class NoArchType():
         no_arch_type = cls.__new__(cls)
         no_arch_type._noarch = py_no_arch_type
         return no_arch_type
-    
+
     @property
     def generic(self) -> bool:
         """
@@ -23,7 +22,7 @@ class NoArchType():
         >>>
         """
         return self._noarch.generic
-    
+
     @property
     def none(self) -> bool:
         """
@@ -33,7 +32,7 @@ class NoArchType():
         >>>
         """
         return self._noarch.none
-    
+
     @property
     def python(self) -> bool:
         """
