@@ -309,12 +309,11 @@ class PackageRecord:
         ```
         """
         noarchtype = NoArchType._from_py_no_arch_type(self._record.noarch)
-        if noarchtype.none:
-            return None
         if noarchtype.python:
             return "python"
         if noarchtype.generic:
             return "generic"
+        return None
 
     @property
     def platform(self) -> Optional[str]:

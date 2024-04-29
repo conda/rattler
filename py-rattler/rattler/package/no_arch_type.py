@@ -57,7 +57,7 @@ class NoArchType:
         >>>
         ```
         """
-        return self._type.__hash__()
+        return self._noarch.__hash__()
 
     def __eq__(self, other: object) -> bool:
         """
@@ -80,7 +80,7 @@ class NoArchType:
         if not isinstance(other, NoArchType):
             return False
 
-        return self._type == other._type
+        return self._noarch == other._noarch
 
     def __ne__(self, other: object) -> bool:
         """
@@ -99,7 +99,7 @@ class NoArchType:
         if not isinstance(other, NoArchType):
             return True
 
-        return self._type != other._type
+        return self._noarch != other._noarch
 
     def __repr__(self) -> str:
         """
