@@ -409,7 +409,8 @@ mod tests {
             tdir.path()
                 .to_path_buf()
                 .join("auth.json")
-                .to_str().unwrap(),
+                .to_str()
+                .unwrap(),
         );
         let storage = AuthenticationStorage::default();
         std::env::remove_var("RATTLER_AUTH_FILE");
