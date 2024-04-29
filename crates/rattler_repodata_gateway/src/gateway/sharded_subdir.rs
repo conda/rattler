@@ -7,6 +7,7 @@ use rattler_digest::Sha256Hash;
 use reqwest::StatusCode;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -182,21 +183,31 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             .map_err(FetchRepoDataError::IoError)?;
         let packages =
             itertools::chain(shard.packages.into_iter(), shard.packages_conda.into_iter());
+        let base_url = add_trailing_slash(&base_url);
         Ok(packages
-            .map(|(file_name, package_record)| {
-                // TODO: use compute_package_url ?
-                let subdir = &package_record.subdir;
-                let url = base_url.join(&format!("{subdir}/{file_name}")).unwrap();
-                RepoDataRecord {
-                    url,
-                    channel: channel_name.clone(),
-                    package_record,
-                    file_name,
-                }
+            .map(|(file_name, package_record)| RepoDataRecord {
+                url: base_url
+                    .join(&file_name)
+                    .expect("filename is not a valid url"),
+                channel: channel_name.clone(),
+                package_record,
+                file_name,
             })
             .collect())
     })
     .await
+}
+
+/// Returns the URL with a trailing slash if it doesn't already have one.
+fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
+    let path = url.path();
+    if path.ends_with('/') {
+        Cow::Borrowed(url)
+    } else {
+        let mut url = url.clone();
+        url.set_path(&format!("{path}/"));
+        Cow::Owned(url)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
