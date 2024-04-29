@@ -17,7 +17,7 @@ use dashmap::{mapref::entry::Entry, DashMap};
 use futures::{select_biased, stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use local_subdir::LocalSubdirClient;
-use rattler_conda_types::{Channel, PackageName, Platform};
+use rattler_conda_types::{Channel, MatchSpec, PackageName, Platform};
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::{
@@ -81,7 +81,7 @@ impl GatewayBuilder {
 
         Gateway {
             inner: Arc::new(GatewayInner {
-                subdirs: Default::default(),
+                subdirs: DashMap::default(),
                 client,
                 channel_config: self.channel_config,
                 cache,
@@ -96,6 +96,12 @@ pub struct Gateway {
     inner: Arc<GatewayInner>,
 }
 
+impl Default for Gateway {
+    fn default() -> Self {
+        Gateway::new()
+    }
+}
+
 impl Gateway {
     /// Constructs a simple gateway with the default configuration. Use [`Gateway::builder`] if you
     /// want more control over how the gateway is constructed.
@@ -108,53 +114,62 @@ impl Gateway {
         GatewayBuilder::default()
     }
 
-    /// Recursively loads all repodata records for the given channels, platforms and package names.
+    /// Recursively loads all repodata records for the given channels, platforms
+    /// and specs.
     ///
-    /// This function will asynchronously load the repodata from all subdirectories (combination of
-    /// channels and platforms) and recursively load all repodata records and the dependencies of
-    /// the those records.
+    /// The `specs` passed to this are the root specs. The function will also
+    /// recursively fetch the dependencies of the packages that match the root
+    /// specs. Only the dependencies of the records that match the root specs
+    /// will be fetched.
     ///
-    /// Most processing will happen on the background so downloading and parsing can happen
-    /// simultaneously.
+    /// This function will asynchronously load the repodata from all
+    /// subdirectories (combination of channels and platforms).
     ///
-    /// Repodata is cached by the [`Gateway`] so calling this function twice with the same channels
-    /// will not result in the repodata being fetched twice.
+    /// Most processing will happen on the background so downloading and
+    /// parsing can happen simultaneously.
+    ///
+    /// Repodata is cached by the [`Gateway`] so calling this function twice
+    /// with the same channels will not result in the repodata being fetched
+    /// twice.
     pub async fn load_records_recursive<
         AsChannel,
         ChannelIter,
         PlatformIter,
         PackageNameIter,
-        IntoPackageName,
+        IntoMatchSpec,
     >(
         &self,
         channels: ChannelIter,
         platforms: PlatformIter,
-        names: PackageNameIter,
+        specs: PackageNameIter,
     ) -> Result<Vec<RepoData>, GatewayError>
     where
         AsChannel: Borrow<Channel> + Clone,
         ChannelIter: IntoIterator<Item = AsChannel>,
         PlatformIter: IntoIterator<Item = Platform>,
         <PlatformIter as IntoIterator>::IntoIter: Clone,
-        PackageNameIter: IntoIterator<Item = IntoPackageName>,
-        IntoPackageName: Into<PackageName>,
+        PackageNameIter: IntoIterator<Item = IntoMatchSpec>,
+        IntoMatchSpec: Into<MatchSpec>,
     {
-        self.load_records_inner(channels, platforms, names, true)
+        self.load_records_inner(channels, platforms, specs, true)
             .await
     }
 
-    /// Loads all repodata records for the given channels, platforms and package names.
+    /// Recursively loads all repodata records for the given channels, platforms
+    /// and specs.
     ///
-    /// This function will asynchronously load the repodata from all subdirectories (combination of
-    /// channels and platforms).
+    /// This function will asynchronously load the repodata from all
+    /// subdirectories (combination of channels and platforms).
     ///
-    /// Most processing will happen on the background so downloading and parsing can happen
-    /// simultaneously.
+    /// Most processing will happen on the background so downloading and parsing
+    /// can happen simultaneously.
     ///
-    /// Repodata is cached by the [`Gateway`] so calling this function twice with the same channels
-    /// will not result in the repodata being fetched twice.
+    /// Repodata is cached by the [`Gateway`] so calling this function twice
+    /// with the same channels will not result in the repodata being fetched
+    /// twice.
     ///
-    /// To also fetch the dependencies of the packages use [`Gateway::load_records_recursive`].
+    /// To also fetch the dependencies of the packages use
+    /// [`Gateway::load_records_recursive`].
     pub async fn load_records<
         AsChannel,
         ChannelIter,
@@ -175,21 +190,26 @@ impl Gateway {
         PackageNameIter: IntoIterator<Item = IntoPackageName>,
         IntoPackageName: Into<PackageName>,
     {
-        self.load_records_inner(channels, platforms, names, false)
-            .await
+        self.load_records_inner(
+            channels,
+            platforms,
+            names.into_iter().map(|name| MatchSpec::from(name.into())),
+            false,
+        )
+        .await
     }
 
     async fn load_records_inner<
         AsChannel,
         ChannelIter,
         PlatformIter,
-        PackageNameIter,
-        IntoPackageName,
+        MatchSpecIter,
+        IntoMatchSpec,
     >(
         &self,
         channels: ChannelIter,
         platforms: PlatformIter,
-        names: PackageNameIter,
+        specs: MatchSpecIter,
         recursive: bool,
     ) -> Result<Vec<RepoData>, GatewayError>
     where
@@ -197,8 +217,8 @@ impl Gateway {
         ChannelIter: IntoIterator<Item = AsChannel>,
         PlatformIter: IntoIterator<Item = Platform>,
         <PlatformIter as IntoIterator>::IntoIter: Clone,
-        PackageNameIter: IntoIterator<Item = IntoPackageName>,
-        IntoPackageName: Into<PackageName>,
+        MatchSpecIter: IntoIterator<Item = IntoMatchSpec>,
+        IntoMatchSpec: Into<MatchSpec>,
     {
         // Collect all the channels and platforms together
         let channels = channels.into_iter().collect_vec();
@@ -213,26 +233,33 @@ impl Gateway {
         // becomes available.
         let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
-        for ((channel_idx, channel), platform) in channels_and_platforms.into_iter() {
+        for ((channel_idx, channel), platform) in channels_and_platforms {
             // Create a barrier so work that need this subdir can await it.
             let barrier = Arc::new(BarrierCell::new());
             subdirs.push((channel_idx, barrier.clone()));
 
             let inner = self.inner.clone();
             pending_subdirs.push(async move {
-                let subdir = inner
-                    .get_or_create_subdir(channel.borrow(), platform)
-                    .await?;
-                barrier.set(subdir).expect("subdir was set twice");
-                Ok(())
+                match inner.get_or_create_subdir(channel.borrow(), platform).await {
+                    Ok(subdir) => {
+                        barrier.set(subdir).expect("subdir was set twice");
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
             });
         }
 
         // Package names that we have or will issue requests for.
-        let mut seen = names.into_iter().map(Into::into).collect::<HashSet<_>>();
-
-        // Package names that we still need to fetch.
-        let mut pending_package_names = seen.iter().cloned().collect::<Vec<_>>();
+        let mut seen = HashSet::new();
+        let mut pending_package_specs = Vec::new();
+        for spec in specs {
+            let spec = spec.into();
+            if let Some(name) = &spec.name {
+                seen.insert(name.clone());
+                pending_package_specs.push(spec);
+            }
+        }
 
         // A list of futures to fetch the records for the pending package names. The main task
         // awaits these futures.
@@ -245,18 +272,21 @@ impl Gateway {
         loop {
             // Iterate over all pending package names and create futures to fetch them from all
             // subdirs.
-            for pending_package_name in pending_package_names.drain(..) {
+            for spec in pending_package_specs.drain(..) {
                 for (channel_idx, subdir) in subdirs.iter().cloned() {
-                    let pending_package_name = pending_package_name.clone();
+                    let spec = spec.clone();
+                    let Some(package_name) = spec.name.clone() else {
+                        continue;
+                    };
                     pending_records.push(async move {
                         let barrier_cell = subdir.clone();
                         let subdir = barrier_cell.wait().await;
                         match subdir.as_ref() {
                             Subdir::Found(subdir) => subdir
-                                .get_or_fetch_package_records(&pending_package_name)
+                                .get_or_fetch_package_records(&package_name)
                                 .await
-                                .map(|records| (channel_idx, records)),
-                            Subdir::NotFound => Ok((channel_idx, Arc::from(vec![]))),
+                                .map(|records| (channel_idx, spec, records)),
+                            Subdir::NotFound => Ok((channel_idx, spec, Arc::from(vec![]))),
                         }
                     });
                 }
@@ -266,25 +296,27 @@ impl Gateway {
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs.
                 subdir_result = pending_subdirs.select_next_some() => {
-                    if let Err(subdir_result) = subdir_result {
-                        return Err(subdir_result);
-                    }
+                    subdir_result?;
                 }
 
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
-                    let (channel_idx, records) = records?;
+                    let (channel_idx, request_spec, records) = records?;
 
                     if recursive {
                         // Extract the dependencies from the records and recursively add them to the
                         // list of package names that we need to fetch.
                         for record in records.iter() {
+                            if !request_spec.matches(&record.package_record) {
+                                // Do not recurse into records that do not match to root spec.
+                                continue;
+                            }
                             for dependency in &record.package_record.depends {
                                 let dependency_name = PackageName::new_unchecked(
                                     dependency.split_once(' ').unwrap_or((dependency, "")).0,
                                 );
                                 if seen.insert(dependency_name.clone()) {
-                                    pending_package_names.push(dependency_name.clone());
+                                    pending_package_specs.push(dependency_name.into());
                                 }
                             }
                         }

@@ -1,5 +1,5 @@
 use super::{local_subdir::LocalSubdirClient, GatewayError, SourceConfig};
-use crate::fetch::{fetch_repo_data, FetchRepoDataOptions};
+use crate::fetch::{fetch_repo_data, FetchRepoDataOptions, Variant};
 use crate::gateway::subdir::SubdirClient;
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 use reqwest_middleware::ClientWithMiddleware;
@@ -26,7 +26,7 @@ impl RemoteSubdirClient {
             cache_dir,
             FetchRepoDataOptions {
                 cache_action: source_config.cache_action,
-                variant: Default::default(),
+                variant: Variant::default(),
                 jlap_enabled: source_config.jlap_enabled,
                 zstd_enabled: source_config.zstd_enabled,
                 bz2_enabled: source_config.bz2_enabled,

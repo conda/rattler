@@ -1,19 +1,30 @@
-use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
-use crate::gateway::subdir::SubdirClient;
-use crate::GatewayError;
-use chrono::{DateTime, Utc};
-use futures::TryFutureExt;
+use crate::{
+    fetch::{FetchRepoDataError, RepoDataNotFoundError},
+    gateway::subdir::SubdirClient,
+    GatewayError,
+};
+use bytes::Bytes;
+use futures::{FutureExt, TryFutureExt};
+use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
 use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
 use rattler_digest::Sha256Hash;
-use reqwest::StatusCode;
+use reqwest::{Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::SystemTime;
-use tokio::io::AsyncReadExt;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    io::Write,
+    path::{Path, PathBuf},
+    str::FromStr,
+    sync::Arc,
+    time::SystemTime,
+};
+use tempfile::NamedTempFile;
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, BufReader},
+};
 use url::Url;
 
 pub struct ShardedSubdir {
@@ -24,41 +35,219 @@ pub struct ShardedSubdir {
     cache_dir: PathBuf,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheHeader {
-    pub etag: Option<String>,
-    pub last_modified: Option<DateTime<Utc>>,
-}
-
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
 
-/// Write the shard index cache to disk.
-async fn write_cache(
-    cache_file: &Path,
-    cache_header: CacheHeader,
-    cache_data: &[u8],
-) -> Result<(), std::io::Error> {
-    let cache_header_bytes = rmp_serde::to_vec(&cache_header).unwrap();
-    let header_length = cache_header_bytes.len() as usize;
-    // write it as 4 bytes
-    let content = [
-        MAGIC_NUMBER,
-        &header_length.to_le_bytes(),
-        &cache_header_bytes,
-        cache_data,
-    ]
-    .concat();
-    tokio::fs::write(&cache_file, content).await
+// Fetches the shard index from the url or read it from the cache.
+async fn fetch_index(
+    client: &ClientWithMiddleware,
+    shard_index_url: &Url,
+    cache_path: &Path,
+) -> Result<ShardedRepodata, GatewayError> {
+    async fn from_response(
+        cache_path: &Path,
+        policy: CachePolicy,
+        response: Response,
+    ) -> Result<ShardedRepodata, GatewayError> {
+        // Read the bytes of the response
+        let bytes = response.bytes().await.map_err(FetchRepoDataError::from)?;
+
+        // Decompress the bytes
+        let decoded_bytes = Bytes::from(decode_zst_bytes_async(bytes).await?);
+
+        // Write the cache to disk if the policy allows it.
+        let cache_fut = if policy.is_storable() {
+            write_shard_index_cache(cache_path, policy, decoded_bytes.clone())
+                .map_err(FetchRepoDataError::IoError)
+                .map_ok(Some)
+                .left_future()
+        } else {
+            // Otherwise delete the file
+            tokio::fs::remove_file(cache_path)
+                .map_ok_or_else(
+                    |e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            Ok(None)
+                        } else {
+                            Err(FetchRepoDataError::IoError(e))
+                        }
+                    },
+                    |_| Ok(None),
+                )
+                .right_future()
+        };
+
+        // Parse the bytes
+        let parse_fut = tokio_rayon::spawn(move || rmp_serde::from_slice(&decoded_bytes))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+            .map_err(FetchRepoDataError::IoError);
+
+        // Parse and write the file to disk concurrently
+        let (temp_file, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
+
+        // Persist the cache if succesfully updated the cache.
+        if let Some(temp_file) = temp_file {
+            temp_file
+                .persist(cache_path)
+                .map_err(FetchRepoDataError::from)?;
+        }
+
+        Ok(sharded_index)
+    }
+
+    // Construct the request to fetch the shard index.
+    let request = client
+        .get(shard_index_url.clone())
+        .build()
+        .expect("invalid shard_index request");
+
+    // Try reading the cached file
+    if let Ok((cache_header, file)) = read_cached_index(cache_path).await {
+        match cache_header
+            .policy
+            .before_request(&request, SystemTime::now())
+        {
+            BeforeRequest::Fresh(_) => {
+                if let Ok(shard_index) = read_shard_index_from_reader(file).await {
+                    tracing::debug!("shard index cache hit");
+                    return Ok(shard_index);
+                }
+            }
+            BeforeRequest::Stale {
+                request: state_request,
+                ..
+            } => {
+                let request = convert_request(client.clone(), state_request.clone())
+                    .expect("failed to create request to check staleness");
+                let response = client
+                    .execute(request)
+                    .await
+                    .map_err(FetchRepoDataError::from)?;
+
+                match cache_header.policy.after_response(
+                    &state_request,
+                    &response,
+                    SystemTime::now(),
+                ) {
+                    AfterResponse::NotModified(_policy, _) => {
+                        // The cached file is still valid
+                        if let Ok(shard_index) = read_shard_index_from_reader(file).await {
+                            tracing::debug!("shard index cache was not modified");
+                            // If reading the file failed for some reason we'll just fetch it again.
+                            return Ok(shard_index);
+                        }
+                    }
+                    AfterResponse::Modified(policy, _) => {
+                        // Close the old file so we can create a new one.
+                        drop(file);
+
+                        tracing::debug!("shard index cache has become stale");
+                        return from_response(cache_path, policy, response).await;
+                    }
+                }
+            }
+        }
+    };
+
+    tracing::debug!("fetching fresh shard index");
+
+    // Do a fresh requests
+    let response = client
+        .execute(
+            request
+                .try_clone()
+                .expect("failed to clone initial request"),
+        )
+        .await
+        .map_err(FetchRepoDataError::from)?;
+
+    // Check if the response was successful.
+    if response.status() == StatusCode::NOT_FOUND {
+        return Err(GatewayError::FetchRepoDataError(
+            FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
+                response.error_for_status().unwrap_err(),
+            )),
+        ));
+    };
+
+    let policy = CachePolicy::new(&request, &response);
+    from_response(cache_path, policy, response).await
 }
 
-/// Read the cache header - returns the cache header and the reader that can be
-/// used to read the rest of the file.
-async fn read_cache_header(
-    cache_file: &Path,
-) -> Result<(CacheHeader, tokio::io::BufReader<tokio::fs::File>), std::io::Error> {
-    let cache_data = tokio::fs::File::open(&cache_file).await?;
-    let mut reader = tokio::io::BufReader::new(cache_data);
+/// Writes the shard index cache to disk.
+async fn write_shard_index_cache(
+    cache_path: &Path,
+    policy: CachePolicy,
+    decoded_bytes: Bytes,
+) -> std::io::Result<NamedTempFile> {
+    let cache_path = cache_path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        // Write the header
+        let cache_header = rmp_serde::encode::to_vec(&CacheHeader { policy })
+            .expect("failed to encode cache header");
+        let cache_dir = cache_path
+            .parent()
+            .expect("the cache path must have a parent");
+        std::fs::create_dir_all(cache_dir)?;
+        let mut temp_file = tempfile::Builder::new()
+            .tempfile_in(cache_dir)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        temp_file.write_all(MAGIC_NUMBER)?;
+        temp_file.write_all(&(cache_header.len() as u32).to_le_bytes())?;
+        temp_file.write_all(&cache_header)?;
+        temp_file.write_all(decoded_bytes.as_ref())?;
+
+        Ok(temp_file)
+    })
+    .map_err(|e| match e.try_into_panic() {
+        Ok(payload) => std::panic::resume_unwind(payload),
+        Err(e) => std::io::Error::new(std::io::ErrorKind::Other, e),
+    })
+    .await?
+}
+
+/// Converts from a `http::request::Parts` into a `reqwest::Request`.
+fn convert_request(
+    client: ClientWithMiddleware,
+    parts: http::request::Parts,
+) -> Result<reqwest::Request, reqwest::Error> {
+    client
+        .request(
+            parts.method,
+            Url::from_str(&parts.uri.to_string()).expect("uris should be the same"),
+        )
+        .headers(parts.headers)
+        .version(parts.version)
+        .build()
+}
+
+/// Read the shard index from a reader and deserialize it.
+async fn read_shard_index_from_reader(
+    mut reader: BufReader<File>,
+) -> std::io::Result<ShardedRepodata> {
+    // Read the file to memory
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes).await?;
+
+    // Deserialize the bytes
+    tokio_rayon::spawn(move || rmp_serde::from_slice(&bytes))
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+}
+
+/// Cache information stored at the start of the cache file.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CacheHeader {
+    pub policy: CachePolicy,
+}
+
+/// Try reading the cache file from disk.
+async fn read_cached_index(cache_path: &Path) -> std::io::Result<(CacheHeader, BufReader<File>)> {
+    // Open the file for reading
+    let file = File::open(cache_path).await?;
+    let mut reader = BufReader::new(file);
+
+    // Read the magic from the file
     let mut magic_number = [0; MAGIC_NUMBER.len()];
     reader.read_exact(&mut magic_number).await?;
     if magic_number != MAGIC_NUMBER {
@@ -68,13 +257,17 @@ async fn read_cache_header(
         ));
     }
 
-    let mut header_length_bytes = [0; 8];
-    reader.read_exact(&mut header_length_bytes).await?;
-    let header_length = usize::from_le_bytes(header_length_bytes);
+    // Read the length of the header
+    let header_length = reader.read_u32_le().await? as usize;
+
+    // Read the header from the file
     let mut header_bytes = vec![0; header_length];
     reader.read_exact(&mut header_bytes).await?;
+
+    // Deserialize the header
     let cache_header = rmp_serde::from_slice::<CacheHeader>(&header_bytes)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+
     Ok((cache_header, reader))
 }
 
@@ -99,138 +292,8 @@ impl ShardedSubdir {
 
         let cache_key = crate::utils::url_to_cache_filename(&repodata_shards_url);
         let sharded_repodata_path = cache_dir.join(format!("{cache_key}.shard-cache-v1"));
-
-        let mut cache_data = None;
-        if sharded_repodata_path.exists() {
-            // split the header from the sharded repodata
-            let mut result = None;
-            match read_cache_header(&sharded_repodata_path).await {
-                Ok((cache_header, file)) => {
-                    result = Some((cache_header, file));
-                }
-                Err(e) => {
-                    tracing::info!("failed to read cache header: {:?}", e);
-                    // remove the file and try to fetch it again, ignore any error here
-                    tokio::fs::remove_file(&sharded_repodata_path).await.ok();
-                }
-            }
-
-            if let Some((cache_header, mut file)) = result {
-                // Cache times out after 1 hour
-                let mut rest = Vec::new();
-                // parse the last_modified header
-                if let Some(last_modified) = &cache_header.last_modified {
-                    let now: DateTime<Utc> = SystemTime::now().into();
-                    let elapsed = now - last_modified;
-                    if elapsed > chrono::Duration::hours(1) {
-                        // insert the etag
-                        cache_data = Some((cache_header, file));
-                    } else {
-                        tracing::info!("Using cached sharded repodata - cache still valid");
-                        match file.read_to_end(&mut rest).await {
-                            Ok(_) => {
-                                let sharded_repodata = rmp_serde::from_slice(&rest).unwrap();
-                                return Ok(Self {
-                                    channel,
-                                    client,
-                                    sharded_repodata,
-                                    shard_base_url,
-                                    cache_dir,
-                                });
-                            }
-                            Err(e) => {
-                                tracing::info!("failed to read cache data: {:?}", e);
-                                // remove the file and try to fetch it again, ignore any error here
-                                tokio::fs::remove_file(&sharded_repodata_path).await.ok();
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let response = client
-            .get(repodata_shards_url.clone())
-            .send()
-            .await
-            .map_err(FetchRepoDataError::from)?;
-
-        // Check if the response was successful.
-        if response.status() == StatusCode::NOT_FOUND {
-            return Err(GatewayError::FetchRepoDataError(
-                FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
-                    response.error_for_status().unwrap_err(),
-                )),
-            ));
-        };
-
-        if let Some((cache_header, mut file)) = cache_data {
-            let found_etag = response.headers().get("etag").and_then(|v| v.to_str().ok());
-
-            if found_etag == cache_header.etag.as_deref() {
-                // The cached file is up to date
-                tracing::info!("Using cached sharded repodata - etag match");
-                let mut rest = Vec::new();
-                match file.read_to_end(&mut rest).await {
-                    Ok(_) => {
-                        let sharded_repodata = rmp_serde::from_slice(&rest).unwrap();
-                        return Ok(Self {
-                            channel,
-                            client,
-                            sharded_repodata,
-                            shard_base_url,
-                            cache_dir,
-                        });
-                    }
-                    Err(e) => {
-                        tracing::info!("failed to read cache data: {:?}", e);
-                        // remove the file and try to fetch it again, ignore any error here
-                        tokio::fs::remove_file(&sharded_repodata_path).await.ok();
-                    }
-                }
-            }
-        }
-
-        let response = response
-            .error_for_status()
-            .map_err(FetchRepoDataError::from)?;
-
-        let cache_header = CacheHeader {
-            etag: response
-                .headers()
-                .get("etag")
-                .map(|v| v.to_str().unwrap().to_string()),
-            last_modified: response
-                .headers()
-                .get("last-modified")
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| DateTime::parse_from_rfc2822(v).ok())
-                .map(|v| v.with_timezone(&Utc)),
-        };
-
-        // Parse the sharded repodata from the response
-        let sharded_repodata_compressed_bytes =
-            response.bytes().await.map_err(FetchRepoDataError::from)?;
-        let sharded_repodata_bytes =
-            decode_zst_bytes_async(sharded_repodata_compressed_bytes).await?;
-
-        // write the sharded repodata to disk
-        write_cache(
-            &sharded_repodata_path,
-            cache_header,
-            &sharded_repodata_bytes,
-        )
-        .await
-        .map_err(|e| {
-            FetchRepoDataError::IoError(std::io::Error::new(std::io::ErrorKind::Other, e))
-        })?;
-
-        let sharded_repodata = tokio_rayon::spawn(move || {
-            rmp_serde::from_slice::<ShardedRepodata>(&sharded_repodata_bytes)
-        })
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-        .map_err(FetchRepoDataError::IoError)?;
+        let sharded_repodata =
+            fetch_index(&client, &repodata_shards_url, &sharded_repodata_path).await?;
 
         // Determine the cache directory and make sure it exists.
         let cache_dir = cache_dir.join("shards-v1");
@@ -241,8 +304,8 @@ impl ShardedSubdir {
         Ok(Self {
             channel,
             client,
-            sharded_repodata,
             shard_base_url,
+            sharded_repodata,
             cache_dir,
         })
     }
@@ -260,7 +323,7 @@ impl SubdirClient for ShardedSubdir {
         };
 
         // Check if we already have the shard in the cache.
-        let shard_cache_path = self.cache_dir.join(&format!("{:x}.msgpack", shard));
+        let shard_cache_path = self.cache_dir.join(format!("{shard:x}.msgpack"));
 
         // Read the cached shard
         match tokio::fs::read(&shard_cache_path).await {
@@ -283,7 +346,7 @@ impl SubdirClient for ShardedSubdir {
         // Download the shard
         let shard_url = self
             .shard_base_url
-            .join(&format!("shards/{:x}.msgpack.zst", shard))
+            .join(&format!("shards/{shard:x}.msgpack.zst"))
             .expect("invalid shard url");
 
         let shard_response = self

@@ -19,7 +19,7 @@ use rattler_conda_types::{
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
 };
-use rattler_repodata_gateway::Gateway;
+use rattler_repodata_gateway::{Gateway, RepoData};
 use rattler_solve::{
     libsolv_c::{self},
     resolvo, ChannelPriority, RepoDataIter, SolverImpl, SolverTask,
@@ -131,19 +131,19 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .finish();
 
     let start_load_repo_data = Instant::now();
-    let package_names = specs.iter().filter_map(|spec| spec.name.as_ref().cloned());
     let repo_data = wrap_in_async_progress(
         "loading repodata",
         gateway.load_records_recursive(
             channels,
             [install_platform, Platform::NoArch],
-            package_names,
+            specs.clone(),
         ),
     )
-    .await?;
+    .await
+    .context("failed to load repodata")?;
 
     // Determine the number of recors
-    let total_records: usize = repo_data.iter().map(|r| r.len()).sum();
+    let total_records: usize = repo_data.iter().map(RepoData::len).sum();
     println!(
         "Loaded {} records in {:?}",
         total_records,
@@ -197,10 +197,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect();
 
     let solver_task = SolverTask {
-        available_packages: repo_data
-            .iter()
-            .map(|repo_data| RepoDataIter(repo_data))
-            .collect::<Vec<_>>(),
+        available_packages: repo_data.iter().map(RepoDataIter).collect::<Vec<_>>(),
         locked_packages,
         virtual_packages,
         specs,
@@ -246,7 +243,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         for operation in &transaction.operations {
             match operation {
                 TransactionOperation::Install(r) => {
-                    println!("{} {}", console::style("+").green(), format_record(r))
+                    println!("{} {}", console::style("+").green(), format_record(r));
                 }
                 TransactionOperation::Change { old, new } => {
                     println!(

@@ -27,7 +27,7 @@ impl SubdirData {
     pub fn from_client<C: SubdirClient + 'static>(client: C) -> Self {
         Self {
             client: Arc::new(client),
-            records: Default::default(),
+            records: DashMap::default(),
         }
     }
 
@@ -101,7 +101,7 @@ impl SubdirData {
         .map_err(JoinError::try_into_panic)
         {
             Ok(Ok(records)) => records,
-            Ok(Err(err)) => return Err(GatewayError::from(err)),
+            Ok(Err(err)) => return Err(err),
             Err(Ok(panic)) => std::panic::resume_unwind(panic),
             Err(Err(_)) => {
                 return Err(GatewayError::IoError(

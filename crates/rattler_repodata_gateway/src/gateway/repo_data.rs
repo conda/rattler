@@ -2,7 +2,7 @@ use rattler_conda_types::RepoDataRecord;
 use std::iter::FusedIterator;
 use std::sync::Arc;
 
-/// A container for RepoDataRecords that are returned from the [`Gateway`].
+/// A container for `RepoDataRecord`s that are returned from the [`Gateway`].
 ///
 /// This struct references the same memory as the gateway therefor not
 /// duplicating the records.
