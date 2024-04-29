@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import Optional
 
 from rattler.rattler import PyNoArchType
 
@@ -6,42 +7,65 @@ from rattler.rattler import PyNoArchType
 class NoArchType:
     _noarch: PyNoArchType
 
+    def __init__(self, noarch: Optional[str] = None) -> NoArchType:
+        if noarch is None:
+            self._noarch = PyNoArchType.none()
+            self._source = None
+        elif noarch == "python":
+            self._noarch = PyNoArchType.python()
+            self._source = "python"
+        elif noarch == "generic":
+            self._noarch = PyNoArchType.generic()
+            self._source = "generic"
+        else:
+            raise ValueError(
+                "NoArchType constructor received unsupported value "
+                f"{noarch} for the `noarch` parameter"
+            )
+
     @classmethod
     def _from_py_no_arch_type(cls, py_no_arch_type: PyNoArchType) -> NoArchType:
         """Construct Rattler NoArchType from FFI PyNoArchType object."""
         no_arch_type = cls.__new__(cls)
         no_arch_type._noarch = py_no_arch_type
+        no_arch_type._source = py_no_arch_type
         return no_arch_type
 
     @property
     def generic(self) -> bool:
         """
         Return whether this NoArchType is 'generic'
-        >>> NoArchType('generic')
+        >>> NoArchType('generic').generic
         True
+        >>> NoArchType('generic').python
+        False
         >>>
         """
-        return self._noarch.generic
+        return self._noarch.is_generic
 
     @property
     def none(self) -> bool:
         """
         Return whether this NoArchType is set
-        >>> NoArchType(None)
+        >>> NoArchType(None).none
         True
+        >>> NoArchType(None).python
+        False
         >>>
         """
-        return self._noarch.none
+        return self._noarch.is_none
 
     @property
     def python(self) -> bool:
         """
         Return whether this NoArchType is 'python'
-        >>> NoArchType('python')
+        >>> NoArchType('python').python
         True
+        >>> NoArchType('python').generic
+        False
         >>>
         """
-        return self._noarch.python
+        return self._noarch.is_python
 
     def __hash__(self) -> int:
         """
@@ -52,7 +76,7 @@ class NoArchType:
         ```python
         >>> hash(NoArchType("python")) == hash(NoArchType("python"))
         True
-        >>> hash(NoArchType("python")) == hash(NoArchType("abc-test"))
+        >>> hash(NoArchType("python")) == hash(NoArchType("generic"))
         False
         >>>
         ```
@@ -114,4 +138,4 @@ class NoArchType:
         >>>
         ```
         """
-        return f'NoArchType("{self._noarch}")'
+        return f'NoArchType("{self._source}")'
