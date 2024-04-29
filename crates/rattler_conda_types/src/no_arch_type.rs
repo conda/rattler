@@ -51,6 +51,11 @@ impl NoArchType {
         self.kind() == Some(NoArchKind::Python)
     }
 
+    /// Returns true if this instance is a Generic noarch type
+    pub fn is_generic(&self) -> bool {
+        self.kind() ==  Some(NoArchKind::Generic)
+    }
+
     /// Constructs a Python noarch instance.
     pub fn python() -> Self {
         Self(Some(RawNoArchType::Python))
