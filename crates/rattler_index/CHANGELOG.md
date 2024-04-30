@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.9](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.8...rattler_index-v0.19.9) - 2024-04-30
+
+### Other
+- release ([#625](https://github.com/mamba-org/rattler/pull/625))
+
 ## [0.19.8](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.7...rattler_index-v0.19.8) - 2024-04-25
 
 ### Other
