@@ -93,7 +93,7 @@ pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
-pub use pypi_indexes::{FlatIndexUrlOrPath, PypiIndexes};
+pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used

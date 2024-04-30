@@ -18,13 +18,13 @@ pub struct PypiIndexes {
         skip_serializing_if = "Vec::is_empty",
         with = "serde_yaml::with::singleton_map_recursive"
     )]
-    pub flat_indexes: Vec<FlatIndexUrlOrPath>,
+    pub find_links: Vec<FindLinksUrlOrPath>,
 }
 
 /// A flat index is a static source of
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub enum FlatIndexUrlOrPath {
+pub enum FindLinksUrlOrPath {
     /// Can be a path to a directory or a file containing the flat index
     Path(PathBuf),
 
@@ -32,7 +32,7 @@ pub enum FlatIndexUrlOrPath {
     Url(Url),
 }
 
-impl FlatIndexUrlOrPath {
+impl FindLinksUrlOrPath {
     /// Returns the URL if it is a URL
     pub fn as_url(&self) -> Option<&Url> {
         match self {
