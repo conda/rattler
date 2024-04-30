@@ -21,6 +21,7 @@ use itertools::Itertools;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, MatchSpec, PackageName, Platform};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::HashMap;
 use std::{
     borrow::Borrow,
     collections::HashSet,
@@ -203,12 +204,15 @@ impl Gateway {
 
         // Package names that we have or will issue requests for.
         let mut seen = HashSet::new();
-        let mut pending_package_specs = Vec::new();
+        let mut pending_package_specs = HashMap::new();
         for spec in specs {
             let spec = spec.into();
             if let Some(name) = &spec.name {
                 seen.insert(name.clone());
-                pending_package_specs.push(spec);
+                pending_package_specs
+                    .entry(name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(spec);
             }
         }
 
@@ -223,12 +227,10 @@ impl Gateway {
         loop {
             // Iterate over all pending package names and create futures to fetch them from all
             // subdirs.
-            for spec in pending_package_specs.drain(..) {
+            for (package_name, specs) in pending_package_specs.drain() {
                 for (channel_idx, subdir) in subdirs.iter().cloned() {
-                    let spec = spec.clone();
-                    let Some(package_name) = spec.name.clone() else {
-                        continue;
-                    };
+                    let specs = specs.clone();
+                    let package_name = package_name.clone();
                     pending_records.push(async move {
                         let barrier_cell = subdir.clone();
                         let subdir = barrier_cell.wait().await;
@@ -236,8 +238,8 @@ impl Gateway {
                             Subdir::Found(subdir) => subdir
                                 .get_or_fetch_package_records(&package_name)
                                 .await
-                                .map(|records| (channel_idx, spec, records)),
-                            Subdir::NotFound => Ok((channel_idx, spec, Arc::from(vec![]))),
+                                .map(|records| (channel_idx, specs, records)),
+                            Subdir::NotFound => Ok((channel_idx, specs, Arc::from(vec![]))),
                         }
                     });
                 }
@@ -252,13 +254,13 @@ impl Gateway {
 
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
-                    let (channel_idx, request_spec, records) = records?;
+                    let (channel_idx, request_specs, records) = records?;
 
                     if recursive {
                         // Extract the dependencies from the records and recursively add them to the
                         // list of package names that we need to fetch.
                         for record in records.iter() {
-                            if !request_spec.matches(&record.package_record) {
+                            if !request_specs.iter().any(|spec| spec.matches(&record.package_record)) {
                                 // Do not recurse into records that do not match to root spec.
                                 continue;
                             }
@@ -267,7 +269,7 @@ impl Gateway {
                                     dependency.split_once(' ').unwrap_or((dependency, "")).0,
                                 );
                                 if seen.insert(dependency_name.clone()) {
-                                    pending_package_specs.push(dependency_name.into());
+                                    pending_package_specs.insert(dependency_name.clone(), vec![dependency_name.into()]);
                                 }
                             }
                         }
@@ -531,13 +533,12 @@ mod test {
                 )],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![
-                    PackageName::from_str("rubin-env").unwrap(),
+                    // PackageName::from_str("rubin-env").unwrap(),
                     // PackageName::from_str("jupyterlab").unwrap(),
                     // PackageName::from_str("detectron2").unwrap(),
-
-                    // PackageName::from_str("python").unwrap(),
-                    // PackageName::from_str("boto3").unwrap(),
-                    // PackageName::from_str("requests").unwrap(),
+                    PackageName::from_str("python").unwrap(),
+                    PackageName::from_str("boto3").unwrap(),
+                    PackageName::from_str("requests").unwrap(),
                 ]
                 .into_iter(),
             )
