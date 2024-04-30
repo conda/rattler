@@ -307,6 +307,9 @@ struct GatewayInner {
 
     /// The directory to store any cache
     cache: PathBuf,
+
+    /// A semaphore to limit the number of concurrent requests.
+    concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 impl GatewayInner {
@@ -411,15 +414,13 @@ impl GatewayInner {
                 ));
             }
         } else if url.scheme() == "http" || url.scheme() == "https" {
-            if url
-                .as_str()
-                .starts_with("https://conda.anaconda.org/conda-forge/")
-            {
+            if url.as_str().starts_with("https://fast.prefiks.dev/") {
                 sharded_subdir::ShardedSubdir::new(
                     channel.clone(),
                     platform.to_string(),
                     self.client.clone(),
                     self.cache.clone(),
+                    self.concurrent_requests_semaphore.clone(),
                 )
                 .await
                 .map(SubdirData::from_client)

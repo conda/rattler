@@ -12,6 +12,7 @@ pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<ClientWithMiddleware>,
     cache: Option<PathBuf>,
+    max_concurrent_requests: Option<usize>,
 }
 
 impl GatewayBuilder {
@@ -41,6 +42,13 @@ impl GatewayBuilder {
         self
     }
 
+    /// Sets the maximum number of concurrent HTTP requests to make.
+    #[must_use]
+    pub fn with_max_concurrent_requests(mut self, max_concurrent_requests: usize) -> Self {
+        self.max_concurrent_requests = Some(max_concurrent_requests);
+        self
+    }
+
     /// Finish the construction of the gateway returning a constructed gateway.
     pub fn finish(self) -> Gateway {
         let client = self
@@ -53,12 +61,17 @@ impl GatewayBuilder {
                 .join("rattler/cache")
         });
 
+        let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
+
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: DashMap::default(),
                 client,
                 channel_config: self.channel_config,
                 cache,
+                concurrent_requests_semaphore: Arc::new(tokio::sync::Semaphore::new(
+                    max_concurrent_requests,
+                )),
             }),
         }
     }
