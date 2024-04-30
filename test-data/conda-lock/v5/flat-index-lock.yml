@@ -5,7 +5,7 @@ environments:
     - url: https://conda.anaconda.org/conda-forge/
     indexes:
     - https://pypi.org/simple
-    flat-indexes:
+    find-links:
     - path: ./links
     packages:
       osx-arm64:
