@@ -1,6 +1,7 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
 use super::ParseCondaLockError;
+use crate::file_format_version::FileFormatVersion;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
     PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
@@ -117,7 +118,10 @@ pub struct CondaLockedPackageV3 {
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
-pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseCondaLockError> {
+pub fn parse_v3_or_lower(
+    document: serde_yaml::Value,
+    version: FileFormatVersion,
+) -> Result<LockFile, ParseCondaLockError> {
     let lock_file: LockFileV3 =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
@@ -201,11 +205,13 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
+        indexes: None,
         packages: per_platform,
     };
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
+            version,
             conda_packages: conda_packages.into_iter().collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
             pypi_environment_package_datas: pypi_runtime_configs

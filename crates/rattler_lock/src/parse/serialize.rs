@@ -1,6 +1,6 @@
-use super::FILE_VERSION;
+use crate::file_format_version::FileFormatVersion;
 use crate::utils::serde::RawCondaPackageData;
-use crate::{Channel, EnvironmentPackageData, LockFile, PypiPackageData, UrlOrPath};
+use crate::{Channel, EnvironmentPackageData, LockFile, PypiIndexes, PypiPackageData, UrlOrPath};
 use itertools::Itertools;
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
@@ -12,7 +12,7 @@ use url::Url;
 
 #[derive(Serialize)]
 struct SerializableLockFile<'a> {
-    version: u64,
+    version: FileFormatVersion,
     environments: BTreeMap<&'a String, SerializableEnvironment<'a>>,
     packages: Vec<SerializablePackageData<'a>>,
 }
@@ -20,6 +20,8 @@ struct SerializableLockFile<'a> {
 #[derive(Serialize)]
 struct SerializableEnvironment<'a> {
     channels: &'a [Channel],
+    #[serde(flatten)]
+    indexes: Option<&'a PypiIndexes>,
     packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
@@ -186,6 +188,7 @@ impl Serialize for LockFile {
                     name,
                     SerializableEnvironment {
                         channels: &env_data.channels,
+                        indexes: env_data.indexes.as_ref(),
                         packages: env_data
                             .packages
                             .iter()
@@ -242,7 +245,7 @@ impl Serialize for LockFile {
         packages.sort();
 
         let raw = SerializableLockFile {
-            version: FILE_VERSION,
+            version: FileFormatVersion::LATEST,
             environments,
             packages,
         };
