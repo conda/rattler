@@ -8,6 +8,7 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
+
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
 pub struct AuthenticationMiddleware {
@@ -22,8 +23,12 @@ impl Middleware for AuthenticationMiddleware {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        let url = req.url().clone();
+        // If an `Authorization` header is already present, don't authenticate
+        if req.headers().get(reqwest::header::AUTHORIZATION).is_some() {
+            return next.run(req, extensions).await;
+        }
 
+        let url = req.url().clone();
         match self.auth_storage.get_by_url(url) {
             Err(_) => {
                 // Forward error to caller (invalid URL)

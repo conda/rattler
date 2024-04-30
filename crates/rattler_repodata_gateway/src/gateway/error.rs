@@ -12,4 +12,7 @@ pub enum GatewayError {
 
     #[error("{0}")]
     UnsupportedUrl(String),
+
+    #[error("{0}")]
+    Generic(String),
 }

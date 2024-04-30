@@ -1,4 +1,5 @@
 mod barrier_cell;
+mod builder;
 mod channel_config;
 mod error;
 mod local_subdir;
@@ -8,6 +9,7 @@ mod sharded_subdir;
 mod subdir;
 
 pub use barrier_cell::BarrierCell;
+pub use builder::GatewayBuilder;
 pub use channel_config::{ChannelConfig, SourceConfig};
 pub use error::GatewayError;
 pub use repo_data::RepoData;
@@ -18,7 +20,6 @@ use futures::{select_biased, stream::FuturesUnordered, StreamExt};
 use itertools::Itertools;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, MatchSpec, PackageName, Platform};
-use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::{
     borrow::Borrow,
@@ -29,68 +30,18 @@ use std::{
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 
-// TODO: Instead of using `Channel` it would be better if we could use just the base url. Maybe we
-//  can wrap that in a type. Mamba has the CondaUrl class.
-
-/// A builder for constructing a [`Gateway`].
-#[derive(Default)]
-pub struct GatewayBuilder {
-    channel_config: ChannelConfig,
-    client: Option<ClientWithMiddleware>,
-    cache: Option<PathBuf>,
-}
-
-impl GatewayBuilder {
-    /// New instance of the builder.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set the client to use for fetching repodata.
-    #[must_use]
-    pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
-        self.client = Some(client);
-        self
-    }
-
-    /// Set the channel configuration to use for fetching repodata.
-    #[must_use]
-    pub fn with_channel_config(mut self, channel_config: ChannelConfig) -> Self {
-        self.channel_config = channel_config;
-        self
-    }
-
-    /// Set the directory to use for caching repodata.
-    #[must_use]
-    pub fn with_cache_dir(mut self, cache: impl Into<PathBuf>) -> Self {
-        self.cache = Some(cache.into());
-        self
-    }
-
-    /// Finish the construction of the gateway returning a constructed gateway.
-    pub fn finish(self) -> Gateway {
-        let client = self
-            .client
-            .unwrap_or_else(|| ClientWithMiddleware::from(Client::new()));
-
-        let cache = self.cache.unwrap_or_else(|| {
-            dirs::cache_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("rattler/cache")
-        });
-
-        Gateway {
-            inner: Arc::new(GatewayInner {
-                subdirs: DashMap::default(),
-                client,
-                channel_config: self.channel_config,
-                cache,
-            }),
-        }
-    }
-}
-
-/// Central access point for fetching repodata records.
+/// Central access point for high level queries about [`RepoDataRecord`]s from
+/// different channels.
+///
+/// The gateway is responsible for fetching and caching repodata. Requests are
+/// deduplicated which means that if multiple requests are made for the same
+/// repodata only the first request will actually fetch the data. All other
+/// requests will wait for the first request to complete and then return the
+/// same data.
+///
+/// The gateway is thread-safe and can be shared between multiple threads. The
+/// gateway struct itself uses internal reference counting and is cheaply
+/// clonable. There is no need to wrap the gateway in an `Arc`.
 #[derive(Clone)]
 pub struct Gateway {
     inner: Arc<GatewayInner>,
@@ -357,12 +308,14 @@ struct GatewayInner {
 }
 
 impl GatewayInner {
-    /// Returns the [`Subdir`] for the given channel and platform. This function will create the
-    /// [`Subdir`] if it does not exist yet, otherwise it will return the previously created subdir.
+    /// Returns the [`Subdir`] for the given channel and platform. This
+    /// function will create the [`Subdir`] if it does not exist yet, otherwise
+    /// it will return the previously created subdir.
     ///
-    /// If multiple threads request the same subdir their requests will be coalesced, and they will
-    /// all receive the same subdir. If an error occurs while creating the subdir all waiting tasks
-    /// will also return an error.
+    /// If multiple threads request the same subdir their requests will be
+    /// coalesced, and they will all receive the same subdir. If an error
+    /// occurs while creating the subdir all waiting tasks will also return an
+    /// error.
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,

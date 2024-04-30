@@ -1,16 +1,24 @@
+use crate::gateway::PendingOrFetched;
+use crate::utils::url_to_cache_filename;
 use crate::{
     fetch::{FetchRepoDataError, RepoDataNotFoundError},
     gateway::subdir::SubdirClient,
     GatewayError,
 };
 use bytes::Bytes;
+use chrono::{DateTime, TimeDelta, Utc};
 use futures::{FutureExt, TryFutureExt};
-use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy};
+use http::header::CACHE_CONTROL;
+use http::{HeaderMap, HeaderValue, Method, Uri};
+use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
+use itertools::Either;
+use parking_lot::Mutex;
 use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
 use rattler_digest::Sha256Hash;
 use reqwest::{Response, StatusCode};
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -30,19 +38,56 @@ use url::Url;
 pub struct ShardedSubdir {
     channel: Channel,
     client: ClientWithMiddleware,
-    shard_base_url: Url,
+    channel_base_url: Url,
+    token_client: TokenClient,
     sharded_repodata: ShardedRepodata,
     cache_dir: PathBuf,
 }
 
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
+const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
+
+struct SimpleRequest {
+    uri: Uri,
+    method: Method,
+    headers: HeaderMap,
+}
+
+impl SimpleRequest {
+    pub fn get(url: &Url) -> Self {
+        Self {
+            uri: Uri::from_str(url.as_str()).expect("failed to convert Url to Uri"),
+            method: Method::GET,
+            headers: HeaderMap::default(),
+        }
+    }
+}
+
+impl RequestLike for SimpleRequest {
+    fn method(&self) -> &Method {
+        &self.method
+    }
+
+    fn uri(&self) -> Uri {
+        self.uri.clone()
+    }
+
+    fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    fn is_same_uri(&self, other: &Uri) -> bool {
+        &self.uri() == other
+    }
+}
 
 // Fetches the shard index from the url or read it from the cache.
 async fn fetch_index(
-    client: &ClientWithMiddleware,
-    shard_index_url: &Url,
-    cache_path: &Path,
+    client: ClientWithMiddleware,
+    channel_base_url: &Url,
+    token_client: &TokenClient,
+    cache_dir: &Path,
 ) -> Result<ShardedRepodata, GatewayError> {
     async fn from_response(
         cache_path: &Path,
@@ -95,17 +140,24 @@ async fn fetch_index(
         Ok(sharded_index)
     }
 
-    // Construct the request to fetch the shard index.
-    let request = client
-        .get(shard_index_url.clone())
-        .build()
-        .expect("invalid shard_index request");
+    // Fetch the sharded repodata from the remote server
+    let canonical_shards_url = channel_base_url
+        .join(REPODATA_SHARDS_FILENAME)
+        .expect("invalid shard base url");
+
+    let cache_file_name = format!(
+        "{}.shards-cache-v1",
+        url_to_cache_filename(&canonical_shards_url)
+    );
+    let cache_path = cache_dir.join(cache_file_name);
+
+    let canonical_request = SimpleRequest::get(&canonical_shards_url);
 
     // Try reading the cached file
-    if let Ok((cache_header, file)) = read_cached_index(cache_path).await {
+    if let Ok((cache_header, file)) = read_cached_index(&cache_path).await {
         match cache_header
             .policy
-            .before_request(&request, SystemTime::now())
+            .before_request(&canonical_request, SystemTime::now())
         {
             BeforeRequest::Fresh(_) => {
                 if let Ok(shard_index) = read_shard_index_from_reader(file).await {
@@ -117,8 +169,26 @@ async fn fetch_index(
                 request: state_request,
                 ..
             } => {
-                let request = convert_request(client.clone(), state_request.clone())
-                    .expect("failed to create request to check staleness");
+                // Get the token from the token client
+                let token = token_client.get_token().await?;
+
+                // Determine the actual URL to use for the request
+                let shards_url = token
+                    .shard_base_url
+                    .as_ref()
+                    .unwrap_or(channel_base_url)
+                    .join(REPODATA_SHARDS_FILENAME)
+                    .expect("invalid shard base url");
+
+                // Construct the actual request that we will send
+                let mut request = client
+                    .get(shards_url)
+                    .headers(state_request.headers().clone())
+                    .build()
+                    .expect("failed to build request for shard index");
+                token.add_to_headers(request.headers_mut());
+
+                // Send the request
                 let response = client
                     .execute(request)
                     .await
@@ -142,7 +212,7 @@ async fn fetch_index(
                         drop(file);
 
                         tracing::debug!("shard index cache has become stale");
-                        return from_response(cache_path, policy, response).await;
+                        return from_response(&cache_path, policy, response).await;
                     }
                 }
             }
@@ -150,6 +220,24 @@ async fn fetch_index(
     };
 
     tracing::debug!("fetching fresh shard index");
+
+    // Get the token from the token client
+    let token = token_client.get_token().await?;
+
+    // Determine the actual URL to use for the request
+    let shards_url = token
+        .shard_base_url
+        .as_ref()
+        .unwrap_or(channel_base_url)
+        .join(REPODATA_SHARDS_FILENAME)
+        .expect("invalid shard base url");
+
+    // Construct the actual request that we will send
+    let mut request = client
+        .get(shards_url)
+        .build()
+        .expect("failed to build request for shard index");
+    token.add_to_headers(request.headers_mut());
 
     // Do a fresh requests
     let response = client
@@ -170,8 +258,8 @@ async fn fetch_index(
         ));
     };
 
-    let policy = CachePolicy::new(&request, &response);
-    from_response(cache_path, policy, response).await
+    let policy = CachePolicy::new(&canonical_request, &response);
+    from_response(&cache_path, policy, response).await
 }
 
 /// Writes the shard index cache to disk.
@@ -204,21 +292,6 @@ async fn write_shard_index_cache(
         Err(e) => std::io::Error::new(std::io::ErrorKind::Other, e),
     })
     .await?
-}
-
-/// Converts from a `http::request::Parts` into a `reqwest::Request`.
-fn convert_request(
-    client: ClientWithMiddleware,
-    parts: http::request::Parts,
-) -> Result<reqwest::Request, reqwest::Error> {
-    client
-        .request(
-            parts.method,
-            Url::from_str(&parts.uri.to_string()).expect("uris should be the same"),
-        )
-        .headers(parts.headers)
-        .version(parts.version)
-        .build()
 }
 
 /// Read the shard index from a reader and deserialize it.
@@ -271,6 +344,101 @@ async fn read_cached_index(cache_path: &Path) -> std::io::Result<(CacheHeader, B
     Ok((cache_header, reader))
 }
 
+struct TokenClient {
+    client: ClientWithMiddleware,
+    token_base_url: Url,
+    token: Arc<Mutex<PendingOrFetched<Option<Arc<Token>>>>>,
+}
+
+impl TokenClient {
+    pub fn new(client: ClientWithMiddleware, token_base_url: Url) -> Self {
+        Self {
+            client,
+            token_base_url,
+            token: Arc::new(Mutex::new(PendingOrFetched::Fetched(None))),
+        }
+    }
+
+    pub async fn get_token(&self) -> Result<Arc<Token>, GatewayError> {
+        let sender_or_receiver = {
+            let mut token = self.token.lock();
+            match &*token {
+                PendingOrFetched::Fetched(Some(token)) if token.is_fresh() => {
+                    // The token is still fresh.
+                    return Ok(token.clone());
+                }
+                PendingOrFetched::Fetched(_) => {
+                    let (sender, _) = tokio::sync::broadcast::channel(1);
+                    let sender = Arc::new(sender);
+                    *token = PendingOrFetched::Pending(Arc::downgrade(&sender));
+
+                    Either::Left(sender)
+                }
+                PendingOrFetched::Pending(sender) => {
+                    let sender = sender.upgrade();
+                    if let Some(sender) = sender {
+                        Either::Right(sender.subscribe())
+                    } else {
+                        let (sender, _) = tokio::sync::broadcast::channel(1);
+                        let sender = Arc::new(sender);
+                        *token = PendingOrFetched::Pending(Arc::downgrade(&sender));
+                        Either::Left(sender)
+                    }
+                }
+            }
+        };
+
+        let sender = match sender_or_receiver {
+            Either::Left(sender) => sender,
+            Either::Right(mut receiver) => {
+                return match receiver.recv().await {
+                    Ok(Some(token)) => Ok(token),
+                    _ => {
+                        // If this happens the sender was dropped.
+                        Err(GatewayError::IoError(
+                            "a coalesced request for a token failed".to_string(),
+                            std::io::ErrorKind::Other.into(),
+                        ))
+                    }
+                };
+            }
+        };
+
+        let token_url = self
+            .token_base_url
+            .join("token")
+            .expect("invalid token url");
+        tracing::debug!("fetching token from {}", &token_url);
+
+        // Fetch the token
+        let response = self
+            .client
+            .get(token_url)
+            .header(CACHE_CONTROL, HeaderValue::from_static("max-age=0"))
+            .send()
+            .await
+            .and_then(|r| r.error_for_status().map_err(Into::into))
+            .map_err(FetchRepoDataError::from)
+            .map_err(GatewayError::from)?;
+
+        let token = response
+            .json::<Token>()
+            .await
+            .map_err(FetchRepoDataError::from)
+            .map_err(GatewayError::from)
+            .map(Arc::new)?;
+
+        // Reacquire the token
+        let mut token_lock = self.token.lock();
+        *token_lock = PendingOrFetched::Fetched(Some(token.clone()));
+
+        // Publish the change
+        let _ = sender.send(Some(token.clone()));
+
+        Ok(token)
+    }
+}
+
 impl ShardedSubdir {
     pub async fn new(
         _channel: Channel,
@@ -282,18 +450,12 @@ impl ShardedSubdir {
         let channel =
             Channel::from_url(Url::parse("https://conda.anaconda.org/conda-forge").unwrap());
 
-        let shard_base_url =
+        let channel_base_url =
             Url::parse(&format!("https://fast.prefiks.dev/conda-forge/{subdir}/")).unwrap();
+        let token_client = TokenClient::new(client.clone(), channel_base_url.clone());
 
-        // Fetch the sharded repodata from the remote server
-        let repodata_shards_url = shard_base_url
-            .join("repodata_shards.msgpack.zst")
-            .expect("invalid shard base url");
-
-        let cache_key = crate::utils::url_to_cache_filename(&repodata_shards_url);
-        let sharded_repodata_path = cache_dir.join(format!("{cache_key}.shard-cache-v1"));
         let sharded_repodata =
-            fetch_index(&client, &repodata_shards_url, &sharded_repodata_path).await?;
+            fetch_index(client.clone(), &channel_base_url, &token_client, &cache_dir).await?;
 
         // Determine the cache directory and make sure it exists.
         let cache_dir = cache_dir.join("shards-v1");
@@ -304,8 +466,10 @@ impl ShardedSubdir {
         Ok(Self {
             channel,
             client,
-            shard_base_url,
+            channel_base_url,
+            token_client,
             sharded_repodata,
+
             cache_dir,
         })
     }
@@ -343,16 +507,28 @@ impl SubdirClient for ShardedSubdir {
             Err(err) => return Err(FetchRepoDataError::IoError(err).into()),
         }
 
+        // Get the token
+        let token = self.token_client.get_token().await?;
+
         // Download the shard
-        let shard_url = self
+        let shard_url = token
             .shard_base_url
+            .as_ref()
+            .unwrap_or(&self.channel_base_url)
             .join(&format!("shards/{shard:x}.msgpack.zst"))
             .expect("invalid shard url");
 
-        let shard_response = self
+        let mut shard_request = self
             .client
             .get(shard_url.clone())
-            .send()
+            .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
+            .build()
+            .expect("failed to build shard request");
+        token.add_to_headers(shard_request.headers_mut());
+
+        let shard_response = self
+            .client
+            .execute(shard_request)
             .await
             .and_then(|r| r.error_for_status().map_err(Into::into))
             .map_err(FetchRepoDataError::from)?;
@@ -421,6 +597,38 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             .collect())
     })
     .await
+}
+
+/// The token endpoint response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Token {
+    token: Option<String>,
+    issued_at: Option<DateTime<Utc>>,
+    expires_in: Option<u64>,
+    shard_base_url: Option<Url>,
+}
+
+impl Token {
+    /// Returns true if the token is still considered to be valid.
+    pub fn is_fresh(&self) -> bool {
+        if let (Some(issued_at), Some(expires_in)) = (&self.issued_at, self.expires_in) {
+            let now = Utc::now();
+            if issued_at.add(TimeDelta::seconds(expires_in as i64)) > now {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Add the token to the headers if its available
+    pub fn add_to_headers(&self, headers: &mut http::header::HeaderMap) {
+        if let Some(token) = &self.token {
+            headers.insert(
+                http::header::AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+            );
+        }
+    }
 }
 
 /// Returns the URL with a trailing slash if it doesn't already have one.

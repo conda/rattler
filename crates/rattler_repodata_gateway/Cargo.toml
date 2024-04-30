@@ -20,7 +20,7 @@ chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 dashmap = { workspace = true }
 humansize = { workspace = true }
 humantime = { workspace = true }
-http = { workspace = true, optional = true}
+http = { workspace = true, optional = true }
 futures = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
@@ -52,6 +52,7 @@ zstd = { workspace = true }
 rayon = { workspace = true, optional = true }
 tokio-rayon = { workspace = true, optional = true }
 http-cache-semantics = { workspace = true, optional = true, features = ["reqwest", "serde"] }
+parking_lot = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
@@ -75,4 +76,4 @@ default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn']
 rustls-tls = ['reqwest/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value", "bytes"]
-gateway = ["sparse", "http", "http-cache-semantics", "rayon", "tokio-rayon"]
+gateway = ["sparse", "http", "http-cache-semantics", "rayon", "tokio-rayon", "parking_lot"]
