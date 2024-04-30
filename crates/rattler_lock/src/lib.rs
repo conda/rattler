@@ -78,18 +78,22 @@ use url::Url;
 mod builder;
 mod channel;
 mod conda;
+mod file_format_version;
 mod hash;
 mod parse;
 mod pypi;
+mod pypi_indexes;
 mod url_or_path;
 mod utils;
 
 pub use builder::LockFileBuilder;
 pub use channel::Channel;
 pub use conda::{CondaPackageData, ConversionError};
+pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
+pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the environment name that is used
@@ -110,6 +114,7 @@ pub struct LockFile {
 /// Internal data structure that stores the lock-file data.
 #[derive(Default)]
 struct LockFileInner {
+    version: FileFormatVersion,
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
@@ -137,6 +142,9 @@ enum EnvironmentPackageData {
 struct EnvironmentData {
     /// The channels used to solve the environment. Note that the order matters.
     channels: Vec<Channel>,
+
+    /// The pypi indexes used to solve the environment.
+    indexes: Option<PypiIndexes>,
 
     /// For each individual platform this environment supports we store the package identifiers
     /// associated with the environment.
@@ -201,6 +209,11 @@ impl LockFile {
                 )
             })
     }
+
+    /// Returns the version of the lock-file.
+    pub fn version(&self) -> FileFormatVersion {
+        self.inner.version
+    }
 }
 
 /// Information about a specific environment in the lock-file.
@@ -227,6 +240,15 @@ impl Environment {
     /// priority channel.
     pub fn channels(&self) -> &[Channel] {
         &self.data().channels
+    }
+
+    /// Returns the Pypi indexes that were used to solve this environment.
+    ///
+    /// If there are no pypi packages in the lock-file this will return `None`.
+    ///
+    /// Starting with version `5` of the format this should not be optional.
+    pub fn pypi_indexes(&self) -> Option<&PypiIndexes> {
+        self.data().indexes.as_ref()
     }
 
     /// Returns all the packages for a specific platform in this environment.
@@ -355,6 +377,11 @@ impl Environment {
                 })
                 .collect(),
         )
+    }
+
+    /// Returns the version of the lock-file that contained this environment.
+    pub fn version(&self) -> FileFormatVersion {
+        self.inner.version
     }
 }
 
@@ -594,6 +621,7 @@ mod test {
     #[case("v4/pypi-matplotlib-lock.yml")]
     #[case("v4/turtlesim-lock.yml")]
     #[case("v4/path-based-lock.yml")]
+    #[case("v5/flat-index-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")

@@ -1,9 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 602
+assertion_line: 629
 expression: conda_lock
 ---
-version: 4
+version: 5
 environments:
   default:
     channels:

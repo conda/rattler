@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 629
 expression: conda_lock
 ---
-version: 4
+version: 5
 environments:
   default:
     channels:
@@ -51036,4 +51037,3 @@ packages:
     license_family: GPL
     size: 95357
     timestamp: 1617437173697
-
