@@ -38,5 +38,6 @@ pub struct Shard {
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
     /// The file names of all removed for this shard
+    #[serde(default)]
     pub removed: FxHashSet<String>,
 }

@@ -192,7 +192,8 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
             .map_err(FetchRepoDataError::IoError)?;
         let packages =
-            itertools::chain(shard.packages.into_iter(), shard.conda_packages.into_iter());
+            itertools::chain(shard.packages.into_iter(), shard.conda_packages.into_iter())
+                .filter(|(name, _record)| !shard.removed.contains(name));
         let base_url = add_trailing_slash(&base_url);
         Ok(packages
             .map(|(file_name, package_record)| RepoDataRecord {
