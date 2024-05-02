@@ -461,7 +461,6 @@ fn absolute_path<'a>(path: &'a Path, root_dir: &Path) -> Cow<'a, Path> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::smallvec;
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
@@ -472,15 +471,15 @@ mod tests {
     fn test_parse_platforms() {
         assert_eq!(
             parse_platforms("[noarch, linux-64]"),
-            Ok((Some(smallvec![Platform::NoArch, Platform::Linux64]), ""))
+            Ok((Some(vec![Platform::NoArch, Platform::Linux64]), ""))
         );
         assert_eq!(
             parse_platforms("sometext[noarch]"),
-            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Platform::NoArch]), "sometext"))
         );
         assert_eq!(
             parse_platforms("sometext[noarch,]"),
-            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Platform::NoArch]), "sometext"))
         );
         assert_eq!(parse_platforms("sometext[]"), Ok((None, "sometext")));
         assert!(matches!(
@@ -565,7 +564,7 @@ mod tests {
         assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
 
-        assert_eq!(channel, Channel::from_name("conda-forge/", None, &config));
+        assert_eq!(channel, Channel::from_name("conda-forge/", &config));
     }
 
     #[test]
@@ -660,7 +659,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
-        assert_eq!(channel.platforms, Some(smallvec![platform]));
+        assert_eq!(channel.platforms, Some(vec![platform]));
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/pkgs/main[{platform}]"),
@@ -672,7 +671,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/pkgs/main/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
-        assert_eq!(channel.platforms, Some(smallvec![platform]));
+        assert_eq!(channel.platforms, Some(vec![platform]));
 
         let channel = Channel::from_str("conda-forge/label/rust_dev", &config).unwrap();
         assert_eq!(
