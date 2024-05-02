@@ -1,5 +1,5 @@
 //! Structs to deal with repodata "shards" which are per-package repodata files.
-use fxhash::FxHashMap;
+use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -35,5 +35,8 @@ pub struct Shard {
 
     /// The records for all `.conda` packages
     #[serde(rename = "packages.conda", default)]
-    pub packages_conda: FxHashMap<String, PackageRecord>,
+    pub conda_packages: FxHashMap<String, PackageRecord>,
+
+    /// The file names of all removed for this shard
+    pub removed: FxHashSet<String>,
 }
