@@ -17,6 +17,7 @@ impl RemoteSubdirClient {
         client: ClientWithMiddleware,
         cache_dir: PathBuf,
         source_config: SourceConfig,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Self, GatewayError> {
         let subdir_url = channel.platform_url(platform);
 
@@ -32,7 +33,7 @@ impl RemoteSubdirClient {
                 zstd_enabled: source_config.zstd_enabled,
                 bz2_enabled: source_config.bz2_enabled,
             },
-            None,
+            reporter,
         )
         .await?;
 

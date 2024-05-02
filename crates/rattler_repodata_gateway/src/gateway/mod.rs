@@ -118,7 +118,7 @@ impl GatewayInner {
         &self,
         channel: &Channel,
         platform: Platform,
-        reporter: Option<&dyn Reporter>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<Subdir>, GatewayError> {
         let sender = match self.subdirs.entry((channel.clone(), platform)) {
             Entry::Vacant(entry) => {
@@ -195,7 +195,7 @@ impl GatewayInner {
         &self,
         channel: &Channel,
         platform: Platform,
-        reporter: Option<&dyn Reporter>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Subdir, GatewayError> {
         let url = channel.platform_url(platform);
         let subdir_data = if url.scheme() == "file" {
@@ -218,7 +218,7 @@ impl GatewayInner {
                     self.client.clone(),
                     self.cache.clone(),
                     self.concurrent_requests_semaphore.clone(),
-                    reporter,
+                    reporter.as_deref(),
                 )
                 .await
                 .map(SubdirData::from_client)
@@ -229,6 +229,7 @@ impl GatewayInner {
                     self.client.clone(),
                     self.cache.clone(),
                     self.channel_config.get(channel).clone(),
+                    reporter,
                 )
                 .await
                 .map(SubdirData::from_client)

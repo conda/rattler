@@ -106,7 +106,7 @@ impl GatewayQuery {
             let reporter = self.reporter.clone();
             pending_subdirs.push(async move {
                 match inner
-                    .get_or_create_subdir(channel, platform, reporter.as_deref())
+                    .get_or_create_subdir(channel, platform, reporter)
                     .await
                 {
                     Ok(subdir) => {
