@@ -414,7 +414,9 @@ impl GatewayInner {
                 ));
             }
         } else if url.scheme() == "http" || url.scheme() == "https" {
-            if url.as_str().starts_with("https://fast.prefiks.dev/") {
+            if url.host_str() == Some("fast.prefiks.dev")
+                || url.host_str() == Some("fast.prefix.dev")
+            {
                 sharded_subdir::ShardedSubdir::new(
                     channel.clone(),
                     platform.to_string(),
