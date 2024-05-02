@@ -2,11 +2,9 @@ use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayErr
 use futures::TryFutureExt;
 use http::header::CACHE_CONTROL;
 use http::HeaderValue;
-use rattler_conda_types::{Channel, PackageName, PackageRecord, RepoDataRecord};
-use rattler_digest::Sha256Hash;
+use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Shard, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
-use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, path::PathBuf, sync::Arc};
 use token::TokenClient;
 use url::Url;
 
@@ -208,29 +206,4 @@ fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
         url.set_path(&format!("{path}/"));
         Cow::Owned(url)
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShardedRepodata {
-    pub info: ShardedSubdirInfo,
-    /// The individual shards indexed by package name.
-    pub shards: HashMap<String, Sha256Hash>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Shard {
-    pub packages: HashMap<String, PackageRecord>,
-
-    #[serde(rename = "packages.conda", default)]
-    pub packages_conda: HashMap<String, PackageRecord>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShardedSubdirInfo {
-    /// The name of the subdirectory
-    pub subdir: String,
-
-    /// The base url of the subdirectory. This is the location where the actual
-    /// packages are stored.
-    pub base_url: Url,
 }
