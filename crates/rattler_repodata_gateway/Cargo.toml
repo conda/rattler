@@ -29,7 +29,7 @@ tempfile = { workspace = true }
 tracing = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
-tokio = { workspace = true, features = ["rt", "io-util"] }
+tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
 anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -66,7 +66,7 @@ axum = { workspace = true, features = ["tokio"] }
 hex-literal = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 rstest = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.22.0", default-features = false }
