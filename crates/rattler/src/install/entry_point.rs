@@ -12,8 +12,8 @@ use std::{fs::File, io, io::Write, path::Path};
 /// Get the bytes of the windows launcher executable.
 pub fn get_windows_launcher(platform: &Platform) -> &'static [u8] {
     match platform {
-        Platform::Win32 => unimplemented!("32 bit windows is not supported for entry points"),
-        Platform::Win64 => include_bytes!("../../resources/launcher64.exe"),
+        Platform::Win32 => include_bytes!("../../resources/cli-32.exe"),
+        Platform::Win64 => include_bytes!("../../resources/cli-64.exe"),
         Platform::WinArm64 => unimplemented!("arm64 windows is not supported for entry points"),
         _ => panic!("unsupported platform"),
     }
