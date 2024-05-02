@@ -1,3 +1,5 @@
+use crate::reporter::ResponseReporterExt;
+use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::PendingOrFetched, GatewayError};
 use chrono::{DateTime, TimeDelta, Utc};
 use http::header::CACHE_CONTROL;
@@ -33,7 +35,10 @@ impl TokenClient {
     }
 
     /// Returns the current token or fetches a new one if the current one is expired.
-    pub async fn get_token(&self) -> Result<Arc<Token>, GatewayError> {
+    pub async fn get_token(
+        &self,
+        reporter: Option<&dyn Reporter>,
+    ) -> Result<Arc<Token>, GatewayError> {
         let sender_or_receiver = {
             let mut token = self.token.lock();
             match &*token {
@@ -87,9 +92,10 @@ impl TokenClient {
         // Fetch the token
         let token = {
             let _permit = self.concurrent_request_semaphore.acquire().await;
+            let reporter = reporter.map(|r| (r, r.on_download_start(&token_url)));
             let response = self
                 .client
-                .get(token_url)
+                .get(token_url.clone())
                 .header(CACHE_CONTROL, HeaderValue::from_static("max-age=0"))
                 .send()
                 .await
@@ -97,12 +103,21 @@ impl TokenClient {
                 .map_err(FetchRepoDataError::from)
                 .map_err(GatewayError::from)?;
 
-            response
-                .json::<Token>()
+            let bytes = response
+                .bytes_with_progress(reporter)
                 .await
                 .map_err(FetchRepoDataError::from)
-                .map_err(GatewayError::from)
-                .map(Arc::new)?
+                .map_err(GatewayError::from)?;
+
+            if let Some((reporter, index)) = reporter {
+                reporter.on_download_complete(&token_url, index);
+            }
+
+            let token: Token = serde_json::from_slice(&bytes).map_err(|e| {
+                GatewayError::IoError("failed to parse sharded index token".to_string(), e.into())
+            })?;
+
+            Arc::new(token)
         };
 
         // Reacquire the token

@@ -1,3 +1,5 @@
+use crate::reporter::ResponseReporterExt;
+use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayError};
 use futures::TryFutureExt;
 use http::header::CACHE_CONTROL;
@@ -28,6 +30,7 @@ impl ShardedSubdir {
         client: ClientWithMiddleware,
         cache_dir: PathBuf,
         concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Self, GatewayError> {
         // Construct the base url for the shards (e.g. `<channel>/<subdir>`).
         let shard_base_url = add_trailing_slash(channel.base_url())
@@ -48,6 +51,7 @@ impl ShardedSubdir {
             &token_client,
             &cache_dir,
             concurrent_requests_semaphore.clone(),
+            reporter,
         )
         .await?;
 
@@ -74,6 +78,7 @@ impl SubdirClient for ShardedSubdir {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
         // Find the shard that contains the package
         let Some(shard) = self.sharded_repodata.shards.get(name.as_normalized()) else {
@@ -102,7 +107,7 @@ impl SubdirClient for ShardedSubdir {
         }
 
         // Get the token
-        let token = self.token_client.get_token().await?;
+        let token = self.token_client.get_token(reporter).await?;
 
         // Download the shard
         let shard_url = token
@@ -122,6 +127,7 @@ impl SubdirClient for ShardedSubdir {
 
         let shard_bytes = {
             let _permit = self.concurrent_requests_semaphore.acquire();
+            let reporter = reporter.map(|r| (r, r.on_download_start(&shard_url)));
             let shard_response = self
                 .client
                 .execute(shard_request)
@@ -129,10 +135,16 @@ impl SubdirClient for ShardedSubdir {
                 .and_then(|r| r.error_for_status().map_err(Into::into))
                 .map_err(FetchRepoDataError::from)?;
 
-            shard_response
-                .bytes()
+            let bytes = shard_response
+                .bytes_with_progress(reporter)
                 .await
-                .map_err(FetchRepoDataError::from)?
+                .map_err(FetchRepoDataError::from)?;
+
+            if let Some((reporter, index)) = reporter {
+                reporter.on_download_complete(&shard_url, index);
+            }
+
+            bytes
         };
 
         let shard_bytes = decode_zst_bytes_async(shard_bytes).await?;

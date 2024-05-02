@@ -1,5 +1,6 @@
 use super::GatewayError;
 use crate::gateway::PendingOrFetched;
+use crate::Reporter;
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use rattler_conda_types::{PackageName, RepoDataRecord};
@@ -34,6 +35,7 @@ impl SubdirData {
     pub async fn get_or_fetch_package_records(
         &self,
         name: &PackageName,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
         let sender = match self.records.entry(name.clone()) {
             Entry::Vacant(entry) => {
@@ -95,7 +97,11 @@ impl SubdirData {
         let records = match tokio::spawn({
             let client = self.client.clone();
             let name = name.clone();
-            async move { client.fetch_package_records(&name).await }
+            async move {
+                client
+                    .fetch_package_records(&name, reporter.as_deref())
+                    .await
+            }
         })
         .await
         .map_err(JoinError::try_into_panic)
@@ -130,5 +136,6 @@ pub trait SubdirClient: Send + Sync {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
 }

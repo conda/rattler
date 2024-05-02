@@ -61,9 +61,11 @@
 //! ```
 
 pub mod fetch;
+mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
 mod utils;
+pub use reporter::Reporter;
 
 #[cfg(feature = "gateway")]
 mod gateway;

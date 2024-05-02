@@ -25,7 +25,7 @@ use rattler_solve::{
     resolvo, ChannelPriority, RepoDataIter, SolverImpl, SolverTask,
 };
 use reqwest::Client;
-use std::future::Future;
+use std::future::IntoFuture;
 use std::sync::Arc;
 use std::time::Instant;
 use std::{
@@ -133,11 +133,13 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let start_load_repo_data = Instant::now();
     let repo_data = wrap_in_async_progress(
         "loading repodata",
-        gateway.load_records_recursive(
-            channels,
-            [install_platform, Platform::NoArch],
-            specs.clone(),
-        ),
+        gateway
+            .query(
+                channels,
+                [install_platform, Platform::NoArch],
+                specs.clone(),
+            )
+            .recursive(true),
     )
     .await
     .context("failed to load repodata")?;
@@ -551,7 +553,7 @@ fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func
 }
 
 /// Displays a spinner with the given message while running the specified function to completion.
-async fn wrap_in_async_progress<T, F: Future<Output = T>>(
+async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
     msg: impl Into<Cow<'static, str>>,
     fut: F,
 ) -> T {
@@ -559,7 +561,7 @@ async fn wrap_in_async_progress<T, F: Future<Output = T>>(
     pb.enable_steady_tick(Duration::from_millis(100));
     pb.set_style(long_running_progress_style());
     pb.set_message(msg);
-    let result = fut.await;
+    let result = fut.into_future().await;
     pb.finish_and_clear();
     result
 }

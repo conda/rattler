@@ -2,7 +2,7 @@ use rattler_conda_types::RepoDataRecord;
 use std::iter::FusedIterator;
 use std::sync::Arc;
 
-/// A container for [`RepoDataRecord`]s that are returned from the [`Gateway`].
+/// A container for [`RepoDataRecord`]s that are returned from the [`super::Gateway`].
 ///
 /// This struct references the same memory as the `Gateway` therefor not
 /// duplicating the records in memory.
@@ -11,8 +11,8 @@ use std::sync::Arc;
 /// cheap to clone.
 #[derive(Default, Clone)]
 pub struct RepoData {
-    pub(super) shards: Vec<Arc<[RepoDataRecord]>>,
-    pub(super) len: usize,
+    pub(crate) shards: Vec<Arc<[RepoDataRecord]>>,
+    pub(crate) len: usize,
 }
 
 impl RepoData {

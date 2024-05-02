@@ -14,7 +14,7 @@ readme.workspace = true
 async-trait = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 blake2 = { workspace = true }
-bytes = { workspace = true, optional = true }
+bytes = { workspace = true }
 cache_control = { workspace = true }
 chrono = { workspace = true, features = ["std", "serde", "alloc", "clock"] }
 dashmap = { workspace = true }
@@ -75,5 +75,5 @@ rattler_conda_types = { path = "../rattler_conda_types", version = "0.22.0", def
 default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn']
 rustls-tls = ['reqwest/rustls-tls']
-sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value", "bytes"]
+sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "rayon", "tokio-rayon", "parking_lot"]

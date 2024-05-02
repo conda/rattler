@@ -2,10 +2,11 @@ use crate::fetch::FetchRepoDataError;
 use crate::gateway::subdir::SubdirClient;
 use crate::gateway::GatewayError;
 use crate::sparse::SparseRepoData;
+use crate::utils::run_blocking_task;
+use crate::Reporter;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
 use std::path::Path;
 use std::sync::Arc;
-use tokio::task::JoinError;
 
 /// A client that can be used to fetch repodata for a specific subdirectory from a local directory.
 ///
@@ -22,7 +23,7 @@ impl LocalSubdirClient {
     ) -> Result<Self, GatewayError> {
         let repodata_path = repodata_path.to_path_buf();
         let subdir = subdir.to_string();
-        let sparse = match tokio::task::spawn_blocking(move || {
+        let sparse = run_blocking_task(move || {
             SparseRepoData::new(channel, subdir, &repodata_path, None).map_err(|err| {
                 if err.kind() == std::io::ErrorKind::NotFound {
                     GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err.into()))
@@ -31,18 +32,7 @@ impl LocalSubdirClient {
                 }
             })
         })
-        .await
-        .map_err(JoinError::try_into_panic)
-        {
-            Ok(result) => result?,
-            Err(Ok(panic)) => std::panic::resume_unwind(panic),
-            Err(_) => {
-                return Err(GatewayError::IoError(
-                    "loading of the repodata was cancelled".to_string(),
-                    std::io::ErrorKind::Interrupted.into(),
-                ));
-            }
-        };
+        .await?;
 
         Ok(Self {
             sparse: Arc::new(sparse),
@@ -71,23 +61,17 @@ impl SubdirClient for LocalSubdirClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        _reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
         let sparse_repodata = self.sparse.clone();
         let name = name.clone();
-        match tokio::task::spawn_blocking(move || sparse_repodata.load_records(&name))
-            .await
-            .map_err(JoinError::try_into_panic)
-        {
-            Ok(Ok(records)) => Ok(records.into()),
-            Ok(Err(err)) => Err(GatewayError::IoError(
+        run_blocking_task(move || match sparse_repodata.load_records(&name) {
+            Ok(records) => Ok(records.into()),
+            Err(err) => Err(GatewayError::IoError(
                 "failed to extract repodata records from sparse repodata".to_string(),
                 err,
             )),
-            Err(Ok(panic)) => std::panic::resume_unwind(panic),
-            Err(Err(_)) => Err(GatewayError::IoError(
-                "loading of the records was cancelled".to_string(),
-                std::io::ErrorKind::Interrupted.into(),
-            )),
-        }
+        })
+        .await
     }
 }

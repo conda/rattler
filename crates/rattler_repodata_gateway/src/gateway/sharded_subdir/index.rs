@@ -1,8 +1,9 @@
 use super::{token::TokenClient, ShardedRepodata};
+use crate::reporter::ResponseReporterExt;
 use crate::{
     fetch::{FetchRepoDataError, RepoDataNotFoundError},
     utils::url_to_cache_filename,
-    GatewayError,
+    GatewayError, Reporter,
 };
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
@@ -30,14 +31,24 @@ pub async fn fetch_index(
     token_client: &TokenClient,
     cache_dir: &Path,
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
+    reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
     async fn from_response(
         cache_path: &Path,
         policy: CachePolicy,
         response: Response,
+        reporter: Option<(&dyn Reporter, usize)>,
     ) -> Result<ShardedRepodata, GatewayError> {
         // Read the bytes of the response
-        let bytes = response.bytes().await.map_err(FetchRepoDataError::from)?;
+        let response_url = response.url().clone();
+        let bytes = response
+            .bytes_with_progress(reporter)
+            .await
+            .map_err(FetchRepoDataError::from)?;
+
+        if let Some((reporter, index)) = reporter {
+            reporter.on_download_complete(&response_url, index);
+        }
 
         // Decompress the bytes
         let decoded_bytes = Bytes::from(super::decode_zst_bytes_async(bytes).await?);
@@ -112,7 +123,7 @@ pub async fn fetch_index(
                 ..
             } => {
                 // Get the token from the token client
-                let token = token_client.get_token().await?;
+                let token = token_client.get_token(reporter).await?;
 
                 // Determine the actual URL to use for the request
                 let shards_url = token
@@ -124,7 +135,7 @@ pub async fn fetch_index(
 
                 // Construct the actual request that we will send
                 let mut request = client
-                    .get(shards_url)
+                    .get(shards_url.clone())
                     .headers(state_request.headers().clone())
                     .build()
                     .expect("failed to build request for shard index");
@@ -134,6 +145,7 @@ pub async fn fetch_index(
                 let _request_permit = concurrent_requests_semaphore.acquire().await;
 
                 // Send the request
+                let download_reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
                 let response = client
                     .execute(request)
                     .await
@@ -154,6 +166,9 @@ pub async fn fetch_index(
                             }
                             Err(e) => {
                                 tracing::warn!("the cached shard index has been corrupted: {e}");
+                                if let Some((reporter, index)) = download_reporter {
+                                    reporter.on_download_complete(response.url(), index);
+                                }
                             }
                         }
                     }
@@ -162,7 +177,8 @@ pub async fn fetch_index(
                         drop(file);
 
                         tracing::debug!("shard index cache has become stale");
-                        return from_response(&cache_path, policy, response).await;
+                        return from_response(&cache_path, policy, response, download_reporter)
+                            .await;
                     }
                 }
             }
@@ -172,7 +188,7 @@ pub async fn fetch_index(
     tracing::debug!("fetching fresh shard index");
 
     // Get the token from the token client
-    let token = token_client.get_token().await?;
+    let token = token_client.get_token(reporter).await?;
 
     // Determine the actual URL to use for the request
     let shards_url = token
@@ -184,7 +200,7 @@ pub async fn fetch_index(
 
     // Construct the actual request that we will send
     let mut request = client
-        .get(shards_url)
+        .get(shards_url.clone())
         .build()
         .expect("failed to build request for shard index");
     token.add_to_headers(request.headers_mut());
@@ -193,6 +209,7 @@ pub async fn fetch_index(
     let _request_permit = concurrent_requests_semaphore.acquire().await;
 
     // Do a fresh requests
+    let reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
     let response = client
         .execute(
             request
@@ -212,7 +229,7 @@ pub async fn fetch_index(
     };
 
     let policy = CachePolicy::new(&canonical_request, &response);
-    from_response(&cache_path, policy, response).await
+    from_response(&cache_path, policy, response, reporter).await
 }
 
 /// Writes the shard index cache to disk.

@@ -1,4 +1,5 @@
 use crate::fetch::FetchRepoDataError;
+use crate::utils::Cancelled;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -15,4 +16,13 @@ pub enum GatewayError {
 
     #[error("{0}")]
     Generic(String),
+
+    #[error("the operation was cancelled")]
+    Cancelled,
+}
+
+impl From<Cancelled> for GatewayError {
+    fn from(_: Cancelled) -> Self {
+        GatewayError::Cancelled
+    }
 }

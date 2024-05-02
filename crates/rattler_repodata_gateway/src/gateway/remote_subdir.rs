@@ -1,6 +1,7 @@
 use super::{local_subdir::LocalSubdirClient, GatewayError, SourceConfig};
 use crate::fetch::{fetch_repo_data, FetchRepoDataOptions, Variant};
 use crate::gateway::subdir::SubdirClient;
+use crate::Reporter;
 use rattler_conda_types::{Channel, PackageName, Platform, RepoDataRecord};
 use reqwest_middleware::ClientWithMiddleware;
 use std::{path::PathBuf, sync::Arc};
@@ -52,7 +53,8 @@ impl SubdirClient for RemoteSubdirClient {
     async fn fetch_package_records(
         &self,
         name: &PackageName,
+        reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
-        self.sparse.fetch_package_records(name).await
+        self.sparse.fetch_package_records(name, reporter).await
     }
 }
