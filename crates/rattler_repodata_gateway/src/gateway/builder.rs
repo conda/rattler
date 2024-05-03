@@ -24,6 +24,12 @@ impl GatewayBuilder {
     /// Set the client to use for fetching repodata.
     #[must_use]
     pub fn with_client(mut self, client: ClientWithMiddleware) -> Self {
+        self.set_client(client);
+        self
+    }
+
+    /// Set the client to use for fetching repodata.
+    pub fn set_client(&mut self, client: ClientWithMiddleware) -> &mut Self {
         self.client = Some(client);
         self
     }
@@ -31,6 +37,12 @@ impl GatewayBuilder {
     /// Set the channel configuration to use for fetching repodata.
     #[must_use]
     pub fn with_channel_config(mut self, channel_config: ChannelConfig) -> Self {
+        self.set_channel_config(channel_config);
+        self
+    }
+
+    /// Sets the channel configuration to use for fetching repodata.
+    pub fn set_channel_config(&mut self, channel_config: ChannelConfig) -> &mut Self {
         self.channel_config = channel_config;
         self
     }
@@ -38,6 +50,12 @@ impl GatewayBuilder {
     /// Set the directory to use for caching repodata.
     #[must_use]
     pub fn with_cache_dir(mut self, cache: impl Into<PathBuf>) -> Self {
+        self.set_cache_dir(cache);
+        self
+    }
+
+    /// Set the directory to use for caching repodata.
+    pub fn set_cache_dir(&mut self, cache: impl Into<PathBuf>) -> &mut Self {
         self.cache = Some(cache.into());
         self
     }
@@ -45,6 +63,12 @@ impl GatewayBuilder {
     /// Sets the maximum number of concurrent HTTP requests to make.
     #[must_use]
     pub fn with_max_concurrent_requests(mut self, max_concurrent_requests: usize) -> Self {
+        self.set_max_concurrent_requests(max_concurrent_requests);
+        self
+    }
+
+    /// Sets the maximum number of concurrent HTTP requests to make.
+    pub fn set_max_concurrent_requests(&mut self, max_concurrent_requests: usize) -> &mut Self {
         self.max_concurrent_requests = Some(max_concurrent_requests);
         self
     }

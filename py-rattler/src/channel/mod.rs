@@ -39,7 +39,7 @@ impl PyChannelConfig {
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct PyChannel {
     pub(crate) inner: Channel,
 }

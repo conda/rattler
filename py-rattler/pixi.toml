@@ -16,6 +16,7 @@ license = "BSD-3-Clause"
 [feature.build.dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
+rust = "~=1.77"
 
 [feature.build.tasks]
 build = "PIP_REQUIRE_VIRTUALENV=false maturin develop"
@@ -63,6 +64,6 @@ docs = { cmd = "mkdocs serve" }
 build-docs = { cmd = "mkdocs build" }
 
 [environments]
-build = [ "build" ]
-test = [ "test" ]
-docs = [ "docs" ]
+build = { features = ["build"], solve-group = "default" }
+test = { features = ["build", "test"], solve-group = "default" }
+docs = ["docs"]
