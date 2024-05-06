@@ -6,8 +6,11 @@ from dataclasses import dataclass
 
 from rattler.rattler import PyGateway, PySourceConfig, PyMatchSpec
 
-from rattler import Channel, MatchSpec, RepoDataRecord, PackageName, Platform
-from rattler.platform.platform import PlatformLiteral
+from rattler.channel import Channel
+from rattler.match_spec import MatchSpec
+from rattler.repo_data.record import RepoDataRecord
+from rattler.platform import Platform, PlatformLiteral
+from rattler.package.package_name import PackageName
 
 CacheAction = Literal["cache-or-fetch", "use-cache-only", "force-cache-only", "no-cache"]
 
@@ -22,9 +25,22 @@ class SourceConfig:
     """
 
     jlap_enabled: bool = True
+    """Whether the JLAP compression is enabled or not."""
+
     zstd_enabled: bool = True
+    """Whether the ZSTD compression is enabled or not."""
+
     bz2_enabled: bool = True
+    """Whether the BZ2 compression is enabled or not."""
+
     cache_action: CacheAction = "cache-or-fetch"
+    """How to interact with the cache.
+    
+    * `'cache-or-fetch'` (default): Use the cache if its up to date or fetch from the URL if there is no valid cached value.
+    * `'use-cache-only'`: Only use the cache, but error out if the cache is not up to date
+    * `'force-cache-only'`: Only use the cache, ignore whether or not it is up to date.
+    * `'no-cache'`: Do not use the cache even if there is an up to date entry
+    """
 
     def _into_py(self) -> PySourceConfig:
         """
@@ -48,16 +64,28 @@ class SourceConfig:
 
 class Gateway:
     """
-    An object that manages repodata and allows efficiently querying different
-    channels for it.
+    The gateway manages all the quircks and complex bits of efficiently acquiring
+    repodata. It implements all the necessary logic to fetch the repodata from a
+    remote server, cache it locally and convert it into python objects.
+
+    The gateway can also easily be used concurrently, as it is designed to be
+    thread-safe. When two threads are querying the same channel at the same time,
+    their requests are coallesced into a single request. This is done to reduce the
+    number of requests made to the remote server and reduce the overal memory usage.
+
+    The gateway caches the repodata internally, so if the same channel is queried
+    multiple times the records will only be fetched once. However, the conversion
+    of the records to a python object is done every time the query method is called.
+    Therefor, instead of requesting records directly, its more efficient to pass the
+    gateway itself to methods that accepts it.
     """
 
     def __init__(
-            self,
-            cache_dir: Optional[os.PathLike[str]] = None,
-            default_config: Optional[SourceConfig] = None,
-            per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
-            max_concurrent_requests: int = 100,
+        self,
+        cache_dir: Optional[os.PathLike[str]] = None,
+        default_config: Optional[SourceConfig] = None,
+        per_channel_config: Optional[dict[Channel | str, SourceConfig]] = None,
+        max_concurrent_requests: int = 100,
     ) -> None:
         """
         Arguments:
@@ -81,19 +109,18 @@ class Gateway:
             cache_dir=cache_dir,
             default_config=default_config._into_py(),
             per_channel_config={
-                channel._channel if isinstance(channel, Channel) else Channel(
-                    channel)._channel: config._into_py()
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel: config._into_py()
                 for channel, config in (per_channel_config or {}).items()
             },
             max_concurrent_requests=max_concurrent_requests,
         )
 
     async def query(
-            self,
-            channels: List[Channel | str],
-            platforms: List[Platform | PlatformLiteral],
-            specs: List[MatchSpec | PackageName | str],
-            recursive: bool = True,
+        self,
+        channels: List[Channel | str],
+        platforms: List[Platform | PlatformLiteral],
+        specs: List[MatchSpec | PackageName | str],
+        recursive: bool = True,
     ) -> List[List[RepoDataRecord]]:
         """Queries the gateway for repodata.
 
@@ -129,21 +156,22 @@ class Gateway:
         >>> records = asyncio.run(gateway.query(["conda-forge"], ["linux-aarch64"], ["python"]))
         >>> assert len(records) == 1
         >>>
+        ```
         """
         py_records = await self._gateway.query(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for
-                channel in channels
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
             ],
-            platforms=[platform._inner if isinstance(platform, Platform) else Platform(platform)._inner for platform in platforms],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True)
-                   for spec in specs],
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
             recursive=recursive,
         )
 
         # Convert the records into python objects
-        return [[RepoDataRecord._from_py_record(record) for record in records] for records
-                in py_records]
+        return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
     def __repr__(self) -> str:
         """
