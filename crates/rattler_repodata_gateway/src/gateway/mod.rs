@@ -65,7 +65,7 @@ impl Gateway {
         GatewayBuilder::default()
     }
 
-    /// Constructs a new [`GatewayQuery`] which can be used to query repodata records.
+    /// Constructs a new `GatewayQuery` which can be used to query repodata records.
     pub fn query<AsChannel, ChannelIter, PlatformIter, PackageNameIter, IntoMatchSpec>(
         &self,
         channels: ChannelIter,
