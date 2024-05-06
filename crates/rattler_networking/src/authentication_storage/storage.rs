@@ -63,11 +63,13 @@ impl AuthenticationStorage {
                 auth_file
             );
 
-            let backend = FileStorage::new(path.to_path_buf()).map_err(|e| anyhow!(
-                "Error creating file storage backend for RATTLER_AUTH_FILE ({}): {}",
-                auth_file,
-                e
-            ))?;
+            let backend = FileStorage::new(path.to_path_buf()).map_err(|e| {
+                anyhow!(
+                    "Error creating file storage backend for RATTLER_AUTH_FILE ({}): {}",
+                    auth_file,
+                    e
+                )
+            })?;
 
             storage.add_backend(Arc::from(backend));
             Ok(storage)
