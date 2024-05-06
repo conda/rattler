@@ -56,12 +56,20 @@ impl SubdirData {
                         let sender = sender.upgrade();
 
                         if let Some(sender) = sender {
+                            // Create a receiver before we drop the entry. While we hold on to
+                            // the entry we have exclusive access to it, this means the task
+                            // currently fetching the package will not be able to store a value
+                            // until we drop the entry.
+                            // By creating the receiver here we ensure that we are subscribed
+                            // before the other tasks sends a value over the channel.
+                            let mut receiver = sender.subscribe();
+
                             // Explicitly drop the entry, so we don't block any other tasks.
                             drop(entry);
 
                             // The sender is still active, so we can wait for the records to be
                             // fetched.
-                            return match sender.subscribe().recv().await {
+                            return match receiver.recv().await {
                                 Ok(records) => Ok(records),
                                 Err(_) => {
                                     // If this happens the sender was dropped. We simply have to

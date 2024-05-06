@@ -28,6 +28,7 @@ use std::{
 };
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
+use tracing::instrument;
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -114,6 +115,7 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
+    #[instrument(skip(self, reporter), err)]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
@@ -139,12 +141,20 @@ impl GatewayInner {
                         let sender = sender.upgrade();
 
                         if let Some(sender) = sender {
+                            // Create a receiver before we drop the entry. While we hold on to
+                            // the entry we have exclusive access to it, this means the task
+                            // currently fetching the subdir will not be able to store a value
+                            // until we drop the entry.
+                            // By creating the receiver here we ensure that we are subscribed
+                            // before the other tasks sends a value over the channel.
+                            let mut receiver = sender.subscribe();
+
                             // Explicitly drop the entry, so we don't block any other tasks.
                             drop(entry);
 
                             // The sender is still active, so we can wait for the subdir to be
                             // created.
-                            return match sender.subscribe().recv().await {
+                            return match receiver.recv().await {
                                 Ok(subdir) => Ok(subdir),
                                 Err(_) => {
                                     // If this happens the sender was dropped.
