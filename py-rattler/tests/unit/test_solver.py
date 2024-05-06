@@ -3,11 +3,11 @@ import pytest
 from rattler import (
     solve,
     ChannelPriority,
-    RepoDataRecord,
+    RepoDataRecord, Channel, Gateway,
 )
 
 @pytest.mark.asyncio
-async def test_solve(gateway, conda_forge_channel):
+async def test_solve(gateway: Gateway, conda_forge_channel: Channel) -> None:
     solved_data = await solve(
         [conda_forge_channel],
         ["linux-64"],
@@ -21,7 +21,7 @@ async def test_solve(gateway, conda_forge_channel):
 
 
 @pytest.mark.asyncio
-async def test_solve_channel_priority_disabled(gateway, pytorch_channel, conda_forge_channel):
+async def test_solve_channel_priority_disabled(gateway: Gateway, pytorch_channel: Channel, conda_forge_channel: Channel) -> None:
     solved_data = await solve(
         [conda_forge_channel, pytorch_channel],
         ["linux-64"],

@@ -1,11 +1,13 @@
 import os
+from pathlib import Path
+
 import pytest
 
-from rattler import solve, link
+from rattler import solve, link, Gateway, Channel
 
 
 @pytest.mark.asyncio
-async def test_link(gateway, conda_forge_channel, tmp_path):
+async def test_link(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Path) -> None:
     cache_dir = tmp_path / "cache"
     env_dir = tmp_path / "env"
 
