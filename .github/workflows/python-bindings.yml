@@ -44,9 +44,9 @@ jobs:
       - name: Format and Lint
         run: |
           cd py-rattler
-          pixi run lint
-          pixi run fmt-check
+          pixi run -e test lint
+          pixi run -e test fmt-check
       - name: Run tests
         run: |
           cd py-rattler
-          pixi run test
+          pixi run -e test test
