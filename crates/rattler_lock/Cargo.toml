@@ -1,6 +1,6 @@
 [package]
 name = "rattler_lock"
-version = "0.22.3"
+version = "0.22.4"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for conda lock"
@@ -23,6 +23,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
+serde_repr = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 purl = { workspace = true, features = ["serde"] }

@@ -17,6 +17,8 @@ def test_load_prefix_record() -> None:
     assert r.features is None
     assert r.file_name == "tk-8.6.12-h8ffe710_0.tar.bz2"
     assert len(r.files) == len(r.paths_data.paths) == 1099
+    assert r.subdir == "win-64"
+    assert r.noarch is None
     paths = r.paths_data
     assert isinstance(paths, PrefixPaths)
     paths_with_placeholder = 0

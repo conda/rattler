@@ -4,8 +4,8 @@ use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
-use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
+use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
 use regex::Regex;
 use std::borrow::Cow;
@@ -102,6 +102,10 @@ pub enum LinkFileError {
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
+
+    /// The hash of the file could not be computed.
+    #[error("failed to compute the sha256 hash of the file")]
+    FailedToComputeSha(#[source] std::io::Error),
 }
 
 /// The successful result of calling [`link_file`].
@@ -246,9 +250,16 @@ pub fn link_file(
                 }
 
                 // The file on disk changed from the original file so the hash and file size
-                // also became invalid.
-                sha256 = None;
-                file_size = None;
+                // also became invalid. Let's recompute them.
+                sha256 = Some(
+                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                        .map_err(LinkFileError::FailedToComputeSha)?,
+                );
+                file_size = Some(
+                    std::fs::symlink_metadata(&destination_path)
+                        .map_err(LinkFileError::FailedToOpenDestinationFile)?
+                        .len(),
+                );
             }
         }
         LinkMethod::Patched(*file_mode)
@@ -266,10 +277,20 @@ pub fn link_file(
     let sha256 = if let Some(sha256) = sha256 {
         sha256
     } else if let Some(sha256) = path_json_entry.sha256 {
+        // Note: the paths.json file contains the sha256 hash of the "linked to" file.
+        //       However, if we replace the prefix in that linked-to file, then the hash is currently
+        //       not updated accordingly. Mamba and Conda have a post-processing step where they adjust the hash.
+        //       I am not sure it's necessary though.
         sha256
-    } else {
+    } else if path_json_entry.path_type == PathType::HardLink {
         rattler_digest::compute_file_digest::<Sha256>(&destination_path)
-            .map_err(LinkFileError::FailedToOpenDestinationFile)?
+            .map_err(LinkFileError::FailedToComputeSha)?
+    } else {
+        // This is either a softlink or a directory.
+        // Computing the hash for a directory is not possible.
+        // For a softlink - we can't be sure that the file it points to is the same as the one in the cache.
+        // This hash is `0000...0000`
+        Sha256Hash::default()
     };
 
     // Compute the final file size if we didnt already.
@@ -420,7 +441,6 @@ fn symlink_to_destination(
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
-
     loop {
         match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(LinkMethod::Softlink),
