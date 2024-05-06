@@ -749,7 +749,7 @@ async fn find_installed_packages(
     {
         let entry = entry?;
         let path = entry.path();
-        if path.ends_with(".json") {
+        if !path.ends_with(".json") {
             continue;
         }
 

@@ -276,11 +276,19 @@ pub fn link_file(
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
+    } else if link_method == LinkMethod::Softlink {
+        // we hash the content of the symlink file. Note that this behavior is different from
+        // conda or mamba (where the target of the symlink is hashed). However, hashing the target
+        // of the symlink is more tricky in our case as we link everything in parallel and would have to
+        // potentially "wait" for dependencies to be available.
+        // This needs to be taken into account when verifying an installation.
+        let linked_path = destination_path
+            .read_link()
+            .map_err(LinkFileError::FailedToReadSymlink)?;
+        rattler_digest::compute_bytes_digest::<Sha256>(
+            linked_path.as_os_str().to_string_lossy().as_bytes(),
+        )
     } else if let Some(sha256) = path_json_entry.sha256 {
-        // Note: the paths.json file contains the sha256 hash of the "linked to" file.
-        //       However, if we replace the prefix in that linked-to file, then the hash is currently
-        //       not updated accordingly. Mamba and Conda have a post-processing step where they adjust the hash.
-        //       I am not sure it's necessary though.
         sha256
     } else if path_json_entry.path_type == PathType::HardLink {
         rattler_digest::compute_file_digest::<Sha256>(&destination_path)
@@ -288,7 +296,6 @@ pub fn link_file(
     } else {
         // This is either a softlink or a directory.
         // Computing the hash for a directory is not possible.
-        // For a softlink - we can't be sure that the file it points to is the same as the one in the cache.
         // This hash is `0000...0000`
         Sha256Hash::default()
     };
