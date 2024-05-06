@@ -399,4 +399,33 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_rattler_auth_file_env_var_handling() -> anyhow::Result<()> {
+        let tdir = tempdir()?;
+
+        let storage = temp_env::with_var(
+            "RATTLER_AUTH_FILE",
+            Some(
+                tdir.path()
+                    .to_path_buf()
+                    .join("auth.json")
+                    .to_str()
+                    .unwrap(),
+            ),
+            || AuthenticationStorage::from_env().unwrap(),
+        );
+
+        let host = "test.example.com";
+        let authentication = Authentication::CondaToken("testtoken".to_string());
+        storage.store(host, &authentication)?;
+
+        let file = tdir.path().join("auth.json");
+        assert_eq!(
+            std::fs::read_to_string(file)?,
+            "{\"test.example.com\":{\"CondaToken\":\"testtoken\"}}"
+        );
+
+        Ok(())
+    }
 }
