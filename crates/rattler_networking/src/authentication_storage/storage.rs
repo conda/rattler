@@ -29,23 +29,6 @@ impl Default for AuthenticationStorage {
     fn default() -> Self {
         let mut storage = Self::new();
 
-        if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
-            let path = std::path::Path::new(&auth_file);
-
-            tracing::info!(
-                "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
-                auth_file
-            );
-
-            let backend = FileStorage::new(path.to_path_buf()).unwrap_or_else(|e| {
-                tracing::error!("Failed to create file storage at {}: {}", auth_file, e);
-                FileStorage::default()
-            });
-
-            storage.add_backend(Arc::from(backend));
-            return storage;
-        }
-
         storage.add_backend(Arc::from(KeyringAuthenticationStorage::default()));
         storage.add_backend(Arc::from(FileStorage::default()));
         storage.add_backend(Arc::from(NetRcStorage::from_env().unwrap_or_else(
@@ -65,6 +48,31 @@ impl AuthenticationStorage {
         Self {
             backends: vec![],
             cache: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Create a new authentication storage with the default backends
+    /// respecting the `RATTLER_AUTH_FILE` environment variable
+    pub fn from_env() -> Result<Self> {
+        if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
+            let mut storage = Self::new();
+            let path = std::path::Path::new(&auth_file);
+
+            tracing::info!(
+                "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
+                auth_file
+            );
+
+            let backend = FileStorage::new(path.to_path_buf()).map_err(|e| anyhow!(
+                "Error creating file storage backend for RATTLER_AUTH_FILE ({}): {}",
+                auth_file,
+                e
+            ))?;
+
+            storage.add_backend(Arc::from(backend));
+            Ok(storage)
+        } else {
+            Ok(Self::default())
         }
     }
 
