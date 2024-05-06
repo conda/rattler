@@ -57,6 +57,7 @@ use version::PyVersion;
 
 use pyo3::prelude::*;
 
+use crate::error::GatewayException;
 use index::py_index;
 use linker::py_link;
 use meta::get_rattler_version;
@@ -68,6 +69,7 @@ use virtual_package::PyVirtualPackage;
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
+#[derive(Clone)]
 pub struct Wrap<T>(pub T);
 
 impl<T> Deref for Wrap<T> {
@@ -208,6 +210,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     .unwrap();
 
     m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
+
+    m.add("GatewayError", py.get_type::<GatewayException>())
         .unwrap();
 
     Ok(())

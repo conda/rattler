@@ -1,6 +1,11 @@
+use crate::error::PyRattlerError;
+use crate::match_spec::PyMatchSpec;
+use crate::platform::PyPlatform;
+use crate::record::PyRecord;
 use crate::{PyChannel, Wrap};
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyclass, pymethods, FromPyObject, PyAny, PyResult};
+use pyo3::{pyclass, pymethods, FromPyObject, PyAny, PyResult, Python};
+use pyo3_asyncio::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::CacheAction;
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig};
 use std::collections::HashMap;
@@ -34,12 +39,13 @@ impl PyGateway {
         per_channel_config: HashMap<PyChannel, PySourceConfig>,
         cache_dir: Option<PathBuf>,
     ) -> PyResult<Self> {
-        let mut channel_config = ChannelConfig::default();
-        channel_config.default = default_config.into();
-        channel_config.per_channel = per_channel_config
-            .into_iter()
-            .map(|(k, v)| (k.into(), v.into()))
-            .collect();
+        let channel_config = ChannelConfig {
+            default: default_config.into(),
+            per_channel: per_channel_config
+                .into_iter()
+                .map(|(k, v)| (k.into(), v.into()))
+                .collect(),
+        };
 
         let mut gateway = Gateway::builder()
             .with_max_concurrent_requests(max_concurrent_requests)
@@ -51,6 +57,36 @@ impl PyGateway {
 
         Ok(Self {
             inner: gateway.finish(),
+        })
+    }
+
+    pub fn query<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+        platforms: Vec<PyPlatform>,
+        specs: Vec<PyMatchSpec>,
+        recursive: bool,
+    ) -> PyResult<&'a PyAny> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            let repodatas = gateway
+                .query(channels, platforms.into_iter().map(|p| p.inner), specs)
+                .recursive(recursive)
+                .execute()
+                .await
+                .map_err(PyRattlerError::from)?;
+
+            // Convert the records into a list of lists
+            Ok(repodatas
+                .into_iter()
+                .map(|r| {
+                    r.into_iter()
+                        .cloned()
+                        .map(PyRecord::from)
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>())
         })
     }
 }
