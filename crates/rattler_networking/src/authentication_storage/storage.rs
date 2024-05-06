@@ -52,7 +52,9 @@ impl AuthenticationStorage {
     }
 
     /// Create a new authentication storage with the default backends
-    /// respecting the `RATTLER_AUTH_FILE` environment variable
+    /// respecting the `RATTLER_AUTH_FILE` environment variable.
+    /// If the variable is set, the file storage backend will be used
+    /// with the path specified in the variable
     pub fn from_env() -> Result<Self> {
         if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
             let mut storage = Self::new();
