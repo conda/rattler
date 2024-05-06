@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.19.10"
+version = "0.19.11"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -32,7 +32,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 pin-project-lite = { workspace = true }
 rattler_digest = { path="../rattler_digest", version = "0.19.3", default-features = false, features = ["tokio", "serde"] }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.22.0", default-features = false, optional = true }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.22.1", default-features = false, optional = true }
 memmap2 = { workspace = true, optional = true }
 ouroboros = { workspace = true, optional = true }
 serde_with = { workspace = true }
@@ -40,7 +40,7 @@ superslice = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 json-patch = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
-rattler_networking = { path="../rattler_networking", version = "0.20.4", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.5", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
