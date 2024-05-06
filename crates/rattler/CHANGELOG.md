@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/mamba-org/rattler/compare/rattler-v0.23.2...rattler-v0.24.0) - 2024-05-06
+
+### Fixed
+- use the output of `readlink` as hash for softlinks ([#643](https://github.com/mamba-org/rattler/pull/643))
+- sha computation of symlinks was failing sometimes ([#641](https://github.com/mamba-org/rattler/pull/641))
+
 ## [0.23.2](https://github.com/mamba-org/rattler/compare/rattler-v0.23.1...rattler-v0.23.2) - 2024-04-30
 
 ### Other

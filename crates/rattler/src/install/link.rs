@@ -4,8 +4,8 @@ use memmap2::Mmap;
 use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
 use rattler_conda_types::Platform;
-use rattler_digest::HashingWriter;
 use rattler_digest::Sha256;
+use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
 use regex::Regex;
 use std::borrow::Cow;
@@ -102,6 +102,10 @@ pub enum LinkFileError {
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
+
+    /// The hash of the file could not be computed.
+    #[error("failed to compute the sha256 hash of the file")]
+    FailedToComputeSha(#[source] std::io::Error),
 }
 
 /// The successful result of calling [`link_file`].
@@ -246,9 +250,16 @@ pub fn link_file(
                 }
 
                 // The file on disk changed from the original file so the hash and file size
-                // also became invalid.
-                sha256 = None;
-                file_size = None;
+                // also became invalid. Let's recompute them.
+                sha256 = Some(
+                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                        .map_err(LinkFileError::FailedToComputeSha)?,
+                );
+                file_size = Some(
+                    std::fs::symlink_metadata(&destination_path)
+                        .map_err(LinkFileError::FailedToOpenDestinationFile)?
+                        .len(),
+                );
             }
         }
         LinkMethod::Patched(*file_mode)
@@ -265,11 +276,28 @@ pub fn link_file(
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
+    } else if link_method == LinkMethod::Softlink {
+        // we hash the content of the symlink file. Note that this behavior is different from
+        // conda or mamba (where the target of the symlink is hashed). However, hashing the target
+        // of the symlink is more tricky in our case as we link everything in parallel and would have to
+        // potentially "wait" for dependencies to be available.
+        // This needs to be taken into account when verifying an installation.
+        let linked_path = destination_path
+            .read_link()
+            .map_err(LinkFileError::FailedToReadSymlink)?;
+        rattler_digest::compute_bytes_digest::<Sha256>(
+            linked_path.as_os_str().to_string_lossy().as_bytes(),
+        )
     } else if let Some(sha256) = path_json_entry.sha256 {
         sha256
-    } else {
+    } else if path_json_entry.path_type == PathType::HardLink {
         rattler_digest::compute_file_digest::<Sha256>(&destination_path)
-            .map_err(LinkFileError::FailedToOpenDestinationFile)?
+            .map_err(LinkFileError::FailedToComputeSha)?
+    } else {
+        // This is either a softlink or a directory.
+        // Computing the hash for a directory is not possible.
+        // This hash is `0000...0000`
+        Sha256Hash::default()
     };
 
     // Compute the final file size if we didnt already.
@@ -420,7 +448,6 @@ fn symlink_to_destination(
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
-
     loop {
         match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(LinkMethod::Softlink),

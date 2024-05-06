@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.5](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.4...rattler_networking-v0.20.5) - 2024-05-06
+
+### Added
+- respect `RATTLER_AUTH_FILE` when using AuthenticationStorage::default() ([#636](https://github.com/mamba-org/rattler/pull/636))
+
 ## [0.20.4](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.3...rattler_networking-v0.20.4) - 2024-04-30
 
 ### Other

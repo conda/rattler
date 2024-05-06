@@ -9,6 +9,7 @@ mod match_spec;
 mod meta;
 mod nameless_match_spec;
 mod networking;
+mod no_arch_type;
 mod package_name;
 mod paths_json;
 mod platform;
@@ -42,6 +43,7 @@ use lock::{
 use match_spec::PyMatchSpec;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
+use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
@@ -117,6 +119,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPrefixPathsEntry>().unwrap();
     m.add_class::<PyPrefixPathType>().unwrap();
     m.add_class::<PyPrefixPaths>().unwrap();
+
+    m.add_class::<PyNoArchType>().unwrap();
 
     m.add_class::<PyLockFile>().unwrap();
     m.add_class::<PyEnvironment>().unwrap();
