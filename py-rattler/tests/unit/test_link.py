@@ -13,13 +13,13 @@ async def test_link(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Pa
 
     solved_data = await solve(
         [conda_forge_channel],
-        ["linux-64"],
-        ["xtensor"],
+        ["noarch"],
+        ["conda-forge-pinning"],
         gateway,
     )
 
     await link(solved_data, env_dir, cache_dir)
 
-    assert os.path.exists(env_dir / "include/xtensor.hpp")
-    assert os.path.exists(env_dir / "include/xtensor")
-    assert os.path.exists(env_dir / "include/xtl")
+    assert os.path.exists(env_dir / "conda_build_config.yaml")
+    assert os.path.exists(env_dir / "share/conda-forge/migrations/pypy37.yaml")
+    assert os.path.exists(env_dir / "share/conda-forge/migrations/pypy37-windows.yaml")

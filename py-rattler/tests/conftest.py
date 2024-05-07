@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -10,11 +11,13 @@ def gateway() -> Gateway:
     return Gateway()
 
 @pytest.fixture
-def conda_forge_channel() -> Channel:
-    data_dir = os.path.join(os.path.dirname(__file__), "../../test-data/channels/conda-forge")
-    return Channel(data_dir)
+def test_data_dir() -> str:
+    return os.path.normpath(os.path.join(os.path.dirname(__file__), "../../test-data"))
 
 @pytest.fixture
-def pytorch_channel() ->Channel:
-    data_dir = os.path.join(os.path.dirname(__file__), "../../test-data/channels/pytorch")
-    return Channel(data_dir)
+def conda_forge_channel(test_data_dir: str) -> Channel:
+    return Channel(os.path.join(test_data_dir, "channels/conda-forge"))
+
+@pytest.fixture
+def pytorch_channel(test_data_dir: str) -> Channel:
+    return Channel(os.path.join(test_data_dir, "channels/conda-pytorch"))
