@@ -81,7 +81,7 @@ impl Gateway {
         IntoMatchSpec: Into<MatchSpec>,
     {
         GatewayQuery::new(
-            self.clone(),
+            self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
             specs.into_iter().map(Into::into).collect(),

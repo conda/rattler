@@ -1,4 +1,4 @@
-use super::{subdir::Subdir, BarrierCell, Gateway, GatewayError, RepoData};
+use super::{subdir::Subdir, BarrierCell, GatewayInner, GatewayError, RepoData};
 use crate::Reporter;
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
@@ -23,7 +23,7 @@ use std::{
 #[derive(Clone)]
 pub struct GatewayQuery {
     /// The gateway that manages all resources
-    gateway: Gateway,
+    gateway: Arc<GatewayInner>,
 
     /// The channels to fetch from
     channels: Vec<Channel>,
@@ -45,7 +45,7 @@ impl GatewayQuery {
     /// Constructs a new instance. This should not be called directly, use
     /// [`Gateway::query`] instead.
     pub(super) fn new(
-        gateway: Gateway,
+        gateway: Arc<GatewayInner>,
         channels: Vec<Channel>,
         platforms: Vec<Platform>,
         specs: Vec<MatchSpec>,
@@ -102,7 +102,7 @@ impl GatewayQuery {
             let barrier = Arc::new(BarrierCell::new());
             subdirs.push((channel_idx, barrier.clone()));
 
-            let inner = self.gateway.inner.clone();
+            let inner = self.gateway.clone();
             let reporter = self.reporter.clone();
             pending_subdirs.push(async move {
                 match inner

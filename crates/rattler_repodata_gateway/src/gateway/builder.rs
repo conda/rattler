@@ -86,7 +86,6 @@ impl GatewayBuilder {
         });
 
         let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
-
         Gateway {
             inner: Arc::new(GatewayInner {
                 subdirs: DashMap::default(),
