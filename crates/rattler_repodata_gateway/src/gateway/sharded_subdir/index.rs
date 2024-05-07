@@ -1,13 +1,9 @@
 use super::{token::TokenClient, ShardedRepodata};
 use crate::reporter::ResponseReporterExt;
-use crate::{
-    fetch::{FetchRepoDataError, RepoDataNotFoundError},
-    utils::url_to_cache_filename,
-    GatewayError, Reporter,
-};
+use crate::{utils::url_to_cache_filename, GatewayError, Reporter};
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
-use http::{HeaderMap, Method, StatusCode, Uri};
+use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
@@ -41,10 +37,7 @@ pub async fn fetch_index(
     ) -> Result<ShardedRepodata, GatewayError> {
         // Read the bytes of the response
         let response_url = response.url().clone();
-        let bytes = response
-            .bytes_with_progress(reporter)
-            .await
-            .map_err(FetchRepoDataError::from)?;
+        let bytes = response.bytes_with_progress(reporter).await?;
 
         if let Some((reporter, index)) = reporter {
             reporter.on_download_complete(&response_url, index);
@@ -56,8 +49,16 @@ pub async fn fetch_index(
         // Write the cache to disk if the policy allows it.
         let cache_fut = if policy.is_storable() {
             write_shard_index_cache(cache_path, policy, decoded_bytes.clone())
-                .map_err(FetchRepoDataError::IoError)
                 .map_ok(Some)
+                .map_err(|e| {
+                    GatewayError::IoError(
+                        format!(
+                            "failed to create temporary file to cache shard index to {}",
+                            cache_path.display()
+                        ),
+                        e,
+                    )
+                })
                 .left_future()
         } else {
             // Otherwise delete the file
@@ -67,7 +68,13 @@ pub async fn fetch_index(
                         if e.kind() == std::io::ErrorKind::NotFound {
                             Ok(None)
                         } else {
-                            Err(FetchRepoDataError::IoError(e))
+                            Err(GatewayError::IoError(
+                                format!(
+                                    "failed to remove cached shard index at {}",
+                                    cache_path.display()
+                                ),
+                                e,
+                            ))
                         }
                     },
                     |_| Ok(None),
@@ -78,16 +85,24 @@ pub async fn fetch_index(
         // Parse the bytes
         let parse_fut = tokio_rayon::spawn(move || rmp_serde::from_slice(&decoded_bytes))
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-            .map_err(FetchRepoDataError::IoError);
+            .map_err(|e| {
+                GatewayError::IoError(
+                    format!("failed to parse shard index from {response_url}"),
+                    e,
+                )
+            });
 
         // Parse and write the file to disk concurrently
         let (temp_file, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
 
         // Persist the cache if succesfully updated the cache.
         if let Some(temp_file) = temp_file {
-            temp_file
-                .persist(cache_path)
-                .map_err(FetchRepoDataError::from)?;
+            temp_file.persist(cache_path).map_err(|e| {
+                GatewayError::IoError(
+                    format!("failed to persist shard index to {}", cache_path.display()),
+                    e.into(),
+                )
+            })?;
         }
 
         Ok(sharded_index)
@@ -146,10 +161,7 @@ pub async fn fetch_index(
 
                 // Send the request
                 let download_reporter = reporter.map(|r| (r, r.on_download_start(&shards_url)));
-                let response = client
-                    .execute(request)
-                    .await
-                    .map_err(FetchRepoDataError::from)?;
+                let response = client.execute(request).await?;
 
                 match cache_header.policy.after_response(
                     &state_request,
@@ -216,17 +228,7 @@ pub async fn fetch_index(
                 .try_clone()
                 .expect("failed to clone initial request"),
         )
-        .await
-        .map_err(FetchRepoDataError::from)?;
-
-    // Check if the response was successful.
-    if response.status() == StatusCode::NOT_FOUND {
-        return Err(GatewayError::FetchRepoDataError(
-            FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
-                response.error_for_status().unwrap_err(),
-            )),
-        ));
-    };
+        .await?;
 
     let policy = CachePolicy::new(&canonical_request, &response);
     from_response(&cache_path, policy, response, reporter).await

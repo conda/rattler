@@ -1,9 +1,9 @@
+use ::url::Url;
 pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
 pub use flock::LockedFile;
 use std::fmt::Write;
 use tokio::task::JoinError;
-use url::Url;
 
 mod encoding;
 

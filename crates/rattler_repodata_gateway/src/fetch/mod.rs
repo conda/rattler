@@ -32,7 +32,7 @@ pub mod jlap;
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
     #[error(transparent)]
-    HttpError(reqwest_middleware::Error),
+    HttpError(reqwest::Error),
 
     /// There was a file system error
     #[error(transparent)]
@@ -88,15 +88,9 @@ impl From<reqwest::Error> for FetchRepoDataError {
     }
 }
 
-impl From<reqwest_middleware::Error> for RepoDataNotFoundError {
-    fn from(err: reqwest_middleware::Error) -> Self {
-        Self::HttpError(err.redact())
-    }
-}
-
 impl From<reqwest::Error> for RepoDataNotFoundError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(err.redact().into())
+        Self::HttpError(err.redact())
     }
 }
 

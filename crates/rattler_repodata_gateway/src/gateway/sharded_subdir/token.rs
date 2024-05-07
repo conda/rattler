@@ -100,7 +100,6 @@ impl TokenClient {
                 .send()
                 .await
                 .and_then(|r| r.error_for_status().map_err(Into::into))
-                .map_err(FetchRepoDataError::from)
                 .map_err(GatewayError::from)?;
 
             let bytes = response

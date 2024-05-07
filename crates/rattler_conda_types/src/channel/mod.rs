@@ -4,6 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
+use file_url::directory_path_to_url;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -153,7 +154,7 @@ impl Channel {
             #[cfg(not(target_arch = "wasm32"))]
             {
                 let absolute_path = absolute_path(&path, &config.root_dir);
-                let url = Url::from_directory_path(absolute_path)
+                let url = directory_path_to_url(&absolute_path)
                     .map_err(|_err| ParseChannelError::InvalidPath(path))?;
                 Self {
                     platforms,
@@ -450,7 +451,10 @@ fn normalize_path(path: &Path) -> PathBuf {
 
 /// Returns the specified path as an absolute path
 fn absolute_path<'a>(path: &'a Path, root_dir: &Path) -> Cow<'a, Path> {
-    if path.is_absolute() {
+    if matches!(
+        path.components().next(),
+        Some(Component::RootDir | Component::Prefix(_))
+    ) {
         return Cow::Borrowed(path);
     }
 

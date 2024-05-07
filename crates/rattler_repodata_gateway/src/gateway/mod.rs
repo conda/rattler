@@ -16,9 +16,9 @@ pub use error::GatewayError;
 pub use query::GatewayQuery;
 pub use repo_data::RepoData;
 
-use crate::fetch::FetchRepoDataError;
-use crate::Reporter;
+use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
 use dashmap::{mapref::entry::Entry, DashMap};
+use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 use reqwest_middleware::ClientWithMiddleware;
@@ -209,10 +209,14 @@ impl GatewayInner {
     ) -> Result<Subdir, GatewayError> {
         let url = channel.platform_url(platform);
         let subdir_data = if url.scheme() == "file" {
-            if let Ok(path) = url.to_file_path() {
-                LocalSubdirClient::from_directory(&path)
-                    .await
-                    .map(SubdirData::from_client)
+            if let Some(path) = url_to_path(&url) {
+                LocalSubdirClient::from_channel_subdir(
+                    &path.join("repodata.json"),
+                    channel.clone(),
+                    platform.as_str(),
+                )
+                .await
+                .map(SubdirData::from_client)
             } else {
                 return Err(GatewayError::UnsupportedUrl(
                     "unsupported file based url".to_string(),
@@ -253,12 +257,23 @@ impl GatewayInner {
 
         match subdir_data {
             Ok(client) => Ok(Subdir::Found(client)),
-            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(_)))
-                if platform != Platform::NoArch =>
-            {
+            Err(GatewayError::SubdirNotFoundError(err)) if platform != Platform::NoArch => {
                 // If the subdir was not found and the platform is not `noarch` we assume its just
                 // empty.
+                tracing::info!(
+                    "subdir {} of channel {} was not found, ignoring",
+                    err.subdir,
+                    err.channel.canonical_name()
+                );
                 Ok(Subdir::NotFound)
+            }
+            Err(GatewayError::FetchRepoDataError(FetchRepoDataError::NotFound(err))) => {
+                Err(SubdirNotFoundError {
+                    subdir: platform.to_string(),
+                    channel: channel.clone(),
+                    source: err.into(),
+                }
+                .into())
             }
             Err(err) => Err(err),
         }
@@ -276,8 +291,10 @@ enum PendingOrFetched<T> {
 mod test {
     use crate::gateway::Gateway;
     use crate::utils::simple_channel_server::SimpleChannelServer;
-    use rattler_conda_types::{Channel, PackageName, Platform};
-    use std::path::Path;
+    use crate::GatewayError;
+    use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
+    use rstest::rstest;
+    use std::path::{Path, PathBuf};
     use std::str::FromStr;
     use std::time::Instant;
     use url::Url;
@@ -302,7 +319,7 @@ mod test {
         let records = gateway
             .query(
                 vec![local_conda_forge()],
-                vec![Platform::Linux64, Platform::Win32, Platform::NoArch],
+                vec![Platform::Linux64, Platform::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )
             .recursive(true)
@@ -331,6 +348,28 @@ mod test {
 
         let total_records: usize = records.iter().map(|r| r.len()).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[rstest]
+    #[case::named("non-existing-channel")]
+    #[case::url("https://conda.anaconda.org/does-not-exist")]
+    #[case::file_url("file:///does/not/exist")]
+    #[case::win_path("c:/does-not-exist")]
+    #[case::unix_path("/does-not-exist")]
+    #[tokio::test]
+    async fn test_doesnt_exist(#[case] channel: &str) {
+        let gateway = Gateway::new();
+
+        let default_channel_config = ChannelConfig::default_with_root_dir(PathBuf::new());
+        let err = gateway
+            .query(
+                vec![Channel::from_str(channel, &default_channel_config).unwrap()],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![PackageName::from_str("some-package").unwrap()].into_iter(),
+            )
+            .await;
+
+        assert_matches::assert_matches!(err, Err(GatewayError::SubdirNotFoundError(_)))
     }
 
     #[ignore]

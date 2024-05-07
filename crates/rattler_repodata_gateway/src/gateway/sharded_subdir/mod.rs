@@ -1,9 +1,10 @@
+use crate::gateway::error::SubdirNotFoundError;
 use crate::reporter::ResponseReporterExt;
 use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayError};
 use futures::TryFutureExt;
 use http::header::CACHE_CONTROL;
-use http::HeaderValue;
+use http::{HeaderValue, StatusCode};
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Shard, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
 use std::{borrow::Cow, path::PathBuf, sync::Arc};
@@ -53,7 +54,17 @@ impl ShardedSubdir {
             concurrent_requests_semaphore.clone(),
             reporter,
         )
-        .await?;
+        .await
+        .map_err(|e| match e {
+            GatewayError::ReqwestError(e) if e.status() == Some(StatusCode::NOT_FOUND) => {
+                GatewayError::SubdirNotFoundError(SubdirNotFoundError {
+                    channel: channel.clone(),
+                    subdir,
+                    source: e.into(),
+                })
+            }
+            e => e,
+        })?;
 
         // Determine the cache directory and make sure it exists.
         let cache_dir = cache_dir.join("shards-v1");

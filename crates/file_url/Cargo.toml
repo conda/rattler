@@ -1,0 +1,17 @@
+[package]
+name = "file_url"
+version = "0.1.0"
+edition.workspace = true
+authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
+description = "Helper functions to work with file:// urls"
+categories.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+url = { workspace = true }
+percent-encoding = { workspace = true }
+itertools = { workspace = true }
+
+[dev-dependencies]
+rstest = { workspace = true }

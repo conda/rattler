@@ -9,7 +9,7 @@ use std::sync::Arc;
 ///
 /// `RepoData` uses internal reference counting, therefor it is relatively
 /// cheap to clone.
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct RepoData {
     pub(crate) shards: Vec<Arc<[RepoDataRecord]>>,
     pub(crate) len: usize,
