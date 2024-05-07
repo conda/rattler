@@ -1,4 +1,4 @@
-use super::{subdir::Subdir, BarrierCell, GatewayInner, GatewayError, RepoData};
+use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
 use crate::Reporter;
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;

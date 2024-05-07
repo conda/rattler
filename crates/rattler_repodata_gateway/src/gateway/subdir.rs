@@ -1,4 +1,4 @@
-use super::{GatewayError};
+use super::GatewayError;
 use crate::gateway::PendingOrFetched;
 use crate::Reporter;
 use dashmap::mapref::entry::Entry;
