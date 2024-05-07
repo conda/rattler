@@ -18,6 +18,14 @@ pub struct BarrierCell<T> {
     notify: Notify,
 }
 
+impl<T> Drop for BarrierCell<T> {
+    fn drop(&mut self) {
+        if self.state.load(Ordering::Acquire) == BarrierCellState::Initialized as u8 {
+            unsafe { self.value.get_mut().assume_init_drop() }
+        }
+    }
+}
+
 unsafe impl<T: Sync> Sync for BarrierCell<T> {}
 
 unsafe impl<T: Send> Send for BarrierCell<T> {}
