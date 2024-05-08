@@ -112,7 +112,8 @@ fn path_to_url(path: &Path) -> Result<String, NotAnAbsolutePath> {
                 result.push(':');
             }
             Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
-                let host = Host::parse(server.to_str().ok_or(NotAnAbsolutePath)?).map_err(|_err| NotAnAbsolutePath)?;
+                let host = Host::parse(server.to_str().ok_or(NotAnAbsolutePath)?)
+                    .map_err(|_err| NotAnAbsolutePath)?;
                 write!(result, "{host}").unwrap();
                 // host_end = to_u32(serialization.len()).unwrap();
                 // host_internal = host.into();
