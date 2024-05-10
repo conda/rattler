@@ -1,9 +1,14 @@
 //! Functionality for writing conda packages
+use core::arch;
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, Write};
+use std::os::macos::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
+use chrono::{Datelike, Timelike};
 use rattler_conda_types::package::PackageMetadata;
+use zip::DateTime;
 
 /// Trait for progress bars
 pub trait ProgressBar {
@@ -183,6 +188,7 @@ pub fn write_tar_bz2_package<W: Write>(
         writer,
         compression_level.to_bzip2_level()?,
     ));
+    archive.mode(tar::HeaderMode::Deterministic);
     archive.follow_symlinks(false);
 
     let total_size = total_size(base_path, paths);
@@ -237,6 +243,13 @@ fn write_zst_archive<W: Write>(
 
     // Compress it as tar.zst
     let tar_file = File::open(&tar_path)?;
+
+    // SystemTime::from(value)
+
+    // tar_file.set_modified(time)
+    // let mut metadata = tar_file.metadata().unwrap();
+    // metadata.modified()
+
     let compression_level = compression_level.to_zstd_level()?;
     let mut zst_encoder = zstd::Encoder::new(writer, compression_level)?;
     zst_encoder.multithread(num_threads.unwrap_or_else(|| num_cpus::get() as u32))?;
@@ -289,8 +302,27 @@ pub fn write_conda_package<W: Write + Seek>(
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
-    let options =
-        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    let last_modified_time = if let Some(time) = timestamp {
+        DateTime::from_date_and_time(
+            time.year() as u16,
+            time.month() as u8,
+            time.day() as u8,
+            time.hour() as u8,
+            time.minute() as u8,
+            time.second() as u8,
+        )
+        .expect("time should be in correct range")
+    } else {
+        // 1-1-2023 00:00:00 (Fixed date in the past for reproducible builds)
+        DateTime::from_date_and_time(2023, 1, 1, 0, 0, 0)
+            .expect("1-1-2023 00:00:00 should convert into datetime")
+    };
+
+
+    let options = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .last_modified_time(last_modified_time);
 
     // write the metadata as first file in the zip archive
     let package_metadata = PackageMetadata::default();

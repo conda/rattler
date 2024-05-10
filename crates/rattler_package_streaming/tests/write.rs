@@ -4,9 +4,10 @@ use rattler_package_streaming::write::{
     write_conda_package, write_tar_bz2_package, CompressionLevel,
 };
 use std::collections::HashMap;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 use walkdir::WalkDir;
 
 fn find_all_archives() -> impl Iterator<Item = PathBuf> {
@@ -122,9 +123,6 @@ fn compare_two_conda_archives(p1: &Path, p2: &Path) {
     println!("Comparing {p1:?} and {p2:?}");
     let mut archive1 = File::open(p1).unwrap();
     let mut archive2 = File::open(p2).unwrap();
-    
-    let archive1_metadata = archive1.metadata().unwrap();
-    let archive2_metadata = archive1.metadata().unwrap();
 
     // open outer zip file
     let mut zip1 = zip::ZipArchive::new(&mut archive1).unwrap();
@@ -139,14 +137,6 @@ fn compare_two_conda_archives(p1: &Path, p2: &Path) {
     let _mstr1 = std::str::from_utf8(&metadata_bytes1).unwrap();
     let metadata_bytes2 = metadata2.bytes().collect::<Result<Vec<u8>, _>>().unwrap();
     let _mstr2 = std::str::from_utf8(&metadata_bytes2).unwrap();
-
-    // compare last modified time
-
-    let last_mtime1 = archive1_metadata.modified().unwrap();
-    let last_mtime2 = archive2_metadata.modified().unwrap();
-
-    assert_eq!(last_mtime1, last_mtime2);
-
 
     // compare metadata.json files
 
