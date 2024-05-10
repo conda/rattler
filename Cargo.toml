@@ -53,6 +53,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 cmake = "0.1.50"
 console = { version = "0.15.8", features = ["windows-console-colors"] }
 criterion = "0.5"
+dashmap = "5.5.3"
 difference = "2.0.0"
 digest = "0.10.7"
 dirs = "5.0.1"
@@ -63,12 +64,14 @@ fslock = "0.2.1"
 futures = "0.3.30"
 futures-util = "0.3.30"
 fxhash = "0.2.1"
+generic-array = "0.14.4"
 getrandom = { version = "0.2.14", default-features = false }
 glob = "0.3.1"
-google-cloud-auth = { version = "0.13.2", default-features = false}
+google-cloud-auth = { version = "0.13.2", default-features = false }
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "1.1"
+http-cache-semantics = "2.1.0"
 humansize = "2.1.3"
 humantime = "2.1.0"
 indexmap = "2.2.6"
@@ -90,6 +93,7 @@ nom = "7.1.3"
 num_cpus = "1.16.0"
 once_cell = "1.19.0"
 ouroboros = "0.18.3"
+parking_lot = "0.12.1"
 pathdiff = "0.2.1"
 pep440_rs = { version = "0.5.0" }
 pep508_rs = { version = "0.4.2" }
@@ -106,6 +110,7 @@ reqwest-middleware = "0.3.0"
 reqwest-retry = "0.5.0"
 resolvo = { version = "0.4.0" }
 retry-policies = { version = "0.3.0", default-features = false }
+rmp-serde = { version = "1.2.0" }
 rstest = { version = "0.19.0" }
 rstest_reuse = "0.6.0"
 serde = { version = "1.0.198" }
@@ -141,6 +146,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false }
 tracing-test = { version = "0.2.4" }
 trybuild = { version = "1.0.91" }
+typed-path = { version = "0.8.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.8.0", default-features = false }
 walkdir = "2.5.0"
@@ -149,3 +155,6 @@ zip = { version = "0.6.6", default-features = false }
 zstd = { version = "0.13.1", default-features = false }
 
 [patch.crates-io]
+
+[profile.release]
+debug = true

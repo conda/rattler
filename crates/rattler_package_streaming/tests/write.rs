@@ -173,7 +173,7 @@ fn test_rewrite_tar_bz2() {
 
         let new_archive = temp_dir.join(format!(
             "{}-new.tar.bz2",
-            file_path.file_stem().unwrap().to_string_lossy().as_ref()
+            &file_path.file_stem().unwrap().to_string_lossy()
         ));
 
         let writer = File::create(&new_archive).unwrap();
@@ -213,7 +213,7 @@ fn test_rewrite_conda() {
 
         let new_archive = temp_dir.join(format!(
             "{}-new.conda",
-            file_path.file_stem().unwrap().to_string_lossy().as_ref()
+            &file_path.file_stem().unwrap().to_string_lossy()
         ));
 
         let writer = File::create(&new_archive).unwrap();

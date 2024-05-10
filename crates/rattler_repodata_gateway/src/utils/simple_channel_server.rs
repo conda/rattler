@@ -1,7 +1,6 @@
 use axum::routing::get_service;
-use std::future::IntoFuture;
-use std::net::SocketAddr;
-use std::path::Path;
+use rattler_conda_types::Channel;
+use std::{future::IntoFuture, net::SocketAddr, path::Path};
 use tokio::sync::oneshot;
 use tower_http::services::ServeDir;
 use url::Url;
@@ -15,6 +14,11 @@ impl SimpleChannelServer {
     /// Returns the root `Url` to the server.
     pub fn url(&self) -> Url {
         Url::parse(&format!("http://localhost:{}", self.local_addr.port())).unwrap()
+    }
+
+    #[allow(dead_code)]
+    pub fn channel(&self) -> Channel {
+        Channel::from_url(self.url())
     }
 }
 

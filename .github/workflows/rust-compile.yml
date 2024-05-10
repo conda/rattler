@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,resolvo
+  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,resolvo,gateway
 
 jobs:
   check-rustdoc-links:

@@ -253,6 +253,16 @@ impl MatchSpec {
     }
 }
 
+// Enable constructing a match spec from a package name.
+impl From<PackageName> for MatchSpec {
+    fn from(value: PackageName) -> Self {
+        Self {
+            name: Some(value),
+            ..Default::default()
+        }
+    }
+}
+
 /// Similar to a [`MatchSpec`] but does not include the package name. This is useful in places
 /// where the package name is already known (e.g. `foo = "3.4.1 *cuda"`)
 #[serde_as]
