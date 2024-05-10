@@ -1,5 +1,6 @@
 use crate::gateway::error::SubdirNotFoundError;
 use crate::reporter::ResponseReporterExt;
+use crate::utils::run_blocking_task;
 use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayError};
 use futures::TryFutureExt;
@@ -182,7 +183,7 @@ impl SubdirClient for ShardedSubdir {
 async fn decode_zst_bytes_async<R: AsRef<[u8]> + Send + 'static>(
     bytes: R,
 ) -> Result<Vec<u8>, GatewayError> {
-    tokio_rayon::spawn(move || match zstd::decode_all(bytes.as_ref()) {
+    run_blocking_task(move || match zstd::decode_all(bytes.as_ref()) {
         Ok(decoded) => Ok(decoded),
         Err(err) => Err(GatewayError::IoError(
             "failed to decode zstd shard".to_string(),
@@ -197,7 +198,7 @@ async fn parse_records<R: AsRef<[u8]> + Send + 'static>(
     channel_name: String,
     base_url: Url,
 ) -> Result<Vec<RepoDataRecord>, GatewayError> {
-    tokio_rayon::spawn(move || {
+    run_blocking_task(move || {
         // let shard = serde_json::from_slice::<Shard>(bytes.as_ref()).map_err(std::io::Error::from)?;
         let shard = rmp_serde::from_slice::<Shard>(bytes.as_ref())
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))

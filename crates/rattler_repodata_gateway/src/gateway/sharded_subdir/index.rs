@@ -1,5 +1,6 @@
 use super::{token::TokenClient, ShardedRepodata};
 use crate::reporter::ResponseReporterExt;
+use crate::utils::run_blocking_task;
 use crate::{utils::url_to_cache_filename, GatewayError, Reporter};
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
@@ -83,19 +84,21 @@ pub async fn fetch_index(
         };
 
         // Parse the bytes
-        let parse_fut = tokio_rayon::spawn(move || rmp_serde::from_slice(&decoded_bytes))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
-            .map_err(|e| {
-                GatewayError::IoError(
-                    format!("failed to parse shard index from {response_url}"),
-                    e,
-                )
-            });
+        let parse_fut = run_blocking_task(move || {
+            rmp_serde::from_slice(&decoded_bytes)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+                .map_err(|e| {
+                    GatewayError::IoError(
+                        format!("failed to parse shard index from {response_url}"),
+                        e,
+                    )
+                })
+        });
 
         // Parse and write the file to disk concurrently
         let (temp_file, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
 
-        // Persist the cache if succesfully updated the cache.
+        // Persist the cache if successfully updated the cache.
         if let Some(temp_file) = temp_file {
             temp_file.persist(cache_path).map_err(|e| {
                 GatewayError::IoError(
@@ -269,15 +272,21 @@ async fn write_shard_index_cache(
 /// Read the shard index from a reader and deserialize it.
 async fn read_shard_index_from_reader(
     mut reader: BufReader<File>,
-) -> std::io::Result<ShardedRepodata> {
+) -> Result<ShardedRepodata, GatewayError> {
     // Read the file to memory
     let mut bytes = Vec::new();
-    reader.read_to_end(&mut bytes).await?;
+    reader
+        .read_to_end(&mut bytes)
+        .await
+        .map_err(|e| GatewayError::IoError("failed to read shard index buffer".to_string(), e))?;
 
     // Deserialize the bytes
-    tokio_rayon::spawn(move || rmp_serde::from_slice(&bytes))
-        .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+    run_blocking_task(move || {
+        rmp_serde::from_slice(&bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+            .map_err(|e| GatewayError::IoError("failed to parse shard index".to_string(), e))
+    })
+    .await
 }
 
 /// Cache information stored at the start of the cache file.

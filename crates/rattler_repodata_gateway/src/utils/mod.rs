@@ -45,7 +45,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
 /// A marker type that is used to signal that a task was cancelled.
 pub(crate) struct Cancelled;
 
-/// Run a blocking task to complettion. If the task is cancelled, the function
+/// Run a blocking task to completion. If the task is cancelled, the function
 /// will return an error converted from `Error`.
 pub async fn run_blocking_task<T, E, F>(f: F) -> Result<T, E>
 where
