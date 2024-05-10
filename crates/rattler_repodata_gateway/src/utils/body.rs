@@ -1,12 +1,16 @@
 use bytes::Bytes;
 use futures::Stream;
 use pin_project_lite::pin_project;
-use std::collections::VecDeque;
-use std::future::Future;
-use std::marker::PhantomData;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    collections::VecDeque,
+    future::Future,
+    marker::PhantomData,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
+/// A helper trait to convert a stream of bytes coming from a request body into
+/// another type.
 pub trait BodyStreamExt<E>: Sized {
     fn bytes(self) -> BytesCollect<Self, E>;
 
