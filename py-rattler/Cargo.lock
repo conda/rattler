@@ -2581,6 +2581,7 @@ dependencies = [
  "anyhow",
  "async-compression",
  "blake2",
+ "bytes",
  "cache_control",
  "chrono",
  "futures",

@@ -452,7 +452,7 @@ class FileMode:
     The file mode of the entry.
     """
 
-    _inner: PyFileMode
+    _inner: PyFileMode | None = None
 
     @property
     def binary(self) -> bool:
@@ -472,7 +472,8 @@ class FileMode:
         >>>
         ```
         """
-        return self._inner.binary
+        return self._inner.binary if self._inner else False
+
 
     @property
     def text(self) -> bool:
@@ -492,7 +493,25 @@ class FileMode:
         >>>
         ```
         """
-        return self._inner.text
+        return self._inner.text if self._inner else False
+
+    @property
+    def unknown(self):
+        """
+        The file mode is unknown/unspecified
+        Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_package_archive(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        ... )
+        >>> entry = paths_json.paths[1]
+        >>> file_mode = entry.prefix_placeholder.file_mode
+        >>> file_mode.unknown
+        True
+        >>>
+        """
+        return self._inner is None
 
     @classmethod
     def _from_py_file_mode(cls, py_file_mode: PyFileMode) -> FileMode:
