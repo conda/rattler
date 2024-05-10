@@ -8,6 +8,7 @@ use reqwest_middleware::{Middleware, Next};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 use url::Url;
+
 /// `reqwest` middleware to authenticate requests
 #[derive(Clone, Default)]
 pub struct AuthenticationMiddleware {
@@ -22,8 +23,12 @@ impl Middleware for AuthenticationMiddleware {
         extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        let url = req.url().clone();
+        // If an `Authorization` header is already present, don't authenticate
+        if req.headers().get(reqwest::header::AUTHORIZATION).is_some() {
+            return next.run(req, extensions).await;
+        }
 
+        let url = req.url().clone();
         match self.auth_storage.get_by_url(url) {
             Err(_) => {
                 // Forward error to caller (invalid URL)
@@ -396,6 +401,35 @@ mod tests {
                 assert_eq!(retrieved.1, None);
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_rattler_auth_file_env_var_handling() -> anyhow::Result<()> {
+        let tdir = tempdir()?;
+
+        let storage = temp_env::with_var(
+            "RATTLER_AUTH_FILE",
+            Some(
+                tdir.path()
+                    .to_path_buf()
+                    .join("auth.json")
+                    .to_str()
+                    .unwrap(),
+            ),
+            || AuthenticationStorage::from_env().unwrap(),
+        );
+
+        let host = "test.example.com";
+        let authentication = Authentication::CondaToken("testtoken".to_string());
+        storage.store(host, &authentication)?;
+
+        let file = tdir.path().join("auth.json");
+        assert_eq!(
+            std::fs::read_to_string(file)?,
+            "{\"test.example.com\":{\"CondaToken\":\"testtoken\"}}"
+        );
 
         Ok(())
     }

@@ -11,8 +11,8 @@ use rattler_conda_types::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
 use crate::{
-    error::PyRattlerError, package_name::PyPackageName, prefix_paths::PyPrefixPaths,
-    version::PyVersion,
+    error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
+    prefix_paths::PyPrefixPaths, version::PyVersion,
 };
 
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
@@ -196,6 +196,12 @@ impl PyRecord {
     #[getter]
     pub fn subdir(&self) -> String {
         self.as_package_record().subdir.clone()
+    }
+
+    /// The noarch type this package implements, if any.
+    #[getter]
+    pub fn noarch(&self) -> PyNoArchType {
+        self.as_package_record().noarch.into()
     }
 
     /// The date this entry was created.

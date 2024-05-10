@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.20.3"
+version = "0.20.5"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -47,3 +47,4 @@ tokio = { workspace = true, features = ["macros"] }
 axum = { workspace = true }
 reqwest-retry = { workspace = true }
 sha2 = { workspace = true }
+temp-env = { workspace = true }

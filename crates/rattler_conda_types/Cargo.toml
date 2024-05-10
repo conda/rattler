@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.22.0"
+version = "0.22.1"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 chrono = { workspace = true }
+file_url = { path = "../file_url", version = "0.1.0" }
 fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
@@ -30,6 +31,7 @@ smallvec = { workspace = true, features = ["serde", "const_new", "const_generics
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]

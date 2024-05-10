@@ -39,7 +39,7 @@ impl PyChannelConfig {
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone)]
+#[derive(Clone, Hash, Eq, PartialEq)]
 pub struct PyChannel {
     pub(crate) inner: Channel,
 }
@@ -79,7 +79,7 @@ impl PyChannel {
 
     /// Returns the Urls for the given platform.
     pub fn platform_url(&self, platform: &PyPlatform) -> String {
-        self.inner.platform_url(platform.clone().into()).into()
+        self.inner.platform_url((*platform).into()).into()
     }
 }
 

@@ -1,8 +1,9 @@
 ---
 source: crates/rattler_lock/src/lib.rs
+assertion_line: 629
 expression: conda_lock
 ---
-version: 4
+version: 5
 environments:
   default:
     channels:
@@ -1289,4 +1290,3 @@ packages:
       - "vc >=14.1,<15"
       - vs2015_runtime >=14.16.27033
     platform: win
-

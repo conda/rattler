@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.22.0...rattler_conda_types-v0.22.1) - 2024-05-06
+
+### Added
+- expose `*Record.noarch` in Python bindings ([#635](https://github.com/mamba-org/rattler/pull/635))
+
 ## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.21.0...rattler_conda_types-v0.22.0) - 2024-04-25
 
 ### Added

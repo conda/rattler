@@ -1,6 +1,8 @@
 //! This module provides functionality to download and cache `repodata.json` from a remote location.
 
+use crate::reporter::ResponseReporterExt;
 use crate::utils::{AsyncEncoding, Encoding, LockedFile};
+use crate::Reporter;
 use cache::{CacheHeaders, Expiring, RepoDataState};
 use cache_control::{Cachability, CacheControl};
 use futures::{future::ready, FutureExt, TryStreamExt};
@@ -11,6 +13,7 @@ use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
 };
+use std::sync::Arc;
 use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
@@ -24,19 +27,16 @@ use url::Url;
 mod cache;
 pub mod jlap;
 
-/// Type alias for function to report progress while downloading repodata
-pub type ProgressFunc = Box<dyn FnMut(DownloadProgress) + Send + Sync>;
-
 /// `RepoData` could not be found for given channel and platform
 #[derive(Debug, thiserror::Error)]
 pub enum RepoDataNotFoundError {
     /// There was an error on the Http request
     #[error(transparent)]
-    HttpError(reqwest_middleware::Error),
+    HttpError(reqwest::Error),
 
     /// There was a file system error
     #[error(transparent)]
-    FileSystemError(std::io::Error),
+    FileSystemError(#[from] std::io::Error),
 }
 
 #[allow(missing_docs)]
@@ -88,15 +88,9 @@ impl From<reqwest::Error> for FetchRepoDataError {
     }
 }
 
-impl From<reqwest_middleware::Error> for RepoDataNotFoundError {
-    fn from(err: reqwest_middleware::Error) -> Self {
-        Self::HttpError(err.redact())
-    }
-}
-
 impl From<reqwest::Error> for RepoDataNotFoundError {
     fn from(err: reqwest::Error) -> Self {
-        Self::HttpError(err.redact().into())
+        Self::HttpError(err.redact())
     }
 }
 
@@ -195,17 +189,6 @@ impl Default for FetchRepoDataOptions {
             bz2_enabled: true,
         }
     }
-}
-
-/// A struct that provides information about download progress.
-#[derive(Debug, Clone)]
-pub struct DownloadProgress {
-    /// The number of bytes already downloaded
-    pub bytes: u64,
-
-    /// The total number of bytes to download. Or `None` if this is not known. This can happen
-    /// if the server does not supply a `Content-Length` header.
-    pub total: Option<u64>,
 }
 
 /// The result of [`fetch_repo_data`].
@@ -321,7 +304,7 @@ pub async fn fetch_repo_data(
     client: reqwest_middleware::ClientWithMiddleware,
     cache_path: PathBuf,
     options: FetchRepoDataOptions,
-    progress: Option<ProgressFunc>,
+    reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     let subdir_url = normalize_subdir_url(subdir_url);
 
@@ -429,6 +412,7 @@ pub async fn fetch_repo_data(
             subdir_url.clone(),
             repo_data_state.clone(),
             &repo_data_json_path,
+            reporter.clone(),
         )
         .await
         {
@@ -505,6 +489,9 @@ pub async fn fetch_repo_data(
         cache_headers.add_to_request(&mut headers);
     }
     // Send the request and wait for a reply
+    let download_reporter = reporter
+        .as_deref()
+        .map(|r| (r, r.on_download_start(&repo_data_url)));
     let response = match request_builder.headers(headers).send().await {
         Ok(response) if response.status() == StatusCode::NOT_FOUND => {
             return Err(FetchRepoDataError::NotFound(RepoDataNotFoundError::from(
@@ -551,6 +538,7 @@ pub async fn fetch_repo_data(
     let cache_headers = CacheHeaders::from(&response);
 
     // Stream the content to a temporary file
+    let response_url = response.url().clone();
     let (temp_file, blake2_hash) = stream_and_decode_to_file(
         repo_data_url.clone(),
         response,
@@ -562,9 +550,13 @@ pub async fn fetch_repo_data(
             Encoding::Passthrough
         },
         &cache_path,
-        progress,
+        download_reporter,
     )
     .await?;
+
+    if let Some((reporter, index)) = download_reporter {
+        reporter.on_download_complete(&response_url, index);
+    }
 
     // Persist the file to its final destination
     let repo_data_destination_path = repo_data_json_path.clone();
@@ -625,40 +617,19 @@ async fn stream_and_decode_to_file(
     response: Response,
     content_encoding: Encoding,
     temp_dir: &Path,
-    mut progress_func: Option<ProgressFunc>,
+    reporter: Option<(&dyn Reporter, usize)>,
 ) -> Result<(NamedTempFile, blake2::digest::Output<Blake2b256>), FetchRepoDataError> {
-    // Determine the length of the response in bytes and notify the listener that a download is
-    // starting. The response may be compressed. Decompression happens below.
-    let content_size = response.content_length();
-    if let Some(progress_func) = progress_func.as_mut() {
-        progress_func(DownloadProgress {
-            bytes: 0,
-            total: content_size,
-        });
-    }
-
     // Determine the encoding of the response
     let transfer_encoding = Encoding::from(&response);
 
     // Convert the response into a byte stream
-    let bytes_stream = response
-        .bytes_stream()
-        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
-
-    // Listen in on the bytes as they come from the response. Progress is tracked here instead of
-    // after decoding because that doesnt properly represent the number of bytes that are being
-    // transferred over the network.
     let mut total_bytes = 0;
-    let total_bytes_mut = &mut total_bytes;
-    let bytes_stream = bytes_stream.inspect_ok(move |bytes| {
-        *total_bytes_mut += bytes.len() as u64;
-        if let Some(progress_func) = progress_func.as_mut() {
-            progress_func(DownloadProgress {
-                bytes: *total_bytes_mut,
-                total: content_size,
-            });
-        }
-    });
+    let bytes_stream = response
+        .byte_stream_with_progress(reporter)
+        .inspect_ok(|bytes| {
+            total_bytes += bytes.len();
+        })
+        .map_err(|e| std::io::Error::new(ErrorKind::Other, e));
 
     // Create a new stream from the byte stream that decodes the bytes using the transfer encoding
     // on the fly.
@@ -1038,19 +1009,18 @@ fn validate_cached_state(
 
 #[cfg(test)]
 mod test {
-    use super::{
-        fetch_repo_data, CacheResult, CachedRepoData, DownloadProgress, FetchRepoDataOptions,
-    };
+    use super::{fetch_repo_data, CacheResult, CachedRepoData, FetchRepoDataOptions};
     use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
     use crate::utils::simple_channel_server::SimpleChannelServer;
     use crate::utils::Encoding;
+    use crate::Reporter;
     use assert_matches::assert_matches;
     use hex_literal::hex;
     use rattler_networking::AuthenticationMiddleware;
     use reqwest::Client;
     use reqwest_middleware::ClientWithMiddleware;
     use std::path::Path;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use tempfile::TempDir;
     use tokio::io::AsyncWriteExt;
@@ -1405,12 +1375,27 @@ mod test {
         std::fs::write(subdir_path.path().join("repodata.json"), FAKE_REPO_DATA).unwrap();
         let server = SimpleChannelServer::new(subdir_path.path()).await;
 
-        let last_download_progress = Arc::new(AtomicU64::new(0));
-        let last_download_progress_captured = last_download_progress.clone();
-        let download_progress = move |progress: DownloadProgress| {
-            last_download_progress_captured.store(progress.bytes, Ordering::SeqCst);
-            assert_eq!(progress.total, Some(1110));
-        };
+        struct BasicReporter {
+            last_download_progress: AtomicUsize,
+        }
+
+        impl Reporter for BasicReporter {
+            fn on_download_progress(
+                &self,
+                _url: &Url,
+                _index: usize,
+                bytes_downloaded: usize,
+                total_bytes: Option<usize>,
+            ) {
+                self.last_download_progress
+                    .store(bytes_downloaded, Ordering::SeqCst);
+                assert_eq!(total_bytes, Some(1110));
+            }
+        }
+
+        let reporter = Arc::new(BasicReporter {
+            last_download_progress: AtomicUsize::new(0),
+        });
 
         // Download the data from the channel with an empty cache.
         let cache_dir = TempDir::new().unwrap();
@@ -1419,12 +1404,12 @@ mod test {
             ClientWithMiddleware::from(Client::new()),
             cache_dir.into_path(),
             FetchRepoDataOptions::default(),
-            Some(Box::new(download_progress)),
+            Some(reporter.clone()),
         )
         .await
         .unwrap();
 
-        assert_eq!(last_download_progress.load(Ordering::SeqCst), 1110);
+        assert_eq!(reporter.last_download_progress.load(Ordering::SeqCst), 1110);
     }
 
     #[tracing_test::traced_test]

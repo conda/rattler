@@ -51,6 +51,40 @@ impl AuthenticationStorage {
         }
     }
 
+    /// Create a new authentication storage with the default backends
+    /// respecting the `RATTLER_AUTH_FILE` environment variable.
+    /// If the variable is set, the file storage backend will be used
+    /// with the path specified in the variable
+    pub fn from_env() -> Result<Self> {
+        if let Ok(auth_file) = std::env::var("RATTLER_AUTH_FILE") {
+            let path = std::path::Path::new(&auth_file);
+
+            tracing::info!(
+                "\"RATTLER_AUTH_FILE\" environment variable set, using file storage at {}",
+                auth_file
+            );
+
+            Ok(Self::from_file(path)?)
+        } else {
+            Ok(Self::default())
+        }
+    }
+
+    /// Create a new authentication storage with just a file storage backend
+    pub fn from_file(path: &std::path::Path) -> Result<Self> {
+        let mut storage = Self::new();
+        let backend = FileStorage::new(path.to_path_buf()).map_err(|e| {
+            anyhow!(
+                "Error creating file storage backend from file ({}): {}",
+                path.display(),
+                e
+            )
+        })?;
+
+        storage.add_backend(Arc::from(backend));
+        Ok(storage)
+    }
+
     /// Add a new storage backend to the authentication storage
     /// (backends are tried in the order they are added)
     pub fn add_backend(&mut self, backend: Arc<dyn StorageBackend + Send + Sync>) {

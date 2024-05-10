@@ -35,7 +35,7 @@ jobs:
           lfs: true
       - uses: prefix-dev/setup-pixi@v0.6.0
         with:
-          pixi-version: v0.13.0
+          pixi-version: v0.20.1
           cache: true
           manifest-path: py-rattler/pixi.toml
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -44,9 +44,9 @@ jobs:
       - name: Format and Lint
         run: |
           cd py-rattler
-          pixi run lint
-          pixi run fmt-check
+          pixi run -e test lint
+          pixi run -e test fmt-check
       - name: Run tests
         run: |
           cd py-rattler
-          pixi run test
+          pixi run -e test test
