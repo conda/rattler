@@ -28,8 +28,6 @@ serde_repr = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 purl = { workspace = true, features = ["serde"] }
-rayon = { workspace = true }
-
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
 similar-asserts = { workspace = true }

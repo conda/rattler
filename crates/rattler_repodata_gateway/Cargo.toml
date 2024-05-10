@@ -38,7 +38,6 @@ pin-project-lite = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.22.1", default-features = false, optional = true }
 rattler_digest = { path = "../rattler_digest", version = "0.19.3", default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { path = "../rattler_networking", version = "0.20.5", default-features = false }
-rayon = { workspace = true, optional = true }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
 rmp-serde = { workspace = true }
