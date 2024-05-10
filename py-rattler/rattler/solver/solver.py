@@ -1,18 +1,24 @@
 from __future__ import annotations
 import datetime
 from typing import List, Optional
+
+from rattler import Channel, Platform
 from rattler.match_spec.match_spec import MatchSpec
 
 from rattler.channel import ChannelPriority
-from rattler.rattler import py_solve
+from rattler.rattler import py_solve, PyMatchSpec
+
+from rattler.platform.platform import PlatformLiteral
+from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
-from rattler.repo_data.sparse import SparseRepoData
 from rattler.virtual_package.generic import GenericVirtualPackage
 
 
-def solve(
-    specs: List[MatchSpec],
-    available_packages: List[SparseRepoData],
+async def solve(
+    channels: List[Channel | str],
+    platforms: List[Platform | PlatformLiteral],
+    specs: List[MatchSpec | str],
+    gateway: Gateway,
     locked_packages: Optional[List[RepoDataRecord]] = None,
     pinned_packages: Optional[List[RepoDataRecord]] = None,
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
@@ -25,7 +31,9 @@ def solve(
 
     Arguments:
         specs: A list of matchspec to solve.
-        available_packages: A list of RepoData to use for solving the `specs`.
+        channels: The channels to query for the packages.
+        platforms: The platforms to query for the packages.
+        gateway: The gateway to use for acquiring repodata.
         locked_packages: Records of packages that are previously selected.
                          If the solver encounters multiple variants of a single
                          package (identified by its name), it will sort the records
@@ -46,6 +54,7 @@ def solve(
                          the channel that the package is first found in will be used as
                          the only channel for that package. When `ChannelPriority.Disabled`
                          it will search for every package in every channel.
+        timeout:    The maximum time the solver is allowed to run.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -53,13 +62,20 @@ def solve(
 
     return [
         RepoDataRecord._from_py_record(solved_package)
-        for solved_package in py_solve(
-            [spec._match_spec for spec in specs],
-            [package._sparse for package in available_packages],
-            [package._record for package in locked_packages or []],
-            [package._record for package in pinned_packages or []],
-            [v_package._generic_virtual_package for v_package in virtual_packages or []],
-            channel_priority.value,
-            timeout.microseconds if timeout else None,
+        for solved_package in await py_solve(
+            channels=[
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+            ],
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            gateway=gateway._gateway,
+            locked_packages=[package._record for package in locked_packages or []],
+            pinned_packages=[package._record for package in pinned_packages or []],
+            virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
+            channel_priority=channel_priority.value,
+            timeout=timeout.microseconds if timeout else None,
         )
     ]

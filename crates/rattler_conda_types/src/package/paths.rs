@@ -116,7 +116,7 @@ impl PathsJson {
                             path_type,
                             prefix_placeholder: prefix.map(|entry| PrefixPlaceholder {
                                 file_mode: entry.file_mode,
-                                placeholder: entry.prefix.as_ref().to_owned(),
+                                placeholder: (*entry.prefix).to_owned(),
                             }),
                             no_link: no_link.contains(&path),
                             sha256: None,

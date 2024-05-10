@@ -6,6 +6,8 @@ from rattler.repo_data import (
     RepoDataRecord,
     PatchInstructions,
     SparseRepoData,
+    Gateway,
+    SourceConfig,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import AuthenticatedClient, fetch_repo_data
@@ -19,9 +21,9 @@ from rattler.package import (
     PathType,
     PrefixPlaceholder,
     FileMode,
+    IndexJson,
 )
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
-from rattler.solver import solve
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
 from rattler.linker import link
@@ -35,6 +37,7 @@ from rattler.lock import (
     PypiPackageData,
     PypiPackageEnvironmentData,
 )
+from rattler.solver import solve
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -80,4 +83,6 @@ __all__ = [
     "PrefixPlaceholder",
     "FileMode",
     "IndexJson",
+    "Gateway",
+    "SourceConfig",
 ]

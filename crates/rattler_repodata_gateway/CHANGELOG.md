@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.11](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.19.10...rattler_repodata_gateway-v0.19.11) - 2024-05-06
+
+### Other
+- updated the following local packages: rattler_conda_types, rattler_networking
+
+## [0.19.10](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.19.9...rattler_repodata_gateway-v0.19.10) - 2024-04-30
+
+### Added
+- create SparseRepoData from byte slices ([#624](https://github.com/mamba-org/rattler/pull/624))
+
 ## [0.19.9](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.19.8...rattler_repodata_gateway-v0.19.9) - 2024-04-25
 
 ### Other

@@ -474,7 +474,6 @@ class FileMode:
         """
         return self._inner.binary if self._inner else False
 
-
     @property
     def text(self) -> bool:
         """
@@ -496,7 +495,7 @@ class FileMode:
         return self._inner.text if self._inner else False
 
     @property
-    def unknown(self):
+    def unknown(self) -> bool:
         """
         The file mode is unknown/unspecified
         Examples
@@ -505,10 +504,10 @@ class FileMode:
         >>> paths_json = PathsJson.from_package_archive(
         ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
         ... )
-        >>> entry = paths_json.paths[1]
+        >>> entry = paths_json.paths[-1]
         >>> file_mode = entry.prefix_placeholder.file_mode
         >>> file_mode.unknown
-        True
+        False
         >>>
         """
         return self._inner is None

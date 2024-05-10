@@ -6,28 +6,84 @@ theme:
     primary: yellow
     accent: yellow
     scheme: slate
-
+  site_url: https://prefix.dev
   font:
     text: Red Hat Text
     code: JetBrains Mono
 
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: prefix-light
+      accent: prefix-light
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: prefix
+      accent: prefix
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  icon:
+    edit: material/pencil
+    view: material/eye
+
+  features:
+    - content.tabs.link
+    - content.code.copy
+    - content.action.edit
+    - content.code.annotate
+    # - content.code.select Sponsor only
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
 
 extra_css:
   - stylesheets/extra.css
 
 repo_url: https://github.com/mamba-org/rattler/
+edit_uri: edit/main/py-rattler/docs/
 
 markdown_extensions:
+  - admonition
+  - def_list
+  - footnotes
+  - admonition
+  - def_list
+  - footnotes
+  - pymdownx.tasklist:
+      custom_checkbox: true
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
-  - admonition
-  - def_list
-  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+  - pymdownx.tabbed:
+      alternate_style: true
+  - toc:
+      toc_depth: 3
+      permalink: "#"
+  - mdx_truly_sane_lists
 
 nav:
   - First Steps: index.md
@@ -69,6 +125,7 @@ nav:
           - PrefixPaths: prefix_paths.md
           - PrefixRecord: prefix_record.md
       - repo_data:
+          - Gateway: gateway.md
           - PackageRecord: package_record.md
           - PatchInstructions: patch_instructions.md
           - RepoDataRecord: repo_data_record.md

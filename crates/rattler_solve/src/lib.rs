@@ -159,3 +159,15 @@ impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for S {
         self
     }
 }
+
+/// A helper struct that implements `IntoRepoData` for anything that can
+/// iterate over `RepoDataRecord`s.
+pub struct RepoDataIter<T>(pub T);
+
+impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> IntoRepoData<'a, S>
+    for RepoDataIter<T>
+{
+    fn into(self) -> S {
+        self.0.into_iter().collect()
+    }
+}

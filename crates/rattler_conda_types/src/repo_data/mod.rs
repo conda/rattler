@@ -2,6 +2,7 @@
 //! of a channel. It provides indexing functionality.
 
 pub mod patches;
+pub mod sharded;
 mod topological_sort;
 
 use std::borrow::Cow;

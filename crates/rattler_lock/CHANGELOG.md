@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.5](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.4...rattler_lock-v0.22.5) - 2024-05-06
+
+### Other
+- updated the following local packages: rattler_conda_types
+
+## [0.22.4](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.3...rattler_lock-v0.22.4) - 2024-04-30
+
+### Added
+- adds pypi indexes to the lock-file ([#626](https://github.com/mamba-org/rattler/pull/626))
+
 ## [0.22.3](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.2...rattler_lock-v0.22.3) - 2024-04-25
 
 ### Fixed

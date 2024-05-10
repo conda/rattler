@@ -79,7 +79,7 @@ impl FromStr for HasPrefixEntry {
                 |(prefix, _, file_mode, _, path)| HasPrefixEntry {
                     prefix: Cow::Owned(prefix.into_owned()),
                     file_mode,
-                    relative_path: PathBuf::from(path.as_ref()),
+                    relative_path: PathBuf::from(&*path),
                 },
             ))(buf)
         }
@@ -89,7 +89,7 @@ impl FromStr for HasPrefixEntry {
             all_consuming(map(possibly_quoted_string, |path| HasPrefixEntry {
                 prefix: Cow::Borrowed(placeholder_string()),
                 file_mode: FileMode::Text,
-                relative_path: PathBuf::from(path.as_ref()),
+                relative_path: PathBuf::from(&*path),
             }))(buf)
         }
 

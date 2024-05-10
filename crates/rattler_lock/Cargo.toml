@@ -1,6 +1,6 @@
 [package]
 name = "rattler_lock"
-version = "0.22.3"
+version = "0.22.5"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for conda lock"
@@ -15,19 +15,19 @@ chrono = { workspace = true }
 fxhash = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.22.0", default-features = false }
-rattler_digest = { path="../rattler_digest", version = "0.19.3", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.22.1", default-features = false }
+rattler_digest = { path = "../rattler_digest", version = "0.19.3", default-features = false }
+file_url = { path = "../file_url", version = "0.1.0" }
 pep508_rs = { workspace = true, features = ["serde"] }
 pep440_rs = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
+serde_repr = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 purl = { workspace = true, features = ["serde"] }
-percent-encoding = {  workspace = true }
-
 [dev-dependencies]
 insta = { workspace = true, features = ["yaml"] }
 similar-asserts = { workspace = true }

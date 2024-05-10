@@ -3,17 +3,18 @@ use pyo3::{pyfunction, types::PyTuple, Py, PyAny, PyResult, Python, ToPyObject};
 use pyo3_asyncio::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
-    fetch_repo_data, CachedRepoData, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
+    fetch_repo_data, CachedRepoData, FetchRepoDataError, FetchRepoDataOptions,
 };
 use url::Url;
 
-use std::{path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, platform::PyPlatform,
     repo_data::sparse::PySparseRepoData,
 };
 use authenticated_client::PyAuthenticatedClient;
+use rattler_repodata_gateway::Reporter;
 
 pub mod authenticated_client;
 pub mod cached_repo_data;
@@ -32,12 +33,11 @@ pub fn py_fetch_repo_data<'a>(
     let client = PyAuthenticatedClient::new();
 
     for (subdir, chan) in get_subdir_urls(channels, platforms)? {
-        let progress = if let Some(callback) = callback {
-            let callback = callback.to_object(py);
-            Some(get_progress_func(callback))
-        } else {
-            None
-        };
+        let callback = callback.map(|callback| {
+            Arc::new(ProgressReporter {
+                callback: callback.to_object(py),
+            }) as _
+        });
         let cache_path = cache_path.clone();
         let client = client.clone();
 
@@ -49,7 +49,7 @@ pub fn py_fetch_repo_data<'a>(
                     client.into(),
                     cache_path,
                     FetchRepoDataOptions::default(),
-                    progress,
+                    callback,
                 )
                 .await?,
                 chan,
@@ -72,14 +72,23 @@ pub fn py_fetch_repo_data<'a>(
     })
 }
 
-/// Creates a closure to show progress of Download
-fn get_progress_func(callback: Py<PyAny>) -> Box<dyn FnMut(DownloadProgress) + Send + Sync> {
-    Box::new(move |progress: DownloadProgress| {
+struct ProgressReporter {
+    callback: Py<PyAny>,
+}
+
+impl Reporter for ProgressReporter {
+    fn on_download_progress(
+        &self,
+        _url: &Url,
+        _index: usize,
+        bytes_downloaded: usize,
+        total_bytes: Option<usize>,
+    ) {
         Python::with_gil(|py| {
-            let args = PyTuple::new(py, [Some(progress.bytes), progress.total]);
-            callback.call1(py, args).expect("Callback failed!");
+            let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes]);
+            self.callback.call1(py, args).expect("Callback failed!");
         });
-    })
+    }
 }
 
 /// Creates a subdir urls out of channels and channels.
