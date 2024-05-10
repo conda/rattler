@@ -65,7 +65,7 @@ impl Ord for VersionWithSource {
         // First order by version then by string representation
         self.version
             .cmp(&other.version)
-            .then_with(|| self.as_str().as_ref().cmp(other.as_str().as_ref()))
+            .then_with(|| self.as_str().cmp(&other.as_str()))
     }
 }
 

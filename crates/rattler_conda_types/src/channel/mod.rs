@@ -1,12 +1,13 @@
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use file_url::directory_path_to_url;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
@@ -146,16 +147,14 @@ impl Channel {
                 ..Channel::from_url(url)
             }
         } else if is_path(channel) {
-            let path = PathBuf::from(channel);
-
             #[cfg(target_arch = "wasm32")]
             return Err(ParseChannelError::InvalidPath(path));
 
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let absolute_path = absolute_path(&path, &config.root_dir);
-                let url = directory_path_to_url(&absolute_path)
-                    .map_err(|_err| ParseChannelError::InvalidPath(path))?;
+                let absolute_path = absolute_path(channel, &config.root_dir)?;
+                let url = directory_path_to_url(absolute_path.to_path())
+                    .map_err(|_err| ParseChannelError::InvalidPath(channel.to_owned()))?;
                 Self {
                     platforms,
                     base_url: url,
@@ -327,8 +326,16 @@ pub enum ParseChannelError {
     ParseUrlError(#[source] url::ParseError),
 
     /// Error when the path is invalid.
-    #[error("invalid path '{0}")]
-    InvalidPath(PathBuf),
+    #[error("invalid path '{0}'")]
+    InvalidPath(String),
+
+    /// The root directory is not an absolute path
+    #[error("root directory from channel config is not an absolute path")]
+    NonAbsoluteRootDir(PathBuf),
+
+    /// The root directory is not UTF-8 encoded.
+    #[error("root directory of channel config is not utf8 encoded")]
+    NotUtf8RootDir(PathBuf),
 }
 
 impl From<ParsePlatformError> for ParseChannelError {
@@ -421,54 +428,31 @@ fn is_path(path: &str) -> bool {
         Some((letter, ':', '/' | '\\')) if letter.is_alphabetic())
 }
 
-/// Normalizes a file path by eliminating `..` and `.`.
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
-
-    for component in components {
-        match component {
-            Component::Prefix(..) => unreachable!(),
-            Component::RootDir => {
-                ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                ret.pop();
-            }
-            Component::Normal(c) => {
-                ret.push(c);
-            }
-        }
-    }
-    ret
-}
-
 /// Returns the specified path as an absolute path
-fn absolute_path<'a>(path: &'a Path, root_dir: &Path) -> Cow<'a, Path> {
-    if matches!(
-        path.components().next(),
-        Some(Component::RootDir | Component::Prefix(_))
-    ) {
-        return Cow::Borrowed(path);
+fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
+    let path = Utf8TypedPath::from(path);
+    if path.is_absolute() {
+        return Ok(path.normalize());
     }
 
-    let absolute_dir = root_dir.join(path);
-    Cow::Owned(normalize_path(&absolute_dir))
+    let root_dir_str = root_dir
+        .to_str()
+        .ok_or_else(|| ParseChannelError::NotUtf8RootDir(root_dir.to_path_buf()))?;
+    let native_root_dir = Utf8NativePathBuf::from(root_dir_str);
+
+    if !native_root_dir.is_absolute() {
+        return Err(ParseChannelError::NonAbsoluteRootDir(
+            root_dir.to_path_buf(),
+        ));
+    }
+
+    Ok(native_root_dir.to_typed_path().join(path).normalize())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        path::{Path, PathBuf},
-        str::FromStr,
-    };
+    use std::str::FromStr;
     use url::Url;
 
     #[test]
@@ -493,51 +477,27 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_path() {
-        assert_eq!(
-            normalize_path(Path::new("foo/bar")),
-            PathBuf::from("foo/bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("foo/bar/")),
-            PathBuf::from("foo/bar/")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/bar")),
-            PathBuf::from("foo/bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/../bar")),
-            PathBuf::from("bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/../bar/..")),
-            PathBuf::from("")
-        );
-    }
-
-    #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
+        let native_current_dir = typed_path::utils::utf8_current_dir()
+            .expect("")
+            .to_typed_path_buf();
         assert_eq!(
-            absolute_path(Path::new("."), &current_dir).as_ref(),
-            &current_dir
+            absolute_path(".", &current_dir).as_ref(),
+            Ok(&native_current_dir)
         );
         assert_eq!(
-            absolute_path(Path::new("foo"), &current_dir).as_ref(),
-            &current_dir.join("foo")
+            absolute_path("foo", &current_dir).as_ref(),
+            Ok(&native_current_dir.join("foo"))
         );
 
-        let mut parent_dir = current_dir.clone();
+        let mut parent_dir = native_current_dir.clone();
         assert!(parent_dir.pop());
 
+        assert_eq!(absolute_path("..", &current_dir).as_ref(), Ok(&parent_dir));
         assert_eq!(
-            absolute_path(Path::new(".."), &current_dir).as_ref(),
-            &parent_dir
-        );
-        assert_eq!(
-            absolute_path(Path::new("../foo"), &current_dir).as_ref(),
-            &parent_dir.join("foo")
+            absolute_path("../foo", &current_dir).as_ref(),
+            Ok(&parent_dir.join("foo"))
         );
     }
 
@@ -610,14 +570,12 @@ mod tests {
         let current_dir = std::env::current_dir().expect("no current dir?");
         let channel = Channel::from_str("./dir/does/not_exist", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
+        let expected = absolute_path("./dir/does/not_exist", &current_dir).unwrap();
         assert_eq!(
             channel.name(),
-            Url::from_directory_path(absolute_path(
-                Path::new("./dir/does/not_exist"),
-                &current_dir
-            ))
-            .unwrap()
-            .as_str()
+            file_url::directory_path_to_url(expected.to_path())
+                .unwrap()
+                .as_str()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(

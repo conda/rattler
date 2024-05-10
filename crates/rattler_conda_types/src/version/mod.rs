@@ -951,7 +951,6 @@ impl<'de> Deserialize<'de> for Version {
         D: Deserializer<'de>,
     {
         Cow::<'de, str>::deserialize(deserializer)?
-            .as_ref()
             .parse()
             .map_err(D::Error::custom)
     }

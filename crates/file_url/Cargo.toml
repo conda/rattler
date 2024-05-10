@@ -12,6 +12,7 @@ license.workspace = true
 url = { workspace = true }
 percent-encoding = { workspace = true }
 itertools = { workspace = true }
+typed-path = { workspace = true }
 
 [dev-dependencies]
 rstest = { workspace = true }

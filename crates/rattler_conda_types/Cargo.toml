@@ -31,6 +31,7 @@ smallvec = { workspace = true, features = ["serde", "const_new", "const_generics
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]

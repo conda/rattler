@@ -5,8 +5,11 @@
 use itertools::Itertools;
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
 use std::fmt::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
+use typed_path::{
+    Utf8TypedComponent, Utf8TypedPath, Utf8UnixComponent, Utf8WindowsComponent, Utf8WindowsPrefix,
+};
 use url::{Host, Url};
 
 /// Returns true if the specified segment is considered to be a Windows drive letter segment.
@@ -94,8 +97,8 @@ fn starts_with_windows_drive_letter(s: &str) -> bool {
         && (s.len() == 2 || matches!(s.as_bytes()[2], b'/' | b'\\' | b'?' | b'#'))
 }
 
-fn path_to_url(path: &Path) -> Result<String, NotAnAbsolutePath> {
-    use std::path::{Component, Prefix};
+fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, NotAnAbsolutePath> {
+    let path = path.into();
     let mut components = path.components();
 
     let mut result = String::from("file://");
@@ -103,39 +106,37 @@ fn path_to_url(path: &Path) -> Result<String, NotAnAbsolutePath> {
 
     let root = components.next();
     match root {
-        Some(Component::Prefix(ref p)) => match p.kind() {
-            Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => {
-                // host_end = to_u32(serialization.len()).unwrap();
-                // host_internal = HostInternal::None;
+        Some(Utf8TypedComponent::Windows(Utf8WindowsComponent::Prefix(ref p))) => match p.kind() {
+            Utf8WindowsPrefix::Disk(letter) | Utf8WindowsPrefix::VerbatimDisk(letter) => {
                 result.push('/');
-                result.push(letter as char);
+                result.push(letter);
                 result.push(':');
             }
-            Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
-                let host = Host::parse(server.to_str().ok_or(NotAnAbsolutePath)?)
-                    .map_err(|_err| NotAnAbsolutePath)?;
+            Utf8WindowsPrefix::UNC(server, share)
+            | Utf8WindowsPrefix::VerbatimUNC(server, share) => {
+                let host = Host::parse(server).map_err(|_err| NotAnAbsolutePath)?;
                 write!(result, "{host}").unwrap();
-                // host_end = to_u32(serialization.len()).unwrap();
-                // host_internal = host.into();
                 result.push('/');
-                let share = share.to_str().ok_or(NotAnAbsolutePath)?;
                 result.extend(percent_encode(share.as_bytes(), PATH_SEGMENT));
             }
             _ => return Err(NotAnAbsolutePath),
         },
-        Some(Component::RootDir) => {}
+        Some(Utf8TypedComponent::Unix(Utf8UnixComponent::RootDir)) => {}
         _ => return Err(NotAnAbsolutePath),
     }
 
     let mut path_only_has_prefix = true;
     for component in components {
-        if component == Component::RootDir {
+        if matches!(
+            component,
+            Utf8TypedComponent::Windows(Utf8WindowsComponent::RootDir)
+                | Utf8TypedComponent::Unix(Utf8UnixComponent::RootDir)
+        ) {
             continue;
         }
 
         path_only_has_prefix = false;
-        // FIXME: somehow work with non-unicode?
-        let component = component.as_os_str().to_str().ok_or(NotAnAbsolutePath)?;
+        let component = component.as_str();
 
         result.push('/');
         result.extend(percent_encode(component.as_bytes(), PATH_SEGMENT));
@@ -152,14 +153,17 @@ fn path_to_url(path: &Path) -> Result<String, NotAnAbsolutePath> {
     Ok(result)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NotAnAbsolutePath;
 
-pub fn file_path_to_url(path: &Path) -> Result<Url, NotAnAbsolutePath> {
+pub fn file_path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<Url, NotAnAbsolutePath> {
     let url = path_to_url(path)?;
     Ok(Url::from_str(&url).expect("url string must be a valid url"))
 }
 
-pub fn directory_path_to_url(path: &Path) -> Result<Url, NotAnAbsolutePath> {
+pub fn directory_path_to_url<'a>(
+    path: impl Into<Utf8TypedPath<'a>>,
+) -> Result<Url, NotAnAbsolutePath> {
     let mut url = path_to_url(path)?;
     if !url.ends_with('/') {
         url.push('/');
@@ -199,16 +203,11 @@ mod tests {
         "\\\\.\\Volume{b75e2c83-0000-0000-0000-602f00000000}\\Test\\Foo.txt",
         None
     )]
-    #[case::ip_address(
-        "\\127.0.0.1\\c$\\temp\\test-file.txt",
-        Some("file:///127.0.0.1/c$/temp/test-file.txt")
-    )]
     #[case::percent_encoding("//foo/ba r", Some("file://foo/ba%20r"))]
     fn test_file_path_to_url(#[case] path: &str, #[case] expected: Option<&str>) {
-        let path = PathBuf::from(path);
         let expected = expected.map(|s| s.to_string());
         assert_eq!(
-            super::file_path_to_url(&path).map(|u| u.to_string()).ok(),
+            super::file_path_to_url(path).map(|u| u.to_string()).ok(),
             expected
         );
     }

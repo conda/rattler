@@ -118,4 +118,14 @@ mod test {
         barrier.set(42).unwrap();
         assert!(barrier.set(42).is_err());
     }
+
+    #[test]
+    pub fn test_drop() {
+        let barrier = BarrierCell::new();
+        let arc = Arc::new(42);
+        barrier.set(arc.clone()).unwrap();
+        assert_eq!(Arc::strong_count(&arc), 2);
+        drop(barrier);
+        assert_eq!(Arc::strong_count(&arc), 1);
+    }
 }
