@@ -112,9 +112,12 @@ impl TokenClient {
                 reporter.on_download_complete(&token_url, index);
             }
 
-            let token: Token = serde_json::from_slice(&bytes).map_err(|e| {
+            let mut token: Token = serde_json::from_slice(&bytes).map_err(|e| {
                 GatewayError::IoError("failed to parse sharded index token".to_string(), e.into())
             })?;
+
+            // Ensure that the issued_at field is set.
+            token.issued_at.get_or_insert_with(Utc::now);
 
             Arc::new(token)
         };
