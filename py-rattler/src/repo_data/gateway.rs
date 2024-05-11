@@ -7,8 +7,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, FromPyObject, PyAny, PyResult, Python};
 use pyo3_asyncio::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::CacheAction;
-use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig};
-use std::collections::HashMap;
+use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[pyclass]
@@ -27,6 +27,21 @@ impl From<PyGateway> for Gateway {
 impl From<Gateway> for PyGateway {
     fn from(value: Gateway) -> Self {
         Self { inner: value }
+    }
+}
+
+impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
+    fn extract(ob: &'source PyAny) -> PyResult<Self> {
+        let parsed = match ob.extract::<Option<HashSet<PyPlatform>>>()? {
+            Some(platforms) => SubdirSelection::Some(
+                platforms
+                    .into_iter()
+                    .map(|p| p.inner.as_str().to_owned())
+                    .collect(),
+            ),
+            None => SubdirSelection::All,
+        };
+        Ok(Wrap(parsed))
     }
 }
 
@@ -58,6 +73,10 @@ impl PyGateway {
         Ok(Self {
             inner: gateway.finish(),
         })
+    }
+
+    pub fn clear_repodata_cache(&self, channel: &PyChannel, subdirs: Wrap<SubdirSelection>) {
+        self.inner.clear_repodata_cache(&channel.inner, subdirs.0);
     }
 
     pub fn query<'a>(

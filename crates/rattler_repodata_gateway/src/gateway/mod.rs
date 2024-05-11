@@ -22,6 +22,7 @@ use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::HashSet;
 use std::{
     path::PathBuf,
     sync::{Arc, Weak},
@@ -56,12 +57,16 @@ impl Default for Gateway {
 /// A selection of subdirectories.
 #[derive(Default, Clone, Debug)]
 pub enum SubdirSelection {
+    /// Select all subdirectories
     #[default]
     All,
-    Some(Vec<String>),
+
+    /// Select these specific subdirectories
+    Some(HashSet<String>),
 }
 
 impl SubdirSelection {
+    /// Returns `true` if the given subdirectory is part of the selection.
     pub fn contains(&self, subdir: &str) -> bool {
         match self {
             SubdirSelection::All => true,

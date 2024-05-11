@@ -173,6 +173,35 @@ class Gateway:
         # Convert the records into python objects
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
+    def clear_repodata_cache(
+        self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
+    ) -> None:
+        """
+        Clears any in-memory cache for the given channel.
+
+        Any subsequent query will re-fetch any required data from the source.
+
+        This method does not clear any on-disk cache.
+
+        Arguments:
+            channel: The channel to clear the cache for.
+            subdirs: A selection of subdirectories to clear, if `None` is specified
+                     all subdirectories of the channel are cleared.
+
+        Examples
+        --------
+        >>> gateway = Gateway()
+        >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
+        >>> gateway.clear_repodata_cache("robostack")
+        >>>
+        """
+        self._gateway.clear_repodata_cache(
+            channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
+            {subdir._inner if isinstance(subdir, Platform) else Platform(subdir)._inner for subdir in subdirs}
+            if subdirs is not None
+            else None,
+        )
+
     def __repr__(self) -> str:
         """
         Returns a representation of the Gateway.
