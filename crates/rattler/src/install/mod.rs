@@ -352,7 +352,7 @@ pub async fn link_package(
             Ok(vec![(number_of_paths_entries, paths_entry)])
         };
 
-        pending_futures.push(install_future.boxed_local());
+        pending_futures.push(install_future.boxed());
         number_of_paths_entries += 1;
     }
 
@@ -414,7 +414,7 @@ pub async fn link_package(
                 Ok(entries)
             };
 
-            pending_futures.push(entry_point_fut.boxed_local());
+            pending_futures.push(entry_point_fut.boxed());
             number_of_paths_entries += if platform.is_windows() { 2 } else { 1 };
         }
     }
