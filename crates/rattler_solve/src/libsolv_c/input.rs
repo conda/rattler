@@ -313,7 +313,7 @@ pub fn cache_repodata(
     // Add repodata to a new pool + repo
     let pool = Pool::default();
     let repo = Repo::new(&pool, url, channel_priority.unwrap_or(0));
-    add_repodata_records(&pool, &repo, data);
+    add_repodata_records(&pool, &repo, data, None);
 
     // Export repo to .solv in memory
     let mut stream_ptr = std::ptr::null_mut();
