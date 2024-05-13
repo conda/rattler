@@ -24,6 +24,7 @@ async def solve(
     virtual_packages: Optional[List[GenericVirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
+    exclude_newer: Optional[datetime.datetime] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -55,6 +56,7 @@ async def solve(
                          the only channel for that package. When `ChannelPriority.Disabled`
                          it will search for every package in every channel.
         timeout:    The maximum time the solver is allowed to run.
+        exclude_newer: Exclude any record that is newer than the given datetime.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -77,5 +79,8 @@ async def solve(
             virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
             channel_priority=channel_priority.value,
             timeout=timeout.microseconds if timeout else None,
+            exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            if exclude_newer
+            else None,
         )
     ]
