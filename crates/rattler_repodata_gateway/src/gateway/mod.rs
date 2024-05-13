@@ -22,6 +22,7 @@ use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 use reqwest_middleware::ClientWithMiddleware;
+use std::collections::HashSet;
 use std::{
     path::PathBuf,
     sync::{Arc, Weak},
@@ -50,6 +51,27 @@ pub struct Gateway {
 impl Default for Gateway {
     fn default() -> Self {
         Gateway::new()
+    }
+}
+
+/// A selection of subdirectories.
+#[derive(Default, Clone, Debug)]
+pub enum SubdirSelection {
+    /// Select all subdirectories
+    #[default]
+    All,
+
+    /// Select these specific subdirectories
+    Some(HashSet<String>),
+}
+
+impl SubdirSelection {
+    /// Returns `true` if the given subdirectory is part of the selection.
+    pub fn contains(&self, subdir: &str) -> bool {
+        match self {
+            SubdirSelection::All => true,
+            SubdirSelection::Some(subdirs) => subdirs.contains(&subdir.to_string()),
+        }
     }
 }
 
@@ -86,6 +108,17 @@ impl Gateway {
             platforms.into_iter().collect(),
             specs.into_iter().map(Into::into).collect(),
         )
+    }
+
+    /// Clears any in-memory cache for the given channel.
+    ///
+    /// Any subsequent query will re-fetch any required data from the source.
+    ///
+    /// This method does not clear any on-disk cache.
+    pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
+        self.inner
+            .subdirs
+            .retain(|key, _| key.0 != *channel || !subdirs.contains(key.1.as_str()));
     }
 }
 
@@ -289,13 +322,16 @@ enum PendingOrFetched<T> {
 
 #[cfg(test)]
 mod test {
+    use crate::fetch::CacheAction;
     use crate::gateway::Gateway;
     use crate::utils::simple_channel_server::SimpleChannelServer;
-    use crate::GatewayError;
+    use crate::{GatewayError, Reporter, SourceConfig};
+    use dashmap::DashSet;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
     use rstest::rstest;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
+    use std::sync::Arc;
     use std::time::Instant;
     use url::Url;
 
@@ -402,5 +438,61 @@ mod test {
 
         let total_records: usize = records.iter().map(|r| r.len()).sum();
         assert_eq!(total_records, 84242);
+    }
+
+    #[tokio::test]
+    async fn test_clear_cache() {
+        let local_channel = remote_conda_forge().await;
+
+        // Create a gateway with a custom channel configuration that disables caching.
+        let gateway = Gateway::builder()
+            .with_channel_config(super::ChannelConfig {
+                default: SourceConfig {
+                    cache_action: CacheAction::NoCache,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .finish();
+
+        #[derive(Default)]
+        struct Downloads {
+            urls: DashSet<Url>,
+        }
+        let downloads = Arc::new(Downloads::default());
+        impl Reporter for Arc<Downloads> {
+            fn on_download_complete(&self, url: &Url, _index: usize) {
+                self.urls.insert(url.clone());
+            }
+        }
+
+        // Construct a simpel query
+        let query = gateway
+            .query(
+                vec![local_channel.channel()],
+                vec![Platform::Linux64, Platform::NoArch],
+                vec![PackageName::from_str("python").unwrap()].into_iter(),
+            )
+            .with_reporter(downloads.clone());
+
+        // Run the query once. We expect some activity.
+        query.clone().execute().await.unwrap();
+        assert!(downloads.urls.len() > 0, "there should be some urls");
+        downloads.urls.clear();
+
+        // Run the query a second time.
+        query.clone().execute().await.unwrap();
+        assert!(
+            downloads.urls.is_empty(),
+            "there should be NO new url fetches"
+        );
+
+        // Now clear the cache and run the query again.
+        gateway.clear_repodata_cache(&local_channel.channel(), Default::default());
+        query.clone().execute().await.unwrap();
+        assert!(
+            downloads.urls.len() > 0,
+            "after clearing the cache there should be new urls fetched"
+        );
     }
 }

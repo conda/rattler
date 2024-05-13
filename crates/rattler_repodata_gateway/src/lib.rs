@@ -71,4 +71,6 @@ pub use reporter::Reporter;
 mod gateway;
 
 #[cfg(feature = "gateway")]
-pub use gateway::{ChannelConfig, Gateway, GatewayBuilder, GatewayError, RepoData, SourceConfig};
+pub use gateway::{
+    ChannelConfig, Gateway, GatewayBuilder, GatewayError, RepoData, SourceConfig, SubdirSelection,
+};
