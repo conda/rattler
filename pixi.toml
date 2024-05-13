@@ -17,6 +17,7 @@ fmt = "cargo fmt"
 lint = "cargo clippy"
 check = "cargo check"
 test = "cargo test"
+rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
 cxx-compiler = "~=1.6.0"
