@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
     Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, NoArchType, PackageRecord,
@@ -124,13 +125,8 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
         SparseRepoData::load_records_recursive(sparse_repo_datas, names, None).unwrap();
 
     let solver_task = SolverTask {
-        available_packages: &available_packages,
         specs: specs.clone(),
-        locked_packages: Vec::default(),
-        pinned_packages: Vec::default(),
-        virtual_packages: Vec::default(),
-        timeout: None,
-        channel_priority: ChannelPriority::Strict,
+        ..SolverTask::from_iter(&available_packages)
     };
 
     let pkgs1 = match T::default().solve(solver_task) {
@@ -204,6 +200,8 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 }
 macro_rules! solver_backend_tests {
     ($T:path) => {
+        use chrono::{DateTime, Utc};
+
         #[test]
         fn test_solve_quetz() {
             insta::assert_yaml_snapshot!(solve_real_world::<$T>(vec!["quetz",]));
@@ -245,17 +243,18 @@ macro_rules! solver_backend_tests {
         fn test_solve_favored() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
-                vec![installed_package(
-                    "conda-forge",
-                    "linux-64",
-                    "bors",
-                    "1.0",
-                    "bla_1",
-                    1,
-                )],
-                Vec::new(),
-                Vec::new(),
-                &["bors"],
+                SimpleSolveTask {
+                    specs: &["bors"],
+                    installed_packages: vec![installed_package(
+                        "conda-forge",
+                        "linux-64",
+                        "bors",
+                        "1.0",
+                        "bla_1",
+                        1,
+                    )],
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -267,10 +266,10 @@ macro_rules! solver_backend_tests {
         fn test_solve_with_error() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                &["foobar >=2", "bors >= 2"],
+                SimpleSolveTask {
+                    specs: &["foobar >=2", "bors >= 2"],
+                    ..SimpleSolveTask::default()
+                },
             );
 
             assert!(result.is_err());
@@ -283,10 +282,10 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_install_non_existent() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                &["asdfasdf", "foo<4"],
+                SimpleSolveTask {
+                    specs: &["asdfasdf", "foo<4"],
+                    ..SimpleSolveTask::default()
+                },
             );
 
             assert!(result.is_err());
@@ -299,10 +298,10 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_missing_virtual_package() {
             let result = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                &["bar"],
+                SimpleSolveTask {
+                    specs: &["bar"],
+                    ..SimpleSolveTask::default()
+                },
             );
 
             assert!(matches!(result.err(), Some(SolveError::Unsolvable(_))));
@@ -312,14 +311,15 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_with_virtual_package() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                vec![GenericVirtualPackage {
-                    name: rattler_conda_types::PackageName::new_unchecked("__unix"),
-                    version: Version::from_str("0").unwrap(),
-                    build_string: "0".to_string(),
-                }],
-                &["bar"],
+                SimpleSolveTask {
+                    specs: &["bar"],
+                    virtual_packages: vec![GenericVirtualPackage {
+                        name: rattler_conda_types::PackageName::new_unchecked("__unix"),
+                        version: Version::from_str("0").unwrap(),
+                        build_string: "0".to_string(),
+                    }],
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -334,10 +334,10 @@ macro_rules! solver_backend_tests {
         fn test_solve_dummy_repo_install_new() {
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                &["foo<4"],
+                SimpleSolveTask {
+                    specs: &["foo<4"],
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -380,10 +380,10 @@ macro_rules! solver_backend_tests {
 
             let operations = solve::<$T>(
                 dummy_channel_json_path(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                &[match_spec],
+                SimpleSolveTask {
+                    specs: &[match_spec],
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -405,10 +405,11 @@ macro_rules! solver_backend_tests {
 
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                already_installed,
-                Vec::new(),
-                Vec::new(),
-                &["foo<4"],
+                SimpleSolveTask {
+                    specs: &["foo<4"],
+                    installed_packages: already_installed,
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -433,10 +434,11 @@ macro_rules! solver_backend_tests {
 
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                already_installed,
-                Vec::new(),
-                Vec::new(),
-                &["foo>=4"],
+                SimpleSolveTask {
+                    specs: &["foo>=4"],
+                    installed_packages: already_installed,
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -459,10 +461,11 @@ macro_rules! solver_backend_tests {
 
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                already_installed,
-                Vec::new(),
-                Vec::new(),
-                &["foo<4"],
+                SimpleSolveTask {
+                    specs: &["foo<4"],
+                    installed_packages: already_installed,
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
@@ -487,15 +490,38 @@ macro_rules! solver_backend_tests {
 
             let pkgs = solve::<$T>(
                 dummy_channel_json_path(),
-                already_installed,
-                Vec::new(),
-                Vec::new(),
-                &[],
+                SimpleSolveTask {
+                    installed_packages: already_installed,
+                    ..SimpleSolveTask::default()
+                },
             )
             .unwrap();
 
             // Should be no packages!
             assert_eq!(0, pkgs.len());
+        }
+
+        #[test]
+        fn test_exclude_newer() {
+            let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+
+            let pkgs = solve::<$T>(
+                dummy_channel_json_path(),
+                SimpleSolveTask {
+                    specs: &["foo"],
+                    exclude_newer: Some(date),
+                    ..SimpleSolveTask::default()
+                },
+            )
+            .unwrap();
+
+            assert_eq!(1, pkgs.len());
+
+            let info = &pkgs[0];
+            assert_eq!("foo", info.package_record.name.as_normalized());
+            assert_eq!("3.0.2", &info.package_record.version.to_string(),
+                "although there is a newer version available we expect an older version of foo because we exclude the newer version based on the timestamp");
+            assert_eq!(&info.file_name, "foo-3.0.2-py36h1af98f8_1.tar.bz2", "even though there is a conda version available we expect the tar.bz2 version because we exclude the .conda version based on the timestamp");
         }
     };
 }
@@ -504,7 +530,7 @@ macro_rules! solver_backend_tests {
 mod libsolv_c {
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SolveError, Version,
+        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
     #[allow(unused_imports)] // For some reason windows thinks this is an unused import.
     use rattler_solve::ChannelPriority;
@@ -547,7 +573,8 @@ mod libsolv_c {
                 specs,
                 pinned_packages: Vec::new(),
                 timeout: None,
-                channel_priority: ChannelPriority::Strict,
+                channel_priority: ChannelPriority::default,
+                exclude_newer: None,
             })
             .unwrap();
 
@@ -592,7 +619,7 @@ mod libsolv_c {
 mod resolvo {
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SolveError, Version,
+        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
@@ -601,17 +628,35 @@ mod resolvo {
     fn test_solve_locked() {
         let result = solve::<rattler_solve::resolvo::Solver>(
             dummy_channel_json_path(),
-            Vec::new(),
-            vec![installed_package(
-                "conda-forge",
-                "linux-64",
-                "bors",
-                "1.0",
-                "bla_1",
-                1,
-            )],
-            Vec::new(),
-            &["bors >=2"],
+            SimpleSolveTask {
+                specs: &["bors >=2"],
+                pinned_packages: vec![installed_package(
+                    "conda-forge",
+                    "linux-64",
+                    "bors",
+                    "1.0",
+                    "bla_1",
+                    1,
+                )],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    #[test]
+    fn test_exclude_newer_error() {
+        let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
+
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            dummy_channel_json_path(),
+            SimpleSolveTask {
+                specs: &["foo>=4"],
+                exclude_newer: Some(date),
+                ..SimpleSolveTask::default()
+            },
         );
 
         // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
@@ -619,28 +664,34 @@ mod resolvo {
     }
 }
 
-fn solve<T: SolverImpl + Default>(
-    repo_path: String,
+#[derive(Default)]
+struct SimpleSolveTask<'a> {
+    specs: &'a [&'a str],
     installed_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
-    match_specs: &[&str],
+    exclude_newer: Option<DateTime<Utc>>,
+}
+
+fn solve<T: SolverImpl + Default>(
+    repo_path: String,
+    task: SimpleSolveTask<'_>,
 ) -> Result<Vec<RepoDataRecord>, SolveError> {
     let repo_data = read_repodata(&repo_path);
 
-    let specs: Vec<_> = match_specs
+    let specs: Vec<_> = task
+        .specs
         .iter()
         .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
         .collect();
 
     let task = SolverTask {
-        locked_packages: installed_packages,
-        virtual_packages,
-        available_packages: [&repo_data],
+        locked_packages: task.installed_packages,
+        virtual_packages: task.virtual_packages,
         specs,
-        pinned_packages,
-        timeout: None,
-        channel_priority: ChannelPriority::Strict,
+        pinned_packages: task.pinned_packages,
+        exclude_newer: task.exclude_newer,
+        ..SolverTask::from_iter([&repo_data])
     };
 
     let pkgs = T::default().solve(task)?;
@@ -652,8 +703,15 @@ fn solve<T: SolverImpl + Default>(
     Ok(pkgs)
 }
 
-fn compare_solve(specs: Vec<&str>) {
-    let specs = specs
+#[derive(Default)]
+struct CompareTask<'a> {
+    specs: Vec<&'a str>,
+    exclude_newer: Option<DateTime<Utc>>,
+}
+
+fn compare_solve(task: CompareTask<'_>) {
+    let specs = task
+        .specs
         .iter()
         .map(|s| MatchSpec::from_str(s, ParseStrictness::Lenient).unwrap())
         .collect::<Vec<_>>();
@@ -693,13 +751,9 @@ fn compare_solve(specs: Vec<&str>) {
             extract_pkgs(
                 rattler_solve::libsolv_c::Solver
                     .solve(SolverTask {
-                        available_packages: &available_packages,
                         specs: specs.clone(),
-                        locked_packages: Vec::default(),
-                        pinned_packages: Vec::default(),
-                        virtual_packages: Vec::default(),
-                        timeout: None,
-                        channel_priority: ChannelPriority::Strict,
+                        exclude_newer: task.exclude_newer,
+                        ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap(),
             ),
@@ -716,13 +770,9 @@ fn compare_solve(specs: Vec<&str>) {
             extract_pkgs(
                 rattler_solve::resolvo::Solver
                     .solve(SolverTask {
-                        available_packages: &available_packages,
                         specs: specs.clone(),
-                        locked_packages: Vec::default(),
-                        pinned_packages: Vec::default(),
-                        virtual_packages: Vec::default(),
-                        timeout: None,
-                        channel_priority: ChannelPriority::Strict,
+                        exclude_newer: task.exclude_newer,
+                        ..SolverTask::from_iter(&available_packages)
                     })
                     .unwrap(),
             ),
@@ -751,27 +801,42 @@ fn compare_solve(specs: Vec<&str>) {
 
 #[test]
 fn compare_solve_tensorboard() {
-    compare_solve(vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"]);
+    compare_solve(CompareTask {
+        specs: vec!["tensorboard=2.1.1", "grpc-cpp=1.39.1"],
+        ..CompareTask::default()
+    });
 }
 
 #[test]
 fn compare_solve_python() {
-    compare_solve(vec!["python=3.9"]);
+    compare_solve(CompareTask {
+        specs: vec!["python=3.9"],
+        ..CompareTask::default()
+    });
 }
 
 #[test]
 fn compare_solve_tensorflow() {
-    compare_solve(vec!["tensorflow"]);
+    compare_solve(CompareTask {
+        specs: vec!["tensorflow"],
+        ..CompareTask::default()
+    });
 }
 
 #[test]
 fn compare_solve_quetz() {
-    compare_solve(vec!["quetz"]);
+    compare_solve(CompareTask {
+        specs: vec!["quetz"],
+        ..CompareTask::default()
+    });
 }
 
 #[test]
 fn compare_solve_xtensor_xsimd() {
-    compare_solve(vec!["xtensor", "xsimd"]);
+    compare_solve(CompareTask {
+        specs: vec!["xtensor", "xsimd"],
+        ..CompareTask::default()
+    });
 }
 
 fn solve_to_get_channel_of_spec(
@@ -788,30 +853,16 @@ fn solve_to_get_channel_of_spec(
     let available_packages =
         SparseRepoData::load_records_recursive(repo_data, names, None).unwrap();
 
+    let task = SolverTask {
+        specs: specs.clone(),
+        channel_priority,
+        ..SolverTask::from_iter(&available_packages)
+    };
+
     let result = if use_resolvo {
-        rattler_solve::resolvo::Solver
-            .solve(SolverTask {
-                available_packages: &available_packages,
-                specs: specs.clone(),
-                locked_packages: Vec::default(),
-                pinned_packages: Vec::default(),
-                virtual_packages: Vec::default(),
-                timeout: None,
-                channel_priority,
-            })
-            .unwrap()
+        rattler_solve::resolvo::Solver.solve(task).unwrap()
     } else {
-        rattler_solve::libsolv_c::Solver
-            .solve(SolverTask {
-                available_packages: &available_packages,
-                specs: specs.clone(),
-                locked_packages: Vec::default(),
-                pinned_packages: Vec::default(),
-                virtual_packages: Vec::default(),
-                timeout: None,
-                channel_priority,
-            })
-            .unwrap()
+        rattler_solve::libsolv_c::Solver.solve(task).unwrap()
     };
 
     let record = result.iter().find(|record| {

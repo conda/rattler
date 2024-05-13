@@ -16,6 +16,7 @@ use super::{
         solvable::SolvableId,
     },
 };
+use chrono::{DateTime, Utc};
 use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
 use std::{cmp::Ordering, collections::HashMap};
 
@@ -48,6 +49,7 @@ pub fn add_repodata_records<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
+    exclude_newer: Option<&DateTime<Utc>>,
 ) -> Vec<SolvableId> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
@@ -77,6 +79,12 @@ pub fn add_repodata_records<'a>(
 
     let mut solvable_ids = Vec::new();
     for (repo_data_index, repo_data) in repo_datas.into_iter().enumerate() {
+        // Skip packages that are newer than the specified timestamp
+        match (exclude_newer, repo_data.package_record.timestamp.as_ref()) {
+            (Some(exclude_newer), Some(timestamp)) if *timestamp > *exclude_newer => continue,
+            _ => {}
+        }
+
         // Create a solvable for the package
         let solvable_id =
             match add_or_reuse_solvable(pool, repo, &data, &mut package_to_type, repo_data) {
