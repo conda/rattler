@@ -223,7 +223,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // Construct a transaction to
     let transaction = Transaction::from_current_and_desired(
-        installed_packages,
+        &installed_packages,
         required_packages,
         install_platform,
     )?;
@@ -282,7 +282,19 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         );
     } else {
         // Execute the operations that are returned by the solver.
-        execute_transaction(transaction, target_prefix, cache_dir, download_client).await?;
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&installed_packages)
+            .execute_link_scripts(true)
+            .with_io_concurrency_limit(100)
+            .finish();
+        execute_transaction(
+            &install_driver,
+            transaction,
+            target_prefix,
+            cache_dir,
+            download_client,
+        )
+        .await?;
         println!(
             "{} Successfully updated the environment",
             console::style(console::Emoji("✔", "")).green(),
@@ -294,16 +306,14 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
 /// Executes the transaction on the given environment.
 async fn execute_transaction(
-    transaction: Transaction<PrefixRecord, RepoDataRecord>,
+    install_driver: &InstallDriver,
+    transaction: Transaction<&PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
     cache_dir: PathBuf,
     download_client: reqwest_middleware::ClientWithMiddleware,
 ) -> anyhow::Result<()> {
     // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
-
-    // Create an install driver which helps limit the number of concurrent filesystem operations
-    let install_driver = InstallDriver::default();
 
     // Run pre-process (pre-unlink, mainly)
     install_driver.pre_process(&transaction, &target_prefix)?;
@@ -393,7 +403,7 @@ async fn execute_operation(
     install_driver: &InstallDriver,
     download_pb: Option<&ProgressBar>,
     link_pb: &ProgressBar,
-    op: TransactionOperation<PrefixRecord, RepoDataRecord>,
+    op: TransactionOperation<&PrefixRecord, RepoDataRecord>,
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
     // Determine the package to install

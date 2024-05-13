@@ -1,10 +1,11 @@
 //! Functions for running link scripts (pre-unlink and post-link) for a package
+use std::borrow::Borrow;
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
 };
 
-use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
 
 use super::{InstallDriver, Transaction};
@@ -151,15 +152,19 @@ pub fn run_link_scripts<'a>(
 
 impl InstallDriver {
     /// Run any post-link scripts that are part of the packages that are being installed.
-    pub fn run_post_link_scripts(
+    pub fn run_post_link_scripts<Old, New>(
         &self,
-        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        transaction: &Transaction<Old, New>,
         prefix_records: &[&PrefixRecord],
         target_prefix: &Path,
-    ) -> Result<PrePostLinkResult, LinkScriptError> {
+    ) -> Result<PrePostLinkResult, LinkScriptError>
+    where
+        Old: AsRef<New>,
+        New: AsRef<PackageRecord>,
+    {
         let to_install = transaction
             .installed_packages()
-            .map(|r| &r.package_record.name)
+            .map(|r| &r.as_ref().name)
             .collect::<HashSet<_>>();
 
         let filter_iter = prefix_records
@@ -176,14 +181,17 @@ impl InstallDriver {
     }
 
     /// Run any post-link scripts that are part of the packages that are being installed.
-    pub fn run_pre_unlink_scripts(
+    pub fn run_pre_unlink_scripts<Old, New>(
         &self,
-        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        transaction: &Transaction<Old, New>,
         target_prefix: &Path,
-    ) -> Result<PrePostLinkResult, LinkScriptError> {
+    ) -> Result<PrePostLinkResult, LinkScriptError>
+    where
+        Old: Borrow<PrefixRecord>,
+    {
         run_link_scripts(
             LinkScriptType::PreUnlink,
-            transaction.removed_packages(),
+            transaction.removed_packages().map(Borrow::borrow),
             target_prefix,
             &transaction.platform,
         )
@@ -225,13 +233,14 @@ mod tests {
 
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
+        let driver = InstallDriver::builder().execute_link_scripts(true).finish();
 
         execute_transaction(
             transaction,
             target_prefix.path(),
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
-            &InstallDriver::default(),
+            &driver,
             &InstallOptions::default(),
         )
         .await;
@@ -253,7 +262,7 @@ mod tests {
             target_prefix.path(),
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
             &cache,
-            &InstallDriver::default(),
+            &driver,
             &InstallOptions::default(),
         )
         .await;
