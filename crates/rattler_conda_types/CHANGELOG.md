@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.22.1...rattler_conda_types-v0.23.0) - 2024-05-13
+
+### Added
+- high level repodata access ([#560](https://github.com/mamba-org/rattler/pull/560))
+
+### Other
+- update README.md
+
 ## [0.22.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.22.0...rattler_conda_types-v0.22.1) - 2024-05-06
 
 ### Added
