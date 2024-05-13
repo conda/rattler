@@ -573,7 +573,7 @@ mod libsolv_c {
                 specs,
                 pinned_packages: Vec::new(),
                 timeout: None,
-                channel_priority: ChannelPriority::default,
+                channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
             })
             .unwrap();
