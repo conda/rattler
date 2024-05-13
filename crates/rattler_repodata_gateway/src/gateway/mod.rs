@@ -325,7 +325,7 @@ mod test {
     use crate::fetch::CacheAction;
     use crate::gateway::Gateway;
     use crate::utils::simple_channel_server::SimpleChannelServer;
-    use crate::{GatewayError, Reporter, SourceConfig};
+    use crate::{GatewayError, RepoData, Reporter, SourceConfig};
     use dashmap::DashSet;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
     use rstest::rstest;
@@ -362,7 +362,7 @@ mod test {
             .await
             .unwrap();
 
-        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
     }
 
@@ -382,7 +382,7 @@ mod test {
             .await
             .unwrap();
 
-        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
     }
 
@@ -436,7 +436,7 @@ mod test {
         let end = Instant::now();
         println!("{} records in {:?}", records.len(), end - start);
 
-        let total_records: usize = records.iter().map(|r| r.len()).sum();
+        let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 84242);
     }
 

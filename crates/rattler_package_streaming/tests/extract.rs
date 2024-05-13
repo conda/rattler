@@ -210,7 +210,7 @@ async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[c
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(all(feature = "reqwest"))]
+#[cfg(feature = "reqwest")]
 #[apply(url_archives)]
 #[tokio::test]
 async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {

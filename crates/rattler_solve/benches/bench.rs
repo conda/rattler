@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingM
 use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{ChannelPriority, SolverImpl, SolverTask};
+use rattler_solve::{SolverImpl, SolverTask};
 
 fn conda_json_path() -> String {
     format!(
@@ -63,13 +63,8 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         b.iter(|| {
             rattler_solve::libsolv_c::Solver
                 .solve(black_box(SolverTask {
-                    available_packages: &available_packages,
-                    locked_packages: vec![],
-                    pinned_packages: vec![],
-                    virtual_packages: vec![],
                     specs: specs.clone(),
-                    timeout: None,
-                    channel_priority: ChannelPriority::Strict,
+                    ..SolverTask::from_iter(&available_packages)
                 }))
                 .unwrap()
         });
@@ -80,13 +75,8 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         b.iter(|| {
             rattler_solve::resolvo::Solver
                 .solve(black_box(SolverTask {
-                    available_packages: &available_packages,
-                    locked_packages: vec![],
-                    pinned_packages: vec![],
-                    virtual_packages: vec![],
                     specs: specs.clone(),
-                    timeout: None,
-                    channel_priority: ChannelPriority::Strict,
+                    ..SolverTask::from_iter(&available_packages)
                 }))
                 .unwrap()
         });
