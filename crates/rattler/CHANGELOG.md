@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/mamba-org/rattler/compare/rattler-v0.24.1...rattler-v0.25.0) - 2024-05-14
+
+### Added
+- exclude repodata records based on timestamp ([#654](https://github.com/mamba-org/rattler/pull/654))
+
+### Other
+- use semaphore for install driver ([#653](https://github.com/mamba-org/rattler/pull/653))
+
 ## [0.24.1](https://github.com/mamba-org/rattler/compare/rattler-v0.24.0...rattler-v0.24.1) - 2024-05-13
 
 ### Other

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.7](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.6...rattler_lock-v0.22.7) - 2024-05-14
+
+### Other
+- bump pep crates ([#661](https://github.com/mamba-org/rattler/pull/661))
+
 ## [0.22.6](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.5...rattler_lock-v0.22.6) - 2024-05-13
 
 ### Added

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.10](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.9...rattler_package_streaming-v0.20.10) - 2024-05-14
+
+### Added
+- exclude repodata records based on timestamp ([#654](https://github.com/mamba-org/rattler/pull/654))
+
 ## [0.20.9](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.8...rattler_package_streaming-v0.20.9) - 2024-05-13
 
 ### Added
