@@ -35,14 +35,14 @@ jobs:
         with:
           profile: minimal
 
-      - uses: prefix-dev/setup-pixi@v0.5.1
+      - uses: prefix-dev/setup-pixi@v0.7.0
         with:
-          pixi-version: v0.10.0
+          pixi-version: v0.13.0
           cache: true
           manifest-path: py-rattler/pixi.toml
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       #  This does the following:
       #   - Replaces the docs icon with one that clearly denotes it's not the released package on crates.io

@@ -1,0 +1,3 @@
+# PypiPackageData
+
+::: rattler.lock.PypiPackageData

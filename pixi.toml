@@ -17,11 +17,12 @@ fmt = "cargo fmt"
 lint = "cargo clippy"
 check = "cargo check"
 test = "cargo test"
+rattler = "cargo run --bin rattler --release --"
 
 [dependencies]
 cxx-compiler = "~=1.6.0"
 openssl = "~=3.1.2"
 make = "~=4.3"
 pkg-config = "~=0.29.2"
-rust = "~=1.71.1"
+rust = "~=1.75.0"
 cmake = "~=3.26.4"

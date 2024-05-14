@@ -33,13 +33,16 @@ pub mod libc;
 pub mod linux;
 pub mod osx;
 
+use archspec::cpu::Microarchitecture;
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{GenericVirtualPackage, PackageName, Platform, Version};
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -145,7 +148,7 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
         result.push(cuda.into());
     }
 
-    if let Some(archspec) = Archspec::from_platform(platform) {
+    if let Some(archspec) = Archspec::current() {
         result.push(archspec.into());
     }
 
@@ -257,40 +260,95 @@ impl From<Cuda> for VirtualPackage {
 }
 
 /// Archspec describes the CPU architecture
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Archspec {
-    /// A specification of the architecture family. This could be `x86_64` but it could also include
-    /// the full CPU family.
-    pub spec: String,
+    /// The associated microarchitecture
+    pub spec: Arc<Microarchitecture>,
+}
+
+impl Serialize for Archspec {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.spec.name().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Archspec {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let name = String::deserialize(deserializer)?;
+        let spec = archspec::cpu::Microarchitecture::known_targets()
+            .get(&name)
+            .cloned()
+            .unwrap_or_else(|| Arc::new(archspec::cpu::Microarchitecture::generic(&name)));
+        Ok(Self { spec })
+    }
+}
+
+impl Hash for Archspec {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.spec.name().hash(state);
+    }
+}
+
+impl PartialEq<Self> for Archspec {
+    fn eq(&self, other: &Self) -> bool {
+        self.spec.name() == other.spec.name()
+    }
+}
+
+impl Eq for Archspec {}
+
+impl From<Arc<Microarchitecture>> for Archspec {
+    fn from(arch: Arc<Microarchitecture>) -> Self {
+        Self { spec: arch }
+    }
 }
 
 impl Archspec {
     /// Returns the current CPU architecture
     pub fn current() -> Option<Self> {
-        Self::from_platform(Platform::current())
+        archspec::cpu::host().ok().map(Into::into)
     }
 
-    /// Returns the CPU architecture for the given platform
+    /// Returns the minimal supported archspec architecture for the given
+    /// platform.
+    #[allow(clippy::match_same_arms)]
     pub fn from_platform(platform: Platform) -> Option<Self> {
-        let archspec = match platform {
+        // The values are taken from the archspec-json library.
+        // See: https://github.com/archspec/archspec-json/blob/master/cpu/microarchitectures.json
+        let archspec_name = match platform {
             Platform::NoArch | Platform::Unknown => return None,
-            Platform::EmscriptenWasm32 | Platform::WasiWasm32 => "wasm32",
+            Platform::EmscriptenWasm32 | Platform::WasiWasm32 => return None,
             Platform::Win32 | Platform::Linux32 => "x86",
             Platform::Win64 | Platform::Osx64 | Platform::Linux64 => "x86_64",
-            Platform::LinuxAarch64 => "aarch64",
-            Platform::LinuxArmV6l => "armv6l",
-            Platform::LinuxArmV7l => "armv7l",
+            Platform::LinuxAarch64 | Platform::LinuxArmV6l | Platform::LinuxArmV7l => "aarch64",
             Platform::LinuxPpc64le => "ppc64le",
             Platform::LinuxPpc64 => "ppc64",
             Platform::LinuxS390X => "s390x",
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",
-            Platform::WinArm64 | Platform::OsxArm64 => "arm64",
+
+            // TODO: There must be a minimal aarch64 version that windows supports.
+            Platform::WinArm64 => "aarch64",
+
+            // The first every Apple Silicon Macs are based on m1.
+            Platform::OsxArm64 => "m1",
         };
 
-        Some(Self {
-            spec: archspec.into(),
-        })
+        Some(
+            archspec::cpu::Microarchitecture::known_targets()
+                .get(archspec_name)
+                .cloned()
+                .unwrap_or_else(|| {
+                    Arc::new(archspec::cpu::Microarchitecture::generic(archspec_name))
+                })
+                .into(),
+        )
     }
 }
 
@@ -299,7 +357,7 @@ impl From<Archspec> for GenericVirtualPackage {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__archspec"),
             version: Version::major(1),
-            build_string: archspec.spec,
+            build_string: archspec.spec.name().to_string(),
         }
     }
 }

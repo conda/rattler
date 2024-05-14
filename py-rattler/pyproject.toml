@@ -21,7 +21,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 license = "BSD-3-Clause"
-documentation = "https://mamba-org.github.io/rattler/py-rattler/"
+
+[project.urls]
+Homepage = "https://github.com/mamba-org/rattler"
+Documentation = "https://mamba-org.github.io/rattler/py-rattler/"
+Repository = "https://github.com/mamba-org/rattler"
+Issues = "https://github.com/mamba-org/rattler/labels/python-bindings"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

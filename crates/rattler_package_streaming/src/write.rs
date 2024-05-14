@@ -3,7 +3,9 @@ use std::fs::{self, File};
 use std::io::{self, Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
+use chrono::{Datelike, Timelike};
 use rattler_conda_types::package::PackageMetadata;
+use zip::DateTime;
 
 /// Trait for progress bars
 pub trait ProgressBar {
@@ -289,8 +291,26 @@ pub fn write_conda_package<W: Write + Seek>(
 ) -> Result<(), std::io::Error> {
     // first create the outer zip archive that uses no compression
     let mut outer_archive = zip::ZipWriter::new(writer);
-    let options =
-        zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+
+    let last_modified_time = if let Some(time) = timestamp {
+        DateTime::from_date_and_time(
+            time.year() as u16,
+            time.month() as u8,
+            time.day() as u8,
+            time.hour() as u8,
+            time.minute() as u8,
+            time.second() as u8,
+        )
+        .expect("time should be in correct range")
+    } else {
+        // 1-1-2023 00:00:00 (Fixed date in the past for reproducible builds)
+        DateTime::from_date_and_time(2023, 1, 1, 0, 0, 0)
+            .expect("1-1-2023 00:00:00 should convert into datetime")
+    };
+
+    let options = zip::write::FileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .last_modified_time(last_modified_time);
 
     // write the metadata as first file in the zip archive
     let package_metadata = PackageMetadata::default();

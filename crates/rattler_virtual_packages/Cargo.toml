@@ -1,6 +1,6 @@
 [package]
 name = "rattler_virtual_packages"
-version.workspace = true
+version = "0.19.10"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Library to work with and detect Conda virtual packages"
@@ -11,15 +11,15 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-cfg-if = { workspace = true }
 libloading = { workspace = true }
 nom = { workspace = true }
 once_cell = { workspace = true }
-rattler_conda_types = { workspace = true }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.23.0", default-features = false }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+archspec = { workspace = true }
 
 [target.'cfg(target_os="macos")'.dependencies]
 plist = { workspace = true }

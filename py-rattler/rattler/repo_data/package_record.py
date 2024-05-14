@@ -1,10 +1,12 @@
 from __future__ import annotations
 import os
 from typing import List, Optional
-from rattler.package.package_name import PackageName
 
+from rattler import VersionWithSource
+from rattler.match_spec.match_spec import MatchSpec
+from rattler.package.no_arch_type import NoArchType
+from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
-from rattler.version.version import Version
 
 
 class PackageRecord:
@@ -15,6 +17,12 @@ class PackageRecord:
     """
 
     _record: PyRecord
+
+    def matches(self, spec: MatchSpec) -> bool:
+        """
+        Match a [`PackageRecord`] against a [`MatchSpec`].
+        """
+        return spec.matches(self)
 
     @staticmethod
     def from_index_json(
@@ -38,9 +46,7 @@ class PackageRecord:
         >>>
         ```
         """
-        return PackageRecord._from_py_record(
-            PyRecord.from_index_json(path, size, sha256, md5)
-        )
+        return PackageRecord._from_py_record(PyRecord.from_index_json(path, size, sha256, md5))
 
     @staticmethod
     def sort_topologically(records: List[PackageRecord]) -> List[PackageRecord]:
@@ -67,10 +73,7 @@ class PackageRecord:
         >>>
         ```
         """
-        return [
-            PackageRecord._from_py_record(p)
-            for p in PyRecord.sort_topologically(records)
-        ]
+        return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
@@ -286,6 +289,34 @@ class PackageRecord:
         return PackageName._from_py_package_name(self._record.name)
 
     @property
+    def noarch(self) -> Optional[str]:
+        """
+        The noarch type of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.noarch
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/pip-23.0-pyhd8ed1ab_0.json"
+        ... )
+        >>> record.noarch
+        'python'
+        >>>
+        ```
+        """
+        noarchtype = NoArchType._from_py_no_arch_type(self._record.noarch)
+        if noarchtype.python:
+            return "python"
+        if noarchtype.generic:
+            return "generic"
+        return None
+
+    @property
     def platform(self) -> Optional[str]:
         """
         Optionally the platform the package supports.
@@ -403,7 +434,7 @@ class PackageRecord:
         return self._record.track_features
 
     @property
-    def version(self) -> Version:
+    def version(self) -> VersionWithSource:
         """
         The version of the package.
 
@@ -415,11 +446,11 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.version
-        Version("3.40.0")
+        VersionWithSource(version="3.40.0", source="3.40.0")
         >>>
         ```
         """
-        return Version._from_py_version(self._record.version)
+        return VersionWithSource._from_py_version(*self._record.version)
 
     def __str__(self) -> str:
         """

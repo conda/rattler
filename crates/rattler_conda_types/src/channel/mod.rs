@@ -1,14 +1,18 @@
 use itertools::Itertools;
 use std::borrow::Cow;
-use std::path::{Component, Path, PathBuf};
+use std::fmt::{Display, Formatter};
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use file_url::directory_path_to_url;
 use serde::{Deserialize, Serialize};
-use smallvec::SmallVec;
 use thiserror::Error;
+use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
+
+const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
 /// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
 /// channel URLs.
@@ -27,14 +31,88 @@ pub struct ChannelConfig {
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
+
+    /// For local channels, the root directory from which to resolve relative paths.
+    /// Most of the time you would initialize this with the current working directory.
+    pub root_dir: PathBuf,
 }
 
-impl Default for ChannelConfig {
-    fn default() -> Self {
-        ChannelConfig {
-            channel_alias: Url::from_str("https://conda.anaconda.org")
+impl ChannelConfig {
+    /// Create a new `ChannelConfig` with the default values.
+    pub fn default_with_root_dir(root_dir: PathBuf) -> Self {
+        Self {
+            root_dir,
+            channel_alias: Url::from_str(DEFAULT_CHANNEL_ALIAS)
                 .expect("could not parse default channel alias"),
         }
+    }
+
+    /// Returns the canonical name of a channel with the given base url.
+    pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
+        if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
+            NamedChannelOrUrl::Name(stripped.trim_matches('/').to_string())
+        } else {
+            NamedChannelOrUrl::Url(base_url.clone())
+        }
+    }
+}
+
+/// Represents a channel description as either a name (e.g. `conda-forge`) or a base url.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub enum NamedChannelOrUrl {
+    /// A named channel
+    Name(String),
+
+    /// A url
+    Url(Url),
+}
+
+impl NamedChannelOrUrl {
+    /// Returns the string representation of the channel.
+    ///
+    /// This method ensures that if the channel is a url, it does not end with a `/`.
+    pub fn as_str(&self) -> &str {
+        match self {
+            NamedChannelOrUrl::Name(name) => name,
+            NamedChannelOrUrl::Url(url) => url.as_str().trim_end_matches('/'),
+        }
+    }
+
+    /// Converts the channel to a base url using the given configuration.
+    pub fn into_base_url(self, config: &ChannelConfig) -> Url {
+        match self {
+            NamedChannelOrUrl::Name(name) => {
+                let mut base_url = config.channel_alias.clone();
+                if let Ok(mut segments) = base_url.path_segments_mut() {
+                    segments.push(&name);
+                }
+                base_url
+            }
+            NamedChannelOrUrl::Url(url) => url,
+        }
+    }
+
+    /// Converts this instance into a channel.
+    pub fn into_channel(self, config: &ChannelConfig) -> Channel {
+        let name = match &self {
+            NamedChannelOrUrl::Name(name) => Some(name.clone()),
+            NamedChannelOrUrl::Url(base_url) => match config.canonical_name(base_url) {
+                NamedChannelOrUrl::Name(name) => Some(name),
+                NamedChannelOrUrl::Url(_) => None,
+            },
+        };
+        let base_url = self.into_base_url(config);
+        Channel {
+            platforms: None,
+            base_url,
+            name,
+        }
+    }
+}
+
+impl Display for NamedChannelOrUrl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
     }
 }
 
@@ -44,7 +122,7 @@ pub struct Channel {
     /// The platforms supported by this channel, or None if no explicit platforms have been
     /// specified.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub platforms: Option<SmallVec<[Platform; 2]>>,
+    pub platforms: Option<Vec<Platform>>,
 
     /// Base URL of the channel, everything is relative to this url.
     pub base_url: Url,
@@ -64,18 +142,19 @@ impl Channel {
 
         let channel = if parse_scheme(channel).is_some() {
             let url = Url::parse(channel)?;
-            Channel::from_url(url, platforms, config)
+            Channel {
+                platforms,
+                ..Channel::from_url(url)
+            }
         } else if is_path(channel) {
-            let path = PathBuf::from(channel);
-
             #[cfg(target_arch = "wasm32")]
             return Err(ParseChannelError::InvalidPath(path));
 
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let absolute_path = absolute_path(&path);
-                let url = Url::from_directory_path(absolute_path)
-                    .map_err(|_err| ParseChannelError::InvalidPath(path))?;
+                let absolute_path = absolute_path(channel, &config.root_dir)?;
+                let url = directory_path_to_url(absolute_path.to_path())
+                    .map_err(|_err| ParseChannelError::InvalidPath(channel.to_owned()))?;
                 Self {
                     platforms,
                     base_url: url,
@@ -83,18 +162,25 @@ impl Channel {
                 }
             }
         } else {
-            Channel::from_name(channel, platforms, config)
+            Channel {
+                platforms,
+                ..Channel::from_name(channel, config)
+            }
         };
 
         Ok(channel)
     }
 
+    /// Set the explicit platforms of the channel.
+    pub fn with_explicit_platforms(self, platforms: impl IntoIterator<Item = Platform>) -> Self {
+        Self {
+            platforms: Some(platforms.into_iter().collect()),
+            ..self
+        }
+    }
+
     /// Constructs a new [`Channel`] from a `Url` and associated platforms.
-    pub fn from_url(
-        url: Url,
-        platforms: Option<impl Into<SmallVec<[Platform; 2]>>>,
-        _config: &ChannelConfig,
-    ) -> Self {
+    pub fn from_url(url: Url) -> Self {
         // Get the path part of the URL but trim the directory suffix
         let path = url.path().trim_end_matches('/');
 
@@ -118,7 +204,7 @@ impl Channel {
             // Case 7: Fallback
             let name = path.trim_start_matches('/');
             Self {
-                platforms: platforms.map(Into::into),
+                platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -128,7 +214,7 @@ impl Channel {
                 .rsplit_once('/')
                 .map_or_else(|| base_url.path(), |(_, path_part)| path_part);
             Self {
-                platforms: platforms.map(Into::into),
+                platforms: None,
                 name: (!name.is_empty()).then_some(name).map(str::to_owned),
                 base_url,
             }
@@ -136,11 +222,7 @@ impl Channel {
     }
 
     /// Construct a channel from a name, platform and configuration.
-    pub fn from_name(
-        name: &str,
-        platforms: Option<SmallVec<[Platform; 2]>>,
-        config: &ChannelConfig,
-    ) -> Self {
+    pub fn from_name(name: &str, config: &ChannelConfig) -> Self {
         // TODO: custom channels
 
         let dir_name = if name.ends_with('/') {
@@ -151,12 +233,35 @@ impl Channel {
 
         let name = name.trim_end_matches('/');
         Self {
-            platforms,
+            platforms: None,
             base_url: config
                 .channel_alias
                 .join(dir_name.as_ref())
                 .expect("name is not a valid Url"),
             name: (!name.is_empty()).then_some(name).map(str::to_owned),
+        }
+    }
+
+    /// Constructs a channel from a directory path.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the path is not an absolute path or could not be canonicalized.
+    pub fn from_directory(path: &Path) -> Self {
+        let path = if path.is_absolute() {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(
+                path.canonicalize()
+                    .expect("path is a not a valid absolute path"),
+            )
+        };
+
+        let url = Url::from_directory_path(path).expect("path is a valid url");
+        Self {
+            platforms: None,
+            base_url: url,
+            name: None,
         }
     }
 
@@ -221,8 +326,16 @@ pub enum ParseChannelError {
     ParseUrlError(#[source] url::ParseError),
 
     /// Error when the path is invalid.
-    #[error("invalid path '{0}")]
-    InvalidPath(PathBuf),
+    #[error("invalid path '{0}'")]
+    InvalidPath(String),
+
+    /// The root directory is not an absolute path
+    #[error("root directory from channel config is not an absolute path")]
+    NonAbsoluteRootDir(PathBuf),
+
+    /// The root directory is not UTF-8 encoded.
+    #[error("root directory of channel config is not utf8 encoded")]
+    NotUtf8RootDir(PathBuf),
 }
 
 impl From<ParsePlatformError> for ParseChannelError {
@@ -239,18 +352,16 @@ impl From<url::ParseError> for ParseChannelError {
 
 /// Extract the platforms from the given human readable channel.
 #[allow(clippy::type_complexity)]
-fn parse_platforms(
-    channel: &str,
-) -> Result<(Option<SmallVec<[Platform; 2]>>, &str), ParsePlatformError> {
+fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), ParsePlatformError> {
     if channel.rfind(']').is_some() {
         if let Some(start_platform_idx) = channel.find('[') {
             let platform_part = &channel[start_platform_idx + 1..channel.len() - 1];
-            let platforms: SmallVec<_> = platform_part
+            let platforms = platform_part
                 .split(',')
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
                 .map(FromStr::from_str)
-                .collect::<Result<_, _>>()?;
+                .collect::<Result<Vec<_>, _>>()?;
             let platforms = if platforms.is_empty() {
                 None
             } else {
@@ -317,68 +428,46 @@ fn is_path(path: &str) -> bool {
         Some((letter, ':', '/' | '\\')) if letter.is_alphabetic())
 }
 
-/// Normalizes a file path by eliminating `..` and `.`.
-fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
-
-    for component in components {
-        match component {
-            Component::Prefix(..) => unreachable!(),
-            Component::RootDir => {
-                ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                ret.pop();
-            }
-            Component::Normal(c) => {
-                ret.push(c);
-            }
-        }
-    }
-    ret
-}
-
 /// Returns the specified path as an absolute path
-fn absolute_path(path: &Path) -> Cow<'_, Path> {
+fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
+    let path = Utf8TypedPath::from(path);
     if path.is_absolute() {
-        return Cow::Borrowed(path);
+        return Ok(path.normalize());
     }
 
-    let current_dir = std::env::current_dir().expect("missing current directory?");
-    let absolute_dir = current_dir.join(path);
-    Cow::Owned(normalize_path(&absolute_dir))
+    let root_dir_str = root_dir
+        .to_str()
+        .ok_or_else(|| ParseChannelError::NotUtf8RootDir(root_dir.to_path_buf()))?;
+    let native_root_dir = Utf8NativePathBuf::from(root_dir_str);
+
+    if !native_root_dir.is_absolute() {
+        return Err(ParseChannelError::NonAbsoluteRootDir(
+            root_dir.to_path_buf(),
+        ));
+    }
+
+    Ok(native_root_dir.to_typed_path().join(path).normalize())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use smallvec::smallvec;
-    use std::{
-        path::{Path, PathBuf},
-        str::FromStr,
-    };
+    use std::str::FromStr;
     use url::Url;
 
     #[test]
     fn test_parse_platforms() {
         assert_eq!(
             parse_platforms("[noarch, linux-64]"),
-            Ok((Some(smallvec![Platform::NoArch, Platform::Linux64]), ""))
+            Ok((Some(vec![Platform::NoArch, Platform::Linux64]), ""))
         );
         assert_eq!(
             parse_platforms("sometext[noarch]"),
-            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Platform::NoArch]), "sometext"))
         );
         assert_eq!(
             parse_platforms("sometext[noarch,]"),
-            Ok((Some(smallvec![Platform::NoArch]), "sometext"))
+            Ok((Some(vec![Platform::NoArch]), "sometext"))
         );
         assert_eq!(parse_platforms("sometext[]"), Ok((None, "sometext")));
         assert!(matches!(
@@ -388,46 +477,27 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_path() {
-        assert_eq!(
-            normalize_path(Path::new("foo/bar")),
-            PathBuf::from("foo/bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("foo/bar/")),
-            PathBuf::from("foo/bar/")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/bar")),
-            PathBuf::from("foo/bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/../bar")),
-            PathBuf::from("bar")
-        );
-        assert_eq!(
-            normalize_path(Path::new("./foo/../bar/..")),
-            PathBuf::from("")
-        );
-    }
-
-    #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
-        assert_eq!(absolute_path(Path::new(".")).as_ref(), &current_dir);
+        let native_current_dir = typed_path::utils::utf8_current_dir()
+            .expect("")
+            .to_typed_path_buf();
         assert_eq!(
-            absolute_path(Path::new("foo")).as_ref(),
-            &current_dir.join("foo")
+            absolute_path(".", &current_dir).as_ref(),
+            Ok(&native_current_dir)
+        );
+        assert_eq!(
+            absolute_path("foo", &current_dir).as_ref(),
+            Ok(&native_current_dir.join("foo"))
         );
 
-        let mut parent_dir = current_dir;
+        let mut parent_dir = native_current_dir.clone();
         assert!(parent_dir.pop());
 
-        assert_eq!(absolute_path(Path::new("..")).as_ref(), &parent_dir);
+        assert_eq!(absolute_path("..", &current_dir).as_ref(), Ok(&parent_dir));
         assert_eq!(
-            absolute_path(Path::new("../foo")).as_ref(),
-            &parent_dir.join("foo")
+            absolute_path("../foo", &current_dir).as_ref(),
+            Ok(&parent_dir.join("foo"))
         );
     }
 
@@ -447,7 +517,7 @@ mod tests {
 
     #[test]
     fn parse_by_name() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("conda-forge", &config).unwrap();
         assert_eq!(
@@ -458,12 +528,12 @@ mod tests {
         assert_eq!(channel.name(), "conda-forge");
         assert_eq!(channel.platforms, None);
 
-        assert_eq!(channel, Channel::from_name("conda-forge/", None, &config));
+        assert_eq!(channel, Channel::from_name("conda-forge/", &config));
     }
 
     #[test]
     fn parse_from_url() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel =
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &config).unwrap();
@@ -482,7 +552,7 @@ mod tests {
 
     #[test]
     fn parse_from_file_path() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("file:///var/channels/conda-forge", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
@@ -500,9 +570,10 @@ mod tests {
         let current_dir = std::env::current_dir().expect("no current dir?");
         let channel = Channel::from_str("./dir/does/not_exist", &config).unwrap();
         assert_eq!(channel.name.as_deref(), Some("./dir/does/not_exist"));
+        let expected = absolute_path("./dir/does/not_exist", &current_dir).unwrap();
         assert_eq!(
             channel.name(),
-            Url::from_directory_path(absolute_path(Path::new("./dir/does/not_exist")))
+            file_url::directory_path_to_url(expected.to_path())
                 .unwrap()
                 .as_str()
         );
@@ -515,7 +586,7 @@ mod tests {
 
     #[test]
     fn parse_url_only() {
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
         assert_eq!(
@@ -538,7 +609,7 @@ mod tests {
     #[test]
     fn parse_platform() {
         let platform = Platform::Linux32;
-        let config = ChannelConfig::default();
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/conda-forge[{platform}]"),
@@ -550,7 +621,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge"));
-        assert_eq!(channel.platforms, Some(smallvec![platform]));
+        assert_eq!(channel.platforms, Some(vec![platform]));
 
         let channel = Channel::from_str(
             format!("https://conda.anaconda.org/pkgs/main[{platform}]"),
@@ -562,7 +633,7 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/pkgs/main/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("pkgs/main"));
-        assert_eq!(channel.platforms, Some(smallvec![platform]));
+        assert_eq!(channel.platforms, Some(vec![platform]));
 
         let channel = Channel::from_str("conda-forge/label/rust_dev", &config).unwrap();
         assert_eq!(
@@ -582,5 +653,25 @@ mod tests {
         assert!(is_path("C:/foo"));
 
         assert!(!is_path("conda-forge/label/rust_dev"));
+    }
+
+    #[test]
+    fn config_canonical_name() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
+        };
+        assert_eq!(
+            channel_config
+                .canonical_name(&Url::from_str("https://conda.anaconda.org/conda-forge/").unwrap())
+                .as_str(),
+            "conda-forge"
+        );
+        assert_eq!(
+            channel_config
+                .canonical_name(&Url::from_str("https://prefix.dev/conda-forge/").unwrap())
+                .as_str(),
+            "https://prefix.dev/conda-forge"
+        );
     }
 }

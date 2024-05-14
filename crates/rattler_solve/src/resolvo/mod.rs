@@ -1,10 +1,11 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
+use crate::{ChannelPriority, IntoRepoData, SolveError, SolverRepoData, SolverTask};
+use chrono::{DateTime, Utc};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
     GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
-    RepoDataRecord,
+    ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
@@ -19,7 +20,6 @@ use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
     ops::Deref,
-    str::FromStr,
 };
 
 use itertools::Itertools;
@@ -171,6 +171,7 @@ pub(crate) struct CondaDependencyProvider<'a> {
 }
 
 impl<'a> CondaDependencyProvider<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_solver_task(
         repodata: impl IntoIterator<Item = RepoData<'a>>,
         favored_records: &'a [RepoDataRecord],
@@ -178,6 +179,8 @@ impl<'a> CondaDependencyProvider<'a> {
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
+        channel_priority: ChannelPriority,
+        exclude_newer: Option<DateTime<Utc>>,
     ) -> Self {
         let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -205,43 +208,61 @@ impl<'a> CondaDependencyProvider<'a> {
             // different archive types. This can happen if you have two variants of the same package but
             // with different extensions. We prefer `.conda` packages over `.tar.bz`.
             //
-            // Its important to insert the records in the same same order as how they were presented to this
+            // Its important to insert the records in the same order as how they were presented to this
             // function to ensure that each solve is deterministic. Iterating over HashMaps is not
             // deterministic at runtime so instead we store the values in a Vec as we iterate over the
             // records. This guarentees that the order of records remains the same over runs.
             let mut ordered_repodata = Vec::with_capacity(repo_datas.records.len());
-            let mut package_to_type: HashMap<&str, (ArchiveType, usize)> =
+            let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_datas.records.len());
 
             for record in repo_datas.records {
+                // Determine if this record will be excluded.
+                let excluded = matches!((&exclude_newer, &record.package_record.timestamp),
+                    (Some(exclude_newer), Some(record_timestamp))
+                        if record_timestamp > exclude_newer);
+
                 let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
                     .unwrap_or((&record.file_name, ArchiveType::TarBz2));
                 match package_to_type.get_mut(file_name) {
                     None => {
                         let idx = ordered_repodata.len();
                         ordered_repodata.push(record);
-                        package_to_type.insert(file_name, (archive_type, idx));
+                        package_to_type.insert(file_name, (archive_type, idx, excluded));
                     }
-                    Some((prev_archive_type, idx)) => match archive_type.cmp(prev_archive_type) {
-                        Ordering::Greater => {
-                            // A previous package has a worse package "type", we'll use the current record
-                            // instead.
+                    Some((prev_archive_type, idx, previous_excluded)) => {
+                        if *previous_excluded && !excluded {
+                            // The previous package would have been excluded by the solver. If the
+                            // current record won't be excluded we should always use that.
                             *prev_archive_type = archive_type;
                             ordered_repodata[*idx] = record;
-                        }
-                        Ordering::Less => {
-                            // A previous package that we already stored is actually a package of a better
-                            // "type" so we'll just use that instead (.conda > .tar.bz)
-                        }
-                        Ordering::Equal => {
-                            if record != ordered_repodata[*idx] {
-                                unreachable!(
-                                    "found duplicate record with different values for {}",
-                                    &record.file_name
-                                );
+                            *previous_excluded = false;
+                        } else if excluded && !*previous_excluded {
+                            // The previous package would not have been excluded by the solver but
+                            // this one will, so we'll keep the previous one regardless of the type.
+                        } else {
+                            match archive_type.cmp(prev_archive_type) {
+                                Ordering::Greater => {
+                                    // A previous package has a worse package "type", we'll use the current record
+                                    // instead.
+                                    *prev_archive_type = archive_type;
+                                    ordered_repodata[*idx] = record;
+                                }
+                                Ordering::Less => {
+                                    // A previous package that we already stored is actually a package of a better
+                                    // "type" so we'll just use that instead (.conda > .tar.bz)
+                                }
+                                Ordering::Equal => {
+                                    if record != ordered_repodata[*idx] {
+                                        unreachable!(
+                                            "found duplicate record with different values for {}",
+                                            &record.file_name
+                                        );
+                                    }
+                                }
                             }
                         }
-                    },
+                    }
                 }
             }
 
@@ -252,6 +273,19 @@ impl<'a> CondaDependencyProvider<'a> {
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
+
+                // Filter out any records that are newer than a specific date.
+                match (&exclude_newer, &record.package_record.timestamp) {
+                    (Some(exclude_newer), Some(record_timestamp))
+                        if record_timestamp > exclude_newer =>
+                    {
+                        let reason = pool.intern_string(format!(
+                            "the package is uploaded after the cutoff date of {exclude_newer}"
+                        ));
+                        candidates.excluded.push((solvable_id, reason));
+                    }
+                    _ => {}
+                }
 
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
@@ -284,10 +318,12 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Enforce channel priority
-                // This functions makes the assumtion that the records are given in order of the channels.
-                if let Some(first_channel) = package_name_found_in_channel
-                    .get(&record.package_record.name.as_normalized().to_string())
-                {
+                // This function makes the assumption that the records are given in order of the channels.
+                if let (Some(first_channel), ChannelPriority::Strict) = (
+                    package_name_found_in_channel
+                        .get(&record.package_record.name.as_normalized().to_string()),
+                    channel_priority,
+                ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
                         tracing::debug!(
@@ -446,6 +482,8 @@ impl super::SolverImpl for Solver {
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,
+            task.channel_priority,
+            task.exclude_newer,
         );
         let pool = provider.pool.clone();
 
@@ -499,7 +537,7 @@ fn parse_match_spec<'a>(
     if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
         Ok(*spec_id)
     } else {
-        let match_spec = MatchSpec::from_str(spec_str)?;
+        let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
         let (name, spec) = match_spec.into_nameless();
         let dependency_name = pool.intern_package_name(
             name.as_ref()

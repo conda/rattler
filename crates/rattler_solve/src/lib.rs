@@ -8,6 +8,7 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
+use chrono::{DateTime, Utc};
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
 
@@ -70,6 +71,22 @@ impl fmt::Display for SolveError {
     }
 }
 
+/// Represents the channel priority option to use during solves.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChannelPriority {
+    /// The channel that the package is first found in will be used as the only channel
+    /// for that package.
+    #[default]
+    Strict,
+
+    // Conda also has "Flexible" as an option, where packages present in multiple channels
+    // are only taken from lower-priority channels when this prevents unsatisfiable environment
+    // errors, but this would need implementation in the solvers.
+    // Flexible,
+    /// Packages can be retrieved from any channel as package version takes precedence.
+    Disabled,
+}
+
 /// Represents a dependency resolution task, to be solved by one of the backends (currently only
 /// libsolv is supported)
 pub struct SolverTask<TAvailablePackagesIterator> {
@@ -102,6 +119,30 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
+
+    /// The channel priority to solve with, either [`ChannelPriority::Strict`] or
+    /// [`ChannelPriority::Disabled`]
+    pub channel_priority: ChannelPriority,
+
+    /// Exclude any package that has a timestamp newer than the specified timestamp.
+    pub exclude_newer: Option<DateTime<Utc>>,
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
+    for SolverTask<Vec<RepoDataIter<I>>>
+{
+    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+        Self {
+            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
+            locked_packages: Vec::new(),
+            pinned_packages: Vec::new(),
+            virtual_packages: Vec::new(),
+            specs: Vec::new(),
+            timeout: None,
+            channel_priority: ChannelPriority::default(),
+            exclude_newer: None,
+        }
+    }
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
@@ -138,5 +179,17 @@ impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a [RepoDataRecord] {
 impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for S {
     fn into(self) -> S {
         self
+    }
+}
+
+/// A helper struct that implements `IntoRepoData` for anything that can
+/// iterate over `RepoDataRecord`s.
+pub struct RepoDataIter<T>(pub T);
+
+impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> IntoRepoData<'a, S>
+    for RepoDataIter<T>
+{
+    fn into(self) -> S {
+        self.0.into_iter().collect()
     }
 }

@@ -70,7 +70,8 @@
 //!         &client,
 //!         subdir_url,
 //!         repo_data_state,
-//!         &current_repo_data
+//!         &current_repo_data,
+//!         None
 //!     ).await.unwrap();
 //!
 //!     // Now we can use the `updated_jlap_state` object to update our `.info.json` file
@@ -83,15 +84,15 @@ use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::redact_known_secrets_from_error;
+use rattler_networking::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
 };
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_with::serde_as;
-use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
 use std::iter::Iterator;
 use std::path::Path;
@@ -99,10 +100,12 @@ use std::str;
 use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use tokio::task::JoinError;
 use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
+use crate::reporter::ResponseReporterExt;
+use crate::utils::{run_blocking_task, Cancelled};
+use crate::Reporter;
 
 /// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";
@@ -164,19 +167,21 @@ pub enum JLAPError {
     Cancelled,
 }
 
+impl From<Cancelled> for JLAPError {
+    fn from(_: Cancelled) -> Self {
+        JLAPError::Cancelled
+    }
+}
+
 impl From<reqwest_middleware::Error> for JLAPError {
     fn from(value: reqwest_middleware::Error) -> Self {
-        Self::HTTP(if let reqwest_middleware::Error::Reqwest(err) = value {
-            reqwest_middleware::Error::Reqwest(redact_known_secrets_from_error(err))
-        } else {
-            value
-        })
+        Self::HTTP(value.redact())
     }
 }
 
 impl From<reqwest::Error> for JLAPError {
     fn from(value: reqwest::Error) -> Self {
-        Self::HTTP(redact_known_secrets_from_error(value).into())
+        Self::HTTP(value.redact().into())
     }
 }
 
@@ -308,6 +313,7 @@ impl<'a> JLAPResponse<'a> {
         &self,
         repo_data_json_path: &Path,
         hash: Output<Blake2b256>,
+        reporter: Option<Arc<dyn Reporter>>,
     ) -> Result<Blake2b256Hash, JLAPError> {
         // We use the current hash to find which patches we need to apply
         let current_idx = self.patches.iter().position(|patch| patch.from == hash);
@@ -317,18 +323,12 @@ impl<'a> JLAPResponse<'a> {
 
         // Apply the patches on a blocking thread. Applying the patches is a relatively CPU intense
         // operation and we don't want to block the tokio runtime.
-        let patches = self.patches.clone();
+        let repo_data_path = self.patches.clone();
         let repo_data_json_path = repo_data_json_path.to_path_buf();
-        match tokio::task::spawn_blocking(move || {
-            apply_jlap_patches(patches, idx, &repo_data_json_path)
+        run_blocking_task(move || {
+            apply_jlap_patches(repo_data_path, idx, &repo_data_json_path, reporter)
         })
         .await
-        .map_err(JoinError::try_into_panic)
-        {
-            Ok(hash) => hash,
-            Err(Ok(reason)) => std::panic::resume_unwind(reason),
-            Err(_) => Err(JLAPError::Cancelled),
-        }
     }
 
     /// Returns a new [`JLAPState`] based on values in [`JLAPResponse`] struct
@@ -414,6 +414,7 @@ pub async fn patch_repo_data(
     subdir_url: Url,
     repo_data_state: RepoDataState,
     repo_data_json_path: &Path,
+    reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<(JLAPState, Blake2b256Hash), JLAPError> {
     // Determine what we should use as our starting state
     let mut jlap_state = get_jlap_state(repo_data_state.jlap);
@@ -422,12 +423,19 @@ pub async fn patch_repo_data(
         .join(JLAP_FILE_NAME)
         .expect("Valid URLs should always be join-able with this constant value");
 
+    let download_report = reporter
+        .as_deref()
+        .map(|reporter| (reporter, reporter.on_download_start(&jlap_url)));
     let (response, position) =
-        fetch_jlap_with_retry(jlap_url.as_str(), client, jlap_state.position).await?;
-    let response_text = match response.text().await {
+        fetch_jlap_with_retry(&jlap_url, client, jlap_state.position).await?;
+    let jlap_response_url = response.url().clone();
+    let response_text = match response.text_with_progress(download_report).await {
         Ok(value) => value,
         Err(error) => return Err(error.into()),
     };
+    if let Some((reporter, index)) = download_report {
+        reporter.on_download_complete(&jlap_response_url, index);
+    }
 
     // Update position as it may have changed
     jlap_state.position = position;
@@ -449,7 +457,7 @@ pub async fn patch_repo_data(
     }
 
     // Applies patches and returns early if an error is encountered
-    let hash = jlap.apply(repo_data_json_path, hash).await?;
+    let hash = jlap.apply(repo_data_json_path, hash, reporter).await?;
 
     // Patches were applied successfully, so we need to update the position
     Ok((jlap.get_state(jlap.new_position, new_iv), hash))
@@ -457,11 +465,11 @@ pub async fn patch_repo_data(
 
 /// Fetches a JLAP response from server
 async fn fetch_jlap(
-    url: &str,
+    url: &Url,
     client: &ClientWithMiddleware,
     range: &str,
 ) -> reqwest_middleware::Result<Response> {
-    let request_builder = client.get(url);
+    let request_builder = client.get(url.clone());
     let mut headers = HeaderMap::default();
 
     headers.insert(
@@ -481,7 +489,7 @@ async fn fetch_jlap(
 /// We return a new value for position if this was triggered so that we can update the
 /// `JLAPState` accordingly.
 async fn fetch_jlap_with_retry(
-    url: &str,
+    url: &Url,
     client: &ClientWithMiddleware,
     position: u64,
 ) -> Result<(Response, u64), JLAPError> {
@@ -506,40 +514,6 @@ async fn fetch_jlap_with_retry(
     }
 }
 
-#[derive(Serialize, Deserialize, Default)]
-struct OrderedRepoData {
-    info: Option<HashMap<String, String>>,
-
-    #[serde(serialize_with = "ordered_map")]
-    packages: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-
-    #[serde(serialize_with = "ordered_map", rename = "packages.conda")]
-    packages_conda: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-
-    removed: Option<Vec<String>>,
-
-    repodata_version: Option<u64>,
-}
-
-fn ordered_map<S>(
-    value: &Option<HashMap<String, HashMap<String, serde_json::Value>>>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match value {
-        Some(value) => {
-            let ordered: BTreeMap<_, _> = value
-                .iter()
-                .map(|(key, packages)| (key, packages.iter().collect::<BTreeMap<_, _>>()))
-                .collect();
-            ordered.serialize(serializer)
-        }
-        None => serializer.serialize_none(),
-    }
-}
-
 /// Applies JLAP patches to a `repodata.json` file
 ///
 /// This is a multi-step process that involves:
@@ -552,14 +526,28 @@ fn apply_jlap_patches(
     patches: Arc<[Patch]>,
     start_index: usize,
     repo_data_path: &Path,
+    reporter: Option<Arc<dyn Reporter>>,
 ) -> Result<Blake2b256Hash, JLAPError> {
+    let report = reporter
+        .as_deref()
+        .map(|reporter| (reporter, reporter.on_jlap_start()));
+
+    if let Some((reporter, index)) = report {
+        reporter.on_jlap_decode_start(index);
+    }
+
     // Read the contents of the current repodata to a string
     let repo_data_contents =
         std::fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
 
     // Parse the JSON so we can manipulate it
     tracing::info!("parsing cached repodata.json as JSON");
-    let mut doc = serde_json::from_str(&repo_data_contents).map_err(JLAPError::JSONParse)?;
+    let mut repo_data =
+        serde_json::from_str::<Value>(&repo_data_contents).map_err(JLAPError::JSONParse)?;
+
+    if let Some((reporter, index)) = report {
+        reporter.on_jlap_decode_completed(index);
+    }
 
     // Apply any patches that we have not already applied
     tracing::info!(
@@ -567,21 +555,22 @@ fn apply_jlap_patches(
         start_index + 1,
         patches.len()
     );
-    for patch in patches[start_index..].iter() {
-        if let Err(error) = json_patch::patch_unsafe(&mut doc, &patch.patch) {
+    for (patch_index, patch) in patches[start_index..].iter().enumerate() {
+        if let Some((reporter, index)) = report {
+            reporter.on_jlap_apply_patch(index, patch_index, patches.len());
+        }
+        if let Err(error) = json_patch::patch_unsafe(&mut repo_data, &patch.patch) {
             return Err(JLAPError::JSONPatch(error));
         }
     }
 
-    // Order the json
-    tracing::info!("converting patched JSON back to repodata");
-    let ordered_doc: OrderedRepoData = serde_json::from_value(doc).map_err(JLAPError::JSONParse)?;
+    if let Some((reporter, index)) = report {
+        reporter.on_jlap_apply_patches_completed(index);
+        reporter.on_jlap_encode_start(index);
+    }
 
     // Convert the json to bytes, but we don't really care about formatting.
-    let mut updated_json = serde_json::to_string(&ordered_doc).map_err(JLAPError::JSONParse)?;
-
-    // We need to add an extra newline character to the end of our string so the hashes match
-    updated_json.insert(updated_json.len(), '\n');
+    let updated_json = serde_json::to_string(&repo_data).map_err(JLAPError::JSONParse)?;
 
     // Write the content to disk and immediately compute the hash of the file contents.
     tracing::info!("writing patched repodata to disk");
@@ -598,6 +587,11 @@ fn apply_jlap_patches(
     let (file, hash) = hashing_writer.finalize();
     file.persist(repo_data_path)
         .map_err(|e| JLAPError::FileSystem(e.error))?;
+
+    if let Some((reporter, index)) = report {
+        reporter.on_jlap_encode_completed(index);
+        reporter.on_jlap_completed(index);
+    }
 
     Ok(hash)
 }
@@ -783,12 +777,11 @@ mod test {
   },
   "removed": [],
   "repodata_version": 1
-}
-"#;
+}"#;
 
-    const FAKE_REPO_DATA_UPDATE_ONE: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"}},\"removed\":[],\"repodata_version\":1}\n";
+    const FAKE_REPO_DATA_UPDATE_ONE: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"}},\"removed\":[],\"repodata_version\":1}";
 
-    const FAKE_REPO_DATA_UPDATE_TWO: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"},\"zstd-static-1.4.5-hb1e8313_0.conda\":{\"build\":\"hb1e8313_0\",\"build_number\":0,\"depends\":[\"libcxx >=10.0.0\",\"zstd 1.4.5 h41d2c2f_0\"],\"license\":\"BSD 3-Clause\",\"md5\":\"5447986040e0b73d6c681a4d8f615d6c\",\"name\":\"zstd-static\",\"sha256\":\"3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658\",\"size\":13930,\"subdir\":\"osx-64\",\"timestamp\":1595965109852,\"version\":\"1.4.5\"}},\"removed\":[],\"repodata_version\":1}\n";
+    const FAKE_REPO_DATA_UPDATE_TWO: &str = "{\"info\":{\"subdir\":\"osx-64\"},\"packages\":{},\"packages.conda\":{\"zstd-1.5.4-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"f284fea068c51b1a0eaea3ac58c300c0\",\"name\":\"zstd\",\"sha256\":\"0af4513ef7ad7fa8854fa714130c25079f3744471fc106f47df80eb10c34429d\",\"size\":605550,\"subdir\":\"osx-64\",\"timestamp\":1680034665911,\"version\":\"1.5.4\"},\"zstd-1.5.5-hc035e20_0.conda\":{\"build\":\"hc035e20_0\",\"build_number\":0,\"depends\":[\"libcxx >=14.0.6\",\"lz4-c >=1.9.4,<1.10.0a0\",\"xz >=5.2.10,<6.0a0\",\"zlib >=1.2.13,<1.3.0a0\"],\"license\":\"BSD-3-Clause AND GPL-2.0-or-later\",\"license_family\":\"BSD\",\"md5\":\"5e0b7ddb1b7dc6b630e1f9a03499c19c\",\"name\":\"zstd\",\"sha256\":\"5b192501744907b841de036bb89f5a2776b4cac5795ccc25dcaebeac784db038\",\"size\":622467,\"subdir\":\"osx-64\",\"timestamp\":1681304595869,\"version\":\"1.5.5\"},\"zstd-static-1.4.5-hb1e8313_0.conda\":{\"build\":\"hb1e8313_0\",\"build_number\":0,\"depends\":[\"libcxx >=10.0.0\",\"zstd 1.4.5 h41d2c2f_0\"],\"license\":\"BSD 3-Clause\",\"md5\":\"5447986040e0b73d6c681a4d8f615d6c\",\"name\":\"zstd-static\",\"sha256\":\"3759ab53ff8320d35c6db00d34059ba99058eeec1cbdd0da968c5e12f73f7658\",\"size\":13930,\"subdir\":\"osx-64\",\"timestamp\":1595965109852,\"version\":\"1.4.5\"}},\"removed\":[],\"repodata_version\":1}";
 
     const FAKE_REPO_DATA_UPDATE_ONE_HASH: &str =
         "9b76165ba998f77b2f50342006192bf28817dad474d78d760ab12cc0260e3ed9";
@@ -955,6 +948,7 @@ mod test {
             test_env.server_url,
             test_env.repo_data_state,
             &test_env.cache_repo_data,
+            None,
         )
         .await
         .unwrap();

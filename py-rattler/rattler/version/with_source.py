@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from typing import Union
+from typing import Union, Optional
+
+from rattler.rattler import PyVersion
 
 from rattler.version import Version
 
 
-class VersionWithSource:
+class VersionWithSource(Version):
     """
     Holds a version and the string it was created from. This is useful if
     you want to retain the original string the version was created from.
@@ -17,7 +19,14 @@ class VersionWithSource:
     the parsed version though it will come out as `1.1`. You loose the
     original representation. This class stores the original source string,
     which can be accessed by `source` property.
+
+    This class derives from `Version` which allows you to compare it with
+    other `Version` objects.
+
+    Comparison will be done based on the parsed version, not the source string.
     """
+
+    _source: str
 
     def __init__(self, version: Union[str, Version]):
         if not isinstance(version, (str, Version)):
@@ -28,46 +37,19 @@ class VersionWithSource:
 
         if isinstance(version, str):
             self._source = version
-            self._version = Version(version)
+            self._version = PyVersion(version)
 
         if isinstance(version, Version):
             self._source = str(version)
-            self._version = version
+            self._version = version._version
 
-    @property
-    def version(self) -> Version:
-        """
-        Returns the `Version` from current object.
-
-        Examples
-        --------
-        ```python
-        >>> v = VersionWithSource("1.01")
-        >>> v.version
-        Version("1.1")
-        >>> v2 = VersionWithSource(v.version)
-        >>> v2.version
-        Version("1.1")
-        >>>
-        ```
-        """
-        return self._version
-
-    @property
-    def source(self) -> str:
-        """
-        Returns the `source` current object was used to create.
-
-        Examples
-        --------
-        ```python
-        >>> v = VersionWithSource("1.01.01")
-        >>> v.source
-        '1.01.01'
-        >>>
-        ```
-        """
-        return self._source
+    @classmethod
+    def _from_py_version(cls, py_version: PyVersion, source: Optional[str] = None) -> VersionWithSource:
+        """Construct Rattler version from FFI PyVersion object."""
+        version = cls.__new__(cls)
+        version._version = py_version
+        version._source = source or py_version.as_str()
+        return version
 
     def __str__(self) -> str:
         """
@@ -91,8 +73,8 @@ class VersionWithSource:
         --------
         ```python
         >>> VersionWithSource("1.02.3")
-        VersionWithSource("1.02.3")
+        VersionWithSource(version="1.2.3", source="1.02.3")
         >>>
         ```
         """
-        return f'{type(self).__name__}("{self.__str__()}")'
+        return f'{type(self).__name__}(version="{self._version.as_str()}", source="{self._source}")'

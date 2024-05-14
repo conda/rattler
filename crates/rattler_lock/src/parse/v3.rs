@@ -1,14 +1,16 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
 use super::ParseCondaLockError;
+use crate::file_format_version::FileFormatVersion;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, DEFAULT_ENVIRONMENT_NAME,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    DEFAULT_ENVIRONMENT_NAME,
 };
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
-use pep508_rs::Requirement;
+use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{
     NoArchType, PackageName, PackageRecord, PackageUrl, Platform, VersionWithSource,
 };
@@ -70,7 +72,7 @@ struct PypiLockedPackageV3 {
 #[derive(Clone, Debug, Deserialize, Hash, Eq, PartialEq)]
 pub struct PypiPackageEnvironmentDataV3 {
     #[serde(default)]
-    pub extras: BTreeSet<String>,
+    pub extras: BTreeSet<ExtraName>,
 }
 
 impl From<PypiPackageEnvironmentDataV3> for PypiPackageEnvironmentData {
@@ -116,7 +118,10 @@ pub struct CondaLockedPackageV3 {
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
-pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseCondaLockError> {
+pub fn parse_v3_or_lower(
+    document: serde_yaml::Value,
+    version: FileFormatVersion,
+) -> Result<LockFile, ParseCondaLockError> {
     let lock_file: LockFileV3 =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
@@ -178,12 +183,13 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
             LockedPackageKindV3::Pypi(pkg) => {
                 let deduplicated_index = pypi_packages
                     .insert_full(PypiPackageData {
-                        name: pkg.name,
+                        name: pep508_rs::PackageName::new(pkg.name)?,
                         version: pkg.version,
                         requires_dist: pkg.requires_dist,
                         requires_python: pkg.requires_python,
-                        url: pkg.url,
+                        url_or_path: UrlOrPath::Url(pkg.url),
                         hash: pkg.hash,
+                        editable: false,
                     })
                     .0;
                 EnvironmentPackageData::Pypi(
@@ -199,11 +205,13 @@ pub fn parse_v3_or_lower(document: serde_yaml::Value) -> Result<LockFile, ParseC
     // Construct the default environment
     let default_environment = EnvironmentData {
         channels: lock_file.metadata.channels,
+        indexes: None,
         packages: per_platform,
     };
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
+            version,
             conda_packages: conda_packages.into_iter().collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
             pypi_environment_package_datas: pypi_runtime_configs

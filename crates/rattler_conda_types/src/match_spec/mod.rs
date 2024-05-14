@@ -68,38 +68,39 @@ use matcher::StringMatcher;
 /// # Examples:
 ///
 /// ```rust
-/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel};
+/// use rattler_conda_types::{MatchSpec, VersionSpec, StringMatcher, PackageName, Channel, ChannelConfig, ParseStrictness::*};
 /// use std::str::FromStr;
 /// use std::sync::Arc;
 ///
-/// let spec = MatchSpec::from_str("foo 1.0 py27_0").unwrap();
+/// let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+/// let spec = MatchSpec::from_str("foo 1.0 py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0").unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
-/// let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
+/// let spec = MatchSpec::from_str("foo=1.0=py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0").unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
-/// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#).unwrap();
+/// let spec = MatchSpec::from_str(r#"conda-forge::foo[version="1.0.*"]"#, Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*", Strict).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 ///
-/// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0").unwrap();
+/// let spec = MatchSpec::from_str("conda-forge/linux-64::foo>=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0").unwrap();
+/// let spec = MatchSpec::from_str("*/linux-64::foo>=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
-/// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0").unwrap()));
-/// assert_eq!(spec.channel, Some(Channel::from_str("*", &Default::default()).map(|channel| Arc::new(channel)).unwrap()));
+/// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
+/// assert_eq!(spec.channel, Some(Channel::from_str("*", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#).unwrap();
+/// let spec = MatchSpec::from_str(r#"foo[build="py2*"]"#, Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py2*").unwrap()));
 /// ```
@@ -146,25 +147,23 @@ pub struct MatchSpec {
 impl Display for MatchSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(channel) = &self.channel {
-            if let Some(name) = &channel.name {
-                // TODO: namespace
-                write!(f, "{name}")?;
+            let name = channel.name();
+            write!(f, "{name}")?;
+
+            if let Some(subdir) = &self.subdir {
+                write!(f, "/{subdir}")?;
             }
-        }
-
-        if let Some(subdir) = &self.subdir {
-            write!(f, "/{subdir}")?;
-        }
-
-        match &self.name {
-            Some(name) => write!(f, "{}", name.as_normalized())?,
-            None => write!(f, "*")?,
         }
 
         if let Some(namespace) = &self.namespace {
             write!(f, ":{namespace}:")?;
         } else if self.channel.is_some() || self.subdir.is_some() {
             write!(f, "::")?;
+        }
+
+        match &self.name {
+            Some(name) => write!(f, "{}", name.as_normalized())?,
+            None => write!(f, "*")?,
         }
 
         if let Some(version) = &self.version {
@@ -251,6 +250,16 @@ impl MatchSpec {
                 sha256: self.sha256,
             },
         )
+    }
+}
+
+// Enable constructing a match spec from a package name.
+impl From<PackageName> for MatchSpec {
+    fn from(value: PackageName) -> Self {
+        Self {
+            name: Some(value),
+            ..Default::default()
+        }
     }
 }
 
@@ -390,7 +399,9 @@ where
 
     match s {
         Some(str_val) => {
-            let config = ChannelConfig::default();
+            let config = ChannelConfig::default_with_root_dir(
+                std::env::current_dir().expect("Could not determine current directory"),
+            );
 
             Channel::from_str(str_val, &config)
                 .map(|channel| Some(Arc::new(channel)))
@@ -406,31 +417,34 @@ mod tests {
 
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
-    use crate::{MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, Version};
+    use crate::{
+        MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseStrictness::*, Version,
+    };
+    use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
 
     #[test]
     fn test_matchspec_format_eq() {
-        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec = MatchSpec::from_str("conda-forge::mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Strict).unwrap();
         let spec_as_string = spec.to_string();
-        let rebuild_spec = MatchSpec::from_str(&spec_as_string).unwrap();
+        let rebuild_spec = MatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
         assert_eq!(spec, rebuild_spec);
     }
 
     #[test]
     fn test_nameless_matchspec_format_eq() {
-        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]").unwrap();
+        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Strict).unwrap();
         let spec_as_string = spec.to_string();
-        let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string).unwrap();
+        let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
         assert_eq!(spec, rebuild_spec);
     }
 
     #[test]
     fn test_hash_match() {
-        let spec1 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
-        let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
+        let spec1 = MatchSpec::from_str("tensorflow 2.6.*", Strict).unwrap();
+        let spec2 = MatchSpec::from_str("tensorflow 2.6.*", Strict).unwrap();
         assert_eq!(spec1, spec2);
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -446,8 +460,8 @@ mod tests {
 
     #[test]
     fn test_hash_no_match() {
-        let spec1 = MatchSpec::from_str("tensorflow 2.6.0.*").unwrap();
-        let spec2 = MatchSpec::from_str("tensorflow 2.6.*").unwrap();
+        let spec1 = MatchSpec::from_str("tensorflow 2.6.0.*", Strict).unwrap();
+        let spec2 = MatchSpec::from_str("tensorflow 2.6.*", Strict).unwrap();
         assert_ne!(spec1, spec2);
 
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -475,24 +489,47 @@ mod tests {
             )
         };
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(!spec.matches(&record));
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        let spec = MatchSpec::from_str("mamba[version==1.0, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(spec.matches(&record));
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, md5=aaaa6252c964db3f3e41c7d30d07f6bf]")
-            .unwrap();
+        let spec = MatchSpec::from_str(
+            "mamba[version==1.0, md5=aaaa6252c964db3f3e41c7d30d07f6bf]",
+            Strict,
+        )
+        .unwrap();
         assert!(!spec.matches(&record));
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf]")
-            .unwrap();
+        let spec = MatchSpec::from_str(
+            "mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            Strict,
+        )
+        .unwrap();
         assert!(spec.matches(&record));
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=f44c4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(spec.matches(&record));
 
-        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]").unwrap();
+        let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn test_serialize_matchspec() {
+        let specs = ["mamba 1.0 py37_0",
+            "conda-forge::pytest[version=1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]",
+            "conda-forge/linux-64::pytest",
+            "conda-forge/linux-64::pytest[version=1.0]",
+            "conda-forge/linux-64::pytest[version=1.0, build=py37_0]",
+            "conda-forge/linux-64::pytest 1.2.3"];
+
+        assert_snapshot!(specs
+            .into_iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>()
+            .join("\n"));
     }
 }

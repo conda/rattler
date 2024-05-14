@@ -1,8 +1,10 @@
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
+use rattler_package_streaming::ExtractError;
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
 use std::fs::File;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 fn test_data_dir() -> PathBuf {
@@ -126,7 +128,7 @@ fn test_stream_info(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &s
 
     let target_dir = temp_dir.join(format!(
         "{}-info",
-        file_path.file_stem().unwrap().to_string_lossy().as_ref()
+        &file_path.file_stem().unwrap().to_string_lossy()
     ));
 
     info_stream.unpack(target_dir).unwrap();
@@ -208,7 +210,7 @@ async fn test_extract_conda_async(#[case] input: &str, #[case] sha256: &str, #[c
     assert_eq!(&format!("{:x}", result.md5), md5);
 }
 
-#[cfg(all(feature = "reqwest"))]
+#[cfg(feature = "reqwest")]
 #[apply(url_archives)]
 #[tokio::test]
 async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case] md5: &str) {
@@ -228,10 +230,50 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
         ClientWithMiddleware::from(Client::new()),
         url,
         &target_dir,
+        None,
     )
     .await
     .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);
+}
+
+#[rstest]
+fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)] cutoff: usize) {
+    let input = "conda-22.11.1-py38haa244fe_1.conda";
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+    let file_path = Path::new(input);
+    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+    let result = extract_conda(
+        FlakyReader {
+            reader: File::open(test_data_dir().join(file_path)).unwrap(),
+            total_read: 0,
+            cutoff,
+        },
+        &target_dir,
+    )
+    .expect_err("this should error out and not panic");
+
+    assert_matches::assert_matches!(result, ExtractError::IoError(_));
+}
+
+struct FlakyReader<R: Read> {
+    reader: R,
+    cutoff: usize,
+    total_read: usize,
+}
+
+impl<R: Read> Read for FlakyReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let remaining = self.cutoff.saturating_sub(self.total_read);
+        if remaining == 0 {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "flaky"));
+        }
+        let max_read = buf.len().min(remaining);
+        let bytes_read = self.reader.read(&mut buf[..max_read])?;
+        self.total_read += bytes_read;
+        Ok(bytes_read)
+    }
 }

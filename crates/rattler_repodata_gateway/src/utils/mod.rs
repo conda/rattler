@@ -1,13 +1,16 @@
+use ::url::Url;
+pub use body::BodyStreamExt;
 pub use encoding::{AsyncEncoding, Encoding};
 pub use flock::LockedFile;
 use std::fmt::Write;
-use url::Url;
+use tokio::task::JoinError;
 
 mod encoding;
 
 #[cfg(test)]
 pub(crate) mod simple_channel_server;
 
+mod body;
 mod flock;
 
 /// Convert a URL to a cache filename
@@ -29,7 +32,7 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
     let url_str = url_str.strip_suffix("/repodata.json").unwrap_or(&url_str);
 
     // Compute the MD5 hash of the resulting URL string
-    let hash = rattler_digest::compute_bytes_digest::<md5::Md5>(url_str);
+    let hash = rattler_digest::compute_bytes_digest::<rattler_digest::Md5>(url_str);
 
     // Convert the hash to an MD5 hash.
     let mut result = String::with_capacity(8);
@@ -37,6 +40,27 @@ pub(crate) fn url_to_cache_filename(url: &Url) -> String {
         write!(result, "{x:02x}").unwrap();
     }
     result
+}
+
+/// A marker type that is used to signal that a task was cancelled.
+pub(crate) struct Cancelled;
+
+/// Run a blocking task to completion. If the task is cancelled, the function
+/// will return an error converted from `Error`.
+pub async fn run_blocking_task<T, E, F>(f: F) -> Result<T, E>
+where
+    F: FnOnce() -> Result<T, E> + Send + 'static,
+    T: Send + 'static,
+    E: From<Cancelled> + Send + 'static,
+{
+    match tokio::task::spawn_blocking(f)
+        .await
+        .map_err(JoinError::try_into_panic)
+    {
+        Ok(result) => result,
+        Err(Err(_err)) => Err(E::from(Cancelled)),
+        Err(Ok(payload)) => std::panic::resume_unwind(payload),
+    }
 }
 
 #[cfg(test)]

@@ -17,6 +17,9 @@ try:
         SolverError,
         ConvertSubdirError,
         VersionBumpError,
+        EnvironmentCreationError,
+        ExtractError,
+        GatewayError,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -73,6 +76,15 @@ except ImportError:
     class VersionBumpError(Exception):  # type: ignore[no-redef]
         """An error that can occur when bumping a version."""
 
+    class EnvironmentCreationError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when creating an environment."""
+
+    class ExtractError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when extracting an archive."""
+
+    class GatewayError(Exception):  # type: ignore[no-redef]
+        """An error that can occur when querying the repodata gateway."""
+
 
 __all__ = [
     "ActivationError",
@@ -92,4 +104,7 @@ __all__ = [
     "TransactionError",
     "ConvertSubdirError",
     "VersionBumpError",
+    "EnvironmentCreationError",
+    "ExtractError",
+    "GatewayError",
 ]

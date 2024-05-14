@@ -1,6 +1,6 @@
 use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
-use rattler_conda_types::{Channel, MatchSpec, PackageName};
-use std::{str::FromStr, sync::Arc};
+use rattler_conda_types::{Channel, MatchSpec, PackageName, ParseStrictness};
+use std::sync::Arc;
 
 use crate::{
     channel::PyChannel, error::PyRattlerError, nameless_match_spec::PyNamelessMatchSpec,
@@ -29,10 +29,17 @@ impl From<PyMatchSpec> for MatchSpec {
 #[pymethods]
 impl PyMatchSpec {
     #[new]
-    pub fn __init__(spec: &str) -> PyResult<Self> {
-        Ok(MatchSpec::from_str(spec)
-            .map(Into::into)
-            .map_err(PyRattlerError::from)?)
+    pub fn __init__(spec: &str, strict: bool) -> PyResult<Self> {
+        Ok(MatchSpec::from_str(
+            spec,
+            if strict {
+                ParseStrictness::Strict
+            } else {
+                ParseStrictness::Lenient
+            },
+        )
+        .map(Into::into)
+        .map_err(PyRattlerError::from)?)
     }
 
     /// The name of the package

@@ -1,0 +1,3 @@
+# EnvironmentCreationError
+
+::: rattler.exceptions.EnvironmentCreationError

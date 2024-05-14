@@ -3,11 +3,23 @@ name: Python bindings CI
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'py-rattler/**/*'
-      - '.github/workflows/python-bindings.yml'
   pull_request:
+    paths:
+      # When we change pyproject.toml, we want to ensure that the maturin builds still work
+      - test-data/**
+      - crates/**
+      - Cargo.*
+
+      # When something in the bindings themselves changes
+      - 'py-rattler/**/*'
+
+      # Or when this workflow changes
+      - '.github/workflows/python-bindings.yml'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -21,9 +33,9 @@ jobs:
         with:
           submodules: recursive
           lfs: true
-      - uses: prefix-dev/setup-pixi@v0.5.1
+      - uses: prefix-dev/setup-pixi@v0.7.0
         with:
-          pixi-version: v0.10.0
+          pixi-version: v0.20.1
           cache: true
           manifest-path: py-rattler/pixi.toml
       - uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -32,9 +44,9 @@ jobs:
       - name: Format and Lint
         run: |
           cd py-rattler
-          pixi run lint
-          pixi run fmt-check
+          pixi run -e test lint
+          pixi run -e test fmt-check
       - name: Run tests
         run: |
           cd py-rattler
-          pixi run test
+          pixi run -e test test

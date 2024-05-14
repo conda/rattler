@@ -160,7 +160,12 @@ impl ClobberRegistry {
                 .enumerate()
                 .filter(|(_, n)| clobbered_by_names.contains(n))
                 .collect::<Vec<_>>();
-            let winner = sorted_clobbered_by.last().expect("No winner found");
+
+            let winner = match sorted_clobbered_by.last() {
+                Some(winner) => winner,
+                // In this case, all files have been removed and we can skip any unclobbering
+                None => continue,
+            };
 
             if winner.1 == clobbered_by_names[0] {
                 tracing::info!(
@@ -273,182 +278,18 @@ mod tests {
         str::FromStr,
     };
 
-    use futures::TryFutureExt;
     use insta::assert_yaml_snapshot;
     use rand::seq::SliceRandom;
-    use rattler_conda_types::{
-        package::IndexJson, PackageRecord, Platform, PrefixRecord, RepoDataRecord, Version,
-    };
-    use rattler_digest::{Md5, Sha256};
-    use rattler_networking::retry_policies::default_retry_policy;
-    use rattler_package_streaming::seek::read_package_file;
-    use transaction::{Transaction, TransactionOperation};
+    use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
 
+    use transaction::TransactionOperation;
+
+    use crate::install::test_utils::*;
     use crate::{
-        get_test_data_dir,
-        install::{transaction, unlink_package, InstallDriver, InstallOptions, PythonInfo},
+        get_repodata_record,
+        install::{transaction, InstallDriver, InstallOptions, PythonInfo},
         package_cache::PackageCache,
     };
-
-    fn get_repodata_record(filename: &str) -> RepoDataRecord {
-        let path = fs::canonicalize(get_test_data_dir().join(filename)).unwrap();
-        print!("{:?}", path);
-        let index_json = read_package_file::<IndexJson>(&path).unwrap();
-
-        // find size and hash
-        let size = fs::metadata(&path).unwrap().len();
-        let sha256 = rattler_digest::compute_file_digest::<Sha256>(&path).unwrap();
-        let md5 = rattler_digest::compute_file_digest::<Md5>(&path).unwrap();
-
-        RepoDataRecord {
-            package_record: PackageRecord::from_index_json(
-                index_json,
-                Some(size),
-                Some(sha256),
-                Some(md5),
-            )
-            .unwrap(),
-            file_name: filename.to_string(),
-            url: url::Url::from_file_path(&path).unwrap(),
-            channel: "clobber".to_string(),
-        }
-    }
-
-    /// Install a package into the environment and write a `conda-meta` file that contains information
-    /// about how the file was linked.
-    async fn install_package_to_environment(
-        target_prefix: &Path,
-        package_dir: PathBuf,
-        repodata_record: RepoDataRecord,
-        install_driver: &InstallDriver,
-        install_options: &InstallOptions,
-    ) -> anyhow::Result<()> {
-        // Link the contents of the package into our environment. This returns all the paths that were linked.
-        let paths = crate::install::link_package(
-            &package_dir,
-            target_prefix,
-            install_driver,
-            install_options.clone(),
-        )
-        .await?;
-
-        // Construct a PrefixRecord for the package
-        let prefix_record = PrefixRecord {
-            repodata_record,
-            package_tarball_full_path: None,
-            extracted_package_dir: Some(package_dir),
-            files: paths
-                .iter()
-                .map(|entry| entry.relative_path.clone())
-                .collect(),
-            paths_data: paths.into(),
-            requested_spec: None,
-            link: None,
-        };
-
-        // Create the conda-meta directory if it doesnt exist yet.
-        let target_prefix = target_prefix.to_path_buf();
-        match tokio::task::spawn_blocking(move || {
-            let conda_meta_path = target_prefix.join("conda-meta");
-            std::fs::create_dir_all(&conda_meta_path)?;
-
-            // Write the conda-meta information
-            let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
-            prefix_record.write_to_path(pkg_meta_path, true)
-        })
-        .await
-        {
-            Ok(result) => Ok(result?),
-            Err(err) => {
-                if let Ok(panic) = err.try_into_panic() {
-                    std::panic::resume_unwind(panic);
-                }
-                // The operation has been cancelled, so we can also just ignore everything.
-                Ok(())
-            }
-        }
-    }
-
-    async fn execute_operation(
-        target_prefix: &Path,
-        download_client: &reqwest_middleware::ClientWithMiddleware,
-        package_cache: &PackageCache,
-        install_driver: &InstallDriver,
-        op: TransactionOperation<PrefixRecord, RepoDataRecord>,
-        install_options: &InstallOptions,
-    ) {
-        // Determine the package to install
-        let install_record = op.record_to_install();
-        let remove_record = op.record_to_remove();
-
-        if let Some(remove_record) = remove_record {
-            unlink_package(target_prefix, remove_record).await.unwrap();
-        }
-
-        let install_package = if let Some(install_record) = install_record {
-            // Make sure the package is available in the package cache.
-            package_cache
-                .get_or_fetch_from_url_with_retry(
-                    &install_record.package_record,
-                    install_record.url.clone(),
-                    download_client.clone(),
-                    default_retry_policy(),
-                )
-                .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
-                .map_err(anyhow::Error::from)
-                .await
-                .unwrap()
-        } else {
-            None
-        };
-
-        // If there is a package to install, do that now.
-        if let Some((record, package_dir)) = install_package {
-            install_package_to_environment(
-                target_prefix,
-                package_dir,
-                record.clone(),
-                install_driver,
-                install_options,
-            )
-            .await
-            .unwrap();
-        }
-    }
-
-    async fn execute_transaction(
-        transaction: Transaction<PrefixRecord, RepoDataRecord>,
-        target_prefix: &Path,
-        download_client: &reqwest_middleware::ClientWithMiddleware,
-        package_cache: &PackageCache,
-        install_driver: &InstallDriver,
-        install_options: &InstallOptions,
-    ) {
-        for op in &transaction.operations {
-            execute_operation(
-                target_prefix,
-                download_client,
-                package_cache,
-                install_driver,
-                op.clone(),
-                install_options,
-            )
-            .await;
-        }
-
-        install_driver
-            .post_process(&transaction, target_prefix)
-            .unwrap();
-    }
-
-    fn find_prefix_record<'a>(
-        prefix_records: &'a [PrefixRecord],
-        name: &str,
-    ) -> Option<&'a PrefixRecord> {
-        prefix_records
-            .iter()
-            .find(|r| r.repodata_record.package_record.name.as_normalized() == name)
-    }
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
         let repodata_record_1 = get_repodata_record("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
@@ -509,9 +350,9 @@ mod tests {
                 }
             })
             .collect::<Vec<_>>();
-        println!("Files: {:?}", files);
+        println!("Files: {files:?}");
         assert_eq!(files.len(), expected_files.len());
-        println!("{:?}", files);
+        println!("{files:?}");
 
         for file in files {
             assert!(expected_files.contains(&file.file_name().unwrap().to_string_lossy().as_ref()));
@@ -583,7 +424,10 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .execute_link_scripts(true)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -785,7 +629,9 @@ mod tests {
                 platform: Platform::current(),
             };
 
-            let install_driver = InstallDriver::new(100, Some(&prefix_records));
+            let install_driver = InstallDriver::builder()
+                .with_prefix_records(&prefix_records)
+                .finish();
 
             execute_transaction(
                 transaction,
@@ -866,7 +712,7 @@ mod tests {
                 .package_record
                 .name
                 .as_normalized()
-                .cmp(&b.repodata_record.package_record.name.as_normalized())
+                .cmp(b.repodata_record.package_record.name.as_normalized())
         });
 
         let update_ops = test_operations_update();
@@ -882,7 +728,9 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -959,7 +807,7 @@ mod tests {
                 .package_record
                 .name
                 .as_normalized()
-                .cmp(&b.repodata_record.package_record.name.as_normalized())
+                .cmp(b.repodata_record.package_record.name.as_normalized())
         });
 
         let update_ops = test_operations_update();
@@ -980,7 +828,9 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -1011,7 +861,9 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::new(100, Some(&prefix_records));
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -1083,5 +935,63 @@ mod tests {
                 &["clobber.py", "clobber.py__clobber-from-clobber-pynoarch-2"],
             );
         }
+    }
+
+    // This used to hit an expect in the clobbering code
+    #[tokio::test]
+    async fn test_transaction_with_clobber_remove_all() {
+        let operations = test_operations();
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations,
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+
+        // remove one of the clobbering files
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: prefix_records
+                .iter()
+                .map(|r| TransactionOperation::Remove(r.clone()))
+                .collect(),
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &install_driver,
+            &InstallOptions::default(),
+        )
+        .await;
+
+        assert_check_files(target_prefix.path(), &[]);
     }
 }

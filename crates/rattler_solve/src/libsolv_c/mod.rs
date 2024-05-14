@@ -1,13 +1,13 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
-use crate::{IntoRepoData, SolverRepoData};
+use crate::{ChannelPriority, IntoRepoData, SolverRepoData};
 use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::CString;
 use std::mem::ManuallyDrop;
 use wrapper::{
@@ -106,8 +106,47 @@ impl super::SolverImpl for Solver {
         });
         pool.set_debug_level(Verbosity::Low);
 
+        let repodatas: Vec<Self::RepoData<'_>> = task
+            .available_packages
+            .into_iter()
+            .map(IntoRepoData::into)
+            .collect();
+
+        // Determine the channel priority for each channel in the repodata in the order in which
+        // the repodatas are passed, where the first channel will have the highest priority value
+        // and each successive channel will descend in priority value. If not strict, the highest
+        // priority value will be 0 and the channel priority map will not be populated as it will
+        // not be used.
+        let mut highest_priority: i32 = 0;
+        let channel_priority: HashMap<String, i32> =
+            if task.channel_priority == ChannelPriority::Strict {
+                let mut seen_channels = HashSet::new();
+                let mut channel_order: Vec<String> = Vec::new();
+                for channel in repodatas
+                    .iter()
+                    .filter(|&r| !r.records.is_empty())
+                    .map(|r| r.records[0].channel.clone())
+                {
+                    if !seen_channels.contains(&channel) {
+                        channel_order.push(channel.clone());
+                        seen_channels.insert(channel);
+                    }
+                }
+                let mut channel_priority = HashMap::new();
+                for (index, channel) in channel_order.iter().enumerate() {
+                    let reverse_index = channel_order.len() - index;
+                    if index == 0 {
+                        highest_priority = reverse_index as i32;
+                    }
+                    channel_priority.insert(channel.clone(), reverse_index as i32);
+                }
+                channel_priority
+            } else {
+                HashMap::new()
+            };
+
         // Add virtual packages
-        let repo = Repo::new(&pool, "virtual_packages");
+        let repo = Repo::new(&pool, "virtual_packages", highest_priority);
         add_virtual_packages(&pool, &repo, &task.virtual_packages);
 
         // Mark the virtual packages as installed.
@@ -116,38 +155,47 @@ impl super::SolverImpl for Solver {
         // Create repos for all channel + platform combinations
         let mut repo_mapping = HashMap::new();
         let mut all_repodata_records = Vec::new();
-        for repodata in task.available_packages.into_iter().map(IntoRepoData::into) {
+        for repodata in repodatas.iter() {
             if repodata.records.is_empty() {
                 continue;
             }
-
             let channel_name = &repodata.records[0].channel;
 
             // We dont want to drop the Repo, its stored in the pool anyway.
-            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name));
+            let priority: i32 = if task.channel_priority == ChannelPriority::Strict {
+                *channel_priority.get(channel_name).unwrap()
+            } else {
+                0
+            };
+            let repo = ManuallyDrop::new(Repo::new(&pool, channel_name, priority));
 
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
             } else {
-                add_repodata_records(&pool, &repo, repodata.records.iter().copied());
+                add_repodata_records(
+                    &pool,
+                    &repo,
+                    repodata.records.iter().copied(),
+                    task.exclude_newer.as_ref(),
+                );
             }
 
             // Keep our own info about repodata_records
             repo_mapping.insert(repo.id(), repo_mapping.len());
-            all_repodata_records.push(repodata.records);
+            all_repodata_records.push(repodata.records.clone());
         }
 
         // Create a special pool for records that are already installed or locked.
-        let repo = Repo::new(&pool, "locked");
-        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
+        let repo = Repo::new(&pool, "locked", highest_priority);
+        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
         all_repodata_records.push(task.locked_packages.iter().collect());
 
         // Create a special pool for records that are pinned and cannot be changed.
-        let repo = Repo::new(&pool, "pinned");
-        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
+        let repo = Repo::new(&pool, "pinned", highest_priority);
+        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -179,6 +227,10 @@ impl super::SolverImpl for Solver {
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);
         solver.set_flag(SolverFlag::allow_downgrade(), true);
+        solver.set_flag(
+            SolverFlag::strict_channel_priority(),
+            task.channel_priority == ChannelPriority::Strict,
+        );
 
         let transaction = solver.solve(&mut goal).map_err(SolveError::Unsolvable)?;
 
