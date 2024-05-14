@@ -1,1 +1,1 @@
-rm %PREFIX%/i-was-post-linked
+del %PREFIX%\i-was-post-linked

@@ -424,7 +424,10 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&prefix_records), true);
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .execute_link_scripts(true)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -626,7 +629,9 @@ mod tests {
                 platform: Platform::current(),
             };
 
-            let install_driver = InstallDriver::new(100, Some(&prefix_records), false);
+            let install_driver = InstallDriver::builder()
+                .with_prefix_records(&prefix_records)
+                .finish();
 
             execute_transaction(
                 transaction,
@@ -723,7 +728,9 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&prefix_records), false);
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -821,7 +828,9 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::new(100, Some(&prefix_records), false);
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -852,7 +861,9 @@ mod tests {
         };
 
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
-        let install_driver = InstallDriver::new(100, Some(&prefix_records), false);
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,
@@ -967,7 +978,9 @@ mod tests {
             platform: Platform::current(),
         };
 
-        let install_driver = InstallDriver::new(100, Some(&prefix_records), false);
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
 
         execute_transaction(
             transaction,

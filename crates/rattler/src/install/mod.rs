@@ -37,10 +37,11 @@ use crate::install::entry_point::{
     create_unix_python_entry_point, create_windows_python_entry_point,
 };
 pub use apple_codesign::AppleCodeSignBehavior;
-use futures::FutureExt;
+use futures::{FutureExt, StreamExt};
 pub use python::PythonInfo;
 use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
 
+use futures::stream::FuturesUnordered;
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
@@ -265,9 +266,6 @@ pub async fn link_package(
     // Determine the platform to use
     let platform = options.platform.unwrap_or(Platform::current());
 
-    // Construct a channel to will hold the results of the different linking stages
-    let (tx, mut rx) = tokio::sync::mpsc::channel(driver.concurrency_limit());
-
     // compute all path renames
     let mut final_paths = compute_paths(&index_json, &paths_json, options.python_info.as_ref());
 
@@ -288,6 +286,7 @@ pub async fn link_package(
     let python_info = options.python_info.map(Arc::new);
 
     // Start linking all package files in parallel
+    let mut pending_futures = FuturesUnordered::new();
     let mut number_of_paths_entries = 0;
     for (entry, computed_path) in final_paths {
         let package_dir = package_dir.to_owned();
@@ -295,61 +294,65 @@ pub async fn link_package(
         let target_prefix = target_prefix.clone();
 
         let clobber_rename = clobber_paths.get(&entry.relative_path).cloned();
-        // Spawn a task to link the specific file. Note that these tasks are throttled by the
-        // driver. So even though we might spawn thousands of tasks they might not all run
-        // parallel because the driver dictates that only N tasks can run in parallel at the same
-        // time.
-        let tx = tx.clone();
-        driver.spawn_throttled_and_forget(move || {
-            // Return immediately if the receiver was closed. This can happen if a previous step
-            // failed. In that case we do not want to continue the installation.
-            if tx.is_closed() {
-                return;
-            }
+        let install_future = async move {
+            let _permit = driver.acquire_io_permit().await;
 
-            let linked_file_result = match link_file(
-                &entry,
-                computed_path,
-                &package_dir,
-                &target_dir,
-                &target_prefix,
-                allow_symbolic_links && !entry.no_link,
-                allow_hard_links && !entry.no_link,
-                allow_ref_links && !entry.no_link,
-                platform,
-                options.apple_codesign_behavior,
-            ) {
-                Ok(result) => Ok((
-                    number_of_paths_entries,
-                    PathsEntry {
-                        relative_path: result.relative_path,
-                        original_path: if clobber_rename.is_some() {
-                            Some(entry.relative_path)
-                        } else {
-                            None
-                        },
-                        path_type: entry.path_type.into(),
-                        no_link: entry.no_link,
-                        sha256: entry.sha256,
-                        sha256_in_prefix: Some(result.sha256),
-                        size_in_bytes: Some(result.file_size),
-                        file_mode: match result.method {
-                            LinkMethod::Patched(file_mode) => Some(file_mode),
-                            _ => None,
-                        },
-                        prefix_placeholder: entry
-                            .prefix_placeholder
-                            .as_ref()
-                            .map(|p| p.placeholder.clone()),
-                    },
-                )),
-                Err(e) => Err(InstallError::FailedToLink(entry.relative_path.clone(), e)),
+            // Spawn a blocking task to link the specific file. We use a blocking task here because
+            // filesystem access is blocking anyway so its more efficient to group them together in
+            // a single blocking call.
+            let cloned_entry = entry.clone();
+            let result = match tokio::task::spawn_blocking(move || {
+                link_file(
+                    &cloned_entry,
+                    computed_path,
+                    &package_dir,
+                    &target_dir,
+                    &target_prefix,
+                    allow_symbolic_links && !cloned_entry.no_link,
+                    allow_hard_links && !cloned_entry.no_link,
+                    allow_ref_links && !cloned_entry.no_link,
+                    platform,
+                    options.apple_codesign_behavior,
+                )
+            })
+            .await
+            .map_err(JoinError::try_into_panic)
+            {
+                Ok(Ok(linked_file)) => linked_file,
+                Ok(Err(e)) => {
+                    return Err(InstallError::FailedToLink(entry.relative_path.clone(), e))
+                }
+                Err(Ok(payload)) => std::panic::resume_unwind(payload),
+                Err(Err(_err)) => return Err(InstallError::Cancelled),
             };
 
-            // Send the result to the main task for further processing.
-            let _ = tx.blocking_send(linked_file_result);
-        });
+            // Construct a `PathsEntry` from the result of the linking operation
+            let paths_entry = PathsEntry {
+                relative_path: result.relative_path,
+                original_path: if clobber_rename.is_some() {
+                    Some(entry.relative_path)
+                } else {
+                    None
+                },
+                path_type: entry.path_type.into(),
+                no_link: entry.no_link,
+                sha256: entry.sha256,
+                sha256_in_prefix: Some(result.sha256),
+                size_in_bytes: Some(result.file_size),
+                file_mode: match result.method {
+                    LinkMethod::Patched(file_mode) => Some(file_mode),
+                    _ => None,
+                },
+                prefix_placeholder: entry
+                    .prefix_placeholder
+                    .as_ref()
+                    .map(|p| p.placeholder.clone()),
+            };
 
+            Ok(vec![(number_of_paths_entries, paths_entry)])
+        };
+
+        pending_futures.push(install_future.boxed());
         number_of_paths_entries += 1;
     }
 
@@ -374,19 +377,15 @@ pub async fn link_package(
         // Create entry points for each listed item. This is different between Windows and unix
         // because on Windows, two PathEntry's are created whereas on Linux only one is created.
         for entry_point in entry_points {
-            let tx = tx.clone();
             let python_info = python_info.clone();
             let target_dir = target_dir.to_owned();
             let target_prefix = target_prefix.clone();
 
-            if platform.is_windows() {
-                driver.spawn_throttled_and_forget(move || {
-                    // Return immediately if the receiver was closed. This can happen if a previous step
-                    // failed. In that case we do not want to continue the installation.
-                    if tx.is_closed() {
-                        return;
-                    }
+            let entry_point_fut = async move {
+                // Acquire an IO permit
+                let _permit = driver.acquire_io_permit().await;
 
+                let entries = if platform.is_windows() {
                     match create_windows_python_entry_point(
                         &target_dir,
                         &target_prefix,
@@ -394,47 +393,31 @@ pub async fn link_package(
                         &python_info,
                         &platform,
                     ) {
-                        Ok([a, b]) => {
-                            let _ = tx.blocking_send(Ok((number_of_paths_entries, a)));
-                            let _ = tx.blocking_send(Ok((number_of_paths_entries + 1, b)));
-                        }
-                        Err(e) => {
-                            let _ = tx.blocking_send(Err(
-                                InstallError::FailedToCreatePythonEntryPoint(e),
-                            ));
-                        }
+                        Ok([a, b]) => vec![
+                            (number_of_paths_entries, a),
+                            (number_of_paths_entries + 1, b),
+                        ],
+                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
                     }
-                });
-                number_of_paths_entries += 2;
-            } else {
-                driver.spawn_throttled_and_forget(move || {
-                    // Return immediately if the receiver was closed. This can happen if a previous step
-                    // failed. In that case we do not want to continue the installation.
-                    if tx.is_closed() {
-                        return;
-                    }
-
-                    let result = match create_unix_python_entry_point(
+                } else {
+                    match create_unix_python_entry_point(
                         &target_dir,
                         &target_prefix,
                         &entry_point,
                         &python_info,
                     ) {
-                        Ok(a) => Ok((number_of_paths_entries, a)),
-                        Err(e) => Err(InstallError::FailedToCreatePythonEntryPoint(e)),
-                    };
+                        Ok(a) => vec![(number_of_paths_entries, a)],
+                        Err(e) => return Err(InstallError::FailedToCreatePythonEntryPoint(e)),
+                    }
+                };
 
-                    let _ = tx.blocking_send(result);
-                });
-                number_of_paths_entries += 1;
-            }
+                Ok(entries)
+            };
+
+            pending_futures.push(entry_point_fut.boxed());
+            number_of_paths_entries += if platform.is_windows() { 2 } else { 1 };
         }
     }
-
-    // Drop the transmitter on the current task. This ensures that the only alive transmitters are
-    // owned by tasks that are running in the background. When we try to receive stuff over the
-    // channel we can then know that all tasks are done if all senders are dropped.
-    drop(tx);
 
     // Await the result of all the background tasks. The background tasks are scheduled in order,
     // however, they can complete in any order. This means we have to reorder them back into
@@ -445,29 +428,28 @@ pub async fn link_package(
     // What makes this loop special is that it also aborts if any of the returned results indicate
     // a failure.
     let mut paths = Vec::with_capacity(number_of_paths_entries);
-    let mut out_of_order_queue =
-        BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(driver.concurrency_limit());
-    while let Some(link_result) = rx.recv().await {
-        let (index, data) = link_result?;
+    let mut out_of_order_queue = BinaryHeap::<OrderWrapper<PathsEntry>>::with_capacity(100);
+    while let Some(link_result) = pending_futures.next().await {
+        for (index, data) in link_result? {
+            if index == paths.len() {
+                // If this is the next element expected in the sorted list, add it immediately. This
+                // basically means the future finished in order.
+                paths.push(data);
 
-        if index == paths.len() {
-            // If this is the next element expected in the sorted list, add it immediately. This
-            // basically means the future finished in order.
-            paths.push(data);
-
-            // By adding a finished future we have to check if there might also be another future
-            // that finished earlier and should also now be added to the result Vec.
-            while let Some(next_output) = out_of_order_queue.peek_mut() {
-                if next_output.index == paths.len() {
-                    paths.push(PeekMut::pop(next_output).data);
-                } else {
-                    break;
+                // By adding a finished future we have to check if there might also be another future
+                // that finished earlier and should also now be added to the result Vec.
+                while let Some(next_output) = out_of_order_queue.peek_mut() {
+                    if next_output.index == paths.len() {
+                        paths.push(PeekMut::pop(next_output).data);
+                    } else {
+                        break;
+                    }
                 }
+            } else {
+                // Otherwise add it to the out-of-order queue. This means that we still have to wait for
+                // another element before we can add the result to the ordered list.
+                out_of_order_queue.push(OrderWrapper { index, data });
             }
-        } else {
-            // Otherwise add it to the out of order queue. This means that we still have to wait for
-            // an another element before we can add the result to the ordered list.
-            out_of_order_queue.push(OrderWrapper { index, data });
         }
     }
     debug_assert_eq!(
@@ -512,7 +494,7 @@ async fn read_paths_json(
     } else {
         let package_dir = package_dir.to_owned();
         driver
-            .spawn_throttled(move || {
+            .run_blocking_io_task(move || {
                 PathsJson::from_package_directory_with_deprecated_fallback(&package_dir)
                     .map_err(InstallError::FailedToReadPathsJson)
             })
@@ -532,7 +514,7 @@ async fn read_index_json(
     } else {
         let package_dir = package_dir.to_owned();
         driver
-            .spawn_throttled(move || {
+            .run_blocking_io_task(move || {
                 IndexJson::from_package_directory(package_dir)
                     .map_err(InstallError::FailedToReadIndexJson)
             })
@@ -552,7 +534,7 @@ async fn read_link_json(
     } else {
         let package_dir = package_dir.to_owned();
         driver
-            .spawn_throttled(move || {
+            .run_blocking_io_task(move || {
                 LinkJson::from_package_directory(package_dir)
                     .map_or_else(
                         |e| {
