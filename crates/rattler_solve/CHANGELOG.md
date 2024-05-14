@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.21.2...rattler_solve-v0.22.0) - 2024-05-14
+
+### Added
+- exclude repodata records based on timestamp ([#654](https://github.com/mamba-org/rattler/pull/654))
+
 ## [0.21.2](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.21.1...rattler_solve-v0.21.2) - 2024-05-13
 
 ### Added
