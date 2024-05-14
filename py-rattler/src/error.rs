@@ -137,11 +137,15 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::EnvironmentCreationError(err) => {
                 EnvironmentCreationException::new_err(err)
             }
-            PyRattlerError::ExtractError(err) => ExtractException::new_err(pretty_print_error(&err)),
+            PyRattlerError::ExtractError(err) => {
+                ExtractException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ActivationScriptFormatError(err) => {
                 ActivationScriptFormatException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::GatewayError(err) => GatewayException::new_err(pretty_print_error(&err)),
+            PyRattlerError::GatewayError(err) => {
+                GatewayException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }
