@@ -1,6 +1,6 @@
 from __future__ import annotations
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from rattler import Channel, Platform
 from rattler.match_spec.match_spec import MatchSpec
@@ -13,18 +13,22 @@ from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
 from rattler.virtual_package.generic import GenericVirtualPackage
 
+SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
+"""Defines the strategy to use when multiple versions of a package are available during solving."""
+
 
 async def solve(
-    channels: List[Channel | str],
-    platforms: List[Platform | PlatformLiteral],
-    specs: List[MatchSpec | str],
-    gateway: Gateway,
-    locked_packages: Optional[List[RepoDataRecord]] = None,
-    pinned_packages: Optional[List[RepoDataRecord]] = None,
-    virtual_packages: Optional[List[GenericVirtualPackage]] = None,
-    timeout: Optional[datetime.timedelta] = None,
-    channel_priority: ChannelPriority = ChannelPriority.Strict,
-    exclude_newer: Optional[datetime.datetime] = None,
+        channels: List[Channel | str],
+        platforms: List[Platform | PlatformLiteral],
+        specs: List[MatchSpec | str],
+        gateway: Gateway,
+        locked_packages: Optional[List[RepoDataRecord]] = None,
+        pinned_packages: Optional[List[RepoDataRecord]] = None,
+        virtual_packages: Optional[List[GenericVirtualPackage]] = None,
+        timeout: Optional[datetime.timedelta] = None,
+        channel_priority: ChannelPriority = ChannelPriority.Strict,
+        exclude_newer: Optional[datetime.datetime] = None,
+        strategy: SolveStrategy = "highest",
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -57,6 +61,13 @@ async def solve(
                          it will search for every package in every channel.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime.
+        strategy: The strategy to use when multiple versions of a package are available.
+
+            * `"highest"`: Select the highest compatible version of all packages.
+            * `"lowest"`: Select the lowest compatible version of all packages.
+            * `"lowest-direct"`: Select the lowest compatible version for all
+              direct dependencies but the highest compatible version of transitive
+              dependencies.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -66,21 +77,26 @@ async def solve(
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for
+                channel in channels
             ],
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
+            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True)
+                   for spec in specs],
             gateway=gateway._gateway,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
-            virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
+            virtual_packages=[v_package._generic_virtual_package for v_package in
+                              virtual_packages or []],
             channel_priority=channel_priority.value,
             timeout=timeout.microseconds if timeout else None,
-            exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            exclude_newer_timestamp_ms=int(
+                exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,
+            strategy=strategy
         )
     ]
