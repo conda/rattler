@@ -36,6 +36,7 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
                             Some(VersionOrUrl::VersionSpecifier(spec))
                         },
                         marker: None,
+                        origin: None,
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()
