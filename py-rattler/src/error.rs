@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::io;
 
 use pyo3::exceptions::PyException;
@@ -69,55 +70,82 @@ pub enum PyRattlerError {
     GatewayError(#[from] GatewayError),
 }
 
+fn pretty_print_error(mut err: &dyn Error) -> String {
+    let mut result = err.to_string();
+    while let Some(source) = err.source() {
+        result.push_str(&format!("\nCaused by: {}", source));
+        err = source;
+    }
+    result
+}
+
 impl From<PyRattlerError> for PyErr {
     fn from(value: PyRattlerError) -> Self {
         match value {
             PyRattlerError::InvalidVersion(err) => {
-                InvalidVersionException::new_err(err.to_string())
+                InvalidVersionException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidMatchSpec(err) => {
-                InvalidMatchSpecException::new_err(err.to_string())
+                InvalidMatchSpecException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::InvalidPackageName(err) => {
-                InvalidPackageNameException::new_err(err.to_string())
+                InvalidPackageNameException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::InvalidUrl(err) => InvalidUrlException::new_err(err.to_string()),
+            PyRattlerError::InvalidUrl(err) => {
+                InvalidUrlException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::InvalidChannel(err) => {
-                InvalidChannelException::new_err(err.to_string())
+                InvalidChannelException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ActivationError(err) => ActivationException::new_err(err.to_string()),
+            PyRattlerError::ActivationError(err) => {
+                ActivationException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ParsePlatformError(err) => {
-                ParsePlatformException::new_err(err.to_string())
+                ParsePlatformException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ParseArchError(err) => ParseArchException::new_err(err.to_string()),
+            PyRattlerError::ParseArchError(err) => {
+                ParseArchException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::FetchRepoDataError(err) => {
-                FetchRepoDataException::new_err(err.to_string())
+                FetchRepoDataException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::CacheDirError(err) => CacheDirException::new_err(err.to_string()),
+            PyRattlerError::CacheDirError(err) => {
+                CacheDirException::new_err(pretty_print_error(err.as_ref()))
+            }
             PyRattlerError::DetectVirtualPackageError(err) => {
-                DetectVirtualPackageException::new_err(err.to_string())
+                DetectVirtualPackageException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::IoError(err) => IoException::new_err(err.to_string()),
-            PyRattlerError::SolverError(err) => SolverException::new_err(err.to_string()),
-            PyRattlerError::TransactionError(err) => TransactionException::new_err(err.to_string()),
+            PyRattlerError::IoError(err) => IoException::new_err(pretty_print_error(&err)),
+            PyRattlerError::SolverError(err) => SolverException::new_err(pretty_print_error(&err)),
+            PyRattlerError::TransactionError(err) => {
+                TransactionException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::LinkError(err) => LinkException::new_err(err),
             PyRattlerError::ConverSubdirError(err) => {
-                ConvertSubdirException::new_err(err.to_string())
+                ConvertSubdirException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::VersionBumpError(err) => VersionBumpException::new_err(err.to_string()),
+            PyRattlerError::VersionBumpError(err) => {
+                VersionBumpException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ParseCondaLockError(err) => {
-                ParseCondaLockException::new_err(err.to_string())
+                ParseCondaLockException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::ConversionError(err) => ConversionException::new_err(err.to_string()),
+            PyRattlerError::ConversionError(err) => {
+                ConversionException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::RequirementError(err) => RequirementException::new_err(err),
             PyRattlerError::EnvironmentCreationError(err) => {
                 EnvironmentCreationException::new_err(err)
             }
-            PyRattlerError::ExtractError(err) => ExtractException::new_err(err.to_string()),
-            PyRattlerError::ActivationScriptFormatError(err) => {
-                ActivationScriptFormatException::new_err(err.to_string())
+            PyRattlerError::ExtractError(err) => {
+                ExtractException::new_err(pretty_print_error(&err))
             }
-            PyRattlerError::GatewayError(err) => GatewayException::new_err(err.to_string()),
+            PyRattlerError::ActivationScriptFormatError(err) => {
+                ActivationScriptFormatException::new_err(pretty_print_error(&err))
+            }
+            PyRattlerError::GatewayError(err) => {
+                GatewayException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }

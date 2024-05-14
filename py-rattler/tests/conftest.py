@@ -23,3 +23,8 @@ def conda_forge_channel(test_data_dir: str) -> Channel:
 @pytest.fixture
 def pytorch_channel(test_data_dir: str) -> Channel:
     return Channel(os.path.join(test_data_dir, "channels/pytorch"))
+
+
+@pytest.fixture
+def dummy_channel(test_data_dir: str) -> Channel:
+    return Channel(os.path.join(test_data_dir, "channels/dummy"))

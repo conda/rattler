@@ -631,7 +631,7 @@ impl ShellEnum {
 
         while let Some(parent_process_id) = system_info
             .process(current_pid)
-            .and_then(|process| process.parent())
+            .and_then(sysinfo::Process::parent)
         {
             // Get the name of the parent process
             system_info.refresh_process(parent_process_id);
@@ -873,7 +873,7 @@ mod tests {
     #[test]
     fn test_from_parent_process_doenst_crash() {
         let shell = ShellEnum::from_parent_process();
-        println!("Detected shell: {:?}", shell);
+        println!("Detected shell: {shell:?}");
     }
 
     #[test]

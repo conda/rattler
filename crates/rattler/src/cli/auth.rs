@@ -47,7 +47,7 @@ pub struct Args {
     subcommand: Subcommand,
 }
 
-/// Authentication errors that can be returned by the AuthenticationCLIError
+/// Authentication errors that can be returned by the `AuthenticationCLIError`
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationCLIError {
     /// An error occured when the input repository URL is parsed
@@ -87,7 +87,7 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 
     let host = if host.matches('.').count() == 1 {
         // use wildcard for top-level domains
-        format!("*.{}", host)
+        format!("*.{host}")
     } else {
         host
     };
@@ -97,7 +97,7 @@ fn get_url(url: &str) -> Result<String, AuthenticationCLIError> {
 
 fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
     let host = get_url(&args.host)?;
-    println!("Authenticating with {}", host);
+    println!("Authenticating with {host}");
 
     let auth = if let Some(conda_token) = args.conda_token {
         Authentication::CondaToken(conda_token)
@@ -131,7 +131,7 @@ fn login(args: LoginArgs, storage: AuthenticationStorage) -> Result<(), Authenti
 fn logout(args: LogoutArgs, storage: AuthenticationStorage) -> Result<(), AuthenticationCLIError> {
     let host = get_url(&args.host)?;
 
-    println!("Removing authentication for {}", host);
+    println!("Removing authentication for {host}");
 
     storage
         .delete(&host)

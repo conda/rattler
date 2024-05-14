@@ -65,6 +65,6 @@ docs = { cmd = "mkdocs serve" }
 build-docs = { cmd = "mkdocs build" }
 
 [environments]
-build = { features = ["build"], solve-group = "default" }
+#build = { features = ["build"], solve-group = "default" }
 test = { features = ["build", "test"], solve-group = "default" }
 docs = ["docs"]

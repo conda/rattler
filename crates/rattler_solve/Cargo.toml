@@ -37,7 +37,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
 
 [features]
-default = ["libsolv_c"]
+default = ["resolvo"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
 resolvo = ["dep:resolvo", "dep:futures"]
 

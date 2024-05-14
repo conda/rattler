@@ -199,10 +199,10 @@ mod test {
         let state = String::from(name);
 
         // Construct a router that returns data from the static dir but fails the first try.
-        let router = if !broken {
-            Router::new().route("/count", get(count)).with_state(state)
-        } else {
+        let router = if broken {
             Router::new().route("/count", get(broken_return))
+        } else {
+            Router::new().route("/count", get(count)).with_state(state)
         };
 
         let addr = SocketAddr::new([127, 0, 0, 1].into(), 0);

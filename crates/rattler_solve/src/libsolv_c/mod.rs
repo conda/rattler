@@ -172,7 +172,12 @@ impl super::SolverImpl for Solver {
             if let Some(solv_file) = repodata.solv_file {
                 add_solv_file(&pool, &repo, solv_file);
             } else {
-                add_repodata_records(&pool, &repo, repodata.records.iter().copied());
+                add_repodata_records(
+                    &pool,
+                    &repo,
+                    repodata.records.iter().copied(),
+                    task.exclude_newer.as_ref(),
+                );
             }
 
             // Keep our own info about repodata_records
@@ -182,7 +187,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked", highest_priority);
-        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages);
+        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -190,7 +195,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned", highest_priority);
-        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages);
+        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None);
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());

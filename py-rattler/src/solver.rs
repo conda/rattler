@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use pyo3::{pyfunction, PyAny, PyErr, PyResult, Python};
 use pyo3_asyncio::tokio::future_into_py;
 use rattler_solve::{resolvo::Solver, RepoDataIter, SolverImpl, SolverTask};
@@ -24,6 +25,7 @@ pub fn py_solve(
     virtual_packages: Vec<PyGenericVirtualPackage>,
     channel_priority: PyChannelPriority,
     timeout: Option<u64>,
+    exclude_newer_timestamp_ms: Option<i64>,
 ) -> PyResult<&'_ PyAny> {
     future_into_py(py, async move {
         let available_packages = gateway
@@ -37,6 +39,8 @@ pub fn py_solve(
             .execute()
             .await
             .map_err(PyRattlerError::from)?;
+
+        let exclude_newer = exclude_newer_timestamp_ms.and_then(DateTime::from_timestamp_millis);
 
         let solve_result = tokio::task::spawn_blocking(move || {
             let task = SolverTask {
@@ -56,6 +60,7 @@ pub fn py_solve(
                 specs: specs.into_iter().map(Into::into).collect(),
                 timeout: timeout.map(std::time::Duration::from_micros),
                 channel_priority: channel_priority.into(),
+                exclude_newer,
             };
 
             Ok::<_, PyErr>(

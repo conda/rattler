@@ -1,0 +1,8 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+assertion_line: 663
+expression: result.unwrap_err()
+---
+Cannot solve the request because of: The following packages are incompatible
+└─ foo >=4 cannot be installed because there are no viable options:
+   └─ foo 4.0.2 is excluded because the package is uploaded after the cutoff date of 2021-12-12 12:12:12 UTC

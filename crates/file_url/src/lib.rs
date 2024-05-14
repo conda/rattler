@@ -205,7 +205,7 @@ mod tests {
     )]
     #[case::percent_encoding("//foo/ba r", Some("file://foo/ba%20r"))]
     fn test_file_path_to_url(#[case] path: &str, #[case] expected: Option<&str>) {
-        let expected = expected.map(|s| s.to_string());
+        let expected = expected.map(std::string::ToString::to_string);
         assert_eq!(
             super::file_path_to_url(path).map(|u| u.to_string()).ok(),
             expected

@@ -22,7 +22,7 @@ use rattler_networking::{
 use rattler_repodata_gateway::{Gateway, RepoData};
 use rattler_solve::{
     libsolv_c::{self},
-    resolvo, ChannelPriority, RepoDataIter, SolverImpl, SolverTask,
+    resolvo, SolverImpl, SolverTask,
 };
 use reqwest::Client;
 use std::future::IntoFuture;
@@ -199,13 +199,11 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect();
 
     let solver_task = SolverTask {
-        available_packages: repo_data.iter().map(RepoDataIter).collect::<Vec<_>>(),
         locked_packages,
         virtual_packages,
         specs,
-        pinned_packages: Vec::new(),
         timeout: opt.timeout.map(Duration::from_millis),
-        channel_priority: ChannelPriority::Strict,
+        ..SolverTask::from_iter(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
