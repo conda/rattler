@@ -528,11 +528,12 @@ macro_rules! solver_backend_tests {
 
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
+    #![allow(unused_imports)] // For some reason windows thinks this is an unused import.
+
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
-    #[allow(unused_imports)] // For some reason windows thinks this is an unused import.
     use rattler_solve::ChannelPriority;
     use rattler_solve::SolveStrategy;
 
@@ -587,17 +588,17 @@ mod libsolv_c {
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
 
-        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
+        assert_eq!("foo-3.0.2-py36h1af98f8_2.conda", info.file_name);
         assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_2.conda",
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_1", info.package_record.build);
-        assert_eq!(1, info.package_record.build_number);
+        assert_eq!("py36h1af98f8_2", info.package_record.build);
+        assert_eq!(2, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
                 "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
