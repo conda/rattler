@@ -18,17 +18,17 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 
 
 async def solve(
-        channels: List[Channel | str],
-        platforms: List[Platform | PlatformLiteral],
-        specs: List[MatchSpec | str],
-        gateway: Gateway,
-        locked_packages: Optional[List[RepoDataRecord]] = None,
-        pinned_packages: Optional[List[RepoDataRecord]] = None,
-        virtual_packages: Optional[List[GenericVirtualPackage]] = None,
-        timeout: Optional[datetime.timedelta] = None,
-        channel_priority: ChannelPriority = ChannelPriority.Strict,
-        exclude_newer: Optional[datetime.datetime] = None,
-        strategy: SolveStrategy = "highest",
+    channels: List[Channel | str],
+    platforms: List[Platform | PlatformLiteral],
+    specs: List[MatchSpec | str],
+    gateway: Gateway,
+    locked_packages: Optional[List[RepoDataRecord]] = None,
+    pinned_packages: Optional[List[RepoDataRecord]] = None,
+    virtual_packages: Optional[List[GenericVirtualPackage]] = None,
+    timeout: Optional[datetime.timedelta] = None,
+    channel_priority: ChannelPriority = ChannelPriority.Strict,
+    exclude_newer: Optional[datetime.datetime] = None,
+    strategy: SolveStrategy = "highest",
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -77,26 +77,22 @@ async def solve(
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve(
             channels=[
-                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for
-                channel in channels
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
             ],
             platforms=[
                 platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
                 for platform in platforms
             ],
-            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True)
-                   for spec in specs],
+            specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
             gateway=gateway._gateway,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
-            virtual_packages=[v_package._generic_virtual_package for v_package in
-                              virtual_packages or []],
+            virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
             channel_priority=channel_priority.value,
             timeout=timeout.microseconds if timeout else None,
-            exclude_newer_timestamp_ms=int(
-                exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,
-            strategy=strategy
+            strategy=strategy,
         )
     ]
