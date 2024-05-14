@@ -534,6 +534,7 @@ mod libsolv_c {
     };
     #[allow(unused_imports)] // For some reason windows thinks this is an unused import.
     use rattler_solve::ChannelPriority;
+    use rattler_solve::SolveStrategy;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
@@ -575,6 +576,7 @@ mod libsolv_c {
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
+                strategy: SolveStrategy::default(),
             })
             .unwrap();
 
