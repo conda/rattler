@@ -126,6 +126,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// Exclude any package that has a timestamp newer than the specified timestamp.
     pub exclude_newer: Option<DateTime<Utc>>,
+
+    /// The solve strategy.
+    pub strategy: SolveStrategy,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -141,8 +144,29 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             timeout: None,
             channel_priority: ChannelPriority::default(),
             exclude_newer: None,
+            strategy: SolveStrategy::default(),
         }
     }
+}
+
+/// Represents the strategy to use when solving dependencies
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum SolveStrategy {
+    /// Resolve the highest version of each package.
+    #[default]
+    Highest,
+
+    /// Resolve the lowest compatible version for each package.
+    ///
+    /// All candidates with the same version are still ordered the same as
+    /// with `Default`. This ensures that the candidate with the highest build
+    /// number is used and downprioritization still works.
+    LowestVersion,
+
+    /// Resolve the lowest compatible version for direct dependencies but the
+    /// highest for transitive dependencies. This is similar to `LowestVersion`
+    /// but only for direct dependencies.
+    LowestVersionDirect,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]

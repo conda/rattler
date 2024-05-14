@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{ChannelPriority, IntoRepoData, SolveError, SolverRepoData, SolverTask};
+use crate::{ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask};
 use chrono::{DateTime, Utc};
 use rattler_conda_types::package::ArchiveType;
 use rattler_conda_types::{
@@ -12,6 +12,7 @@ use resolvo::{
     SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
     VersionSetId,
 };
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::{
     cell::RefCell,
@@ -22,6 +23,7 @@ use std::{
     ops::Deref,
 };
 
+use crate::resolvo::conda_util::CompareStrategy;
 use itertools::Itertools;
 
 mod conda_util;
@@ -168,6 +170,10 @@ pub(crate) struct CondaDependencyProvider<'a> {
     parse_match_spec_cache: RefCell<HashMap<&'a str, VersionSetId>>,
 
     stop_time: Option<std::time::SystemTime>,
+
+    strategy: SolveStrategy,
+
+    direct_dependencies: HashSet<NameId>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -181,6 +187,7 @@ impl<'a> CondaDependencyProvider<'a> {
         stop_time: Option<std::time::SystemTime>,
         channel_priority: ChannelPriority,
         exclude_newer: Option<DateTime<Utc>>,
+        strategy: SolveStrategy,
     ) -> Self {
         let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -192,6 +199,13 @@ impl<'a> CondaDependencyProvider<'a> {
                 pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
             records.entry(name).or_default().candidates.push(solvable);
         }
+
+        // Compute the direct dependencies
+        let direct_dependencies = match_specs
+            .iter()
+            .filter_map(|spec| spec.name.as_ref())
+            .map(|name| pool.intern_package_name(name.as_normalized()))
+            .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
         let channel_specific_specs = match_specs
@@ -374,6 +388,8 @@ impl<'a> CondaDependencyProvider<'a> {
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,
+            strategy,
+            direct_dependencies,
         }
     }
 }
@@ -394,9 +410,30 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
         solver: &SolverCache<SolverMatchSpec<'a>, String, Self>,
         solvables: &mut [SolvableId],
     ) {
+        if solvables.is_empty() {
+            // Short circuit if there are no solvables to sort
+            return;
+        }
+
         let mut highest_version_spec = self.matchspec_to_highest_version.borrow_mut();
+
+        let strategy = match self.strategy {
+            SolveStrategy::Highest => CompareStrategy::Default,
+            SolveStrategy::LowestVersion => CompareStrategy::LowestVersion,
+            SolveStrategy::LowestVersionDirect => {
+                if self
+                    .direct_dependencies
+                    .contains(&self.pool.resolve_solvable(solvables[0]).name_id())
+                {
+                    CompareStrategy::LowestVersion
+                } else {
+                    CompareStrategy::Default
+                }
+            }
+        };
+
         solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec)
+            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy)
         });
     }
 
@@ -484,6 +521,7 @@ impl super::SolverImpl for Solver {
             stop_time,
             task.channel_priority,
             task.exclude_newer,
+            task.strategy,
         );
         let pool = provider.pool.clone();
 
