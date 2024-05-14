@@ -41,8 +41,8 @@ use futures::{FutureExt, StreamExt};
 pub use python::PythonInfo;
 use rattler_conda_types::package::{IndexJson, LinkJson, NoArchLinks, PackageFile};
 
-use itertools::Itertools;
 use futures::stream::FuturesUnordered;
+use itertools::Itertools;
 
 use rattler_conda_types::{package::PathsJson, Platform};
 use std::cmp::Ordering;
