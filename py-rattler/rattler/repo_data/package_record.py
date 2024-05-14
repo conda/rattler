@@ -1,11 +1,12 @@
 from __future__ import annotations
 import os
 from typing import List, Optional
+
+from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchType
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
-from rattler.version.version import Version
 
 
 class PackageRecord:
@@ -433,7 +434,7 @@ class PackageRecord:
         return self._record.track_features
 
     @property
-    def version(self) -> Version:
+    def version(self) -> VersionWithSource:
         """
         The version of the package.
 
@@ -445,11 +446,11 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.version
-        Version("3.40.0")
+        VersionWithSource(version="3.40.0", source="3.40.0")
         >>>
         ```
         """
-        return Version._from_py_version(self._record.version)
+        return VersionWithSource._from_py_version(*self._record.version)
 
     def __str__(self) -> str:
         """
