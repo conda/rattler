@@ -64,6 +64,10 @@ class RepoDataRecord(PackageRecord):
         """
         return self._record.file_name
 
+    @file_name.setter
+    def file_name(self, file_name: str) -> None:
+        self._record.file_name = file_name
+
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:
         """

@@ -41,6 +41,10 @@ impl PyRecord {
         self.as_ref()
     }
 
+    pub fn as_mut_package_record(&mut self) -> &mut PackageRecord {
+        self.as_mut()
+    }
+
     pub fn try_as_repodata_record(&self) -> PyResult<&RepoDataRecord> {
         match &self.inner {
             RecordInner::Prefix(r) => Ok(&r.repodata_record),
@@ -51,8 +55,30 @@ impl PyRecord {
         }
     }
 
+    pub fn try_as_mut_repodata_record(&mut self) -> PyResult<&mut RepoDataRecord> {
+        match &mut self.inner {
+            RecordInner::Prefix(r) => Ok(&mut r.repodata_record),
+            RecordInner::RepoData(r) => Ok(r),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            )),
+        }
+    }
+
     pub fn try_as_prefix_record(&self) -> PyResult<&PrefixRecord> {
         match &self.inner {
+            RecordInner::Prefix(r) => Ok(r),
+            RecordInner::RepoData(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
+            )),
+            RecordInner::Package(_) => Err(PyTypeError::new_err(
+                "Cannot use object of type 'PackageRecord' as 'PrefixRecord'",
+            )),
+        }
+    }
+
+    pub fn try_as_mut_prefix_record(&mut self) -> PyResult<&PrefixRecord> {
+        match &mut self.inner {
             RecordInner::Prefix(r) => Ok(r),
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
                 "Cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
@@ -232,9 +258,16 @@ impl PyRecord {
     }
 
     /// The filename of the package.
-    #[getter]
+    #[getter(file_name)]
     pub fn file_name(&self) -> PyResult<String> {
         Ok(self.try_as_repodata_record()?.file_name.clone())
+    }
+
+    /// The filename of the package.
+    #[setter(file_name)]
+    pub fn set_file_name(&mut self, file_name: String) -> PyResult<()> {
+        self.try_as_mut_repodata_record()?.file_name = file_name;
+        Ok(())
     }
 
     /// The canonical URL from where to get this package.
@@ -366,6 +399,16 @@ impl AsRef<PackageRecord> for PyRecord {
         match &self.inner {
             RecordInner::Prefix(r) => &r.repodata_record.package_record,
             RecordInner::RepoData(r) => &r.package_record,
+            RecordInner::Package(r) => r,
+        }
+    }
+}
+
+impl AsMut<PackageRecord> for PyRecord {
+    fn as_mut(&mut self) -> &mut PackageRecord {
+        match &mut self.inner {
+            RecordInner::Prefix(r) => &mut r.repodata_record.package_record,
+            RecordInner::RepoData(r) => &mut r.package_record,
             RecordInner::Package(r) => r,
         }
     }
