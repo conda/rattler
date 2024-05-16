@@ -1,7 +1,8 @@
 use chrono::DateTime;
-use pyo3::{pyfunction, PyAny, PyErr, PyResult, Python};
+use pyo3::exceptions::PyValueError;
+use pyo3::{pyfunction, FromPyObject, PyAny, PyErr, PyResult, Python};
 use pyo3_asyncio::tokio::future_into_py;
-use rattler_solve::{resolvo::Solver, RepoDataIter, SolverImpl, SolverTask};
+use rattler_solve::{resolvo::Solver, RepoDataIter, SolveStrategy, SolverImpl, SolverTask};
 use tokio::task::JoinError;
 
 use crate::channel::PyChannel;
@@ -10,7 +11,24 @@ use crate::repo_data::gateway::PyGateway;
 use crate::{
     channel::PyChannelPriority, error::PyRattlerError,
     generic_virtual_package::PyGenericVirtualPackage, match_spec::PyMatchSpec, record::PyRecord,
+    Wrap,
 };
+
+impl FromPyObject<'_> for Wrap<SolveStrategy> {
+    fn extract(ob: &'_ PyAny) -> PyResult<Self> {
+        let parsed = match &*ob.extract::<String>()? {
+            "highest" => SolveStrategy::Highest,
+            "lowest" => SolveStrategy::LowestVersion,
+            "lowest-direct" => SolveStrategy::LowestVersionDirect,
+            v => {
+                return Err(PyValueError::new_err(format!(
+                    "cache action must be one of {{'highest', 'lowest', 'lowest-direct'}}, got {v}",
+                )))
+            }
+        };
+        Ok(Wrap(parsed))
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
@@ -26,6 +44,7 @@ pub fn py_solve(
     channel_priority: PyChannelPriority,
     timeout: Option<u64>,
     exclude_newer_timestamp_ms: Option<i64>,
+    strategy: Option<Wrap<SolveStrategy>>,
 ) -> PyResult<&'_ PyAny> {
     future_into_py(py, async move {
         let available_packages = gateway
@@ -61,6 +80,7 @@ pub fn py_solve(
                 timeout: timeout.map(std::time::Duration::from_micros),
                 channel_priority: channel_priority.into(),
                 exclude_newer,
+                strategy: strategy.map_or_else(Default::default, |v| v.0),
             };
 
             Ok::<_, PyErr>(

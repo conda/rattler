@@ -1,5 +1,6 @@
 use crate::global_multi_progress;
 use anyhow::Context;
+use clap::ValueEnum;
 use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -57,13 +58,46 @@ pub struct Opt {
     virtual_package: Option<Vec<String>>,
 
     #[clap(long)]
-    use_resolvo: bool,
+    solver: Option<Solver>,
 
     #[clap(long)]
     timeout: Option<u64>,
 
     #[clap(long)]
     target_prefix: Option<PathBuf>,
+
+    #[clap(long)]
+    strategy: Option<SolveStrategy>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SolveStrategy {
+    /// Resolve the highest compatible version for every package.
+    Highest,
+
+    /// Resolve the lowest compatible version for every package.
+    Lowest,
+
+    /// Resolve the lowest compatible version for direct dependencies but the
+    /// highest compatible for transitive dependencies.
+    LowestDirect,
+}
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum)]
+pub enum Solver {
+    #[default]
+    Resolvo,
+    LibSolv,
+}
+
+impl From<SolveStrategy> for rattler_solve::SolveStrategy {
+    fn from(value: SolveStrategy) -> Self {
+        match value {
+            SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
+            SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
+            SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
+        }
+    }
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -202,18 +236,17 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         virtual_packages,
         specs,
         timeout: opt.timeout.map(Duration::from_millis),
+        strategy: opt.strategy.map_or_else(Default::default, Into::into),
         ..SolverTask::from_iter(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
-    let required_packages = wrap_in_progress("solving", move || {
-        if opt.use_resolvo {
-            resolvo::Solver.solve(solver_task)
-        } else {
-            libsolv_c::Solver.solve(solver_task)
-        }
-    })?;
+    let required_packages =
+        wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
+            Solver::Resolvo => resolvo::Solver.solve(solver_task),
+            Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
+        })?;
 
     if opt.dry_run {
         // Construct a transaction to
