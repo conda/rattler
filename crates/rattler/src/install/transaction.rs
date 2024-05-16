@@ -89,6 +89,11 @@ impl<Old, New> Transaction<Old, New> {
             .iter()
             .filter_map(TransactionOperation::record_to_remove)
     }
+
+    /// Returns the number of records to install.
+    pub fn packages_to_uninstall(&self) -> usize {
+        self.removed_packages().count()
+    }
 }
 
 impl<Old: AsRef<New>, New> Transaction<Old, New> {
@@ -97,6 +102,11 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
         self.operations
             .iter()
             .filter_map(TransactionOperation::record_to_install)
+    }
+
+    /// Returns the number of records to install.
+    pub fn packages_to_install(&self) -> usize {
+        self.installed_packages().count()
     }
 }
 

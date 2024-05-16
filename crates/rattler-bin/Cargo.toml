@@ -28,7 +28,7 @@ console = { workspace = true, features = ["windows-console-colors"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.25.0", default-features = false }
+rattler = { path="../rattler", version = "0.25.0", default-features = false, features = ["indicatif"] }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.23.1", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.20.7", default-features = false }
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.20.1", default-features = false, features = ["gateway"] }

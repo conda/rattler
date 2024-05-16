@@ -1,7 +1,7 @@
 //! Functionality to stream and extract packages directly from a [`reqwest::Url`] within a [`tokio`]
 //! async context.
 
-use crate::{ExtractError, ExtractResult, DownloadReporter};
+use crate::{DownloadReporter, ExtractError, ExtractResult};
 use futures_util::stream::TryStreamExt;
 use rattler_conda_types::package::ArchiveType;
 use rattler_digest::Sha256Hash;
@@ -81,6 +81,7 @@ async fn get_reader(
 ///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/win-64/python-3.11.0-hcf16a7b_0_cpython.tar.bz2").unwrap(),
 ///     Path::new("/tmp"),
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();
@@ -97,7 +98,7 @@ pub async fn extract_tar_bz2(
     // The `response` is used to stream in the package data
     let result = crate::tokio::async_read::extract_tar_bz2(reader, destination).await?;
     if let Some(reporter) = &reporter {
-        reporter.on_download_complete()
+        reporter.on_download_complete();
     }
     Ok(result)
 }
@@ -116,6 +117,7 @@ pub async fn extract_tar_bz2(
 ///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"),
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();
@@ -132,7 +134,7 @@ pub async fn extract_conda(
     let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
     let result = crate::tokio::async_read::extract_conda(reader, destination).await?;
     if let Some(reporter) = &reporter {
-        reporter.on_download_complete()
+        reporter.on_download_complete();
     }
     Ok(result)
 }
@@ -152,6 +154,7 @@ pub async fn extract_conda(
 ///     ClientWithMiddleware::from(Client::new()),
 ///     Url::parse("https://conda.anaconda.org/conda-forge/linux-64/python-3.10.8-h4a9ceb5_0_cpython.conda").unwrap(),
 ///     Path::new("/tmp"),
+///     None,
 ///     None)
 ///     .await
 ///     .unwrap();

@@ -29,6 +29,8 @@ mod test_utils;
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
+#[cfg(feature = "indicatif")]
+pub use installer::{IndicatifReporter, IndicatifReporterBuilder};
 pub use installer::{Installer, InstallerError, Reporter};
 pub use link::{link_file, LinkFileError, LinkMethod};
 use rattler_conda_types::prefix_record::PathsEntry;
@@ -769,7 +771,12 @@ mod test {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
                     let package_dir = package_cache
-                        .get_or_fetch_from_url(package_info, package_url.clone(), client.clone())
+                        .get_or_fetch_from_url(
+                            package_info,
+                            package_url.clone(),
+                            client.clone(),
+                            None,
+                        )
                         .await
                         .unwrap();
 

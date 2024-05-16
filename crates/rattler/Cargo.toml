@@ -15,6 +15,7 @@ default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
 cli-tools = ['dep:clap']
+indicatif = ['dep:indicatif', 'dep:console']
 
 [dependencies]
 anyhow = { workspace = true }
@@ -27,6 +28,7 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
 indexmap = { workspace = true }
+indicatif = { workspace = true, optional = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 memmap2 = { workspace = true }
@@ -50,6 +52,7 @@ tokio-stream = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
+console = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

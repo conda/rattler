@@ -1,5 +1,9 @@
 mod error;
+#[cfg(feature = "indicatif")]
+mod indicatif;
 mod reporter;
+#[cfg(feature = "indicatif")]
+pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
 
 use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
 use crate::default_cache_dir;
@@ -16,6 +20,7 @@ use std::future::ready;
 use std::path::PathBuf;
 use std::{path::Path, sync::Arc};
 use tokio::sync::Semaphore;
+use tokio::task::JoinError;
 
 pub use error::InstallerError;
 pub use reporter::Reporter;
@@ -162,17 +167,16 @@ impl Installer {
         // Create a future to determine the currently installed packages. We
         // can start this in parallel with the other operations and resolve it
         // when we need it.
-        let installed = match self.installed {
-            Some(installed) => installed,
-            None => {
-                // TODO: Should we add progress reporting here?
-                let prefix = prefix.as_ref().to_path_buf();
-                run_blocking_task(move || {
-                    PrefixRecord::collect_from_prefix(&prefix)
-                        .map_err(InstallerError::FailedToDetectInstalledPackages)
-                })
-                .await?
-            }
+        let installed = if let Some(installed) = self.installed {
+            installed
+        } else {
+            // TODO: Should we add progress reporting here?
+            let prefix = prefix.as_ref().to_path_buf();
+            run_blocking_task(move || {
+                PrefixRecord::collect_from_prefix(&prefix)
+                    .map_err(InstallerError::FailedToDetectInstalledPackages)
+            })
+            .await?
         };
 
         // Construct a driver.
@@ -210,6 +214,10 @@ impl Installer {
             ..InstallOptions::default()
         };
 
+        if let Some(reporter) = &self.reporter {
+            reporter.on_transaction_start(&transaction);
+        }
+
         // Preprocess the transaction
         let pre_process_result = driver
             .pre_process(&transaction, prefix.as_ref())
@@ -225,15 +233,40 @@ impl Installer {
             let driver = &driver;
             let prefix = &prefix;
             let operation_future = async move {
+                if let Some(reporter) = &reporter {
+                    reporter.on_transaction_operation_start(idx);
+                }
+
                 // Start populating the cache with the package if it's not already there.
                 let package_to_install = if let Some(record) = operation.record_to_install() {
-                    populate_cache(
-                        record,
-                        downloader.clone(),
-                        &package_cache,
-                        reporter.clone(),
-                    )
-                    .map_ok(move |path| Some((path, record)))
+                    let record = record.clone();
+                    let downloader = downloader.clone();
+                    let reporter = reporter.clone();
+                    let package_cache = package_cache.clone();
+                    tokio::spawn(async move {
+                        let populate_cache_report = reporter.clone().map(|r| {
+                            let cache_index = r.on_populate_cache_start(idx, &record);
+                            (r, cache_index)
+                        });
+                        let cache_path = populate_cache(
+                            &record,
+                            downloader,
+                            &package_cache,
+                            populate_cache_report.clone(),
+                        )
+                        .await?;
+                        if let Some((reporter, index)) = populate_cache_report {
+                            reporter.on_populate_cache_complete(index);
+                        }
+                        Ok((cache_path, record))
+                    })
+                    .map_err(JoinError::try_into_panic)
+                    .map(|res| match res {
+                        Ok(Ok(result)) => Ok(Some(result)),
+                        Ok(Err(e)) => Err(e),
+                        Err(Ok(payload)) => std::panic::resume_unwind(payload),
+                        Err(Err(_err)) => Err(InstallerError::Cancelled),
+                    })
                     .left_future()
                 } else {
                     ready(Ok(None)).right_future()
@@ -256,18 +289,22 @@ impl Installer {
                 if let Some((cached_path, record)) = package_to_install.await? {
                     let reporter = reporter
                         .as_deref()
-                        .map(|r| (r, r.on_link_start(idx, record)));
+                        .map(|r| (r, r.on_link_start(idx, &record)));
                     link_package(
-                        record,
+                        &record,
                         prefix.as_ref(),
                         &cached_path,
                         base_install_options.clone(),
-                        &driver,
+                        driver,
                     )
                     .await?;
                     if let Some((reporter, index)) = reporter {
                         reporter.on_link_complete(index);
                     }
+                }
+
+                if let Some(reporter) = &reporter {
+                    reporter.on_transaction_operation_complete(idx);
                 }
 
                 Ok::<_, InstallerError>(())
@@ -286,6 +323,10 @@ impl Installer {
         let post_process_result = driver
             .post_process(&transaction, prefix.as_ref())
             .map_err(InstallerError::PostProcessingFailed)?;
+
+        if let Some(reporter) = &self.reporter {
+            reporter.on_transaction_complete();
+        }
 
         Ok(InstallationResult {
             transaction,
@@ -348,9 +389,7 @@ async fn link_package(
             );
             prefix_record
                 .write_to_path(conda_meta_path.join(&pkg_meta_path), true)
-                .map_err(|e| {
-                    InstallerError::IoError(format!("failed to write {}", pkg_meta_path), e)
-                })
+                .map_err(|e| InstallerError::IoError(format!("failed to write {pkg_meta_path}"), e))
         })
         .await
 }
@@ -360,16 +399,16 @@ async fn populate_cache(
     record: &RepoDataRecord,
     downloader: reqwest_middleware::ClientWithMiddleware,
     cache: &PackageCache,
-    reporter: Option<Arc<dyn Reporter>>,
+    reporter: Option<(Arc<dyn Reporter>, usize)>,
 ) -> Result<PathBuf, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
-        record: Arc<RepoDataRecord>,
+        cache_index: usize,
     }
 
     impl CacheReporter for CacheReporterBridge {
         fn on_validate_start(&self) -> usize {
-            self.reporter.on_validate_start(&self.record)
+            self.reporter.on_validate_start(self.cache_index)
         }
 
         fn on_validate_complete(&self, index: usize) {
@@ -377,7 +416,7 @@ async fn populate_cache(
         }
 
         fn on_download_start(&self) -> usize {
-            self.reporter.on_download_start(&self.record)
+            self.reporter.on_download_start(self.cache_index)
         }
 
         fn on_download_progress(&self, index: usize, progress: u64, total: Option<u64>) {
@@ -385,7 +424,7 @@ async fn populate_cache(
         }
 
         fn on_download_completed(&self, index: usize) {
-            self.reporter.on_download_completed(index)
+            self.reporter.on_download_completed(index);
         }
     }
 
@@ -395,10 +434,10 @@ async fn populate_cache(
             record.url.clone(),
             downloader,
             default_retry_policy(),
-            reporter.map(|reporter| {
+            reporter.map(|(reporter, cache_index)| {
                 Arc::new(CacheReporterBridge {
                     reporter,
-                    record: Arc::new(record.clone()),
+                    cache_index,
                 }) as _
             }),
         )

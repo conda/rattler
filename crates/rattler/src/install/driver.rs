@@ -1,7 +1,7 @@
 use super::clobber_registry::ClobberRegistry;
 use super::link_script::{PrePostLinkError, PrePostLinkResult};
 use super::unlink::{recursively_remove_empty_directories, UnlinkError};
-use super::{Transaction};
+use super::Transaction;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::prefix_record::PathType;

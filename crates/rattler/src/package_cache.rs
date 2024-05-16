@@ -239,30 +239,6 @@ impl PackageCache {
                 current_try += 1;
                 tracing::debug!("downloading {} to {}", &url, destination.display());
 
-                struct PassthroughReporter {
-                    reporter: Arc<dyn CacheReporter>,
-                    index: Mutex<Option<usize>>,
-                }
-
-                impl DownloadReporter for PassthroughReporter {
-                    fn on_download_start(&self) {
-                        let index = self.reporter.on_download_start();
-                        if self.index.lock().replace(index).is_some() {
-                            panic!("on_download_start was called multiple times")
-                        }
-                    }
-
-                    fn on_download_progress(&self, bytes_downloaded: u64, total_bytes: Option<u64>) {
-                        let index = self.index.lock().expect("on_download_start was not called");
-                        self.reporter.on_download_progress(index, bytes_downloaded, total_bytes);
-                    }
-
-                    fn on_download_complete(&self) {
-                        let index = self.index.lock().take().expect("on_download_start was not called");
-                        self.reporter.on_download_completed(index);
-                    }
-                }
-
                 let result = rattler_package_streaming::reqwest::tokio::extract(
                     client.clone(),
                     url.clone(),
@@ -329,12 +305,13 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     // If the directory already exists validate the contents of the package
+    let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
     if path.is_dir() {
         let path_inner = path.clone();
 
-        let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
         let validation_result =
             tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
+
         if let Some((reporter, index)) = reporter {
             reporter.on_validate_complete(index);
         }
@@ -360,12 +337,44 @@ where
                 }
             }
         }
+    } else if let Some((reporter, index)) = reporter {
+        reporter.on_validate_complete(index);
     }
 
     // Otherwise, defer to populate method to fill our cache.
     fetch(path)
         .await
         .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))
+}
+
+struct PassthroughReporter {
+    reporter: Arc<dyn CacheReporter>,
+    index: Mutex<Option<usize>>,
+}
+
+impl DownloadReporter for PassthroughReporter {
+    fn on_download_start(&self) {
+        let index = self.reporter.on_download_start();
+        assert!(
+            self.index.lock().replace(index).is_none(),
+            "on_download_start was called multiple times"
+        );
+    }
+
+    fn on_download_progress(&self, bytes_downloaded: u64, total_bytes: Option<u64>) {
+        let index = self.index.lock().expect("on_download_start was not called");
+        self.reporter
+            .on_download_progress(index, bytes_downloaded, total_bytes);
+    }
+
+    fn on_download_complete(&self) {
+        let index = self
+            .index
+            .lock()
+            .take()
+            .expect("on_download_start was not called");
+        self.reporter.on_download_completed(index);
+    }
 }
 
 #[cfg(test)]
@@ -425,6 +434,7 @@ mod test {
                         .await
                         .map(|_| ())
                 },
+                None,
             )
             .await
             .unwrap();
@@ -545,6 +555,7 @@ mod test {
                 server_url.join(archive_name).unwrap(),
                 reqwest::Client::default().into(),
                 DoNotRetryPolicy,
+                None,
             )
             .await;
 
@@ -562,6 +573,7 @@ mod test {
                 server_url.join(archive_name).unwrap(),
                 reqwest::Client::default().into(),
                 ExponentialBackoffBuilder::default().build_with_max_retries(3),
+                None,
             )
             .await;
 

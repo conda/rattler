@@ -431,7 +431,6 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
                 }
             }
         };
-
         solvables.sort_by(|&p1, &p2| {
             conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy)
         });

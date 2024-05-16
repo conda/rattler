@@ -104,8 +104,8 @@ use url::Url;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
 use crate::reporter::ResponseReporterExt;
-use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 use crate::Reporter;
+use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
 
 /// File suffix for JLAP file
 pub const JLAP_FILE_SUFFIX: &str = "jlap";

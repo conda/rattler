@@ -29,7 +29,9 @@ fn clobber_template(package_name: &PackageName) -> String {
 
 impl ClobberRegistry {
     /// Create a new clobber registry that is initialized with the given prefix records.
-    pub fn from_prefix_records<'i>(prefix_records: impl IntoIterator<Item=&'i PrefixRecord>) -> Self {
+    pub fn from_prefix_records<'i>(
+        prefix_records: impl IntoIterator<Item = &'i PrefixRecord>,
+    ) -> Self {
         let mut registry = Self::default();
 
         let mut temp_clobbers = Vec::new();

@@ -1,8 +1,8 @@
+use crate::utils::BodyStreamExt;
 use bytes::Bytes;
 use futures::{Stream, TryStreamExt};
 use std::future::Future;
 use url::Url;
-use crate::utils::BodyStreamExt;
 
 /// A trait that enables being notified of download progress.
 pub trait Reporter: Send + Sync {
