@@ -1,6 +1,6 @@
 from __future__ import annotations
 import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from rattler import Channel, Platform
 from rattler.match_spec.match_spec import MatchSpec
@@ -12,6 +12,9 @@ from rattler.platform.platform import PlatformLiteral
 from rattler.repo_data.gateway import Gateway
 from rattler.repo_data.record import RepoDataRecord
 from rattler.virtual_package.generic import GenericVirtualPackage
+
+SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
+"""Defines the strategy to use when multiple versions of a package are available during solving."""
 
 
 async def solve(
@@ -25,6 +28,7 @@ async def solve(
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime] = None,
+    strategy: SolveStrategy = "highest",
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -57,6 +61,13 @@ async def solve(
                          it will search for every package in every channel.
         timeout:    The maximum time the solver is allowed to run.
         exclude_newer: Exclude any record that is newer than the given datetime.
+        strategy: The strategy to use when multiple versions of a package are available.
+
+            * `"highest"`: Select the highest compatible version of all packages.
+            * `"lowest"`: Select the lowest compatible version of all packages.
+            * `"lowest-direct"`: Select the lowest compatible version for all
+              direct dependencies but the highest compatible version of transitive
+              dependencies.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -82,5 +93,6 @@ async def solve(
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,
+            strategy=strategy,
         )
     ]

@@ -62,6 +62,44 @@ async def test_solve_exclude_newer(
     assert str(solved_data[0].version) == "3.0.2"
 
 @pytest.mark.asyncio
+async def test_solve_lowest(gateway: Gateway, dummy_channel: Channel) -> None:
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foobar"],
+        gateway,
+        strategy="lowest",
+    )
+
+    assert isinstance(solved_data, list)
+    assert len(solved_data) == 2
+
+    assert solved_data[0].name.normalized == "foobar"
+    assert str(solved_data[0].version) == "2.0"
+
+    assert solved_data[1].name.normalized == "bors"
+    assert str(solved_data[1].version) == "1.0"
+
+@pytest.mark.asyncio
+async def test_solve_lowest_direct(gateway: Gateway, dummy_channel: Channel) -> None:
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foobar"],
+        gateway,
+        strategy="lowest-direct",
+    )
+
+    assert isinstance(solved_data, list)
+    assert len(solved_data) == 2
+
+    assert solved_data[0].name.normalized == "foobar"
+    assert str(solved_data[0].version) == "2.0"
+
+    assert solved_data[1].name.normalized == "bors"
+    assert str(solved_data[1].version) == "1.2.1"
+
+@pytest.mark.asyncio
 async def test_solve_channel_priority_disabled(
     gateway: Gateway, pytorch_channel: Channel, conda_forge_channel: Channel
 ) -> None:

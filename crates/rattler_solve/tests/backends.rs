@@ -5,7 +5,7 @@ use rattler_conda_types::{
     ParseStrictness, RepoData, RepoDataRecord, Version,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
-use rattler_solve::{ChannelPriority, SolveError, SolverImpl, SolverTask};
+use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
 use std::str::FromStr;
 use std::time::Instant;
 use url::Url;
@@ -344,17 +344,17 @@ macro_rules! solver_backend_tests {
             assert_eq!(1, pkgs.len());
             let info = &pkgs[0];
 
-            assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
+            assert_eq!("foo-3.0.2-py36h1af98f8_2.conda", info.file_name);
             assert_eq!(
-                "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
+                "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_2.conda",
                 info.url.to_string()
             );
             assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
-            assert_eq!("py36h1af98f8_1", info.package_record.build);
-            assert_eq!(1, info.package_record.build_number);
+            assert_eq!("py36h1af98f8_2", info.package_record.build);
+            assert_eq!(2, info.package_record.build_number);
             assert_eq!(
                 rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
                     "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
@@ -528,12 +528,14 @@ macro_rules! solver_backend_tests {
 
 #[cfg(feature = "libsolv_c")]
 mod libsolv_c {
+    #![allow(unused_imports)] // For some reason windows thinks this is an unused import.
+
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
-    #[allow(unused_imports)] // For some reason windows thinks this is an unused import.
     use rattler_solve::ChannelPriority;
+    use rattler_solve::SolveStrategy;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
@@ -575,6 +577,7 @@ mod libsolv_c {
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
                 exclude_newer: None,
+                strategy: SolveStrategy::default(),
             })
             .unwrap();
 
@@ -585,17 +588,17 @@ mod libsolv_c {
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
 
-        assert_eq!("foo-3.0.2-py36h1af98f8_1.conda", info.file_name);
+        assert_eq!("foo-3.0.2-py36h1af98f8_2.conda", info.file_name);
         assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_1.conda",
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_2.conda",
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_1", info.package_record.build);
-        assert_eq!(1, info.package_record.build_number);
+        assert_eq!("py36h1af98f8_2", info.package_record.build);
+        assert_eq!(2, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
                 "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
@@ -662,6 +665,85 @@ mod resolvo {
         // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
         insta::assert_snapshot!(result.unwrap_err());
     }
+
+    #[test]
+    fn test_lowest_version_strategy_highest_build_number() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            dummy_channel_json_path(),
+            SimpleSolveTask {
+                specs: &["foo"],
+                strategy: rattler_solve::SolveStrategy::LowestVersion,
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("3.0.2").unwrap()
+        );
+        assert_eq!(
+            result[0].package_record.build_number, 2,
+            "expected the highest build number"
+        );
+    }
+
+    #[test]
+    fn test_lowest_version_strategy_all() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            dummy_channel_json_path(),
+            SimpleSolveTask {
+                specs: &["foobar"],
+                strategy: rattler_solve::SolveStrategy::LowestVersion,
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].package_record.name.as_normalized(), "foobar");
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("2.0").unwrap(),
+            "expected lowest version of foobar"
+        );
+
+        assert_eq!(result[1].package_record.name.as_normalized(), "bors");
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("1.0").unwrap(),
+            "expected lowest version of bors"
+        );
+    }
+
+    #[test]
+    fn test_lowest_direct_version_strategy() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            dummy_channel_json_path(),
+            SimpleSolveTask {
+                specs: &["foobar"],
+                strategy: rattler_solve::SolveStrategy::LowestVersionDirect,
+                ..SimpleSolveTask::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].package_record.name.as_normalized(), "foobar");
+        assert_eq!(
+            result[0].package_record.version,
+            Version::from_str("2.0").unwrap(),
+            "expected lowest version of foobar"
+        );
+
+        assert_eq!(result[1].package_record.name.as_normalized(), "bors");
+        assert_eq!(
+            result[1].package_record.version,
+            Version::from_str("1.2.1").unwrap(),
+            "expected highest compatible version of bors"
+        );
+    }
 }
 
 #[derive(Default)]
@@ -671,6 +753,7 @@ struct SimpleSolveTask<'a> {
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
     exclude_newer: Option<DateTime<Utc>>,
+    strategy: SolveStrategy,
 }
 
 fn solve<T: SolverImpl + Default>(
@@ -691,6 +774,7 @@ fn solve<T: SolverImpl + Default>(
         specs,
         pinned_packages: task.pinned_packages,
         exclude_newer: task.exclude_newer,
+        strategy: task.strategy,
         ..SolverTask::from_iter([&repo_data])
     };
 

@@ -1,6 +1,6 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
-use crate::{ChannelPriority, IntoRepoData, SolverRepoData};
+use crate::{ChannelPriority, IntoRepoData, SolveStrategy, SolverRepoData};
 use crate::{SolveError, SolverTask};
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
@@ -94,6 +94,12 @@ impl super::SolverImpl for Solver {
         if task.timeout.is_some() {
             return Err(SolveError::UnsupportedOperations(vec![
                 "timeout".to_string()
+            ]));
+        }
+
+        if task.strategy != SolveStrategy::Highest {
+            return Err(SolveError::UnsupportedOperations(vec![
+                "strategy".to_string()
             ]));
         }
 
