@@ -785,7 +785,7 @@ checksum = "658bd65b1cf4c852a3cc96f18a8ce7b5640f6b703f905c7d74532294c2a63984"
 
 [[package]]
 name = "file_url"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "itertools",
  "percent-encoding",
@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.24.1"
+version = "0.25.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2499,6 +2499,7 @@ dependencies = [
  "memchr",
  "memmap2",
  "once_cell",
+ "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
@@ -2508,6 +2509,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.3",
  "reqwest-middleware",
+ "simple_spawn_blocking",
  "smallvec",
  "tempfile",
  "thiserror",
@@ -2520,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "chrono",
  "file_url",
@@ -2563,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.11"
+version = "0.19.12"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2576,7 +2578,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.6"
+version = "0.22.7"
 dependencies = [
  "chrono",
  "file_url",
@@ -2607,20 +2609,23 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.20.6"
+version = "0.20.7"
 dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.0",
+ "bytes",
  "chrono",
  "dirs",
  "fslock",
+ "futures",
  "getrandom",
  "google-cloud-auth",
  "http 1.1.0",
  "itertools",
  "keyring",
  "netrc-rs",
+ "pin-project-lite",
  "reqwest 0.12.3",
  "reqwest-middleware",
  "retry-policies",
@@ -2633,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.20.9"
+version = "0.20.10"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2657,7 +2662,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.20.0"
+version = "0.20.1"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2693,6 +2698,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "simple_spawn_blocking",
  "superslice",
  "tempfile",
  "thiserror",
@@ -2706,7 +2712,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.20.3"
+version = "0.20.4"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
@@ -2721,7 +2727,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.21.2"
+version = "0.22.0"
 dependencies = [
  "chrono",
  "futures",
@@ -2737,7 +2743,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "0.19.10"
+version = "0.19.11"
 dependencies = [
  "archspec",
  "libloading",
@@ -3325,6 +3331,13 @@ dependencies = [
  "num-traits",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "simple_spawn_blocking"
+version = "1.0.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]

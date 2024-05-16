@@ -2,7 +2,7 @@ use crate::gateway::error::SubdirNotFoundError;
 use crate::gateway::subdir::SubdirClient;
 use crate::gateway::GatewayError;
 use crate::sparse::SparseRepoData;
-use crate::utils::run_blocking_task;
+use simple_spawn_blocking::{tokio::run_blocking_task};
 use crate::Reporter;
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord};
 use std::path::Path;

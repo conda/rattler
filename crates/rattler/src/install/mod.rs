@@ -23,11 +23,13 @@ mod python;
 mod transaction;
 pub mod unlink;
 
+mod installer;
 #[cfg(test)]
 mod test_utils;
 
 pub use crate::install::entry_point::{get_windows_launcher, python_entry_point_template};
 pub use driver::InstallDriver;
+pub use installer::{Installer, InstallerError, Reporter};
 pub use link::{link_file, LinkFileError, LinkMethod};
 use rattler_conda_types::prefix_record::PathsEntry;
 pub use transaction::{Transaction, TransactionError, TransactionOperation};
@@ -45,6 +47,7 @@ use futures::stream::FuturesUnordered;
 use itertools::Itertools;
 
 use rattler_conda_types::{package::PathsJson, Platform};
+use simple_spawn_blocking::Cancelled;
 use std::cmp::Ordering;
 use std::collections::binary_heap::PeekMut;
 use std::collections::{BinaryHeap, HashSet};
@@ -105,6 +108,12 @@ pub enum InstallError {
     /// Post-processing involves removing clobbered paths.
     #[error("failed to post process the environment (unclobbering)")]
     PostProcessFailed(#[source] std::io::Error),
+}
+
+impl From<Cancelled> for InstallError {
+    fn from(_: Cancelled) -> Self {
+        InstallError::Cancelled
+    }
 }
 
 impl From<JoinError> for InstallError {

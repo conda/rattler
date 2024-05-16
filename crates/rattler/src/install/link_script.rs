@@ -4,6 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
 };
+use thiserror::Error;
 
 use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
@@ -64,11 +65,20 @@ impl ToString for LinkScriptType {
 }
 
 /// Records the results of running pre/post link scripts
+#[derive(Debug, Clone)]
 pub struct PrePostLinkResult {
     /// Messages from the link scripts
     pub messages: HashMap<PackageName, String>,
     /// Packages that failed to run the link scripts
     pub failed_packages: Vec<PackageName>,
+}
+
+/// An error that can occur during pre-, post-link script execution.
+#[derive(Debug, Error)]
+pub enum PrePostLinkError {
+    /// Failed to determine the currently installed packages.
+    #[error("failed to determine the installed packages")]
+    FailedToDetectInstalledPackages(#[source] std::io::Error),
 }
 
 /// Run the link scripts for a given package

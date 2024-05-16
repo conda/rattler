@@ -3,6 +3,7 @@ use anyhow::Context;
 use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use rattler::install::Installer;
 use rattler::{
     default_cache_dir,
     install::{
@@ -13,8 +14,8 @@ use rattler::{
 };
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
-    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, PackageRecord, ParseStrictness,
-    Platform, PrefixRecord, RepoDataRecord, Version,
+    Channel, ChannelConfig, GenericVirtualPackage, MatchSpec, ParseStrictness, Platform,
+    PrefixRecord, RepoDataRecord, Version,
 };
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
@@ -105,9 +106,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     // Determine the packages that are currently installed in the environment.
-    let installed_packages = find_installed_packages(&target_prefix, 100)
-        .await
-        .context("failed to determine currently installed packages")?;
+    let installed_packages = PrefixRecord::collect_from_prefix(&target_prefix)?;
 
     // For each channel/subdirectory combination, download and cache the `repodata.json` that should
     // be available from the corresponding Url. The code below also displays a nice CLI progress-bar
@@ -216,90 +215,89 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         }
     })?;
 
-    // sort topologically
-    let required_packages = PackageRecord::sort_topologically(required_packages);
-
-    // Construct a transaction to
-    let transaction = Transaction::from_current_and_desired(
-        &installed_packages,
-        required_packages,
-        install_platform,
-    )?;
-
     if opt.dry_run {
+        // Construct a transaction to
+        let transaction = Transaction::from_current_and_desired(
+            installed_packages,
+            required_packages,
+            install_platform,
+        )?;
+
         if transaction.operations.is_empty() {
             println!("No operations necessary");
-        }
-
-        let format_record = |r: &RepoDataRecord| {
-            format!(
-                "{} {} {}",
-                r.package_record.name.as_normalized(),
-                r.package_record.version,
-                r.package_record.build
-            )
-        };
-
-        for operation in &transaction.operations {
-            match operation {
-                TransactionOperation::Install(r) => {
-                    println!("{} {}", console::style("+").green(), format_record(r));
-                }
-                TransactionOperation::Change { old, new } => {
-                    println!(
-                        "{} {} -> {}",
-                        console::style("~").yellow(),
-                        format_record(&old.repodata_record),
-                        format_record(new)
-                    );
-                }
-                TransactionOperation::Reinstall(r) => {
-                    println!(
-                        "{} {}",
-                        console::style("~").yellow(),
-                        format_record(&r.repodata_record)
-                    );
-                }
-                TransactionOperation::Remove(r) => {
-                    println!(
-                        "{} {}",
-                        console::style("-").red(),
-                        format_record(&r.repodata_record)
-                    );
-                }
-            }
+        } else {
+            print_transaction(&transaction);
         }
 
         return Ok(());
     }
 
-    if transaction.operations.is_empty() {
+    let install_start = Instant::now();
+    let result = Installer::new()
+        .with_download_client(download_client)
+        .with_target_platform(install_platform)
+        .with_installed_packages(installed_packages)
+        .execute_link_scripts(true)
+        .install(&target_prefix, required_packages)
+        .await?;
+
+    if result.transaction.operations.is_empty() {
         println!(
             "{} Already up to date",
             console::style(console::Emoji("✔", "")).green(),
         );
     } else {
-        // Execute the operations that are returned by the solver.
-        let install_driver = InstallDriver::builder()
-            .with_prefix_records(&installed_packages)
-            .execute_link_scripts(true)
-            .with_io_concurrency_limit(100)
-            .finish();
-        execute_transaction(
-            &install_driver,
-            transaction,
-            target_prefix,
-            cache_dir,
-            download_client,
-        )
-        .await?;
         println!(
-            "{} Successfully updated the environment",
+            "{} Successfully updated the environment in {:?}",
             console::style(console::Emoji("✔", "")).green(),
+            install_start.elapsed()
         );
+        print_transaction(&result.transaction);
     }
 
     Ok(())
+}
+
+/// Prints the operations of the transaction to the console.
+fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
+    let format_record = |r: &RepoDataRecord| {
+        format!(
+            "{} {} {}",
+            r.package_record.name.as_normalized(),
+            r.package_record.version,
+            r.package_record.build
+        )
+    };
+
+    for operation in &transaction.operations {
+        match operation {
+            TransactionOperation::Install(r) => {
+                println!("{} {}", console::style("+").green(), format_record(r));
+            }
+            TransactionOperation::Change { old, new } => {
+                println!(
+                    "{} {} -> {}",
+                    console::style("~").yellow(),
+                    format_record(&old.repodata_record),
+                    format_record(new)
+                );
+            }
+            TransactionOperation::Reinstall(r) => {
+                println!(
+                    "{} {}",
+                    console::style("~").yellow(),
+                    format_record(&r.repodata_record)
+                );
+            }
+            TransactionOperation::Remove(r) => {
+                println!(
+                    "{} {}",
+                    console::style("-").red(),
+                    format_record(&r.repodata_record)
+                );
+            }
+        }
+    }
 }
 
 /// Executes the transaction on the given environment.
@@ -425,6 +423,7 @@ async fn execute_operation(
                     install_record.url.clone(),
                     download_client.clone(),
                     default_retry_policy(),
+                    None,
                 )
                 .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
                 .map_err(anyhow::Error::from)

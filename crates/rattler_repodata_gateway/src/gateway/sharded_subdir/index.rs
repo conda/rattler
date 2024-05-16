@@ -1,6 +1,6 @@
 use super::{token::TokenClient, ShardedRepodata};
 use crate::reporter::ResponseReporterExt;
-use crate::utils::run_blocking_task;
+use simple_spawn_blocking::{tokio::run_blocking_task};
 use crate::{utils::url_to_cache_filename, GatewayError, Reporter};
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};

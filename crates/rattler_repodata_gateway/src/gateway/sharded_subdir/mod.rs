@@ -1,6 +1,6 @@
 use crate::gateway::error::SubdirNotFoundError;
 use crate::reporter::ResponseReporterExt;
-use crate::utils::run_blocking_task;
+use simple_spawn_blocking::{tokio::run_blocking_task};
 use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayError};
 use futures::TryFutureExt;
