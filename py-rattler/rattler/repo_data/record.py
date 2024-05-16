@@ -24,6 +24,11 @@ class RepoDataRecord(PackageRecord):
         """
         return self._record.url
 
+    @url.setter
+    def url(self, url: str) -> None:
+        self._record.url = url
+        return None
+
     @property
     def channel(self) -> str:
         """
@@ -44,6 +49,11 @@ class RepoDataRecord(PackageRecord):
         ```
         """
         return self._record.channel
+
+    @channel.setter
+    def channel(self, channel: str) -> None:
+        self._record.channel = channel
+        return None
 
     @property
     def file_name(self) -> str:

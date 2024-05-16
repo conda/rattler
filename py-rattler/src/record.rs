@@ -1,5 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
+use chrono::{TimeZone, Utc};
 use pyo3::{
     exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr, PyResult,
 };
@@ -9,10 +10,11 @@ use rattler_conda_types::{
 };
 
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use url::Url;
 
 use crate::{
     error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
-    prefix_paths::PyPrefixPaths, version::PyVersion,
+    platform::PyPlatform, prefix_paths::PyPrefixPaths, version::PyVersion,
 };
 
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
@@ -77,7 +79,7 @@ impl PyRecord {
         }
     }
 
-    pub fn try_as_mut_prefix_record(&mut self) -> PyResult<&PrefixRecord> {
+    pub fn try_as_mut_prefix_record(&mut self) -> PyResult<&mut PrefixRecord> {
         match &mut self.inner {
             RecordInner::Prefix(r) => Ok(r),
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
@@ -118,21 +120,42 @@ impl PyRecord {
     }
 
     /// Optionally the architecture the package supports.
-    #[getter]
+    #[getter(arch)]
     pub fn arch(&self) -> Option<String> {
         self.as_package_record().arch.clone()
     }
 
+    /// Setter for arch.
+    #[setter(arch)]
+    pub fn set_arch(&mut self, arch: Option<String>) -> PyResult<()> {
+        self.as_mut_package_record().arch = arch;
+        Ok(())
+    }
+
     /// The build string of the package.
-    #[getter]
+    #[getter(build)]
     pub fn build(&self) -> String {
         self.as_package_record().build.clone()
     }
 
+    /// Setter for build.
+    #[setter(build)]
+    pub fn set_build(&mut self, build: String) -> PyResult<()> {
+        self.as_mut_package_record().build = build;
+        Ok(())
+    }
+
     /// The build number of the package.
-    #[getter]
+    #[getter(build_number)]
     pub fn build_number(&self) -> u64 {
         self.as_package_record().build_number
+    }
+
+    /// Setter for build number.
+    #[setter(build_number)]
+    pub fn set_build_number(&mut self, build_number: u64) -> PyResult<()> {
+        self.as_mut_package_record().build_number = build_number;
+        Ok(())
     }
 
     /// Additional constraints on packages.
@@ -141,15 +164,29 @@ impl PyRecord {
     /// whereas packages specified in `constrains` are not required
     /// to be installed, but if they are installed they must follow
     /// these constraints.
-    #[getter]
+    #[getter(constrains)]
     pub fn constrains(&self) -> Vec<String> {
         self.as_package_record().constrains.clone()
     }
 
+    /// Setter for constrains.
+    #[setter(constrains)]
+    pub fn set_constrains(&mut self, constrains: Vec<String>) -> PyResult<()> {
+        self.as_mut_package_record().constrains = constrains;
+        Ok(())
+    }
+
     /// Specification of packages this package depends on.
-    #[getter]
+    #[getter(depends)]
     pub fn depends(&self) -> Vec<String> {
         self.as_package_record().depends.clone()
+    }
+
+    /// Setter for depends.
+    #[setter(depends)]
+    pub fn set_depends(&mut self, depends: Vec<String>) -> PyResult<()> {
+        self.as_mut_package_record().depends = depends;
+        Ok(())
     }
 
     /// Features are a deprecated way to specify different
@@ -157,33 +194,61 @@ impl PyRecord {
     /// supported anymore and should not be used. Instead,
     /// `mutex` packages should be used to specify
     /// mutually exclusive features.
-    #[getter]
+    #[getter(features)]
     pub fn features(&self) -> Option<String> {
         self.as_package_record().features.clone()
     }
 
+    /// Setter for features.
+    #[setter(features)]
+    pub fn set_features(&mut self, features: Option<String>) -> PyResult<()> {
+        self.as_mut_package_record().features = features;
+        Ok(())
+    }
+
     /// A deprecated md5 hash.
-    #[getter]
+    #[getter(legacy_bz2_md5)]
     pub fn legacy_bz2_md5(&self) -> Option<String> {
         self.as_package_record().legacy_bz2_md5.clone()
     }
 
     /// A deprecated package archive size.
-    #[getter]
+    #[getter(legacy_bz2_size)]
     pub fn legacy_bz2_size(&self) -> Option<u64> {
         self.as_package_record().legacy_bz2_size
     }
 
+    /// Setter for package archive size.
+    #[setter(legacy_bz2_size)]
+    pub fn set_legacy_bz2_size(&mut self, size: Option<u64>) -> PyResult<()> {
+        self.as_mut_package_record().legacy_bz2_size = size;
+        Ok(())
+    }
+
     /// The specific license of the package.
-    #[getter]
+    #[getter(license)]
     pub fn license(&self) -> Option<String> {
         self.as_package_record().license.clone()
     }
 
+    /// Setter for license.
+    #[setter(license)]
+    pub fn set_license(&mut self, license: Option<String>) -> PyResult<()> {
+        self.as_mut_package_record().license = license;
+        Ok(())
+    }
+
     /// The license family.
-    #[getter]
+    #[getter(license_family)]
     pub fn license_family(&self) -> Option<String> {
         self.as_package_record().license_family.clone()
+    }
+
+    /// Setter for license family.
+    #[setter(license_family)]
+    pub fn set_license_family(&mut self, family: Option<String>) -> PyResult<()> {
+        self.as_mut_package_record().license_family = family;
+        Ok(())
     }
 
     /// Optionally a MD5 hash of the package archive.
@@ -193,15 +258,29 @@ impl PyRecord {
     }
 
     /// Package name of the Record.
-    #[getter]
+    #[getter(name)]
     pub fn name(&self) -> PyPackageName {
         self.as_package_record().name.clone().into()
     }
 
+    /// Setter for name.
+    #[setter(name)]
+    pub fn set_name(&mut self, name: PyPackageName) -> PyResult<()> {
+        self.as_mut_package_record().name = name.inner;
+        Ok(())
+    }
+
     /// Optionally the platform the package supports.
-    #[getter]
+    #[getter(platform)]
     pub fn platform(&self) -> Option<String> {
         self.as_package_record().platform.clone()
+    }
+
+    /// Setter for platform.
+    #[setter(platform)]
+    pub fn set_platform(&mut self, platform: PyPlatform) -> PyResult<()> {
+        self.as_mut_package_record().platform = Some(platform.inner.to_string());
+        Ok(())
     }
 
     /// Optionally a SHA256 hash of the package archive.
@@ -218,37 +297,74 @@ impl PyRecord {
         self.as_package_record().size
     }
 
+    /// Setter for size.
+    #[setter(size)]
+    pub fn set_size(&mut self, size: Option<u64>) -> PyResult<()> {
+        self.as_mut_package_record().size = size;
+        Ok(())
+    }
+
     /// The subdirectory where the package can be found.
-    #[getter]
+    #[getter(subdir)]
     pub fn subdir(&self) -> String {
         self.as_package_record().subdir.clone()
     }
 
+    /// Setter for subdir.
+    #[setter(subdir)]
+    pub fn set_subdir(&mut self, subdir: String) -> PyResult<()> {
+        self.as_mut_package_record().subdir = subdir;
+        Ok(())
+    }
+
     /// The noarch type this package implements, if any.
-    #[getter]
+    #[getter(noarch)]
     pub fn noarch(&self) -> PyNoArchType {
         self.as_package_record().noarch.into()
     }
 
+    /// Setter for noarch.
+    #[setter(noarch)]
+    pub fn set_noarch(&mut self, noarch: PyNoArchType) -> PyResult<()> {
+        self.as_mut_package_record().noarch = noarch.into();
+        Ok(())
+    }
+
     /// The date this entry was created.
-    #[getter]
+    #[getter(timestamp)]
     pub fn timestamp(&self) -> Option<i64> {
         self.as_package_record()
             .timestamp
             .map(|time| time.timestamp())
     }
 
+    /// Setter for entry date.
+    #[setter(timestamp)]
+    pub fn set_timestamp(&mut self, timestamp: u64) -> PyResult<()> {
+        // TODO: remove unwrap
+        let time = Utc.timestamp_opt(timestamp as i64, 0).unwrap();
+        self.as_mut_package_record().timestamp = Some(time);
+        Ok(())
+    }
+
     /// Track features are nowadays only used to downweight packages
     /// (ie. give them less priority). To that effect, the number of track
     /// features is counted (number of commas) and the package is downweighted
     /// by the number of track_features.
-    #[getter]
+    #[getter(track_features)]
     pub fn track_features(&self) -> Vec<String> {
         self.as_package_record().track_features.clone()
     }
 
+    /// Setter for track features.
+    #[setter(track_features)]
+    pub fn set_track_features(&mut self, features: Vec<String>) -> PyResult<()> {
+        self.as_mut_package_record().track_features = features;
+        Ok(())
+    }
+
     /// The version of the package.
-    #[getter]
+    #[getter(version)]
     pub fn version(&self) -> PyVersion {
         self.as_package_record()
             .version
@@ -257,13 +373,20 @@ impl PyRecord {
             .into()
     }
 
+    /// Setter for version.
+    #[setter(version)]
+    pub fn set_version(&mut self, version: PyVersion) -> PyResult<()> {
+        self.as_mut_package_record().version = version.inner.into();
+        Ok(())
+    }
+
     /// The filename of the package.
     #[getter(file_name)]
     pub fn file_name(&self) -> PyResult<String> {
         Ok(self.try_as_repodata_record()?.file_name.clone())
     }
 
-    /// The filename of the package.
+    /// Setter for filename of the package.
     #[setter(file_name)]
     pub fn set_file_name(&mut self, file_name: String) -> PyResult<()> {
         self.try_as_mut_repodata_record()?.file_name = file_name;
@@ -271,21 +394,36 @@ impl PyRecord {
     }
 
     /// The canonical URL from where to get this package.
-    #[getter]
+    #[getter(url)]
     pub fn url(&self) -> PyResult<String> {
         Ok(self.try_as_repodata_record()?.url.to_string())
+    }
+
+    /// Setter for package URL.
+    #[setter(url)]
+    pub fn set_url(&mut self, url: &str) -> PyResult<()> {
+        self.try_as_mut_repodata_record()?.url =
+            Url::from_str(url).map_err(PyRattlerError::from)?;
+        Ok(())
     }
 
     /// String representation of the channel where the
     /// package comes from. This could be a URL but it
     /// could also be a channel name.
-    #[getter]
+    #[getter(channel)]
     pub fn channel(&self) -> PyResult<String> {
         Ok(self.try_as_repodata_record()?.channel.clone())
     }
 
+    /// Setter for package URL.
+    #[setter(channel)]
+    pub fn set_channel(&mut self, channel: String) -> PyResult<()> {
+        self.try_as_mut_repodata_record()?.channel = channel;
+        Ok(())
+    }
+
     /// The path to where the archive of the package was stored on disk.
-    #[getter]
+    #[getter(package_tarball_full_path)]
     pub fn package_tarball_full_path(&self) -> PyResult<Option<PathBuf>> {
         Ok(self
             .try_as_prefix_record()?
@@ -293,29 +431,64 @@ impl PyRecord {
             .clone())
     }
 
+    /// Setter for local package path.
+    #[setter(package_tarball_full_path)]
+    pub fn set_package_tarball_full_path(&mut self, path: Option<PathBuf>) -> PyResult<()> {
+        self.try_as_mut_prefix_record()?.package_tarball_full_path = path;
+        Ok(())
+    }
+
     /// The path that contains the extracted package content.
-    #[getter]
+    #[getter(extracted_package_dir)]
     pub fn extracted_package_dir(&self) -> PyResult<Option<PathBuf>> {
         Ok(self.try_as_prefix_record()?.extracted_package_dir.clone())
     }
 
+    /// Setter for path to extracted package content.
+    #[setter(extracted_package_dir)]
+    pub fn set_extracted_package_dir(&mut self, path: Option<PathBuf>) -> PyResult<()> {
+        self.try_as_mut_prefix_record()?.extracted_package_dir = path;
+        Ok(())
+    }
+
     /// A sorted list of all files included in this package
-    #[getter]
+    #[getter(files)]
     pub fn files(&self) -> PyResult<Vec<PathBuf>> {
         Ok(self.try_as_prefix_record()?.files.clone())
     }
 
+    /// Setter for files included in the package.
+    #[setter(files)]
+    pub fn set_file(&mut self, files: Vec<PathBuf>) -> PyResult<()> {
+        self.try_as_mut_prefix_record()?.files = files;
+        Ok(())
+    }
+
     /// Information about how files have been linked when installing the package.
-    #[getter]
+    #[getter(paths_data)]
     pub fn paths_data(&self) -> PyResult<PyPrefixPaths> {
         Ok(self.try_as_prefix_record()?.paths_data.clone().into())
     }
 
+    /// Setter for paths data.
+    #[setter(paths_data)]
+    pub fn set_paths_data(&mut self, paths_data: PyPrefixPaths) -> PyResult<()> {
+        self.try_as_mut_prefix_record()?.paths_data = paths_data.into();
+        Ok(())
+    }
+
     /// The spec that was used when this package was installed. Note that this field is not updated if the
     /// currently another spec was used.
-    #[getter]
+    #[getter(requested_spec)]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
+    }
+
+    /// Setter for requested spec.
+    #[setter(requested_spec)]
+    pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
+        self.try_as_mut_prefix_record()?.requested_spec = spec;
+        Ok(())
     }
 }
 
