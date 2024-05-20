@@ -10,4 +10,4 @@ edition.workspace = true
 
 
 [dependencies]
-tokio = { version = "1" , default-features = false, optional = true}
+tokio = { version = "1", default-features = false, features = ["rt"], optional = true }
