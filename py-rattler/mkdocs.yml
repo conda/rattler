@@ -102,7 +102,7 @@ nav:
           - PackageHashes: package_hashes.md
           - PypiPackageData: pypi_package_data.md
           - PypiPackageEnvironmentData: pypi_package_environment_data.md
-      - metadata: 
+      - metadata:
           - AboutJson: about_json.md
           - RunExportsJson: run_exports_json.md
           - PathsJson: paths_json.md

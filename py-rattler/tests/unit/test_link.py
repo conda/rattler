@@ -13,9 +13,9 @@ async def test_link(gateway: Gateway, conda_forge_channel: Channel, tmp_path: Pa
 
     solved_data = await solve(
         [conda_forge_channel],
-        ["noarch"],
         ["conda-forge-pinning"],
-        gateway,
+        platforms=["noarch"],
+        gateway=gateway,
     )
 
     await link(solved_data, env_dir, cache_dir)

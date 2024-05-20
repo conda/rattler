@@ -2,28 +2,32 @@ mod error;
 #[cfg(feature = "indicatif")]
 mod indicatif;
 mod reporter;
-#[cfg(feature = "indicatif")]
-pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
-
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::default_cache_dir;
-use crate::install::link_script::PrePostLinkResult;
-use crate::package_cache::{CacheReporter, PackageCache};
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt, TryFutureExt};
-use rattler_conda_types::prefix_record::{Link, LinkType};
-use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord};
-use rattler_networking::retry_policies::default_retry_policy;
-use reqwest::Client;
-use simple_spawn_blocking::tokio::run_blocking_task;
-use std::future::ready;
-use std::path::PathBuf;
-use std::{path::Path, sync::Arc};
-use tokio::sync::Semaphore;
-use tokio::task::JoinError;
+use std::{
+    future::ready,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub use error::InstallerError;
+use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
+#[cfg(feature = "indicatif")]
+pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
+use rattler_conda_types::{
+    prefix_record::{Link, LinkType},
+    Platform, PrefixRecord, RepoDataRecord,
+};
+use rattler_networking::retry_policies::default_retry_policy;
 pub use reporter::Reporter;
+use reqwest::Client;
+use simple_spawn_blocking::tokio::run_blocking_task;
+use tokio::{sync::Semaphore, task::JoinError};
+
+use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::{
+    default_cache_dir,
+    install::link_script::PrePostLinkResult,
+    package_cache::{CacheReporter, PackageCache},
+};
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -68,6 +72,7 @@ impl Installer {
     /// Sets an optional IO concurrency limit. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
+    #[must_use]
     pub fn with_io_concurrency_limit(self, limit: usize) -> Self {
         Self {
             io_semaphore: Some(Arc::new(Semaphore::new(limit))),
@@ -75,9 +80,19 @@ impl Installer {
         }
     }
 
+    /// Sets an optional IO concurrency limit.
+    ///
+    /// This function is similar to [`Self::with_io_concurrency_limit`],
+    /// but modifies an existing instance.
+    pub fn set_io_concurrentcy_limit(&mut self, limit: usize) -> &mut Self {
+        self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
     /// Sets an optional IO concurrency semaphore. This is used to make sure
     /// that the system doesn't acquire more IO resources than the system has
     /// available.
+    #[must_use]
     pub fn with_io_concurrency_semaphore(self, io_concurrency_semaphore: Arc<Semaphore>) -> Self {
         Self {
             io_semaphore: Some(io_concurrency_semaphore),
@@ -85,15 +100,32 @@ impl Installer {
         }
     }
 
+    /// Sets an optional IO concurrency semaphore.
+    ///
+    /// This function is similar to [`Self::with_io_concurrency_semaphore`], but
+    /// modifies an existing instance.
+    pub fn set_io_concurrency_semaphore(&mut self, limit: usize) -> &mut Self {
+        self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
     /// Sets whether to execute link scripts or not.
-    pub fn execute_link_scripts(self, execute: bool) -> Self {
+    #[must_use]
+    pub fn with_execute_link_scripts(self, execute: bool) -> Self {
         Self {
             execute_link_scripts: execute,
             ..self
         }
     }
 
+    /// Sets whether to execute link scripts or not.
+    pub fn set_execute_link_scripts(&mut self, execute: bool) -> &mut Self {
+        self.execute_link_scripts = execute;
+        self
+    }
+
     /// Sets the package cache to use.
+    #[must_use]
     pub fn with_package_cache(self, package_cache: PackageCache) -> Self {
         Self {
             package_cache: Some(package_cache),
@@ -101,7 +133,17 @@ impl Installer {
         }
     }
 
+    /// Sets the package cache to use.
+    ///
+    /// This function is similar to [`Self::with_package_cache`],but modifies an
+    /// existing instance.
+    pub fn set_package_cache(&mut self, package_cache: PackageCache) -> &mut Self {
+        self.package_cache = Some(package_cache);
+        self
+    }
+
     /// Sets the download client to use
+    #[must_use]
     pub fn with_download_client(
         self,
         downloader: reqwest_middleware::ClientWithMiddleware,
@@ -112,8 +154,21 @@ impl Installer {
         }
     }
 
+    /// Sets the download client to use
+    ///
+    /// This function is similar to [`Self::with_download_client`], but modifies
+    /// an existing instance.
+    pub fn set_download_client(
+        &mut self,
+        downloader: reqwest_middleware::ClientWithMiddleware,
+    ) -> &mut Self {
+        self.downloader = Some(downloader);
+        self
+    }
+
     /// Sets a reporter that will receive events during the installation
     /// process.
+    #[must_use]
     pub fn with_reporter<R: Reporter + 'static>(self, reporter: R) -> Self {
         Self {
             reporter: Some(Arc::new(reporter)),
@@ -121,8 +176,19 @@ impl Installer {
         }
     }
 
+    /// Sets a reporter that will receive events during the installation
+    /// process.
+    ///
+    /// This function is similar to [`Self::with_reporter`],but modifies an
+    /// existing instance.
+    pub fn set_reporter<R: Reporter + 'static>(&mut self, reporter: R) -> &mut Self {
+        self.reporter = Some(Arc::new(reporter));
+        self
+    }
+
     /// Sets the packages that are currently installed in the prefix. If this
     /// is not set, the installation process will first figure this out.
+    #[must_use]
     pub fn with_installed_packages(self, installed: Vec<PrefixRecord>) -> Self {
         Self {
             installed: Some(installed),
@@ -130,8 +196,19 @@ impl Installer {
         }
     }
 
+    /// Sets the packages that are currently installed in the prefix. If this
+    /// is not set, the installation process will first figure this out.
+    ///
+    /// This function is similar to [`Self::set_installed_packages`],but
+    /// modifies an existing instance.
+    pub fn set_installed_packages(&mut self, installed: Vec<PrefixRecord>) -> &mut Self {
+        self.installed = Some(installed);
+        self
+    }
+
     /// Sets the target platform of the installation. If not specifically set
     /// this will default to the current platform.
+    #[must_use]
     pub fn with_target_platform(self, target_platform: Platform) -> Self {
         Self {
             target_platform: Some(target_platform),
@@ -139,12 +216,36 @@ impl Installer {
         }
     }
 
+    /// Sets the target platform of the installation. If not specifically set
+    /// this will default to the current platform.
+    ///
+    /// This function is similar to [`Self::with_target_platform`], but modifies
+    /// an existing instance.
+    pub fn set_target_platform(&mut self, target_platform: Platform) -> &mut Self {
+        self.target_platform = Some(target_platform);
+        self
+    }
+
     /// Determines how to handle Apple code signing behavior.
+    #[must_use]
     pub fn with_apple_code_signing_behavior(self, behavior: AppleCodeSignBehavior) -> Self {
         Self {
             apple_code_sign_behavior: behavior,
             ..self
         }
+    }
+
+    /// Determines how to handle Apple code signing behavior.
+    ///
+    /// This function is similar to
+    /// [`Self::with_apple_code_signing_behavior`],but modifies an existing
+    /// instance.
+    pub fn set_apple_code_signing_behavior(
+        &mut self,
+        behavior: AppleCodeSignBehavior,
+    ) -> &mut Self {
+        self.apple_code_sign_behavior = behavior;
+        self
     }
 
     /// Install the packages in the given prefix.
@@ -394,7 +495,8 @@ async fn link_package(
         .await
 }
 
-/// Given a repodata record, fetch the package into the cache if its not already there.
+/// Given a repodata record, fetch the package into the cache if its not already
+/// there.
 async fn populate_cache(
     record: &RepoDataRecord,
     downloader: reqwest_middleware::ClientWithMiddleware,

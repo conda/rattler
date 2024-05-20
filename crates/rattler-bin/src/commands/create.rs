@@ -254,7 +254,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .with_download_client(download_client)
         .with_target_platform(install_platform)
         .with_installed_packages(installed_packages)
-        .execute_link_scripts(true)
+        .with_execute_link_scripts(true)
         .with_reporter(
             IndicatifReporter::builder()
                 .with_multi_progress(global_multi_progress())

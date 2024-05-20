@@ -44,7 +44,7 @@ regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
-simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.0", default-features = false }
+simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.0", default-features = false, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
