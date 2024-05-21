@@ -10,7 +10,7 @@ use indicatif::{HumanBytes, MultiProgress, ProgressFinish, ProgressStyle};
 use parking_lot::Mutex;
 use rattler_conda_types::{PrefixRecord, RepoDataRecord};
 
-use crate::install::{Reporter, Transaction};
+use crate::install::{Reporter, Transaction, TransactionOperation};
 
 /// A builder to construct an [`IndicatifReporter`].
 #[derive(Clone)]
@@ -18,6 +18,26 @@ pub struct IndicatifReporterBuilder<F: ProgressFormatter> {
     multi_progress: Option<indicatif::MultiProgress>,
     clear_when_done: bool,
     formatter: F,
+    placement: Placement,
+}
+
+/// Defines how to place the progress bars. Note that the three progress bars
+/// of the reporter are always kept together in the same order. This placement
+/// refers to how the group of progress bars is placed.
+#[derive(Debug, Clone, Default)]
+pub enum Placement {
+    /// Place all progress bars before the given progress bar.
+    Before(indicatif::ProgressBar),
+
+    /// Place all progress bars after the given progress bar
+    After(indicatif::ProgressBar),
+
+    /// Place all progress bars at the given index
+    Index(usize),
+
+    /// Place all progress bars as the last progress bars.
+    #[default]
+    End,
 }
 
 /// Defines the type of progress-bar.
@@ -101,7 +121,10 @@ impl ProgressFormatter for DefaultProgressFormatter {
         if props.determinate && props.status != ProgressStatus::Finished {
             result.push_str("[{elapsed_precise}] [{bar:20!.bright.yellow/dim.white}] ");
             match props.progress_type {
-                ProgressType::Generic => result.push_str("{human_pos:>4}/{human_len:4} "),
+                ProgressType::Generic => {
+                    // Don't show position and total, because these are visible
+                    // through text anyway.
+                }
                 ProgressType::Bytes => result.push_str("{bytes:>8} @ {bytes_per_sec:8} "),
             }
         } else {
@@ -123,6 +146,7 @@ impl<F: ProgressFormatter> IndicatifReporterBuilder<F> {
         IndicatifReporterBuilder {
             multi_progress: self.multi_progress,
             clear_when_done: self.clear_when_done,
+            placement: self.placement,
             formatter,
         }
     }
@@ -142,6 +166,12 @@ impl<F: ProgressFormatter> IndicatifReporterBuilder<F> {
             clear_when_done,
             ..self
         }
+    }
+
+    /// Defines how the progress bars of the reporter are placed relative to
+    /// any other progress bars that are already present.
+    pub fn with_placement(self, placement: Placement) -> Self {
+        Self { placement, ..self }
     }
 
     /// Finish building [`IndicatifReporter`].
@@ -164,15 +194,17 @@ impl<F: ProgressFormatter> IndicatifReporterBuilder<F> {
                 packages_downloaded: HashSet::default(),
                 total_download_size: 0,
                 clear_when_done: self.clear_when_done,
-                operations_in_progress: 0,
+                operations_in_progress: HashSet::default(),
                 bytes_downloaded: Vec::new(),
                 package_sizes: Vec::new(),
+                package_names: Vec::new(),
                 start_validating: None,
                 start_downloading: None,
                 start_linking: None,
                 end_validating: None,
                 end_downloading: None,
                 end_linking: None,
+                placement: self.placement,
             })),
         }
     }
@@ -194,7 +226,6 @@ struct IndicatifReporterInner<F> {
     link_progress: Option<indicatif::ProgressBar>,
 
     clear_when_done: bool,
-    operations_in_progress: usize,
 
     total_packages_to_cache: usize,
     total_packages_cached: usize,
@@ -209,6 +240,9 @@ struct IndicatifReporterInner<F> {
     bytes_downloaded: Vec<usize>,
 
     package_sizes: Vec<usize>,
+    package_names: Vec<String>,
+
+    operations_in_progress: HashSet<usize>,
 
     start_validating: Option<Instant>,
     start_downloading: Option<Instant>,
@@ -217,6 +251,7 @@ struct IndicatifReporterInner<F> {
     end_validating: Option<Instant>,
     end_downloading: Option<Instant>,
     end_linking: Option<Instant>,
+    placement: Placement,
 }
 
 impl<F: ProgressFormatter> IndicatifReporterInner<F> {
@@ -227,6 +262,51 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
             .or_insert_with(|| self.formatter.format(&props))
             .clone()
     }
+
+    fn update_validating_message(&self) {
+        let Some(validation_progress) = &self.validation_progress else {
+            return;
+        };
+
+        validation_progress.set_message(self.format_progress_message(&self.packages_validating));
+    }
+
+    fn update_download_message(&self) {
+        let Some(download_progress) = &self.download_progress else {
+            return;
+        };
+
+        download_progress.set_message(self.format_progress_message(&self.packages_downloading));
+    }
+
+    fn update_linking_message(&self) {
+        let Some(link_progress) = &self.link_progress else {
+            return;
+        };
+
+        link_progress.set_message(self.format_progress_message(&self.operations_in_progress));
+    }
+
+    fn format_progress_message(&self, remaining: &HashSet<usize>) -> String {
+        let mut msg = String::new();
+
+        // Sort the packages from large to small.
+        let package_iter = remaining
+            .iter()
+            .map(|&idx| (self.package_sizes[idx], &self.package_names[idx]));
+
+        let largest_package = package_iter.max_by_key(|(size, _)| *size);
+        if let Some((_, first)) = largest_package {
+            msg.push_str(first);
+        }
+
+        let count = remaining.len();
+        if count > 1 {
+            msg.push_str(&format!(" (+{})", count - 1));
+        }
+
+        msg
+    }
 }
 
 impl IndicatifReporter<DefaultProgressFormatter> {
@@ -236,6 +316,7 @@ impl IndicatifReporter<DefaultProgressFormatter> {
             multi_progress: None,
             clear_when_done: false,
             formatter: DefaultProgressFormatter::default(),
+            placement: Placement::default(),
         }
     }
 }
@@ -250,9 +331,20 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
     fn on_transaction_start(&self, transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
         let mut inner = self.inner.lock();
 
-        let link_progress = inner
-            .multi_progress
-            .add(indicatif::ProgressBar::new(0))
+        let link_progress = match &inner.placement {
+            Placement::Before(pb) => inner
+                .multi_progress
+                .insert_before(pb, indicatif::ProgressBar::new(0)),
+            Placement::After(pb) => inner
+                .multi_progress
+                .insert_after(pb, indicatif::ProgressBar::new(0)),
+            Placement::Index(idx) => inner
+                .multi_progress
+                .insert(*idx, indicatif::ProgressBar::new(0)),
+            Placement::End => inner.multi_progress.add(indicatif::ProgressBar::new(0)),
+        };
+
+        let link_progress = link_progress
             .with_style(inner.style(ProgressStyleProperties {
                 status: ProgressStatus::Pending,
                 determinate: true,
@@ -267,6 +359,22 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         );
 
         inner.link_progress = Some(link_progress);
+        inner.total_packages_to_cache = transaction.packages_to_install();
+
+        inner.package_names.reserve(transaction.operations.len());
+        for operation in &transaction.operations {
+            let record = match operation {
+                TransactionOperation::Install(new) | TransactionOperation::Change { new, .. } => {
+                    &new.package_record
+                }
+                TransactionOperation::Reinstall(old) | TransactionOperation::Remove(old) => {
+                    &old.repodata_record.package_record
+                }
+            };
+            inner
+                .package_names
+                .push(record.name.as_normalized().to_string());
+        }
     }
 
     fn on_transaction_operation_start(&self, _operation: usize) {}
@@ -325,6 +433,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             progress_type: ProgressType::Generic,
         }));
 
+        inner.update_validating_message();
+
         cache_entry
     }
 
@@ -350,6 +460,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 progress_type: ProgressType::Generic,
             }));
         }
+
+        inner.update_validating_message();
     }
 
     fn on_download_start(&self, cache_entry: usize) -> usize {
@@ -396,6 +508,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         }));
         download_progress.set_length(inner.total_download_size as u64);
 
+        inner.update_download_message();
+
         cache_entry
     }
 
@@ -428,6 +542,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                     progress_type: ProgressType::Bytes,
                 }));
         }
+
+        inner.update_download_message();
     }
 
     fn on_populate_cache_complete(&self, _cache_entry: usize) {
@@ -444,8 +560,13 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 validation_pb.finish_using_style();
                 if let (Some(start), Some(end)) = (inner.start_validating, inner.end_validating) {
                     validation_pb.set_message(format!(
-                        "{} packages in {:?}",
+                        "{} {} in {:?}",
                         inner.packages_validated.len(),
+                        if inner.packages_validated.len() == 1 {
+                            "package"
+                        } else {
+                            "packages"
+                        },
                         end - start
                     ));
                 }
@@ -460,8 +581,13 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 download_pb.finish_using_style();
                 if let (Some(start), Some(end)) = (inner.start_downloading, inner.end_downloading) {
                     download_pb.set_message(format!(
-                        "{} packages ({}) in {:?}",
+                        "{} {} ({}) in {:?}",
                         inner.packages_downloaded.len(),
+                        if inner.packages_downloaded.len() == 1 {
+                            "package"
+                        } else {
+                            "packages"
+                        },
                         HumanBytes(inner.bytes_downloaded.iter().sum::<usize>() as u64),
                         end - start
                     ));
@@ -470,14 +596,13 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         }
     }
 
-    fn on_unlink_start(&self, _operation: usize, _record: &PrefixRecord) -> usize {
+    fn on_unlink_start(&self, operation: usize, _record: &PrefixRecord) -> usize {
         let mut inner = self.inner.lock();
 
         inner.start_linking.get_or_insert_with(Instant::now);
+        inner.operations_in_progress.insert(operation);
 
-        inner.operations_in_progress += 1;
-
-        if inner.operations_in_progress == 1 {
+        if inner.operations_in_progress.len() == 1 {
             inner
                 .link_progress
                 .as_ref()
@@ -489,18 +614,20 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 }));
         }
 
-        0
+        inner.update_linking_message();
+
+        operation
     }
 
-    fn on_unlink_complete(&self, _index: usize) {
+    fn on_unlink_complete(&self, operation: usize) {
         let mut inner = self.inner.lock();
         let link_progress = inner.link_progress.as_ref().expect("progress bar not set");
         link_progress.inc(1);
 
         inner.end_linking = Some(Instant::now());
 
-        inner.operations_in_progress -= 1;
-        if inner.operations_in_progress == 0 {
+        inner.operations_in_progress.remove(&operation);
+        if inner.operations_in_progress.is_empty() {
             let link_progress = inner.link_progress.as_ref().expect("progress bar not set");
             link_progress.set_style(inner.style(ProgressStyleProperties {
                 status: ProgressStatus::Paused,
@@ -508,15 +635,17 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 progress_type: ProgressType::Generic,
             }));
         }
+
+        inner.update_linking_message();
     }
 
-    fn on_link_start(&self, _operation: usize, _record: &RepoDataRecord) -> usize {
+    fn on_link_start(&self, operation: usize, _record: &RepoDataRecord) -> usize {
         let mut inner = self.inner.lock();
 
         inner.start_linking.get_or_insert_with(Instant::now);
 
-        inner.operations_in_progress += 1;
-        if inner.operations_in_progress == 1 {
+        inner.operations_in_progress.insert(operation);
+        if inner.operations_in_progress.len() == 1 {
             inner
                 .link_progress
                 .as_ref()
@@ -528,18 +657,20 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 }));
         }
 
-        0
+        inner.update_linking_message();
+
+        operation
     }
 
-    fn on_link_complete(&self, _index: usize) {
+    fn on_link_complete(&self, operation: usize) {
         let mut inner = self.inner.lock();
         let link_progress = inner.link_progress.as_ref().expect("progress bar not set");
         link_progress.inc(1);
 
         inner.end_linking = Some(Instant::now());
 
-        inner.operations_in_progress -= 1;
-        if inner.operations_in_progress == 0 {
+        inner.operations_in_progress.remove(&operation);
+        if inner.operations_in_progress.is_empty() {
             let link_progress = inner.link_progress.as_ref().expect("progress bar not set");
             link_progress.set_style(inner.style(ProgressStyleProperties {
                 status: ProgressStatus::Paused,
@@ -547,6 +678,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 progress_type: ProgressType::Generic,
             }));
         }
+
+        inner.update_linking_message();
     }
 
     fn on_transaction_operation_complete(&self, _operation: usize) {}
