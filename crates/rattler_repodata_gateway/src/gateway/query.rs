@@ -89,7 +89,6 @@ impl GatewayQuery {
         let channels_and_platforms = self
             .channels
             .iter()
-            .enumerate()
             .cartesian_product(self.platforms.into_iter())
             .collect_vec();
 
@@ -97,10 +96,10 @@ impl GatewayQuery {
         // becomes available.
         let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
-        for ((channel_idx, channel), platform) in channels_and_platforms {
+        for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
             // Create a barrier so work that need this subdir can await it.
             let barrier = Arc::new(BarrierCell::new());
-            subdirs.push((channel_idx, barrier.clone()));
+            subdirs.push((subdir_idx, barrier.clone()));
 
             let inner = self.gateway.clone();
             let reporter = self.reporter.clone();
@@ -136,14 +135,14 @@ impl GatewayQuery {
         let mut pending_records = FuturesUnordered::new();
 
         // The resulting list of repodata records.
-        let mut result = vec![RepoData::default(); self.channels.len()];
+        let mut result = vec![RepoData::default(); subdirs.len()];
 
         // Loop until all pending package names have been fetched.
         loop {
             // Iterate over all pending package names and create futures to fetch them from all
             // subdirs.
             for (package_name, specs) in pending_package_specs.drain() {
-                for (channel_idx, subdir) in subdirs.iter().cloned() {
+                for (subdir_idx, subdir) in subdirs.iter().cloned() {
                     let specs = specs.clone();
                     let package_name = package_name.clone();
                     let reporter = self.reporter.clone();
@@ -154,8 +153,8 @@ impl GatewayQuery {
                             Subdir::Found(subdir) => subdir
                                 .get_or_fetch_package_records(&package_name, reporter)
                                 .await
-                                .map(|records| (channel_idx, specs, records)),
-                            Subdir::NotFound => Ok((channel_idx, specs, Arc::from(vec![]))),
+                                .map(|records| (subdir_idx, specs, records)),
+                            Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
                         }
                     });
                 }
@@ -170,7 +169,7 @@ impl GatewayQuery {
 
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
-                    let (channel_idx, request_specs, records) = records?;
+                    let (subdir_idx, request_specs, records) = records?;
 
                     if self.recursive {
                         // Extract the dependencies from the records and recursively add them to the
@@ -193,7 +192,7 @@ impl GatewayQuery {
 
                     // Add the records to the result
                     if records.len() > 0 {
-                        let result = &mut result[channel_idx];
+                        let result = &mut result[subdir_idx];
                         result.len += records.len();
                         result.shards.push(records);
                     }

@@ -261,6 +261,7 @@ impl<'a> CondaDependencyProvider<'a> {
                                     // instead.
                                     *prev_archive_type = archive_type;
                                     ordered_repodata[*idx] = record;
+                                    *previous_excluded = excluded;
                                 }
                                 Ordering::Less => {
                                     // A previous package that we already stored is actually a package of a better
@@ -269,8 +270,10 @@ impl<'a> CondaDependencyProvider<'a> {
                                 Ordering::Equal => {
                                     if record != ordered_repodata[*idx] {
                                         unreachable!(
-                                            "found duplicate record with different values for {}",
-                                            &record.file_name
+                                            "found duplicate record with different values for {}\nPrevious:\n{:?}\nCurrent:\n{:?}",
+                                            &record.file_name,
+                                            ordered_repodata[*idx],
+                                            record
                                         );
                                     }
                                 }
