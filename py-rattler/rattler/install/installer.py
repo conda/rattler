@@ -7,10 +7,10 @@ from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
 
-from rattler.rattler import py_link
+from rattler.rattler import py_install
 
 
-async def link(
+async def install(
     records: List[RepoDataRecord],
     target_prefix: os.PathLike[str],
     cache_dir: Optional[os.PathLike[str]] = None,
@@ -34,13 +34,13 @@ async def link(
     -------
     ```python
     >>> import asyncio
-    >>> from rattler import solve, link
+    >>> from rattler import solve, install
     >>> async def main():
     ...     # Solve an environment with python 3.9 for the current platform
     ...     records = await solve(channels=["conda-forge"], specs=["python=3.9"])
     ...
     ...     # Link the environment in the directory `my-env`.
-    ...     await link(records, target_prefix="my-env")
+    ...     await install(records, target_prefix="my-env")
     ...
     ...     # That's it! The environment is now created.
     >>> asyncio.run(main())
@@ -67,7 +67,7 @@ async def link(
                 client will be used.
     """
 
-    await py_link(
+    await py_install(
         records=records,
         target_prefix=target_prefix,
         cache_dir=cache_dir,

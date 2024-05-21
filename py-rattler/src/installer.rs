@@ -16,7 +16,7 @@ use crate::{
 // TODO: Accept functions to report progress
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
-pub fn py_link<'a>(
+pub fn py_install<'a>(
     py: Python<'a>,
     records: Vec<&'a PyAny>,
     target_prefix: PathBuf,

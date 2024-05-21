@@ -3,7 +3,7 @@ mod channel;
 mod error;
 mod generic_virtual_package;
 mod index;
-mod linker;
+mod installer;
 mod lock;
 mod match_spec;
 mod meta;
@@ -24,6 +24,8 @@ mod virtual_package;
 mod index_json;
 mod run_exports_json;
 
+use std::ops::Deref;
+
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
@@ -35,18 +37,24 @@ use error::{
     VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
+use index::py_index;
 use index_json::PyIndexJson;
+use installer::py_install;
 use lock::{
     PyEnvironment, PyLockChannel, PyLockFile, PyLockedPackage, PyPackageHashes, PyPypiPackageData,
     PyPypiPackageEnvironmentData,
 };
 use match_spec::PyMatchSpec;
+use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
+use platform::{PyArch, PyPlatform};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
+use pyo3::prelude::*;
+use record::PyRecord;
 use repo_data::{
     gateway::{PyGateway, PySourceConfig},
     patch_instructions::PyPatchInstructions,
@@ -54,20 +62,12 @@ use repo_data::{
     PyRepoData,
 };
 use run_exports_json::PyRunExportsJson;
-use std::ops::Deref;
-use version::PyVersion;
-
-use pyo3::prelude::*;
-
-use crate::error::GatewayException;
-use index::py_index;
-use linker::py_link;
-use meta::get_rattler_version;
-use platform::{PyArch, PyPlatform};
-use record::PyRecord;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::py_solve;
+use version::PyVersion;
 use virtual_package::PyVirtualPackage;
+
+use crate::error::GatewayException;
 
 /// A struct to make it easy to wrap a type as a python type.
 #[repr(transparent)]
@@ -144,7 +144,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         .unwrap();
     m.add_function(wrap_pyfunction!(get_rattler_version, m).unwrap())
         .unwrap();
-    m.add_function(wrap_pyfunction!(py_link, m).unwrap())
+    m.add_function(wrap_pyfunction!(py_install, m).unwrap())
         .unwrap();
     m.add_function(wrap_pyfunction!(py_index, m).unwrap())
         .unwrap();
