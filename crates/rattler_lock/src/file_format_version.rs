@@ -23,6 +23,10 @@ pub enum FileFormatVersion {
 
     /// pypi indexes should be part of the file now.
     V5 = 5,
+
+    /// always record purls for all packages.
+    /// If purl is not available, it means the package is not from pypi.
+    V6 = 6,
 }
 
 impl Display for FileFormatVersion {
@@ -33,7 +37,7 @@ impl Display for FileFormatVersion {
 
 impl FileFormatVersion {
     /// The latest version this crate supports.
-    pub const LATEST: Self = FileFormatVersion::V5;
+    pub const LATEST: Self = FileFormatVersion::V6;
 
     /// Returns true if the pypi indexes should be present in the lock file if
     /// there are pypi packages present.
@@ -63,6 +67,7 @@ impl TryFrom<u64> for FileFormatVersion {
             3 => Self::V3,
             4 => Self::V4,
             5 => Self::V5,
+            6 => Self::V6,
             _ => {
                 return Err(ParseCondaLockError::IncompatibleVersion {
                     lock_file_version: value,

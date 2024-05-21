@@ -79,6 +79,6 @@ mod test {
         .err()
         .unwrap();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 5 is supported.");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 6 is supported.");
     }
 }
