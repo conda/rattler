@@ -110,6 +110,10 @@ impl Installer {
     }
 
     /// Sets whether to execute link scripts or not.
+    ///
+    /// By default, link scripts are not executed. Link scripts can run
+    /// arbitrary code during the installation phase which makes them a security
+    /// risk.
     #[must_use]
     pub fn with_execute_link_scripts(self, execute: bool) -> Self {
         Self {
@@ -119,6 +123,10 @@ impl Installer {
     }
 
     /// Sets whether to execute link scripts or not.
+    ///
+    /// By default, link scripts are not executed. Link scripts can run
+    /// arbitrary code during the installation phase which makes them a security
+    /// risk.
     pub fn set_execute_link_scripts(&mut self, execute: bool) -> &mut Self {
         self.execute_link_scripts = execute;
         self

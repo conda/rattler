@@ -61,11 +61,19 @@ pub enum ProgressTrack {
     Linking,
 }
 
+/// Defines the currect status of a progress bar.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum ProgressStatus {
+    /// The progress bar is visible but has not started yet.
     Pending,
+
+    /// The progress bar is showing active work.
     Active,
+
+    /// The progress bar was active but has been paused for the moment.
     Paused,
+
+    /// The progress bar finished.
     Finished,
 }
 
@@ -82,10 +90,13 @@ pub struct ProgressStyleProperties {
     pub progress_type: ProgressType,
 }
 
+/// A trait that can be used to customize the style of different progress bars
+/// of a [`IndicatifReporter`].
 pub trait ProgressFormatter {
     fn format(&self, props: &ProgressStyleProperties) -> indicatif::ProgressStyle;
 }
 
+/// A default implementation of a [`ProgressFormatter`].
 pub struct DefaultProgressFormatter {
     progress_chars: Cow<'static, str>,
     prefix: Cow<'static, str>,
