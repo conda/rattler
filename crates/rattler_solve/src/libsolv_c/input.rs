@@ -306,7 +306,7 @@ fn reset_solvable(pool: &Pool, repo: &Repo<'_>, data: &Repodata<'_>, solvable_id
 /// unix-like operating systems, and will panic if called from another platform
 /// (e.g. Windows)
 #[cfg(not(target_family = "unix"))]
-pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
+pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> Result<LibcByteSlice, SolveError> {
     unimplemented!("this function is only available on unix-like operating systems")
 }
 
@@ -320,11 +320,11 @@ pub fn cache_repodata(
     url: String,
     data: &[RepoDataRecord],
     channel_priority: Option<i32>,
-) -> LibcByteSlice {
+) -> Result<LibcByteSlice, SolveError> {
     // Add repodata to a new pool + repo
     let pool = Pool::default();
     let repo = Repo::new(&pool, url, channel_priority.unwrap_or(0));
-    add_repodata_records(&pool, &repo, data, None);
+    add_repodata_records(&pool, &repo, data, None)?;
 
     // Export repo to .solv in memory
     let mut stream_ptr = std::ptr::null_mut();
@@ -339,5 +339,5 @@ pub fn cache_repodata(
 
     // Safe because we know `stream_ptr` points to an array of bytes of length
     // `stream_size`
-    unsafe { LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) }
+    Ok(unsafe { LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) })
 }
