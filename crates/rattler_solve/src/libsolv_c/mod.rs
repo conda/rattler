@@ -1,15 +1,16 @@
 //! Provides an solver implementation based on the [`rattler_libsolv_c`] crate.
 
-use crate::{ChannelPriority, IntoRepoData, SolveStrategy, SolverRepoData};
-use crate::{SolveError, SolverTask};
+use std::{
+    collections::{HashMap, HashSet},
+    ffi::CString,
+    mem::ManuallyDrop,
+};
+
 pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
 use rattler_conda_types::RepoDataRecord;
-use std::collections::{HashMap, HashSet};
-use std::ffi::CString;
-use std::mem::ManuallyDrop;
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -17,13 +18,15 @@ use wrapper::{
     solve_goal::SolveGoal,
 };
 
+use crate::{ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask};
+
 mod input;
 mod libc_byte_slice;
 mod output;
 mod wrapper;
 
-/// Represents the information required to load available packages into libsolv for a single channel
-/// and platform combination
+/// Represents the information required to load available packages into libsolv
+/// for a single channel and platform combination
 #[derive(Clone)]
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
@@ -55,8 +58,8 @@ impl<'a> RepoData<'a> {
 
 impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 
-/// Convenience method that converts a string reference to a `CString`, replacing NUL characters
-/// with whitespace (`b' '`)
+/// Convenience method that converts a string reference to a `CString`,
+/// replacing NUL characters with whitespace (`b' '`)
 fn c_string<T: AsRef<str>>(str: T) -> CString {
     let bytes = str.as_ref().as_bytes();
 
@@ -72,7 +75,8 @@ fn c_string<T: AsRef<str>>(str: T) -> CString {
     // Trailing 0
     vec.push(0);
 
-    // Safe because the string does is guaranteed to have no NUL bytes other than the trailing one
+    // Safe because the string does is guaranteed to have no NUL bytes other than
+    // the trailing one
     unsafe { CString::from_vec_with_nul_unchecked(vec) }
 }
 
@@ -118,10 +122,11 @@ impl super::SolverImpl for Solver {
             .map(IntoRepoData::into)
             .collect();
 
-        // Determine the channel priority for each channel in the repodata in the order in which
-        // the repodatas are passed, where the first channel will have the highest priority value
-        // and each successive channel will descend in priority value. If not strict, the highest
-        // priority value will be 0 and the channel priority map will not be populated as it will
+        // Determine the channel priority for each channel in the repodata in the order
+        // in which the repodatas are passed, where the first channel will have
+        // the highest priority value and each successive channel will descend
+        // in priority value. If not strict, the highest priority value will be
+        // 0 and the channel priority map will not be populated as it will
         // not be used.
         let mut highest_priority: i32 = 0;
         let channel_priority: HashMap<String, i32> =
@@ -183,7 +188,7 @@ impl super::SolverImpl for Solver {
                     &repo,
                     repodata.records.iter().copied(),
                     task.exclude_newer.as_ref(),
-                );
+                )?;
             }
 
             // Keep our own info about repodata_records
@@ -193,7 +198,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are already installed or locked.
         let repo = Repo::new(&pool, "locked", highest_priority);
-        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None);
+        let installed_solvables = add_repodata_records(&pool, &repo, &task.locked_packages, None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -201,7 +206,7 @@ impl super::SolverImpl for Solver {
 
         // Create a special pool for records that are pinned and cannot be changed.
         let repo = Repo::new(&pool, "pinned", highest_priority);
-        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None);
+        let pinned_solvables = add_repodata_records(&pool, &repo, &task.pinned_packages, None)?;
 
         // Also add the installed records to the repodata
         repo_mapping.insert(repo.id(), repo_mapping.len());
@@ -261,8 +266,9 @@ impl super::SolverImpl for Solver {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case("", "")]

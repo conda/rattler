@@ -1,5 +1,10 @@
-//! Contains business logic that loads information into libsolv in order to solve a conda
-//! environment
+//! Contains business logic that loads information into libsolv in order to
+//! solve a conda environment
+
+use std::{cmp::Ordering, collections::HashMap};
+
+use chrono::{DateTime, Utc};
+use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
 
 use super::{
     c_string,
@@ -16,15 +21,14 @@ use super::{
         solvable::SolvableId,
     },
 };
-use chrono::{DateTime, Utc};
-use rattler_conda_types::{package::ArchiveType, GenericVirtualPackage, RepoDataRecord};
-use std::{cmp::Ordering, collections::HashMap};
+use crate::SolveError;
 
 #[cfg(not(target_family = "unix"))]
 /// Adds solvables to a repo from an in-memory .solv file
 ///
-/// Note: this function relies on primitives that are only available on unix-like operating systems,
-/// and will panic if called from another platform (e.g. Windows)
+/// Note: this function relies on primitives that are only available on
+/// unix-like operating systems, and will panic if called from another platform
+/// (e.g. Windows)
 pub fn add_solv_file(_pool: &Pool, _repo: &Repo<'_>, _solv_bytes: &LibcByteSlice) {
     unimplemented!("this platform does not support in-memory .solv files");
 }
@@ -32,8 +36,9 @@ pub fn add_solv_file(_pool: &Pool, _repo: &Repo<'_>, _solv_bytes: &LibcByteSlice
 #[cfg(target_family = "unix")]
 /// Adds solvables to a repo from an in-memory .solv file
 ///
-/// Note: this function relies on primitives that are only available on unix-like operating systems,
-/// and will panic if called from another platform (e.g. Windows)
+/// Note: this function relies on primitives that are only available on
+/// unix-like operating systems, and will panic if called from another platform
+/// (e.g. Windows)
 pub fn add_solv_file(pool: &Pool, repo: &Repo<'_>, solv_bytes: &LibcByteSlice) {
     // Add solv file from memory if available
     let mode = c_string("r");
@@ -50,12 +55,12 @@ pub fn add_repodata_records<'a>(
     repo: &Repo<'_>,
     repo_datas: impl IntoIterator<Item = &'a RepoDataRecord>,
     exclude_newer: Option<&DateTime<Utc>>,
-) -> Vec<SolvableId> {
+) -> Result<Vec<SolvableId>, SolveError> {
     // Sanity check
     repo.ensure_belongs_to_pool(pool);
 
-    // Get all the IDs (these strings are internal to libsolv and always present, so we can
-    // unwrap them at will)
+    // Get all the IDs (these strings are internal to libsolv and always present, so
+    // we can unwrap them at will)
     let solvable_buildflavor_id = pool.find_interned_str(SOLVABLE_BUILDFLAVOR).unwrap();
     let solvable_buildtime_id = pool.find_interned_str(SOLVABLE_BUILDTIME).unwrap();
     let solvable_buildversion_id = pool.find_interned_str(SOLVABLE_BUILDVERSION).unwrap();
@@ -74,7 +79,8 @@ pub fn add_repodata_records<'a>(
     // Keeps a mapping from packages added to the repo to the type and solvable
     let mut package_to_type: HashMap<&str, (ArchiveType, SolvableId)> = HashMap::new();
 
-    // Through `data` we can manipulate solvables (see the `Repodata` docs for details)
+    // Through `data` we can manipulate solvables (see the `Repodata` docs for
+    // details)
     let data = repo.add_repodata();
 
     let mut solvable_ids = Vec::new();
@@ -87,7 +93,7 @@ pub fn add_repodata_records<'a>(
 
         // Create a solvable for the package
         let solvable_id =
-            match add_or_reuse_solvable(pool, repo, &data, &mut package_to_type, repo_data) {
+            match add_or_reuse_solvable(pool, repo, &data, &mut package_to_type, repo_data)? {
                 Some(id) => id,
                 None => continue,
             };
@@ -96,7 +102,8 @@ pub fn add_repodata_records<'a>(
         // from the final transaction
         data.set_num(solvable_id, solvable_index_id, repo_data_index as u64);
 
-        // Safe because there are no other active references to any solvable (so no aliasing)
+        // Safe because there are no other active references to any solvable (so no
+        // aliasing)
         let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
         let record = &repo_data.package_record;
 
@@ -201,21 +208,22 @@ pub fn add_repodata_records<'a>(
 
     repo.internalize();
 
-    solvable_ids
+    Ok(solvable_ids)
 }
 
-/// When adding packages, we want to make sure that `.conda` packages have preference over `.tar.bz`
-/// packages. For that reason, when adding a solvable we check first if a `.conda` version of the
-/// package has already been added, in which case we forgo adding its `.tar.bz` version (and return
-/// `None`). If no `.conda` version has been added, we create a new solvable (replacing any existing
-/// solvable for the `.tar.bz` version of the package).
+/// When adding packages, we want to make sure that `.conda` packages have
+/// preference over `.tar.bz` packages. For that reason, when adding a solvable
+/// we check first if a `.conda` version of the package has already been added,
+/// in which case we forgo adding its `.tar.bz` version (and return `None`). If
+/// no `.conda` version has been added, we create a new solvable (replacing any
+/// existing solvable for the `.tar.bz` version of the package).
 fn add_or_reuse_solvable<'a>(
     pool: &Pool,
     repo: &Repo<'_>,
     data: &Repodata<'_>,
     package_to_type: &mut HashMap<&'a str, (ArchiveType, SolvableId)>,
     repo_data: &'a RepoDataRecord,
-) -> Option<SolvableId> {
+) -> Result<Option<SolvableId>, SolveError> {
     // Sometimes we can reuse an existing solvable
     if let Some((filename, archive_type)) = ArchiveType::split_str(&repo_data.file_name) {
         if let Some(&(other_package_type, old_solvable_id)) = package_to_type.get(filename) {
@@ -223,7 +231,7 @@ fn add_or_reuse_solvable<'a>(
                 Ordering::Less => {
                     // A previous package that we already stored is actually a package of a better
                     // "type" so we'll just use that instead (.conda > .tar.bz)
-                    return None;
+                    return Ok(None);
                 }
                 Ordering::Greater => {
                     // A previous package has a worse package "type", we'll reuse the handle but
@@ -234,22 +242,22 @@ fn add_or_reuse_solvable<'a>(
 
                     // Reset and reuse the old solvable
                     reset_solvable(pool, repo, data, old_solvable_id);
-                    return Some(old_solvable_id);
+                    return Ok(Some(old_solvable_id));
                 }
                 Ordering::Equal => {
-                    unreachable!("found a duplicate package")
+                    return Err(SolveError::DuplicateRecords(filename.to_string()));
                 }
             }
         } else {
             let solvable_id = repo.add_solvable();
             package_to_type.insert(filename, (archive_type, solvable_id));
-            return Some(solvable_id);
+            return Ok(Some(solvable_id));
         }
     } else {
         tracing::warn!("unknown package extension: {}", &repo_data.file_name);
     }
 
-    Some(repo.add_solvable())
+    Ok(Some(repo.add_solvable()))
 }
 
 pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVirtualPackage]) {
@@ -261,7 +269,8 @@ pub fn add_virtual_packages(pool: &Pool, repo: &Repo<'_>, packages: &[GenericVir
         // Create a solvable for the package
         let solvable_id = repo.add_solvable();
 
-        // Safe because there are no other references to this solvable_id (we just created it)
+        // Safe because there are no other references to this solvable_id (we just
+        // created it)
         let solvable = unsafe { solvable_id.resolve_raw(pool).as_mut() };
 
         // Name and version
@@ -286,15 +295,16 @@ fn reset_solvable(pool: &Pool, repo: &Repo<'_>, data: &Repodata<'_>, solvable_id
     pool.swap_solvables(blank_solvable, solvable_id);
     data.swap_attrs(blank_solvable, solvable_id);
 
-    // It is safe to free the blank solvable, because there are no other references to it
-    // than in this function
+    // It is safe to free the blank solvable, because there are no other references
+    // to it than in this function
     unsafe { repo.free_solvable(blank_solvable) };
 }
 
 /// Caches the repodata as an in-memory `.solv` file
 ///
-/// Note: this function relies on primitives that are only available on unix-like operating systems,
-/// and will panic if called from another platform (e.g. Windows)
+/// Note: this function relies on primitives that are only available on
+/// unix-like operating systems, and will panic if called from another platform
+/// (e.g. Windows)
 #[cfg(not(target_family = "unix"))]
 pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
     unimplemented!("this function is only available on unix-like operating systems")
@@ -302,8 +312,9 @@ pub fn cache_repodata(_url: String, _data: &[RepoDataRecord]) -> LibcByteSlice {
 
 /// Caches the repodata as an in-memory `.solv` file
 ///
-/// Note: this function relies on primitives that are only available on unix-like operating systems,
-/// and will panic if called from another platform (e.g. Windows)
+/// Note: this function relies on primitives that are only available on
+/// unix-like operating systems, and will panic if called from another platform
+/// (e.g. Windows)
 #[cfg(target_family = "unix")]
 pub fn cache_repodata(
     url: String,
@@ -326,6 +337,7 @@ pub fn cache_repodata(
 
     let stream_ptr = std::ptr::NonNull::new(stream_ptr).expect("stream_ptr was null");
 
-    // Safe because we know `stream_ptr` points to an array of bytes of length `stream_size`
+    // Safe because we know `stream_ptr` points to an array of bytes of length
+    // `stream_size`
     unsafe { LibcByteSlice::from_raw_parts(stream_ptr.cast(), stream_size) }
 }

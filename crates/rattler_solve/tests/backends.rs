@@ -523,6 +523,22 @@ macro_rules! solver_backend_tests {
                 "although there is a newer version available we expect an older version of foo because we exclude the newer version based on the timestamp");
             assert_eq!(&info.file_name, "foo-3.0.2-py36h1af98f8_1.tar.bz2", "even though there is a conda version available we expect the tar.bz2 version because we exclude the .conda version based on the timestamp");
         }
+
+        #[test]
+        fn test_duplicate_record() {
+            use rattler_solve::SolverImpl;
+
+            let mut records = super::read_repodata(&dummy_channel_json_path());
+            records.push(records[0].clone());
+
+            let task = rattler_solve::SolverTask::from_iter([&records]);
+
+            let result = <$T>::default().solve(task);
+            match result {
+               Err(rattler_solve::SolveError::DuplicateRecords(_)) => {},
+                _ => panic!("expected a DuplicateRecord error"),
+            }
+        }
     };
 }
 
