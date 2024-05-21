@@ -17,6 +17,8 @@ class Version:
     Version comparison is case-insensitive.
     """
 
+    _version: PyVersion
+
     def __init__(self, version: str) -> None:
         if isinstance(version, str):
             self._version = PyVersion(version)

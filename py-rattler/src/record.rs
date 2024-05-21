@@ -223,12 +223,12 @@ impl PyRecord {
 
     /// The version of the package.
     #[getter]
-    pub fn version(&self) -> PyVersion {
-        self.as_package_record()
-            .version
-            .clone()
-            .into_version()
-            .into()
+    pub fn version(&self) -> (PyVersion, String) {
+        let version = &self.as_package_record().version;
+        (
+            version.version().clone().into(),
+            version.as_str().into_owned(),
+        )
     }
 
     /// The filename of the package.

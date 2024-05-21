@@ -31,9 +31,13 @@ def test_load_prefix_record() -> None:
             paths_with_placeholder += 1
             assert isinstance(entry.file_mode, FileMode)
             assert entry.file_mode.text or entry.file_mode.binary
-            assert entry.sha256_in_prefix is not None
-        assert entry.sha256 is not None
+            assert entry.sha256_in_prefix.hex() is not None
+        else:
+            assert entry.file_mode.unknown
+            assert entry.sha256.hex() is not None
         assert entry.size_in_bytes > 0
 
         # check that it implements os.PathLike
         isinstance(entry, os.PathLike)
+
+    assert paths_with_placeholder == 3

@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.20.0...rattler_repodata_gateway-v0.20.1) - 2024-05-14
+
+### Added
+- exclude repodata records based on timestamp ([#654](https://github.com/mamba-org/rattler/pull/654))
+
+## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.19.11...rattler_repodata_gateway-v0.20.0) - 2024-05-13
+
+### Added
+- add clear subdir cache function to repodata gateway ([#650](https://github.com/mamba-org/rattler/pull/650))
+- high level repodata access ([#560](https://github.com/mamba-org/rattler/pull/560))
+
+### Other
+- update README.md
+
 ## [0.19.11](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.19.10...rattler_repodata_gateway-v0.19.11) - 2024-05-06
 
 ### Other

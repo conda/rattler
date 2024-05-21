@@ -1,7 +1,9 @@
 use crate::global_multi_progress;
 use anyhow::Context;
+use clap::ValueEnum;
 use futures::{stream, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use indicatif::{HumanBytes, ProgressBar, ProgressState, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rattler::{
     default_cache_dir,
     install::{
@@ -18,20 +20,18 @@ use rattler_conda_types::{
 use rattler_networking::{
     retry_policies::default_retry_policy, AuthenticationMiddleware, AuthenticationStorage,
 };
-use rattler_repodata_gateway::fetch::{
-    CacheResult, DownloadProgress, FetchRepoDataError, FetchRepoDataOptions,
-};
-use rattler_repodata_gateway::sparse::SparseRepoData;
+use rattler_repodata_gateway::{Gateway, RepoData};
 use rattler_solve::{
     libsolv_c::{self},
-    resolvo, ChannelPriority, SolverImpl, SolverTask,
+    resolvo, SolverImpl, SolverTask,
 };
 use reqwest::Client;
+use std::future::IntoFuture;
 use std::sync::Arc;
+use std::time::Instant;
 use std::{
     borrow::Cow,
     env,
-    fmt::Write,
     future::ready,
     path::{Path, PathBuf},
     str::FromStr,
@@ -57,13 +57,46 @@ pub struct Opt {
     virtual_package: Option<Vec<String>>,
 
     #[clap(long)]
-    use_resolvo: bool,
+    solver: Option<Solver>,
 
     #[clap(long)]
     timeout: Option<u64>,
 
     #[clap(long)]
     target_prefix: Option<PathBuf>,
+
+    #[clap(long)]
+    strategy: Option<SolveStrategy>,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum SolveStrategy {
+    /// Resolve the highest compatible version for every package.
+    Highest,
+
+    /// Resolve the lowest compatible version for every package.
+    Lowest,
+
+    /// Resolve the lowest compatible version for direct dependencies but the
+    /// highest compatible for transitive dependencies.
+    LowestDirect,
+}
+
+#[derive(Default, Debug, Clone, Copy, ValueEnum)]
+pub enum Solver {
+    #[default]
+    Resolvo,
+    LibSolv,
+}
+
+impl From<SolveStrategy> for rattler_solve::SolveStrategy {
+    fn from(value: SolveStrategy) -> Self {
+        match value {
+            SolveStrategy::Highest => rattler_solve::SolveStrategy::Highest,
+            SolveStrategy::Lowest => rattler_solve::SolveStrategy::LowestVersion,
+            SolveStrategy::LowestDirect => rattler_solve::SolveStrategy::LowestVersionDirect,
+        }
+    }
 }
 
 pub async fn create(opt: Opt) -> anyhow::Result<()> {
@@ -72,7 +105,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let target_prefix = opt
         .target_prefix
         .unwrap_or_else(|| current_dir.join(".prefix"));
-    println!("target prefix: {target_prefix:?}");
+    println!("Target prefix: {}", target_prefix.display());
 
     // Determine the platform we're going to install for
     let install_platform = if let Some(platform) = opt.platform {
@@ -81,7 +114,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         Platform::current()
     };
 
-    println!("installing for platform: {install_platform:?}");
+    println!("Installing for platform: {install_platform:?}");
 
     // Parse the specs from the command line. We do this explicitly instead of allow clap to deal
     // with this because we need to parse the `channel_config` when parsing matchspecs.
@@ -105,19 +138,6 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .map(|channel_str| Channel::from_str(channel_str, &channel_config))
         .collect::<Result<Vec<_>, _>>()?;
 
-    // Each channel contains multiple subdirectories. Users can specify the subdirectories they want
-    // to use when specifying their channels. If the user didn't specify the default subdirectories
-    // we use defaults based on the current platform.
-    let channel_urls = channels
-        .iter()
-        .flat_map(|channel| {
-            vec![
-                (channel.clone(), install_platform),
-                (channel.clone(), Platform::NoArch),
-            ]
-        })
-        .collect::<Vec<_>>();
-
     // Determine the packages that are currently installed in the environment.
     let installed_packages = find_installed_packages(&target_prefix, 100)
         .await
@@ -138,54 +158,33 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         )))
         .build();
 
-    let multi_progress = global_multi_progress();
-
-    let repodata_cache_path = cache_dir.join("repodata");
-    let channel_and_platform_len = channel_urls.len();
-    let repodata_download_client = download_client.clone();
-    let sparse_repo_datas = futures::stream::iter(channel_urls)
-        .map(move |(channel, platform)| {
-            let repodata_cache = repodata_cache_path.clone();
-            let download_client = repodata_download_client.clone();
-            let multi_progress = multi_progress.clone();
-            async move {
-                fetch_repo_data_records_with_progress(
-                    channel,
-                    platform,
-                    &repodata_cache,
-                    download_client.clone(),
-                    multi_progress,
-                )
-                .await
-            }
-        })
-        .buffer_unordered(channel_and_platform_len)
-        .filter_map(|result| async move {
-            match result {
-                Err(e) => Some(Err(e)),
-                Ok(Some(data)) => Some(Ok(data)),
-                Ok(None) => None,
-            }
-        })
-        .collect::<Vec<_>>()
-        .await
-        // Collect into another iterator where we extract the first erroneous result
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-
     // Get the package names from the matchspecs so we can only load the package records that we need.
-    let package_names = specs.iter().filter_map(|spec| spec.name.as_ref().cloned());
-    let repodatas = wrap_in_progress("parsing repodata", move || {
-        SparseRepoData::load_records_recursive(
-            &sparse_repo_datas,
-            package_names,
-            Some(|record| {
-                if record.name.as_normalized() == "python" {
-                    record.depends.push("pip".to_string());
-                }
-            }),
-        )
-    })?;
+    let gateway = Gateway::builder()
+        .with_cache_dir(cache_dir.join("repodata"))
+        .with_client(download_client.clone())
+        .finish();
+
+    let start_load_repo_data = Instant::now();
+    let repo_data = wrap_in_async_progress(
+        "loading repodata",
+        gateway
+            .query(
+                channels,
+                [install_platform, Platform::NoArch],
+                specs.clone(),
+            )
+            .recursive(true),
+    )
+    .await
+    .context("failed to load repodata")?;
+
+    // Determine the number of recors
+    let total_records: usize = repo_data.iter().map(RepoData::len).sum();
+    println!(
+        "Loaded {} records in {:?}",
+        total_records,
+        start_load_repo_data.elapsed()
+    );
 
     // Determine virtual packages of the system. These packages define the capabilities of the
     // system. Some packages depend on these virtual packages to indiciate compability with the
@@ -218,7 +217,12 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         }
     })?;
 
-    println!("virtual packages: {virtual_packages:?}");
+    println!(
+        "Virtual packages:\n{}\n",
+        virtual_packages
+            .iter()
+            .format_with("\n", |i, f| f(&format_args!("  - {i}",)),)
+    );
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
     // need to solve. We do this by constructing a `SolverProblem`. This encapsulates all the
@@ -229,31 +233,28 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .collect();
 
     let solver_task = SolverTask {
-        available_packages: &repodatas,
         locked_packages,
         virtual_packages,
         specs,
-        pinned_packages: Vec::new(),
         timeout: opt.timeout.map(Duration::from_millis),
-        channel_priority: ChannelPriority::Strict,
+        strategy: opt.strategy.map_or_else(Default::default, Into::into),
+        ..SolverTask::from_iter(&repo_data)
     };
 
     // Next, use a solver to solve this specific problem. This provides us with all the operations
     // we need to apply to our environment to bring it up to date.
-    let required_packages = wrap_in_progress("solving", move || {
-        if opt.use_resolvo {
-            resolvo::Solver.solve(solver_task)
-        } else {
-            libsolv_c::Solver.solve(solver_task)
-        }
-    })?;
+    let required_packages =
+        wrap_in_progress("solving", move || match opt.solver.unwrap_or_default() {
+            Solver::Resolvo => resolvo::Solver.solve(solver_task),
+            Solver::LibSolv => libsolv_c::Solver.solve(solver_task),
+        })?;
 
     // sort topologically
     let required_packages = PackageRecord::sort_topologically(required_packages);
 
     // Construct a transaction to
     let transaction = Transaction::from_current_and_desired(
-        installed_packages,
+        &installed_packages,
         required_packages,
         install_platform,
     )?;
@@ -274,19 +275,30 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
         for operation in &transaction.operations {
             match operation {
-                TransactionOperation::Install(r) => println!("* Install: {}", format_record(r)),
+                TransactionOperation::Install(r) => {
+                    println!("{} {}", console::style("+").green(), format_record(r));
+                }
                 TransactionOperation::Change { old, new } => {
                     println!(
-                        "* Change: {} -> {}",
+                        "{} {} -> {}",
+                        console::style("~").yellow(),
                         format_record(&old.repodata_record),
                         format_record(new)
                     );
                 }
                 TransactionOperation::Reinstall(r) => {
-                    println!("* Reinstall: {}", format_record(&r.repodata_record));
+                    println!(
+                        "{} {}",
+                        console::style("~").yellow(),
+                        format_record(&r.repodata_record)
+                    );
                 }
                 TransactionOperation::Remove(r) => {
-                    println!("* Remove: {}", format_record(&r.repodata_record));
+                    println!(
+                        "{} {}",
+                        console::style("-").red(),
+                        format_record(&r.repodata_record)
+                    );
                 }
             }
         }
@@ -301,7 +313,19 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         );
     } else {
         // Execute the operations that are returned by the solver.
-        execute_transaction(transaction, target_prefix, cache_dir, download_client).await?;
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&installed_packages)
+            .execute_link_scripts(true)
+            .with_io_concurrency_limit(100)
+            .finish();
+        execute_transaction(
+            &install_driver,
+            transaction,
+            target_prefix,
+            cache_dir,
+            download_client,
+        )
+        .await?;
         println!(
             "{} Successfully updated the environment",
             console::style(console::Emoji("✔", "")).green(),
@@ -313,16 +337,14 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
 /// Executes the transaction on the given environment.
 async fn execute_transaction(
-    transaction: Transaction<PrefixRecord, RepoDataRecord>,
+    install_driver: &InstallDriver,
+    transaction: Transaction<&PrefixRecord, RepoDataRecord>,
     target_prefix: PathBuf,
     cache_dir: PathBuf,
     download_client: reqwest_middleware::ClientWithMiddleware,
 ) -> anyhow::Result<()> {
     // Open the package cache
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
-
-    // Create an install driver which helps limit the number of concurrent filesystem operations
-    let install_driver = InstallDriver::default();
 
     // Run pre-process (pre-unlink, mainly)
     install_driver.pre_process(&transaction, &target_prefix)?;
@@ -412,7 +434,7 @@ async fn execute_operation(
     install_driver: &InstallDriver,
     download_pb: Option<&ProgressBar>,
     link_pb: &ProgressBar,
-    op: TransactionOperation<PrefixRecord, RepoDataRecord>,
+    op: TransactionOperation<&PrefixRecord, RepoDataRecord>,
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
     // Determine the package to install
@@ -571,127 +593,141 @@ fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func
     result
 }
 
-/// Given a channel and platform, download and cache the `repodata.json` for it. This function
-/// reports its progress via a CLI progressbar.
-async fn fetch_repo_data_records_with_progress(
-    channel: Channel,
-    platform: Platform,
-    repodata_cache: &Path,
-    client: reqwest_middleware::ClientWithMiddleware,
-    multi_progress: indicatif::MultiProgress,
-) -> Result<Option<SparseRepoData>, anyhow::Error> {
-    // Create a progress bar
-    let progress_bar = multi_progress.add(
-        indicatif::ProgressBar::new(1)
-            .with_finish(indicatif::ProgressFinish::AndLeave)
-            .with_prefix(format!("{}/{platform}", friendly_channel_name(&channel)))
-            .with_style(default_bytes_style()),
-    );
-    progress_bar.enable_steady_tick(Duration::from_millis(100));
-
-    // Download the repodata.json
-    let download_progress_progress_bar = progress_bar.clone();
-    let result = rattler_repodata_gateway::fetch::fetch_repo_data(
-        channel.platform_url(platform),
-        client,
-        repodata_cache.to_path_buf(),
-        FetchRepoDataOptions::default(),
-        Some(Box::new(move |DownloadProgress { total, bytes }| {
-            download_progress_progress_bar.set_length(total.unwrap_or(bytes));
-            download_progress_progress_bar.set_position(bytes);
-        })),
-    )
-    .await;
-
-    // Error out if an error occurred, but also update the progress bar
-    let result = match result {
-        Err(e) => {
-            let not_found = matches!(&e, FetchRepoDataError::NotFound(_));
-            if not_found && platform != Platform::NoArch {
-                progress_bar.set_style(finished_progress_style());
-                progress_bar.finish_with_message("Not Found");
-                return Ok(None);
-            }
-
-            progress_bar.set_style(errored_progress_style());
-            progress_bar.finish_with_message("Error");
-            return Err(e.into());
-        }
-        Ok(result) => result,
-    };
-
-    // Notify that we are deserializing
-    progress_bar.set_style(deserializing_progress_style());
-    progress_bar.set_message("Deserializing..");
-
-    // Deserialize the data. This is a hefty blocking operation so we spawn it as a tokio blocking
-    // task.
-    let repo_data_json_path = result.repo_data_json_path.clone();
-    match tokio::task::spawn_blocking(move || {
-        SparseRepoData::new(
-            channel,
-            platform.to_string(),
-            repo_data_json_path,
-            Some(|record: &mut PackageRecord| {
-                if record.name.as_normalized() == "python" {
-                    record.depends.push("pip".to_string());
-                }
-            }),
-        )
-    })
-    .await
-    {
-        Ok(Ok(repodata)) => {
-            progress_bar.set_style(finished_progress_style());
-            let is_cache_hit = matches!(
-                result.cache_result,
-                CacheResult::CacheHit | CacheResult::CacheHitAfterFetch
-            );
-            progress_bar.finish_with_message(if is_cache_hit { "Using cache" } else { "Done" });
-            Ok(Some(repodata))
-        }
-        Ok(Err(err)) => {
-            progress_bar.set_style(errored_progress_style());
-            progress_bar.finish_with_message("Error");
-            Err(err.into())
-        }
-        Err(err) => {
-            if let Ok(panic) = err.try_into_panic() {
-                std::panic::resume_unwind(panic);
-            } else {
-                progress_bar.set_style(errored_progress_style());
-                progress_bar.finish_with_message("Cancelled..");
-                // Since the task was cancelled most likely the whole async stack is being cancelled.
-                Err(anyhow::anyhow!("cancelled"))
-            }
-        }
-    }
+/// Displays a spinner with the given message while running the specified function to completion.
+async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
+    msg: impl Into<Cow<'static, str>>,
+    fut: F,
+) -> T {
+    let pb = ProgressBar::new_spinner();
+    pb.enable_steady_tick(Duration::from_millis(100));
+    pb.set_style(long_running_progress_style());
+    pb.set_message(msg);
+    let result = fut.into_future().await;
+    pb.finish_and_clear();
+    result
 }
+//
+// /// Given a channel and platform, download and cache the `repodata.json` for it. This function
+// /// reports its progress via a CLI progressbar.
+// async fn fetch_repo_data_records_with_progress(
+//     channel: Channel,
+//     platform: Platform,
+//     repodata_cache: &Path,
+//     client: reqwest_middleware::ClientWithMiddleware,
+//     multi_progress: indicatif::MultiProgress,
+// ) -> Result<Option<SparseRepoData>, anyhow::Error> {
+//     // Create a progress bar
+//     let progress_bar = multi_progress.add(
+//         indicatif::ProgressBar::new(1)
+//             .with_finish(indicatif::ProgressFinish::AndLeave)
+//             .with_prefix(format!("{}/{platform}", friendly_channel_name(&channel)))
+//             .with_style(default_bytes_style()),
+//     );
+//     progress_bar.enable_steady_tick(Duration::from_millis(100));
+//
+//     // Download the repodata.json
+//     let download_progress_progress_bar = progress_bar.clone();
+//     let result = rattler_repodata_gateway::fetch::fetch_repo_data(
+//         channel.platform_url(platform),
+//         client,
+//         repodata_cache.to_path_buf(),
+//         FetchRepoDataOptions::default(),
+//         Some(Box::new(move |DownloadProgress { total, bytes }| {
+//             download_progress_progress_bar.set_length(total.unwrap_or(bytes));
+//             download_progress_progress_bar.set_position(bytes);
+//         })),
+//     )
+//     .await;
+//
+//     // Error out if an error occurred, but also update the progress bar
+//     let result = match result {
+//         Err(e) => {
+//             let not_found = matches!(&e, FetchRepoDataError::NotFound(_));
+//             if not_found && platform != Platform::NoArch {
+//                 progress_bar.set_style(finished_progress_style());
+//                 progress_bar.finish_with_message("Not Found");
+//                 return Ok(None);
+//             }
+//
+//             progress_bar.set_style(errored_progress_style());
+//             progress_bar.finish_with_message("Error");
+//             return Err(e.into());
+//         }
+//         Ok(result) => result,
+//     };
+//
+//     // Notify that we are deserializing
+//     progress_bar.set_style(deserializing_progress_style());
+//     progress_bar.set_message("Deserializing..");
+//
+//     // Deserialize the data. This is a hefty blocking operation so we spawn it as a tokio blocking
+//     // task.
+//     let repo_data_json_path = result.repo_data_json_path.clone();
+//     match tokio::task::spawn_blocking(move || {
+//         SparseRepoData::new(
+//             channel,
+//             platform.to_string(),
+//             repo_data_json_path,
+//             Some(|record: &mut PackageRecord| {
+//                 if record.name.as_normalized() == "python" {
+//                     record.depends.push("pip".to_string());
+//                 }
+//             }),
+//         )
+//     })
+//     .await
+//     {
+//         Ok(Ok(repodata)) => {
+//             progress_bar.set_style(finished_progress_style());
+//             let is_cache_hit = matches!(
+//                 result.cache_result,
+//                 CacheResult::CacheHit | CacheResult::CacheHitAfterFetch
+//             );
+//             progress_bar.finish_with_message(if is_cache_hit { "Using cache" } else { "Done" });
+//             Ok(Some(repodata))
+//         }
+//         Ok(Err(err)) => {
+//             progress_bar.set_style(errored_progress_style());
+//             progress_bar.finish_with_message("Error");
+//             Err(err.into())
+//         }
+//         Err(err) => {
+//             if let Ok(panic) = err.try_into_panic() {
+//                 std::panic::resume_unwind(panic);
+//             } else {
+//                 progress_bar.set_style(errored_progress_style());
+//                 progress_bar.finish_with_message("Cancelled..");
+//                 // Since the task was cancelled most likely the whole async stack is being cancelled.
+//                 Err(anyhow::anyhow!("cancelled"))
+//             }
+//         }
+//     }
+// }
 
-/// Returns a friendly name for the specified channel.
-fn friendly_channel_name(channel: &Channel) -> String {
-    channel
-        .name
-        .as_ref()
-        .map_or_else(|| channel.canonical_name(), String::from)
-}
-
-/// Returns the style to use for a progressbar that is currently in progress.
-fn default_bytes_style() -> indicatif::ProgressStyle {
-    indicatif::ProgressStyle::default_bar()
-        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {bytes:>8} @ {smoothed_bytes_per_sec:8}").unwrap()
-        .progress_chars("━━╾─")
-        .with_key(
-            "smoothed_bytes_per_sec",
-            |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
-                (pos, elapsed_ms) if elapsed_ms > 0 => {
-                    write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap();
-                }
-                _ => write!(w, "-").unwrap(),
-            },
-        )
-}
-
+// /// Returns a friendly name for the specified channel.
+// fn friendly_channel_name(channel: &Channel) -> String {
+//     channel
+//         .name
+//         .as_ref()
+//         .map_or_else(|| channel.canonical_name(), String::from)
+// }
+//
+// /// Returns the style to use for a progressbar that is currently in progress.
+// fn default_bytes_style() -> indicatif::ProgressStyle {
+//     indicatif::ProgressStyle::default_bar()
+//         .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] [{bar:40!.bright.yellow/dim.white}] {bytes:>8} @ {smoothed_bytes_per_sec:8}").unwrap()
+//         .progress_chars("━━╾─")
+//         .with_key(
+//             "smoothed_bytes_per_sec",
+//             |s: &ProgressState, w: &mut dyn Write| match (s.pos(), s.elapsed().as_millis()) {
+//                 (pos, elapsed_ms) if elapsed_ms > 0 => {
+//                     write!(w, "{}/s", HumanBytes((pos as f64 * 1000_f64 / elapsed_ms as f64) as u64)).unwrap();
+//                 }
+//                 _ => write!(w, "-").unwrap(),
+//             },
+//         )
+// }
+//
 /// Returns the style to use for a progressbar that is currently in progress.
 fn default_progress_style() -> indicatif::ProgressStyle {
     indicatif::ProgressStyle::default_bar()
@@ -699,13 +735,13 @@ fn default_progress_style() -> indicatif::ProgressStyle {
         .progress_chars("━━╾─")
 }
 
-/// Returns the style to use for a progressbar that is in Deserializing state.
-fn deserializing_progress_style() -> indicatif::ProgressStyle {
-    indicatif::ProgressStyle::default_bar()
-        .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] {wide_msg}")
-        .unwrap()
-        .progress_chars("━━╾─")
-}
+// /// Returns the style to use for a progressbar that is in Deserializing state.
+// fn deserializing_progress_style() -> indicatif::ProgressStyle {
+//     indicatif::ProgressStyle::default_bar()
+//         .template("{spinner:.green} {prefix:20!} [{elapsed_precise}] {wide_msg}")
+//         .unwrap()
+//         .progress_chars("━━╾─")
+// }
 
 /// Returns the style to use for a progressbar that is finished.
 fn finished_progress_style() -> indicatif::ProgressStyle {
@@ -718,16 +754,16 @@ fn finished_progress_style() -> indicatif::ProgressStyle {
         .progress_chars("━━╾─")
 }
 
-/// Returns the style to use for a progressbar that is in error state.
-fn errored_progress_style() -> indicatif::ProgressStyle {
-    indicatif::ProgressStyle::default_bar()
-        .template(&format!(
-            "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold.red}}",
-            console::style(console::Emoji("❌", " ")).red()
-        ))
-        .unwrap()
-        .progress_chars("━━╾─")
-}
+// /// Returns the style to use for a progressbar that is in error state.
+// fn errored_progress_style() -> indicatif::ProgressStyle {
+//     indicatif::ProgressStyle::default_bar()
+//         .template(&format!(
+//             "{} {{prefix:20!}} [{{elapsed_precise}}] {{msg:.bold.red}}",
+//             console::style(console::Emoji("❌", " ")).red()
+//         ))
+//         .unwrap()
+//         .progress_chars("━━╾─")
+// }
 
 /// Returns the style to use for a progressbar that is indeterminate and simply shows a spinner.
 fn long_running_progress_style() -> indicatif::ProgressStyle {

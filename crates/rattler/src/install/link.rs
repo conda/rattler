@@ -62,10 +62,6 @@ pub enum LinkFileError {
     #[error("unexpected io operation while {0}")]
     IoError(String, #[source] std::io::Error),
 
-    /// The parent directory of the destination file could not be created.
-    #[error("failed to create parent directory")]
-    FailedToCreateParentDirectory(#[source] std::io::Error),
-
     /// The source file could not be opened.
     #[error("could not open source file for reading")]
     FailedToOpenSourceFile(#[source] std::io::Error),
@@ -153,11 +149,6 @@ pub fn link_file(
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
     let destination_path = target_dir.join(&destination_relative_path);
-
-    // Ensure that all directories up to the path exist.
-    if let Some(parent) = destination_path.parent() {
-        std::fs::create_dir_all(parent).map_err(LinkFileError::FailedToCreateParentDirectory)?;
-    }
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.
@@ -398,17 +389,17 @@ fn reflink_to_destination(
                 })?;
             }
             Err(e) if e.kind() == ErrorKind::Unsupported && allow_hard_links => {
-                return hardlink_to_destination(source_path, destination_path)
+                return hardlink_to_destination(source_path, destination_path);
             }
             Err(e) if e.kind() == ErrorKind::Unsupported && !allow_hard_links => {
-                return copy_to_destination(source_path, destination_path)
+                return copy_to_destination(source_path, destination_path);
             }
             Err(_) => {
                 return if allow_hard_links {
                     hardlink_to_destination(source_path, destination_path)
                 } else {
                     copy_to_destination(source_path, destination_path)
-                }
+                };
             }
         }
     }

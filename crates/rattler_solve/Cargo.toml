@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "0.21.1"
+version = "0.22.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -11,8 +11,8 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-rattler_conda_types = { path="../rattler_conda_types", version = "0.22.1", default-features = false }
-rattler_digest = { path="../rattler_digest", version = "0.19.3", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.23.1", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "0.19.4", default-features = false }
 libc = { workspace = true, optional = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
@@ -37,7 +37,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
 
 [features]
-default = ["libsolv_c"]
+default = ["resolvo"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
 resolvo = ["dep:resolvo", "dep:futures"]
 

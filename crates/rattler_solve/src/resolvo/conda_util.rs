@@ -4,6 +4,13 @@ use rattler_conda_types::Version;
 use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub(super) enum CompareStrategy {
+    Default,
+    LowestVersion,
+}
+
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compare_candidates<'a>(
@@ -14,6 +21,7 @@ pub(super) fn compare_candidates<'a>(
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
     >,
+    strategy: CompareStrategy,
 ) -> Ordering {
     let pool = solver.pool();
 
@@ -34,10 +42,12 @@ pub(super) fn compare_candidates<'a>(
     };
 
     // Otherwise, select the variant with the highest version
-    match a_record.version().cmp(b_record.version()) {
-        Ordering::Less => return Ordering::Greater,
-        Ordering::Greater => return Ordering::Less,
-        Ordering::Equal => {}
+    match (strategy, a_record.version().cmp(b_record.version())) {
+        (CompareStrategy::Default, Ordering::Greater)
+        | (CompareStrategy::LowestVersion, Ordering::Less) => return Ordering::Less,
+        (CompareStrategy::Default, Ordering::Less)
+        | (CompareStrategy::LowestVersion, Ordering::Greater) => return Ordering::Greater,
+        (_, Ordering::Equal) => {}
     };
 
     // Otherwise, select the variant with the highest build number

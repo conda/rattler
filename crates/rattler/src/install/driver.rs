@@ -2,23 +2,17 @@ use super::clobber_registry::ClobberRegistry;
 use super::link_script::PrePostLinkResult;
 use super::unlink::{recursively_remove_empty_directories, UnlinkError};
 use super::{InstallError, Transaction};
-use futures::stream::FuturesUnordered;
-use futures::{FutureExt, StreamExt};
 use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::prefix_record::PathType;
-use rattler_conda_types::{PackageRecord, PrefixRecord, RepoDataRecord};
+use rattler_conda_types::{PackageRecord, PrefixRecord};
+use std::borrow::Borrow;
 use std::collections::HashSet;
-use std::future::pending;
 use std::path::Path;
 use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex};
-use tokio::{
-    select,
-    sync::mpsc::{unbounded_channel, UnboundedSender},
-    sync::oneshot,
-    task::JoinHandle,
-};
+use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
+use tokio::task::JoinError;
 
 /// Packages can mostly be installed in isolation and therefor in parallel. However, when installing
 /// a large number of packages at the same time the different installation tasks start competing for
@@ -26,128 +20,91 @@ use tokio::{
 /// each other from resource as well as making sure that due to the large number of requests the
 /// process doesn't try to acquire more resources than the system has available.
 pub struct InstallDriver {
-    inner: Arc<Mutex<InstallDriverInner>>,
-    concurrency_limit: usize,
+    io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
     execute_link_scripts: bool,
 }
 
-struct InstallDriverInner {
-    tx: UnboundedSender<Task>,
-    join_handle: JoinHandle<()>,
-}
-
-type Task = Box<dyn FnOnce() + Send + 'static>;
-
 impl Default for InstallDriver {
     fn default() -> Self {
-        Self::new(100, None, true)
+        Self::builder()
+            .execute_link_scripts(false)
+            .with_io_concurrency_limit(100)
+            .finish()
+    }
+}
+
+/// A builder to configure a new `InstallDriver`.
+#[derive(Debug, Default)]
+pub struct InstallDriverBuilder {
+    io_concurrency_semaphore: Option<Arc<Semaphore>>,
+    clobber_registry: Option<ClobberRegistry>,
+    execute_link_scripts: bool,
+}
+
+impl InstallDriverBuilder {
+    /// Sets an optional IO concurrency limit. This is used to make sure
+    /// that the system doesn't acquire more IO resources than the system has
+    /// available.
+    pub fn with_io_concurrency_limit(self, limit: usize) -> Self {
+        Self {
+            io_concurrency_semaphore: Some(Arc::new(Semaphore::new(limit))),
+            ..self
+        }
+    }
+
+    /// Sets an optional IO concurrency semaphore. This is used to make sure
+    /// that the system doesn't acquire more IO resources than the system has
+    /// available.
+    pub fn with_io_concurrency_semaphore(self, io_concurrency_semaphore: Arc<Semaphore>) -> Self {
+        Self {
+            io_concurrency_semaphore: Some(io_concurrency_semaphore),
+            ..self
+        }
+    }
+
+    /// Sets the prefix records that are present in the current environment.
+    /// This is used to initialize the clobber registry.
+    pub fn with_prefix_records(self, prefix_records: &[PrefixRecord]) -> Self {
+        Self {
+            clobber_registry: Some(ClobberRegistry::from_prefix_records(prefix_records)),
+            ..self
+        }
+    }
+
+    /// Sets whether to execute link scripts or not.
+    pub fn execute_link_scripts(self, execute_link_scripts: bool) -> Self {
+        Self {
+            execute_link_scripts,
+            ..self
+        }
+    }
+
+    pub fn finish(self) -> InstallDriver {
+        InstallDriver {
+            io_concurrency_semaphore: self.io_concurrency_semaphore,
+            clobber_registry: self
+                .clobber_registry
+                .map(Mutex::new)
+                .map(Arc::new)
+                .unwrap_or_default(),
+            execute_link_scripts: self.execute_link_scripts,
+        }
     }
 }
 
 impl InstallDriver {
-    /// Constructs a new [`InstallDriver`] with a given maximum number of concurrent tasks. This is
-    /// the number of tasks spawned through the driver that can run concurrently. This is especially
-    /// useful to make sure no filesystem limits are encountered.
-    pub fn new(
-        concurrency_limit: usize,
-        prefix_records: Option<&[PrefixRecord]>,
-        execute_link_scripts: bool,
-    ) -> Self {
-        let (tx, mut rx) = unbounded_channel::<Task>();
-        let join_handle = tokio::spawn(async move {
-            let mut pending_futures = FuturesUnordered::new();
-            loop {
-                // Build a future to receive a new task to execute, or do not accept new tasks
-                // if the current concurrency limit is reached.
-                let next_task = if pending_futures.len() < concurrency_limit {
-                    rx.recv().left_future()
-                } else {
-                    pending().right_future()
-                };
-
-                // Wait for a new tasks or on of the futures that finishes.
-                select! {
-                    task = next_task => {match task {
-                        Some(task) => {
-                            pending_futures.push(tokio::task::spawn_blocking(task));
-                        }
-                        None => {
-                            // The sender closed, this means the outer struct was dropped, which
-                            // means we can stop as well.
-                            break;
-                        }
-                    }},
-                    Some(result) = pending_futures.next() => {if let Err(err) = result {
-                        // If a panic occurred in the blocking task we resume the error here to make sure
-                        // its not getting lost.
-                        if let Ok(panic) = err.try_into_panic() {
-                            std::panic::resume_unwind(panic);
-                        }
-
-                        // Note: we don't handle the cancelled error here. This can be handled by a
-                        // sender/receiver pair that get closed when the task drops.
-                    }}
-                }
-            }
-        });
-
-        let clobber_registry = prefix_records
-            .map(ClobberRegistry::from_prefix_records)
-            .unwrap_or_default();
-
-        Self {
-            inner: Arc::new(Mutex::new(InstallDriverInner { tx, join_handle })),
-            concurrency_limit,
-            clobber_registry: Arc::new(Mutex::new(clobber_registry)),
-            execute_link_scripts,
-        }
+    /// Constructs a builder to configure a new `InstallDriver`.
+    pub fn builder() -> InstallDriverBuilder {
+        InstallDriverBuilder::default()
     }
 
-    /// Returns the number of tasks that can run in parallel.
-    pub fn concurrency_limit(&self) -> usize {
-        self.concurrency_limit
-    }
-
-    /// Spawns a blocking operation on another thread and waits for it to complete. This is similar
-    /// to calling [`tokio::task::spawn_blocking`] except that the number of concurrent tasks is
-    /// limited. This is especially useful when performing filesystem operations because most
-    /// platforms have a limit on the number of concurrent filesystem operations.
-    pub async fn spawn_throttled<
-        R: Send + 'static,
-        F: FnOnce() -> Result<R, InstallError> + Send + 'static,
-    >(
-        &self,
-        f: F,
-    ) -> Result<R, InstallError> {
-        let (tx, rx) = oneshot::channel();
-
-        // Spawn the task on the background
-        self.spawn_throttled_and_forget(move || {
-            if !tx.is_closed() {
-                let result = f();
-                let _ = tx.send(result);
-            }
-        });
-
-        // Await the result being send back. If an error occurs during receive it means that the
-        // sending end of the channel was closed. This can only really happen when the task has been
-        // dropped. We assume that that means the task has been cancelled.
-        rx.await.map_err(|_err| InstallError::Cancelled)?
-    }
-
-    /// Spawns a blocking operation on another thread but does not wait for it to complete. This is
-    /// similar to calling [`tokio::task::spawn_blocking`] except that the number of concurrent
-    /// tasks is limited. This is especially useful when performing filesystem operations because
-    /// most platforms have a limit on the number of concurrent filesystem operations.
-    pub fn spawn_throttled_and_forget<F: FnOnce() + Send + 'static>(&self, f: F) {
-        let inner = self.inner.lock().unwrap();
-        if inner.tx.send(Box::new(f)).is_err() {
-            unreachable!(
-                "if a send error occurs here it means the task processor is dropped. \
-                Since this only happens when dropping this object there cannot be another call to \
-                this function. Therefor this should never happen."
-            );
+    /// Returns a permit that will allow the caller to perform IO operations. This is used to make
+    /// sure that the system doesn't try to acquire more IO resources than the system has available.
+    pub async fn acquire_io_permit(&self) -> Result<Option<OwnedSemaphorePermit>, AcquireError> {
+        match self.io_concurrency_semaphore.clone() {
+            None => Ok(None),
+            Some(semaphore) => Ok(Some(semaphore.acquire_owned().await?)),
         }
     }
 
@@ -158,9 +115,9 @@ impl InstallDriver {
     }
 
     /// Call this before any packages are installed to perform any pre processing that is required.
-    pub fn pre_process(
+    pub fn pre_process<Old: Borrow<PrefixRecord>, New>(
         &self,
-        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, InstallError> {
         if self.execute_link_scripts {
@@ -177,14 +134,41 @@ impl InstallDriver {
         Ok(None)
     }
 
+    /// Runs a blocking task that will execute on a seperate thread. The task is not started until
+    /// an IO permit is acquired. This is used to make sure that the system doesn't try to acquire
+    /// more IO resources than the system has available.
+    pub async fn run_blocking_io_task<
+        T: Send + 'static,
+        E: Send + Into<InstallError> + 'static,
+        F: FnOnce() -> Result<T, E> + Send + 'static,
+    >(
+        &self,
+        f: F,
+    ) -> Result<T, InstallError> {
+        let _permit = self
+            .acquire_io_permit()
+            .await
+            .map_err(|_err| InstallError::Cancelled)?;
+
+        // Execute the task as a blocking task
+        match tokio::task::spawn_blocking(f)
+            .await
+            .map_err(JoinError::try_into_panic)
+        {
+            Ok(result) => result.map_err(Into::into),
+            Err(Ok(payload)) => std::panic::resume_unwind(payload),
+            Err(Err(_err)) => Err(InstallError::Cancelled),
+        }
+    }
+
     /// Call this after all packages have been installed to perform any post processing that is
     /// required.
     ///
     /// This function will select a winner among multiple packages that might write to a single package
     /// and will also execute any `post-link.sh/bat` scripts
-    pub fn post_process(
+    pub fn post_process<Old: Borrow<PrefixRecord> + AsRef<New>, New: AsRef<PackageRecord>>(
         &self,
-        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        transaction: &Transaction<Old, New>,
         target_prefix: &Path,
     ) -> Result<Option<PrePostLinkResult>, InstallError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
@@ -219,9 +203,9 @@ impl InstallDriver {
     }
 
     /// Remove all empty directories that are not part of the new prefix records.
-    pub fn remove_empty_directories(
+    pub fn remove_empty_directories<Old: Borrow<PrefixRecord>, New>(
         &self,
-        transaction: &Transaction<PrefixRecord, RepoDataRecord>,
+        transaction: &Transaction<Old, New>,
         new_prefix_records: &[PrefixRecord],
         target_prefix: &Path,
     ) -> Result<(), UnlinkError> {
@@ -238,7 +222,7 @@ impl InstallDriver {
         }
 
         // find all removed directories
-        for record in transaction.removed_packages() {
+        for record in transaction.removed_packages().map(Borrow::borrow) {
             let mut removed_directories = HashSet::new();
 
             for paths in record.paths_data.paths.iter() {
@@ -274,11 +258,5 @@ impl InstallDriver {
         }
 
         Ok(())
-    }
-}
-
-impl Drop for InstallDriverInner {
-    fn drop(&mut self) {
-        self.join_handle.abort();
     }
 }

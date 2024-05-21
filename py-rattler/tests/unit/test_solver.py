@@ -1,29 +1,23 @@
-# type: ignore
-import os.path
+import datetime
+
+import pytest
 
 from rattler import (
     solve,
-    Channel,
     ChannelPriority,
-    MatchSpec,
     RepoDataRecord,
-    SparseRepoData,
+    Channel,
+    Gateway,
 )
 
 
-def test_solve():
-    linux64_chan = Channel("conda-forge")
-    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
-    linux64_path = os.path.join(data_dir, "channels/conda-forge/linux-64/repodata.json")
-    linux64_data = SparseRepoData(
-        channel=linux64_chan,
-        subdir="linux-64",
-        path=linux64_path,
-    )
-
-    solved_data = solve(
-        [MatchSpec("python"), MatchSpec("sqlite")],
-        [linux64_data],
+@pytest.mark.asyncio
+async def test_solve(gateway: Gateway, conda_forge_channel: Channel) -> None:
+    solved_data = await solve(
+        [conda_forge_channel],
+        ["linux-64"],
+        ["python", "sqlite"],
+        gateway,
     )
 
     assert isinstance(solved_data, list)
@@ -31,31 +25,96 @@ def test_solve():
     assert len(solved_data) == 19
 
 
-def test_solve_channel_priority_disabled():
-    cf_chan = Channel("conda-forge")
-    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
-    cf_path = os.path.join(data_dir, "channels/conda-forge/linux-64/repodata.json")
-    cf_data = SparseRepoData(
-        channel=cf_chan,
-        subdir="linux-64",
-        path=cf_path,
+@pytest.mark.asyncio
+async def test_solve_exclude_newer(
+        gateway: Gateway, dummy_channel: Channel
+) -> None:
+    """Tests the exclude_newer parameter of the solve function.
+
+    The exclude_newer parameter is used to exclude any record that is newer than
+    the given datetime. This test case will exclude the record with version
+    4.0.2 because of the `exclude_newer` argument.
+    """
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foo"],
+        gateway,
     )
 
-    pytorch_chan = Channel("pytorch")
-    pytorch_path = os.path.join(data_dir, "channels/pytorch/linux-64/repodata.json")
-    pytorch_data = SparseRepoData(
-        channel=pytorch_chan,
-        subdir="linux-64",
-        path=pytorch_path,
+    assert isinstance(solved_data, list)
+    assert isinstance(solved_data[0], RepoDataRecord)
+    assert len(solved_data) == 1
+    assert str(solved_data[0].version) == "4.0.2"
+
+    # Now solve again but with a datetime that is before the version 4.0.2
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foo"],
+        gateway,
+        exclude_newer=datetime.datetime.fromisoformat("2021-01-01"),
     )
 
-    solved_data = solve(
-        [MatchSpec("pytorch-cpu=0.4.1=py36_cpu_1")],
-        [cf_data, pytorch_data],
+    assert isinstance(solved_data, list)
+    assert isinstance(solved_data[0], RepoDataRecord)
+    assert len(solved_data) == 1
+    assert str(solved_data[0].version) == "3.0.2"
+
+@pytest.mark.asyncio
+async def test_solve_lowest(gateway: Gateway, dummy_channel: Channel) -> None:
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foobar"],
+        gateway,
+        strategy="lowest",
+    )
+
+    assert isinstance(solved_data, list)
+    assert len(solved_data) == 2
+
+    assert solved_data[0].name.normalized == "foobar"
+    assert str(solved_data[0].version) == "2.0"
+
+    assert solved_data[1].name.normalized == "bors"
+    assert str(solved_data[1].version) == "1.0"
+
+@pytest.mark.asyncio
+async def test_solve_lowest_direct(gateway: Gateway, dummy_channel: Channel) -> None:
+    solved_data = await solve(
+        [dummy_channel],
+        ["linux-64"],
+        ["foobar"],
+        gateway,
+        strategy="lowest-direct",
+    )
+
+    assert isinstance(solved_data, list)
+    assert len(solved_data) == 2
+
+    assert solved_data[0].name.normalized == "foobar"
+    assert str(solved_data[0].version) == "2.0"
+
+    assert solved_data[1].name.normalized == "bors"
+    assert str(solved_data[1].version) == "1.2.1"
+
+@pytest.mark.asyncio
+async def test_solve_channel_priority_disabled(
+    gateway: Gateway, pytorch_channel: Channel, conda_forge_channel: Channel
+) -> None:
+    solved_data = await solve(
+        [conda_forge_channel, pytorch_channel],
+        ["linux-64"],
+        ["pytorch-cpu=0.4.1=py36_cpu_1"],
+        gateway,
         channel_priority=ChannelPriority.Disabled,
     )
 
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
-    assert list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel == "https://conda.anaconda.org/pytorch/"
+    assert (
+        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        == pytorch_channel.base_url
+    )
     assert len(solved_data) == 32

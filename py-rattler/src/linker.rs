@@ -74,7 +74,11 @@ async fn execute_transaction(
 ) -> Result<(), PyRattlerError> {
     let package_cache = PackageCache::new(cache_dir.join("pkgs"));
 
-    let install_driver = InstallDriver::new(100, Some(&installed_packages), execute_link_scripts);
+    let install_driver = InstallDriver::builder()
+        .with_io_concurrency_limit(100)
+        .with_prefix_records(&installed_packages)
+        .execute_link_scripts(execute_link_scripts)
+        .finish();
 
     let install_options = InstallOptions {
         python_info: transaction.python_info.clone(),
@@ -199,7 +203,7 @@ pub async fn install_package_to_environment(
     };
 
     let target_prefix = target_prefix.clone();
-    match tokio::task::spawn_blocking(move || {
+    let write_prefix_fut = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
 
@@ -215,8 +219,8 @@ pub async fn install_package_to_environment(
         ));
         prefix_record.write_to_path(pkg_meta_path, true)
     })
-    .await
-    {
+    .await;
+    match write_prefix_fut {
         Ok(result) => Ok(result?),
         Err(err) => {
             if let Ok(panic) = err.try_into_panic() {

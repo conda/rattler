@@ -23,6 +23,7 @@ mod virtual_package;
 
 mod index_json;
 mod run_exports_json;
+
 use about_json::PyAboutJson;
 use channel::{PyChannel, PyChannelConfig, PyChannelPriority};
 use error::{
@@ -46,12 +47,19 @@ use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
 use prefix_paths::{PyPrefixPathType, PyPrefixPaths, PyPrefixPathsEntry};
-use repo_data::{patch_instructions::PyPatchInstructions, sparse::PySparseRepoData, PyRepoData};
+use repo_data::{
+    gateway::{PyGateway, PySourceConfig},
+    patch_instructions::PyPatchInstructions,
+    sparse::PySparseRepoData,
+    PyRepoData,
+};
 use run_exports_json::PyRunExportsJson;
+use std::ops::Deref;
 use version::PyVersion;
 
 use pyo3::prelude::*;
 
+use crate::error::GatewayException;
 use index::py_index;
 use linker::py_link;
 use meta::get_rattler_version;
@@ -60,6 +68,18 @@ use record::PyRecord;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::py_solve;
 use virtual_package::PyVirtualPackage;
+
+/// A struct to make it easy to wrap a type as a python type.
+#[repr(transparent)]
+#[derive(Clone)]
+pub struct Wrap<T>(pub T);
+
+impl<T> Deref for Wrap<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 #[pymodule]
 fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
@@ -87,6 +107,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PySparseRepoData>().unwrap();
     m.add_class::<PyRepoData>().unwrap();
     m.add_class::<PyPatchInstructions>().unwrap();
+    m.add_class::<PyGateway>().unwrap();
+    m.add_class::<PySourceConfig>().unwrap();
 
     m.add_class::<PyRecord>().unwrap();
 
@@ -192,6 +214,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     .unwrap();
 
     m.add("ExtractError", py.get_type::<ExtractException>())
+        .unwrap();
+
+    m.add("GatewayError", py.get_type::<GatewayException>())
         .unwrap();
 
     Ok(())

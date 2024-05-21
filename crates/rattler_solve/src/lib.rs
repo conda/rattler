@@ -8,6 +8,7 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
+use chrono::{DateTime, Utc};
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
 use std::fmt;
 
@@ -71,10 +72,11 @@ impl fmt::Display for SolveError {
 }
 
 /// Represents the channel priority option to use during solves.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChannelPriority {
     /// The channel that the package is first found in will be used as the only channel
     /// for that package.
+    #[default]
     Strict,
 
     // Conda also has "Flexible" as an option, where packages present in multiple channels
@@ -121,6 +123,50 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// The channel priority to solve with, either [`ChannelPriority::Strict`] or
     /// [`ChannelPriority::Disabled`]
     pub channel_priority: ChannelPriority,
+
+    /// Exclude any package that has a timestamp newer than the specified timestamp.
+    pub exclude_newer: Option<DateTime<Utc>>,
+
+    /// The solve strategy.
+    pub strategy: SolveStrategy,
+}
+
+impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
+    for SolverTask<Vec<RepoDataIter<I>>>
+{
+    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+        Self {
+            available_packages: iter.into_iter().map(|iter| RepoDataIter(iter)).collect(),
+            locked_packages: Vec::new(),
+            pinned_packages: Vec::new(),
+            virtual_packages: Vec::new(),
+            specs: Vec::new(),
+            timeout: None,
+            channel_priority: ChannelPriority::default(),
+            exclude_newer: None,
+            strategy: SolveStrategy::default(),
+        }
+    }
+}
+
+/// Represents the strategy to use when solving dependencies
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub enum SolveStrategy {
+    /// Resolve the highest version of each package.
+    #[default]
+    Highest,
+
+    /// Resolve the lowest compatible version for each package.
+    ///
+    /// All candidates with the same version are still ordered the same as
+    /// with `Default`. This ensures that the candidate with the highest build
+    /// number is used and downprioritization still works.
+    LowestVersion,
+
+    /// Resolve the lowest compatible version for direct dependencies but the
+    /// highest for transitive dependencies. This is similar to `LowestVersion`
+    /// but only for direct dependencies.
+    LowestVersionDirect,
 }
 
 /// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
@@ -157,5 +203,17 @@ impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for &'a [RepoDataRecord] {
 impl<'a, S: SolverRepoData<'a>> IntoRepoData<'a, S> for S {
     fn into(self) -> S {
         self
+    }
+}
+
+/// A helper struct that implements `IntoRepoData` for anything that can
+/// iterate over `RepoDataRecord`s.
+pub struct RepoDataIter<T>(pub T);
+
+impl<'a, T: IntoIterator<Item = &'a RepoDataRecord>, S: SolverRepoData<'a>> IntoRepoData<'a, S>
+    for RepoDataIter<T>
+{
+    fn into(self) -> S {
+        self.0.into_iter().collect()
     }
 }

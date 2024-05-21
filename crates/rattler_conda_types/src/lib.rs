@@ -39,6 +39,7 @@ pub use parse_mode::ParseStrictness;
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch};
+pub use repo_data::sharded::{Shard, ShardedRepodata, ShardedSubdirInfo};
 pub use repo_data::{
     compute_package_url, ChannelInfo, ConvertSubdirError, PackageRecord, RepoData,
 };
