@@ -132,8 +132,7 @@ pub struct PackageRecord {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Vec<PackageUrl>,
+    pub purls: Option<Vec<PackageUrl>>,
 
     /// Optionally a SHA256 hash of the package archive
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -289,7 +288,7 @@ impl PackageRecord {
             timestamp: None,
             track_features: vec![],
             version: version.into(),
-            purls: vec![],
+            purls: Some(vec![]),
         }
     }
 
@@ -404,7 +403,7 @@ impl PackageRecord {
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-            purls: vec![],
+            purls: Some(vec![]),
         })
     }
 }

@@ -170,7 +170,7 @@ pub fn parse_v3_or_lower(
                             timestamp: value.timestamp,
                             track_features: value.track_features,
                             version: value.version,
-                            purls: value.purls,
+                            purls: Some(value.purls),
                         },
                         url: value.url,
                         file_name: None,
