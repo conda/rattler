@@ -1,3 +1,5 @@
+use std::{str::FromStr, time::Instant};
+
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use rattler_conda_types::{
@@ -6,8 +8,6 @@ use rattler_conda_types::{
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{ChannelPriority, SolveError, SolveStrategy, SolverImpl, SolverTask};
-use std::str::FromStr;
-use std::time::Instant;
 use url::Url;
 
 fn channel_config() -> ChannelConfig {
@@ -147,8 +147,8 @@ fn solve_real_world<T: SolverImpl + Default>(specs: Vec<&str>) -> Vec<String> {
             })
             .collect::<Vec<_>>();
 
-        // The order of packages is nondeterministic, so we sort them to ensure we can compare them
-        // to a previous run
+        // The order of packages is nondeterministic, so we sort them to ensure we can
+        // compare them to a previous run
         pkgs.sort();
         pkgs
     };
@@ -523,6 +523,22 @@ macro_rules! solver_backend_tests {
                 "although there is a newer version available we expect an older version of foo because we exclude the newer version based on the timestamp");
             assert_eq!(&info.file_name, "foo-3.0.2-py36h1af98f8_1.tar.bz2", "even though there is a conda version available we expect the tar.bz2 version because we exclude the .conda version based on the timestamp");
         }
+
+        #[test]
+        fn test_duplicate_record() {
+            use rattler_solve::SolverImpl;
+
+            let mut records = super::read_repodata(&dummy_channel_json_path());
+            records.push(records[0].clone());
+
+            let task = rattler_solve::SolverTask::from_iter([&records]);
+
+            let result = <$T>::default().solve(task);
+            match result {
+               Err(rattler_solve::SolveError::DuplicateRecords(_)) => {},
+                _ => panic!("expected a DuplicateRecord error"),
+            }
+        }
     };
 }
 
@@ -530,21 +546,22 @@ macro_rules! solver_backend_tests {
 mod libsolv_c {
     #![allow(unused_imports)] // For some reason windows thinks this is an unused import.
 
+    use rattler_solve::{ChannelPriority, SolveStrategy};
+
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
-    use rattler_solve::ChannelPriority;
-    use rattler_solve::SolveStrategy;
 
     solver_backend_tests!(rattler_solve::libsolv_c::Solver);
 
     #[test]
     #[cfg(target_family = "unix")]
     fn test_solve_with_cached_solv_file_install_new() {
-        use super::read_repodata;
         use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
         use rattler_solve::{SolverImpl, SolverTask};
+
+        use super::read_repodata;
 
         let repo_data = read_repodata(&dummy_channel_json_path());
 
@@ -558,7 +575,8 @@ mod libsolv_c {
             .to_string(),
             &repo_data,
             None,
-        );
+        )
+        .unwrap();
 
         let libsolv_repodata = rattler_solve::libsolv_c::RepoData {
             records: repo_data.iter().collect(),
@@ -819,8 +837,8 @@ fn compare_solve(task: CompareTask<'_>) {
             })
             .collect::<Vec<_>>();
 
-        // The order of packages is nondeterministic, so we sort them to ensure we can compare them
-        // to a previous run
+        // The order of packages is nondeterministic, so we sort them to ensure we can
+        // compare them to a previous run
         pkgs.sort();
         pkgs
     };
