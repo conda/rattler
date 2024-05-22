@@ -1,5 +1,6 @@
-//! `rattler_solve` is a crate that provides functionality to solve Conda environments. It currently
-//! exposes the functionality through the [`SolverImpl::solve`] function.
+//! `rattler_solve` is a crate that provides functionality to solve Conda
+//! environments. It currently exposes the functionality through the
+//! [`SolverImpl::solve`] function.
 
 #![deny(missing_docs)]
 
@@ -8,17 +9,18 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
-use std::fmt;
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
     /// The repo data associated to a channel and platform combination
     type RepoData<'a>: SolverRepoData<'a>;
 
-    /// Resolve the dependencies and return the [`RepoDataRecord`]s that should be present in the
-    /// environment.
+    /// Resolve the dependencies and return the [`RepoDataRecord`]s that should
+    /// be present in the environment.
     fn solve<
         'a,
         R: IntoRepoData<'a, Self::RepoData<'a>>,
@@ -36,13 +38,16 @@ pub enum SolveError {
     Unsolvable(Vec<String>),
 
     /// The solver backend returned operations that we dont know how to install.
-    /// Each string is a somewhat user-friendly representation of which operation was not recognized
-    /// and can be used for error reporting
+    /// Each string is a somewhat user-friendly representation of which
+    /// operation was not recognized and can be used for error reporting
     UnsupportedOperations(Vec<String>),
 
     /// Error when converting matchspec
     #[error(transparent)]
     ParseMatchSpecError(#[from] rattler_conda_types::ParseMatchSpecError),
+
+    /// Encountered duplicate records in the available packages.
+    DuplicateRecords(String),
 
     /// To support Resolvo cancellation
     Cancelled,
@@ -67,6 +72,9 @@ impl fmt::Display for SolveError {
             SolveError::Cancelled => {
                 write!(f, "Solve operation has been cancelled")
             }
+            SolveError::DuplicateRecords(filename) => {
+                write!(f, "encountered duplicate records for {filename}")
+            }
         }
     }
 }
@@ -74,8 +82,8 @@ impl fmt::Display for SolveError {
 /// Represents the channel priority option to use during solves.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum ChannelPriority {
-    /// The channel that the package is first found in will be used as the only channel
-    /// for that package.
+    /// The channel that the package is first found in will be used as the only
+    /// channel for that package.
     #[default]
     Strict,
 
@@ -83,32 +91,36 @@ pub enum ChannelPriority {
     // are only taken from lower-priority channels when this prevents unsatisfiable environment
     // errors, but this would need implementation in the solvers.
     // Flexible,
-    /// Packages can be retrieved from any channel as package version takes precedence.
+    /// Packages can be retrieved from any channel as package version takes
+    /// precedence.
     Disabled,
 }
 
-/// Represents a dependency resolution task, to be solved by one of the backends (currently only
-/// libsolv is supported)
+/// Represents a dependency resolution task, to be solved by one of the backends
+/// (currently only libsolv is supported)
 pub struct SolverTask<TAvailablePackagesIterator> {
     /// An iterator over all available packages
     pub available_packages: TAvailablePackagesIterator,
 
     /// Records of packages that are previously selected.
     ///
-    /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records and select the best possible version. However, if there exists a
-    /// locked version it will prefer that variant instead. This is useful to reduce the number of
+    /// If the solver encounters multiple variants of a single package
+    /// (identified by its name), it will sort the records and select the
+    /// best possible version. However, if there exists a locked version it
+    /// will prefer that variant instead. This is useful to reduce the number of
     /// packages that are updated when installing new packages.
     ///
-    /// Usually you add the currently installed packages or packages from a lock-file here.
+    /// Usually you add the currently installed packages or packages from a
+    /// lock-file here.
     pub locked_packages: Vec<RepoDataRecord>,
 
     /// Records of packages that are previously selected and CANNOT be changed.
     ///
-    /// If the solver encounters multiple variants of a single package (identified by its name), it
-    /// will sort the records and select the best possible version. However, if there is a variant
-    /// available in the `pinned_packages` field it will always select that version no matter what
-    /// even if that means other packages have to be downgraded.
+    /// If the solver encounters multiple variants of a single package
+    /// (identified by its name), it will sort the records and select the
+    /// best possible version. However, if there is a variant available in
+    /// the `pinned_packages` field it will always select that version no matter
+    /// what even if that means other packages have to be downgraded.
     pub pinned_packages: Vec<RepoDataRecord>,
 
     /// Virtual packages considered active
@@ -120,11 +132,12 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
-    /// The channel priority to solve with, either [`ChannelPriority::Strict`] or
-    /// [`ChannelPriority::Disabled`]
+    /// The channel priority to solve with, either [`ChannelPriority::Strict`]
+    /// or [`ChannelPriority::Disabled`]
     pub channel_priority: ChannelPriority,
 
-    /// Exclude any package that has a timestamp newer than the specified timestamp.
+    /// Exclude any package that has a timestamp newer than the specified
+    /// timestamp.
     pub exclude_newer: Option<DateTime<Utc>>,
 
     /// The solve strategy.
@@ -169,22 +182,23 @@ pub enum SolveStrategy {
     LowestVersionDirect,
 }
 
-/// A representation of a collection of [`RepoDataRecord`] usable by a [`SolverImpl`]
-/// implementation.
+/// A representation of a collection of [`RepoDataRecord`] usable by a
+/// [`SolverImpl`] implementation.
 ///
-/// Some solvers might be able to cache the collection between different runs of the solver which
-/// could potentially eliminate some overhead. This trait enables creating a representation of the
-/// repodata that is most suitable for a specific backend.
+/// Some solvers might be able to cache the collection between different runs of
+/// the solver which could potentially eliminate some overhead. This trait
+/// enables creating a representation of the repodata that is most suitable for
+/// a specific backend.
 ///
-/// Some solvers may add additional functionality to their specific implementation that enables
-/// caching the repodata to disk in an efficient way (see [`crate::libsolv_c::RepoData`] for
-/// an example).
+/// Some solvers may add additional functionality to their specific
+/// implementation that enables caching the repodata to disk in an efficient way
+/// (see [`crate::libsolv_c::RepoData`] for an example).
 pub trait SolverRepoData<'a>: FromIterator<&'a RepoDataRecord> {}
 
 /// Defines the ability to convert a type into [`SolverRepoData`].
 pub trait IntoRepoData<'a, S: SolverRepoData<'a>> {
-    /// Converts this instance into an instance of [`SolverRepoData`] which is consumable by a
-    /// specific [`SolverImpl`] implementation.
+    /// Converts this instance into an instance of [`SolverRepoData`] which is
+    /// consumable by a specific [`SolverImpl`] implementation.
     fn into(self) -> S;
 }
 
