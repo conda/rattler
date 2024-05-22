@@ -40,7 +40,6 @@ impl FileFormatVersion {
     pub fn should_pypi_indexes_be_present(self) -> bool {
         self >= FileFormatVersion::V5
     }
-
 }
 
 impl Default for FileFormatVersion {
