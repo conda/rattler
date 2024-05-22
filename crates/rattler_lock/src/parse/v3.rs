@@ -170,7 +170,7 @@ pub fn parse_v3_or_lower(
                             timestamp: value.timestamp,
                             track_features: value.track_features,
                             version: value.version,
-                            purls: match value.purls.is_empty(){
+                            purls: match value.purls.is_empty() {
                                 true => None,
                                 false => Some(value.purls),
                             },
