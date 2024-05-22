@@ -138,7 +138,7 @@ pub struct PackageRecord {
     /// Now, None:: means that the purl is missing, and it will be tried to filled in.
     /// So later it can be one of the following:
     /// Some([]) means that the purl is empty and package is not pypi one.
-    /// Some([PackageUrl]) means that it is a pypi package.
+    /// Some([`PackageUrl`]) means that it is a pypi package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<Vec<PackageUrl>>,
 
