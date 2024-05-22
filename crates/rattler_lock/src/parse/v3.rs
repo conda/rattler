@@ -16,6 +16,7 @@ use rattler_conda_types::{
 };
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use std::ops::Not;
 use std::{collections::BTreeSet, sync::Arc};
 use url::Url;
 
@@ -170,7 +171,7 @@ pub fn parse_v3_or_lower(
                             timestamp: value.timestamp,
                             track_features: value.track_features,
                             version: value.version,
-                            purls: value.purls,
+                            purls: value.purls.is_empty().not().then_some(value.purls),
                         },
                         url: value.url,
                         file_name: None,

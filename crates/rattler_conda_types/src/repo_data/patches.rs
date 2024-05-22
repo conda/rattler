@@ -143,7 +143,7 @@ impl PackageRecord {
             self.license_family = license_family.clone();
         }
         if let Some(package_urls) = &patch.purls {
-            self.purls = package_urls.clone();
+            self.purls = Some(package_urls.clone());
         }
     }
 }

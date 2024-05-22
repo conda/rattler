@@ -85,9 +85,8 @@ pub(crate) struct RawCondaPackageData<'a> {
     pub license: Cow<'a, Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_family: Cow<'a, Option<String>>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Cow<'a, Vec<PackageUrl>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Cow<'a, Option<Vec<PackageUrl>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,

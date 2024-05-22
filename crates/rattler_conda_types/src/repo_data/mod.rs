@@ -132,8 +132,15 @@ pub struct PackageRecord {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Vec<PackageUrl>,
+    /// starting from 0.23.2, this field became [`Option<Vec<PackageUrl>>`].
+    /// This was done to support older lockfiles,
+    /// where we didn't differentiate between empty purl and missing one.
+    /// Now, None:: means that the purl is missing, and it will be tried to filled in.
+    /// So later it can be one of the following:
+    /// [`Some(vec![])`] means that the purl is empty and package is not pypi one.
+    /// [`Some([`PackageUrl`])`] means that it is a pypi package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Option<Vec<PackageUrl>>,
 
     /// Optionally a SHA256 hash of the package archive
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -289,7 +296,7 @@ impl PackageRecord {
             timestamp: None,
             track_features: vec![],
             version: version.into(),
-            purls: vec![],
+            purls: None,
         }
     }
 
@@ -404,7 +411,7 @@ impl PackageRecord {
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-            purls: vec![],
+            purls: None,
         })
     }
 }
