@@ -9,7 +9,7 @@ use serde_with::{serde_as, skip_serializing_none};
 /// The `run_exports.json` file contains information about the run exports of a package
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone, Ord, PartialOrd)]
 pub struct RunExportsJson {
     /// weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -37,6 +37,28 @@ impl PackageFile for RunExportsJson {
 
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
         serde_json::from_str(str).map_err(Into::into)
+    }
+}
+
+impl RunExportsJson {
+    /// Construct an empty `RunExportsJson`
+    pub fn new() -> Self {
+        Self {
+            weak: Vec::new(),
+            strong: Vec::new(),
+            noarch: Vec::new(),
+            weak_constrains: Vec::new(),
+            strong_constrains: Vec::new(),
+        }
+    }
+
+    /// Test if all fields are empty
+    pub fn is_empty(&self) -> bool {
+        self.weak.is_empty()
+            && self.strong.is_empty()
+            && self.noarch.is_empty()
+            && self.weak_constrains.is_empty()
+            && self.strong_constrains.is_empty()
     }
 }
 

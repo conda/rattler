@@ -123,6 +123,7 @@ impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
                 timestamp: value.timestamp,
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
+                run_exports: None,
             },
             url: value.url.into_owned(),
             file_name: value.file_name.into_owned(),
