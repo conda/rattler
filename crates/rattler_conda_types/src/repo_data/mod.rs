@@ -132,6 +132,7 @@ pub struct PackageRecord {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<Vec<PackageUrl>>,
 
     /// Optionally a SHA256 hash of the package archive
@@ -288,7 +289,7 @@ impl PackageRecord {
             timestamp: None,
             track_features: vec![],
             version: version.into(),
-            purls: Some(vec![]),
+            purls: None,
         }
     }
 
@@ -403,7 +404,7 @@ impl PackageRecord {
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-            purls: Some(vec![]),
+            purls: None,
         })
     }
 }

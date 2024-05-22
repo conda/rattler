@@ -107,7 +107,7 @@ fn installed_package(
             timestamp: None,
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
-            purls: Vec::new(),
+            purls: None,
         },
     }
 }

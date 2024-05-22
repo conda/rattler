@@ -2,7 +2,7 @@
 source: crates/rattler_lock/src/lib.rs
 expression: conda_lock
 ---
-version: 6
+version: 5
 environments:
   default:
     channels:
@@ -992,6 +992,7 @@ packages:
     sha256: fe51de6107f9edc7aa4f786a70f4a883943bc9d39b3bb7307c04c41410990726
     md5: d7c89558ba9fa0495403155b64376d81
     platform: linux
+    purls: []
   - kind: conda
     name: _libgcc_mutex
     version: "0.1"
@@ -1000,6 +1001,7 @@ packages:
     sha256: 5dd34b412e6274c0614d01a2f616844376ae873dfb8782c2c67d055779de6df6
     md5: e96f48755dc7c9f86c4aecf4cac40477
     platform: linux
+    purls: []
   - kind: conda
     name: _openmp_mutex
     version: "4.5"
@@ -1011,6 +1013,7 @@ packages:
       - _libgcc_mutex ==0.1 conda_forge
       - libgomp >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: _openmp_mutex
     version: "4.5"
@@ -1021,6 +1024,7 @@ packages:
     depends:
       - libgomp >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: _openmp_mutex
     version: "4.5"
@@ -1032,6 +1036,7 @@ packages:
       - _libgcc_mutex ==0.1 conda_forge
       - libgomp >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: alabaster
     version: 0.7.13
@@ -1042,6 +1047,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: alabaster
     version: 0.7.13
@@ -1052,6 +1058,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: alabaster
     version: 0.7.13
@@ -1062,6 +1069,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: alabaster
     version: 0.7.13
@@ -1072,6 +1080,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: alabaster
     version: 0.7.13
@@ -1082,6 +1091,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: alsa-lib
     version: 1.2.8
@@ -1092,6 +1102,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: appdirs
     version: 1.4.4
@@ -1102,6 +1113,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: appdirs
     version: 1.4.4
@@ -1112,6 +1124,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: appdirs
     version: 1.4.4
@@ -1122,6 +1135,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: appdirs
     version: 1.4.4
@@ -1132,6 +1146,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: appdirs
     version: 1.4.4
@@ -1142,6 +1157,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: appnope
     version: 0.1.3
@@ -1152,6 +1168,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: appnope
     version: 0.1.3
@@ -1162,6 +1179,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: asttokens
     version: 2.2.1
@@ -1173,6 +1191,7 @@ packages:
       - python >=3.5
       - six
     platform: linux
+    purls: []
   - kind: conda
     name: asttokens
     version: 2.2.1
@@ -1184,6 +1203,7 @@ packages:
       - python >=3.5
       - six
     platform: linux
+    purls: []
   - kind: conda
     name: asttokens
     version: 2.2.1
@@ -1195,6 +1215,7 @@ packages:
       - python >=3.5
       - six
     platform: linux
+    purls: []
   - kind: conda
     name: asttokens
     version: 2.2.1
@@ -1206,6 +1227,7 @@ packages:
       - python >=3.5
       - six
     platform: osx
+    purls: []
   - kind: conda
     name: asttokens
     version: 2.2.1
@@ -1217,6 +1239,7 @@ packages:
       - python >=3.5
       - six
     platform: osx
+    purls: []
   - kind: conda
     name: attr
     version: 2.5.1
@@ -1227,6 +1250,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: attrs
     version: 22.2.0
@@ -1237,6 +1261,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: attrs
     version: 22.2.0
@@ -1247,6 +1272,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: attrs
     version: 22.2.0
@@ -1257,6 +1283,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: attrs
     version: 22.2.0
@@ -1267,6 +1294,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: attrs
     version: 22.2.0
@@ -1277,6 +1305,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: babel
     version: 2.11.0
@@ -1288,6 +1317,7 @@ packages:
       - python >=3.6
       - pytz
     platform: linux
+    purls: []
   - kind: conda
     name: babel
     version: 2.11.0
@@ -1299,6 +1329,7 @@ packages:
       - python >=3.6
       - pytz
     platform: linux
+    purls: []
   - kind: conda
     name: babel
     version: 2.11.0
@@ -1310,6 +1341,7 @@ packages:
       - python >=3.6
       - pytz
     platform: linux
+    purls: []
   - kind: conda
     name: babel
     version: 2.11.0
@@ -1321,6 +1353,7 @@ packages:
       - python >=3.6
       - pytz
     platform: osx
+    purls: []
   - kind: conda
     name: babel
     version: 2.11.0
@@ -1332,6 +1365,7 @@ packages:
       - python >=3.6
       - pytz
     platform: osx
+    purls: []
   - kind: conda
     name: backcall
     version: 0.2.0
@@ -1342,6 +1376,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: backcall
     version: 0.2.0
@@ -1352,6 +1387,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: backcall
     version: 0.2.0
@@ -1362,6 +1398,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: backcall
     version: 0.2.0
@@ -1372,6 +1409,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: backcall
     version: 0.2.0
@@ -1382,6 +1420,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: backports
     version: "1.0"
@@ -1392,6 +1431,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: backports
     version: "1.0"
@@ -1402,6 +1442,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: backports
     version: "1.0"
@@ -1412,6 +1453,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: backports
     version: "1.0"
@@ -1422,6 +1464,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: backports
     version: "1.0"
@@ -1432,6 +1475,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: backports.functools_lru_cache
     version: 1.6.4
@@ -1444,6 +1488,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: backports.functools_lru_cache
     version: 1.6.4
@@ -1456,6 +1501,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: backports.functools_lru_cache
     version: 1.6.4
@@ -1468,6 +1514,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: backports.functools_lru_cache
     version: 1.6.4
@@ -1480,6 +1527,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: backports.functools_lru_cache
     version: 1.6.4
@@ -1492,6 +1540,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: backports.zoneinfo
     version: 0.2.1
@@ -1503,6 +1552,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: backports.zoneinfo
     version: 0.2.1
@@ -1514,6 +1564,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: backports.zoneinfo
     version: 0.2.1
@@ -1525,6 +1576,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: backports.zoneinfo
     version: 0.2.1
@@ -1536,6 +1588,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: backports.zoneinfo
     version: 0.2.1
@@ -1547,6 +1600,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: beautifulsoup4
     version: 4.11.2
@@ -1558,6 +1612,7 @@ packages:
       - python >=3.6
       - soupsieve >=1.2
     platform: linux
+    purls: []
   - kind: conda
     name: beautifulsoup4
     version: 4.11.2
@@ -1569,6 +1624,7 @@ packages:
       - python >=3.6
       - soupsieve >=1.2
     platform: linux
+    purls: []
   - kind: conda
     name: beautifulsoup4
     version: 4.11.2
@@ -1580,6 +1636,7 @@ packages:
       - python >=3.6
       - soupsieve >=1.2
     platform: linux
+    purls: []
   - kind: conda
     name: beautifulsoup4
     version: 4.11.2
@@ -1591,6 +1648,7 @@ packages:
       - python >=3.6
       - soupsieve >=1.2
     platform: osx
+    purls: []
   - kind: conda
     name: beautifulsoup4
     version: 4.11.2
@@ -1602,6 +1660,7 @@ packages:
       - python >=3.6
       - soupsieve >=1.2
     platform: osx
+    purls: []
   - kind: conda
     name: binutils
     version: "2.39"
@@ -1612,6 +1671,7 @@ packages:
     depends:
       - "binutils_impl_linux-64 >=2.39,<2.40.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: binutils
     version: "2.39"
@@ -1622,6 +1682,7 @@ packages:
     depends:
       - "binutils_impl_linux-aarch64 >=2.39,<2.40.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: binutils
     version: "2.39"
@@ -1632,6 +1693,7 @@ packages:
     depends:
       - "binutils_impl_linux-ppc64le >=2.39,<2.40.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_impl_linux-64
     version: "2.39"
@@ -1643,6 +1705,7 @@ packages:
       - ld_impl_linux-64 ==2.39 hcc3a1bd_1
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_impl_linux-aarch64
     version: "2.39"
@@ -1654,6 +1717,7 @@ packages:
       - ld_impl_linux-aarch64 ==2.39 h16cd69b_1
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_impl_linux-ppc64le
     version: "2.39"
@@ -1665,6 +1729,7 @@ packages:
       - ld_impl_linux-ppc64le ==2.39 hea198f4_1
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_linux-64
     version: "2.39"
@@ -1676,6 +1741,7 @@ packages:
       - binutils_impl_linux-64 2.39.*
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_linux-aarch64
     version: "2.39"
@@ -1687,6 +1753,7 @@ packages:
       - binutils_impl_linux-aarch64 2.39.*
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: binutils_linux-ppc64le
     version: "2.39"
@@ -1698,6 +1765,7 @@ packages:
       - binutils_impl_linux-ppc64le 2.39.*
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: breathe
     version: 4.34.0
@@ -1713,6 +1781,7 @@ packages:
       - python >=3.6
       - "sphinx >=4.0,<6.0.0a"
     platform: linux
+    purls: []
   - kind: conda
     name: breathe
     version: 4.34.0
@@ -1728,6 +1797,7 @@ packages:
       - python >=3.6
       - "sphinx >=4.0,<6.0.0a"
     platform: linux
+    purls: []
   - kind: conda
     name: breathe
     version: 4.34.0
@@ -1743,6 +1813,7 @@ packages:
       - python >=3.6
       - "sphinx >=4.0,<6.0.0a"
     platform: linux
+    purls: []
   - kind: conda
     name: breathe
     version: 4.34.0
@@ -1758,6 +1829,7 @@ packages:
       - python >=3.6
       - "sphinx >=4.0,<6.0.0a"
     platform: osx
+    purls: []
   - kind: conda
     name: breathe
     version: 4.34.0
@@ -1773,6 +1845,7 @@ packages:
       - python >=3.6
       - "sphinx >=4.0,<6.0.0a"
     platform: osx
+    purls: []
   - kind: conda
     name: brotli
     version: 1.0.9
@@ -1786,6 +1859,7 @@ packages:
       - libbrotlienc ==1.0.9 h166bdaf_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli
     version: 1.0.9
@@ -1799,6 +1873,7 @@ packages:
       - libbrotlienc ==1.0.9 h4e544f5_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli
     version: 1.0.9
@@ -1812,6 +1887,7 @@ packages:
       - libbrotlienc ==1.0.9 hb283c62_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli
     version: 1.0.9
@@ -1824,6 +1900,7 @@ packages:
       - libbrotlidec ==1.0.9 hb7f2c08_8
       - libbrotlienc ==1.0.9 hb7f2c08_8
     platform: osx
+    purls: []
   - kind: conda
     name: brotli
     version: 1.0.9
@@ -1836,6 +1913,7 @@ packages:
       - libbrotlidec ==1.0.9 h1a8c8d9_8
       - libbrotlienc ==1.0.9 h1a8c8d9_8
     platform: osx
+    purls: []
   - kind: conda
     name: brotli-bin
     version: 1.0.9
@@ -1848,6 +1926,7 @@ packages:
       - libbrotlienc ==1.0.9 h166bdaf_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli-bin
     version: 1.0.9
@@ -1860,6 +1939,7 @@ packages:
       - libbrotlienc ==1.0.9 h4e544f5_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli-bin
     version: 1.0.9
@@ -1872,6 +1952,7 @@ packages:
       - libbrotlienc ==1.0.9 hb283c62_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: brotli-bin
     version: 1.0.9
@@ -1883,6 +1964,7 @@ packages:
       - libbrotlidec ==1.0.9 hb7f2c08_8
       - libbrotlienc ==1.0.9 hb7f2c08_8
     platform: osx
+    purls: []
   - kind: conda
     name: brotli-bin
     version: 1.0.9
@@ -1894,6 +1976,7 @@ packages:
       - libbrotlidec ==1.0.9 h1a8c8d9_8
       - libbrotlienc ==1.0.9 h1a8c8d9_8
     platform: osx
+    purls: []
   - kind: conda
     name: brotlipy
     version: 0.7.0
@@ -1907,6 +1990,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: brotlipy
     version: 0.7.0
@@ -1920,6 +2004,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: brotlipy
     version: 0.7.0
@@ -1933,6 +2018,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: brotlipy
     version: 0.7.0
@@ -1945,6 +2031,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: brotlipy
     version: 0.7.0
@@ -1957,6 +2044,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: bzip2
     version: 1.0.8
@@ -1967,6 +2055,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: bzip2
     version: 1.0.8
@@ -1977,6 +2066,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: bzip2
     version: 1.0.8
@@ -1987,6 +2077,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: bzip2
     version: 1.0.8
@@ -1995,6 +2086,7 @@ packages:
     sha256: 60ba4c64f5d0afca0d283c7addba577d3e2efc0db86002808dadb0498661b2f2
     md5: 37edc4e6304ca87316e160f5ca0bd1b5
     platform: osx
+    purls: []
   - kind: conda
     name: bzip2
     version: 1.0.8
@@ -2003,6 +2095,7 @@ packages:
     sha256: a3efbd06ad1432edb0163c48225421f34c2660f5cc002283a8d27e791320b549
     md5: fc76ace7b94fb1f694988ab1b14dd248
     platform: osx
+    purls: []
   - kind: conda
     name: c-compiler
     version: 1.5.2
@@ -2015,6 +2108,7 @@ packages:
       - gcc
       - gcc_linux-64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: c-compiler
     version: 1.5.2
@@ -2027,6 +2121,7 @@ packages:
       - gcc
       - gcc_linux-aarch64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: c-compiler
     version: 1.5.2
@@ -2039,6 +2134,7 @@ packages:
       - gcc
       - gcc_linux-ppc64le 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: c-compiler
     version: 1.5.2
@@ -2052,6 +2148,7 @@ packages:
       - ld64 >=530
       - llvm-openmp
     platform: osx
+    purls: []
   - kind: conda
     name: c-compiler
     version: 1.5.2
@@ -2065,6 +2162,7 @@ packages:
       - ld64 >=530
       - llvm-openmp
     platform: osx
+    purls: []
   - kind: conda
     name: ca-certificates
     version: 2022.12.7
@@ -2073,6 +2171,7 @@ packages:
     sha256: 8f6c81b0637771ae0ea73dc03a6d30bec3326ba3927f2a7b91931aa2d59b1789
     md5: ff9f73d45c4a07d6f424495288a26080
     platform: linux
+    purls: []
   - kind: conda
     name: ca-certificates
     version: 2022.12.7
@@ -2081,6 +2180,7 @@ packages:
     sha256: bb4e6340d55775738a5867a16071658c294d46cceff7f652f65d8dc6a495a578
     md5: 2450fbcaf65634e0d071e47e2b8487b4
     platform: linux
+    purls: []
   - kind: conda
     name: ca-certificates
     version: 2022.12.7
@@ -2089,6 +2189,7 @@ packages:
     sha256: 82b77cb085c961b085fbbb5ea3920c1933bda08c2e1dd53685f6f21b16a336ac
     md5: e3becd49c6d0e94d1b67c9f9a4d50587
     platform: linux
+    purls: []
   - kind: conda
     name: ca-certificates
     version: 2022.12.7
@@ -2097,6 +2198,7 @@ packages:
     sha256: 898276d86de89fb034ecfae05103045d0a0d6a356ced1b6d1832cdbd07a8fc18
     md5: af2bdcd68f16ce030ca957cdeb83d88a
     platform: osx
+    purls: []
   - kind: conda
     name: ca-certificates
     version: 2022.12.7
@@ -2105,6 +2207,7 @@ packages:
     sha256: a9634dc719fc9cd4c91cf8ad3167532e59051cace3e90ef2ba305a41c316784a
     md5: 7dc111916edc905957b7417a247583b6
     platform: osx
+    purls: []
   - kind: conda
     name: cairo
     version: 1.16.0
@@ -2130,6 +2233,7 @@ packages:
       - xorg-libxrender
       - "zlib >=1.2.12,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: cctools
     version: 973.0.1
@@ -2142,6 +2246,7 @@ packages:
       - ld64 ==609 hc6ad406_11
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: cctools
     version: 973.0.1
@@ -2154,6 +2259,7 @@ packages:
       - ld64 ==609 h619f069_11
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: cctools_osx-64
     version: 973.0.1
@@ -2168,6 +2274,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - sigtool
     platform: osx
+    purls: []
   - kind: conda
     name: cctools_osx-arm64
     version: 973.0.1
@@ -2182,6 +2289,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - sigtool
     platform: osx
+    purls: []
   - kind: conda
     name: certifi
     version: 2022.12.7
@@ -2192,6 +2300,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: certifi
     version: 2022.12.7
@@ -2202,6 +2311,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: certifi
     version: 2022.12.7
@@ -2212,6 +2322,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: certifi
     version: 2022.12.7
@@ -2222,6 +2333,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: certifi
     version: 2022.12.7
@@ -2232,6 +2344,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: cffi
     version: 1.15.1
@@ -2246,6 +2359,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cffi
     version: 1.15.1
@@ -2260,6 +2374,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cffi
     version: 1.15.1
@@ -2274,6 +2389,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cffi
     version: 1.15.1
@@ -2287,6 +2403,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: cffi
     version: 1.15.1
@@ -2300,6 +2417,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: charset-normalizer
     version: 2.1.1
@@ -2310,6 +2428,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: charset-normalizer
     version: 2.1.1
@@ -2320,6 +2439,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: charset-normalizer
     version: 2.1.1
@@ -2330,6 +2450,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: charset-normalizer
     version: 2.1.1
@@ -2340,6 +2461,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: charset-normalizer
     version: 2.1.1
@@ -2350,6 +2472,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: clang
     version: 14.0.6
@@ -2360,6 +2483,7 @@ packages:
     depends:
       - clang-14 ==14.0.6 default_h55ffa42_0
     platform: osx
+    purls: []
   - kind: conda
     name: clang
     version: 14.0.6
@@ -2370,6 +2494,7 @@ packages:
     depends:
       - clang-14 ==14.0.6 default_h81a5282_0
     platform: osx
+    purls: []
   - kind: conda
     name: clang-14
     version: 14.0.6
@@ -2382,6 +2507,7 @@ packages:
       - libcxx >=13.0.1
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: clang-14
     version: 14.0.6
@@ -2394,6 +2520,7 @@ packages:
       - libcxx >=13.0.1
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: clang_osx-64
     version: 14.0.6
@@ -2408,6 +2535,7 @@ packages:
       - ld64_osx-64
       - llvm-tools 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: clang_osx-arm64
     version: 14.0.6
@@ -2422,6 +2550,7 @@ packages:
       - ld64_osx-arm64
       - llvm-tools 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: clangxx
     version: 14.0.6
@@ -2432,6 +2561,7 @@ packages:
     depends:
       - clang ==14.0.6 h694c41f_0
     platform: osx
+    purls: []
   - kind: conda
     name: clangxx
     version: 14.0.6
@@ -2442,6 +2572,7 @@ packages:
     depends:
       - clang ==14.0.6 hce30654_0
     platform: osx
+    purls: []
   - kind: conda
     name: clangxx_osx-64
     version: 14.0.6
@@ -2455,6 +2586,7 @@ packages:
       - libcxx >=14.0.6
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: clangxx_osx-arm64
     version: 14.0.6
@@ -2468,6 +2600,7 @@ packages:
       - libcxx >=14.0.6
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: click
     version: 8.1.3
@@ -2479,6 +2612,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: click
     version: 8.1.3
@@ -2490,6 +2624,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: click
     version: 8.1.3
@@ -2501,6 +2636,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: click
     version: 8.1.3
@@ -2512,6 +2648,7 @@ packages:
       - __unix
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: click
     version: 8.1.3
@@ -2523,6 +2660,7 @@ packages:
       - __unix
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: colorama
     version: 0.4.6
@@ -2533,6 +2671,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: colorama
     version: 0.4.6
@@ -2543,6 +2682,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: colorama
     version: 0.4.6
@@ -2553,6 +2693,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: colorama
     version: 0.4.6
@@ -2563,6 +2704,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: colorama
     version: 0.4.6
@@ -2573,6 +2715,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: compiler-rt
     version: 14.0.6
@@ -2585,6 +2728,7 @@ packages:
       - clangxx 14.0.6.*
       - compiler-rt_osx-64 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: compiler-rt
     version: 14.0.6
@@ -2597,6 +2741,7 @@ packages:
       - clangxx 14.0.6.*
       - compiler-rt_osx-arm64 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: compiler-rt_osx-64
     version: 14.0.6
@@ -2608,6 +2753,7 @@ packages:
       - clang 14.0.6.*
       - clangxx 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: compiler-rt_osx-arm64
     version: 14.0.6
@@ -2619,6 +2765,7 @@ packages:
       - clang 14.0.6.*
       - clangxx 14.0.6.*
     platform: osx
+    purls: []
   - kind: conda
     name: compilers
     version: 1.5.2
@@ -2631,6 +2778,7 @@ packages:
       - cxx-compiler ==1.5.2 hf52228f_0
       - fortran-compiler ==1.5.2 hdb1a99f_0
     platform: linux
+    purls: []
   - kind: conda
     name: compilers
     version: 1.5.2
@@ -2643,6 +2791,7 @@ packages:
       - cxx-compiler ==1.5.2 h4c384f3_0
       - fortran-compiler ==1.5.2 h878be85_0
     platform: linux
+    purls: []
   - kind: conda
     name: compilers
     version: 1.5.2
@@ -2655,6 +2804,7 @@ packages:
       - cxx-compiler ==1.5.2 he01d56d_0
       - fortran-compiler ==1.5.2 hc9fb769_0
     platform: linux
+    purls: []
   - kind: conda
     name: compilers
     version: 1.5.2
@@ -2667,6 +2817,7 @@ packages:
       - cxx-compiler ==1.5.2 hb8565cd_0
       - fortran-compiler ==1.5.2 haad3a49_0
     platform: osx
+    purls: []
   - kind: conda
     name: compilers
     version: 1.5.2
@@ -2679,6 +2830,7 @@ packages:
       - cxx-compiler ==1.5.2 hffc8910_0
       - fortran-compiler ==1.5.2 h2ccabda_0
     platform: osx
+    purls: []
   - kind: conda
     name: contourpy
     version: 1.0.7
@@ -2693,6 +2845,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: contourpy
     version: 1.0.7
@@ -2707,6 +2860,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: contourpy
     version: 1.0.7
@@ -2721,6 +2875,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: contourpy
     version: 1.0.7
@@ -2734,6 +2889,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: contourpy
     version: 1.0.7
@@ -2747,6 +2903,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: coverage
     version: 7.1.0
@@ -2760,6 +2917,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tomli
     platform: linux
+    purls: []
   - kind: conda
     name: coverage
     version: 7.1.0
@@ -2773,6 +2931,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tomli
     platform: linux
+    purls: []
   - kind: conda
     name: coverage
     version: 7.1.0
@@ -2786,6 +2945,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tomli
     platform: linux
+    purls: []
   - kind: conda
     name: coverage
     version: 7.1.0
@@ -2798,6 +2958,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tomli
     platform: osx
+    purls: []
   - kind: conda
     name: coverage
     version: 7.1.0
@@ -2810,6 +2971,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tomli
     platform: osx
+    purls: []
   - kind: conda
     name: cryptography
     version: 39.0.1
@@ -2824,6 +2986,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cryptography
     version: 39.0.1
@@ -2838,6 +3001,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cryptography
     version: 39.0.1
@@ -2852,6 +3016,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cryptography
     version: 39.0.1
@@ -2865,6 +3030,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: cryptography
     version: 39.0.1
@@ -2878,6 +3044,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: cxx-compiler
     version: 1.5.2
@@ -2890,6 +3057,7 @@ packages:
       - gxx
       - gxx_linux-64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: cxx-compiler
     version: 1.5.2
@@ -2902,6 +3070,7 @@ packages:
       - gxx
       - gxx_linux-aarch64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: cxx-compiler
     version: 1.5.2
@@ -2914,6 +3083,7 @@ packages:
       - gxx
       - gxx_linux-ppc64le 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: cxx-compiler
     version: 1.5.2
@@ -2925,6 +3095,7 @@ packages:
       - c-compiler ==1.5.2 hbf74d83_0
       - clangxx_osx-64 14.*
     platform: osx
+    purls: []
   - kind: conda
     name: cxx-compiler
     version: 1.5.2
@@ -2936,6 +3107,7 @@ packages:
       - c-compiler ==1.5.2 h5008568_0
       - clangxx_osx-arm64 14.*
     platform: osx
+    purls: []
   - kind: conda
     name: cycler
     version: 0.11.0
@@ -2946,6 +3118,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: cycler
     version: 0.11.0
@@ -2956,6 +3129,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: cycler
     version: 0.11.0
@@ -2966,6 +3140,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: cycler
     version: 0.11.0
@@ -2976,6 +3151,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: cycler
     version: 0.11.0
@@ -2986,6 +3162,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: cython
     version: 0.29.33
@@ -2999,6 +3176,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cython
     version: 0.29.33
@@ -3012,6 +3190,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cython
     version: 0.29.33
@@ -3025,6 +3204,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: cython
     version: 0.29.33
@@ -3037,6 +3217,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: cython
     version: 0.29.33
@@ -3049,6 +3230,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: dbus
     version: 1.13.6
@@ -3061,6 +3243,7 @@ packages:
       - libgcc-ng >=9.4.0
       - "libglib >=2.70.2,<3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: decorator
     version: 5.1.1
@@ -3071,6 +3254,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: decorator
     version: 5.1.1
@@ -3081,6 +3265,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: decorator
     version: 5.1.1
@@ -3091,6 +3276,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: decorator
     version: 5.1.1
@@ -3101,6 +3287,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: decorator
     version: 5.1.1
@@ -3111,6 +3298,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: docutils
     version: "0.19"
@@ -3122,6 +3310,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: docutils
     version: "0.19"
@@ -3133,6 +3322,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: docutils
     version: "0.19"
@@ -3144,6 +3334,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: docutils
     version: "0.19"
@@ -3155,6 +3346,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: docutils
     version: "0.19"
@@ -3166,6 +3358,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: doxygen
     version: 1.9.5
@@ -3178,6 +3371,7 @@ packages:
       - "libiconv >=1.16,<2.0.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: doxygen
     version: 1.9.5
@@ -3190,6 +3384,7 @@ packages:
       - "libiconv >=1.16,<2.0.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: doxygen
     version: 1.9.5
@@ -3202,6 +3397,7 @@ packages:
       - "libiconv >=1.16,<2.0.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: doxygen
     version: 1.9.5
@@ -3213,6 +3409,7 @@ packages:
       - libcxx >=14.0.4
       - "libiconv >=1.16,<2.0.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: doxygen
     version: 1.9.5
@@ -3224,6 +3421,7 @@ packages:
       - libcxx >=14.0.4
       - "libiconv >=1.16,<2.0.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: exceptiongroup
     version: 1.1.0
@@ -3234,6 +3432,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: exceptiongroup
     version: 1.1.0
@@ -3244,6 +3443,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: exceptiongroup
     version: 1.1.0
@@ -3254,6 +3454,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: exceptiongroup
     version: 1.1.0
@@ -3264,6 +3465,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: exceptiongroup
     version: 1.1.0
@@ -3274,6 +3476,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: execnet
     version: 1.9.0
@@ -3284,6 +3487,7 @@ packages:
     depends:
       - python ==2.7|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: execnet
     version: 1.9.0
@@ -3294,6 +3498,7 @@ packages:
     depends:
       - python ==2.7|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: execnet
     version: 1.9.0
@@ -3304,6 +3509,7 @@ packages:
     depends:
       - python ==2.7|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: execnet
     version: 1.9.0
@@ -3314,6 +3520,7 @@ packages:
     depends:
       - python ==2.7|>=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: execnet
     version: 1.9.0
@@ -3324,6 +3531,7 @@ packages:
     depends:
       - python ==2.7|>=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: executing
     version: 1.2.0
@@ -3334,6 +3542,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: executing
     version: 1.2.0
@@ -3344,6 +3553,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: executing
     version: 1.2.0
@@ -3354,6 +3564,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: executing
     version: 1.2.0
@@ -3364,6 +3575,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: executing
     version: 1.2.0
@@ -3374,6 +3586,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: expat
     version: 2.5.0
@@ -3385,6 +3598,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: fftw
     version: 3.3.10
@@ -3398,6 +3612,7 @@ packages:
       - libgfortran5 >=10.4.0
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: font-ttf-dejavu-sans-mono
     version: "2.37"
@@ -3406,6 +3621,7 @@ packages:
     sha256: 58d7f40d2940dd0a8aa28651239adbf5613254df0f75789919c4e6762054403b
     md5: 0c96522c6bdaed4b1566d11387caaf45
     platform: linux
+    purls: []
   - kind: conda
     name: font-ttf-inconsolata
     version: "3.000"
@@ -3414,6 +3630,7 @@ packages:
     sha256: c52a29fdac682c20d252facc50f01e7c2e7ceac52aa9817aaf0bb83f7559ec5c
     md5: 34893075a5c9e55cdafac56607368fc6
     platform: linux
+    purls: []
   - kind: conda
     name: font-ttf-source-code-pro
     version: "2.038"
@@ -3422,6 +3639,7 @@ packages:
     sha256: 00925c8c055a2275614b4d983e1df637245e19058d79fc7dd1a93b8d9fb4b139
     md5: 4d59c254e01d9cde7957100457e2d5fb
     platform: linux
+    purls: []
   - kind: conda
     name: font-ttf-ubuntu
     version: "0.83"
@@ -3430,6 +3648,7 @@ packages:
     sha256: 470d5db54102bd51dbb0c5990324a2f4a0bc976faa493b22193338adb9882e2e
     md5: 19410c3df09dfb12d1206132a1d357c5
     platform: linux
+    purls: []
   - kind: conda
     name: fontconfig
     version: 2.14.2
@@ -3444,6 +3663,7 @@ packages:
       - "libuuid >=2.32.1,<3.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: fonts-conda-ecosystem
     version: "1"
@@ -3454,6 +3674,7 @@ packages:
     depends:
       - fonts-conda-forge
     platform: linux
+    purls: []
   - kind: conda
     name: fonts-conda-forge
     version: "1"
@@ -3467,6 +3688,7 @@ packages:
       - font-ttf-source-code-pro
       - font-ttf-ubuntu
     platform: linux
+    purls: []
   - kind: conda
     name: fonttools
     version: 4.38.0
@@ -3482,6 +3704,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - unicodedata2 >=14.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: fonttools
     version: 4.38.0
@@ -3497,6 +3720,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - unicodedata2 >=14.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: fonttools
     version: 4.38.0
@@ -3512,6 +3736,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - unicodedata2 >=14.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: fonttools
     version: 4.38.0
@@ -3526,6 +3751,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - unicodedata2 >=14.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: fonttools
     version: 4.38.0
@@ -3540,6 +3766,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - unicodedata2 >=14.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: fortran-compiler
     version: 1.5.2
@@ -3553,6 +3780,7 @@ packages:
       - gfortran
       - gfortran_linux-64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: fortran-compiler
     version: 1.5.2
@@ -3566,6 +3794,7 @@ packages:
       - gfortran
       - gfortran_linux-aarch64 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: fortran-compiler
     version: 1.5.2
@@ -3579,6 +3808,7 @@ packages:
       - gfortran
       - gfortran_linux-ppc64le 11.*
     platform: linux
+    purls: []
   - kind: conda
     name: fortran-compiler
     version: 1.5.2
@@ -3593,6 +3823,7 @@ packages:
       - ld64 >=530
       - llvm-openmp
     platform: osx
+    purls: []
   - kind: conda
     name: fortran-compiler
     version: 1.5.2
@@ -3607,6 +3838,7 @@ packages:
       - ld64 >=530
       - llvm-openmp
     platform: osx
+    purls: []
   - kind: conda
     name: freetype
     version: 2.12.1
@@ -3619,6 +3851,7 @@ packages:
       - "libpng >=1.6.39,<1.7.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: freetype
     version: 2.12.1
@@ -3631,6 +3864,7 @@ packages:
       - "libpng >=1.6.39,<1.7.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: freetype
     version: 2.12.1
@@ -3643,6 +3877,7 @@ packages:
       - "libpng >=1.6.39,<1.7.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: freetype
     version: 2.12.1
@@ -3654,6 +3889,7 @@ packages:
       - "libpng >=1.6.39,<1.7.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: freetype
     version: 2.12.1
@@ -3665,6 +3901,7 @@ packages:
       - "libpng >=1.6.39,<1.7.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: gcc
     version: 11.3.0
@@ -3675,6 +3912,7 @@ packages:
     depends:
       - gcc_impl_linux-64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gcc
     version: 11.3.0
@@ -3685,6 +3923,7 @@ packages:
     depends:
       - gcc_impl_linux-aarch64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gcc
     version: 11.3.0
@@ -3695,6 +3934,7 @@ packages:
     depends:
       - gcc_impl_linux-ppc64le 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_impl_linux-64
     version: 11.3.0
@@ -3711,6 +3951,7 @@ packages:
       - libstdcxx-ng >=11.3.0
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_impl_linux-aarch64
     version: 11.3.0
@@ -3727,6 +3968,7 @@ packages:
       - libstdcxx-ng >=11.3.0
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_impl_linux-ppc64le
     version: 11.3.0
@@ -3743,6 +3985,7 @@ packages:
       - libstdcxx-ng >=11.3.0
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_linux-64
     version: 11.3.0
@@ -3755,6 +3998,7 @@ packages:
       - gcc_impl_linux-64 11.3.0.*
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_linux-aarch64
     version: 11.3.0
@@ -3767,6 +4011,7 @@ packages:
       - gcc_impl_linux-aarch64 11.3.0.*
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gcc_linux-ppc64le
     version: 11.3.0
@@ -3779,6 +4024,7 @@ packages:
       - gcc_impl_linux-ppc64le 11.3.0.*
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: gettext
     version: 0.21.1
@@ -3789,6 +4035,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: gettext
     version: 0.21.1
@@ -3799,6 +4046,7 @@ packages:
     depends:
       - "libiconv >=1.17,<2.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran
     version: 11.3.0
@@ -3811,6 +4059,7 @@ packages:
       - gcc_impl_linux-64 11.3.0.*
       - gfortran_impl_linux-64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran
     version: 11.3.0
@@ -3823,6 +4072,7 @@ packages:
       - gcc_impl_linux-aarch64 11.3.0.*
       - gfortran_impl_linux-aarch64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran
     version: 11.3.0
@@ -3835,6 +4085,7 @@ packages:
       - gcc_impl_linux-ppc64le 11.3.0.*
       - gfortran_impl_linux-ppc64le 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran
     version: 11.3.0
@@ -3847,6 +4098,7 @@ packages:
       - gfortran_osx-64
       - ld64
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran
     version: 11.3.0
@@ -3859,6 +4111,7 @@ packages:
       - gfortran_osx-arm64
       - ld64
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran_impl_linux-64
     version: 11.3.0
@@ -3873,6 +4126,7 @@ packages:
       - libstdcxx-ng >=4.9
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_impl_linux-aarch64
     version: 11.3.0
@@ -3887,6 +4141,7 @@ packages:
       - libstdcxx-ng >=4.9
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_impl_linux-ppc64le
     version: 11.3.0
@@ -3901,6 +4156,7 @@ packages:
       - libstdcxx-ng >=4.9
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_impl_osx-64
     version: 11.3.0
@@ -3920,6 +4176,7 @@ packages:
       - "mpfr >=4.1.0,<5.0a0"
       - zlib
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran_impl_osx-arm64
     version: 11.3.0
@@ -3939,6 +4196,7 @@ packages:
       - "mpfr >=4.1.0,<5.0a0"
       - zlib
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran_linux-64
     version: 11.3.0
@@ -3952,6 +4210,7 @@ packages:
       - gfortran_impl_linux-64 11.3.0.*
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_linux-aarch64
     version: 11.3.0
@@ -3965,6 +4224,7 @@ packages:
       - gfortran_impl_linux-aarch64 11.3.0.*
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_linux-ppc64le
     version: 11.3.0
@@ -3978,6 +4238,7 @@ packages:
       - gfortran_impl_linux-ppc64le 11.3.0.*
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: gfortran_osx-64
     version: 11.3.0
@@ -3995,6 +4256,7 @@ packages:
       - libgfortran-devel_osx-64 ==11.3.0
       - libgfortran5 >=11.3.0
     platform: osx
+    purls: []
   - kind: conda
     name: gfortran_osx-arm64
     version: 11.3.0
@@ -4012,6 +4274,7 @@ packages:
       - libgfortran-devel_osx-arm64 ==11.3.0
       - libgfortran5 >=11.3.0
     platform: osx
+    purls: []
   - kind: conda
     name: gitdb
     version: 4.0.10
@@ -4023,6 +4286,7 @@ packages:
       - python >=3.4
       - "smmap >=3.0.1,<4"
     platform: linux
+    purls: []
   - kind: conda
     name: gitdb
     version: 4.0.10
@@ -4034,6 +4298,7 @@ packages:
       - python >=3.4
       - "smmap >=3.0.1,<4"
     platform: linux
+    purls: []
   - kind: conda
     name: gitdb
     version: 4.0.10
@@ -4045,6 +4310,7 @@ packages:
       - python >=3.4
       - "smmap >=3.0.1,<4"
     platform: linux
+    purls: []
   - kind: conda
     name: gitdb
     version: 4.0.10
@@ -4056,6 +4322,7 @@ packages:
       - python >=3.4
       - "smmap >=3.0.1,<4"
     platform: osx
+    purls: []
   - kind: conda
     name: gitdb
     version: 4.0.10
@@ -4067,6 +4334,7 @@ packages:
       - python >=3.4
       - "smmap >=3.0.1,<4"
     platform: osx
+    purls: []
   - kind: conda
     name: gitpython
     version: 3.1.30
@@ -4079,6 +4347,7 @@ packages:
       - python >=3.7
       - typing_extensions >=3.7.4.3
     platform: linux
+    purls: []
   - kind: conda
     name: gitpython
     version: 3.1.30
@@ -4091,6 +4360,7 @@ packages:
       - python >=3.7
       - typing_extensions >=3.7.4.3
     platform: linux
+    purls: []
   - kind: conda
     name: gitpython
     version: 3.1.30
@@ -4103,6 +4373,7 @@ packages:
       - python >=3.7
       - typing_extensions >=3.7.4.3
     platform: linux
+    purls: []
   - kind: conda
     name: gitpython
     version: 3.1.30
@@ -4115,6 +4386,7 @@ packages:
       - python >=3.7
       - typing_extensions >=3.7.4.3
     platform: osx
+    purls: []
   - kind: conda
     name: gitpython
     version: 3.1.30
@@ -4127,6 +4399,7 @@ packages:
       - python >=3.7
       - typing_extensions >=3.7.4.3
     platform: osx
+    purls: []
   - kind: conda
     name: glib
     version: 2.74.1
@@ -4143,6 +4416,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - python *
     platform: linux
+    purls: []
   - kind: conda
     name: glib-tools
     version: 2.74.1
@@ -4156,6 +4430,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: gmp
     version: 6.2.1
@@ -4166,6 +4441,7 @@ packages:
     depends:
       - libcxx >=10.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: gmp
     version: 6.2.1
@@ -4176,6 +4452,7 @@ packages:
     depends:
       - libcxx >=11.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: graphite2
     version: 1.3.13
@@ -4187,6 +4464,7 @@ packages:
       - libgcc-ng >=7.5.0
       - libstdcxx-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: gst-plugins-base
     version: 1.22.0
@@ -4208,6 +4486,7 @@ packages:
       - "libxcb >=1.13,<1.14.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: gstreamer
     version: 1.22.0
@@ -4223,6 +4502,7 @@ packages:
       - "libglib >=2.74.1,<3.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: gstreamer-orc
     version: 0.4.33
@@ -4233,6 +4513,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: gxx
     version: 11.3.0
@@ -4244,6 +4525,7 @@ packages:
       - gcc 11.3.0.*
       - gxx_impl_linux-64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gxx
     version: 11.3.0
@@ -4255,6 +4537,7 @@ packages:
       - gcc 11.3.0.*
       - gxx_impl_linux-aarch64 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gxx
     version: 11.3.0
@@ -4266,6 +4549,7 @@ packages:
       - gcc 11.3.0.*
       - gxx_impl_linux-ppc64le 11.3.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_impl_linux-64
     version: 11.3.0
@@ -4278,6 +4562,7 @@ packages:
       - libstdcxx-devel_linux-64 ==11.3.0 h210ce93_19
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_impl_linux-aarch64
     version: 11.3.0
@@ -4290,6 +4575,7 @@ packages:
       - libstdcxx-devel_linux-aarch64 ==11.3.0 h02014c4_19
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_impl_linux-ppc64le
     version: 11.3.0
@@ -4302,6 +4588,7 @@ packages:
       - libstdcxx-devel_linux-ppc64le ==11.3.0 hcb32637_19
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_linux-64
     version: 11.3.0
@@ -4315,6 +4602,7 @@ packages:
       - gxx_impl_linux-64 11.3.0.*
       - sysroot_linux-64
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_linux-aarch64
     version: 11.3.0
@@ -4328,6 +4616,7 @@ packages:
       - gxx_impl_linux-aarch64 11.3.0.*
       - sysroot_linux-aarch64
     platform: linux
+    purls: []
   - kind: conda
     name: gxx_linux-ppc64le
     version: 11.3.0
@@ -4341,6 +4630,7 @@ packages:
       - gxx_impl_linux-ppc64le 11.3.0.*
       - sysroot_linux-ppc64le
     platform: linux
+    purls: []
   - kind: conda
     name: harfbuzz
     version: 6.0.0
@@ -4357,6 +4647,7 @@ packages:
       - "libglib >=2.74.1,<3.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: hypothesis
     version: 6.68.1
@@ -4373,6 +4664,7 @@ packages:
       - setuptools
       - "sortedcontainers >=2.1.0,<3.0.0"
     platform: linux
+    purls: []
   - kind: conda
     name: hypothesis
     version: 6.68.1
@@ -4389,6 +4681,7 @@ packages:
       - setuptools
       - "sortedcontainers >=2.1.0,<3.0.0"
     platform: linux
+    purls: []
   - kind: conda
     name: hypothesis
     version: 6.68.1
@@ -4405,6 +4698,7 @@ packages:
       - setuptools
       - "sortedcontainers >=2.1.0,<3.0.0"
     platform: linux
+    purls: []
   - kind: conda
     name: hypothesis
     version: 6.68.1
@@ -4421,6 +4715,7 @@ packages:
       - setuptools
       - "sortedcontainers >=2.1.0,<3.0.0"
     platform: osx
+    purls: []
   - kind: conda
     name: hypothesis
     version: 6.68.1
@@ -4437,6 +4732,7 @@ packages:
       - setuptools
       - "sortedcontainers >=2.1.0,<3.0.0"
     platform: osx
+    purls: []
   - kind: conda
     name: icu
     version: "70.1"
@@ -4448,6 +4744,7 @@ packages:
       - libgcc-ng >=10.3.0
       - libstdcxx-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: idna
     version: "3.4"
@@ -4458,6 +4755,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: idna
     version: "3.4"
@@ -4468,6 +4766,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: idna
     version: "3.4"
@@ -4478,6 +4777,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: idna
     version: "3.4"
@@ -4488,6 +4788,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: idna
     version: "3.4"
@@ -4498,6 +4799,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: imagesize
     version: 1.4.1
@@ -4508,6 +4810,7 @@ packages:
     depends:
       - python >=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: imagesize
     version: 1.4.1
@@ -4518,6 +4821,7 @@ packages:
     depends:
       - python >=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: imagesize
     version: 1.4.1
@@ -4528,6 +4832,7 @@ packages:
     depends:
       - python >=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: imagesize
     version: 1.4.1
@@ -4538,6 +4843,7 @@ packages:
     depends:
       - python >=3.4
     platform: osx
+    purls: []
   - kind: conda
     name: imagesize
     version: 1.4.1
@@ -4548,6 +4854,7 @@ packages:
     depends:
       - python >=3.4
     platform: osx
+    purls: []
   - kind: conda
     name: importlib-metadata
     version: 6.0.0
@@ -4559,6 +4866,7 @@ packages:
       - python >=3.8
       - zipp >=0.5
     platform: linux
+    purls: []
   - kind: conda
     name: importlib-metadata
     version: 6.0.0
@@ -4570,6 +4878,7 @@ packages:
       - python >=3.8
       - zipp >=0.5
     platform: linux
+    purls: []
   - kind: conda
     name: importlib-metadata
     version: 6.0.0
@@ -4581,6 +4890,7 @@ packages:
       - python >=3.8
       - zipp >=0.5
     platform: linux
+    purls: []
   - kind: conda
     name: importlib-metadata
     version: 6.0.0
@@ -4592,6 +4902,7 @@ packages:
       - python >=3.8
       - zipp >=0.5
     platform: osx
+    purls: []
   - kind: conda
     name: importlib-metadata
     version: 6.0.0
@@ -4603,6 +4914,7 @@ packages:
       - python >=3.8
       - zipp >=0.5
     platform: osx
+    purls: []
   - kind: conda
     name: iniconfig
     version: 2.0.0
@@ -4613,6 +4925,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: iniconfig
     version: 2.0.0
@@ -4623,6 +4936,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: iniconfig
     version: 2.0.0
@@ -4633,6 +4947,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: iniconfig
     version: 2.0.0
@@ -4643,6 +4958,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: iniconfig
     version: 2.0.0
@@ -4653,6 +4969,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: ipython
     version: 8.10.0
@@ -4674,6 +4991,7 @@ packages:
       - stack_data
       - traitlets >=5
     platform: linux
+    purls: []
   - kind: conda
     name: ipython
     version: 8.10.0
@@ -4695,6 +5013,7 @@ packages:
       - stack_data
       - traitlets >=5
     platform: linux
+    purls: []
   - kind: conda
     name: ipython
     version: 8.10.0
@@ -4716,6 +5035,7 @@ packages:
       - stack_data
       - traitlets >=5
     platform: linux
+    purls: []
   - kind: conda
     name: ipython
     version: 8.10.0
@@ -4738,6 +5058,7 @@ packages:
       - stack_data
       - traitlets >=5
     platform: osx
+    purls: []
   - kind: conda
     name: ipython
     version: 8.10.0
@@ -4760,6 +5081,7 @@ packages:
       - stack_data
       - traitlets >=5
     platform: osx
+    purls: []
   - kind: conda
     name: isl
     version: "0.25"
@@ -4770,6 +5092,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: isl
     version: "0.25"
@@ -4780,6 +5103,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: jack
     version: 1.9.22
@@ -4794,6 +5118,7 @@ packages:
       - "libopus >=1.3.1,<2.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: jedi
     version: 0.18.2
@@ -4805,6 +5130,7 @@ packages:
       - "parso >=0.8.0,<0.9.0"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: jedi
     version: 0.18.2
@@ -4816,6 +5142,7 @@ packages:
       - "parso >=0.8.0,<0.9.0"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: jedi
     version: 0.18.2
@@ -4827,6 +5154,7 @@ packages:
       - "parso >=0.8.0,<0.9.0"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: jedi
     version: 0.18.2
@@ -4838,6 +5166,7 @@ packages:
       - "parso >=0.8.0,<0.9.0"
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: jedi
     version: 0.18.2
@@ -4849,6 +5178,7 @@ packages:
       - "parso >=0.8.0,<0.9.0"
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: jinja2
     version: 3.1.2
@@ -4860,6 +5190,7 @@ packages:
       - markupsafe >=2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: jinja2
     version: 3.1.2
@@ -4871,6 +5202,7 @@ packages:
       - markupsafe >=2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: jinja2
     version: 3.1.2
@@ -4882,6 +5214,7 @@ packages:
       - markupsafe >=2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: jinja2
     version: 3.1.2
@@ -4893,6 +5226,7 @@ packages:
       - markupsafe >=2.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: jinja2
     version: 3.1.2
@@ -4904,6 +5238,7 @@ packages:
       - markupsafe >=2.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: jpeg
     version: 9e
@@ -4914,6 +5249,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: jpeg
     version: 9e
@@ -4924,6 +5260,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: jpeg
     version: 9e
@@ -4934,6 +5271,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: jpeg
     version: 9e
@@ -4942,6 +5280,7 @@ packages:
     sha256: 1ef5f9b4d9817820224c92b016da210b1356250d7272e16901c547e156b3e615
     md5: 6b55131ae9445ef38746dc6b080acda9
     platform: osx
+    purls: []
   - kind: conda
     name: jpeg
     version: 9e
@@ -4950,6 +5289,7 @@ packages:
     sha256: 7e21d03917fb535b39c3af0cc7b7115617556a4ca2fe13018c09407987883b34
     md5: ef1cce2ab799e0c2f32c3344125ff218
     platform: osx
+    purls: []
   - kind: conda
     name: kernel-headers_linux-64
     version: 2.6.32
@@ -4958,6 +5298,7 @@ packages:
     sha256: c9f33acc0f1095bd4e7a2b577dfa41fc3fef3713b3975e8467a0fbed188fe6f4
     md5: 5dd5127afd710f91f6a75821bac0a4f0
     platform: linux
+    purls: []
   - kind: conda
     name: kernel-headers_linux-aarch64
     version: 4.18.0
@@ -4966,6 +5307,7 @@ packages:
     sha256: 14e227d98193550f9da275e58e27de104ab569849f1ce16b810fae4d7b351d49
     md5: a9385e5b11a076c40d75915986f498d7
     platform: linux
+    purls: []
   - kind: conda
     name: kernel-headers_linux-ppc64le
     version: 3.10.0
@@ -4974,6 +5316,7 @@ packages:
     sha256: 6752a00b9bf73087c90fbc3da9284745ec7fb5f960a132d3189c6a053d59cfb8
     md5: 2c36c739b5b1827404dcc96860f9b7e1
     platform: linux
+    purls: []
   - kind: conda
     name: keyutils
     version: 1.6.1
@@ -4984,6 +5327,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: kiwisolver
     version: 1.4.4
@@ -4997,6 +5341,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: kiwisolver
     version: 1.4.4
@@ -5010,6 +5355,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: kiwisolver
     version: 1.4.4
@@ -5023,6 +5369,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: kiwisolver
     version: 1.4.4
@@ -5035,6 +5382,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: kiwisolver
     version: 1.4.4
@@ -5047,6 +5395,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: krb5
     version: 1.20.1
@@ -5061,6 +5410,7 @@ packages:
       - libstdcxx-ng >=12
       - "openssl >=3.0.7,<4.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: lame
     version: "3.100"
@@ -5071,6 +5421,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: lcms2
     version: "2.14"
@@ -5083,6 +5434,7 @@ packages:
       - libgcc-ng >=12
       - "libtiff >=4.5.0,<4.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: lcms2
     version: "2.14"
@@ -5095,6 +5447,7 @@ packages:
       - libgcc-ng >=12
       - "libtiff >=4.5.0,<4.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: lcms2
     version: "2.14"
@@ -5107,6 +5460,7 @@ packages:
       - libgcc-ng >=12
       - "libtiff >=4.5.0,<4.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: lcms2
     version: "2.14"
@@ -5118,6 +5472,7 @@ packages:
       - "jpeg >=9e,<10a"
       - "libtiff >=4.5.0,<4.6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: lcms2
     version: "2.14"
@@ -5129,6 +5484,7 @@ packages:
       - "jpeg >=9e,<10a"
       - "libtiff >=4.5.0,<4.6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: ld64
     version: "609"
@@ -5140,6 +5496,7 @@ packages:
       - ld64_osx-64 ==609 hfd63004_11
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: ld64
     version: "609"
@@ -5151,6 +5508,7 @@ packages:
       - ld64_osx-arm64 ==609 h7167370_11
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: ld64_osx-64
     version: "609"
@@ -5164,6 +5522,7 @@ packages:
       - sigtool
       - "tapi >=1100.0.11,<1101.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: ld64_osx-arm64
     version: "609"
@@ -5177,6 +5536,7 @@ packages:
       - sigtool
       - "tapi >=1100.0.11,<1101.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: ld_impl_linux-64
     version: "2.39"
@@ -5185,6 +5545,7 @@ packages:
     sha256: 3e7f203e33ea497b6e468279cc5fdef7d556473c25e7466b35fd672940392469
     md5: 737be0d34c22d24432049ab7a3214de4
     platform: linux
+    purls: []
   - kind: conda
     name: ld_impl_linux-aarch64
     version: "2.39"
@@ -5193,6 +5554,7 @@ packages:
     sha256: aae71464a25bc5f32db5211621798a0725fc910a6a2a19a6161dbfcb0a7b1e35
     md5: 9daf385ebefaea92087d3a315e398964
     platform: linux
+    purls: []
   - kind: conda
     name: ld_impl_linux-ppc64le
     version: "2.39"
@@ -5201,6 +5563,7 @@ packages:
     sha256: 20d6db1053ae4af65677fc4b4cf9b2d5884ce26ea6b38f7088a5ebad1de62746
     md5: c7db6cc5b9479df1ed884b6147601613
     platform: linux
+    purls: []
   - kind: conda
     name: lerc
     version: 4.0.0
@@ -5212,6 +5575,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: lerc
     version: 4.0.0
@@ -5223,6 +5587,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: lerc
     version: 4.0.0
@@ -5234,6 +5599,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: lerc
     version: 4.0.0
@@ -5244,6 +5610,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: lerc
     version: 4.0.0
@@ -5254,6 +5621,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: libblas
     version: 3.9.0
@@ -5264,6 +5632,7 @@ packages:
     depends:
       - "libopenblas >=0.3.21,<1.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libblas
     version: 3.9.0
@@ -5274,6 +5643,7 @@ packages:
     depends:
       - "libopenblas >=0.3.21,<1.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libblas
     version: 3.9.0
@@ -5284,6 +5654,7 @@ packages:
     depends:
       - "libopenblas >=0.3.21,<1.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libblas
     version: 3.9.0
@@ -5294,6 +5665,7 @@ packages:
     depends:
       - "libopenblas >=0.3.21,<1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libblas
     version: 3.9.0
@@ -5304,6 +5676,7 @@ packages:
     depends:
       - "libopenblas >=0.3.21,<1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlicommon
     version: 1.0.9
@@ -5314,6 +5687,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlicommon
     version: 1.0.9
@@ -5324,6 +5698,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlicommon
     version: 1.0.9
@@ -5334,6 +5709,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlicommon
     version: 1.0.9
@@ -5342,6 +5718,7 @@ packages:
     sha256: c983101653f5bffea605c4423d84fd5ca28ee36b290cdb6207ec246e293f7d94
     md5: 37157d273eaf3bc7d6862104161d9ec9
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlicommon
     version: 1.0.9
@@ -5350,6 +5727,7 @@ packages:
     sha256: 1bd70570aee08fe0274dd46879d0b4c36c662c18d3afc03c41c375c84658af88
     md5: 84eb0c3c995a865079080d092e4a3c06
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlidec
     version: 1.0.9
@@ -5361,6 +5739,7 @@ packages:
       - libbrotlicommon ==1.0.9 h166bdaf_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlidec
     version: 1.0.9
@@ -5372,6 +5751,7 @@ packages:
       - libbrotlicommon ==1.0.9 h4e544f5_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlidec
     version: 1.0.9
@@ -5383,6 +5763,7 @@ packages:
       - libbrotlicommon ==1.0.9 hb283c62_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlidec
     version: 1.0.9
@@ -5393,6 +5774,7 @@ packages:
     depends:
       - libbrotlicommon ==1.0.9 hb7f2c08_8
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlidec
     version: 1.0.9
@@ -5403,6 +5785,7 @@ packages:
     depends:
       - libbrotlicommon ==1.0.9 h1a8c8d9_8
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlienc
     version: 1.0.9
@@ -5414,6 +5797,7 @@ packages:
       - libbrotlicommon ==1.0.9 h166bdaf_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlienc
     version: 1.0.9
@@ -5425,6 +5809,7 @@ packages:
       - libbrotlicommon ==1.0.9 h4e544f5_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlienc
     version: 1.0.9
@@ -5436,6 +5821,7 @@ packages:
       - libbrotlicommon ==1.0.9 hb283c62_8
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libbrotlienc
     version: 1.0.9
@@ -5446,6 +5832,7 @@ packages:
     depends:
       - libbrotlicommon ==1.0.9 hb7f2c08_8
     platform: osx
+    purls: []
   - kind: conda
     name: libbrotlienc
     version: 1.0.9
@@ -5456,6 +5843,7 @@ packages:
     depends:
       - libbrotlicommon ==1.0.9 h1a8c8d9_8
     platform: osx
+    purls: []
   - kind: conda
     name: libcap
     version: "2.66"
@@ -5467,6 +5855,7 @@ packages:
       - "attr >=2.5.1,<2.6.0a0"
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libcblas
     version: 3.9.0
@@ -5477,6 +5866,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linux64_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: libcblas
     version: 3.9.0
@@ -5487,6 +5877,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linuxaarch64_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: libcblas
     version: 3.9.0
@@ -5497,6 +5888,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linuxppc64le_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: libcblas
     version: 3.9.0
@@ -5507,6 +5899,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_osx64_openblas
     platform: osx
+    purls: []
   - kind: conda
     name: libcblas
     version: 3.9.0
@@ -5517,6 +5910,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_osxarm64_openblas
     platform: osx
+    purls: []
   - kind: conda
     name: libclang
     version: 15.0.7
@@ -5531,6 +5925,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libclang-cpp14
     version: 14.0.6
@@ -5542,6 +5937,7 @@ packages:
       - libcxx >=13.0.1
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libclang-cpp14
     version: 14.0.6
@@ -5553,6 +5949,7 @@ packages:
       - libcxx >=13.0.1
       - "libllvm14 >=14.0.6,<14.1.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libclang13
     version: 15.0.7
@@ -5566,6 +5963,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libcups
     version: 2.3.3
@@ -5579,6 +5977,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libcxx
     version: 14.0.6
@@ -5587,6 +5986,7 @@ packages:
     sha256: ebb75dd9f854b1f184a98d0b9128a3faed6cd2f05f83677e1f399c253580afe7
     md5: 208a6a874b073277374de48a782f6b10
     platform: osx
+    purls: []
   - kind: conda
     name: libcxx
     version: 14.0.6
@@ -5595,6 +5995,7 @@ packages:
     sha256: 8e199c6956fad3abcbe9a1468c6219d9e95b64b898e9cf009b82d669c3bfdaf6
     md5: 716c4b72ff3808ade65748fd9b49cc44
     platform: osx
+    purls: []
   - kind: conda
     name: libdb
     version: 6.2.32
@@ -5606,6 +6007,7 @@ packages:
       - libgcc-ng >=9.3.0
       - libstdcxx-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libdeflate
     version: "1.17"
@@ -5616,6 +6018,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libdeflate
     version: "1.17"
@@ -5626,6 +6029,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libdeflate
     version: "1.17"
@@ -5636,6 +6040,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libdeflate
     version: "1.17"
@@ -5644,6 +6049,7 @@ packages:
     sha256: b322e190fd6fe631e1f4836ef99cbfb8352c03c30b51cb5baa216f7c9124d82e
     md5: e3894420cf8b6abbf6c4d3d9742fbb4a
     platform: osx
+    purls: []
   - kind: conda
     name: libdeflate
     version: "1.17"
@@ -5652,6 +6058,7 @@ packages:
     sha256: 9a1979b3f6dc155b8c48987cfae6b13ba19b3e176e4470b87f60011e806218f5
     md5: cae34d3f6ab02e0abf92ec3caaf0bd39
     platform: osx
+    purls: []
   - kind: conda
     name: libedit
     version: 3.1.20191231
@@ -5663,6 +6070,7 @@ packages:
       - libgcc-ng >=7.5.0
       - "ncurses >=6.2,<7.0.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libevent
     version: 2.1.10
@@ -5674,6 +6082,7 @@ packages:
       - libgcc-ng >=9.4.0
       - "openssl >=3.0.0,<4.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libffi
     version: 3.4.2
@@ -5684,6 +6093,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libffi
     version: 3.4.2
@@ -5694,6 +6104,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libffi
     version: 3.4.2
@@ -5704,6 +6115,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libffi
     version: 3.4.2
@@ -5712,6 +6124,7 @@ packages:
     sha256: 7a2d27a936ceee6942ea4d397f9c7d136f12549d86f7617e8b6bad51e01a941f
     md5: ccb34fb14960ad8b125962d3d79b31a9
     platform: osx
+    purls: []
   - kind: conda
     name: libffi
     version: 3.4.2
@@ -5720,6 +6133,7 @@ packages:
     sha256: 41b3d13efb775e340e4dba549ab5c029611ea6918703096b2eaa9c015c0750ca
     md5: 086914b672be056eb70fd4285b6783b6
     platform: osx
+    purls: []
   - kind: conda
     name: libflac
     version: 1.4.2
@@ -5733,6 +6147,7 @@ packages:
       - "libogg >=1.3.4,<1.4.0a0"
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-devel_linux-64
     version: 11.3.0
@@ -5741,6 +6156,7 @@ packages:
     sha256: 70b2c370cc616304f732eeb4014825390dbee044ecbc3875e968b0ea01bd7503
     md5: 9b7bdb0b42ce4e4670d32bfe0532b56a
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-devel_linux-aarch64
     version: 11.3.0
@@ -5749,6 +6165,7 @@ packages:
     sha256: 40f1288935150ab0b524c030d852aa67826db379ff61350c817006b9ce1b2b97
     md5: dde2aeef8efee13089f2fbb2bdb4879e
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-devel_linux-ppc64le
     version: 11.3.0
@@ -5757,6 +6174,7 @@ packages:
     sha256: f4270a73600fe1debf364cfc4b74aac4ca90a052abe9e302301ab62189fc255a
     md5: e652f909e48f3e16a1f4c2a26aaa900b
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-ng
     version: 12.2.0
@@ -5768,6 +6186,7 @@ packages:
       - _libgcc_mutex ==0.1 conda_forge
       - _openmp_mutex >=4.5
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-ng
     version: 12.2.0
@@ -5778,6 +6197,7 @@ packages:
     depends:
       - _openmp_mutex >=4.5
     platform: linux
+    purls: []
   - kind: conda
     name: libgcc-ng
     version: 12.2.0
@@ -5789,6 +6209,7 @@ packages:
       - _libgcc_mutex ==0.1 conda_forge
       - _openmp_mutex >=4.5
     platform: linux
+    purls: []
   - kind: conda
     name: libgcrypt
     version: 1.10.1
@@ -5800,6 +6221,7 @@ packages:
       - libgcc-ng >=10.3.0
       - "libgpg-error >=1.44,<2.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran
     version: 5.0.0
@@ -5810,6 +6232,7 @@ packages:
     depends:
       - libgfortran5
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran
     version: 5.0.0
@@ -5820,6 +6243,7 @@ packages:
     depends:
       - libgfortran5
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran-devel_osx-64
     version: 11.3.0
@@ -5828,6 +6252,7 @@ packages:
     sha256: d93b662d07aeb99417be9b62ca511520865e691d1fc224a63e383727791ac3b7
     md5: 3729d4388eb5a801b148dd4802899dba
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran-devel_osx-arm64
     version: 11.3.0
@@ -5836,6 +6261,7 @@ packages:
     sha256: e0e304772a9c572081ee04b316327cec0659c77890db26548ea600ab9b20e1c8
     md5: 28cf7c6b44b099d8cb4f801dc547cc5c
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran-ng
     version: 12.2.0
@@ -5846,6 +6272,7 @@ packages:
     depends:
       - libgfortran5 ==12.2.0 h337968e_19
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran-ng
     version: 12.2.0
@@ -5856,6 +6283,7 @@ packages:
     depends:
       - libgfortran5 ==12.2.0 hf695500_19
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran-ng
     version: 12.2.0
@@ -5866,6 +6294,7 @@ packages:
     depends:
       - libgfortran5 ==12.2.0 hda65b67_19
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran5
     version: 11.3.0
@@ -5876,6 +6305,7 @@ packages:
     depends:
       - llvm-openmp >=8.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran5
     version: 11.3.0
@@ -5886,6 +6316,7 @@ packages:
     depends:
       - llvm-openmp >=8.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: libgfortran5
     version: 12.2.0
@@ -5894,6 +6325,7 @@ packages:
     sha256: 03ea784edd12037dc3a7a0078ff3f9c3383feabb34d5ba910bb2fd7a21a2d961
     md5: 164b4b1acaedc47ee7e658ae6b308ca3
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran5
     version: 12.2.0
@@ -5902,6 +6334,7 @@ packages:
     sha256: e0496081c3a26c578abd0e292317c80159ebfbd5bb1ecca446894b9adf39abd7
     md5: bc890809e1f807b51bf04dfbee70ddf5
     platform: linux
+    purls: []
   - kind: conda
     name: libgfortran5
     version: 12.2.0
@@ -5910,6 +6343,7 @@ packages:
     sha256: 6131391202198279f8a3744fa08e6f3f6513d8211799608410bca8fe6b76bf37
     md5: 62f0191db9d8e634ed676c0645aee79b
     platform: linux
+    purls: []
   - kind: conda
     name: libglib
     version: 2.74.1
@@ -5926,6 +6360,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "pcre2 >=10.40,<10.41.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libglib
     version: 2.74.1
@@ -5941,6 +6376,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "pcre2 >=10.40,<10.41.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libgomp
     version: 12.2.0
@@ -5951,6 +6387,7 @@ packages:
     depends:
       - _libgcc_mutex ==0.1 conda_forge
     platform: linux
+    purls: []
   - kind: conda
     name: libgomp
     version: 12.2.0
@@ -5959,6 +6396,7 @@ packages:
     sha256: d802eaceaf6f77fb8cb2e990aacf9b3eaa83361b16369a760fc1585841d7885c
     md5: 65b9cb876525dcb2e74a90cf02c6762a
     platform: linux
+    purls: []
   - kind: conda
     name: libgomp
     version: 12.2.0
@@ -5969,6 +6407,7 @@ packages:
     depends:
       - _libgcc_mutex ==0.1 conda_forge
     platform: linux
+    purls: []
   - kind: conda
     name: libgpg-error
     version: "1.46"
@@ -5981,6 +6420,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libiconv
     version: "1.17"
@@ -5991,6 +6431,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libiconv
     version: "1.17"
@@ -6001,6 +6442,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libiconv
     version: "1.17"
@@ -6011,6 +6453,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libiconv
     version: "1.17"
@@ -6019,6 +6462,7 @@ packages:
     sha256: 4a3294037d595754f7da7c11a41f3922f995aaa333f3cb66f02d8afa032a7bc2
     md5: 691d103d11180486154af49c037b7ed9
     platform: osx
+    purls: []
   - kind: conda
     name: libiconv
     version: "1.17"
@@ -6027,6 +6471,7 @@ packages:
     sha256: 2eb33065783b802f71d52bef6f15ce0fafea0adc8506f10ebd0d490244087bec
     md5: 686f9c755574aa221f29fbcf36a67265
     platform: osx
+    purls: []
   - kind: conda
     name: liblapack
     version: 3.9.0
@@ -6037,6 +6482,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linux64_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: liblapack
     version: 3.9.0
@@ -6047,6 +6493,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linuxaarch64_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: liblapack
     version: 3.9.0
@@ -6057,6 +6504,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_linuxppc64le_openblas
     platform: linux
+    purls: []
   - kind: conda
     name: liblapack
     version: 3.9.0
@@ -6067,6 +6515,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_osx64_openblas
     platform: osx
+    purls: []
   - kind: conda
     name: liblapack
     version: 3.9.0
@@ -6077,6 +6526,7 @@ packages:
     depends:
       - libblas ==3.9.0 16_osxarm64_openblas
     platform: osx
+    purls: []
   - kind: conda
     name: libllvm14
     version: 14.0.6
@@ -6088,6 +6538,7 @@ packages:
       - libcxx >=14
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libllvm14
     version: 14.0.6
@@ -6099,6 +6550,7 @@ packages:
       - libcxx >=14
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libllvm15
     version: 15.0.7
@@ -6113,6 +6565,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libnsl
     version: 2.0.0
@@ -6123,6 +6576,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libnsl
     version: 2.0.0
@@ -6133,6 +6587,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libnsl
     version: 2.0.0
@@ -6143,6 +6598,7 @@ packages:
     depends:
       - libgcc-ng >=9.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libogg
     version: 1.3.4
@@ -6153,6 +6609,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libopenblas
     version: 0.3.21
@@ -6165,6 +6622,7 @@ packages:
       - libgfortran-ng
       - libgfortran5 >=10.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libopenblas
     version: 0.3.21
@@ -6177,6 +6635,7 @@ packages:
       - libgfortran-ng
       - libgfortran5 >=10.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libopenblas
     version: 0.3.21
@@ -6189,6 +6648,7 @@ packages:
       - libgfortran-ng
       - libgfortran5 >=10.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: libopenblas
     version: 0.3.21
@@ -6201,6 +6661,7 @@ packages:
       - libgfortran5 >=11.3.0
       - llvm-openmp >=14.0.4
     platform: osx
+    purls: []
   - kind: conda
     name: libopenblas
     version: 0.3.21
@@ -6213,6 +6674,7 @@ packages:
       - libgfortran5 >=11.3.0
       - llvm-openmp >=14.0.4
     platform: osx
+    purls: []
   - kind: conda
     name: libopus
     version: 1.3.1
@@ -6223,6 +6685,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libpng
     version: 1.6.39
@@ -6234,6 +6697,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libpng
     version: 1.6.39
@@ -6245,6 +6709,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libpng
     version: 1.6.39
@@ -6256,6 +6721,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libpng
     version: 1.6.39
@@ -6266,6 +6732,7 @@ packages:
     depends:
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libpng
     version: 1.6.39
@@ -6276,6 +6743,7 @@ packages:
     depends:
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libpq
     version: "15.2"
@@ -6289,6 +6757,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "openssl >=3.0.8,<4.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libsanitizer
     version: 11.3.0
@@ -6299,6 +6768,7 @@ packages:
     depends:
       - libgcc-ng >=11.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libsanitizer
     version: 11.3.0
@@ -6309,6 +6779,7 @@ packages:
     depends:
       - libgcc-ng >=11.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libsanitizer
     version: 11.3.0
@@ -6319,6 +6790,7 @@ packages:
     depends:
       - libgcc-ng >=11.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libsndfile
     version: 1.2.0
@@ -6336,6 +6808,7 @@ packages:
       - "libvorbis >=1.3.7,<1.4.0a0"
       - "mpg123 >=1.31.1,<1.32.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libsqlite
     version: 3.39.4
@@ -6347,6 +6820,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.12,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libsqlite
     version: 3.40.0
@@ -6358,6 +6832,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libsqlite
     version: 3.40.0
@@ -6369,6 +6844,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libsqlite
     version: 3.40.0
@@ -6379,6 +6855,7 @@ packages:
     depends:
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libsqlite
     version: 3.40.0
@@ -6389,6 +6866,7 @@ packages:
     depends:
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libstdcxx-devel_linux-64
     version: 11.3.0
@@ -6397,6 +6875,7 @@ packages:
     sha256: abfcbf3a0f770be88eefebf84ae3a901da9e933799c9eecf3e9b06f34b00a0a5
     md5: 8aee006c0662f551f3acef9a7077a5b9
     platform: linux
+    purls: []
   - kind: conda
     name: libstdcxx-devel_linux-aarch64
     version: 11.3.0
@@ -6405,6 +6884,7 @@ packages:
     sha256: 83a35253ac31c38d502bcff450457a86a9cd175f164cabc82400ea07ad2679be
     md5: 1951ddce2b043a2597eb8317f6fee950
     platform: linux
+    purls: []
   - kind: conda
     name: libstdcxx-devel_linux-ppc64le
     version: 11.3.0
@@ -6413,6 +6893,7 @@ packages:
     sha256: f4f4869b24af9d3f37ac15ced5efd51323a0b92886ba0a50fb79d199ba402dd2
     md5: 7c528de8f0dddad1ef05aa11151f66d6
     platform: linux
+    purls: []
   - kind: conda
     name: libstdcxx-ng
     version: 12.2.0
@@ -6421,6 +6902,7 @@ packages:
     sha256: 0289e6a7b9a5249161a3967909e12dcfb4ab4475cdede984635d3fb65c606f08
     md5: 1030b1f38c129f2634eae026f704fe60
     platform: linux
+    purls: []
   - kind: conda
     name: libstdcxx-ng
     version: 12.2.0
@@ -6429,6 +6911,7 @@ packages:
     sha256: db906f0ad19acc6aefcd5409a7a72fea76302f72013dce7593467ae07dbf54f3
     md5: 981741cd4321edd5c504b48f74fe91f2
     platform: linux
+    purls: []
   - kind: conda
     name: libstdcxx-ng
     version: 12.2.0
@@ -6437,6 +6920,7 @@ packages:
     sha256: 6e630d9cbb4c0680757e4cbe86a09302125283afd791e997d0ae2fc7ce863384
     md5: 7fd9892955253a7e5f49ae0e94703dd7
     platform: linux
+    purls: []
   - kind: conda
     name: libsystemd0
     version: "252"
@@ -6453,6 +6937,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libtiff
     version: 4.5.0
@@ -6471,6 +6956,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libtiff
     version: 4.5.0
@@ -6489,6 +6975,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libtiff
     version: 4.5.0
@@ -6507,6 +6994,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libtiff
     version: 4.5.0
@@ -6524,6 +7012,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libtiff
     version: 4.5.0
@@ -6541,6 +7030,7 @@ packages:
       - "xz >=5.2.6,<6.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: libtool
     version: 2.4.7
@@ -6551,6 +7041,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libudev1
     version: "252"
@@ -6562,6 +7053,7 @@ packages:
       - "__glibc >=2.17,<3.0.a0"
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libuuid
     version: 2.32.1
@@ -6572,6 +7064,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libuuid
     version: 2.32.1
@@ -6582,6 +7075,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libuuid
     version: 2.32.1
@@ -6592,6 +7086,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libvorbis
     version: 1.3.7
@@ -6604,6 +7099,7 @@ packages:
       - "libogg >=1.3.4,<1.4.0a0"
       - libstdcxx-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: libwebp-base
     version: 1.2.4
@@ -6614,6 +7110,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libwebp-base
     version: 1.2.4
@@ -6624,6 +7121,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libwebp-base
     version: 1.2.4
@@ -6634,6 +7132,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libwebp-base
     version: 1.2.4
@@ -6642,6 +7141,7 @@ packages:
     sha256: ca3eb817054ac2942802b6b51dc671ab2af6564da329bebcb2538cdb31b59fa1
     md5: 28807bef802a354f9c164e7ab242c5cb
     platform: osx
+    purls: []
   - kind: conda
     name: libwebp-base
     version: 1.2.4
@@ -6650,6 +7150,7 @@ packages:
     sha256: 43e9557894d07ddbba76fdacf321ca84f2c6da5a649a32a6a91f23e2761d1df4
     md5: 23f90b9f28c585445c52184a3388d01d
     platform: osx
+    purls: []
   - kind: conda
     name: libxcb
     version: "1.13"
@@ -6663,6 +7164,7 @@ packages:
       - xorg-libxau
       - xorg-libxdmcp
     platform: linux
+    purls: []
   - kind: conda
     name: libxcb
     version: "1.13"
@@ -6676,6 +7178,7 @@ packages:
       - xorg-libxau
       - xorg-libxdmcp
     platform: linux
+    purls: []
   - kind: conda
     name: libxcb
     version: "1.13"
@@ -6689,6 +7192,7 @@ packages:
       - xorg-libxau
       - xorg-libxdmcp
     platform: linux
+    purls: []
   - kind: conda
     name: libxcb
     version: "1.13"
@@ -6701,6 +7205,7 @@ packages:
       - xorg-libxau
       - xorg-libxdmcp
     platform: osx
+    purls: []
   - kind: conda
     name: libxcb
     version: "1.13"
@@ -6713,6 +7218,7 @@ packages:
       - xorg-libxau
       - xorg-libxdmcp
     platform: osx
+    purls: []
   - kind: conda
     name: libxkbcommon
     version: 1.0.3
@@ -6725,6 +7231,7 @@ packages:
       - libstdcxx-ng >=7.5.0
       - "libxml2 >=2.9.10,<2.11.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libxml2
     version: 2.10.3
@@ -6739,6 +7246,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "xz >=5.2.6,<6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: libzlib
     version: 1.2.13
@@ -6749,6 +7257,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libzlib
     version: 1.2.13
@@ -6759,6 +7268,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libzlib
     version: 1.2.13
@@ -6769,6 +7279,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: libzlib
     version: 1.2.13
@@ -6777,6 +7288,7 @@ packages:
     sha256: 0d954350222cc12666a1f4852dbc9bcf4904d8e467d29505f2b04ded6518f890
     md5: 35eb3fce8d51ed3c1fd4122bad48250b
     platform: osx
+    purls: []
   - kind: conda
     name: libzlib
     version: 1.2.13
@@ -6785,6 +7297,7 @@ packages:
     sha256: a1bf4a1c107838fea4570a7f1750306d65d84fcf2913d4e0d30b4db785e8f223
     md5: 780852dc54c4c07e64b276a97f89c162
     platform: osx
+    purls: []
   - kind: conda
     name: llvm-openmp
     version: 15.0.7
@@ -6793,6 +7306,7 @@ packages:
     sha256: cc1586b43b757890b7d1cd24e1582345a36c40acd6cb6f9d9affb91de3c62015
     md5: 3faa9933dff6e96333b5ca5274674b63
     platform: osx
+    purls: []
   - kind: conda
     name: llvm-openmp
     version: 15.0.7
@@ -6801,6 +7315,7 @@ packages:
     sha256: 6cc4cf021fc1f06df3b97598bf9583fe7a04fad6a4eef9882558f7932f362bc0
     md5: 358164e15a9320f11b84a53fb8d8e446
     platform: osx
+    purls: []
   - kind: conda
     name: llvm-tools
     version: 14.0.6
@@ -6812,6 +7327,7 @@ packages:
       - libllvm14 ==14.0.6 h5b596cc_1
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: llvm-tools
     version: 14.0.6
@@ -6823,6 +7339,7 @@ packages:
       - libllvm14 ==14.0.6 hf6e71e7_1
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: lz4-c
     version: 1.9.4
@@ -6834,6 +7351,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: markupsafe
     version: 2.1.2
@@ -6846,6 +7364,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: markupsafe
     version: 2.1.2
@@ -6858,6 +7377,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: markupsafe
     version: 2.1.2
@@ -6870,6 +7390,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: markupsafe
     version: 2.1.2
@@ -6881,6 +7402,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: markupsafe
     version: 2.1.2
@@ -6892,6 +7414,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib
     version: 3.6.3
@@ -6906,6 +7429,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tornado >=5
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib
     version: 3.6.3
@@ -6919,6 +7443,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tornado >=5
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib
     version: 3.6.3
@@ -6932,6 +7457,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tornado >=5
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib
     version: 3.6.3
@@ -6945,6 +7471,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tornado >=5
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib
     version: 3.6.3
@@ -6958,6 +7485,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - tornado >=5
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib-base
     version: 3.6.3
@@ -6983,6 +7511,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-base
     version: 3.6.3
@@ -7008,6 +7537,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-base
     version: 3.6.3
@@ -7033,6 +7563,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-base
     version: 3.6.3
@@ -7057,6 +7588,7 @@ packages:
       - python-dateutil >=2.7
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib-base
     version: 3.6.3
@@ -7080,6 +7612,7 @@ packages:
       - python-dateutil >=2.7
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib-inline
     version: 0.1.6
@@ -7091,6 +7624,7 @@ packages:
       - python >=3.6
       - traitlets
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-inline
     version: 0.1.6
@@ -7102,6 +7636,7 @@ packages:
       - python >=3.6
       - traitlets
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-inline
     version: 0.1.6
@@ -7113,6 +7648,7 @@ packages:
       - python >=3.6
       - traitlets
     platform: linux
+    purls: []
   - kind: conda
     name: matplotlib-inline
     version: 0.1.6
@@ -7124,6 +7660,7 @@ packages:
       - python >=3.6
       - traitlets
     platform: osx
+    purls: []
   - kind: conda
     name: matplotlib-inline
     version: 0.1.6
@@ -7135,6 +7672,7 @@ packages:
       - python >=3.6
       - traitlets
     platform: osx
+    purls: []
   - kind: conda
     name: meson
     version: 1.0.0
@@ -7147,6 +7685,7 @@ packages:
       - python >=3.5.2
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: meson
     version: 1.0.0
@@ -7159,6 +7698,7 @@ packages:
       - python >=3.5.2
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: meson
     version: 1.0.0
@@ -7171,6 +7711,7 @@ packages:
       - python >=3.5.2
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: meson
     version: 1.0.0
@@ -7183,6 +7724,7 @@ packages:
       - python >=3.5.2
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: meson
     version: 1.0.0
@@ -7195,6 +7737,7 @@ packages:
       - python >=3.5.2
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: meson-python
     version: 0.12.0
@@ -7212,6 +7755,7 @@ packages:
       - typing-extensions >=3.7.4
       - wheel >=0.36.0
     platform: linux
+    purls: []
   - kind: conda
     name: meson-python
     version: 0.12.0
@@ -7229,6 +7773,7 @@ packages:
       - typing-extensions >=3.7.4
       - wheel >=0.36.0
     platform: linux
+    purls: []
   - kind: conda
     name: meson-python
     version: 0.12.0
@@ -7246,6 +7791,7 @@ packages:
       - typing-extensions >=3.7.4
       - wheel >=0.36.0
     platform: linux
+    purls: []
   - kind: conda
     name: meson-python
     version: 0.12.0
@@ -7263,6 +7809,7 @@ packages:
       - typing-extensions >=3.7.4
       - wheel >=0.36.0
     platform: osx
+    purls: []
   - kind: conda
     name: meson-python
     version: 0.12.0
@@ -7280,6 +7827,7 @@ packages:
       - typing-extensions >=3.7.4
       - wheel >=0.36.0
     platform: osx
+    purls: []
   - kind: conda
     name: mpc
     version: 1.3.1
@@ -7291,6 +7839,7 @@ packages:
       - "gmp >=6.2.1,<7.0a0"
       - "mpfr >=4.1.0,<5.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: mpc
     version: 1.3.1
@@ -7302,6 +7851,7 @@ packages:
       - "gmp >=6.2.1,<7.0a0"
       - "mpfr >=4.1.0,<5.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: mpfr
     version: 4.1.0
@@ -7312,6 +7862,7 @@ packages:
     depends:
       - "gmp >=6.2.1,<7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: mpfr
     version: 4.1.0
@@ -7322,6 +7873,7 @@ packages:
     depends:
       - "gmp >=6.2.0,<7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: mpg123
     version: 1.31.2
@@ -7333,6 +7885,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: munkres
     version: 1.1.4
@@ -7343,6 +7896,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: munkres
     version: 1.1.4
@@ -7353,6 +7907,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: munkres
     version: 1.1.4
@@ -7363,6 +7918,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: munkres
     version: 1.1.4
@@ -7373,6 +7929,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: munkres
     version: 1.1.4
@@ -7383,6 +7940,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: mypy
     version: "0.981"
@@ -7399,6 +7957,7 @@ packages:
       - tomli >=1.1.0
       - typing_extensions >=3.10
     platform: linux
+    purls: []
   - kind: conda
     name: mypy
     version: "0.981"
@@ -7415,6 +7974,7 @@ packages:
       - tomli >=1.1.0
       - typing_extensions >=3.10
     platform: linux
+    purls: []
   - kind: conda
     name: mypy
     version: "0.981"
@@ -7431,6 +7991,7 @@ packages:
       - tomli >=1.1.0
       - typing_extensions >=3.10
     platform: linux
+    purls: []
   - kind: conda
     name: mypy
     version: "0.981"
@@ -7446,6 +8007,7 @@ packages:
       - tomli >=1.1.0
       - typing_extensions >=3.10
     platform: osx
+    purls: []
   - kind: conda
     name: mypy
     version: "0.981"
@@ -7461,6 +8023,7 @@ packages:
       - tomli >=1.1.0
       - typing_extensions >=3.10
     platform: osx
+    purls: []
   - kind: conda
     name: mypy_extensions
     version: 1.0.0
@@ -7471,6 +8034,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: mypy_extensions
     version: 1.0.0
@@ -7481,6 +8045,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: mypy_extensions
     version: 1.0.0
@@ -7491,6 +8056,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: mypy_extensions
     version: 1.0.0
@@ -7501,6 +8067,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: mypy_extensions
     version: 1.0.0
@@ -7511,6 +8078,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: mysql-common
     version: 8.0.32
@@ -7523,6 +8091,7 @@ packages:
       - libstdcxx-ng >=12
       - "openssl >=3.0.7,<4.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: mysql-libs
     version: 8.0.32
@@ -7538,6 +8107,7 @@ packages:
       - "openssl >=3.0.7,<4.0a0"
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -7548,6 +8118,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -7558,6 +8129,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -7568,6 +8140,7 @@ packages:
     depends:
       - libgcc-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -7576,6 +8149,7 @@ packages:
     sha256: 9794a23d03586c99cac49d4ae3d5337faaa6bfc256b31d2662ff4ad5972be143
     md5: 76217ebfbb163ff2770a261f955a5861
     platform: osx
+    purls: []
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -7584,6 +8158,7 @@ packages:
     sha256: 50ba7c13dd7d05569e7caa98a13a3684450f8547b4965a1e86b54e2f1240debe
     md5: db86e5a978380a13f5559f97afdfe99d
     platform: osx
+    purls: []
   - kind: conda
     name: ninja
     version: 1.11.0
@@ -7595,6 +8170,7 @@ packages:
       - libgcc-ng >=10.3.0
       - libstdcxx-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ninja
     version: 1.11.0
@@ -7606,6 +8182,7 @@ packages:
       - libgcc-ng >=10.3.0
       - libstdcxx-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ninja
     version: 1.11.0
@@ -7617,6 +8194,7 @@ packages:
       - libgcc-ng >=10.3.0
       - libstdcxx-ng >=10.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: ninja
     version: 1.11.0
@@ -7627,6 +8205,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: ninja
     version: 1.11.0
@@ -7637,6 +8216,7 @@ packages:
     depends:
       - libcxx >=13.0.1
     platform: osx
+    purls: []
   - kind: conda
     name: nomkl
     version: "1.0"
@@ -7645,6 +8225,7 @@ packages:
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
     md5: 9a66894dfd07c4510beb6b3f9672ccc0
     platform: linux
+    purls: []
   - kind: conda
     name: nomkl
     version: "1.0"
@@ -7653,6 +8234,7 @@ packages:
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
     md5: 9a66894dfd07c4510beb6b3f9672ccc0
     platform: linux
+    purls: []
   - kind: conda
     name: nomkl
     version: "1.0"
@@ -7661,6 +8243,7 @@ packages:
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
     md5: 9a66894dfd07c4510beb6b3f9672ccc0
     platform: linux
+    purls: []
   - kind: conda
     name: nomkl
     version: "1.0"
@@ -7669,6 +8252,7 @@ packages:
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
     md5: 9a66894dfd07c4510beb6b3f9672ccc0
     platform: osx
+    purls: []
   - kind: conda
     name: nomkl
     version: "1.0"
@@ -7677,6 +8261,7 @@ packages:
     sha256: d38542a151a90417065c1a234866f97fd1ea82a81de75ecb725955ab78f88b4b
     md5: 9a66894dfd07c4510beb6b3f9672ccc0
     platform: osx
+    purls: []
   - kind: conda
     name: nspr
     version: "4.35"
@@ -7688,6 +8273,7 @@ packages:
       - libgcc-ng >=12
       - libstdcxx-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: nss
     version: "3.88"
@@ -7703,6 +8289,7 @@ packages:
       - "libzlib >=1.2.13,<1.3.0a0"
       - "nspr >=4.35,<5.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: numpy
     version: 1.24.2
@@ -7719,6 +8306,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: numpy
     version: 1.24.2
@@ -7735,6 +8323,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: numpy
     version: 1.24.2
@@ -7751,6 +8340,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: numpy
     version: 1.24.2
@@ -7766,6 +8356,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: numpy
     version: 1.24.2
@@ -7781,6 +8372,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: numpydoc
     version: 1.4.0
@@ -7793,6 +8385,7 @@ packages:
       - python >=3.7
       - sphinx >=1.8
     platform: linux
+    purls: []
   - kind: conda
     name: numpydoc
     version: 1.4.0
@@ -7805,6 +8398,7 @@ packages:
       - python >=3.7
       - sphinx >=1.8
     platform: linux
+    purls: []
   - kind: conda
     name: numpydoc
     version: 1.4.0
@@ -7817,6 +8411,7 @@ packages:
       - python >=3.7
       - sphinx >=1.8
     platform: linux
+    purls: []
   - kind: conda
     name: numpydoc
     version: 1.4.0
@@ -7829,6 +8424,7 @@ packages:
       - python >=3.7
       - sphinx >=1.8
     platform: osx
+    purls: []
   - kind: conda
     name: numpydoc
     version: 1.4.0
@@ -7841,6 +8437,7 @@ packages:
       - python >=3.7
       - sphinx >=1.8
     platform: osx
+    purls: []
   - kind: conda
     name: openblas
     version: 0.3.21
@@ -7854,6 +8451,7 @@ packages:
       - libgfortran5 >=10.4.0
       - libopenblas ==0.3.21 pthreads_h78a6416_3
     platform: linux
+    purls: []
   - kind: conda
     name: openblas
     version: 0.3.21
@@ -7867,6 +8465,7 @@ packages:
       - libgfortran5 >=10.4.0
       - libopenblas ==0.3.21 pthreads_h6cb6f83_3
     platform: linux
+    purls: []
   - kind: conda
     name: openblas
     version: 0.3.21
@@ -7880,6 +8479,7 @@ packages:
       - libgfortran5 >=10.4.0
       - libopenblas ==0.3.21 pthreads_h60f2977_3
     platform: linux
+    purls: []
   - kind: conda
     name: openblas
     version: 0.3.21
@@ -7893,6 +8493,7 @@ packages:
       - libopenblas ==0.3.21 openmp_h429af6e_3
       - llvm-openmp >=14.0.4
     platform: osx
+    purls: []
   - kind: conda
     name: openblas
     version: 0.3.21
@@ -7906,6 +8507,7 @@ packages:
       - libopenblas ==0.3.21 openmp_hc731615_3
       - llvm-openmp >=14.0.4
     platform: osx
+    purls: []
   - kind: conda
     name: openjpeg
     version: 2.5.0
@@ -7920,6 +8522,7 @@ packages:
       - "libtiff >=4.5.0,<4.6.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: openjpeg
     version: 2.5.0
@@ -7934,6 +8537,7 @@ packages:
       - "libtiff >=4.5.0,<4.6.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: openjpeg
     version: 2.5.0
@@ -7948,6 +8552,7 @@ packages:
       - "libtiff >=4.5.0,<4.6.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: openjpeg
     version: 2.5.0
@@ -7961,6 +8566,7 @@ packages:
       - "libtiff >=4.5.0,<4.6.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: openjpeg
     version: 2.5.0
@@ -7974,6 +8580,7 @@ packages:
       - "libtiff >=4.5.0,<4.6.0a0"
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: openssl
     version: 3.0.8
@@ -7985,6 +8592,7 @@ packages:
       - ca-certificates
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: openssl
     version: 3.0.8
@@ -7996,6 +8604,7 @@ packages:
       - ca-certificates
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: openssl
     version: 3.0.8
@@ -8007,6 +8616,7 @@ packages:
       - ca-certificates
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: openssl
     version: 3.0.8
@@ -8017,6 +8627,7 @@ packages:
     depends:
       - ca-certificates
     platform: osx
+    purls: []
   - kind: conda
     name: openssl
     version: 3.0.8
@@ -8027,6 +8638,7 @@ packages:
     depends:
       - ca-certificates
     platform: osx
+    purls: []
   - kind: conda
     name: packaging
     version: "23.0"
@@ -8037,6 +8649,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: packaging
     version: "23.0"
@@ -8047,6 +8660,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: packaging
     version: "23.0"
@@ -8057,6 +8671,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: packaging
     version: "23.0"
@@ -8067,6 +8682,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: packaging
     version: "23.0"
@@ -8077,6 +8693,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: pandas
     version: 1.5.3
@@ -8093,6 +8710,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - pytz >=2020.1
     platform: linux
+    purls: []
   - kind: conda
     name: pandas
     version: 1.5.3
@@ -8109,6 +8727,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - pytz >=2020.1
     platform: linux
+    purls: []
   - kind: conda
     name: pandas
     version: 1.5.3
@@ -8125,6 +8744,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - pytz >=2020.1
     platform: linux
+    purls: []
   - kind: conda
     name: pandas
     version: 1.5.3
@@ -8140,6 +8760,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - pytz >=2020.1
     platform: osx
+    purls: []
   - kind: conda
     name: pandas
     version: 1.5.3
@@ -8155,6 +8776,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - pytz >=2020.1
     platform: osx
+    purls: []
   - kind: conda
     name: parso
     version: 0.8.3
@@ -8165,6 +8787,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: parso
     version: 0.8.3
@@ -8175,6 +8798,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: parso
     version: 0.8.3
@@ -8185,6 +8809,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: parso
     version: 0.8.3
@@ -8195,6 +8820,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: parso
     version: 0.8.3
@@ -8205,6 +8831,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pcre2
     version: "10.40"
@@ -8217,6 +8844,7 @@ packages:
       - libgcc-ng >=12
       - "libzlib >=1.2.12,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pcre2
     version: "10.40"
@@ -8228,6 +8856,7 @@ packages:
       - "bzip2 >=1.0.8,<2.0a0"
       - "libzlib >=1.2.12,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: pexpect
     version: 4.8.0
@@ -8239,6 +8868,7 @@ packages:
       - ptyprocess >=0.5
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: pexpect
     version: 4.8.0
@@ -8250,6 +8880,7 @@ packages:
       - ptyprocess >=0.5
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: pexpect
     version: 4.8.0
@@ -8261,6 +8892,7 @@ packages:
       - ptyprocess >=0.5
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: pexpect
     version: 4.8.0
@@ -8272,6 +8904,7 @@ packages:
       - ptyprocess >=0.5
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: pexpect
     version: 4.8.0
@@ -8283,6 +8916,7 @@ packages:
       - ptyprocess >=0.5
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: pickleshare
     version: 0.7.5
@@ -8293,6 +8927,7 @@ packages:
     depends:
       - python >=3
     platform: linux
+    purls: []
   - kind: conda
     name: pickleshare
     version: 0.7.5
@@ -8303,6 +8938,7 @@ packages:
     depends:
       - python >=3
     platform: linux
+    purls: []
   - kind: conda
     name: pickleshare
     version: 0.7.5
@@ -8313,6 +8949,7 @@ packages:
     depends:
       - python >=3
     platform: linux
+    purls: []
   - kind: conda
     name: pickleshare
     version: 0.7.5
@@ -8323,6 +8960,7 @@ packages:
     depends:
       - python >=3
     platform: osx
+    purls: []
   - kind: conda
     name: pickleshare
     version: 0.7.5
@@ -8333,6 +8971,7 @@ packages:
     depends:
       - python >=3
     platform: osx
+    purls: []
   - kind: conda
     name: pillow
     version: 9.4.0
@@ -8354,6 +8993,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pillow
     version: 9.4.0
@@ -8375,6 +9015,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pillow
     version: 9.4.0
@@ -8396,6 +9037,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pillow
     version: 9.4.0
@@ -8416,6 +9058,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: pillow
     version: 9.4.0
@@ -8436,6 +9079,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - "tk >=8.6.12,<8.7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: pip
     version: "23.0"
@@ -8448,6 +9092,7 @@ packages:
       - setuptools
       - wheel
     platform: linux
+    purls: []
   - kind: conda
     name: pip
     version: "23.0"
@@ -8460,6 +9105,7 @@ packages:
       - setuptools
       - wheel
     platform: linux
+    purls: []
   - kind: conda
     name: pip
     version: "23.0"
@@ -8472,6 +9118,7 @@ packages:
       - setuptools
       - wheel
     platform: linux
+    purls: []
   - kind: conda
     name: pip
     version: "23.0"
@@ -8484,6 +9131,7 @@ packages:
       - setuptools
       - wheel
     platform: osx
+    purls: []
   - kind: conda
     name: pip
     version: "23.0"
@@ -8496,6 +9144,7 @@ packages:
       - setuptools
       - wheel
     platform: osx
+    purls: []
   - kind: conda
     name: pixman
     version: 0.40.0
@@ -8506,6 +9155,7 @@ packages:
     depends:
       - libgcc-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: pkg-config
     version: 0.29.2
@@ -8516,6 +9166,7 @@ packages:
     depends:
       - libgcc-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: pkg-config
     version: 0.29.2
@@ -8526,6 +9177,7 @@ packages:
     depends:
       - libgcc-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: pkg-config
     version: 0.29.2
@@ -8536,6 +9188,7 @@ packages:
     depends:
       - libgcc-ng >=8.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: pkg-config
     version: 0.29.2
@@ -8546,6 +9199,7 @@ packages:
     depends:
       - "libiconv >=1.16,<2.0.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: pkg-config
     version: 0.29.2
@@ -8557,6 +9211,7 @@ packages:
       - "libglib >=2.70.2,<3.0a0"
       - "libiconv >=1.16,<2.0.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: pluggy
     version: 1.0.0
@@ -8567,6 +9222,7 @@ packages:
     depends:
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pluggy
     version: 1.0.0
@@ -8577,6 +9233,7 @@ packages:
     depends:
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pluggy
     version: 1.0.0
@@ -8587,6 +9244,7 @@ packages:
     depends:
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pluggy
     version: 1.0.0
@@ -8597,6 +9255,7 @@ packages:
     depends:
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: pluggy
     version: 1.0.0
@@ -8607,6 +9266,7 @@ packages:
     depends:
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: ply
     version: "3.11"
@@ -8617,6 +9277,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: pooch
     version: 1.6.0
@@ -8630,6 +9291,7 @@ packages:
       - python >=3.6
       - requests >=2.19.0
     platform: linux
+    purls: []
   - kind: conda
     name: pooch
     version: 1.6.0
@@ -8643,6 +9305,7 @@ packages:
       - python >=3.6
       - requests >=2.19.0
     platform: linux
+    purls: []
   - kind: conda
     name: pooch
     version: 1.6.0
@@ -8656,6 +9319,7 @@ packages:
       - python >=3.6
       - requests >=2.19.0
     platform: linux
+    purls: []
   - kind: conda
     name: pooch
     version: 1.6.0
@@ -8669,6 +9333,7 @@ packages:
       - python >=3.6
       - requests >=2.19.0
     platform: osx
+    purls: []
   - kind: conda
     name: pooch
     version: 1.6.0
@@ -8682,6 +9347,7 @@ packages:
       - python >=3.6
       - requests >=2.19.0
     platform: osx
+    purls: []
   - kind: conda
     name: prompt-toolkit
     version: 3.0.36
@@ -8693,6 +9359,7 @@ packages:
       - python >=3.6
       - wcwidth
     platform: linux
+    purls: []
   - kind: conda
     name: prompt-toolkit
     version: 3.0.36
@@ -8704,6 +9371,7 @@ packages:
       - python >=3.6
       - wcwidth
     platform: linux
+    purls: []
   - kind: conda
     name: prompt-toolkit
     version: 3.0.36
@@ -8715,6 +9383,7 @@ packages:
       - python >=3.6
       - wcwidth
     platform: linux
+    purls: []
   - kind: conda
     name: prompt-toolkit
     version: 3.0.36
@@ -8726,6 +9395,7 @@ packages:
       - python >=3.6
       - wcwidth
     platform: osx
+    purls: []
   - kind: conda
     name: prompt-toolkit
     version: 3.0.36
@@ -8737,6 +9407,7 @@ packages:
       - python >=3.6
       - wcwidth
     platform: osx
+    purls: []
   - kind: conda
     name: psutil
     version: 5.9.4
@@ -8749,6 +9420,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: psutil
     version: 5.9.4
@@ -8761,6 +9433,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: psutil
     version: 5.9.4
@@ -8773,6 +9446,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: psutil
     version: 5.9.4
@@ -8784,6 +9458,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: psutil
     version: 5.9.4
@@ -8795,6 +9470,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: pthread-stubs
     version: "0.4"
@@ -8805,6 +9481,7 @@ packages:
     depends:
       - libgcc-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: pthread-stubs
     version: "0.4"
@@ -8815,6 +9492,7 @@ packages:
     depends:
       - libgcc-ng >=7.5.0
     platform: linux
+    purls: []
   - kind: conda
     name: pthread-stubs
     version: "0.4"
@@ -8825,6 +9503,7 @@ packages:
     depends:
       - libgcc-ng >=8.4.0
     platform: linux
+    purls: []
   - kind: conda
     name: pthread-stubs
     version: "0.4"
@@ -8833,6 +9512,7 @@ packages:
     sha256: 6e3900bb241bcdec513d4e7180fe9a19186c1a38f0b4080ed619d26014222c53
     md5: addd19059de62181cd11ae8f4ef26084
     platform: osx
+    purls: []
   - kind: conda
     name: pthread-stubs
     version: "0.4"
@@ -8841,6 +9521,7 @@ packages:
     sha256: 9da9e6f5d51dff6ad2e4ee0874791437ba952e0a6249942273f0fedfd07ea826
     md5: d3f26c6494d4105d4ecb85203d687102
     platform: osx
+    purls: []
   - kind: conda
     name: ptyprocess
     version: 0.7.0
@@ -8851,6 +9532,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: ptyprocess
     version: 0.7.0
@@ -8861,6 +9543,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: ptyprocess
     version: 0.7.0
@@ -8871,6 +9554,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: ptyprocess
     version: 0.7.0
@@ -8881,6 +9565,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: ptyprocess
     version: 0.7.0
@@ -8891,6 +9576,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: pulseaudio
     version: "16.1"
@@ -8913,6 +9599,7 @@ packages:
       - libudev1 >=252
       - "openssl >=3.0.7,<4.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pure_eval
     version: 0.2.2
@@ -8923,6 +9610,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pure_eval
     version: 0.2.2
@@ -8933,6 +9621,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pure_eval
     version: 0.2.2
@@ -8943,6 +9632,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pure_eval
     version: 0.2.2
@@ -8953,6 +9643,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: pure_eval
     version: 0.2.2
@@ -8963,6 +9654,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: pycodestyle
     version: 2.7.0
@@ -8973,6 +9665,7 @@ packages:
     depends:
       - python 2.7.*|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pycodestyle
     version: 2.7.0
@@ -8983,6 +9676,7 @@ packages:
     depends:
       - python 2.7.*|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pycodestyle
     version: 2.7.0
@@ -8993,6 +9687,7 @@ packages:
     depends:
       - python 2.7.*|>=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: pycodestyle
     version: 2.7.0
@@ -9003,6 +9698,7 @@ packages:
     depends:
       - python 2.7.*|>=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: pycodestyle
     version: 2.7.0
@@ -9013,6 +9709,7 @@ packages:
     depends:
       - python 2.7.*|>=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: pycparser
     version: "2.21"
@@ -9023,6 +9720,7 @@ packages:
     depends:
       - python 2.7.*|>=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: pycparser
     version: "2.21"
@@ -9033,6 +9731,7 @@ packages:
     depends:
       - python 2.7.*|>=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: pycparser
     version: "2.21"
@@ -9043,6 +9742,7 @@ packages:
     depends:
       - python 2.7.*|>=3.4
     platform: linux
+    purls: []
   - kind: conda
     name: pycparser
     version: "2.21"
@@ -9053,6 +9753,7 @@ packages:
     depends:
       - python 2.7.*|>=3.4
     platform: osx
+    purls: []
   - kind: conda
     name: pycparser
     version: "2.21"
@@ -9063,6 +9764,7 @@ packages:
     depends:
       - python 2.7.*|>=3.4
     platform: osx
+    purls: []
   - kind: conda
     name: pydata-sphinx-theme
     version: 0.9.0
@@ -9077,6 +9779,7 @@ packages:
       - python >=3.7
       - sphinx >=4.0.2
     platform: linux
+    purls: []
   - kind: conda
     name: pydata-sphinx-theme
     version: 0.9.0
@@ -9091,6 +9794,7 @@ packages:
       - python >=3.7
       - sphinx >=4.0.2
     platform: linux
+    purls: []
   - kind: conda
     name: pydata-sphinx-theme
     version: 0.9.0
@@ -9105,6 +9809,7 @@ packages:
       - python >=3.7
       - sphinx >=4.0.2
     platform: linux
+    purls: []
   - kind: conda
     name: pydata-sphinx-theme
     version: 0.9.0
@@ -9119,6 +9824,7 @@ packages:
       - python >=3.7
       - sphinx >=4.0.2
     platform: osx
+    purls: []
   - kind: conda
     name: pydata-sphinx-theme
     version: 0.9.0
@@ -9133,6 +9839,7 @@ packages:
       - python >=3.7
       - sphinx >=4.0.2
     platform: osx
+    purls: []
   - kind: conda
     name: pygments
     version: 2.14.0
@@ -9144,6 +9851,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: pygments
     version: 2.14.0
@@ -9155,6 +9863,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: pygments
     version: 2.14.0
@@ -9166,6 +9875,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: linux
+    purls: []
   - kind: conda
     name: pygments
     version: 2.14.0
@@ -9177,6 +9887,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: pygments
     version: 2.14.0
@@ -9188,6 +9899,7 @@ packages:
       - python >=3.6
       - setuptools
     platform: osx
+    purls: []
   - kind: conda
     name: pyopenssl
     version: 23.0.0
@@ -9199,6 +9911,7 @@ packages:
       - "cryptography >=38.0.0,<40"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyopenssl
     version: 23.0.0
@@ -9210,6 +9923,7 @@ packages:
       - "cryptography >=38.0.0,<40"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyopenssl
     version: 23.0.0
@@ -9221,6 +9935,7 @@ packages:
       - "cryptography >=38.0.0,<40"
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyopenssl
     version: 23.0.0
@@ -9232,6 +9947,7 @@ packages:
       - "cryptography >=38.0.0,<40"
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pyopenssl
     version: 23.0.0
@@ -9243,6 +9959,7 @@ packages:
       - "cryptography >=38.0.0,<40"
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pyparsing
     version: 3.0.9
@@ -9253,6 +9970,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyparsing
     version: 3.0.9
@@ -9263,6 +9981,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyparsing
     version: 3.0.9
@@ -9273,6 +9992,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pyparsing
     version: 3.0.9
@@ -9283,6 +10003,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pyparsing
     version: 3.0.9
@@ -9293,6 +10014,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pyproject-metadata
     version: 0.7.1
@@ -9304,6 +10026,7 @@ packages:
       - packaging >=19.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pyproject-metadata
     version: 0.7.1
@@ -9315,6 +10038,7 @@ packages:
       - packaging >=19.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pyproject-metadata
     version: 0.7.1
@@ -9326,6 +10050,7 @@ packages:
       - packaging >=19.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pyproject-metadata
     version: 0.7.1
@@ -9337,6 +10062,7 @@ packages:
       - packaging >=19.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: pyproject-metadata
     version: 0.7.1
@@ -9348,6 +10074,7 @@ packages:
       - packaging >=19.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: pyqt
     version: 5.15.7
@@ -9364,6 +10091,7 @@ packages:
       - "qt-main >=5.15.6,<5.16.0a0"
       - "sip >=6.7.5,<6.8.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: pyqt5-sip
     version: 12.11.0
@@ -9380,6 +10108,7 @@ packages:
       - sip
       - toml
     platform: linux
+    purls: []
   - kind: conda
     name: pysocks
     version: 1.7.1
@@ -9391,6 +10120,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pysocks
     version: 1.7.1
@@ -9402,6 +10132,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pysocks
     version: 1.7.1
@@ -9413,6 +10144,7 @@ packages:
       - __unix
       - python >=3.8
     platform: linux
+    purls: []
   - kind: conda
     name: pysocks
     version: 1.7.1
@@ -9424,6 +10156,7 @@ packages:
       - __unix
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: pysocks
     version: 1.7.1
@@ -9435,6 +10168,7 @@ packages:
       - __unix
       - python >=3.8
     platform: osx
+    purls: []
   - kind: conda
     name: pytest
     version: 7.2.1
@@ -9452,6 +10186,7 @@ packages:
       - python >=3.8
       - tomli >=1.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: pytest
     version: 7.2.1
@@ -9469,6 +10204,7 @@ packages:
       - python >=3.8
       - tomli >=1.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: pytest
     version: 7.2.1
@@ -9486,6 +10222,7 @@ packages:
       - python >=3.8
       - tomli >=1.0.0
     platform: linux
+    purls: []
   - kind: conda
     name: pytest
     version: 7.2.1
@@ -9503,6 +10240,7 @@ packages:
       - python >=3.8
       - tomli >=1.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: pytest
     version: 7.2.1
@@ -9520,6 +10258,7 @@ packages:
       - python >=3.8
       - tomli >=1.0.0
     platform: osx
+    purls: []
   - kind: conda
     name: pytest-cov
     version: 4.0.0
@@ -9533,6 +10272,7 @@ packages:
       - python >=3.6
       - toml
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-cov
     version: 4.0.0
@@ -9546,6 +10286,7 @@ packages:
       - python >=3.6
       - toml
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-cov
     version: 4.0.0
@@ -9559,6 +10300,7 @@ packages:
       - python >=3.6
       - toml
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-cov
     version: 4.0.0
@@ -9572,6 +10314,7 @@ packages:
       - python >=3.6
       - toml
     platform: osx
+    purls: []
   - kind: conda
     name: pytest-cov
     version: 4.0.0
@@ -9585,6 +10328,7 @@ packages:
       - python >=3.6
       - toml
     platform: osx
+    purls: []
   - kind: conda
     name: pytest-xdist
     version: 3.2.0
@@ -9597,6 +10341,7 @@ packages:
       - pytest >=6.2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-xdist
     version: 3.2.0
@@ -9609,6 +10354,7 @@ packages:
       - pytest >=6.2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-xdist
     version: 3.2.0
@@ -9621,6 +10367,7 @@ packages:
       - pytest >=6.2.0
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: pytest-xdist
     version: 3.2.0
@@ -9633,6 +10380,7 @@ packages:
       - pytest >=6.2.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: pytest-xdist
     version: 3.2.0
@@ -9645,6 +10393,7 @@ packages:
       - pytest >=6.2.0
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: python
     version: 3.9.16
@@ -9669,6 +10418,7 @@ packages:
       - tzdata
       - "xz >=5.2.6,<6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: python
     version: 3.9.16
@@ -9693,6 +10443,7 @@ packages:
       - tzdata
       - "xz >=5.2.6,<6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: python
     version: 3.9.16
@@ -9717,6 +10468,7 @@ packages:
       - tzdata
       - "xz >=5.2.6,<6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: python
     version: 3.9.16
@@ -9737,6 +10489,7 @@ packages:
       - tzdata
       - "xz >=5.2.6,<6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: python
     version: 3.9.16
@@ -9757,6 +10510,7 @@ packages:
       - tzdata
       - "xz >=5.2.6,<6.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: python-dateutil
     version: 2.8.2
@@ -9768,6 +10522,7 @@ packages:
       - python >=3.6
       - six >=1.5
     platform: linux
+    purls: []
   - kind: conda
     name: python-dateutil
     version: 2.8.2
@@ -9779,6 +10534,7 @@ packages:
       - python >=3.6
       - six >=1.5
     platform: linux
+    purls: []
   - kind: conda
     name: python-dateutil
     version: 2.8.2
@@ -9790,6 +10546,7 @@ packages:
       - python >=3.6
       - six >=1.5
     platform: linux
+    purls: []
   - kind: conda
     name: python-dateutil
     version: 2.8.2
@@ -9801,6 +10558,7 @@ packages:
       - python >=3.6
       - six >=1.5
     platform: osx
+    purls: []
   - kind: conda
     name: python-dateutil
     version: 2.8.2
@@ -9812,6 +10570,7 @@ packages:
       - python >=3.6
       - six >=1.5
     platform: osx
+    purls: []
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -9820,6 +10579,7 @@ packages:
     sha256: 89e8c4436dd04d8b4a0c13c508e930be56973a480a9714171969de953bdafd3a
     md5: 0dd193187d54e585cac7eab942a8847e
     platform: linux
+    purls: []
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -9828,6 +10588,7 @@ packages:
     sha256: f9ea2e91bd871899b5c2682e6ef78523b68769a62ea86af86894cfc5d37d1f0a
     md5: b6f330b045cf3425945d536a6b5cd240
     platform: linux
+    purls: []
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -9836,6 +10597,7 @@ packages:
     sha256: 3321ab95a62cefe8b305da972b8780647fd8063e96ee331e2b6c9070353272c2
     md5: 4f09b636d43728c2906cf03a18a4e8f6
     platform: linux
+    purls: []
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -9844,6 +10606,7 @@ packages:
     sha256: b02e179f015b042510da8ba256c86f5cfb34058a96ec1c548f33f9f8bcdbb78c
     md5: 021e2768e8eaf24ee8e25aec64d305a1
     platform: osx
+    purls: []
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -9852,6 +10615,7 @@ packages:
     sha256: 9434a23c734685db9a5017206dae58f141e2edddec2ee9e1ec10a3fdefa55c0f
     md5: f8fb5fb65327a2429b084833c8ff1dbc
     platform: osx
+    purls: []
   - kind: conda
     name: pytz
     version: 2022.7.1
@@ -9862,6 +10626,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pytz
     version: 2022.7.1
@@ -9872,6 +10637,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pytz
     version: 2022.7.1
@@ -9882,6 +10648,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: pytz
     version: 2022.7.1
@@ -9892,6 +10659,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: pytz
     version: 2022.7.1
@@ -9902,6 +10670,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: qt-main
     version: 5.15.8
@@ -9949,6 +10718,7 @@ packages:
       - xcb-util-wm
       - "zstd >=1.5.2,<1.6.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: readline
     version: 8.1.2
@@ -9960,6 +10730,7 @@ packages:
       - libgcc-ng >=12
       - "ncurses >=6.3,<7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: readline
     version: 8.1.2
@@ -9971,6 +10742,7 @@ packages:
       - libgcc-ng >=12
       - "ncurses >=6.3,<7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: readline
     version: 8.1.2
@@ -9982,6 +10754,7 @@ packages:
       - libgcc-ng >=12
       - "ncurses >=6.3,<7.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: readline
     version: 8.1.2
@@ -9992,6 +10765,7 @@ packages:
     depends:
       - "ncurses >=6.3,<7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: readline
     version: 8.1.2
@@ -10002,6 +10776,7 @@ packages:
     depends:
       - "ncurses >=6.3,<7.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: requests
     version: 2.28.2
@@ -10016,6 +10791,7 @@ packages:
       - "python >=3.7,<4.0"
       - "urllib3 >=1.21.1,<1.27"
     platform: linux
+    purls: []
   - kind: conda
     name: requests
     version: 2.28.2
@@ -10030,6 +10806,7 @@ packages:
       - "python >=3.7,<4.0"
       - "urllib3 >=1.21.1,<1.27"
     platform: linux
+    purls: []
   - kind: conda
     name: requests
     version: 2.28.2
@@ -10044,6 +10821,7 @@ packages:
       - "python >=3.7,<4.0"
       - "urllib3 >=1.21.1,<1.27"
     platform: linux
+    purls: []
   - kind: conda
     name: requests
     version: 2.28.2
@@ -10058,6 +10836,7 @@ packages:
       - "python >=3.7,<4.0"
       - "urllib3 >=1.21.1,<1.27"
     platform: osx
+    purls: []
   - kind: conda
     name: requests
     version: 2.28.2
@@ -10072,6 +10851,7 @@ packages:
       - "python >=3.7,<4.0"
       - "urllib3 >=1.21.1,<1.27"
     platform: osx
+    purls: []
   - kind: conda
     name: scipy
     version: 1.10.0
@@ -10092,6 +10872,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: scipy
     version: 1.10.0
@@ -10112,6 +10893,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: scipy
     version: 1.10.0
@@ -10132,6 +10914,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: scipy
     version: 1.10.0
@@ -10151,6 +10934,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: scipy
     version: 1.10.0
@@ -10170,6 +10954,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: setuptools
     version: 59.2.0
@@ -10181,6 +10966,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: setuptools
     version: 59.2.0
@@ -10192,6 +10978,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: setuptools
     version: 59.2.0
@@ -10203,6 +10990,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: setuptools
     version: 59.2.0
@@ -10214,6 +11002,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: setuptools
     version: 59.2.0
@@ -10225,6 +11014,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: sigtool
     version: 0.1.3
@@ -10235,6 +11025,7 @@ packages:
     depends:
       - "openssl >=3.0.0,<4.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: sigtool
     version: 0.1.3
@@ -10245,6 +11036,7 @@ packages:
     depends:
       - "openssl >=3.0.0,<4.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: sip
     version: 6.7.7
@@ -10261,6 +11053,7 @@ packages:
       - python_abi 3.9.* *_cp39
       - toml
     platform: linux
+    purls: []
   - kind: conda
     name: six
     version: 1.16.0
@@ -10271,6 +11064,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: six
     version: 1.16.0
@@ -10281,6 +11075,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: six
     version: 1.16.0
@@ -10291,6 +11086,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: six
     version: 1.16.0
@@ -10301,6 +11097,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: six
     version: 1.16.0
@@ -10311,6 +11108,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: smmap
     version: 3.0.5
@@ -10321,6 +11119,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: smmap
     version: 3.0.5
@@ -10331,6 +11130,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: smmap
     version: 3.0.5
@@ -10341,6 +11141,7 @@ packages:
     depends:
       - python
     platform: linux
+    purls: []
   - kind: conda
     name: smmap
     version: 3.0.5
@@ -10351,6 +11152,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: smmap
     version: 3.0.5
@@ -10361,6 +11163,7 @@ packages:
     depends:
       - python
     platform: osx
+    purls: []
   - kind: conda
     name: snowballstemmer
     version: 2.2.0
@@ -10371,6 +11174,7 @@ packages:
     depends:
       - python >=2
     platform: linux
+    purls: []
   - kind: conda
     name: snowballstemmer
     version: 2.2.0
@@ -10381,6 +11185,7 @@ packages:
     depends:
       - python >=2
     platform: linux
+    purls: []
   - kind: conda
     name: snowballstemmer
     version: 2.2.0
@@ -10391,6 +11196,7 @@ packages:
     depends:
       - python >=2
     platform: linux
+    purls: []
   - kind: conda
     name: snowballstemmer
     version: 2.2.0
@@ -10401,6 +11207,7 @@ packages:
     depends:
       - python >=2
     platform: osx
+    purls: []
   - kind: conda
     name: snowballstemmer
     version: 2.2.0
@@ -10411,6 +11218,7 @@ packages:
     depends:
       - python >=2
     platform: osx
+    purls: []
   - kind: conda
     name: sortedcontainers
     version: 2.4.0
@@ -10421,6 +11229,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: sortedcontainers
     version: 2.4.0
@@ -10431,6 +11240,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: sortedcontainers
     version: 2.4.0
@@ -10441,6 +11251,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: sortedcontainers
     version: 2.4.0
@@ -10451,6 +11262,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: sortedcontainers
     version: 2.4.0
@@ -10461,6 +11273,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: soupsieve
     version: 2.3.2.post1
@@ -10471,6 +11284,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: soupsieve
     version: 2.3.2.post1
@@ -10481,6 +11295,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: soupsieve
     version: 2.3.2.post1
@@ -10491,6 +11306,7 @@ packages:
     depends:
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: soupsieve
     version: 2.3.2.post1
@@ -10501,6 +11317,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: soupsieve
     version: 2.3.2.post1
@@ -10511,6 +11328,7 @@ packages:
     depends:
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: sphinx
     version: 5.3.0
@@ -10538,6 +11356,7 @@ packages:
       - sphinxcontrib-qthelp
       - sphinxcontrib-serializinghtml >=1.1.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx
     version: 5.3.0
@@ -10565,6 +11384,7 @@ packages:
       - sphinxcontrib-qthelp
       - sphinxcontrib-serializinghtml >=1.1.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx
     version: 5.3.0
@@ -10592,6 +11412,7 @@ packages:
       - sphinxcontrib-qthelp
       - sphinxcontrib-serializinghtml >=1.1.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx
     version: 5.3.0
@@ -10619,6 +11440,7 @@ packages:
       - sphinxcontrib-qthelp
       - sphinxcontrib-serializinghtml >=1.1.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinx
     version: 5.3.0
@@ -10646,6 +11468,7 @@ packages:
       - sphinxcontrib-qthelp
       - sphinxcontrib-serializinghtml >=1.1.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinx-design
     version: 0.3.0
@@ -10657,6 +11480,7 @@ packages:
       - python >=3.6
       - "sphinx >=4,<6"
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx-design
     version: 0.3.0
@@ -10668,6 +11492,7 @@ packages:
       - python >=3.6
       - "sphinx >=4,<6"
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx-design
     version: 0.3.0
@@ -10679,6 +11504,7 @@ packages:
       - python >=3.6
       - "sphinx >=4,<6"
     platform: linux
+    purls: []
   - kind: conda
     name: sphinx-design
     version: 0.3.0
@@ -10690,6 +11516,7 @@ packages:
       - python >=3.6
       - "sphinx >=4,<6"
     platform: osx
+    purls: []
   - kind: conda
     name: sphinx-design
     version: 0.3.0
@@ -10701,6 +11528,7 @@ packages:
       - python >=3.6
       - "sphinx >=4,<6"
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-applehelp
     version: 1.0.4
@@ -10711,6 +11539,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-applehelp
     version: 1.0.4
@@ -10721,6 +11550,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-applehelp
     version: 1.0.4
@@ -10731,6 +11561,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-applehelp
     version: 1.0.4
@@ -10741,6 +11572,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-applehelp
     version: 1.0.4
@@ -10751,6 +11583,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-devhelp
     version: 1.0.2
@@ -10761,6 +11594,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-devhelp
     version: 1.0.2
@@ -10771,6 +11605,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-devhelp
     version: 1.0.2
@@ -10781,6 +11616,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-devhelp
     version: 1.0.2
@@ -10791,6 +11627,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-devhelp
     version: 1.0.2
@@ -10801,6 +11638,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-htmlhelp
     version: 2.0.1
@@ -10811,6 +11649,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-htmlhelp
     version: 2.0.1
@@ -10821,6 +11660,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-htmlhelp
     version: 2.0.1
@@ -10831,6 +11671,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-htmlhelp
     version: 2.0.1
@@ -10841,6 +11682,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-htmlhelp
     version: 2.0.1
@@ -10851,6 +11693,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-jsmath
     version: 1.0.1
@@ -10861,6 +11704,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-jsmath
     version: 1.0.1
@@ -10871,6 +11715,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-jsmath
     version: 1.0.1
@@ -10881,6 +11726,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-jsmath
     version: 1.0.1
@@ -10891,6 +11737,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-jsmath
     version: 1.0.1
@@ -10901,6 +11748,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-qthelp
     version: 1.0.3
@@ -10911,6 +11759,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-qthelp
     version: 1.0.3
@@ -10921,6 +11770,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-qthelp
     version: 1.0.3
@@ -10931,6 +11781,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-qthelp
     version: 1.0.3
@@ -10941,6 +11792,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-qthelp
     version: 1.0.3
@@ -10951,6 +11803,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-serializinghtml
     version: 1.1.5
@@ -10961,6 +11814,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-serializinghtml
     version: 1.1.5
@@ -10971,6 +11825,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-serializinghtml
     version: 1.1.5
@@ -10981,6 +11836,7 @@ packages:
     depends:
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: sphinxcontrib-serializinghtml
     version: 1.1.5
@@ -10991,6 +11847,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sphinxcontrib-serializinghtml
     version: 1.1.5
@@ -11001,6 +11858,7 @@ packages:
     depends:
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: stack_data
     version: 0.6.2
@@ -11014,6 +11872,7 @@ packages:
       - pure_eval
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: stack_data
     version: 0.6.2
@@ -11027,6 +11886,7 @@ packages:
       - pure_eval
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: stack_data
     version: 0.6.2
@@ -11040,6 +11900,7 @@ packages:
       - pure_eval
       - python >=3.5
     platform: linux
+    purls: []
   - kind: conda
     name: stack_data
     version: 0.6.2
@@ -11053,6 +11914,7 @@ packages:
       - pure_eval
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: stack_data
     version: 0.6.2
@@ -11066,6 +11928,7 @@ packages:
       - pure_eval
       - python >=3.5
     platform: osx
+    purls: []
   - kind: conda
     name: sysroot_linux-64
     version: "2.12"
@@ -11076,6 +11939,7 @@ packages:
     depends:
       - kernel-headers_linux-64 ==2.6.32 he073ed8_15
     platform: linux
+    purls: []
   - kind: conda
     name: sysroot_linux-aarch64
     version: "2.17"
@@ -11086,6 +11950,7 @@ packages:
     depends:
       - kernel-headers_linux-aarch64 ==4.18.0 h5b4a56d_13
     platform: linux
+    purls: []
   - kind: conda
     name: sysroot_linux-ppc64le
     version: "2.17"
@@ -11096,6 +11961,7 @@ packages:
     depends:
       - kernel-headers_linux-ppc64le ==3.10.0 h23d7e6c_13
     platform: linux
+    purls: []
   - kind: conda
     name: tapi
     version: 1100.0.11
@@ -11106,6 +11972,7 @@ packages:
     depends:
       - libcxx >=10.0.0.a0
     platform: osx
+    purls: []
   - kind: conda
     name: tapi
     version: 1100.0.11
@@ -11116,6 +11983,7 @@ packages:
     depends:
       - libcxx >=11.0.0.a0
     platform: osx
+    purls: []
   - kind: conda
     name: tk
     version: 8.6.12
@@ -11127,6 +11995,7 @@ packages:
       - libgcc-ng >=9.4.0
       - "libzlib >=1.2.11,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: tk
     version: 8.6.12
@@ -11138,6 +12007,7 @@ packages:
       - libgcc-ng >=9.4.0
       - "libzlib >=1.2.11,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: tk
     version: 8.6.12
@@ -11149,6 +12019,7 @@ packages:
       - libgcc-ng >=9.4.0
       - "libzlib >=1.2.11,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: tk
     version: 8.6.12
@@ -11159,6 +12030,7 @@ packages:
     depends:
       - "libzlib >=1.2.11,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: tk
     version: 8.6.12
@@ -11169,6 +12041,7 @@ packages:
     depends:
       - "libzlib >=1.2.11,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: toml
     version: 0.10.2
@@ -11179,6 +12052,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: toml
     version: 0.10.2
@@ -11189,6 +12063,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: toml
     version: 0.10.2
@@ -11199,6 +12074,7 @@ packages:
     depends:
       - python >=2.7
     platform: linux
+    purls: []
   - kind: conda
     name: toml
     version: 0.10.2
@@ -11209,6 +12085,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: toml
     version: 0.10.2
@@ -11219,6 +12096,7 @@ packages:
     depends:
       - python >=2.7
     platform: osx
+    purls: []
   - kind: conda
     name: tomli
     version: 2.0.1
@@ -11229,6 +12107,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: tomli
     version: 2.0.1
@@ -11239,6 +12118,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: tomli
     version: 2.0.1
@@ -11249,6 +12129,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: tomli
     version: 2.0.1
@@ -11259,6 +12140,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: tomli
     version: 2.0.1
@@ -11269,6 +12151,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: tornado
     version: "6.2"
@@ -11281,6 +12164,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: tornado
     version: "6.2"
@@ -11293,6 +12177,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: tornado
     version: "6.2"
@@ -11305,6 +12190,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: tornado
     version: "6.2"
@@ -11316,6 +12202,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: tornado
     version: "6.2"
@@ -11327,6 +12214,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: traitlets
     version: 5.9.0
@@ -11337,6 +12225,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: traitlets
     version: 5.9.0
@@ -11347,6 +12236,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: traitlets
     version: 5.9.0
@@ -11357,6 +12247,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: traitlets
     version: 5.9.0
@@ -11367,6 +12258,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: traitlets
     version: 5.9.0
@@ -11377,6 +12269,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: typing-extensions
     version: 4.4.0
@@ -11387,6 +12280,7 @@ packages:
     depends:
       - typing_extensions ==4.4.0 pyha770c72_0
     platform: linux
+    purls: []
   - kind: conda
     name: typing-extensions
     version: 4.4.0
@@ -11397,6 +12291,7 @@ packages:
     depends:
       - typing_extensions ==4.4.0 pyha770c72_0
     platform: linux
+    purls: []
   - kind: conda
     name: typing-extensions
     version: 4.4.0
@@ -11407,6 +12302,7 @@ packages:
     depends:
       - typing_extensions ==4.4.0 pyha770c72_0
     platform: linux
+    purls: []
   - kind: conda
     name: typing-extensions
     version: 4.4.0
@@ -11417,6 +12313,7 @@ packages:
     depends:
       - typing_extensions ==4.4.0 pyha770c72_0
     platform: osx
+    purls: []
   - kind: conda
     name: typing-extensions
     version: 4.4.0
@@ -11427,6 +12324,7 @@ packages:
     depends:
       - typing_extensions ==4.4.0 pyha770c72_0
     platform: osx
+    purls: []
   - kind: conda
     name: typing_extensions
     version: 4.4.0
@@ -11437,6 +12335,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: typing_extensions
     version: 4.4.0
@@ -11447,6 +12346,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: typing_extensions
     version: 4.4.0
@@ -11457,6 +12357,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: typing_extensions
     version: 4.4.0
@@ -11467,6 +12368,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: typing_extensions
     version: 4.4.0
@@ -11477,6 +12379,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: tzdata
     version: 2022g
@@ -11485,6 +12388,7 @@ packages:
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     md5: 51fc4fcfb19f5d95ffc8c339db5068e8
     platform: linux
+    purls: []
   - kind: conda
     name: tzdata
     version: 2022g
@@ -11493,6 +12397,7 @@ packages:
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     md5: 51fc4fcfb19f5d95ffc8c339db5068e8
     platform: linux
+    purls: []
   - kind: conda
     name: tzdata
     version: 2022g
@@ -11501,6 +12406,7 @@ packages:
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     md5: 51fc4fcfb19f5d95ffc8c339db5068e8
     platform: linux
+    purls: []
   - kind: conda
     name: tzdata
     version: 2022g
@@ -11509,6 +12415,7 @@ packages:
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     md5: 51fc4fcfb19f5d95ffc8c339db5068e8
     platform: osx
+    purls: []
   - kind: conda
     name: tzdata
     version: 2022g
@@ -11517,6 +12424,7 @@ packages:
     sha256: 0bfae0b9962bc0dbf79048f9175b913ed4f53c4310d06708dc7acbb290ad82f6
     md5: 51fc4fcfb19f5d95ffc8c339db5068e8
     platform: osx
+    purls: []
   - kind: conda
     name: unicodedata2
     version: 15.0.0
@@ -11529,6 +12437,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: unicodedata2
     version: 15.0.0
@@ -11541,6 +12450,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: unicodedata2
     version: 15.0.0
@@ -11553,6 +12463,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: linux
+    purls: []
   - kind: conda
     name: unicodedata2
     version: 15.0.0
@@ -11564,6 +12475,7 @@ packages:
       - "python >=3.9,<3.10.0a0"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: unicodedata2
     version: 15.0.0
@@ -11575,6 +12487,7 @@ packages:
       - "python >=3.9,<3.10.0a0 *_cpython"
       - python_abi 3.9.* *_cp39
     platform: osx
+    purls: []
   - kind: conda
     name: urllib3
     version: 1.26.14
@@ -11591,6 +12504,7 @@ packages:
       - "pysocks >=1.5.6,<2.0,!=1.5.7"
       - python <4.0
     platform: linux
+    purls: []
   - kind: conda
     name: urllib3
     version: 1.26.14
@@ -11607,6 +12521,7 @@ packages:
       - "pysocks >=1.5.6,<2.0,!=1.5.7"
       - python <4.0
     platform: linux
+    purls: []
   - kind: conda
     name: urllib3
     version: 1.26.14
@@ -11623,6 +12538,7 @@ packages:
       - "pysocks >=1.5.6,<2.0,!=1.5.7"
       - python <4.0
     platform: linux
+    purls: []
   - kind: conda
     name: urllib3
     version: 1.26.14
@@ -11639,6 +12555,7 @@ packages:
       - "pysocks >=1.5.6,<2.0,!=1.5.7"
       - python <4.0
     platform: osx
+    purls: []
   - kind: conda
     name: urllib3
     version: 1.26.14
@@ -11655,6 +12572,7 @@ packages:
       - "pysocks >=1.5.6,<2.0,!=1.5.7"
       - python <4.0
     platform: osx
+    purls: []
   - kind: conda
     name: wcwidth
     version: 0.2.6
@@ -11666,6 +12584,7 @@ packages:
       - backports.functools_lru_cache
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: wcwidth
     version: 0.2.6
@@ -11677,6 +12596,7 @@ packages:
       - backports.functools_lru_cache
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: wcwidth
     version: 0.2.6
@@ -11688,6 +12608,7 @@ packages:
       - backports.functools_lru_cache
       - python >=3.6
     platform: linux
+    purls: []
   - kind: conda
     name: wcwidth
     version: 0.2.6
@@ -11699,6 +12620,7 @@ packages:
       - backports.functools_lru_cache
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: wcwidth
     version: 0.2.6
@@ -11710,6 +12632,7 @@ packages:
       - backports.functools_lru_cache
       - python >=3.6
     platform: osx
+    purls: []
   - kind: conda
     name: wheel
     version: 0.38.4
@@ -11720,6 +12643,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: wheel
     version: 0.38.4
@@ -11730,6 +12654,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: wheel
     version: 0.38.4
@@ -11740,6 +12665,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: wheel
     version: 0.38.4
@@ -11750,6 +12676,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: wheel
     version: 0.38.4
@@ -11760,6 +12687,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: xcb-util
     version: 0.4.0
@@ -11771,6 +12699,7 @@ packages:
       - libgcc-ng >=12
       - "libxcb >=1.13,<1.14.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: xcb-util-image
     version: 0.4.0
@@ -11783,6 +12712,7 @@ packages:
       - "libxcb >=1.13,<1.14.0a0"
       - "xcb-util >=0.4.0,<0.5.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: xcb-util-keysyms
     version: 0.4.0
@@ -11794,6 +12724,7 @@ packages:
       - libgcc-ng >=12
       - "libxcb >=1.13,<1.14.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: xcb-util-renderutil
     version: 0.3.9
@@ -11805,6 +12736,7 @@ packages:
       - libgcc-ng >=12
       - "libxcb >=1.13,<1.14.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: xcb-util-wm
     version: 0.4.1
@@ -11816,6 +12748,7 @@ packages:
       - libgcc-ng >=12
       - "libxcb >=1.13,<1.14.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-kbproto
     version: 1.0.7
@@ -11826,6 +12759,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libice
     version: 1.0.10
@@ -11836,6 +12770,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libsm
     version: 1.2.3
@@ -11848,6 +12783,7 @@ packages:
       - "libuuid >=2.32.1,<3.0a0"
       - xorg-libice 1.0.*
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libx11
     version: 1.7.2
@@ -11861,6 +12797,7 @@ packages:
       - xorg-kbproto
       - xorg-xproto
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxau
     version: 1.0.9
@@ -11871,6 +12808,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxau
     version: 1.0.9
@@ -11881,6 +12819,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxau
     version: 1.0.9
@@ -11891,6 +12830,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxau
     version: 1.0.9
@@ -11899,6 +12839,7 @@ packages:
     sha256: 6dcdbfcdb87c21cb615cd1a0a7fab7e657a443c771e80c771524f7d9b8443304
     md5: c5049997b2e98edfbcdd294582f66281
     platform: osx
+    purls: []
   - kind: conda
     name: xorg-libxau
     version: 1.0.9
@@ -11907,6 +12848,7 @@ packages:
     sha256: a5810ad0fae16b72ee7cbb22e009c926dd1cd95d82885896e7f20fe911f7195f
     md5: e2fa1f5a28cf0ce02516baf910be132e
     platform: osx
+    purls: []
   - kind: conda
     name: xorg-libxdmcp
     version: 1.1.3
@@ -11917,6 +12859,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxdmcp
     version: 1.1.3
@@ -11927,6 +12870,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxdmcp
     version: 1.1.3
@@ -11937,6 +12881,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxdmcp
     version: 1.1.3
@@ -11945,6 +12890,7 @@ packages:
     sha256: 485421c16f03a01b8ed09984e0b2ababdbb3527e1abf354ff7646f8329be905f
     md5: 86ac76d6bf1cbb9621943eb3bd9ae36e
     platform: osx
+    purls: []
   - kind: conda
     name: xorg-libxdmcp
     version: 1.1.3
@@ -11953,6 +12899,7 @@ packages:
     sha256: d9a2fb4762779994718832f05a7d62ab2dcf6103a312235267628b5187ce88f7
     md5: 6738b13f7fadc18725965abdd4129c36
     platform: osx
+    purls: []
   - kind: conda
     name: xorg-libxext
     version: 1.3.4
@@ -11965,6 +12912,7 @@ packages:
       - "xorg-libx11 >=1.7.0,<2.0a0"
       - xorg-xextproto
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-libxrender
     version: 0.9.10
@@ -11977,6 +12925,7 @@ packages:
       - "xorg-libx11 >=1.7.0,<2.0a0"
       - xorg-renderproto
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-renderproto
     version: 0.11.1
@@ -11987,6 +12936,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-xextproto
     version: 7.3.0
@@ -11997,6 +12947,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xorg-xproto
     version: 7.0.31
@@ -12007,6 +12958,7 @@ packages:
     depends:
       - libgcc-ng >=9.3.0
     platform: linux
+    purls: []
   - kind: conda
     name: xz
     version: 5.2.6
@@ -12017,6 +12969,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: xz
     version: 5.2.6
@@ -12027,6 +12980,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: xz
     version: 5.2.6
@@ -12037,6 +12991,7 @@ packages:
     depends:
       - libgcc-ng >=12
     platform: linux
+    purls: []
   - kind: conda
     name: xz
     version: 5.2.6
@@ -12045,6 +13000,7 @@ packages:
     sha256: eb09823f34cc2dd663c0ec4ab13f246f45dcd52e5b8c47b9864361de5204a1c8
     md5: a72f9d4ea13d55d745ff1ed594747f10
     platform: osx
+    purls: []
   - kind: conda
     name: xz
     version: 5.2.6
@@ -12053,6 +13009,7 @@ packages:
     sha256: 59d78af0c3e071021cfe82dc40134c19dab8cdf804324b62940f5c8cd71803ec
     md5: 39c6b54e94014701dd157f4f576ed211
     platform: osx
+    purls: []
   - kind: conda
     name: zipp
     version: 3.13.0
@@ -12063,6 +13020,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: zipp
     version: 3.13.0
@@ -12073,6 +13031,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: zipp
     version: 3.13.0
@@ -12083,6 +13042,7 @@ packages:
     depends:
       - python >=3.7
     platform: linux
+    purls: []
   - kind: conda
     name: zipp
     version: 3.13.0
@@ -12093,6 +13053,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: zipp
     version: 3.13.0
@@ -12103,6 +13064,7 @@ packages:
     depends:
       - python >=3.7
     platform: osx
+    purls: []
   - kind: conda
     name: zlib
     version: 1.2.13
@@ -12114,6 +13076,7 @@ packages:
       - libgcc-ng >=12
       - libzlib ==1.2.13 h166bdaf_4
     platform: linux
+    purls: []
   - kind: conda
     name: zlib
     version: 1.2.13
@@ -12124,6 +13087,7 @@ packages:
     depends:
       - libzlib ==1.2.13 hfd90126_4
     platform: osx
+    purls: []
   - kind: conda
     name: zlib
     version: 1.2.13
@@ -12134,6 +13098,7 @@ packages:
     depends:
       - libzlib ==1.2.13 h03a7124_4
     platform: osx
+    purls: []
   - kind: conda
     name: zstd
     version: 1.5.2
@@ -12146,6 +13111,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: zstd
     version: 1.5.2
@@ -12158,6 +13124,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: zstd
     version: 1.5.2
@@ -12170,6 +13137,7 @@ packages:
       - libstdcxx-ng >=12
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: linux
+    purls: []
   - kind: conda
     name: zstd
     version: 1.5.2
@@ -12181,6 +13149,7 @@ packages:
       - libcxx >=14.0.6
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
   - kind: conda
     name: zstd
     version: 1.5.2
@@ -12192,3 +13161,4 @@ packages:
       - libcxx >=14.0.6
       - "libzlib >=1.2.13,<1.3.0a0"
     platform: osx
+    purls: []
