@@ -44,6 +44,13 @@ impl FileFormatVersion {
     pub fn should_pypi_indexes_be_present(self) -> bool {
         self >= FileFormatVersion::V5
     }
+
+    /// Returns true if the purls should be present in the lock file.
+    /// If purl is not available, it means the package is not from pypi.
+    /// For older versions, the purl was optional.
+    pub fn should_purls_be_present(self) -> bool {
+        self >= FileFormatVersion::V6
+    }
 }
 
 impl Default for FileFormatVersion {
