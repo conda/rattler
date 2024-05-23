@@ -13,8 +13,8 @@ use std::{
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord,
-    ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageName,
+    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
@@ -108,13 +108,36 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),
     VirtualPackage(&'a GenericVirtualPackage),
 }
 
+impl<'a> PartialOrd<Self> for SolverPackageRecord<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for SolverPackageRecord<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.version().cmp(other.version()))
+            .then_with(|| self.build_number().cmp(&other.build_number()))
+            .then_with(|| self.timestamp().cmp(&other.timestamp()))
+    }
+}
+
 impl<'a> SolverPackageRecord<'a> {
+    fn name(&self) -> &PackageName {
+        match self {
+            SolverPackageRecord::Record(rec) => &rec.package_record.name,
+            SolverPackageRecord::VirtualPackage(rec) => &rec.name,
+        }
+    }
+
     fn version(&self) -> &rattler_conda_types::Version {
         match self {
             SolverPackageRecord::Record(rec) => rec.package_record.version.version(),
