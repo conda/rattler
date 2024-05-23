@@ -11,7 +11,7 @@ use super::PackageFile;
 /// package
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Hash, Clone, Ord, PartialOrd)]
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
 pub struct RunExportsJson {
     /// weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]

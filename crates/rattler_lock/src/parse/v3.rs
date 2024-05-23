@@ -115,7 +115,7 @@ pub struct CondaLockedPackageV3 {
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Vec<PackageUrl>,
+    pub purls: BTreeSet<PackageUrl>,
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
