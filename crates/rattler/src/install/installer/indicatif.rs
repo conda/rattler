@@ -151,6 +151,16 @@ impl ProgressFormatter for DefaultProgressFormatter {
     }
 }
 
+impl DefaultProgressFormatter {
+    /// Sets the prefix all all progress bars.
+    pub fn with_prefix(self, prefix: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            prefix: prefix.into(),
+            ..self
+        }
+    }
+}
+
 impl<F: ProgressFormatter> IndicatifReporterBuilder<F> {
     /// Sets the formatter to use for the progress bars.
     pub fn with_formatter<T: ProgressFormatter>(self, formatter: T) -> IndicatifReporterBuilder<T> {
