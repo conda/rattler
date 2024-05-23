@@ -1,17 +1,19 @@
 //! Builder for the creation of lock files.
 
-use crate::file_format_version::FileFormatVersion;
-use crate::{
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiIndexes, PypiPackageData, PypiPackageEnvironmentData,
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
 };
+
 use fxhash::FxHashMap;
 use indexmap::{IndexMap, IndexSet};
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
+
+use crate::{
+    file_format_version::FileFormatVersion, Channel, CondaPackageData,
+    EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes,
+    PypiPackageData, PypiPackageEnvironmentData,
 };
 
 /// A struct to incrementally build a lock-file.
@@ -68,9 +70,9 @@ impl LockFileBuilder {
 
     /// Adds a conda locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::with_conda_package`] but differs in that it takes a
-    /// mutable reference to self instead of consuming it. This allows for a more fluent with
-    /// chaining calls.
+    /// This function is similar to [`Self::with_conda_package`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    /// This allows for a more fluent with chaining calls.
     pub fn add_conda_package(
         &mut self,
         environment: impl Into<String>,
@@ -102,9 +104,9 @@ impl LockFileBuilder {
 
     /// Adds a pypi locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::with_pypi_package`] but differs in that it takes a
-    /// mutable reference to self instead of consuming it. This allows for a more fluent with
-    /// chaining calls.
+    /// This function is similar to [`Self::with_pypi_package`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    /// This allows for a more fluent with chaining calls.
     pub fn add_pypi_package(
         &mut self,
         environment: impl Into<String>,
@@ -141,9 +143,9 @@ impl LockFileBuilder {
 
     /// Adds a conda locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::add_conda_package`] but differs in that it consumes
-    /// `self` instead of taking a mutable reference. This allows for a better interface when
-    /// modifying an existing instance.
+    /// This function is similar to [`Self::add_conda_package`] but differs in
+    /// that it consumes `self` instead of taking a mutable reference. This
+    /// allows for a better interface when modifying an existing instance.
     pub fn with_conda_package(
         mut self,
         environment: impl Into<String>,
@@ -154,11 +156,46 @@ impl LockFileBuilder {
         self
     }
 
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn with_package(
+        mut self,
+        environment: impl Into<String>,
+        platform: Platform,
+        locked_package: Package,
+    ) -> Self {
+        self.add_package(environment, platform, locked_package);
+        self
+    }
+
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn add_package(
+        &mut self,
+        environment: impl Into<String>,
+        platform: Platform,
+        locked_package: Package,
+    ) -> &mut Self {
+        match locked_package {
+            Package::Conda(p) => {
+                self.add_conda_package(environment, platform, p.package_data().clone())
+            }
+            Package::Pypi(p) => {
+                self.add_pypi_package(
+                    environment,
+                    platform,
+                    p.package_data().clone(),
+                    p.environment_data().clone(),
+                )
+            }
+        }
+    }
+
     /// Adds a pypi locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::add_pypi_package`] but differs in that it consumes
-    /// `self` instead of taking a mutable reference. This allows for a better interface when
-    /// modifying an existing instance.
+    /// This function is similar to [`Self::add_pypi_package`] but differs in
+    /// that it consumes `self` instead of taking a mutable reference. This
+    /// allows for a better interface when modifying an existing instance.
     pub fn with_pypi_package(
         mut self,
         environment: impl Into<String>,

@@ -1,5 +1,6 @@
 #![allow(clippy::option_option)]
 
+use std::collections::BTreeSet;
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
@@ -97,7 +98,7 @@ pub struct PackageRecordPatch {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
-    pub purls: Option<Vec<PackageUrl>>,
+    pub purls: Option<BTreeSet<PackageUrl>>,
 }
 
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
