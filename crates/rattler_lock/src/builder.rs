@@ -11,9 +11,9 @@ use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 
 use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaPackageData,
-    EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes,
-    PypiPackageData, PypiPackageEnvironmentData,
+    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes, PypiPackageData,
+    PypiPackageEnvironmentData,
 };
 
 /// A struct to incrementally build a lock-file.
@@ -180,14 +180,12 @@ impl LockFileBuilder {
             Package::Conda(p) => {
                 self.add_conda_package(environment, platform, p.package_data().clone())
             }
-            Package::Pypi(p) => {
-                self.add_pypi_package(
-                    environment,
-                    platform,
-                    p.package_data().clone(),
-                    p.environment_data().clone(),
-                )
-            }
+            Package::Pypi(p) => self.add_pypi_package(
+                environment,
+                platform,
+                p.package_data().clone(),
+                p.environment_data().clone(),
+            ),
         }
     }
 

@@ -1,9 +1,9 @@
 #![allow(clippy::option_option)]
 
-use std::collections::BTreeSet;
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
 
