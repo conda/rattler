@@ -11,7 +11,7 @@ use std::{
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
-pub use indicatif::{IndicatifReporter, IndicatifReporterBuilder};
+pub use indicatif::{DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, ProgressFormatter};
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,
