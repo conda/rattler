@@ -1,31 +1,32 @@
-//! Defines [`RepoData`]. `RepoData` stores information of all packages present in a subdirectory
-//! of a channel. It provides indexing functionality.
+//! Defines [`RepoData`]. `RepoData` stores information of all packages present
+//! in a subdirectory of a channel. It provides indexing functionality.
 
 pub mod patches;
 pub mod sharded;
 mod topological_sort;
 
-use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::{Display, Formatter};
-use std::path::Path;
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+    fmt::{Display, Formatter},
+    path::Path,
+};
 
 use fxhash::{FxHashMap, FxHashSet};
-
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
+use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
-
-use rattler_macros::sorted;
 
 use crate::{
     build_spec::BuildNumber, package::IndexJson, utils::serde::DeserializeFromStrUnchecked,
     Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
 };
 
-/// [`RepoData`] is an index of package binaries available on in a subdirectory of a Conda channel.
+/// [`RepoData`] is an index of package binaries available on in a subdirectory
+/// of a Conda channel.
 // Note: we cannot use the sorted macro here, because the `packages` and `conda_packages` fields are
 // serialized in a special way. Therefore we do it manually.
 #[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone)]
@@ -37,8 +38,9 @@ pub struct RepoData {
     #[serde(serialize_with = "sort_map_alphabetically")]
     pub packages: FxHashMap<String, PackageRecord>,
 
-    /// The conda packages contained in the repodata.json file (under a different key for
-    /// backwards compatibility with previous conda versions)
+    /// The conda packages contained in the repodata.json file (under a
+    /// different key for backwards compatibility with previous conda
+    /// versions)
     #[serde(
         default,
         rename = "packages.conda",
@@ -46,7 +48,8 @@ pub struct RepoData {
     )]
     pub conda_packages: FxHashMap<String, PackageRecord>,
 
-    /// removed packages (files are still accessible, but they are not installable like regular packages)
+    /// removed packages (files are still accessible, but they are not
+    /// installable like regular packages)
     #[serde(
         default,
         serialize_with = "sort_set_alphabetically",
@@ -70,12 +73,12 @@ pub struct ChannelInfo {
     pub base_url: Option<String>,
 }
 
-/// A single record in the Conda repodata. A single record refers to a single binary distribution
-/// of a package on a Conda channel.
+/// A single record in the Conda repodata. A single record refers to a single
+/// binary distribution of a package on a Conda channel.
 #[serde_as]
 #[skip_serializing_none]
 #[sorted]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct PackageRecord {
     /// Optionally the architecture the package supports
     pub arch: Option<String>,
@@ -86,10 +89,11 @@ pub struct PackageRecord {
     /// The build number of the package
     pub build_number: BuildNumber,
 
-    /// Additional constraints on packages. `constrains` are different from `depends` in that packages
-    /// specified in `depends` must be installed next to this package, whereas packages specified in
-    /// `constrains` are not required to be installed, but if they are installed they must follow these
-    /// constraints.
+    /// Additional constraints on packages. `constrains` are different from
+    /// `depends` in that packages specified in `depends` must be installed
+    /// next to this package, whereas packages specified in `constrains` are
+    /// not required to be installed, but if they are installed they must follow
+    /// these constraints.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub constrains: Vec<String>,
 
@@ -97,8 +101,9 @@ pub struct PackageRecord {
     #[serde(default)]
     pub depends: Vec<String>,
 
-    /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
-    /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
+    /// Features are a deprecated way to specify different feature sets for the
+    /// conda solver. This is not supported anymore and should not be used.
+    /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     pub features: Option<String>,
 
@@ -122,18 +127,25 @@ pub struct PackageRecord {
     #[serde_as(deserialize_as = "DeserializeFromStrUnchecked")]
     pub name: PackageName,
 
-    /// If this package is independent of architecture this field specifies in what way. See
-    /// [`NoArchType`] for more information.
+    /// If this package is independent of architecture this field specifies in
+    /// what way. See [`NoArchType`] for more information.
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
 
     /// Optionally the platform the package supports
     pub platform: Option<String>, // Note that this does not match the [`Platform`] enum..
 
-    /// Package identifiers of packages that are equivalent to this package but from other
-    /// ecosystems.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Vec<PackageUrl>,
+    /// Package identifiers of packages that are equivalent to this package but
+    /// from other ecosystems.
+    /// starting from 0.23.2, this field became [`Option<Vec<PackageUrl>>`].
+    /// This was done to support older lockfiles,
+    /// where we didn't differentiate between empty purl and missing one.
+    /// Now, None:: means that the purl is missing, and it will be tried to
+    /// filled in. So later it can be one of the following:
+    /// [`Some(vec![])`] means that the purl is empty and package is not pypi
+    /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Option<BTreeSet<PackageUrl>>,
 
     /// Optionally a SHA256 hash of the package archive
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -150,8 +162,9 @@ pub struct PackageRecord {
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
-    /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
-    /// that effect, the number of track features is counted (number of commas) and the package is downweighted
+    /// Track features are nowadays only used to downweight packages (ie. give
+    /// them less priority). To that effect, the number of track features is
+    /// counted (number of commas) and the package is downweighted
     /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "OneOrMany<_>")]
@@ -194,8 +207,8 @@ impl RepoData {
         self.info.as_ref().and_then(|i| i.base_url.as_deref())
     }
 
-    /// Builds a [`Vec<RepoDataRecord>`] from the packages in a [`RepoData`] given the source of the
-    /// data.
+    /// Builds a [`Vec<RepoDataRecord>`] from the packages in a [`RepoData`]
+    /// given the source of the data.
     pub fn into_repo_data_records(self, channel: &Channel) -> Vec<RepoDataRecord> {
         let mut records = Vec::with_capacity(self.packages.len() + self.conda_packages.len());
         let channel_name = channel.canonical_name();
@@ -266,7 +279,8 @@ fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
 }
 
 impl PackageRecord {
-    /// A simple helper method that constructs a `PackageRecord` with the bare minimum values.
+    /// A simple helper method that constructs a `PackageRecord` with the bare
+    /// minimum values.
     pub fn new(name: PackageName, version: impl Into<VersionWithSource>, build: String) -> Self {
         Self {
             arch: None,
@@ -289,14 +303,15 @@ impl PackageRecord {
             timestamp: None,
             track_features: vec![],
             version: version.into(),
-            purls: vec![],
+            purls: None,
         }
     }
 
     /// Sorts the records topologically.
     ///
-    /// This function is deterministic, meaning that it will return the same result regardless of
-    /// the order of `records` and of the `depends` vector inside the records.
+    /// This function is deterministic, meaning that it will return the same
+    /// result regardless of the order of `records` and of the `depends`
+    /// vector inside the records.
     ///
     /// Note that this function only works for packages with unique names.
     pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(records: Vec<T>) -> Vec<T> {
@@ -331,8 +346,8 @@ pub enum ConvertSubdirError {
 /// # Why can we not use `Platform::FromStr`?
 ///
 /// We cannot use the [`Platform`] `FromStr` directly because `x86` and `x86_64`
-/// are different architecture strings. Also some combinations have been removed,
-/// because they have not been found.
+/// are different architecture strings. Also some combinations have been
+/// removed, because they have not been found.
 fn determine_subdir(
     platform: Option<String>,
     arch: Option<String>,
@@ -370,7 +385,8 @@ fn determine_subdir(
 }
 
 impl PackageRecord {
-    /// Builds a [`PackageRecord`] from a [`IndexJson`] and optionally a size, sha256 and md5 hash.
+    /// Builds a [`PackageRecord`] from a [`IndexJson`] and optionally a size,
+    /// sha256 and md5 hash.
     pub fn from_index_json(
         index: IndexJson,
         size: Option<u64>,
@@ -404,7 +420,7 @@ impl PackageRecord {
             timestamp: index.timestamp,
             track_features: index.track_features,
             version: index.version,
-            purls: vec![],
+            purls: None,
         })
     }
 }
@@ -428,10 +444,12 @@ fn sort_set_alphabetically<S: serde::Serializer>(
 
 #[cfg(test)]
 mod test {
-    use crate::repo_data::{compute_package_url, determine_subdir};
     use fxhash::FxHashMap;
 
-    use crate::{Channel, ChannelConfig, RepoData};
+    use crate::{
+        repo_data::{compute_package_url, determine_subdir},
+        Channel, ChannelConfig, RepoData,
+    };
 
     // isl-0.12.2-1.tar.bz2
     // gmp-5.1.2-6.tar.bz2

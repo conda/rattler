@@ -93,6 +93,7 @@ pub struct ProgressStyleProperties {
 /// A trait that can be used to customize the style of different progress bars
 /// of a [`IndicatifReporter`].
 pub trait ProgressFormatter {
+    /// Returns a progress bar style for the given properties.
     fn format(&self, props: &ProgressStyleProperties) -> indicatif::ProgressStyle;
 }
 

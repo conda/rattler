@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_lock/src/lib.rs
-assertion_line: 629
 expression: conda_lock
 ---
 version: 5

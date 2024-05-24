@@ -3,6 +3,7 @@
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
 
@@ -97,7 +98,7 @@ pub struct PackageRecordPatch {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
-    pub purls: Option<Vec<PackageUrl>>,
+    pub purls: Option<BTreeSet<PackageUrl>>,
 }
 
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
@@ -143,7 +144,7 @@ impl PackageRecord {
             self.license_family = license_family.clone();
         }
         if let Some(package_urls) = &patch.purls {
-            self.purls = package_urls.clone();
+            self.purls = Some(package_urls.clone());
         }
     }
 }

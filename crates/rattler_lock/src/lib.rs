@@ -1,78 +1,93 @@
 #![deny(missing_docs, dead_code)]
 
-//! Definitions for a lock-file format that stores information about pinned dependencies from both
-//! the Conda and Pypi ecosystem.
+//! Definitions for a lock-file format that stores information about pinned
+//! dependencies from both the Conda and Pypi ecosystem.
 //!
 //! The crate is structured in two API levels.
 //!
-//! 1. The top level API accessible through the [`LockFile`] type that exposes high level access to
-//!    the lock-file. This API is intended to be relatively stable and is the preferred way to
-//!    interact with the lock-file.
-//! 2. The `*Data` types. These are lower level types that expose more of the internal data
-//!    structures used in the crate. These types are not intended to be stable and are subject to
-//!    change over time. These types are used internally by the top level API. Also note that only
-//!    a subset of the `*Data` types are exposed. See `[crate::PyPiPackageData]`,
+//! 1. The top level API accessible through the [`LockFile`] type that exposes
+//!    high level access to the lock-file. This API is intended to be relatively
+//!    stable and is the preferred way to interact with the lock-file.
+//! 2. The `*Data` types. These are lower level types that expose more of the
+//!    internal data structures used in the crate. These types are not intended
+//!    to be stable and are subject to change over time. These types are used
+//!    internally by the top level API. Also note that only a subset of the
+//!    `*Data` types are exposed. See `[crate::PyPiPackageData]`,
 //!    `[crate::CondaPackageData]` for examples.
 //!
 //! ## Design goals
 //!
 //! The goal of the lock-file format is:
 //!
-//! * To be complete. The lock-file should contain all the information needed to recreate
-//!   environments even years after it was created. As long as the package data persists that a
-//!   lock-file refers to, it should be possible to recreate the environment.
-//! * To be human readable. Although lock-files are not intended to be edited by hand, they should
-//!   be relatively easy to read and understand. So that when a lock-file is checked into version
-//!   control and someone looks at the diff, they can understand what changed.
-//! * To be easily parsable. It should be fairly straightforward to create a parser for the format
-//!   so that it can be used in other tools.
-//! * To reduce diff size when the content changes. The order of content in the serialized lock-file
-//!   should be fixed to ensure that the diff size is minimized when the content changes.
-//! * To be reproducible. Recreating the lock-file with the exact same input (including externally
-//!   fetched data) should yield the same lock-file byte-for-byte.
-//! * To be statically verifiable. Given the specifications of the packages that went into a
-//!   lock-file it should be possible to cheaply verify whether or not the specifications are still
-//!   satisfied by the packages stored in the lock-file.
-//! * Backward compatible. Older version of lock-files should still be readable by never versions of
-//!   this crate.
+//! * To be complete. The lock-file should contain all the information needed to
+//!   recreate environments even years after it was created. As long as the
+//!   package data persists that a lock-file refers to, it should be possible to
+//!   recreate the environment.
+//! * To be human readable. Although lock-files are not intended to be edited by
+//!   hand, they should be relatively easy to read and understand. So that when
+//!   a lock-file is checked into version control and someone looks at the diff,
+//!   they can understand what changed.
+//! * To be easily parsable. It should be fairly straightforward to create a
+//!   parser for the format so that it can be used in other tools.
+//! * To reduce diff size when the content changes. The order of content in the
+//!   serialized lock-file should be fixed to ensure that the diff size is
+//!   minimized when the content changes.
+//! * To be reproducible. Recreating the lock-file with the exact same input
+//!   (including externally fetched data) should yield the same lock-file
+//!   byte-for-byte.
+//! * To be statically verifiable. Given the specifications of the packages that
+//!   went into a lock-file it should be possible to cheaply verify whether or
+//!   not the specifications are still satisfied by the packages stored in the
+//!   lock-file.
+//! * Backward compatible. Older version of lock-files should still be readable
+//!   by never versions of this crate.
 //!
 //! ## Relation to conda-lock
 //!
 //! Initially the lock-file format was based on [`conda-lock`](https://github.com/conda/conda-lock)
-//! but over time significant changes have been made compared to the original conda-lock format.
-//! Conda-lock files (e.g. `conda-lock.yml` files) can still be parsed by this crate but the
-//! serialization format changed significantly. This means files created by this crate are not
-//! compatible with conda-lock.
+//! but over time significant changes have been made compared to the original
+//! conda-lock format. Conda-lock files (e.g. `conda-lock.yml` files) can still
+//! be parsed by this crate but the serialization format changed significantly.
+//! This means files created by this crate are not compatible with conda-lock.
 //!
-//! Conda-lock stores a lot of metadata to be able to verify if the lock-file is still valid given
-//! the sources/inputs. For example conda-lock contains a `content-hash` which is a hash of all the
-//! input data of the lock-file.
-//! This crate approaches this differently by storing enough information in the lock-file to be able
-//! to verify if the lock-file still satisfies an input/source without requiring additional input
-//! (e.g. network requests) or expensive solves. We call this static satisfiability verification.
+//! Conda-lock stores a lot of metadata to be able to verify if the lock-file is
+//! still valid given the sources/inputs. For example conda-lock contains a
+//! `content-hash` which is a hash of all the input data of the lock-file.
+//! This crate approaches this differently by storing enough information in the
+//! lock-file to be able to verify if the lock-file still satisfies an
+//! input/source without requiring additional input (e.g. network requests) or
+//! expensive solves. We call this static satisfiability verification.
 //!
-//! Conda-lock stores a custom __partial__ representation of a [`rattler_conda_types::RepoDataRecord`]
-//! in the lock-file. This poses a problem when incrementally updating an environment. To only
-//! partially update packages in the lock-file without completely recreating it, the records stored
-//! in the lock-file need to be passed to the solver as "preferred" packages. Since
-//! [`rattler_conda_types::MatchSpec`] can match on any field present in a
-//! [`rattler_conda_types::PackageRecord`] we need to store all fields in the lock-file not just a
-//! subset.
-//! To that end this crate stores the full [`rattler_conda_types::PackageRecord`] in the lock-file.
-//! This allows completely recreating the record that was read from repodata when the lock-file was
-//! created which will allow a correct incremental update.
+//! Conda-lock stores a custom __partial__ representation of a
+//! [`rattler_conda_types::RepoDataRecord`] in the lock-file. This poses a
+//! problem when incrementally updating an environment. To only partially update
+//! packages in the lock-file without completely recreating it, the records
+//! stored in the lock-file need to be passed to the solver as "preferred"
+//! packages. Since [`rattler_conda_types::MatchSpec`] can match on any field
+//! present in a [`rattler_conda_types::PackageRecord`] we need to store all
+//! fields in the lock-file not just a subset.
+//! To that end this crate stores the full
+//! [`rattler_conda_types::PackageRecord`] in the lock-file. This allows
+//! completely recreating the record that was read from repodata when the
+//! lock-file was created which will allow a correct incremental update.
 //!
-//! Conda-lock requires users to create multiple lock-files when they want to store multiple
-//! environments. This crate allows storing multiple environments for different platforms and with
-//! different channels in a single lock-file. This allows storing production- and test environments
-//! in a single file.
+//! Conda-lock requires users to create multiple lock-files when they want to
+//! store multiple environments. This crate allows storing multiple environments
+//! for different platforms and with different channels in a single lock-file.
+//! This allows storing production- and test environments in a single file.
+
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashMap},
+    io::Read,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+};
 
 use fxhash::FxHashMap;
 use pep508_rs::{ExtraName, Requirement};
 use rattler_conda_types::{MatchSpec, PackageRecord, Platform, RepoDataRecord};
-use std::collections::{BTreeSet, HashMap};
-use std::sync::Arc;
-use std::{borrow::Cow, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 mod builder;
@@ -96,16 +111,19 @@ pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashab
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
 pub use url_or_path::UrlOrPath;
 
-/// The name of the default environment in a [`LockFile`]. This is the environment name that is used
-/// when no explicit environment name is specified.
+/// The name of the default environment in a [`LockFile`]. This is the
+/// environment name that is used when no explicit environment name is
+/// specified.
 pub const DEFAULT_ENVIRONMENT_NAME: &str = "default";
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
-/// Lock-files can store information for multiple platforms and for multiple environments.
+/// Lock-files can store information for multiple platforms and for multiple
+/// environments.
 ///
-/// The high-level API provided by this type holds internal references to the data. Its is therefore
-/// cheap to clone this type and any type derived from it (e.g. [`Environment`] or [`Package`]).
+/// The high-level API provided by this type holds internal references to the
+/// data. Its is therefore cheap to clone this type and any type derived from it
+/// (e.g. [`Environment`] or [`Package`]).
 #[derive(Clone, Default)]
 pub struct LockFile {
     inner: Arc<LockFileInner>,
@@ -123,9 +141,10 @@ struct LockFileInner {
     environment_lookup: FxHashMap<String, usize>,
 }
 
-/// An package used in an environment. Selects a type of package based on the enum and might contain
-/// additional data that is specific to the environment. For instance different environments might
-/// select the same Pypi package but with different extras.
+/// An package used in an environment. Selects a type of package based on the
+/// enum and might contain additional data that is specific to the environment.
+/// For instance different environments might select the same Pypi package but
+/// with different extras.
 #[derive(Clone, Copy, Debug)]
 enum EnvironmentPackageData {
     Conda(usize),
@@ -134,8 +153,8 @@ enum EnvironmentPackageData {
 
 /// Information about a specific environment in the lock file.
 ///
-/// This only needs to store information about an environment that cannot be derived from the
-/// packages itself.
+/// This only needs to store information about an environment that cannot be
+/// derived from the packages itself.
 ///
 /// The default environment is called "default".
 #[derive(Clone, Debug)]
@@ -146,14 +165,14 @@ struct EnvironmentData {
     /// The pypi indexes used to solve the environment.
     indexes: Option<PypiIndexes>,
 
-    /// For each individual platform this environment supports we store the package identifiers
-    /// associated with the environment.
+    /// For each individual platform this environment supports we store the
+    /// package identifiers associated with the environment.
     packages: FxHashMap<Platform, Vec<EnvironmentPackageData>>,
 }
 
 impl LockFile {
-    /// Constructs a new lock-file builder. This is the preferred way to constructs a lock-file
-    /// programmatically.
+    /// Constructs a new lock-file builder. This is the preferred way to
+    /// constructs a lock-file programmatically.
     pub fn builder() -> LockFileBuilder {
         LockFileBuilder::new()
     }
@@ -187,7 +206,8 @@ impl LockFile {
         })
     }
 
-    /// Returns the environment with the default name as defined by [`DEFAULT_ENVIRONMENT_NAME`].
+    /// Returns the environment with the default name as defined by
+    /// [`DEFAULT_ENVIRONMENT_NAME`].
     pub fn default_environment(&self) -> Option<Environment> {
         self.environment(DEFAULT_ENVIRONMENT_NAME)
     }
@@ -236,8 +256,8 @@ impl Environment {
 
     /// Returns the channels that are used by this environment.
     ///
-    /// Note that the order of the channels is significant. The first channel is the highest
-    /// priority channel.
+    /// Note that the order of the channels is significant. The first channel is
+    /// the highest priority channel.
     pub fn channels(&self) -> &[Channel] {
         &self.data().channels
     }
@@ -264,7 +284,8 @@ impl Environment {
         )
     }
 
-    /// Returns an iterator over all packages and platforms defined for this environment
+    /// Returns an iterator over all packages and platforms defined for this
+    /// environment
     pub fn packages_by_platform(
         &self,
     ) -> impl Iterator<
@@ -309,7 +330,8 @@ impl Environment {
             .collect()
     }
 
-    /// Returns all conda packages for all platforms and converts them to [`RepoDataRecord`].
+    /// Returns all conda packages for all platforms and converts them to
+    /// [`RepoDataRecord`].
     pub fn conda_repodata_records(
         &self,
     ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
@@ -332,9 +354,10 @@ impl Environment {
             .collect()
     }
 
-    /// Takes all the conda packages, converts them to [`RepoDataRecord`] and returns them or
-    /// returns an error if the conversion failed. Returns `None` if the specified platform is not
-    /// defined for this environment.
+    /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
+    /// returns them or returns an error if the conversion failed. Returns
+    /// `None` if the specified platform is not defined for this
+    /// environment.
     pub fn conda_repodata_records_for_platform(
         &self,
         platform: Platform,
@@ -355,8 +378,9 @@ impl Environment {
             .map(Some)
     }
 
-    /// Returns all the pypi packages and their associated environment data for the specified
-    /// platform. Returns `None` if the platform is not defined for this environment.
+    /// Returns all the pypi packages and their associated environment data for
+    /// the specified platform. Returns `None` if the platform is not
+    /// defined for this environment.
     pub fn pypi_packages_for_platform(
         &self,
         platform: Platform,
@@ -395,9 +419,21 @@ pub enum Package {
     Pypi(PypiPackage),
 }
 
+impl From<CondaPackage> for Package {
+    fn from(value: CondaPackage) -> Self {
+        Package::Conda(value)
+    }
+}
+
+impl From<PypiPackage> for Package {
+    fn from(value: PypiPackage) -> Self {
+        Package::Pypi(value)
+    }
+}
+
 impl Package {
-    /// Constructs a new instance from a [`EnvironmentPackageData`] and a reference to the internal
-    /// data structure.
+    /// Constructs a new instance from a [`EnvironmentPackageData`] and a
+    /// reference to the internal data structure.
     fn from_env_package(data: EnvironmentPackageData, inner: Arc<LockFileInner>) -> Self {
         match data {
             EnvironmentPackageData::Conda(idx) => {
@@ -421,8 +457,8 @@ impl Package {
         matches!(self, Self::Pypi(_))
     }
 
-    /// Returns this instance as a [`CondaPackage`] if this instance represents a conda
-    /// package.
+    /// Returns this instance as a [`CondaPackage`] if this instance represents
+    /// a conda package.
     pub fn as_conda(&self) -> Option<&CondaPackage> {
         match self {
             Self::Conda(value) => Some(value),
@@ -430,8 +466,8 @@ impl Package {
         }
     }
 
-    /// Returns this instance as a [`PypiPackage`] if this instance represents a pypi
-    /// package.
+    /// Returns this instance as a [`PypiPackage`] if this instance represents a
+    /// pypi package.
     pub fn as_pypi(&self) -> Option<&PypiPackage> {
         match self {
             Self::Conda(_) => None,
@@ -439,8 +475,8 @@ impl Package {
         }
     }
 
-    /// Returns this instance as a [`CondaPackage`] if this instance represents a conda
-    /// package.
+    /// Returns this instance as a [`CondaPackage`] if this instance represents
+    /// a conda package.
     pub fn into_conda(self) -> Option<CondaPackage> {
         match self {
             Self::Conda(value) => Some(value),
@@ -448,8 +484,8 @@ impl Package {
         }
     }
 
-    /// Returns this instance as a [`PypiPackage`] if this instance represents a pypi
-    /// package.
+    /// Returns this instance as a [`PypiPackage`] if this instance represents a
+    /// pypi package.
     pub fn into_pypi(self) -> Option<PypiPackage> {
         match self {
             Self::Conda(_) => None,
@@ -600,16 +636,19 @@ pub struct PypiPackageDataRef<'p> {
     /// The package data. This information is deduplicated between environments.
     pub package: &'p PypiPackageData,
 
-    /// Environment specific data for the package. This information is specific to the environment.
+    /// Environment specific data for the package. This information is specific
+    /// to the environment.
     pub environment: &'p PypiPackageEnvironmentData,
 }
 
 #[cfg(test)]
 mod test {
-    use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
+    use std::path::Path;
+
     use rattler_conda_types::Platform;
     use rstest::*;
-    use std::path::Path;
+
+    use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
     #[rstest]
     #[case("v0/numpy-conda-lock.yml")]

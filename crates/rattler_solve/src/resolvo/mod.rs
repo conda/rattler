@@ -1,35 +1,36 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{ChannelPriority, IntoRepoData, SolveError, SolveStrategy, SolverRepoData, SolverTask};
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fmt::{Display, Formatter},
+    marker::PhantomData,
+    ops::Deref,
+    rc::Rc,
+};
+
 use chrono::{DateTime, Utc};
-use rattler_conda_types::package::ArchiveType;
+use itertools::Itertools;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
-    ParseStrictness, RepoDataRecord,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageName,
+    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
     SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
     VersionSetId,
 };
-use std::collections::HashSet;
-use std::rc::Rc;
-use std::{
-    cell::RefCell,
-    cmp::Ordering,
-    collections::HashMap,
-    fmt::{Display, Formatter},
-    marker::PhantomData,
-    ops::Deref,
-};
 
-use crate::resolvo::conda_util::CompareStrategy;
-use itertools::Itertools;
+use crate::{
+    resolvo::conda_util::CompareStrategy, ChannelPriority, IntoRepoData, SolveError, SolveStrategy,
+    SolverRepoData, SolverTask,
+};
 
 mod conda_util;
 
-/// Represents the information required to load available packages into libsolv for a single channel
-/// and platform combination
+/// Represents the information required to load available packages into libsolv
+/// for a single channel and platform combination
 #[derive(Clone)]
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
@@ -107,13 +108,36 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),
     VirtualPackage(&'a GenericVirtualPackage),
 }
 
+impl<'a> PartialOrd<Self> for SolverPackageRecord<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for SolverPackageRecord<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.version().cmp(other.version()))
+            .then_with(|| self.build_number().cmp(&other.build_number()))
+            .then_with(|| self.timestamp().cmp(&other.timestamp()))
+    }
+}
+
 impl<'a> SolverPackageRecord<'a> {
+    fn name(&self) -> &PackageName {
+        match self {
+            SolverPackageRecord::Record(rec) => &rec.package_record.name,
+            SolverPackageRecord::VirtualPackage(rec) => &rec.name,
+        }
+    }
+
     fn version(&self) -> &rattler_conda_types::Version {
         match self {
             SolverPackageRecord::Record(rec) => rec.package_record.version.version(),
@@ -188,7 +212,7 @@ impl<'a> CondaDependencyProvider<'a> {
         channel_priority: ChannelPriority,
         exclude_newer: Option<DateTime<Utc>>,
         strategy: SolveStrategy,
-    ) -> Self {
+    ) -> Result<Self, SolveError> {
         let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
@@ -218,14 +242,17 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Add additional records
         for repo_datas in repodata {
-            // Iterate over all records and dedup records that refer to the same package data but with
-            // different archive types. This can happen if you have two variants of the same package but
-            // with different extensions. We prefer `.conda` packages over `.tar.bz`.
+            // Iterate over all records and dedup records that refer to the same package
+            // data but with different archive types. This can happen if you
+            // have two variants of the same package but with different
+            // extensions. We prefer `.conda` packages over `.tar.bz`.
             //
-            // Its important to insert the records in the same order as how they were presented to this
-            // function to ensure that each solve is deterministic. Iterating over HashMaps is not
-            // deterministic at runtime so instead we store the values in a Vec as we iterate over the
-            // records. This guarentees that the order of records remains the same over runs.
+            // Its important to insert the records in the same order as how they were
+            // presented to this function to ensure that each solve is
+            // deterministic. Iterating over HashMaps is not deterministic at
+            // runtime so instead we store the values in a Vec as we iterate over the
+            // records. This guarentees that the order of records remains the same over
+            // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_datas.records.len());
             let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_datas.records.len());
@@ -252,27 +279,29 @@ impl<'a> CondaDependencyProvider<'a> {
                             ordered_repodata[*idx] = record;
                             *previous_excluded = false;
                         } else if excluded && !*previous_excluded {
-                            // The previous package would not have been excluded by the solver but
-                            // this one will, so we'll keep the previous one regardless of the type.
+                            // The previous package would not have been excluded
+                            // by the solver but
+                            // this one will, so we'll keep the previous one
+                            // regardless of the type.
                         } else {
                             match archive_type.cmp(prev_archive_type) {
                                 Ordering::Greater => {
-                                    // A previous package has a worse package "type", we'll use the current record
-                                    // instead.
+                                    // A previous package has a worse package "type", we'll use the
+                                    // current record instead.
                                     *prev_archive_type = archive_type;
                                     ordered_repodata[*idx] = record;
+                                    *previous_excluded = excluded;
                                 }
                                 Ordering::Less => {
-                                    // A previous package that we already stored is actually a package of a better
-                                    // "type" so we'll just use that instead (.conda > .tar.bz)
+                                    // A previous package that we already stored
+                                    // is actually a package of a better
+                                    // "type" so we'll just use that instead
+                                    // (.conda > .tar.bz)
                                 }
                                 Ordering::Equal => {
-                                    if record != ordered_repodata[*idx] {
-                                        unreachable!(
-                                            "found duplicate record with different values for {}",
-                                            &record.file_name
-                                        );
-                                    }
+                                    return Err(SolveError::DuplicateRecords(
+                                        record.file_name.clone(),
+                                    ));
                                 }
                             }
                         }
@@ -314,7 +343,8 @@ impl<'a> CondaDependencyProvider<'a> {
                         if let Some(spec_channel) = &spec.channel {
                             if record.channel != spec_channel.base_url.to_string() {
                                 tracing::debug!("Ignoring {} from {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), &record.channel);
-                                // Add record to the excluded with reason of being in the non requested channel.
+                                // Add record to the excluded with reason of being in the non
+                                // requested channel.
                                 let message = format!(
                                     "candidate not in requested channel: '{}'",
                                     spec_channel
@@ -332,7 +362,8 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Enforce channel priority
-                // This function makes the assumption that the records are given in order of the channels.
+                // This function makes the assumption that the records are given in order of the
+                // channels.
                 if let (Some(first_channel), ChannelPriority::Strict) = (
                     package_name_found_in_channel
                         .get(&record.package_record.name.as_normalized().to_string()),
@@ -382,7 +413,7 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.locked = Some(solvable);
         }
 
-        Self {
+        Ok(Self {
             pool,
             records,
             matchspec_to_highest_version: RefCell::default(),
@@ -390,7 +421,7 @@ impl<'a> CondaDependencyProvider<'a> {
             stop_time,
             strategy,
             direct_dependencies,
-        }
+        })
     }
 }
 
@@ -472,7 +503,8 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 }
 
-/// Displays the different candidates by their version and sorted by their version
+/// Displays the different candidates by their version and sorted by their
+/// version
 pub struct CondaSolvableDisplay;
 
 impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
@@ -521,7 +553,7 @@ impl super::SolverImpl for Solver {
             task.channel_priority,
             task.exclude_newer,
             task.strategy,
-        );
+        )?;
         let pool = provider.pool.clone();
 
         // Construct the requirements that the solver needs to satisfy.

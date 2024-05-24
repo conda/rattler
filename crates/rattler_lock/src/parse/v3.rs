@@ -16,6 +16,7 @@ use rattler_conda_types::{
 };
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use std::ops::Not;
 use std::{collections::BTreeSet, sync::Arc};
 use url::Url;
 
@@ -114,7 +115,7 @@ pub struct CondaLockedPackageV3 {
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Vec<PackageUrl>,
+    pub purls: BTreeSet<PackageUrl>,
 }
 
 /// A function that enables parsing of lock files version 3 or lower.
@@ -170,7 +171,7 @@ pub fn parse_v3_or_lower(
                             timestamp: value.timestamp,
                             track_features: value.track_features,
                             version: value.version,
-                            purls: value.purls,
+                            purls: value.purls.is_empty().not().then_some(value.purls),
                         },
                         url: value.url,
                         file_name: None,
