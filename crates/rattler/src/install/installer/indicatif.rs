@@ -430,6 +430,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         inner.total_packages_to_cache = transaction.packages_to_install();
 
         inner.package_names.reserve(transaction.operations.len());
+        inner.package_sizes.reserve(transaction.operations.len());
         for operation in &transaction.operations {
             let record = match operation {
                 TransactionOperation::Install(new) | TransactionOperation::Change { new, .. } => {
@@ -442,6 +443,9 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             inner
                 .package_names
                 .push(record.name.as_normalized().to_string());
+            inner
+                .package_sizes
+                .push(record.size.unwrap_or_default() as usize);
         }
     }
 
@@ -449,11 +453,6 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
     fn on_populate_cache_start(&self, operation: usize, record: &RepoDataRecord) -> usize {
         let mut inner = self.inner.lock();
-
-        // Record the size of the record if we would download it.
-        let new_length = inner.package_sizes.len().max(operation + 1);
-        inner.package_sizes.resize_with(new_length, || 0);
-        inner.package_sizes[operation] = record.package_record.size.unwrap_or_default() as usize;
 
         inner.populate_cache_started.insert(operation);
 
