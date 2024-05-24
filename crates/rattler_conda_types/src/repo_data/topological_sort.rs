@@ -26,9 +26,20 @@ pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(packages: Vec<T>) -> 
     let mut stack = Vec::new();
     let mut cycles = Vec::new();
 
-    for root in &roots {
-        if !visited.contains(root) {
-            if let Some(cycle) = find_cycles(root, &all_packages, &mut visited, &mut stack) {
+    // We must start from the roots, unless all packages are in a cycle, in which case we can start from any package
+    let starting_points_for_root_finding = if roots.is_empty() {
+        packages.first().map_or_else(Vec::new, |package| {
+            vec![package.as_ref().name.as_normalized().to_string()]
+        })
+    } else {
+        roots
+    };
+
+    for starting_point in &starting_points_for_root_finding {
+        if !visited.contains(starting_point) {
+            if let Some(cycle) =
+                find_cycles(starting_point, &all_packages, &mut visited, &mut stack)
+            {
                 cycles.push(cycle);
             }
         }
@@ -339,6 +350,7 @@ mod tests {
     #[case(get_resolved_packages_for_python(), "python", &[("libzlib", "libgcc-ng")])]
     #[case(get_resolved_packages_for_numpy(), "numpy", &[("llvm-openmp", "libzlib")])]
     #[case(get_resolved_packages_for_two_roots(), "4ti2", &[("libzlib", "libgcc-ng")])]
+    #[case(get_resolved_packages_for_rootless_graph(), "pip", &[("python", "pip")])]
     #[case(get_resolved_packages_for_python_pip(), "pip", &[("pip", "python"), ("libzlib", "libgcc-ng")])]
     fn test_topological_sort(
         #[case] packages: Vec<RepoDataRecord>,
@@ -1743,6 +1755,56 @@ mod tests {
               "channel": "https://conda.anaconda.org/conda-forge/"
             }
           ]"#;
+
+        serde_json::from_str(repodata_json).unwrap()
+    }
+
+    fn get_resolved_packages_for_rootless_graph() -> Vec<RepoDataRecord> {
+        // Pip depends on Python and Python depends on Pip since Python 3.12
+        // Below is a simplified version of their repodata.
+        let repodata_json = r#"[
+          {
+              "build": "pyhd8ed1ab_0",
+              "build_number": 0,
+              "depends": [
+                  "python >=3.7"
+              ],
+              "license": "MIT",
+              "license_family": "MIT",
+              "md5": "f586ac1e56c8638b64f9c8122a7b8a67",
+              "name": "pip",
+              "noarch": "python",
+              "sha256": "b7c1c5d8f13e8cb491c4bd1d0d1896a4cf80fc47de01059ad77509112b664a4a",
+              "size": 1398245,
+              "subdir": "noarch",
+              "timestamp": 1706960660581,
+              "version": "24.0",
+              "fn": "pip-24.0-pyhd8ed1ab_0.conda",
+              "url": "https://conda.anaconda.org/conda-forge/noarch/pip-24.0-pyhd8ed1ab_0.conda",
+              "channel": "https://conda.anaconda.org/conda-forge/"
+          },
+          {
+            "build": "h1411813_0_cpython",
+            "build_number": 0,
+            "constrains": [
+                "python_abi 3.12.* *_cp312"
+            ],
+            "depends": [
+                "pip"
+            ],
+            "license": "Python-2.0",
+            "md5": "df1448ec6cbf8eceb03d29003cf72ae6",
+            "name": "python",
+            "sha256": "3b327ffc152a245011011d1d730781577a8274fde1cf6243f073749ead8f1c2a",
+            "size": 14557341,
+            "subdir": "osx-64",
+            "timestamp": 1713208068012,
+            "version": "3.12.3",
+            "fn": "python-3.12.3-h1411813_0_cpython.conda",
+            "url": "https://conda.anaconda.org/conda-forge/osx-64/python-3.12.3-h1411813_0_cpython.conda",
+            "channel": "https://conda.anaconda.org/conda-forge/"
+        }
+      ]"#;
 
         serde_json::from_str(repodata_json).unwrap()
     }
