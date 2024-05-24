@@ -227,6 +227,7 @@ impl<F: ProgressFormatter> IndicatifReporterBuilder<F> {
                 end_downloading: None,
                 end_linking: None,
                 placement: self.placement,
+                populate_cache_started: HashSet::default(),
             })),
         }
     }
@@ -246,6 +247,8 @@ struct IndicatifReporterInner<F> {
     validation_progress: Option<indicatif::ProgressBar>,
     download_progress: Option<indicatif::ProgressBar>,
     link_progress: Option<indicatif::ProgressBar>,
+
+    populate_cache_started: HashSet<usize>,
 
     clear_when_done: bool,
 
@@ -291,6 +294,28 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
         };
 
         validation_progress.set_message(self.format_progress_message(&self.packages_validating));
+    }
+
+    fn update_validating_status(&self) {
+        let Some(validation_progress) = &self.validation_progress else {
+            return;
+        };
+
+        if self.packages_validating.is_empty() {
+            if self.populate_cache_started.len() == self.total_packages_to_cache {
+                validation_progress.set_style(self.style(ProgressStyleProperties {
+                    status: ProgressStatus::Finished,
+                    determinate: true,
+                    progress_type: ProgressType::Generic,
+                }));
+            } else {
+                validation_progress.set_style(self.style(ProgressStyleProperties {
+                    status: ProgressStatus::Paused,
+                    determinate: true,
+                    progress_type: ProgressType::Generic,
+                }));
+            }
+        }
     }
 
     fn update_download_message(&self) {
@@ -409,6 +434,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         inner.package_sizes.resize_with(new_length, || 0);
         inner.package_sizes[operation] = record.package_record.size.unwrap_or_default() as usize;
 
+        inner.populate_cache_started.insert(operation);
+
         operation
     }
 
@@ -475,14 +502,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         validation_progress.inc(1);
 
-        if inner.packages_validating.is_empty() {
-            validation_progress.set_style(inner.style(ProgressStyleProperties {
-                status: ProgressStatus::Paused,
-                determinate: true,
-                progress_type: ProgressType::Generic,
-            }));
-        }
-
+        inner.update_validating_status();
         inner.update_validating_message();
     }
 
@@ -531,6 +551,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         download_progress.set_length(inner.total_download_size as u64);
 
         inner.update_download_message();
+        inner.update_validating_status();
 
         cache_entry
     }
