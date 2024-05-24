@@ -10,14 +10,13 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
+use digest::Digest;
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
-use rattler_digest::compute_file_digest;
+use rattler_digest::Sha256;
 use std::{
-    fs::Metadata,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-use rattler_lock::PackageHashes::Sha256;
 
 /// An error that is returned by [`validate_package_directory`] if the contents of the directory seems to be
 /// corrupted.
@@ -148,7 +147,6 @@ fn validate_package_entry(
 fn validate_package_hard_link_entry(
     path: PathBuf,
     entry: &PathsEntry,
-    metadata: Metadata,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::HardLink);
 
@@ -178,7 +176,7 @@ fn validate_package_hard_link_entry(
         if size_in_bytes != actual_file_len {
             return Err(PackageEntryValidationError::IncorrectSize(
                 size_in_bytes,
-                metadata.len(),
+                actual_file_len,
             ));
         }
     }
