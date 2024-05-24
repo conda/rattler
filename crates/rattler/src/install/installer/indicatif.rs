@@ -451,7 +451,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
     fn on_transaction_operation_start(&self, _operation: usize) {}
 
-    fn on_populate_cache_start(&self, operation: usize, record: &RepoDataRecord) -> usize {
+    fn on_populate_cache_start(&self, operation: usize, _record: &RepoDataRecord) -> usize {
         let mut inner = self.inner.lock();
 
         inner.populate_cache_started.insert(operation);
