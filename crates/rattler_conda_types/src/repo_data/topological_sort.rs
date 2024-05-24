@@ -1767,7 +1767,7 @@ mod tests {
               "build": "pyhd8ed1ab_0",
               "build_number": 0,
               "depends": [
-                  "python >=3.7",
+                  "python >=3.7"
               ],
               "license": "MIT",
               "license_family": "MIT",
