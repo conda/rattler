@@ -303,11 +303,7 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
 
         if self.packages_validating.is_empty() {
             if self.populate_cache_started.len() == self.total_packages_to_cache {
-                validation_progress.set_style(self.style(ProgressStyleProperties {
-                    status: ProgressStatus::Finished,
-                    determinate: true,
-                    progress_type: ProgressType::Generic,
-                }));
+                self.finish_validation_progress();
             } else {
                 validation_progress.set_style(self.style(ProgressStyleProperties {
                     status: ProgressStatus::Paused,
@@ -315,6 +311,31 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
                     progress_type: ProgressType::Generic,
                 }));
             }
+        }
+    }
+
+    fn finish_validation_progress(&self) {
+        let Some(validation_progress) = &self.validation_progress else {
+            return;
+        };
+
+        validation_progress.set_style(self.style(ProgressStyleProperties {
+            status: ProgressStatus::Finished,
+            determinate: true,
+            progress_type: ProgressType::Generic,
+        }));
+        validation_progress.finish_using_style();
+        if let (Some(start), Some(end)) = (self.start_validating, self.end_validating) {
+            validation_progress.set_message(format!(
+                "{} {} in {:?}",
+                self.packages_validated.len(),
+                if self.packages_validated.len() == 1 {
+                    "package"
+                } else {
+                    "packages"
+                },
+                end - start
+            ));
         }
     }
 
@@ -502,8 +523,8 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         validation_progress.inc(1);
 
-        inner.update_validating_status();
         inner.update_validating_message();
+        inner.update_validating_status();
     }
 
     fn on_download_start(&self, cache_entry: usize) -> usize {
@@ -551,6 +572,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         download_progress.set_length(inner.total_download_size as u64);
 
         inner.update_download_message();
+        inner.update_validating_message();
         inner.update_validating_status();
 
         cache_entry
@@ -594,26 +616,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
 
         inner.total_packages_cached += 1;
         if inner.total_packages_cached >= inner.total_packages_to_cache {
-            if let Some(validation_pb) = &inner.validation_progress {
-                validation_pb.set_style(inner.style(ProgressStyleProperties {
-                    status: ProgressStatus::Finished,
-                    determinate: true,
-                    progress_type: ProgressType::Generic,
-                }));
-                validation_pb.finish_using_style();
-                if let (Some(start), Some(end)) = (inner.start_validating, inner.end_validating) {
-                    validation_pb.set_message(format!(
-                        "{} {} in {:?}",
-                        inner.packages_validated.len(),
-                        if inner.packages_validated.len() == 1 {
-                            "package"
-                        } else {
-                            "packages"
-                        },
-                        end - start
-                    ));
-                }
-            }
+            inner.finish_validation_progress();
 
             if let Some(download_pb) = &inner.download_progress {
                 download_pb.set_style(inner.style(ProgressStyleProperties {
