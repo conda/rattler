@@ -318,6 +318,16 @@ impl Version {
                     .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
+
+                // If the segment ends with an ascii character, make it `a` instead of whatever it says
+                let last_iden_component = segment_components
+                    .iter_mut()
+                    .filter_map(Component::as_iden_mut)
+                    .next_back();
+
+                if let Some(last_iden_component) = last_iden_component {
+                    *last_iden_component = "a".into();
+                }                
             }
 
             let has_implicit_default =
@@ -766,6 +776,22 @@ impl Component {
     pub fn as_number_mut(&mut self) -> Option<&mut u64> {
         match self {
             Component::Numeral(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns a component as iden value
+    pub fn as_iden(&self) -> Option<&Box<str>> {
+        match self {
+            Component::Iden(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns a component as mutable iden value
+    pub fn as_iden_mut(&mut self) -> Option<&mut Box<str>> {
+        match self {
+            Component::Iden(value) => Some(value),
             _ => None,
         }
     }
@@ -1562,6 +1588,13 @@ mod test {
                 .bump(VersionBumpType::Segment(-3))
                 .unwrap(),
             Version::from_str("2.1.9").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("9d")
+                .unwrap()
+                .bump(VersionBumpType::Segment(0))
+                .unwrap(),
+            Version::from_str("10a").unwrap()
         );
     }
 
