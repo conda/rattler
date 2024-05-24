@@ -327,7 +327,7 @@ impl Version {
 
                 if let Some(last_iden_component) = last_iden_component {
                     *last_iden_component = "a".into();
-                }                
+                }
             }
 
             let has_implicit_default =
@@ -1306,14 +1306,14 @@ mod test {
                 .unwrap()
                 .bump(VersionBumpType::Last)
                 .unwrap(),
-            Version::from_str("1.2l").unwrap()
+            Version::from_str("1.2a").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.alpha+3.4")
                 .unwrap()
                 .bump(VersionBumpType::Last)
                 .unwrap(),
-            Version::from_str("5!1.1alpha+3.4").unwrap()
+            Version::from_str("5!1.1a+3.4").unwrap()
         );
     }
 
@@ -1487,14 +1487,14 @@ mod test {
                 .unwrap()
                 .bump(VersionBumpType::Minor)
                 .unwrap(),
-            Version::from_str("2.2l").unwrap()
+            Version::from_str("2.2a").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.alpha+3.4")
                 .unwrap()
                 .bump(VersionBumpType::Minor)
                 .unwrap(),
-            Version::from_str("5!1.1alpha+3.4").unwrap()
+            Version::from_str("5!1.1a+3.4").unwrap()
         );
     }
 
@@ -1522,14 +1522,14 @@ mod test {
                 .unwrap()
                 .bump(VersionBumpType::Patch)
                 .unwrap(),
-            Version::from_str("2.1l.6alpha").unwrap()
+            Version::from_str("2.1l.6a").unwrap()
         );
         assert_eq!(
             Version::from_str("5!1.8.alpha+3.4")
                 .unwrap()
                 .bump(VersionBumpType::Patch)
                 .unwrap(),
-            Version::from_str("5!1.8.1alpha+3.4").unwrap()
+            Version::from_str("5!1.8.1a+3.4").unwrap()
         );
     }
 
