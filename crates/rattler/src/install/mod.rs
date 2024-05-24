@@ -43,7 +43,10 @@ pub use apple_codesign::AppleCodeSignBehavior;
 pub use driver::InstallDriver;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 #[cfg(feature = "indicatif")]
-pub use installer::{DefaultProgressFormatter, IndicatifReporter, ProgressFormatter, IndicatifReporterBuilder};
+pub use installer::{
+    DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
+    ProgressFormatter,
+};
 pub use installer::{Installer, InstallerError, Reporter};
 use itertools::Itertools;
 pub use link::{link_file, LinkFileError, LinkMethod};
