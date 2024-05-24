@@ -240,7 +240,25 @@ impl Version {
     }
 
     /// Returns a new version after bumping it according to the specified bump type.
+    /// 
+    /// For example, bumping the Major version:
+    /// - Major: `3.1.4` -> `4.1.4`
+    /// - Minor: `3.1.4` -> `3.2.4`
+    /// - Patch: `3.1.4` -> `3.1.5`
+    /// 
+    /// Special cases, like openssl versions, are bumped like:
+    /// 
+    /// - Minor: 1.1.1j -> 1.1.2a
     pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+        self.bump_impl(bump_type, false)
+    }
+
+    /// Returns a new version after bumping it according to the specified bump type.
+    pub fn bump_with_alpha(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+        self.bump_impl(bump_type, true)
+    }
+
+    fn bump_impl(&self, bump_type: VersionBumpType, with_alpha: bool) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
         let mut flags = Flags::default();
@@ -346,6 +364,13 @@ impl Version {
                 .expect("copying the segment should just work");
 
             segments.push(segment);
+        }
+
+        if with_alpha {
+            components.push(Component::Numeral(0));
+            components.push(Component::Iden("a".into()));
+            components.push(Component::Numeral(0));
+            segments.push(Segment::new(3).unwrap())
         }
 
         if self.has_local() {
@@ -1593,6 +1618,31 @@ mod test {
             Version::from_str("9d")
                 .unwrap()
                 .bump(VersionBumpType::Segment(0))
+                .unwrap(),
+            Version::from_str("10a").unwrap()
+        );
+    }
+
+    #[test]
+    fn bump_segment_with_alpha() {
+        assert_eq!(
+            Version::from_str("1.1.9")
+                .unwrap()
+                .bump_with_alpha(VersionBumpType::Segment(2))
+                .unwrap(),
+            Version::from_str("1.1.10.0a0").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("1.1.9+3.4")
+                .unwrap()
+                .bump_with_alpha(VersionBumpType::Segment(2))
+                .unwrap(),
+            Version::from_str("1.1.10.0a0+3.4").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("9e")
+                .unwrap()
+                .bump_with_alpha(VersionBumpType::Segment(0))
                 .unwrap(),
             Version::from_str("10a").unwrap()
         );
