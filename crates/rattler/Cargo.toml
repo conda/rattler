@@ -27,6 +27,7 @@ dirs = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
+humantime = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true, optional = true }
 itertools = { workspace = true }
