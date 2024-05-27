@@ -172,6 +172,7 @@ pub fn parse_v3_or_lower(
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
+                            run_exports: None,
                         },
                         url: value.url,
                         file_name: None,

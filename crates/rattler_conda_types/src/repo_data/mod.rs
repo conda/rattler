@@ -21,7 +21,9 @@ use thiserror::Error;
 use url::Url;
 
 use crate::{
-    build_spec::BuildNumber, package::IndexJson, utils::serde::DeserializeFromStrUnchecked,
+    build_spec::BuildNumber,
+    package::{IndexJson, RunExportsJson},
+    utils::serde::DeserializeFromStrUnchecked,
     Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
 };
 
@@ -146,6 +148,10 @@ pub struct PackageRecord {
     /// one. [`Some([`PackageUrl`])`] means that it is a pypi package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<BTreeSet<PackageUrl>>,
+
+    /// Run exports that are specified in the package.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_exports: Option<RunExportsJson>,
 
     /// Optionally a SHA256 hash of the package archive
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
@@ -304,6 +310,7 @@ impl PackageRecord {
             track_features: vec![],
             version: version.into(),
             purls: None,
+            run_exports: None,
         }
     }
 
@@ -421,6 +428,7 @@ impl PackageRecord {
             track_features: index.track_features,
             version: index.version,
             purls: None,
+            run_exports: None,
         })
     }
 }
