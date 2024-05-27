@@ -240,25 +240,35 @@ impl Version {
     }
 
     /// Returns a new version after bumping it according to the specified bump type.
-    /// 
+    ///
     /// For example, bumping the Major version:
     /// - Major: `3.1.4` -> `4.1.4`
     /// - Minor: `3.1.4` -> `3.2.4`
     /// - Patch: `3.1.4` -> `3.1.5`
-    /// 
+    ///
     /// Special cases, like openssl versions, are bumped like:
-    /// 
+    ///
     /// - Minor: 1.1.1j -> 1.1.2a
     pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         self.bump_impl(bump_type, false)
     }
 
-    /// Returns a new version after bumping it according to the specified bump type.
+    /// Returns a new version after bumping it according to the specified bump type, and add an alpha component
+    /// to the end of the version to prevent the inclusion of any "alpha" versions.
+    ///
+    /// E.g.
+    ///
+    /// - Patch: `3.1.4` -> `3.1.5.0a0`
+    /// - Major: `9b` -> `10a` (no alpha version included for this case)
     pub fn bump_with_alpha(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         self.bump_impl(bump_type, true)
     }
 
-    fn bump_impl(&self, bump_type: VersionBumpType, with_alpha: bool) -> Result<Self, VersionBumpError> {
+    fn bump_impl(
+        &self,
+        bump_type: VersionBumpType,
+        with_alpha: bool,
+    ) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
         let mut flags = Flags::default();
@@ -367,10 +377,21 @@ impl Version {
         }
 
         if with_alpha {
-            components.push(Component::Numeral(0));
-            components.push(Component::Iden("a".into()));
-            components.push(Component::Numeral(0));
-            segments.push(Segment::new(3).unwrap())
+            // if the last segment has a iden component, we don't want to bump it to `a`
+            let has_iden = if let Some(segment_iter) = self.segments().last() {
+                segment_iter
+                    .components()
+                    .any(|c| matches!(c, Component::Iden(_)))
+            } else {
+                false
+            };
+
+            if !has_iden {
+                components.push(Component::Numeral(0));
+                components.push(Component::Iden("a".into()));
+                components.push(Component::Numeral(0));
+                segments.push(Segment::new(3).unwrap())
+            }
         }
 
         if self.has_local() {
