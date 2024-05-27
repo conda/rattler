@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.23.1...rattler_conda_types-v0.24.0) - 2024-05-27
+
+### Added
+- removed Ord and more ([#673](https://github.com/mamba-org/rattler/pull/673))
+- always store purls as a key in lock file ([#669](https://github.com/mamba-org/rattler/pull/669))
+- add solve strategies ([#660](https://github.com/mamba-org/rattler/pull/660))
+
+### Fixed
+- make topological sorting support fully cyclic dependencies ([#678](https://github.com/mamba-org/rattler/pull/678))
+
 ## [0.23.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.23.0...rattler_conda_types-v0.23.1) - 2024-05-14
 
 ### Added

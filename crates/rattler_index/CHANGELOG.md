@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.13](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.12...rattler_index-v0.19.13) - 2024-05-27
+
+### Added
+- always store purls as a key in lock file ([#669](https://github.com/mamba-org/rattler/pull/669))
+
 ## [0.19.12](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.11...rattler_index-v0.19.12) - 2024-05-14
 
 ### Other
