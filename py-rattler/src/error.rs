@@ -1,8 +1,6 @@
-use std::error::Error;
-use std::io;
+use std::{error::Error, io};
 
-use pyo3::exceptions::PyException;
-use pyo3::{create_exception, PyErr};
+use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
@@ -10,8 +8,7 @@ use rattler_conda_types::{
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_package_streaming::ExtractError;
-use rattler_repodata_gateway::fetch::FetchRepoDataError;
-use rattler_repodata_gateway::GatewayError;
+use rattler_repodata_gateway::{fetch::FetchRepoDataError, GatewayError};
 use rattler_shell::activation::ActivationError;
 use rattler_solve::SolveError;
 use rattler_virtual_packages::DetectVirtualPackageError;
@@ -68,6 +65,8 @@ pub enum PyRattlerError {
     ActivationScriptFormatError(std::fmt::Error),
     #[error(transparent)]
     GatewayError(#[from] GatewayError),
+    #[error(transparent)]
+    InstallerError(#[from] rattler::install::InstallerError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -146,6 +145,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::GatewayError(err) => {
                 GatewayException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::InstallerError(err) => {
+                InstallerException::new_err(pretty_print_error(&err))
+            }
         }
     }
 }
@@ -174,3 +176,4 @@ create_exception!(exceptions, EnvironmentCreationException, PyException);
 create_exception!(exceptions, ExtractException, PyException);
 create_exception!(exceptions, ActivationScriptFormatException, PyException);
 create_exception!(exceptions, GatewayException, PyException);
+create_exception!(exceptions, InstallerException, PyException);

@@ -1,18 +1,19 @@
 use super::clobber_registry::ClobberRegistry;
-use super::link_script::PrePostLinkResult;
+use super::link_script::{PrePostLinkError, PrePostLinkResult};
 use super::unlink::{recursively_remove_empty_directories, UnlinkError};
-use super::{InstallError, Transaction};
+use super::Transaction;
 use indexmap::IndexSet;
 use itertools::Itertools;
 use rattler_conda_types::prefix_record::PathType;
 use rattler_conda_types::{PackageRecord, PrefixRecord};
+use simple_spawn_blocking::tokio::run_blocking_task;
+use simple_spawn_blocking::Cancelled;
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex};
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
-use tokio::task::JoinError;
 
 /// Packages can mostly be installed in isolation and therefor in parallel. However, when installing
 /// a large number of packages at the same time the different installation tasks start competing for
@@ -65,7 +66,10 @@ impl InstallDriverBuilder {
 
     /// Sets the prefix records that are present in the current environment.
     /// This is used to initialize the clobber registry.
-    pub fn with_prefix_records(self, prefix_records: &[PrefixRecord]) -> Self {
+    pub fn with_prefix_records<'i>(
+        self,
+        prefix_records: impl IntoIterator<Item = &'i PrefixRecord>,
+    ) -> Self {
         Self {
             clobber_registry: Some(ClobberRegistry::from_prefix_records(prefix_records)),
             ..self
@@ -119,7 +123,7 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
-    ) -> Result<Option<PrePostLinkResult>, InstallError> {
+    ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
         if self.execute_link_scripts {
             match self.run_pre_unlink_scripts(transaction, target_prefix) {
                 Ok(res) => {
@@ -139,26 +143,19 @@ impl InstallDriver {
     /// more IO resources than the system has available.
     pub async fn run_blocking_io_task<
         T: Send + 'static,
-        E: Send + Into<InstallError> + 'static,
+        E: Send + From<Cancelled> + 'static,
         F: FnOnce() -> Result<T, E> + Send + 'static,
     >(
         &self,
         f: F,
-    ) -> Result<T, InstallError> {
-        let _permit = self
-            .acquire_io_permit()
-            .await
-            .map_err(|_err| InstallError::Cancelled)?;
+    ) -> Result<T, E> {
+        let permit = self.acquire_io_permit().await.map_err(|_err| Cancelled)?;
 
-        // Execute the task as a blocking task
-        match tokio::task::spawn_blocking(f)
-            .await
-            .map_err(JoinError::try_into_panic)
-        {
-            Ok(result) => result.map_err(Into::into),
-            Err(Ok(payload)) => std::panic::resume_unwind(payload),
-            Err(Err(_err)) => Err(InstallError::Cancelled),
-        }
+        run_blocking_task(move || {
+            let _permit = permit;
+            f()
+        })
+        .await
     }
 
     /// Call this after all packages have been installed to perform any post processing that is
@@ -170,9 +167,9 @@ impl InstallDriver {
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
-    ) -> Result<Option<PrePostLinkResult>, InstallError> {
+    ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
-            .map_err(InstallError::PostProcessFailed)?;
+            .map_err(PrePostLinkError::FailedToDetectInstalledPackages)?;
 
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());

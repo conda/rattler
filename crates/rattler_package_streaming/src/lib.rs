@@ -78,3 +78,13 @@ pub struct ExtractResult {
     /// The Md5 hash of the extracted archive.
     pub md5: Md5Hash,
 }
+
+/// A trait that can be implemented to report download progress.
+pub trait DownloadReporter: Send + Sync {
+    /// Called when the download starts.
+    fn on_download_start(&self);
+    /// Called when the download makes progress.
+    fn on_download_progress(&self, bytes_downloaded: u64, total_bytes: Option<u64>);
+    /// Called when the download finishes.
+    fn on_download_complete(&self);
+}

@@ -10,10 +10,10 @@
 //! `paths.json` file is missing these deprecated files are used instead to reconstruct a
 //! [`PathsJson`] object. See [`PathsJson::from_deprecated_package_directory`] for more information.
 
+use digest::Digest;
 use rattler_conda_types::package::{IndexJson, PackageFile, PathType, PathsEntry, PathsJson};
-use rattler_digest::compute_file_digest;
+use rattler_digest::Sha256;
 use std::{
-    fs::Metadata,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
@@ -135,20 +135,11 @@ fn validate_package_entry(
 ) -> Result<(), PackageEntryValidationError> {
     let path = package_dir.join(&entry.relative_path);
 
-    // Get the metadata for the entry
-    let metadata = match std::fs::symlink_metadata(&path) {
-        Ok(metadata) => metadata,
-        Err(e) if e.kind() == ErrorKind::NotFound => {
-            return Err(PackageEntryValidationError::NotFound);
-        }
-        Err(e) => return Err(PackageEntryValidationError::GetMetadataFailed(e)),
-    };
-
     // Validate based on the type of path
     match entry.path_type {
-        PathType::HardLink => validate_package_hard_link_entry(path, entry, metadata),
-        PathType::SoftLink => validate_package_soft_link_entry(path, entry, metadata),
-        PathType::Directory => validate_package_directory_entry(path, entry, metadata),
+        PathType::HardLink => validate_package_hard_link_entry(path, entry),
+        PathType::SoftLink => validate_package_soft_link_entry(path, entry),
+        PathType::Directory => validate_package_directory_entry(path, entry),
     }
 }
 
@@ -156,16 +147,36 @@ fn validate_package_entry(
 fn validate_package_hard_link_entry(
     path: PathBuf,
     entry: &PathsEntry,
-    metadata: Metadata,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::HardLink);
 
+    // Short-circuit if we have no validation reference
+    if entry.sha256.is_none() && entry.size_in_bytes.is_none() {
+        if !path.is_file() {
+            return Err(PackageEntryValidationError::NotFound);
+        }
+        return Ok(());
+    }
+
+    // Open the file for reading
+    let mut file = match std::fs::File::open(&path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            return Err(PackageEntryValidationError::NotFound);
+        }
+        Err(e) => return Err(PackageEntryValidationError::IoError(e)),
+    };
+
     // Validate the size of the file
     if let Some(size_in_bytes) = entry.size_in_bytes {
-        if size_in_bytes != metadata.len() {
+        let actual_file_len = file
+            .metadata()
+            .map_err(PackageEntryValidationError::IoError)?
+            .len();
+        if size_in_bytes != actual_file_len {
             return Err(PackageEntryValidationError::IncorrectSize(
                 size_in_bytes,
-                metadata.len(),
+                actual_file_len,
             ));
         }
     }
@@ -173,7 +184,9 @@ fn validate_package_hard_link_entry(
     // Check the SHA256 hash of the file
     if let Some(expected_hash) = &entry.sha256 {
         // Determine the hash of the file on disk
-        let hash = compute_file_digest::<rattler_digest::Sha256>(&path)?;
+        let mut hasher = Sha256::default();
+        std::io::copy(&mut file, &mut hasher)?;
+        let hash = hasher.finalize();
 
         // Compare the two hashes
         if expected_hash != &hash {
@@ -190,13 +203,12 @@ fn validate_package_hard_link_entry(
 /// Determine whether the information in the [`PathsEntry`] matches the symbolic link at the specified
 /// path.
 fn validate_package_soft_link_entry(
-    _path: PathBuf,
+    path: PathBuf,
     entry: &PathsEntry,
-    metadata: Metadata,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::SoftLink);
 
-    if !metadata.is_symlink() {
+    if !path.is_symlink() {
         return Err(PackageEntryValidationError::ExpectedSymlink);
     }
 
@@ -210,13 +222,12 @@ fn validate_package_soft_link_entry(
 
 /// Determine whether the information in the [`PathsEntry`] matches the directory at the specified path.
 fn validate_package_directory_entry(
-    _path: PathBuf,
+    path: PathBuf,
     entry: &PathsEntry,
-    metadata: Metadata,
 ) -> Result<(), PackageEntryValidationError> {
     debug_assert!(entry.path_type == PathType::Directory);
 
-    if metadata.is_dir() {
+    if path.is_dir() {
         Ok(())
     } else {
         Err(PackageEntryValidationError::ExpectedDirectory)

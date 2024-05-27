@@ -1,6 +1,5 @@
 use super::{token::TokenClient, ShardedRepodata};
 use crate::reporter::ResponseReporterExt;
-use crate::utils::run_blocking_task;
 use crate::{utils::url_to_cache_filename, GatewayError, Reporter};
 use bytes::Bytes;
 use futures::{FutureExt, TryFutureExt};
@@ -9,6 +8,7 @@ use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLik
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
+use simple_spawn_blocking::tokio::run_blocking_task;
 use std::sync::Arc;
 use std::{io::Write, path::Path, str::FromStr, time::SystemTime};
 use tempfile::NamedTempFile;

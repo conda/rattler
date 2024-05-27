@@ -1,6 +1,5 @@
 use crate::gateway::error::SubdirNotFoundError;
 use crate::reporter::ResponseReporterExt;
-use crate::utils::run_blocking_task;
 use crate::Reporter;
 use crate::{fetch::FetchRepoDataError, gateway::subdir::SubdirClient, GatewayError};
 use futures::TryFutureExt;
@@ -8,6 +7,7 @@ use http::header::CACHE_CONTROL;
 use http::{HeaderValue, StatusCode};
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Shard, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
+use simple_spawn_blocking::tokio::run_blocking_task;
 use std::{borrow::Cow, path::PathBuf, sync::Arc};
 use token::TokenClient;
 use url::Url;

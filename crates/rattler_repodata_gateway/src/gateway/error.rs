@@ -1,9 +1,9 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
-use crate::utils::Cancelled;
 use rattler_conda_types::Channel;
 use rattler_networking::Redact;
 use reqwest_middleware::Error;
+use simple_spawn_blocking::Cancelled;
 use std::fmt::{Display, Formatter};
 use std::io;
 use thiserror::Error;

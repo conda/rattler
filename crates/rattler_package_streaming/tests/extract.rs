@@ -231,6 +231,7 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
         url,
         &target_dir,
         None,
+        None,
     )
     .await
     .unwrap();

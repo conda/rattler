@@ -10,6 +10,10 @@ pub enum TransactionError {
     /// An error that happens if the python version could not be parsed.
     #[error(transparent)]
     PythonInfoError(#[from] PythonInfoError),
+
+    /// The operation was cancelled
+    #[error("the operation was cancelled")]
+    Cancelled,
 }
 
 /// Describes an operation to perform
@@ -62,6 +66,7 @@ impl<Old, New> TransactionOperation<Old, New> {
 }
 
 /// Describes the operations to perform to bring an environment from one state into another.
+#[derive(Debug)]
 pub struct Transaction<Old, New> {
     /// A list of operations to update an environment
     pub operations: Vec<TransactionOperation<Old, New>>,
@@ -84,6 +89,11 @@ impl<Old, New> Transaction<Old, New> {
             .iter()
             .filter_map(TransactionOperation::record_to_remove)
     }
+
+    /// Returns the number of records to install.
+    pub fn packages_to_uninstall(&self) -> usize {
+        self.removed_packages().count()
+    }
 }
 
 impl<Old: AsRef<New>, New> Transaction<Old, New> {
@@ -92,6 +102,11 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
         self.operations
             .iter()
             .filter_map(TransactionOperation::record_to_install)
+    }
+
+    /// Returns the number of records to install.
+    pub fn packages_to_install(&self) -> usize {
+        self.installed_packages().count()
     }
 }
 
@@ -155,7 +170,7 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
                         old: old_record,
                         new: record,
                     });
-                } else if needs_python_relink {
+                } else if needs_python_relink && old_record.as_ref().noarch.is_python() {
                     // when the python version changed, we need to relink all noarch packages
                     // to recompile the bytecode
                     operations.push(TransactionOperation::Reinstall(old_record));

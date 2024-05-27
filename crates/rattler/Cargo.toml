@@ -15,6 +15,7 @@ default = ['native-tls']
 native-tls = ['reqwest/native-tls', 'rattler_package_streaming/native-tls']
 rustls-tls = ['reqwest/rustls-tls', 'rattler_package_streaming/rustls-tls']
 cli-tools = ['dep:clap']
+indicatif = ['dep:indicatif', 'dep:console']
 
 [dependencies]
 anyhow = { workspace = true }
@@ -27,20 +28,23 @@ fs-err = { workspace = true }
 futures = { workspace = true }
 fxhash = { workspace = true }
 indexmap = { workspace = true }
+indicatif = { workspace = true, optional = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
-rattler_conda_types = { path="../rattler_conda_types", version = "0.23.1", default-features = false }
-rattler_digest = { path="../rattler_digest", version = "0.19.4", default-features = false }
-rattler_networking = { path="../rattler_networking", version = "0.20.7", default-features = false }
-rattler_shell = { path="../rattler_shell", version = "0.20.4", default-features = false }
-rattler_package_streaming = { path="../rattler_package_streaming", version = "0.20.10", default-features = false, features = ["reqwest"] }
+parking_lot = { workspace = true }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.23.1", default-features = false }
+rattler_digest = { path = "../rattler_digest", version = "0.19.4", default-features = false }
+rattler_networking = { path = "../rattler_networking", version = "0.20.7", default-features = false }
+rattler_shell = { path = "../rattler_shell", version = "0.20.4", default-features = false }
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.20.10", default-features = false, features = ["reqwest"] }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }
 reqwest-middleware = { workspace = true }
 smallvec = { workspace = true }
+simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.0", default-features = false, features = ["tokio"] }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
@@ -48,6 +52,7 @@ tokio-stream = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }
+console = { workspace = true, optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }

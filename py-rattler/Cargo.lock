@@ -471,6 +471,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "console"
+version = "0.15.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e1f83fc076bd6dd27517eacdf25fef6c4dfe5f1d7448bafaaf3a26f13b5e4eb"
+dependencies = [
+ "encode_unicode",
+ "lazy_static",
+ "libc",
+ "unicode-width",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,6 +648,12 @@ checksum = "d98e71ae4df57d214182a2e5cb90230c0192c6ddfcaa05c36453d46a54713e10"
 dependencies = [
  "stable_deref_trait",
 ]
+
+[[package]]
+name = "encode_unicode"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a357d28ed41a50f9c765dbfe56cbc04a64e53e5fc58ba79fbc34c10ef3df831f"
 
 [[package]]
 name = "encoding_rs"
@@ -1467,6 +1486,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "indicatif"
+version = "0.17.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "763a5a8f45087d6bcea4222e7b72c291a054edf80e4ef6efd2a4979878c7bea3"
+dependencies = [
+ "console",
+ "instant",
+ "number_prefix",
+ "portable-atomic",
+ "unicode-width",
+]
+
+[[package]]
 name = "indoc"
 version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1900,6 +1932,12 @@ dependencies = [
  "hermit-abi",
  "libc",
 ]
+
+[[package]]
+name = "number_prefix"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "object"
@@ -2489,16 +2527,19 @@ dependencies = [
  "anyhow",
  "bytes",
  "chrono",
+ "console",
  "digest",
  "dirs",
  "fs-err",
  "futures",
  "fxhash",
  "indexmap 2.2.6",
+ "indicatif",
  "itertools 0.12.1",
  "memchr",
  "memmap2",
  "once_cell",
+ "parking_lot",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
@@ -2508,6 +2549,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.4",
  "reqwest-middleware",
+ "simple_spawn_blocking",
  "smallvec",
  "tempfile",
  "thiserror",
@@ -2612,15 +2654,18 @@ dependencies = [
  "anyhow",
  "async-trait",
  "base64 0.22.1",
+ "bytes",
  "chrono",
  "dirs",
  "fslock",
+ "futures",
  "getrandom",
  "google-cloud-auth",
  "http 1.1.0",
  "itertools 0.12.1",
  "keyring",
  "netrc-rs",
+ "pin-project-lite",
  "reqwest 0.12.4",
  "reqwest-middleware",
  "retry-policies",
@@ -2693,6 +2738,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "simple_spawn_blocking",
  "superslice",
  "tempfile",
  "thiserror",
@@ -3328,6 +3374,13 @@ dependencies = [
  "num-traits",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "simple_spawn_blocking"
+version = "1.0.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]
