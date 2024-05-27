@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.2](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.20.1...rattler_repodata_gateway-v0.20.2) - 2024-05-27
+
+### Fixed
+- result grouped by subdir instead of channel ([#666](https://github.com/mamba-org/rattler/pull/666))
+
+### Other
+- introducing the installer ([#664](https://github.com/mamba-org/rattler/pull/664))
+
 ## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.20.0...rattler_repodata_gateway-v0.20.1) - 2024-05-14
 
 ### Added
