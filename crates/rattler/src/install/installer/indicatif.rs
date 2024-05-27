@@ -88,6 +88,9 @@ pub struct ProgressStyleProperties {
 
     /// The type of progress to show.
     pub progress_type: ProgressType,
+
+    /// The progress bar
+    pub track: ProgressTrack,
 }
 
 /// A trait that can be used to customize the style of different progress bars
@@ -131,8 +134,15 @@ impl ProgressFormatter for DefaultProgressFormatter {
 
         // Add progress indicator
         if props.determinate && props.status != ProgressStatus::Finished {
-            result.push_str("[{elapsed_precise}] [{bar:20!.bright.yellow/dim.white}] ");
+            if props.status == ProgressStatus::Active {
+                result.push_str("[{elapsed_precise}] [{bar:20!.bright.yellow/dim.white}] ");
+            } else {
+                result.push_str("[{elapsed_precise}] [{bar:20!.dim.yellow/dim.white}] ");
+            }
             match props.progress_type {
+                ProgressType::Generic if props.track == ProgressTrack::Linking => {
+                    result.push_str("{human_pos:>5}/{human_len} ");
+                }
                 ProgressType::Generic => {
                     // Don't show position and total, because these are visible
                     // through text anyway.
@@ -309,6 +319,7 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
                     status: ProgressStatus::Paused,
                     determinate: true,
                     progress_type: ProgressType::Generic,
+                    track: ProgressTrack::Validation,
                 }));
             }
         }
@@ -323,18 +334,19 @@ impl<F: ProgressFormatter> IndicatifReporterInner<F> {
             status: ProgressStatus::Finished,
             determinate: true,
             progress_type: ProgressType::Generic,
+            track: ProgressTrack::Validation,
         }));
         validation_progress.finish_using_style();
         if let (Some(start), Some(end)) = (self.start_validating, self.end_validating) {
             validation_progress.set_message(format!(
-                "{} {} in {:?}",
+                "{} {} in {}",
                 self.packages_validated.len(),
                 if self.packages_validated.len() == 1 {
                     "package"
                 } else {
                     "packages"
                 },
-                end - start
+                format_duration(end - start)
             ));
         }
     }
@@ -417,8 +429,9 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 status: ProgressStatus::Pending,
                 determinate: true,
                 progress_type: ProgressType::Generic,
+                track: ProgressTrack::Linking,
             }))
-            .with_prefix("update prefix")
+            .with_prefix("installing packages")
             .with_finish(ProgressFinish::AndLeave);
         link_progress.enable_steady_tick(Duration::from_millis(100));
 
@@ -482,6 +495,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                         status: ProgressStatus::Active,
                         determinate: true,
                         progress_type: ProgressType::Generic,
+                        track: ProgressTrack::Validation,
                     }))
                     .with_prefix("validate cache")
                     .with_finish(ProgressFinish::AndLeave);
@@ -500,6 +514,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             status: ProgressStatus::Active,
             determinate: true,
             progress_type: ProgressType::Generic,
+            track: ProgressTrack::Validation,
         }));
 
         inner.update_validating_message();
@@ -550,6 +565,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                         status: ProgressStatus::Active,
                         determinate: true,
                         progress_type: ProgressType::Generic,
+                        track: ProgressTrack::DownloadAndExtract,
                     }))
                     .with_prefix("download & extract")
                     .with_finish(ProgressFinish::AndLeave);
@@ -567,6 +583,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             status: ProgressStatus::Active,
             determinate: true,
             progress_type: ProgressType::Bytes,
+            track: ProgressTrack::DownloadAndExtract,
         }));
         download_progress.set_length(inner.total_download_size as u64);
 
@@ -604,6 +621,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                     status: ProgressStatus::Paused,
                     determinate: true,
                     progress_type: ProgressType::Bytes,
+                    track: ProgressTrack::DownloadAndExtract,
                 }));
         }
 
@@ -622,11 +640,12 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                     status: ProgressStatus::Finished,
                     determinate: true,
                     progress_type: ProgressType::Bytes,
+                    track: ProgressTrack::DownloadAndExtract,
                 }));
                 download_pb.finish_using_style();
                 if let (Some(start), Some(end)) = (inner.start_downloading, inner.end_downloading) {
                     download_pb.set_message(format!(
-                        "{} {} ({}) in {:?}",
+                        "{} {} ({}) in {}",
                         inner.packages_downloaded.len(),
                         if inner.packages_downloaded.len() == 1 {
                             "package"
@@ -634,7 +653,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                             "packages"
                         },
                         HumanBytes(inner.bytes_downloaded.iter().sum::<usize>() as u64),
-                        end - start
+                        format_duration(end - start)
                     ));
                 }
             }
@@ -656,6 +675,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                     status: ProgressStatus::Active,
                     determinate: true,
                     progress_type: ProgressType::Generic,
+                    track: ProgressTrack::Linking,
                 }));
         }
 
@@ -678,6 +698,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 status: ProgressStatus::Paused,
                 determinate: true,
                 progress_type: ProgressType::Generic,
+                track: ProgressTrack::Linking,
             }));
         }
 
@@ -699,6 +720,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                     status: ProgressStatus::Active,
                     determinate: true,
                     progress_type: ProgressType::Generic,
+                    track: ProgressTrack::Linking,
                 }));
         }
 
@@ -721,6 +743,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 status: ProgressStatus::Paused,
                 determinate: true,
                 progress_type: ProgressType::Generic,
+                track: ProgressTrack::Linking,
             }));
         }
 
@@ -735,7 +758,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
         if let (Some(link_pb), Some(start), Some(end)) =
             (&inner.link_progress, inner.start_linking, inner.end_linking)
         {
-            link_pb.set_message(format!("took {:?}", end - start));
+            link_pb.set_message(format!("took {}", format_duration(end - start)));
         }
 
         for (pb, track) in [
@@ -755,6 +778,7 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
                 } else {
                     ProgressType::Generic
                 },
+                track,
             }));
             if inner.clear_when_done {
                 pb.finish_and_clear();
@@ -763,4 +787,9 @@ impl<F: ProgressFormatter + Send> Reporter for IndicatifReporter<F> {
             }
         }
     }
+}
+
+/// Formats a durations. Rounds to milliseconds and uses human-readable format.
+fn format_duration(duration: Duration) -> humantime::FormattedDuration {
+    humantime::format_duration(Duration::from_millis(duration.as_millis() as u64))
 }
