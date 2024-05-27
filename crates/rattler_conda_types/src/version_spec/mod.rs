@@ -331,6 +331,7 @@ impl VersionSpec {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
+    use rstest::rstest;
 
     use crate::version_spec::parse::ParseConstraintError;
     use crate::version_spec::{
@@ -426,6 +427,17 @@ mod tests {
     #[test]
     fn issue_204() {
         assert!(VersionSpec::from_str(">=3.8<3.9", ParseStrictness::Strict).is_err());
+    }
+
+    #[rstest]
+    #[case("2.38.*", true)]
+    #[case("2.38.0.*", true)]
+    #[case("2.38.0.1*", false)]
+    #[case("2.38.0a.*", false)]
+    fn issue_685(#[case] spec: &str, #[case] starts_with: bool) {
+        let spec = VersionSpec::from_str(spec, ParseStrictness::Strict).unwrap();
+        let version = &Version::from_str("2.38").unwrap();
+        assert_eq!(spec.matches(version), starts_with);
     }
 
     #[test]
