@@ -89,7 +89,8 @@ impl PyVersion {
             inner: self
                 .inner
                 .extend_to_length(length)
-                .map_err(PyRattlerError::from)?,
+                .map_err(PyRattlerError::from)?
+                .into_owned(),
         })
     }
 

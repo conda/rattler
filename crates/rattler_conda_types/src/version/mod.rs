@@ -579,9 +579,10 @@ impl Version {
     }
 
     /// Extend the version to the specified length by adding default components (0s).
-    pub fn extend_to_length(&self, length: usize) -> Result<Version, VersionExtendError> {
+    /// If the version is already longer than the specified length it is returned as is.
+    pub fn extend_to_length(&self, length: usize) -> Result<Cow<'_, Version>, VersionExtendError> {
         if self.segment_count() >= length {
-            return Ok(self.clone());
+            return Ok(Cow::Borrowed(self));
         }
 
         // copy everything up to local version
@@ -593,11 +594,9 @@ impl Version {
         // unwrap is OK here because these should be fine to construct
         let segment = Segment::new(1).unwrap().with_separator(Some('.')).unwrap();
 
-        if length > self.segment_count() {
-            for _ in 0..(length - self.segment_count()) {
-                components.push(Component::Numeral(0));
-                segments.push(segment);
-            }
+        for _ in 0..(length - self.segment_count()) {
+            components.push(Component::Numeral(0));
+            segments.push(segment);
         }
 
         // add local version if it exists
@@ -617,11 +616,11 @@ impl Version {
             self.flags
         };
 
-        Ok(Version {
+        Ok(Cow::Owned(Version {
             components: components.into(),
             segments: segments.into(),
             flags,
-        })
+        }))
     }
 }
 
