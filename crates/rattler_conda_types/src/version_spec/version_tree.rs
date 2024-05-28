@@ -1,6 +1,5 @@
-use crate::version_spec::{
-    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
-};
+use std::convert::TryFrom;
+
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while},
@@ -10,10 +9,14 @@ use nom::{
     multi::{many0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
 };
-use std::convert::TryFrom;
 use thiserror::Error;
 
-/// A representation of an hierarchy of version constraints e.g. `1.3.4,>=5.0.1|(1.2.4,>=3.0.1)`.
+use crate::version_spec::{
+    EqualityOperator, LogicalOperator, RangeOperator, StrictRangeOperator, VersionOperators,
+};
+
+/// A representation of an hierarchy of version constraints e.g.
+/// `1.3.4,>=5.0.1|(1.2.4,>=3.0.1)`.
 #[derive(Debug, Eq, PartialEq)]
 pub(super) enum VersionTree<'a> {
     Term(&'a str),
@@ -109,7 +112,10 @@ pub(crate) fn recognize_version_with_star<'a, E: ParseError<&'a str> + ContextEr
 ) -> Result<(&'a str, &'a str), nom::Err<E>> {
     alt((
         // A version with an optional * or .*.
-        terminated(recognize_version, opt(alt((tag(".*"), tag("*"))))),
+        terminated(
+            recognize_version,
+            take_while(|c: char| c == '.' || c == '*'),
+        ),
         // Just a *
         tag("*"),
     ))(input)
@@ -156,7 +162,8 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             ))(input)
         }
 
-        /// Given multiple version tree components, flatten the structure as much as possible.
+        /// Given multiple version tree components, flatten the structure as
+        /// much as possible.
         fn flatten_group(operator: LogicalOperator, args: Vec<VersionTree<'_>>) -> VersionTree<'_> {
             if args.len() == 1 {
                 args.into_iter().next().unwrap()
@@ -207,12 +214,13 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::convert::TryFrom;
+
     use super::{parse_operator, recognize_version, LogicalOperator, VersionTree};
-    use crate::version_spec::version_tree::{parse_version_epoch, recognize_constraint};
     use crate::version_spec::{
+        version_tree::{parse_version_epoch, recognize_constraint},
         EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators,
     };
-    use std::convert::TryFrom;
 
     #[test]
     fn test_treeify() {

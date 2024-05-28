@@ -1,7 +1,3 @@
-use crate::version::parse::version_parser;
-use crate::version_spec::constraint::Constraint;
-use crate::version_spec::{EqualityOperator, RangeOperator, StrictRangeOperator, VersionOperators};
-use crate::{ParseStrictness, ParseVersionError, ParseVersionErrorKind};
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while, take_while1},
@@ -13,6 +9,15 @@ use nom::{
 };
 use thiserror::Error;
 
+use crate::{
+    version::parse::version_parser,
+    version_spec::{
+        constraint::Constraint, EqualityOperator, RangeOperator, StrictRangeOperator,
+        VersionOperators,
+    },
+    ParseStrictness, ParseVersionError, ParseVersionErrorKind,
+};
+
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 enum ParseVersionOperatorError<'i> {
     #[error("invalid operator '{0}'")]
@@ -21,7 +26,8 @@ enum ParseVersionOperatorError<'i> {
     ExpectedOperator,
 }
 
-/// Parses a version operator, returns an error if the operator is not recognized or not found.
+/// Parses a version operator, returns an error if the operator is not
+/// recognized or not found.
 fn operator_parser(input: &str) -> IResult<&str, VersionOperators, ParseVersionOperatorError<'_>> {
     // Take anything that looks like an operator.
     let (rest, operator_str) = take_while1(|c| "=!<>~".contains(c))(input).map_err(
@@ -142,8 +148,9 @@ fn logical_constraint_parser(
             _ => unreachable!(),
         };
 
-        // Take everything that looks like a version and use that to parse the version. Any error means
-        // no characters were detected that belong to the version.
+        // Take everything that looks like a version and use that to parse the version.
+        // Any error means no characters were detected that belong to the
+        // version.
         let (rest, version_str) = take_while1::<_, _, (&str, ErrorKind)>(|c: char| {
             c.is_alphanumeric() || "!-_.*+".contains(c)
         })(input)
@@ -154,9 +161,10 @@ fn logical_constraint_parser(
             }))
         })?;
 
-        // Handle the case where no version was specified. These cases don't make any sense (e.g.
-        // ``>=*``) but they do exist in the wild. This code here tries to map it to something that at
-        // least makes some sort of sense. But this is not the case for everything, for instance what
+        // Handle the case where no version was specified. These cases don't make any
+        // sense (e.g. ``>=*``) but they do exist in the wild. This code here
+        // tries to map it to something that at least makes some sort of sense.
+        // But this is not the case for everything, for instance what
         // what is ment with `!=*` or `<*`?
         // See: https://github.com/AnacondaRecipes/repodata-hotfixes/issues/220
         if version_str == "*" {
@@ -230,6 +238,13 @@ fn logical_constraint_parser(
             }
             ("*" | ".*", None, _) => VersionOperators::StrictRange(StrictRangeOperator::StartsWith),
 
+            // Support for edge case version spec that looks like `2023.*.*`.
+            (version_remainder, None, Lenient)
+                if looks_like_infinite_starts_with(version_remainder) =>
+            {
+                VersionOperators::StrictRange(StrictRangeOperator::StartsWith)
+            }
+
             // The version string kinda looks like a regular expression.
             (version_remainder, _, _)
                 if version_str.contains('*') || version_remainder.ends_with('$') =>
@@ -260,6 +275,27 @@ fn logical_constraint_parser(
     }
 }
 
+/// Returns true if the input looks like a version constraint with repeated
+/// starts with pattern. E.g: `.*.*`
+///
+/// This is an edge case found in the anaconda main repodata as `mkl 2023.*.*`.
+pub fn looks_like_infinite_starts_with(input: &str) -> bool {
+    let mut input = input;
+    while !input.is_empty() {
+        match input.strip_suffix(".*") {
+            Some(rest) if rest.is_empty() => {
+                // If we were able to continuously strip the `.*` pattern, then we found a
+                // match.
+                return true;
+            }
+            Some(rest) => input = rest,
+            None => return false,
+        }
+    }
+
+    false
+}
+
 /// Parses a version constraint.
 pub fn constraint_parser(
     strictness: ParseStrictness,
@@ -275,11 +311,13 @@ pub fn constraint_parser(
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use crate::{ParseStrictness::*, Version, VersionSpec};
+    use std::str::FromStr;
+
     use assert_matches::assert_matches;
     use rstest::rstest;
-    use std::str::FromStr;
+
+    use super::*;
+    use crate::{ParseStrictness::*, Version, VersionSpec};
 
     #[test]
     fn test_operator_parser() {
@@ -471,5 +509,15 @@ mod test {
     #[test]
     fn pixi_issue_278() {
         assert!(VersionSpec::from_str("1.8.1+g6b29558", Strict).is_ok());
+    }
+
+    #[test]
+    fn test_looks_like_infinite_starts_with() {
+        assert!(looks_like_infinite_starts_with(".*"));
+        assert!(looks_like_infinite_starts_with(".*.*"));
+        assert!(!looks_like_infinite_starts_with(".0.*"));
+        assert!(!looks_like_infinite_starts_with(""));
+        assert!(!looks_like_infinite_starts_with(""));
+        assert!(!looks_like_infinite_starts_with(".* .*"));
     }
 }

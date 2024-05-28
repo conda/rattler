@@ -1,23 +1,27 @@
-//! This module contains code to work with "versionspec". It represents the version part of
-//! [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
+//! This module contains code to work with "versionspec". It represents the
+//! version part of [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
 
 mod constraint;
 pub(crate) mod parse;
 pub(crate) mod version_tree;
 
-use crate::version_spec::version_tree::ParseVersionTreeError;
-use crate::{ParseStrictness, ParseVersionError, Version};
+use std::{
+    convert::TryFrom,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+
+pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
+use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
-use std::convert::TryFrom;
-use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 use thiserror::Error;
 use version_tree::VersionTree;
 
-use crate::version::StrictVersion;
-pub(crate) use constraint::is_start_of_version_constraint;
-use parse::ParseConstraintError;
+use crate::{
+    version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
+    ParseVersionError, Version,
+};
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]
@@ -91,8 +95,8 @@ pub enum VersionOperators {
     Exact(EqualityOperator),
 }
 
-/// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or
-/// `>=3.4|<4.0`,
+/// Logical operator used two compare groups of version comparisions. E.g.
+/// `>=3.4,<4.0` or `>=3.4|<4.0`,
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum LogicalOperator {
     /// All comparators must evaluate to true for the group to evaluate to true.
@@ -330,14 +334,17 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use assert_matches::assert_matches;
 
-    use crate::version_spec::parse::ParseConstraintError;
-    use crate::version_spec::{
-        EqualityOperator, LogicalOperator, ParseVersionSpecError, RangeOperator,
+    use crate::{
+        version_spec::{
+            parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
+            RangeOperator,
+        },
+        ParseStrictness, Version, VersionSpec,
     };
-    use crate::{ParseStrictness, Version, VersionSpec};
-    use std::str::FromStr;
 
     #[test]
     fn test_simple() {
@@ -443,6 +450,15 @@ mod tests {
             VersionSpec::from_str(">2.10*", ParseStrictness::Lenient).unwrap(),
             VersionSpec::from_str(">=2.10", ParseStrictness::Strict).unwrap()
         );
+    }
+
+    #[test]
+    fn issue_mkl_double() {
+        assert_eq!(
+            VersionSpec::from_str("2023.*.*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("2023.*", ParseStrictness::Lenient).unwrap()
+        );
+        assert!(VersionSpec::from_str("2023.*.*", ParseStrictness::Strict).is_err());
     }
 
     #[test]
