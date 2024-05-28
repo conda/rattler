@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.1](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.23.0...rattler_solve-v0.23.1) - 2024-05-28
+
+### Added
+- add run exports to package data ([#671](https://github.com/mamba-org/rattler/pull/671))
+
+### Other
+- enable serialization of enums ([#698](https://github.com/mamba-org/rattler/pull/698))
+
 ## [0.23.0](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.22.0...rattler_solve-v0.23.0) - 2024-05-27
 
 ### Added

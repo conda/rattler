@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.24.0...rattler_conda_types-v0.25.0) - 2024-05-28
+
+### Added
+- when bumping, extend versions with `0` to match the bump request ([#695](https://github.com/mamba-org/rattler/pull/695))
+- extend tests and handle characters better when bumping versions ([#694](https://github.com/mamba-org/rattler/pull/694))
+- add a function to extend version with `0s` ([#689](https://github.com/mamba-org/rattler/pull/689))
+- add run exports to package data ([#671](https://github.com/mamba-org/rattler/pull/671))
+
+### Fixed
+- lenient parsing of 2023.*.* ([#688](https://github.com/mamba-org/rattler/pull/688))
+- VersionSpec starts with, with trailing zeros ([#686](https://github.com/mamba-org/rattler/pull/686))
+
+### Other
+- move bump implementation to bump.rs and simplify tests ([#692](https://github.com/mamba-org/rattler/pull/692))
+
 ## [0.24.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.23.1...rattler_conda_types-v0.24.0) - 2024-05-27
 
 ### Added
