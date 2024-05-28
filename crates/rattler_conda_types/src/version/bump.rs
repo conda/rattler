@@ -35,10 +35,22 @@ pub enum VersionBumpError {
 }
 
 impl Version {
+    /// Bumps the version according to the specified bump type and returns the new version.
+    /// This function will add an alpha specifier to the version (e.g. `1.0.0` will bump to `1.0.1.0a0`) to exclude
+    /// any alpha releases.
+    pub fn bump_with_alpha(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+        self.bump_impl(bump_type, true)
+    }
+
+    /// Bumps the version according to the specified bump type and returns the new version.
+    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+        self.bump_impl(bump_type, false)
+    }
+
     /// Returns a new version after bumping it according to the specified bump type.
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
-    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+    fn bump_impl(&self, bump_type: VersionBumpType, with_alpha: bool) -> Result<Self, VersionBumpError> {
         // Sanity check whether the version has enough segments for this bump type.
         let segment_count = self.segment_count();
         let segment_to_bump = match bump_type {
@@ -108,6 +120,10 @@ impl Version {
                 if let Some(last_iden_component) = last_iden_component {
                     *last_iden_component = "a".into();
                 }
+            }
+
+            if with_alpha {
+                
             }
 
             let has_implicit_default =
