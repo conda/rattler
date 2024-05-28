@@ -5,6 +5,7 @@ use rattler::install::TransactionError;
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
     ParseMatchSpecError, ParsePlatformError, ParseVersionError, VersionBumpError,
+    VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_package_streaming::ExtractError;
@@ -51,6 +52,8 @@ pub enum PyRattlerError {
     ConverSubdirError(#[from] ConvertSubdirError),
     #[error(transparent)]
     VersionBumpError(#[from] VersionBumpError),
+    #[error(transparent)]
+    VersionExtendError(#[from] VersionExtendError),
     #[error(transparent)]
     ParseCondaLockError(#[from] ParseCondaLockError),
     #[error(transparent)]
@@ -126,6 +129,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::VersionBumpError(err) => {
                 VersionBumpException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::VersionExtendError(err) => {
+                VersionExtendException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ParseCondaLockError(err) => {
                 ParseCondaLockException::new_err(pretty_print_error(&err))
             }
@@ -169,6 +175,7 @@ create_exception!(exceptions, TransactionException, PyException);
 create_exception!(exceptions, LinkException, PyException);
 create_exception!(exceptions, ConvertSubdirException, PyException);
 create_exception!(exceptions, VersionBumpException, PyException);
+create_exception!(exceptions, VersionExtendException, PyException);
 create_exception!(exceptions, ParseCondaLockException, PyException);
 create_exception!(exceptions, ConversionException, PyException);
 create_exception!(exceptions, RequirementException, PyException);

@@ -47,7 +47,7 @@ pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{
     Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
-    VersionBumpType, VersionWithSource,
+    VersionBumpType, VersionExtendError, VersionWithSource,
 };
 pub use version_spec::VersionSpec;
 

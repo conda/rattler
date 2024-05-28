@@ -28,6 +28,7 @@ pub use bump::{VersionBumpError, VersionBumpType};
 use flags::Flags;
 use segment::Segment;
 
+use thiserror::Error;
 pub use with_source::VersionWithSource;
 
 /// This class implements an order relation between version strings. Version strings can contain the
@@ -167,6 +168,15 @@ pub struct Version {
 
 type ComponentVec = SmallVec<[Component; 3]>;
 type SegmentVec = SmallVec<[Segment; 4]>;
+
+/// Error that can occur when extending a version to a certain length.
+#[derive(Error, Debug, PartialEq)]
+
+pub enum VersionExtendError {
+    /// The version is too long (there is a maximum number of segments allowed)
+    #[error("the version is too long")]
+    VersionTooLong,
+}
 
 impl Version {
     /// Constructs a version with just a major component and no other components, e.g. "1".
@@ -566,6 +576,51 @@ impl Version {
         } else {
             Cow::Borrowed(self)
         }
+    }
+
+    /// Extend the version to the specified length by adding default components (0s).
+    /// If the version is already longer than the specified length it is returned as is.
+    pub fn extend_to_length(&self, length: usize) -> Result<Cow<'_, Version>, VersionExtendError> {
+        if self.segment_count() >= length {
+            return Ok(Cow::Borrowed(self));
+        }
+
+        // copy everything up to local version
+        let mut segments = self.segments[..self.segment_count()].to_vec();
+        let components_end = segments.iter().map(|s| s.len() as usize).sum::<usize>()
+            + usize::from(self.has_epoch());
+        let mut components = self.components.clone()[..components_end].to_vec();
+
+        // unwrap is OK here because these should be fine to construct
+        let segment = Segment::new(1).unwrap().with_separator(Some('.')).unwrap();
+
+        for _ in 0..(length - self.segment_count()) {
+            components.push(Component::Numeral(0));
+            segments.push(segment);
+        }
+
+        // add local version if it exists
+        let flags = if self.has_local() {
+            let flags = self
+                .flags
+                .with_local_segment_index(segments.len() as u8)
+                .ok_or(VersionExtendError::VersionTooLong)?;
+            for segment_iter in self.local_segments() {
+                for component in segment_iter.components().cloned() {
+                    components.push(component);
+                }
+                segments.push(segment_iter.segment);
+            }
+            flags
+        } else {
+            self.flags
+        };
+
+        Ok(Cow::Owned(Version {
+            components: components.into(),
+            segments: segments.into(),
+            flags,
+        }))
     }
 }
 
@@ -1076,6 +1131,7 @@ mod test {
     use std::hash::{Hash, Hasher};
 
     use rand::seq::SliceRandom;
+    use rstest::rstest;
 
     use crate::version::{StrictVersion, VersionBumpError, VersionBumpType};
 
@@ -1598,5 +1654,23 @@ mod test {
             .unwrap_err();
 
         assert_eq!(err, VersionBumpError::InvalidSegment { index: -3 });
+    }
+
+    #[rstest]
+    #[case("1", 3, "1.0.0")]
+    #[case("1.2", 3, "1.2.0")]
+    #[case("1.2+3.4", 3, "1.2.0+3.4")]
+    #[case("4!1.2+3.4", 3, "4!1.2.0+3.4")]
+    #[case("4!1.2+3.4", 5, "4!1.2.0.0.0+3.4")]
+    #[test]
+    fn extend_to_length(#[case] version: &str, #[case] elements: usize, #[case] expected: &str) {
+        assert_eq!(
+            Version::from_str(version)
+                .unwrap()
+                .extend_to_length(elements)
+                .unwrap()
+                .to_string(),
+            expected
+        );
     }
 }
