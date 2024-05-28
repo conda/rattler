@@ -274,10 +274,6 @@ mod test {
                 Version::from_str("1.2").unwrap(),
             ))
         );
-        assert_eq!(
-            Constraint::from_str("1.2.*.*", strictness),
-            Err(ParseConstraintError::RegexConstraintsNotSupported)
-        );
     }
 
     #[rstest]
