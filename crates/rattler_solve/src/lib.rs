@@ -81,6 +81,8 @@ impl fmt::Display for SolveError {
 
 /// Represents the channel priority option to use during solves.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum ChannelPriority {
     /// The channel that the package is first found in will be used as the only
     /// channel for that package.
@@ -164,6 +166,8 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
 
 /// Represents the strategy to use when solving dependencies
 #[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum SolveStrategy {
     /// Resolve the highest version of each package.
     #[default]
