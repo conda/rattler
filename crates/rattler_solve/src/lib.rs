@@ -80,7 +80,7 @@ impl fmt::Display for SolveError {
 }
 
 /// Represents the channel priority option to use during solves.
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
 pub enum ChannelPriority {
