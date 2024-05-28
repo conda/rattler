@@ -83,6 +83,16 @@ impl PyVersion {
         })
     }
 
+    /// Extend a version to a specified length by adding `0s` if necessary
+    pub fn extend_to_length(&self, length: usize) -> PyResult<Self> {
+        Ok(Self {
+            inner: self
+                .inner
+                .extend_to_length(length)
+                .map_err(PyRattlerError::from)?,
+        })
+    }
+
     /// Returns a list of segments of the version. It does not contain
     /// the local segment of the version. See `local_segments` for
     /// local segments in version.

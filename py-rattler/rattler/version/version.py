@@ -146,6 +146,24 @@ class Version:
         """
         return Version._from_py_version(self._version.bump_segment(index))
 
+    def extend_to_length(self, length) -> Version:
+        """
+        Returns a new version that is extended with `0s` to the specified length.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1')
+        >>> v.extend_to_length(3)
+        Version("1.0.0")
+        >>> v = Version('4!1.2+3.4')
+        >>> v.extend_to_length(4)
+        Version("4!1.2.0.0+3.4")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.extend_to_length(length))
+
     @property
     def has_local(self) -> bool:
         """

@@ -169,8 +169,11 @@ pub struct Version {
 type ComponentVec = SmallVec<[Component; 3]>;
 type SegmentVec = SmallVec<[Segment; 4]>;
 
+/// Error that can occur when extending a version to a certain length.
 #[derive(Error, Debug, PartialEq)]
+
 pub enum VersionExtendError {
+    /// The version is too long (there is a maximum number of segments allowed)
     #[error("the version is too long")]
     VersionTooLong,
 }
@@ -593,7 +596,7 @@ impl Version {
         if length > self.segment_count() {
             for _ in 0..(length - self.segment_count()) {
                 components.push(Component::Numeral(0));
-                segments.push(segment.clone());
+                segments.push(segment);
             }
         }
 
@@ -614,11 +617,11 @@ impl Version {
             self.flags
         };
 
-        return Ok(Version {
+        Ok(Version {
             components: components.into(),
             segments: segments.into(),
             flags,
-        });
+        })
     }
 }
 
