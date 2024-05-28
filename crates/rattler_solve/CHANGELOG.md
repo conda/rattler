@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.2](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.23.1...rattler_solve-v0.23.2) - 2024-05-28
+
+### Fixed
+- ChannelPriority implements Debug ([#701](https://github.com/mamba-org/rattler/pull/701))
+
 ## [0.23.1](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.23.0...rattler_solve-v0.23.1) - 2024-05-28
 
 ### Added
