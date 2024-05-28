@@ -62,6 +62,9 @@ class Version:
         >>> v = Version('1.0')
         >>> v.bump_major()
         Version("2.0")
+        >>> v = Version('9d')
+        >>> v.bump_major()
+        Version("10a")
         >>>
         ```
         """
@@ -98,6 +101,9 @@ class Version:
         >>> v = Version('1.0.5')
         >>> v.bump_patch()
         Version("1.0.6")
+        >>> v = Version('1.1.1e')
+        >>> v.bump_patch()
+        Version("1.1.2a")
         >>>
         >>> Version("1.5").bump_patch() # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
