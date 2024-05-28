@@ -82,9 +82,8 @@ class Version:
         >>> v.bump_minor()
         Version("1.1")
         >>>
-        >>> Version("1").bump_minor() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1").bump_minor()
+        Version("1.1")
         >>>
         ```
         """
@@ -105,9 +104,8 @@ class Version:
         >>> v.bump_patch()
         Version("1.1.2a")
         >>>
-        >>> Version("1.5").bump_patch() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1.5").bump_patch()
+        Version("1.5.1")
         >>>
         ```
         """
@@ -144,9 +142,8 @@ class Version:
         >>> Version("1.5").bump_segment(-5) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         exceptions.VersionBumpException
-        >>> Version("1.5").bump_segment(5) # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1.5").bump_segment(5)
+        Version("1.5.0.0.0.1")
         >>>
         ```
         """
