@@ -35,14 +35,18 @@ async def install(
     ```python
     >>> import asyncio
     >>> from rattler import solve, install
+    >>> from tempfile import TemporaryDirectory
+    >>> temp_dir = TemporaryDirectory()
+    >>>
     >>> async def main():
     ...     # Solve an environment with python 3.9 for the current platform
     ...     records = await solve(channels=["conda-forge"], specs=["python=3.9"])
     ...
-    ...     # Link the environment in the directory `my-env`.
-    ...     await install(records, target_prefix="my-env")
+    ...     # Link the environment in a temporary directory (you can pass any kind of path here).
+    ...     await install(records, target_prefix=temp_dir.name)
     ...
     ...     # That's it! The environment is now created.
+    ...     # You will find Python under `f"{temp_dir.name}/bin/python"` or `f"{temp_dir.name}/python.exe"` on Windows.
     >>> asyncio.run(main())
 
     ```
