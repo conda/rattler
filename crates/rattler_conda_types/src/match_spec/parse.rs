@@ -1,28 +1,35 @@
-use super::matcher::{StringMatcher, StringMatcherParseError};
-use super::MatchSpec;
-use crate::build_spec::{BuildNumberSpec, ParseBuildNumberSpecError};
-use crate::package::ArchiveType;
-use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
-use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
+use std::{borrow::Cow, path::PathBuf, str::FromStr};
+
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
+    character::complete::{char, multispace0, one_of},
+    combinator::{opt, recognize},
+    error::{context, ContextError, ParseError},
+    multi::{separated_list0, separated_list1},
+    sequence::{delimited, preceded, separated_pair, terminated},
+    Finish, IResult,
+};
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+use smallvec::SmallVec;
+use thiserror::Error;
+use url::Url;
+
+use super::{
+    matcher::{StringMatcher, StringMatcherParseError},
+    MatchSpec,
+};
 use crate::{
+    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    package::ArchiveType,
+    version_spec::{
+        is_start_of_version_constraint,
+        version_tree::{recognize_constraint, recognize_version},
+        ParseVersionSpecError,
+    },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness, VersionSpec,
 };
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
-use nom::character::complete::{char, multispace0, one_of};
-use nom::combinator::{opt, recognize};
-use nom::error::{context, ContextError, ParseError};
-use nom::multi::{separated_list0, separated_list1};
-use nom::sequence::{delimited, preceded, separated_pair, terminated};
-use nom::{Finish, IResult};
-use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
-use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::path::PathBuf;
-use std::str::FromStr;
-use thiserror::Error;
-use url::Url;
 
 /// The type of parse error that occurred when parsing match spec.
 #[derive(Debug, Clone, Error)]
@@ -98,16 +105,17 @@ impl MatchSpec {
     }
 }
 
-/// Strips a comment from a match spec. A comment is preceded by a '#' followed by the comment
-/// itself. This functions splits the matchspec into the matchspec and comment part.
+/// Strips a comment from a match spec. A comment is preceded by a '#' followed
+/// by the comment itself. This functions splits the matchspec into the
+/// matchspec and comment part.
 fn strip_comment(input: &str) -> (&str, Option<&str>) {
     input
         .split_once('#')
         .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
 }
 
-/// Strips any if statements from the matchspec. `if` statements in matchspec are "anticipating
-/// future compatibility issues".
+/// Strips any if statements from the matchspec. `if` statements in matchspec
+/// are "anticipating future compatibility issues".
 fn strip_if(input: &str) -> (&str, Option<&str>) {
     // input
     //     .split_once("if")
@@ -121,10 +129,10 @@ fn is_package_file(input: &str) -> bool {
     ArchiveType::try_from(input).is_some()
 }
 
-/// An optimized data structure to store key value pairs in between a bracket string
-/// `[key1=value1, key2=value2]`. The optimization stores two such values on the stack and otherwise
-/// allocates a vector on the heap. Two is chosen because that seems to be more than enough for
-/// most use cases.
+/// An optimized data structure to store key value pairs in between a bracket
+/// string `[key1=value1, key2=value2]`. The optimization stores two such values
+/// on the stack and otherwise allocates a vector on the heap. Two is chosen
+/// because that seems to be more than enough for most use cases.
 type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 
 /// A parse combinator to filter whitespace if front and after another parser.
@@ -184,8 +192,8 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
     }
 }
 
-/// Strips the brackets part of the matchspec returning the rest of the matchspec and  the contents
-/// of the brackets as a `Vec<&str>`.
+/// Strips the brackets part of the matchspec returning the rest of the
+/// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
     if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
@@ -275,7 +283,7 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
         let version_glob = terminated(opt(tag(".")), tag("*"));
 
         // Matches a version followed by an optional version glob
-        let version_followed_by_glob = terminated(recognize_version, opt(version_glob));
+        let version_followed_by_glob = terminated(recognize_version(true), opt(version_glob));
 
         // Just matches the glob operator ("*")
         let just_star = tag("*");
@@ -456,13 +464,14 @@ fn matchspec_parser(
         let version_str = if let (Some(version_str), true) =
             (version_str.strip_prefix("=="), build_str.is_none())
         {
-            // If the version starts with `==` and the build string is none we strip the `==` part.
+            // If the version starts with `==` and the build string is none we strip the
+            // `==` part.
             Cow::Borrowed(version_str)
         } else if let Some(version_str_part) = version_str.strip_prefix('=') {
             let not_a_group = !version_str_part.contains(['=', ',', '|']);
             if not_a_group {
-                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a *
-                // if it doesnt have one already.
+                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a
+                // * if it doesnt have one already.
                 if build_str.is_none() && !version_str_part.ends_with('*') {
                     Cow::Owned(format!("{version_str_part}*"))
                 } else {
@@ -492,21 +501,21 @@ fn matchspec_parser(
 
 #[cfg(test)]
 mod tests {
-    use crate::ParseStrictness::*;
+    use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+
     use assert_matches::assert_matches;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
-    use std::sync::Arc;
+    use smallvec::smallvec;
 
     use super::{
         split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
         ParseMatchSpecError,
     };
-    use crate::match_spec::parse::parse_bracket_list;
-    use crate::{BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, VersionSpec};
-    use smallvec::smallvec;
+    use crate::{
+        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
+        NamelessMatchSpec, ParseStrictness::*, VersionSpec,
+    };
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(

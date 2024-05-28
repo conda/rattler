@@ -8,6 +8,7 @@ use nom::{
     error::{context, convert_error, ContextError, ParseError},
     multi::{many0, separated_list1},
     sequence::{delimited, preceded, terminated, tuple},
+    IResult,
 };
 use thiserror::Error;
 
@@ -69,41 +70,52 @@ fn parse_version_epoch<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
 
 /// A parser that recognizes a version
 pub(crate) fn recognize_version<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    input: &'a str,
-) -> Result<(&'a str, &'a str), nom::Err<E>> {
+    allow_glob: bool,
+) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
     /// Recognizes a single version component (`1`, `a`, `alpha`, `grub`)
     fn recognize_version_component<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> Result<(&'a str, &'a str), nom::Err<E>> {
-        let ident = alpha1;
-        let num = digit1;
-        alt((ident, num))(input)
+        allow_glob: bool,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            let ident = alpha1;
+            let num = digit1;
+            let glob = tag("*");
+            if allow_glob {
+                alt((ident, num, glob))(input)
+            } else {
+                alt((ident, num))(input)
+            }
+        }
     }
 
     /// Recognize one or more version components (`1.2.3`)
     fn recognize_version_components<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> Result<(&'a str, &'a str), nom::Err<E>> {
+        allow_glob: bool,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            recognize(tuple((
+                recognize_version_component(allow_glob),
+                many0(preceded(
+                    opt(take_while(|c: char| c == '.' || c == '-' || c == '_')),
+                    recognize_version_component(allow_glob),
+                )),
+            )))(input)
+        }
+    }
+
+    move |input: &'a str| {
         recognize(tuple((
-            recognize_version_component,
-            many0(preceded(
-                opt(take_while(|c: char| c == '.' || c == '-' || c == '_')),
-                recognize_version_component,
+            // Optional version epoch
+            opt(context("epoch", parse_version_epoch)),
+            // Version components
+            context("components", recognize_version_components(allow_glob)),
+            // Local version
+            opt(preceded(
+                tag("+"),
+                cut(context("local", recognize_version_components(allow_glob))),
             )),
         )))(input)
     }
-
-    recognize(tuple((
-        // Optional version epoch
-        opt(context("epoch", parse_version_epoch)),
-        // Version components
-        context("components", recognize_version_components),
-        // Local version
-        opt(preceded(
-            tag("+"),
-            cut(context("local", recognize_version_components)),
-        )),
-    )))(input)
 }
 
 /// Recognize a version followed by a .* or *, or just a *
@@ -113,7 +125,7 @@ pub(crate) fn recognize_version_with_star<'a, E: ParseError<&'a str> + ContextEr
     alt((
         // A version with an optional * or .*.
         terminated(
-            recognize_version,
+            recognize_version(true),
             take_while(|c: char| c == '.' || c == '*'),
         ),
         // Just a *
@@ -330,14 +342,17 @@ mod tests {
     fn test_recognize_version() {
         type Err<'a> = nom::error::Error<&'a str>;
 
-        assert_eq!(recognize_version::<Err<'_>>("3.8.9"), Ok(("", "3.8.9")));
-        assert_eq!(recognize_version::<Err<'_>>("3"), Ok(("", "3")));
         assert_eq!(
-            recognize_version::<Err<'_>>("1!3.8.9+3.4-alpha.2"),
+            recognize_version::<Err<'_>>(false)("3.8.9"),
+            Ok(("", "3.8.9"))
+        );
+        assert_eq!(recognize_version::<Err<'_>>(false)("3"), Ok(("", "3")));
+        assert_eq!(
+            recognize_version::<Err<'_>>(false)("1!3.8.9+3.4-alpha.2"),
             Ok(("", "1!3.8.9+3.4-alpha.2"))
         );
-        assert_eq!(recognize_version::<Err<'_>>("3."), Ok((".", "3")));
-        assert_eq!(recognize_version::<Err<'_>>("3.*"), Ok((".*", "3")));
+        assert_eq!(recognize_version::<Err<'_>>(false)("3."), Ok((".", "3")));
+        assert_eq!(recognize_version::<Err<'_>>(false)("3.*"), Ok((".*", "3")));
 
         let versions = [
             // Implicit epoch of 0
@@ -398,7 +413,7 @@ mod tests {
 
         for version_str in versions {
             assert_eq!(
-                recognize_version::<Err<'_>>(version_str),
+                recognize_version::<Err<'_>>(false)(version_str),
                 Ok(("", version_str))
             );
         }

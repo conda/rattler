@@ -459,6 +459,12 @@ mod tests {
             VersionSpec::from_str("2023.*", ParseStrictness::Lenient).unwrap()
         );
         assert!(VersionSpec::from_str("2023.*.*", ParseStrictness::Strict).is_err());
+        assert_matches!(
+            VersionSpec::from_str("2023.*.0", ParseStrictness::Lenient).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::RegexConstraintsNotSupported
+            )
+        );
     }
 
     #[test]
