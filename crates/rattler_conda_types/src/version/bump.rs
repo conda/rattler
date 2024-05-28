@@ -50,7 +50,11 @@ impl Version {
     /// Returns a new version after bumping it according to the specified bump type.
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
-    fn bump_impl(&self, bump_type: VersionBumpType, with_alpha: bool) -> Result<Self, VersionBumpError> {
+    fn bump_impl(
+        &self,
+        bump_type: VersionBumpType,
+        with_alpha: bool,
+    ) -> Result<Self, VersionBumpError> {
         // Sanity check whether the version has enough segments for this bump type.
         let segment_count = self.segment_count();
         let segment_to_bump = match bump_type {
@@ -122,10 +126,6 @@ impl Version {
                 }
             }
 
-            if with_alpha {
-                
-            }
-
             let has_implicit_default =
                 segment.has_implicit_default() && segment_components[0] == Component::default();
             let start_idx = usize::from(has_implicit_default);
@@ -142,6 +142,20 @@ impl Version {
                 .expect("copying the segment should just work");
 
             segments.push(segment);
+        }
+
+        if with_alpha {
+            let last_segment = version.segments().last().expect("at least one segment");
+            // check if there is an iden component in the last segment
+            let has_iden = last_segment.components().any(|c| c.as_iden().is_some());
+            if !has_iden {
+                components.extend([
+                    Component::Numeral(0),
+                    Component::Iden(Box::from("a")),
+                    Component::Numeral(0),
+                ]);
+                segments.push(Segment::new(3).unwrap().with_separator(Some('.')).unwrap());
+            }
         }
 
         if version.has_local() {
@@ -248,6 +262,23 @@ mod test {
             Version::from_str(input)
                 .unwrap()
                 .bump(VersionBumpType::Segment(idx))
+                .unwrap(),
+            Version::from_str(expected).unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case(0, "1.1.9", "2.1.9.0a0")]
+    #[case(2, "1.0.0", "1.0.1.0a0")]
+    #[case(2, "1.0.0a", "1.0.1a")]
+    #[case(2, "1.0.0f", "1.0.1a")]
+    #[case(2, "5!1.0.0", "5!1.0.1.0a0")]
+    #[case(2, "5!1.0.0+3.4", "5!1.0.1.0a0+3.4")]
+    fn with_alpha(#[case] idx: i32, #[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            Version::from_str(input)
+                .unwrap()
+                .bump_with_alpha(VersionBumpType::Segment(idx))
                 .unwrap(),
             Version::from_str(expected).unwrap()
         );
