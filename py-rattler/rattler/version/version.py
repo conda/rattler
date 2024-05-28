@@ -146,7 +146,7 @@ class Version:
         """
         return Version._from_py_version(self._version.bump_segment(index))
 
-    def extend_to_length(self, length) -> Version:
+    def extend_to_length(self, length: int) -> Version:
         """
         Returns a new version that is extended with `0s` to the specified length.
 
