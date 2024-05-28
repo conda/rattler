@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{Component, Version};
 
-use super::{flags::Flags, segment::Segment, ComponentVec, SegmentVec};
+use super::{segment::Segment, ComponentVec, SegmentVec};
 
 /// `VersionBumpType` is used to specify the type of bump to perform on a version.
 #[derive(Clone)]
@@ -22,24 +22,16 @@ pub enum VersionBumpType {
 /// `VersionBumpError` is used to specify the type of error that occurred when bumping a version.
 #[derive(Error, Debug, PartialEq)]
 pub enum VersionBumpError {
-    /// Cannot bump the major segment of a version with less than 1 segment.
-    #[error("cannot bump the major segment of a version with less than 1 segment")]
-    NoMajorSegment,
-    /// Cannot bump the minor segment of a version with less than 2 segments.
-    #[error("cannot bump the minor segment of a version with less than 2 segments")]
-    NoMinorSegment,
-    /// Cannot bump the patch segment of a version with less than 3 segments.
-    #[error("cannot bump the patch segment of a version with less than 3 segments")]
-    NoPatchSegment,
-    /// Cannot bump the last segment of a version with no segments.
-    #[error("cannot bump the last segment of a version with no segments")]
-    NoLastSegment,
     /// Invalid segment index.
     #[error("cannot bump the segment '{index:?}' of a version if it's not present")]
     InvalidSegment {
         /// The segment index that was attempted to be bumped.
         index: i32,
     },
+
+    /// Could not extend the version
+    #[error("could not extend the version: {0}")]
+    VersionExtendError(#[from] crate::VersionExtendError),
 }
 
 impl Version {
@@ -47,74 +39,56 @@ impl Version {
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
     pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
+        // Sanity check whether the version has enough segments for this bump type.
+        let segment_count = self.segment_count();
+        let segment_to_bump = match bump_type {
+            VersionBumpType::Major => 0,
+            VersionBumpType::Minor => 1,
+            VersionBumpType::Patch => 2,
+            VersionBumpType::Last => {
+                if segment_count > 0 {
+                    segment_count - 1
+                } else {
+                    0
+                }
+            }
+            VersionBumpType::Segment(index_to_bump) => {
+                let computed_index = if index_to_bump < 0 {
+                    index_to_bump + segment_count as i32
+                } else {
+                    index_to_bump
+                };
+                if computed_index < 0 {
+                    return Err(VersionBumpError::InvalidSegment {
+                        index: index_to_bump,
+                    });
+                }
+                computed_index as usize
+            }
+        };
+
+        // Add the necessary segments to the version if it's too short.
+        let version = self.extend_to_length(segment_to_bump + 1)?;
+
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
-        let mut flags = Flags::default();
+        let mut flags = version.flags;
 
         // Copy the optional epoch.
-        if let Some(epoch) = self.epoch_opt() {
+        if let Some(epoch) = version.epoch_opt() {
             components.push(Component::Numeral(epoch));
             flags = flags.with_has_epoch(true);
         }
 
-        // Sanity check whether the version has enough segments for this bump type.
-        let segment_count = self.segment_count();
-        match bump_type {
-            VersionBumpType::Major => {
-                if segment_count < 1 {
-                    return Err(VersionBumpError::NoMajorSegment);
-                }
-            }
-            VersionBumpType::Minor => {
-                if segment_count < 2 {
-                    return Err(VersionBumpError::NoMinorSegment);
-                }
-            }
-            VersionBumpType::Patch => {
-                if segment_count < 3 {
-                    return Err(VersionBumpError::NoPatchSegment);
-                }
-            }
-            VersionBumpType::Last => {
-                if segment_count == 0 {
-                    return Err(VersionBumpError::NoLastSegment);
-                }
-            }
-            VersionBumpType::Segment(index) => {
-                let uindex = if index < 0 {
-                    segment_count as i32 + index
-                } else {
-                    index
-                };
-
-                if uindex < 0 || uindex >= segment_count as i32 {
-                    return Err(VersionBumpError::InvalidSegment { index });
-                }
-            }
-        }
-
         // Copy over all the segments and bump the last segment.
-        let segment_count = self.segment_count();
-        for (idx, segment_iter) in self.segments().enumerate() {
+        for (idx, segment_iter) in version.segments().enumerate() {
             let segment = segment_iter.segment;
 
             let mut segment_components =
                 segment_iter.components().cloned().collect::<ComponentVec>();
 
             // Determine whether this is the segment that needs to be bumped.
-            let is_segment_to_bump = match bump_type {
-                VersionBumpType::Major => idx == 0,
-                VersionBumpType::Minor => idx == 1,
-                VersionBumpType::Patch => idx == 2,
-                VersionBumpType::Last => idx == (segment_count - 1),
-                VersionBumpType::Segment(mut index_to_bump) => {
-                    if index_to_bump < 0 {
-                        index_to_bump += segment_count as i32;
-                    }
-
-                    idx == index_to_bump as usize
-                }
-            };
+            let is_segment_to_bump = segment_to_bump == idx;
 
             // Bump the segment if we need to. Each segment must at least start with a number so this should always work.
             if is_segment_to_bump {
@@ -154,7 +128,7 @@ impl Version {
             segments.push(segment);
         }
 
-        if self.has_local() {
+        if version.has_local() {
             let segment_idx = segments.len() as u8;
             for segment_iter in self.local_segments() {
                 for component in segment_iter.components().cloned() {
@@ -181,7 +155,7 @@ mod test {
 
     use rstest::rstest;
 
-    use crate::{Version, VersionBumpError, VersionBumpType};
+    use crate::{Version, VersionBumpType};
 
     #[rstest]
     #[case("1.1", "1.2")]
@@ -225,20 +199,14 @@ mod test {
         );
     }
 
-    #[test]
-    fn bump_minor_fail() {
-        let err = Version::from_str("1")
-            .unwrap()
-            .bump(VersionBumpType::Minor)
-            .unwrap_err();
-
-        assert_eq!(err, VersionBumpError::NoMinorSegment);
-    }
-
     #[rstest]
     #[case("1.1.9", "1.1.10")]
     #[case("2.1l.5alpha", "2.1l.6a")]
     #[case("5!1.8.alpha+3.4", "5!1.8.1a+3.4")]
+    #[case("1", "1.0.1")]
+    #[case("1alpha", "1alpha.0.1")]
+    #[case("5!1+3.4", "5!1.0.1+3.4")]
+    #[case("2.1", "2.1.1")]
     fn bump_patch(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -249,16 +217,6 @@ mod test {
         );
     }
 
-    #[test]
-    fn bump_patch_fail() {
-        let err = Version::from_str("1.3")
-            .unwrap()
-            .bump(VersionBumpType::Patch)
-            .unwrap_err();
-
-        assert_eq!(err, VersionBumpError::NoPatchSegment);
-    }
-
     #[rstest]
     #[case(0, "1.1.9", "2.1.9")]
     #[case(1, "1.1.9", "1.2.9")]
@@ -267,6 +225,8 @@ mod test {
     #[case(-2, "1.1.9", "1.2.9")]
     #[case(-3, "1.1.9", "2.1.9")]
     #[case(0, "9d", "10a")]
+    #[case(5, "1.2.3", "1.2.3.0.0.1")]
+    #[case(2, "9d", "9d.0.1")]
     fn bump_segment(#[case] idx: i32, #[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -275,22 +235,5 @@ mod test {
                 .unwrap(),
             Version::from_str(expected).unwrap()
         );
-    }
-
-    #[test]
-    fn bump_segment_fail() {
-        let err = Version::from_str("1.3")
-            .unwrap()
-            .bump(VersionBumpType::Segment(3))
-            .unwrap_err();
-
-        assert_eq!(err, VersionBumpError::InvalidSegment { index: 3 });
-
-        let err = Version::from_str("1.3")
-            .unwrap()
-            .bump(VersionBumpType::Segment(-3))
-            .unwrap_err();
-
-        assert_eq!(err, VersionBumpError::InvalidSegment { index: -3 });
     }
 }
