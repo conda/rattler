@@ -23,6 +23,7 @@ tempfile = { workspace = true }
 rattler_libsolv_c = { path="../rattler_libsolv_c", version = "0.19.3", default-features = false, optional = true }
 resolvo = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
