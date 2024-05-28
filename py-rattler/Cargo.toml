@@ -52,7 +52,7 @@ thiserror = "1.0.61"
 url = "2.5.0"
 
 openssl = { version = "0.10", optional = true }
-pep508_rs = "0.4.2"
+pep508_rs = "0.6.0"
 
 [build-dependencies]
 pyo3-build-config = "0.21"
