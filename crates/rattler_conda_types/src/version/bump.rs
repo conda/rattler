@@ -44,6 +44,8 @@ pub enum VersionBumpError {
 
 impl Version {
     /// Returns a new version after bumping it according to the specified bump type.
+    /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
+    /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
     pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         let mut components = ComponentVec::new();
         let mut segments = SegmentVec::new();
@@ -122,6 +124,16 @@ impl Version {
                     .next_back()
                     .expect("every segment must at least contain a single numeric component");
                 *last_numeral_component += 1;
+
+                // If the segment ends with an ascii character, make it `a` instead of whatever it says
+                let last_iden_component = segment_components
+                    .iter_mut()
+                    .filter_map(Component::as_iden_mut)
+                    .next_back();
+
+                if let Some(last_iden_component) = last_iden_component {
+                    *last_iden_component = "a".into();
+                }
             }
 
             let has_implicit_default =
@@ -173,8 +185,8 @@ mod test {
 
     #[rstest]
     #[case("1.1", "1.2")]
-    #[case("1.1l", "1.2l")] // TODO this is wrong
-    #[case("5!1.alpha+3.4", "5!1.1alpha+3.4")]
+    #[case("1.1l", "1.2a")]
+    #[case("5!1.alpha+3.4", "5!1.1a+3.4")]
     fn bump_last(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -201,8 +213,8 @@ mod test {
 
     #[rstest]
     #[case("1.1", "1.2")]
-    #[case("2.1l", "2.2l")] // TODO this is wrong
-    #[case("5!1.alpha+3.4", "5!1.1alpha+3.4")]
+    #[case("2.1l", "2.2a")]
+    #[case("5!1.alpha+3.4", "5!1.1a+3.4")]
     fn bump_minor(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -225,8 +237,8 @@ mod test {
 
     #[rstest]
     #[case("1.1.9", "1.1.10")]
-    #[case("2.1l.5alpha", "2.1l.6alpha")]
-    #[case("5!1.8.alpha+3.4", "5!1.8.1alpha+3.4")]
+    #[case("2.1l.5alpha", "2.1l.6a")]
+    #[case("5!1.8.alpha+3.4", "5!1.8.1a+3.4")]
     fn bump_patch(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
@@ -254,7 +266,7 @@ mod test {
     #[case(-1, "1.1.9", "1.1.10")]
     #[case(-2, "1.1.9", "1.2.9")]
     #[case(-3, "1.1.9", "2.1.9")]
-    // TODO #[case(0, "9d", "10a")]
+    #[case(0, "9d", "10a")]
     fn bump_segment(#[case] idx: i32, #[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             Version::from_str(input)
