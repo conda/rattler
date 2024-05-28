@@ -583,7 +583,15 @@ fn segments_starts_with<
         let (left, right) = match ranges {
             EitherOrBoth::Both(left, right) => (left, right),
             EitherOrBoth::Left(_) => return true,
-            EitherOrBoth::Right(_) => return false,
+            EitherOrBoth::Right(segment) => {
+                // If the segment is zero we can skip it. As long as there are
+                // only zeros, the version is still considered to start with
+                // the other version.
+                if segment.is_zero() {
+                    continue;
+                }
+                return false;
+            }
         };
         for values in left.components().zip_longest(right.components()) {
             if !match values {
@@ -795,6 +803,11 @@ impl Component {
     pub fn is_numeric(&self) -> bool {
         matches!(self, Component::Numeral(_))
     }
+
+    /// Checks whether the component is a zero.
+    pub fn is_zero(&self) -> bool {
+        matches!(self, Component::Numeral(0))
+    }
 }
 
 impl From<u64> for Component {
@@ -968,6 +981,11 @@ pub struct SegmentIter<'v> {
 }
 
 impl<'v> SegmentIter<'v> {
+    /// Returns true if the
+    pub fn is_zero(&self) -> bool {
+        self.components().all(Component::is_zero)
+    }
+
     /// Returns true if the first component is an implicit default added while parsing the version.
     /// E.g. `2.a` is represented as `2.0a`. The `0` is added implicitly.
     pub fn has_implicit_default(&self) -> bool {
