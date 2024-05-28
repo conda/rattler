@@ -155,7 +155,7 @@ mod test {
 
     use rstest::rstest;
 
-    use crate::{Version, VersionBumpError, VersionBumpType};
+    use crate::{Version, VersionBumpType};
 
     #[rstest]
     #[case("1.1", "1.2")]
