@@ -41,7 +41,7 @@ impl Version {
     ///
     /// For example, `1.0.0` will become `1.0.0.0a0`.
     /// If the last version element contains a character, it's not modified (e.g. `1.0.0a` will remain `1.0.0a`).
-    pub fn add_alpha(&self) -> Cow<'_, Self> {
+    pub fn with_alpha(&self) -> Cow<'_, Self> {
         let last_segment = self.segments().last().expect("at least one segment");
         // check if there is an iden component in the last segment
         let has_iden = last_segment.components().any(|c| c.as_iden().is_some());
@@ -291,7 +291,7 @@ mod test {
                 .unwrap()
                 .bump(VersionBumpType::Segment(idx))
                 .unwrap()
-                .add_alpha()
+                .with_alpha()
                 .into_owned(),
             Version::from_str(expected).unwrap()
         );

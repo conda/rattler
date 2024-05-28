@@ -184,6 +184,13 @@ impl PyVersion {
             .map_err(PyRattlerError::from)?)
     }
 
+    /// Returns a new version where the last segment is an "alpha" segment (ie. `.0a0`)
+    pub fn with_alpha(&self) -> Self {
+        Self {
+            inner: self.inner.with_alpha().into_owned(),
+        }
+    }
+
     /// Compute the hash of the version.
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
