@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use thiserror::Error;
 
 use crate::{Component, Version};
@@ -35,26 +37,49 @@ pub enum VersionBumpError {
 }
 
 impl Version {
-    /// Bumps the version according to the specified bump type and returns the new version.
-    /// This function will add an alpha specifier to the version (e.g. `1.0.0` will bump to `1.0.1.0a0`) to exclude
-    /// any alpha releases.
-    pub fn bump_with_alpha(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
-        self.bump_impl(bump_type, true)
-    }
+    /// Add alpha specifier to the end of the version when the last element does not contain an `iden` component.
+    ///
+    /// For example, `1.0.0` will become `1.0.0.0a0`.
+    /// If the last version element contains a character, it's not modified (e.g. `1.0.0a` will remain `1.0.0a`).
+    pub fn add_alpha(&self) -> Cow<'_, Self> {
+        let last_segment = self.segments().last().expect("at least one segment");
+        // check if there is an iden component in the last segment
+        let has_iden = last_segment.components().any(|c| c.as_iden().is_some());
+        if has_iden {
+            return Cow::Borrowed(self);
+        }
+        let local_segment_index = self.local_segment_index().unwrap_or(self.segments.len());
+        let mut segments = self.segments[0..local_segment_index].to_vec();
+        let components_offset = segments.iter().map(|s| s.len() as usize).sum::<usize>()
+            + usize::from(self.has_epoch());
 
-    /// Bumps the version according to the specified bump type and returns the new version.
-    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
-        self.bump_impl(bump_type, false)
+        segments.push(Segment::new(3).unwrap().with_separator(Some('.')).unwrap());
+        segments.extend(self.segments[local_segment_index..].iter());
+
+        let mut components = self.components.clone();
+        components.insert(components_offset, Component::Numeral(0));
+        components.insert(components_offset + 1, Component::Iden("a".into()));
+        components.insert(components_offset + 2, Component::Numeral(0));
+
+        let flags = if let Some(local_segment_index) = self.local_segment_index() {
+            self.flags
+                .with_local_segment_index((local_segment_index + 1) as u8)
+                .unwrap()
+        } else {
+            self.flags
+        };
+
+        Cow::Owned(Version {
+            components,
+            segments: segments.into(),
+            flags,
+        })
     }
 
     /// Returns a new version after bumping it according to the specified bump type.
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
-    fn bump_impl(
-        &self,
-        bump_type: VersionBumpType,
-        with_alpha: bool,
-    ) -> Result<Self, VersionBumpError> {
+    pub fn bump(&self, bump_type: VersionBumpType) -> Result<Self, VersionBumpError> {
         // Sanity check whether the version has enough segments for this bump type.
         let segment_count = self.segment_count();
         let segment_to_bump = match bump_type {
@@ -142,20 +167,6 @@ impl Version {
                 .expect("copying the segment should just work");
 
             segments.push(segment);
-        }
-
-        if with_alpha {
-            let last_segment = version.segments().last().expect("at least one segment");
-            // check if there is an iden component in the last segment
-            let has_iden = last_segment.components().any(|c| c.as_iden().is_some());
-            if !has_iden {
-                components.extend([
-                    Component::Numeral(0),
-                    Component::Iden(Box::from("a")),
-                    Component::Numeral(0),
-                ]);
-                segments.push(Segment::new(3).unwrap().with_separator(Some('.')).unwrap());
-            }
         }
 
         if version.has_local() {
@@ -278,8 +289,10 @@ mod test {
         assert_eq!(
             Version::from_str(input)
                 .unwrap()
-                .bump_with_alpha(VersionBumpType::Segment(idx))
-                .unwrap(),
+                .bump(VersionBumpType::Segment(idx))
+                .unwrap()
+                .add_alpha()
+                .into_owned(),
             Version::from_str(expected).unwrap()
         );
     }
