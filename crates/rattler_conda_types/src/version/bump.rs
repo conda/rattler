@@ -76,6 +76,28 @@ impl Version {
         })
     }
 
+    /// Remove the local segment from the version if it exists.
+    /// Returns a new version without the local segment.
+    /// 
+    /// For example, `1.0.0+3.4` will become `1.0.0`.
+    pub fn remove_local(&self) -> Cow<'_, Self> {
+        if let Some(local_segment_index) = self.local_segment_index() {
+            let mut segments = self.segments[0..local_segment_index].to_vec();
+            let components_offset = segments.iter().map(|s| s.len() as usize).sum::<usize>()
+                + usize::from(self.has_epoch());
+            let mut components = self.components.clone();
+            components.drain(components_offset..);
+
+            Cow::Owned(Version {
+                components,
+                segments: segments.into(),
+                flags: self.flags.with_local_segment_index(0).unwrap(),
+            })
+        } else {
+            return Cow::Borrowed(self);
+        }
+    }
+
     /// Returns a new version after bumping it according to the specified bump type.
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
@@ -292,6 +314,22 @@ mod test {
                 .bump(VersionBumpType::Segment(idx))
                 .unwrap()
                 .with_alpha()
+                .into_owned(),
+            Version::from_str(expected).unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case("1.1.9", "1.1.9")]
+    #[case("1.0.0+3", "1.0.0")]
+    #[case("1.0.0+3.4", "1.0.0")]
+    #[case("1.0.0+3.4alpha.2.4", "1.0.0")]
+    #[case("5!1.0.0+3.4alpha.2.4", "5!1.0.0")]
+    fn remove_local(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            Version::from_str(input)
+                .unwrap()
+                .remove_local()
                 .into_owned(),
             Version::from_str(expected).unwrap()
         );
