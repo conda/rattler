@@ -78,11 +78,11 @@ impl Version {
 
     /// Remove the local segment from the version if it exists.
     /// Returns a new version without the local segment.
-    /// 
+    ///
     /// For example, `1.0.0+3.4` will become `1.0.0`.
     pub fn remove_local(&self) -> Cow<'_, Self> {
         if let Some(local_segment_index) = self.local_segment_index() {
-            let mut segments = self.segments[0..local_segment_index].to_vec();
+            let segments = self.segments[0..local_segment_index].to_vec();
             let components_offset = segments.iter().map(|s| s.len() as usize).sum::<usize>()
                 + usize::from(self.has_epoch());
             let mut components = self.components.clone();

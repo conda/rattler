@@ -191,6 +191,13 @@ impl PyVersion {
         }
     }
 
+    /// Returns a new version where the local segment is removed (e.g. `1.0+local` -> `1.0`)
+    pub fn remove_local(&self) -> Self {
+        Self {
+            inner: self.inner.remove_local().into_owned(),
+        }
+    }
+
     /// Compute the hash of the version.
     fn __hash__(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
