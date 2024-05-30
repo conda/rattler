@@ -20,7 +20,6 @@ use super::{
     MatchSpec,
 };
 use crate::package::ArchiveIdentifier;
-use crate::version_spec::EqualityOperator::Equals;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     package::ArchiveType,
@@ -30,7 +29,7 @@ use crate::{
         ParseVersionSpecError,
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness, ParseVersionError, Version, VersionSpec,
+    ParseChannelError, ParseStrictness, ParseVersionError, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -388,7 +387,7 @@ fn matchspec_parser(
 
     // 2. Is the spec a tarball?
     if is_package_file(input) {
-        let _url = match Url::parse(input) {
+        let url = match Url::parse(input) {
             Ok(url) => url,
             #[cfg(target_arch = "wasm32")]
             Err(_) => return Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
@@ -400,24 +399,13 @@ fn matchspec_parser(
             },
         };
 
-        let identifier = match Url::parse(input) {
-            Ok(url) => ArchiveIdentifier::try_from_url(&url)
-                .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
-            Err(_) => ArchiveIdentifier::try_from_path(&input)
-                .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
-        };
-
-        let version = Version::from_str(identifier.version.as_str())
-            .map_err(|e| ParseMatchSpecError::InvalidPackagePathOrUrlVersion(e))?;
-        let name = PackageName::from_str(identifier.name.as_str())?;
-        let build = StringMatcher::from_str(identifier.build_string.as_str())?;
+        let identifier = ArchiveIdentifier::try_from_url(&url)
+            .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+        let file_name = identifier.to_file_name();
 
         return Ok(MatchSpec {
-            name: Some(name),
-            url: Some(input.to_string()),
-            file_name: Some(identifier.to_file_name()),
-            version: Some(VersionSpec::Exact(Equals, version)),
-            build: Some(build),
+            url: Some(url),
+            file_name: Some(file_name),
             ..MatchSpec::default()
         });
     }
@@ -531,15 +519,15 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
     use smallvec::smallvec;
+    use url::Url;
 
     use super::{
         split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
         ParseMatchSpecError,
     };
-    use crate::version_spec::EqualityOperator::Equals;
     use crate::{
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseStrictness::*, Version, VersionSpec,
+        NamelessMatchSpec, ParseStrictness::*, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -859,16 +847,11 @@ mod tests {
             Strict,
         )
         .unwrap();
-        assert_eq!(spec.url, Some("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda".to_string()));
-        assert_eq!(spec.name, Some("py-rattler".parse().unwrap()));
+        assert_eq!(spec.url, Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap()));
         assert_eq!(
-            spec.version,
-            Some(VersionSpec::Exact(
-                Equals,
-                Version::from_str("0.6.1").unwrap()
-            ))
+            spec.file_name,
+            Some("py-rattler-0.6.1-py39h8169da8_0.conda".parse().unwrap())
         );
-        assert_eq!(spec.build, Some("py39h8169da8_0".parse().unwrap()));
     }
 
     #[test]
@@ -880,16 +863,13 @@ mod tests {
         .unwrap();
         assert_eq!(
             spec.url,
-            Some("C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2".to_string())
+            Some(
+                Url::parse("file:C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
+            )
         );
-        assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(
-            spec.version,
-            Some(VersionSpec::Exact(
-                Equals,
-                Version::from_str("1.0").unwrap()
-            ))
+            spec.file_name,
+            Some("foo-1.0-py27_0.tar.bz2".parse().unwrap())
         );
-        assert_eq!(spec.build, Some("py27_0".parse().unwrap()));
     }
 }
