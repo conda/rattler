@@ -1,12 +1,38 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 629
 expression: evaluated
 ---
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  name: foo
+  version: "==1.0"
+  build: py27_0
+  file_name: foo-1.0-py27_0.tar.bz2
+  url: /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2
+"C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2":
+  name: foo
+  version: "==1.0"
+  build: py27_0
+  file_name: foo-1.0-py27_0.tar.bz2
+  url: "C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 blas *.* mkl:
   name: blas
   version: "*"
   build: mkl
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
+  name: foo
+  version: 1.0.*
+  build_number:
+    op: Gt
+    rhs: 6
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"conda-forge::foo[version=1.0.*]":
+  name: foo
+  version: 1.0.*
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
 foo=1.0=py27_0:
   name: foo
   version: "==1.0"
@@ -15,6 +41,18 @@ foo==1.0=py27_0:
   name: foo
   version: "==1.0"
   build: py27_0
+"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
+  name: py-rattler
+  version: "==0.6.1"
+  build: py39h8169da8_0
+  file_name: py-rattler-0.6.1-py39h8169da8_0.conda
+  url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
+"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
+  name: boost-cpp
+  version: "==1.78.0"
+  build: h75c5d50_1
+  file_name: boost-cpp-1.78.0-h75c5d50_1.tar.bz2
+  url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
 python 3.8.* *_cpython:
   name: python
   version: 3.8.*
@@ -26,4 +64,3 @@ pytorch=*=cuda*:
 "x264 >=1!164.3095,<1!165":
   name: x264
   version: ">=1!164.3095,<1!165"
-

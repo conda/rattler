@@ -142,6 +142,8 @@ pub struct MatchSpec {
     /// The sha256 hash of the package
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
+    /// The url of the package
+    pub url: Option<String>,
 }
 
 impl Display for MatchSpec {
@@ -248,6 +250,7 @@ impl MatchSpec {
                 namespace: self.namespace,
                 md5: self.md5,
                 sha256: self.sha256,
+                url: self.url,
             },
         )
     }
@@ -292,6 +295,8 @@ pub struct NamelessMatchSpec {
     /// The sha256 hash of the package
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
+    /// The url of the package
+    pub url: Option<String>,
 }
 
 impl NamelessMatchSpec {
@@ -366,6 +371,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
+            url: spec.url,
         }
     }
 }
@@ -384,6 +390,7 @@ impl MatchSpec {
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
+            url: spec.url,
         }
     }
 }
