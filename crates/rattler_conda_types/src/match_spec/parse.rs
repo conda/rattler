@@ -19,13 +19,19 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-use crate::{build_spec::{BuildNumberSpec, ParseBuildNumberSpecError}, package::ArchiveType, version_spec::{
-    is_start_of_version_constraint,
-    version_tree::{recognize_constraint, recognize_version},
-    ParseVersionSpecError,
-}, Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName, ParseChannelError, ParseStrictness, VersionSpec, Version, ParseVersionError};
 use crate::package::ArchiveIdentifier;
 use crate::version_spec::EqualityOperator::Equals;
+use crate::{
+    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    package::ArchiveType,
+    version_spec::{
+        is_start_of_version_constraint,
+        version_tree::{recognize_constraint, recognize_version},
+        ParseVersionSpecError,
+    },
+    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
+    ParseChannelError, ParseStrictness, ParseVersionError, Version, VersionSpec,
+};
 
 /// The type of parse error that occurred when parsing match spec.
 #[derive(Debug, Clone, Error)]
@@ -396,24 +402,24 @@ fn matchspec_parser(
 
         let identifier = match Url::parse(input) {
             Ok(url) => ArchiveIdentifier::try_from_url(&url)
-            .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
-            Err(_) => ArchiveIdentifier::try_from_path(&input).ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
+                .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
+            Err(_) => ArchiveIdentifier::try_from_path(&input)
+                .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?,
         };
 
-        let version = Version::from_str(identifier.version.as_str()).map_err(|e| ParseMatchSpecError::InvalidPackagePathOrUrlVersion(e))?;
+        let version = Version::from_str(identifier.version.as_str())
+            .map_err(|e| ParseMatchSpecError::InvalidPackagePathOrUrlVersion(e))?;
         let name = PackageName::from_str(identifier.name.as_str())?;
         let build = StringMatcher::from_str(identifier.build_string.as_str())?;
 
         return Ok(MatchSpec {
-                name: Some(name),
-                url: Some(input.to_string()),
-                file_name: Some(identifier.to_file_name()),
-                version: Some(VersionSpec::Exact(Equals, version)),
-                build: Some(build),
-                ..MatchSpec::default()
-            }
-        );
-
+            name: Some(name),
+            url: Some(input.to_string()),
+            file_name: Some(identifier.to_file_name()),
+            version: Some(VersionSpec::Exact(Equals, version)),
+            build: Some(build),
+            ..MatchSpec::default()
+        });
     }
 
     // 3. Strip off brackets portion
@@ -530,8 +536,11 @@ mod tests {
         split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
         ParseMatchSpecError,
     };
-    use crate::{match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, ParseStrictness::*, VersionSpec, Version};
     use crate::version_spec::EqualityOperator::Equals;
+    use crate::{
+        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
+        NamelessMatchSpec, ParseStrictness::*, Version, VersionSpec,
+    };
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -844,20 +853,43 @@ mod tests {
     }
 
     #[test]
-    fn test_parsing_url(){
-        let spec = MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda", Strict).unwrap();
+    fn test_parsing_url() {
+        let spec = MatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
+            Strict,
+        )
+        .unwrap();
         assert_eq!(spec.url, Some("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda".to_string()));
         assert_eq!(spec.name, Some("py-rattler".parse().unwrap()));
-        assert_eq!(spec.version, Some(VersionSpec::Exact(Equals, Version::from_str("0.6.1").unwrap())));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::Exact(
+                Equals,
+                Version::from_str("0.6.1").unwrap()
+            ))
+        );
         assert_eq!(spec.build, Some("py39h8169da8_0".parse().unwrap()));
     }
 
     #[test]
-    fn test_parsing_path(){
-        let spec = MatchSpec::from_str("C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2", Strict).unwrap();
-        assert_eq!(spec.url, Some("C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2".to_string()));
+    fn test_parsing_path() {
+        let spec = MatchSpec::from_str(
+            "C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            Strict,
+        )
+        .unwrap();
+        assert_eq!(
+            spec.url,
+            Some("C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2".to_string())
+        );
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
-        assert_eq!(spec.version, Some(VersionSpec::Exact(Equals, Version::from_str("1.0").unwrap())));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::Exact(
+                Equals,
+                Version::from_str("1.0").unwrap()
+            ))
+        );
         assert_eq!(spec.build, Some("py27_0".parse().unwrap()));
     }
 }
