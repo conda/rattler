@@ -149,6 +149,45 @@ class Version:
         """
         return Version._from_py_version(self._version.bump_segment(index))
 
+    def with_alpha(self) -> Version:
+        """
+        Returns a new version where the last segment of this version has
+        been bumped with an alpha character. If the last segment contains a
+        character, nothing is added.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0')
+        >>> v.with_alpha()
+        Version("1.0.0a0")
+        >>> v = Version('1.0.f')
+        >>> v.with_alpha()
+        Version("1.0.f")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.with_alpha())
+
+    def remove_local(self) -> Version:
+        """
+        Returns a new version where the local segment of the version has been removed.
+        Leaves the version unchanged if it does not have a local segment.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0+3.4')
+        >>> v.remove_local()
+        Version("1.0")
+        >>> v = Version('1.0')
+        >>> v.remove_local()
+        Version("1.0")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.remove_local())
+
     def extend_to_length(self, length: int) -> Version:
         """
         Returns a new version that is extended with `0s` to the specified length.
