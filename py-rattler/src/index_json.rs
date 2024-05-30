@@ -142,7 +142,7 @@ impl PyIndexJson {
     /// The timestamp when this package was created
     #[getter]
     pub fn timestamp(&self) -> Option<i64> {
-        self.inner.timestamp.map(|time| time.timestamp())
+        self.inner.timestamp.map(|time| time.timestamp_millis())
     }
 
     /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
