@@ -75,6 +75,40 @@ class PackageRecord:
         """
         return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
+    @staticmethod
+    def to_graph(records: List[PackageRecord]) -> networkx.DiGraph:
+        """
+        Converts a list of PackageRecords to a networkx.DiGraph.
+        The nodes in the graph are the PackageRecords and the edges are the dependencies.
+
+        Examples:
+        ```python
+        import rattler
+        import asyncio
+        import networkx as nx
+        from matplotlib import pyplot as plt
+
+        solve = asyncio.run(rattler.solve(['main'], ['python'], platforms=['osx-arm64', 'noarch']))
+
+        graph = rattler.PackageRecord.to_graph(solve)
+
+        nx.draw(graph, with_labels=True, font_weight='bold')
+        plt.show()
+        ```
+        """
+        import networkx as nx
+
+        names_to_records = {record.name: record for record in records}
+
+        graph = nx.DiGraph()
+        for record in records:
+            graph.add_node(record)
+            for dep in record.depends:
+                name = dep.split(" ")[0]
+                graph.add_edge(record, names_to_records[PackageName(name)])
+
+        return graph
+
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
         """
