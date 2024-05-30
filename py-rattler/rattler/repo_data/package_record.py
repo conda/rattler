@@ -405,12 +405,12 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.timestamp
-        datetime.datetime(2022, 11, 17, 16, 7, 19, 781000)
+        datetime.datetime(2022, 11, 17, 15, 7, 19, 781000, tzinfo=datetime.timezone.utc)
         >>>
         ```
         """
         if self._record.timestamp:
-            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0)
+            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return self._record.timestamp
 
