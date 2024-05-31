@@ -1,12 +1,20 @@
 from __future__ import annotations
 import os
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchType
 from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
+
+if TYPE_CHECKING:
+    import networkx as nx
+else:
+    try:
+        import networkx as nx
+    except ImportError:
+        nx = None
 
 
 class PackageRecord:
@@ -76,31 +84,32 @@ class PackageRecord:
         return [PackageRecord._from_py_record(p) for p in PyRecord.sort_topologically(records)]
 
     @staticmethod
-    def to_graph(records: List[PackageRecord]) -> networkx.DiGraph:
+    def to_graph(records: List[PackageRecord]) -> nx.DiGraph:  # type: ignore[type-arg]
         """
-        Converts a list of PackageRecords to a networkx.DiGraph.
+        Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
 
-        Examples:
+        Examples
+        --------
         ```python
         import rattler
         import asyncio
         import networkx as nx
         from matplotlib import pyplot as plt
 
-        solve = asyncio.run(rattler.solve(['main'], ['python'], platforms=['osx-arm64', 'noarch']))
-
-        graph = rattler.PackageRecord.to_graph(solve)
+        records = asyncio.run(rattler.solve(['main'], ['python'], platforms=['osx-arm64', 'noarch']))
+        graph = rattler.PackageRecord.to_graph(records)
 
         nx.draw(graph, with_labels=True, font_weight='bold')
         plt.show()
         ```
         """
-        import networkx as nx
+        if nx is None:
+            raise ImportError("networkx is not installed")
 
         names_to_records = {record.name: record for record in records}
 
-        graph = nx.DiGraph()
+        graph = nx.DiGraph()  # type: ignore[var-annotated]
         for record in records:
             graph.add_node(record)
             for dep in record.depends:
