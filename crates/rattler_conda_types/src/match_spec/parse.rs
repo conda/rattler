@@ -1,5 +1,4 @@
 use std::{borrow::Cow, path::PathBuf, str::FromStr};
-use std::path::Path;
 
 use nom::{
     branch::alt,
@@ -406,22 +405,15 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2. Is the spec a tarball?
+    // 2. Is the spec a package file, then we can parse it as a url and use as is
     if is_package_file(input) {
-        let url = match PathBuf::from_str(input) {
-            Ok(path) => {
-                match file_url::file_path_to_url(input) {
-                    Ok(url) => url,
-                    Err(_) => {
-                        parse_url(input)
-                            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?
-                    }
-                }
-            }
-            Err(_) => {
-                parse_url(input)?
-            }
-        };
+        let url = PathBuf::from_str(input)
+            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)
+            .and_then(|_path| {
+                file_url::file_path_to_url(input)
+                    .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)
+            })
+            .or_else(|_| parse_url(input))?;
 
 
         let identifier = ArchiveIdentifier::try_from_url(&url)
@@ -890,6 +882,23 @@ mod tests {
             spec.url,
             Some(
                 Url::parse("file:C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
+            )
+        );
+        assert_eq!(
+            spec.file_name,
+            Some("foo-1.0-py27_0.tar.bz2".parse().unwrap())
+        );
+
+        let spec = MatchSpec::from_str(
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            Strict,
+        )
+            .unwrap();
+
+        assert_eq!(
+            spec.url,
+            Some(
+                Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
             )
         );
         assert_eq!(
