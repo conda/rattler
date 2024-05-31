@@ -11,6 +11,7 @@ use typed_path::{
     Utf8TypedComponent, Utf8TypedPath, Utf8UnixComponent, Utf8WindowsComponent, Utf8WindowsPrefix,
 };
 use url::{Host, Url};
+use thiserror::Error;
 
 /// Returns true if the specified segment is considered to be a Windows drive letter segment.
 /// E.g. the segment `C:` or `C%3A` would be considered a drive letter segment.
@@ -97,7 +98,7 @@ fn starts_with_windows_drive_letter(s: &str) -> bool {
         && (s.len() == 2 || matches!(s.as_bytes()[2], b'/' | b'\\' | b'?' | b'#'))
 }
 
-fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, NotAnAbsolutePath> {
+fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURLParseError> {
     let path = path.into();
     let mut components = path.components();
 
@@ -114,15 +115,15 @@ fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, NotAnAb
             }
             Utf8WindowsPrefix::UNC(server, share)
             | Utf8WindowsPrefix::VerbatimUNC(server, share) => {
-                let host = Host::parse(server).map_err(|_err| NotAnAbsolutePath)?;
+                let host = Host::parse(server).map_err(|_err| FileURLParseError::NotAnAbsolutePath)?;
                 write!(result, "{host}").unwrap();
                 result.push('/');
                 result.extend(percent_encode(share.as_bytes(), PATH_SEGMENT));
             }
-            _ => return Err(NotAnAbsolutePath),
+            _ => return Err(FileURLParseError::NotAnAbsolutePath),
         },
         Some(Utf8TypedComponent::Unix(Utf8UnixComponent::RootDir)) => {}
-        _ => return Err(NotAnAbsolutePath),
+        _ => return Err(FileURLParseError::NotAnAbsolutePath),
     }
 
     let mut path_only_has_prefix = true;
@@ -153,17 +154,22 @@ fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, NotAnAb
     Ok(result)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NotAnAbsolutePath;
+#[derive(Debug, Error)]
+pub enum FileURLParseError{
+    #[error("The path is not an absolute path")]
+    NotAnAbsolutePath,
 
-pub fn file_path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<Url, NotAnAbsolutePath> {
+    #[error("The URL string is invalid")]
+    InvalidUrl(#[from] url::ParseError),
+}
+pub fn file_path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<Url, FileURLParseError> {
     let url = path_to_url(path)?;
-    Ok(Url::from_str(&url).expect("url string must be a valid url"))
+    Url::from_str(&url).map_err(FileURLParseError::InvalidUrl)
 }
 
 pub fn directory_path_to_url<'a>(
     path: impl Into<Utf8TypedPath<'a>>,
-) -> Result<Url, NotAnAbsolutePath> {
+) -> Result<Url, FileURLParseError> {
     let mut url = path_to_url(path)?;
     if !url.ends_with('/') {
         url.push('/');
