@@ -25,6 +25,10 @@ async fn get_reader(
     expected_sha256: Option<Sha256Hash>,
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<impl tokio::io::AsyncRead, ExtractError> {
+    if let Some(reporter) = &reporter {
+        reporter.on_download_start();
+    }
+
     if url.scheme() == "file" {
         let file =
             tokio::fs::File::open(url.to_file_path().expect("Could not convert to file path"))
@@ -39,10 +43,6 @@ async fn get_reader(
         if let Some(sha256) = expected_sha256 {
             // This is used by the OCI registry middleware to verify the sha256 of the response
             request = request.header("X-Expected-Sha256", format!("{sha256:x}"));
-        }
-
-        if let Some(reporter) = &reporter {
-            reporter.on_download_start();
         }
 
         let response = request
