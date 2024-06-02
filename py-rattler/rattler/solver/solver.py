@@ -92,7 +92,7 @@ async def solve(
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
             channel_priority=channel_priority.value,
-            timeout=timeout.microseconds if timeout else None,
+            timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
             if exclude_newer
             else None,
