@@ -36,6 +36,9 @@ pytest = "~=7.4.0"
 pytest-asyncio = "0.21.1.*"
 pytest-xprocess = ">=0.23.0,<0.24"
 
+[feature.test.pypi-dependencies]
+types-networkx = "*"
+
 [feature.test.tasks]
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
 fmt-python = "ruff format rattler"
