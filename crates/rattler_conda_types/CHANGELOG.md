@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.25.0...rattler_conda_types-v0.25.1) - 2024-06-03
+
+### Added
+- add a `with_alpha` function that adds `0a0` to the version ([#696](https://github.com/mamba-org/rattler/pull/696))
+
 ## [0.25.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.24.0...rattler_conda_types-v0.25.0) - 2024-05-28
 
 ### Added
