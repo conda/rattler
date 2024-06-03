@@ -33,7 +33,7 @@ jobs:
         with:
           submodules: recursive
           lfs: true
-      - uses: prefix-dev/setup-pixi@v0.8.0
+      - uses: prefix-dev/setup-pixi@v0.8.1
         with:
           manifest-path: py-rattler/pixi.toml
       - uses: actions-rust-lang/setup-rust-toolchain@v1
