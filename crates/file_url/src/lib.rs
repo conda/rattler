@@ -7,11 +7,11 @@ use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
+use thiserror::Error;
 use typed_path::{
     Utf8TypedComponent, Utf8TypedPath, Utf8UnixComponent, Utf8WindowsComponent, Utf8WindowsPrefix,
 };
 use url::{Host, Url};
-use thiserror::Error;
 
 /// Returns true if the specified segment is considered to be a Windows drive letter segment.
 /// E.g. the segment `C:` or `C%3A` would be considered a drive letter segment.
@@ -115,7 +115,8 @@ fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURL
             }
             Utf8WindowsPrefix::UNC(server, share)
             | Utf8WindowsPrefix::VerbatimUNC(server, share) => {
-                let host = Host::parse(server).map_err(|_err| FileURLParseError::NotAnAbsolutePath)?;
+                let host =
+                    Host::parse(server).map_err(|_err| FileURLParseError::NotAnAbsolutePath)?;
                 write!(result, "{host}").unwrap();
                 result.push('/');
                 result.extend(percent_encode(share.as_bytes(), PATH_SEGMENT));
@@ -155,7 +156,7 @@ fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURL
 }
 
 #[derive(Debug, Error)]
-pub enum FileURLParseError{
+pub enum FileURLParseError {
     #[error("The path is not an absolute path")]
     NotAnAbsolutePath,
 

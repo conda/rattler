@@ -144,8 +144,8 @@ type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 fn whitespace_enclosed<'a, F, O, E: ParseError<&'a str>>(
     mut inner: F,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, O, E>
-    where
-        F: FnMut(&'a str) -> IResult<&'a str, O, E>,
+where
+    F: FnMut(&'a str) -> IResult<&'a str, O, E>,
 {
     move |input: &'a str| {
         let (input, _) = multispace0(input)?;
@@ -415,7 +415,6 @@ fn matchspec_parser(
             })
             .or_else(|_| parse_url(input))?;
 
-
         let identifier = ArchiveIdentifier::try_from_url(&url)
             .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?;
         let file_name = identifier.to_file_name();
@@ -672,7 +671,7 @@ mod tests {
             r#"conda-forge::foo[version=1.0.*, build_number=">6"]"#,
             Strict,
         )
-            .unwrap();
+        .unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(
             spec.version,
@@ -707,7 +706,7 @@ mod tests {
                 parse_digest_from_hex::<Sha256>(
                     "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3"
                 )
-                    .unwrap()
+                .unwrap()
             )
         );
 
@@ -715,7 +714,7 @@ mod tests {
             "conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]",
             Strict,
         )
-            .unwrap();
+        .unwrap();
         assert_eq!(
             spec.md5,
             Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap())
@@ -862,7 +861,8 @@ mod tests {
         let spec = MatchSpec::from_str(
             "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
             Strict,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(spec.url, Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap()));
         assert_eq!(
@@ -877,7 +877,7 @@ mod tests {
             "C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
             Strict,
         )
-            .unwrap();
+        .unwrap();
         assert_eq!(
             spec.url,
             Some(
@@ -893,13 +893,11 @@ mod tests {
             "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
             Strict,
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(
             spec.url,
-            Some(
-                Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
-            )
+            Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
         );
         assert_eq!(
             spec.file_name,
