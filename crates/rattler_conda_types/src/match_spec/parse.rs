@@ -20,9 +20,10 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
+use crate::utils::url::parse_scheme;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    package::ArchiveType,
+    utils::path::is_path,
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
@@ -30,7 +31,6 @@ use crate::{
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness, ParseVersionError, VersionSpec,
-    utils::path::is_path,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -132,11 +132,6 @@ fn strip_if(input: &str) -> (&str, Option<&str>) {
     //     .map(|(spec, if_statement)| (spec, Some(if_statement)))
     //     .unwrap_or_else(|| (input, None))
     (input, None)
-}
-
-/// Returns true if the specified string represents a package path.
-fn is_package_file(input: &str) -> bool {
-    ArchiveType::try_from(input).is_some()
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -390,16 +385,19 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2. Is the spec a package file, then we can parse it as a url and use as is
-    if is_package_file(input) {
-        let url = if is_path(input) {
-            let path = Utf8TypedPath::from(input);
-            file_url::file_path_to_url(path)
-                .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
-        } else {
-            Url::parse(input)?
-        };
-
+    // 2.a Is the spec an url, parse it as an url
+    if parse_scheme(input).is_some() {
+        let url = Url::parse(input)?;
+        return Ok(MatchSpec {
+            url: Some(url),
+            ..MatchSpec::default()
+        });
+    }
+    // 2.b Is the spec a path, parse it as an url
+    if is_path(input) {
+        let path = Utf8TypedPath::from(input);
+        let url = file_url::file_path_to_url(path)
+            .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
         return Ok(MatchSpec {
             url: Some(url),
             ..MatchSpec::default()
@@ -525,7 +523,6 @@ mod tests {
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
         NamelessMatchSpec, ParseStrictness::*, VersionSpec,
     };
-    use crate::InvalidPackageNameError::InvalidCharacters;
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -867,30 +864,35 @@ mod tests {
             "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
             Strict,
         )
-            .unwrap();
+        .unwrap();
 
         assert_eq!(
             spec.url,
             Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
         );
+
+        let spec = MatchSpec::from_str("C:\\Users\\user\\Downloads\\package", Strict).unwrap();
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("file://C:/Users/user/Downloads/package").unwrap())
+        );
+        let spec = MatchSpec::from_str("/home/user/Downloads/package", Strict).unwrap();
+
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("file:/home/user/Downloads/package").unwrap())
+        );
     }
 
     #[test]
-    fn test_non_happy_path_parsing(){
-        let spec = MatchSpec::from_str(
-            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.bla",
-            Strict,
-        )
-            .expect_err("Should fail to parse");
+    fn test_non_happy_url_parsing() {
+        let err = MatchSpec::from_str("http://username@", Strict).expect_err("Invalid url");
+        assert_eq!(err.to_string(), "invalid package spec url");
 
-        assert_eq!(spec, ParseMatchSpecError::InvalidPackageName(InvalidCharacters("/home/user/conda-bld/linux-64/foo-1.0-py27_0.bla".to_string())));
+        let err = MatchSpec::from_str("bla/bla", Strict).expect_err("Invalid url");
+        assert_eq!(err.to_string(), "invalid package path or url");
 
-        let spec = MatchSpec::from_str(
-            "foo-1.0-py27_0.tar.bz2",
-            Strict,
-        )
-            .expect_err("Should fail to parse");
-
-        assert_eq!(spec, ParseMatchSpecError::InvalidPackageUrl(url::ParseError::RelativeUrlWithoutBase));
+        let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
+        assert_eq!(err.to_string(), "invalid package path or url");
     }
 }

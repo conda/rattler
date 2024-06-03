@@ -3,12 +3,13 @@ use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use crate::utils::path::is_path;
+use crate::utils::url::parse_scheme;
 use file_url::directory_path_to_url;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
-use crate::utils::path::is_path;
 
 use super::{ParsePlatformError, Platform};
 
@@ -379,31 +380,6 @@ fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), Parse
 pub(crate) const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
     &CURRENT_PLATFORMS
-}
-
-/// Parses the schema part of the human-readable channel. Returns the scheme part if it exists.
-fn parse_scheme(channel: &str) -> Option<&str> {
-    let scheme_end = channel.find("://")?;
-
-    // Scheme part is too long
-    if scheme_end > 11 {
-        return None;
-    }
-
-    let scheme_part = &channel[0..scheme_end];
-    let mut scheme_chars = scheme_part.chars();
-
-    // First character must be alphabetic
-    if scheme_chars.next().map(char::is_alphabetic) != Some(true) {
-        return None;
-    }
-
-    // The rest must be alpha-numeric
-    if scheme_chars.all(char::is_alphanumeric) {
-        Some(scheme_part)
-    } else {
-        None
-    }
 }
 
 /// Returns the specified path as an absolute path
