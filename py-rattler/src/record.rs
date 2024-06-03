@@ -209,7 +209,7 @@ impl PyRecord {
     pub fn timestamp(&self) -> Option<i64> {
         self.as_package_record()
             .timestamp
-            .map(|time| time.timestamp())
+            .map(|time| time.timestamp_millis())
     }
 
     /// Track features are nowadays only used to downweight packages
