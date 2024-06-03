@@ -12,7 +12,7 @@ from rattler.rattler import py_install
 
 async def install(
     records: List[RepoDataRecord],
-    target_prefix: os.PathLike[str],
+    target_prefix: str | os.PathLike[str],
     cache_dir: Optional[os.PathLike[str]] = None,
     installed_packages: Optional[List[PrefixRecord]] = None,
     platform: Optional[Platform] = None,
@@ -73,7 +73,7 @@ async def install(
 
     await py_install(
         records=records,
-        target_prefix=target_prefix,
+        target_prefix=str(target_prefix),
         cache_dir=cache_dir,
         installed_packages=installed_packages,
         platform=platform._inner if platform is not None else None,

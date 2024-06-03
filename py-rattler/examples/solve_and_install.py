@@ -4,7 +4,7 @@ import tempfile
 from rattler import solve, install, VirtualPackage
 
 
-async def main():
+async def main() -> None:
     # Start by solving the environment.
     #
     # Solving is the process of going from specifications of package and their

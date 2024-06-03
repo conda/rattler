@@ -1,6 +1,6 @@
 from __future__ import annotations
 import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Sequence
 
 from rattler import Channel, Platform, VirtualPackage
 from rattler.match_spec.match_spec import MatchSpec
@@ -18,13 +18,13 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 
 
 async def solve(
-    channels: List[Channel | str],
-    specs: List[MatchSpec | str],
+    channels: Sequence[Channel | str],
+    specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
-    platforms: Optional[List[Platform | PlatformLiteral]] = None,
-    locked_packages: Optional[List[RepoDataRecord]] = None,
-    pinned_packages: Optional[List[RepoDataRecord]] = None,
-    virtual_packages: Optional[List[GenericVirtualPackage | VirtualPackage]] = None,
+    platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
+    locked_packages: Optional[Sequence[RepoDataRecord]] = None,
+    pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
+    virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime] = None,
