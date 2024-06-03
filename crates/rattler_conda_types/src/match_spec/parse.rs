@@ -871,7 +871,8 @@ mod tests {
         assert_eq!(
             spec.url,
             Some(
-                Url::parse("file://C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
+                Url::parse("file://C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2")
+                    .unwrap()
             )
         );
 
