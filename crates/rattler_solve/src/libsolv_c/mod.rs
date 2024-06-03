@@ -234,6 +234,11 @@ impl super::SolverImpl for Solver {
             goal.install(id, false);
         }
 
+        for spec in task.constraints {
+            let id = pool.intern_matchspec(&spec);
+            goal.install(id, true);
+        }
+
         // Construct a solver and solve the problems in the queue
         let mut solver = pool.create_solver();
         solver.set_flag(SolverFlag::allow_uninstall(), true);

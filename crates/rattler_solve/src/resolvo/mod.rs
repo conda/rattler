@@ -568,11 +568,21 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
+        let root_constraints = task
+            .constraints
+            .iter()
+            .map(|spec| {
+                let (name, spec) = spec.clone().into_nameless();
+                let name = name.expect("cannot use matchspec without a name");
+                let name_id = provider.pool.intern_package_name(name.as_normalized());
+                provider.pool.intern_version_set(name_id, spec.into())
+            })
+            .collect();
+
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver
-            .solve(root_requirements)
-            .map_err(|unsolvable_or_cancelled| {
+        let solvables = solver.solve(root_requirements, root_constraints).map_err(
+            |unsolvable_or_cancelled| {
                 match unsolvable_or_cancelled {
                     UnsolvableOrCancelled::Unsolvable(problem) => {
                         SolveError::Unsolvable(vec![problem
@@ -583,7 +593,8 @@ impl super::SolverImpl for Solver {
                     // put a generic message in here for now
                     UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
                 }
-            })?;
+            },
+        )?;
 
         // Get the resulting packages from the solver.
         let required_records = solvables
