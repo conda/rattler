@@ -131,9 +131,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// The specs we want to solve
     pub specs: Vec<MatchSpec>,
 
-    /// Additional constraints that should be satisfied by the solver. Packages
-    /// included in the `constraints` are not necessarily installed, but they
-    /// must be satisfied by the solver.
+    /// Additional constraints that should be satisfied by the solver.
+    /// Packages included in the `constraints` are not necessarily
+    /// installed, but they must be satisfied by the solution.
     pub constraints: Vec<MatchSpec>,
 
     /// The timeout after which the solver should stop

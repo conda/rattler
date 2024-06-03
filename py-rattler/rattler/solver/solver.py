@@ -70,9 +70,9 @@ async def solve(
             * `"lowest-direct"`: Select the lowest compatible version for all
               direct dependencies but the highest compatible version of transitive
               dependencies.
-        constraints: A list of matchspec to use as constraints. These constraints are
-                used to filter the packages that are considered during solving, but they
-                will not necessarily be added to the solution.
+        constraints: Additional constraints that should be satisfied by the solver.
+            Packages included in the `constraints` are not necessarily installed,
+            but they must be satisfied by the solution.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
