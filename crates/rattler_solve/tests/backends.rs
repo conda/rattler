@@ -544,7 +544,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_constraints() {
             // There following package is provided as .tar.bz and as .conda in repodata.json
-            let operations = solve::<$T>(
+            let mut operations = solve::<$T>(
                 dummy_channel_json_path(),
                 SimpleSolveTask {
                     specs: &["foobar"],
@@ -554,9 +554,12 @@ macro_rules! solver_backend_tests {
             )
             .unwrap();
 
+            // Sort operations by file name to make the test deterministic
+            operations.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+
             assert_eq!(operations.len(), 2);
-            assert_eq!(operations[0].file_name, "foobar-2.1-bla_1.tar.bz2");
-            assert_eq!(operations[1].file_name, "bors-1.0-bla_1.tar.bz2");
+            assert_eq!(operations[0].file_name, "bors-1.0-bla_1.tar.bz2");
+            assert_eq!(operations[1].file_name, "foobar-2.1-bla_1.tar.bz2");
         }
     };
 }
