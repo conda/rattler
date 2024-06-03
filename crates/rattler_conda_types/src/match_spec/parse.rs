@@ -889,8 +889,8 @@ mod tests {
         let err = MatchSpec::from_str("http://username@", Strict).expect_err("Invalid url");
         assert_eq!(err.to_string(), "invalid package spec url");
 
-        let err = MatchSpec::from_str("bla/bla", Strict).expect_err("Invalid url");
-        assert_eq!(err.to_string(), "invalid package path or url");
+        let err = MatchSpec::from_str("bla/bla", Strict).expect_err("Should try to parse as name not url");
+        assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
 
         let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
         assert_eq!(err.to_string(), "invalid package path or url");

@@ -17,11 +17,6 @@ pub(crate) fn is_path(path: &str) -> bool {
         return true;
     }
 
-    // Check if the path contains back or forward slashes
-    if path.contains('/') || path.contains('\\') {
-        return true;
-    }
-
     // A drive letter followed by a colon and a (backward or forward) slash
     matches!(path.chars().take(3).collect_tuple(),
         Some((letter, ':', '/' | '\\')) if letter.is_alphabetic())
