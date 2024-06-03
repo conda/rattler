@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, str::FromStr};
 
 use nom::{
     branch::alt,
@@ -13,6 +13,7 @@ use nom::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
+use typed_path::Utf8TypedPath;
 use url::Url;
 
 use super::{
@@ -29,14 +30,19 @@ use crate::{
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness, ParseVersionError, VersionSpec,
+    utils::path::is_path,
 };
 
 /// The type of parse error that occurred when parsing match spec.
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq)]
 pub enum ParseMatchSpecError {
     /// The path or url of the package was invalid
     #[error("invalid package path or url")]
     InvalidPackagePathOrUrl,
+
+    /// Invalid package spec url
+    #[error("invalid package spec url")]
+    InvalidPackageUrl(#[from] url::ParseError),
 
     /// Invalid version in path or url
     #[error(transparent)]
@@ -374,26 +380,6 @@ impl NamelessMatchSpec {
     }
 }
 
-fn parse_url(input: &str) -> Result<Url, ParseMatchSpecError> {
-    match Url::parse(input) {
-        Ok(url) => Ok(url),
-        Err(_) => {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                match PathBuf::from_str(input) {
-                    Ok(path) => Url::from_file_path(path)
-                        .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl),
-                    Err(_) => Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
-                }
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                Err(ParseMatchSpecError::InvalidPackagePathOrUrl);
-            }
-        }
-    }
-}
-
 /// Parses a conda match spec.
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
 fn matchspec_parser(
@@ -406,13 +392,13 @@ fn matchspec_parser(
 
     // 2. Is the spec a package file, then we can parse it as a url and use as is
     if is_package_file(input) {
-        let url = PathBuf::from_str(input)
-            .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)
-            .and_then(|_path| {
-                file_url::file_path_to_url(input)
-                    .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)
-            })
-            .or_else(|_| parse_url(input))?;
+        let url = if is_path(input) {
+            let path = Utf8TypedPath::from(input);
+            file_url::file_path_to_url(path)
+                .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
+        } else {
+            Url::parse(input)?
+        };
 
         return Ok(MatchSpec {
             url: Some(url),
@@ -539,6 +525,7 @@ mod tests {
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
         NamelessMatchSpec, ParseStrictness::*, VersionSpec,
     };
+    use crate::InvalidPackageNameError::InvalidCharacters;
 
     fn channel_config() -> ChannelConfig {
         ChannelConfig::default_with_root_dir(
@@ -880,11 +867,30 @@ mod tests {
             "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
             Strict,
         )
-        .unwrap();
+            .unwrap();
 
         assert_eq!(
             spec.url,
             Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
         );
+    }
+
+    #[test]
+    fn test_non_happy_path_parsing(){
+        let spec = MatchSpec::from_str(
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.bla",
+            Strict,
+        )
+            .expect_err("Should fail to parse");
+
+        assert_eq!(spec, ParseMatchSpecError::InvalidPackageName(InvalidCharacters("/home/user/conda-bld/linux-64/foo-1.0-py27_0.bla".to_string())));
+
+        let spec = MatchSpec::from_str(
+            "foo-1.0-py27_0.tar.bz2",
+            Strict,
+        )
+            .expect_err("Should fail to parse");
+
+        assert_eq!(spec, ParseMatchSpecError::InvalidPackageUrl(url::ParseError::RelativeUrlWithoutBase));
     }
 }
