@@ -864,14 +864,14 @@ mod tests {
     #[test]
     fn test_parsing_path() {
         let spec = MatchSpec::from_str(
-            "C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
             Strict,
         )
         .unwrap();
         assert_eq!(
             spec.url,
             Some(
-                Url::parse("file:C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
+                Url::parse("file://C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
             )
         );
 
