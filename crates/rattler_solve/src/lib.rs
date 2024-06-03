@@ -131,6 +131,11 @@ pub struct SolverTask<TAvailablePackagesIterator> {
     /// The specs we want to solve
     pub specs: Vec<MatchSpec>,
 
+    /// Additional constraints that should be satisfied by the solver. Packages
+    /// included in the `constraints` are not necessarily installed, but they
+    /// must be satisfied by the solver.
+    pub constraints: Vec<MatchSpec>,
+
     /// The timeout after which the solver should stop
     pub timeout: Option<std::time::Duration>,
 
@@ -156,6 +161,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             pinned_packages: Vec::new(),
             virtual_packages: Vec::new(),
             specs: Vec::new(),
+            constraints: Vec::new(),
             timeout: None,
             channel_priority: ChannelPriority::default(),
             exclude_newer: None,

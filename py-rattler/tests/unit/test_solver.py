@@ -122,3 +122,19 @@ async def test_solve_channel_priority_disabled(
             == pytorch_channel.base_url
     )
     assert len(solved_data) == 32
+
+@pytest.mark.asyncio
+async def test_solve_constraints(gateway: Gateway, dummy_channel: Channel) -> None:
+    solved_data = await solve(
+        [dummy_channel],
+        ["foobar"],
+        constraints=["bors <=1", "nonexisting"],
+        platforms=["linux-64"],
+        gateway=gateway,
+    )
+
+    assert isinstance(solved_data, list)
+    assert len(solved_data) == 2
+
+    assert solved_data[0].file_name == "foobar-2.1-bla_1.tar.bz2"
+    assert solved_data[1].file_name == "bors-1.0-bla_1.tar.bz2"

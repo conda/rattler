@@ -540,6 +540,24 @@ macro_rules! solver_backend_tests {
                 _ => panic!("expected a DuplicateRecord error"),
             }
         }
+
+        #[test]
+        fn test_constraints() {
+            // There following package is provided as .tar.bz and as .conda in repodata.json
+            let operations = solve::<$T>(
+                dummy_channel_json_path(),
+                SimpleSolveTask {
+                    specs: &["foobar"],
+                    constraints: vec!["bors <=1", "nonexisting"],
+                    ..SimpleSolveTask::default()
+                },
+            )
+            .unwrap();
+
+            assert_eq!(operations.len(), 2);
+            assert_eq!(operations[0].file_name, "foobar-2.1-bla_1.tar.bz2");
+            assert_eq!(operations[1].file_name, "bors-1.0-bla_1.tar.bz2");
+        }
     };
 }
 
@@ -768,6 +786,7 @@ mod resolvo {
 #[derive(Default)]
 struct SimpleSolveTask<'a> {
     specs: &'a [&'a str],
+    constraints: Vec<&'a str>,
     installed_packages: Vec<RepoDataRecord>,
     pinned_packages: Vec<RepoDataRecord>,
     virtual_packages: Vec<GenericVirtualPackage>,
@@ -787,10 +806,17 @@ fn solve<T: SolverImpl + Default>(
         .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
         .collect();
 
+    let constraints = task
+        .constraints
+        .into_iter()
+        .map(|m| MatchSpec::from_str(m, ParseStrictness::Lenient).unwrap())
+        .collect();
+
     let task = SolverTask {
         locked_packages: task.installed_packages,
         virtual_packages: task.virtual_packages,
         specs,
+        constraints,
         pinned_packages: task.pinned_packages,
         exclude_newer: task.exclude_newer,
         strategy: task.strategy,
@@ -942,12 +968,11 @@ fn compare_solve_xtensor_xsimd() {
     });
 }
 
-fn solve_to_get_channel_of_spec(
+fn solve_to_get_channel_of_spec<T: SolverImpl + Default>(
     spec_str: &str,
     expected_channel: &str,
     repo_data: Vec<&SparseRepoData>,
     channel_priority: ChannelPriority,
-    use_resolvo: bool,
 ) {
     let spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient).unwrap();
     let specs = vec![spec.clone()];
@@ -962,11 +987,7 @@ fn solve_to_get_channel_of_spec(
         ..SolverTask::from_iter(&available_packages)
     };
 
-    let result = if use_resolvo {
-        rattler_solve::resolvo::Solver.solve(task).unwrap()
-    } else {
-        rattler_solve::libsolv_c::Solver.solve(task).unwrap()
-    };
+    let result = T::default().solve(task).unwrap();
 
     let record = result.iter().find(|record| {
         record.package_record.name.as_normalized() == spec.name.as_ref().unwrap().as_normalized()
@@ -980,33 +1001,29 @@ fn channel_specific_requirement() {
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
     ];
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
         ChannelPriority::Strict,
-        true,
     );
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "conda-forge::pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata.clone(),
         ChannelPriority::Disabled,
-        true,
     );
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata.clone(),
         ChannelPriority::Strict,
-        true,
     );
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch::pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
-        true,
     );
 }
 
@@ -1017,12 +1034,11 @@ fn channel_priority_strict() {
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
     ];
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch-cpu",
         "https://conda.anaconda.org/conda-forge/",
         repodata,
         ChannelPriority::Strict,
-        true,
     );
 
     // Solve with pytorch as the first channel
@@ -1030,12 +1046,11 @@ fn channel_priority_strict() {
         read_pytorch_sparse_repo_data(),
         read_conda_forge_sparse_repo_data(),
     ];
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch-cpu",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Strict,
-        true,
     );
 }
 
@@ -1051,12 +1066,11 @@ fn channel_priority_strict_panic() {
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
     ];
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Strict,
-        true,
     );
 }
 
@@ -1066,15 +1080,15 @@ fn channel_priority_disabled() {
         read_conda_forge_sparse_repo_data(),
         read_pytorch_sparse_repo_data(),
     ];
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::resolvo::Solver>(
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
-        true,
     );
 }
 
+#[cfg(feature = "libsolv_c")]
 #[test]
 #[should_panic(
     expected = "called `Result::unwrap()` on an `Err` value: Unsolvable([\"package \
@@ -1086,15 +1100,15 @@ fn channel_priority_strict_libsolv_c() {
         read_pytorch_sparse_repo_data(),
     ];
 
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::libsolv_c::Solver>(
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Strict,
-        false,
     );
 }
 
+#[cfg(feature = "libsolv_c")]
 #[test]
 fn channel_priority_disabled_libsolv_c() {
     let repodata = vec![
@@ -1102,11 +1116,10 @@ fn channel_priority_disabled_libsolv_c() {
         read_pytorch_sparse_repo_data(),
     ];
 
-    solve_to_get_channel_of_spec(
+    solve_to_get_channel_of_spec::<rattler_solve::libsolv_c::Solver>(
         "pytorch-cpu=0.4.1=py36_cpu_1",
         "https://conda.anaconda.org/pytorch/",
         repodata,
         ChannelPriority::Disabled,
-        false,
     );
 }

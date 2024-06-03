@@ -29,6 +29,7 @@ async def solve(
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime] = None,
     strategy: SolveStrategy = "highest",
+    constraints: Optional[List[MatchSpec | str]] = None,
 ) -> List[RepoDataRecord]:
     """
     Resolve the dependencies and return the `RepoDataRecord`s
@@ -69,6 +70,9 @@ async def solve(
             * `"lowest-direct"`: Select the lowest compatible version for all
               direct dependencies but the highest compatible version of transitive
               dependencies.
+        constraints: A list of matchspec to use as constraints. These constraints are
+                used to filter the packages that are considered during solving, but they
+                will not necessarily be added to the solution.
 
     Returns:
         Resolved list of `RepoDataRecord`s.
@@ -97,5 +101,11 @@ async def solve(
             if exclude_newer
             else None,
             strategy=strategy,
+            constraints=[
+                constraint._match_spec if isinstance(constraint, MatchSpec) else PyMatchSpec(str(constraint), True)
+                for constraint in constraints
+            ]
+            if constraints is not None
+            else [],
         )
     ]
