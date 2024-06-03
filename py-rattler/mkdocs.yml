@@ -84,6 +84,7 @@ markdown_extensions:
       toc_depth: 3
       permalink: "#"
   - mdx_truly_sane_lists
+  - pymdownx.snippets
 
 nav:
   - First Steps: index.md
@@ -91,7 +92,7 @@ nav:
       - core:
           - fetch: fetch_repo_data.md
           - solve: solver.md
-          - install: install.md
+          - install: installer.md
       - channel:
           - ChannelConfig: channel_config.md
           - Channel: channel.md

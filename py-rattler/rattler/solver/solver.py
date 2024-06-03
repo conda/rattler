@@ -1,8 +1,8 @@
 from __future__ import annotations
 import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Sequence
 
-from rattler import Channel, Platform
+from rattler import Channel, Platform, VirtualPackage
 from rattler.match_spec.match_spec import MatchSpec
 
 from rattler.channel import ChannelPriority
@@ -18,13 +18,13 @@ SolveStrategy = Literal["highest", "lowest", "lowest-direct"]
 
 
 async def solve(
-    channels: List[Channel | str],
-    specs: List[MatchSpec | str],
+    channels: Sequence[Channel | str],
+    specs: Sequence[MatchSpec | str],
     gateway: Gateway = Gateway(),
-    platforms: Optional[List[Platform | PlatformLiteral]] = None,
-    locked_packages: Optional[List[RepoDataRecord]] = None,
-    pinned_packages: Optional[List[RepoDataRecord]] = None,
-    virtual_packages: Optional[List[GenericVirtualPackage]] = None,
+    platforms: Optional[Sequence[Platform | PlatformLiteral]] = None,
+    locked_packages: Optional[Sequence[RepoDataRecord]] = None,
+    pinned_packages: Optional[Sequence[RepoDataRecord]] = None,
+    virtual_packages: Optional[Sequence[GenericVirtualPackage | VirtualPackage]] = None,
     timeout: Optional[datetime.timedelta] = None,
     channel_priority: ChannelPriority = ChannelPriority.Strict,
     exclude_newer: Optional[datetime.datetime] = None,
@@ -94,7 +94,12 @@ async def solve(
             gateway=gateway._gateway,
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
-            virtual_packages=[v_package._generic_virtual_package for v_package in virtual_packages or []],
+            virtual_packages=[
+                v_package.into_generic()._generic_virtual_package
+                if isinstance(v_package, VirtualPackage)
+                else v_package._generic_virtual_package
+                for v_package in virtual_packages or []
+            ],
             channel_priority=channel_priority.value,
             timeout=int(timeout / datetime.timedelta(microseconds=1)) if timeout else None,
             exclude_newer_timestamp_ms=int(exclude_newer.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
