@@ -1,18 +1,22 @@
-//! This module contains the [`Shell`] trait and implementations for various shells.
+//! This module contains the [`Shell`] trait and implementations for various
+//! shells.
 
-use crate::activation::PathModificationBehavior;
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::OsStr,
+    fmt::Write,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+};
+
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
 use rattler_conda_types::Platform;
-use std::collections::HashMap;
-use std::ffi::OsStr;
-use std::process::Command;
-use std::str::FromStr;
-use std::{
-    fmt::Write,
-    path::{Path, PathBuf},
-};
 use thiserror::Error;
+
+use crate::activation::PathModificationBehavior;
 
 /// A trait for generating shell scripts.
 /// The trait is implemented for each shell individually.
@@ -32,7 +36,8 @@ use thiserror::Error;
 /// ```
 #[enum_dispatch(ShellEnum)]
 pub trait Shell {
-    /// Write a command to the script that forces the usage of UTF8-encoding for the shell script.
+    /// Write a command to the script that forces the usage of UTF8-encoding for
+    /// the shell script.
     fn force_utf8(&self, _f: &mut impl Write) -> std::fmt::Result {
         Ok(())
     }
@@ -46,7 +51,8 @@ pub trait Shell {
     /// Run a script in the current shell.
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result;
 
-    /// Test to see if the path can be executed by the shell, based on the extension of the path.
+    /// Test to see if the path can be executed by the shell, based on the
+    /// extension of the path.
     fn can_run_script(&self, path: &Path) -> bool {
         path.is_file()
             && path
@@ -55,8 +61,8 @@ pub trait Shell {
                 .map_or(false, |ext| ext == self.extension())
     }
 
-    /// Executes a command in the current shell. Use [`Self::run_script`] when you want to run
-    /// another shell script.
+    /// Executes a command in the current shell. Use [`Self::run_script`] when
+    /// you want to run another shell script.
     fn run_command<'a>(
         &self,
         f: &mut impl Write,
@@ -95,7 +101,8 @@ pub trait Shell {
     /// The executable that can be called to start this shell.
     fn executable(&self) -> &str;
 
-    /// Constructs a [`Command`] that will execute the specified script by this shell.
+    /// Constructs a [`Command`] that will execute the specified script by this
+    /// shell.
     fn create_run_script_command(&self, path: &Path) -> Command;
 
     /// Path seperator
@@ -122,8 +129,8 @@ pub trait Shell {
         writeln!(f, "/usr/bin/env")
     }
 
-    /// Write the script to the writer and do some post-processing for line-endings.
-    /// Only really relevant for cmd.exe scripts.
+    /// Write the script to the writer and do some post-processing for
+    /// line-endings. Only really relevant for cmd.exe scripts.
     fn write_script(&self, f: &mut impl std::io::Write, script: &str) -> std::io::Result<()> {
         f.write_all(script.as_bytes())
     }
@@ -204,7 +211,8 @@ impl Shell for Bash {
         let mut paths_vec = paths
             .iter()
             .map(|path| {
-                // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+                // check if we are on Windows, and if yes, convert native path to unix for (Git)
+                // Bash
                 if cfg!(windows) {
                     match native_path_to_unix(path.to_string_lossy().as_ref()) {
                         Ok(path) => path,
@@ -244,7 +252,8 @@ impl Shell for Bash {
     fn create_run_script_command(&self, path: &Path) -> Command {
         let mut cmd = Command::new(self.executable());
 
-        // check if we are on Windows, and if yes, convert native path to unix for (Git) Bash
+        // check if we are on Windows, and if yes, convert native path to unix for (Git)
+        // Bash
         if cfg!(windows) {
             cmd.arg(native_path_to_unix(path.to_str().unwrap()).unwrap());
         } else {
@@ -510,6 +519,13 @@ impl Shell for Fish {
 fn escape_backslashes(s: &str) -> String {
     s.replace('\\', "\\\\")
 }
+fn quote_if_required(s: &str) -> Cow<'_, str> {
+    if s.contains(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-') {
+        Cow::Owned(format!("\"{s}\""))
+    } else {
+        Cow::Borrowed(s)
+    }
+}
 
 /// A [`Shell`] implementation for the Bash shell.
 #[derive(Debug, Clone, Copy, Default)]
@@ -518,11 +534,16 @@ pub struct NuShell;
 impl Shell for NuShell {
     fn set_env_var(&self, f: &mut impl Write, env_var: &str, value: &str) -> std::fmt::Result {
         // escape backslashes for Windows (make them double backslashes)
-        writeln!(f, "$env.{} = \"{}\"", env_var, escape_backslashes(value))
+        writeln!(
+            f,
+            "$env.{} = \"{}\"",
+            quote_if_required(env_var),
+            escape_backslashes(value)
+        )
     }
 
     fn unset_env_var(&self, f: &mut impl Write, env_var: &str) -> std::fmt::Result {
-        writeln!(f, "hide-env {env_var}")
+        writeln!(f, "hide-env {}", quote_if_required(env_var))
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
@@ -603,11 +624,11 @@ impl ShellEnum {
 
     /// Determine the user's current shell from the environment
     ///
-    /// This will read the SHELL environment variable and try to determine which shell is in use
-    /// from that.
+    /// This will read the SHELL environment variable and try to determine which
+    /// shell is in use from that.
     ///
-    /// If SHELL is set, but contains a value that doesn't correspond to one of the supported shell
-    /// types, then return `None`.
+    /// If SHELL is set, but contains a value that doesn't correspond to one of
+    /// the supported shell types, then return `None`.
     pub fn from_env() -> Option<Self> {
         if let Some(env_shell) = std::env::var_os("SHELL") {
             Self::from_shell_path(env_shell)
@@ -774,8 +795,8 @@ impl<T: Shell + 'static> ShellScript<T> {
         Ok(self)
     }
 
-    /// Add contents to the script. The contents will be added as is, so make sure to format it
-    /// correctly for the shell.
+    /// Add contents to the script. The contents will be added as is, so make
+    /// sure to format it correctly for the shell.
     pub fn append_script(&mut self, script: &Self) -> &mut Self {
         self.contents.push('\n');
         self.contents.push_str(&script.contents);
