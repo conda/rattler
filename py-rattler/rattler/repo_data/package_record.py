@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 from typing import List, Optional, TYPE_CHECKING
+import datetime
 
 from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
@@ -435,7 +436,7 @@ class PackageRecord:
         return self._record.subdir
 
     @property
-    def timestamp(self) -> Optional[int]:
+    def timestamp(self) -> Optional[datetime.datetime]:
         """
         The date this entry was created.
 
@@ -447,10 +448,13 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.timestamp
-        1668697639
+        datetime.datetime(2022, 11, 17, 15, 7, 19, 781000, tzinfo=datetime.timezone.utc)
         >>>
         ```
         """
+        if self._record.timestamp:
+            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
+
         return self._record.timestamp
 
     @property

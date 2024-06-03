@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use thiserror::Error;
 
 use crate::{Component, Version};
@@ -35,6 +37,67 @@ pub enum VersionBumpError {
 }
 
 impl Version {
+    /// Add alpha specifier to the end of the version when the last element does not contain an `iden` component.
+    ///
+    /// For example, `1.0.0` will become `1.0.0.0a0`.
+    /// If the last version element contains a character, it's not modified (e.g. `1.0.0a` will remain `1.0.0a`).
+    pub fn with_alpha(&self) -> Cow<'_, Self> {
+        let last_segment = self.segments().last().expect("at least one segment");
+        // check if there is an iden component in the last segment
+        let has_iden = last_segment.components().any(|c| c.as_iden().is_some());
+        if has_iden {
+            return Cow::Borrowed(self);
+        }
+        let local_segment_index = self.local_segment_index().unwrap_or(self.segments.len());
+        let mut segments = self.segments[0..local_segment_index].to_vec();
+        let components_offset = segments.iter().map(|s| s.len() as usize).sum::<usize>()
+            + usize::from(self.has_epoch());
+
+        segments.push(Segment::new(3).unwrap().with_separator(Some('.')).unwrap());
+        segments.extend(self.segments[local_segment_index..].iter());
+
+        let mut components = self.components.clone();
+        components.insert(components_offset, Component::Numeral(0));
+        components.insert(components_offset + 1, Component::Iden("a".into()));
+        components.insert(components_offset + 2, Component::Numeral(0));
+
+        let flags = if let Some(local_segment_index) = self.local_segment_index() {
+            self.flags
+                .with_local_segment_index((local_segment_index + 1) as u8)
+                .unwrap()
+        } else {
+            self.flags
+        };
+
+        Cow::Owned(Version {
+            components,
+            segments: segments.into(),
+            flags,
+        })
+    }
+
+    /// Remove the local segment from the version if it exists.
+    /// Returns a new version without the local segment.
+    ///
+    /// For example, `1.0.0+3.4` will become `1.0.0`.
+    pub fn remove_local(&self) -> Cow<'_, Self> {
+        if let Some(local_segment_index) = self.local_segment_index() {
+            let segments = self.segments[0..local_segment_index].to_vec();
+            let components_offset = segments.iter().map(|s| s.len() as usize).sum::<usize>()
+                + usize::from(self.has_epoch());
+            let mut components = self.components.clone();
+            components.drain(components_offset..);
+
+            Cow::Owned(Version {
+                components,
+                segments: segments.into(),
+                flags: self.flags.with_local_segment_index(0).unwrap(),
+            })
+        } else {
+            return Cow::Borrowed(self);
+        }
+    }
+
     /// Returns a new version after bumping it according to the specified bump type.
     /// Note: if a version ends with a character, the next bigger version will use `a` as the character.
     /// For example: `1.1l` -> `1.2a`, but also `1.1.0alpha` -> `1.1.1a`.
@@ -233,6 +296,41 @@ mod test {
                 .unwrap()
                 .bump(VersionBumpType::Segment(idx))
                 .unwrap(),
+            Version::from_str(expected).unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case(0, "1.1.9", "2.1.9.0a0")]
+    #[case(2, "1.0.0", "1.0.1.0a0")]
+    #[case(2, "1.0.0a", "1.0.1a")]
+    #[case(2, "1.0.0f", "1.0.1a")]
+    #[case(2, "5!1.0.0", "5!1.0.1.0a0")]
+    #[case(2, "5!1.0.0+3.4", "5!1.0.1.0a0+3.4")]
+    fn with_alpha(#[case] idx: i32, #[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            Version::from_str(input)
+                .unwrap()
+                .bump(VersionBumpType::Segment(idx))
+                .unwrap()
+                .with_alpha()
+                .into_owned(),
+            Version::from_str(expected).unwrap()
+        );
+    }
+
+    #[rstest]
+    #[case("1.1.9", "1.1.9")]
+    #[case("1.0.0+3", "1.0.0")]
+    #[case("1.0.0+3.4", "1.0.0")]
+    #[case("1.0.0+3.4alpha.2.4", "1.0.0")]
+    #[case("5!1.0.0+3.4alpha.2.4", "5!1.0.0")]
+    fn remove_local(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(
+            Version::from_str(input)
+                .unwrap()
+                .remove_local()
+                .into_owned(),
             Version::from_str(expected).unwrap()
         );
     }

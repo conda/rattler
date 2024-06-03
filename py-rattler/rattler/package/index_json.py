@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import datetime
 from pathlib import Path
 from typing import List, Optional
 
@@ -285,7 +286,7 @@ class IndexJson:
         return None
 
     @property
-    def timestamp(self) -> Optional[int]:
+    def timestamp(self) -> Optional[datetime.datetime]:
         """
         The timestamp when this package was created
 
@@ -296,12 +297,12 @@ class IndexJson:
         ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
         ... )
         >>> idx_json.timestamp
-        1661200742
+        datetime.datetime(2022, 8, 22, 20, 39, 2, 467000, tzinfo=datetime.timezone.utc)
         >>>
         ```
         """
         if timestamp := self._inner.timestamp:
-            return timestamp
+            return datetime.datetime.fromtimestamp(timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return None
 
