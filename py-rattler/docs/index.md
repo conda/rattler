@@ -25,7 +25,7 @@ Let's see an example to learn some of the functionality the library has to offer
 ```
 
 Py-rattler provides friendly high level functions to download dependencies and create environments.
-This is done through for instance the `solve` and `install` functions.
+The `solve` and `install` functions are excellent examples of such high-level functions.
 
 ## What is conda & conda-forge?
 
