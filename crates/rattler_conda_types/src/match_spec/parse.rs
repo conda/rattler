@@ -19,7 +19,6 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     package::ArchiveType,
@@ -408,20 +407,15 @@ fn matchspec_parser(
     // 2. Is the spec a package file, then we can parse it as a url and use as is
     if is_package_file(input) {
         let url = PathBuf::from_str(input)
-            .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)
+            .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)
             .and_then(|_path| {
                 file_url::file_path_to_url(input)
-                    .map_err(|_| ParseMatchSpecError::InvalidPackagePathOrUrl)
+                    .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)
             })
             .or_else(|_| parse_url(input))?;
 
-        let identifier = ArchiveIdentifier::try_from_url(&url)
-            .ok_or(ParseMatchSpecError::InvalidPackagePathOrUrl)?;
-        let file_name = identifier.to_file_name();
-
         return Ok(MatchSpec {
             url: Some(url),
-            file_name: Some(file_name),
             ..MatchSpec::default()
         });
     }
@@ -865,10 +859,6 @@ mod tests {
         .unwrap();
 
         assert_eq!(spec.url, Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap()));
-        assert_eq!(
-            spec.file_name,
-            Some("py-rattler-0.6.1-py39h8169da8_0.conda".parse().unwrap())
-        );
     }
 
     #[test]
@@ -884,10 +874,6 @@ mod tests {
                 Url::parse("file:C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap()
             )
         );
-        assert_eq!(
-            spec.file_name,
-            Some("foo-1.0-py27_0.tar.bz2".parse().unwrap())
-        );
 
         let spec = MatchSpec::from_str(
             "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
@@ -898,10 +884,6 @@ mod tests {
         assert_eq!(
             spec.url,
             Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
-        );
-        assert_eq!(
-            spec.file_name,
-            Some("foo-1.0-py27_0.tar.bz2".parse().unwrap())
         );
     }
 }
