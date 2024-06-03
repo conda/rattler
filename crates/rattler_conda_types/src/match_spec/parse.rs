@@ -764,7 +764,7 @@ mod tests {
         // Please keep this list sorted.
         let specs = [
             "blas *.* mkl",
-            "C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
             "foo=1.0=py27_0",
             "foo==1.0=py27_0",
             "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
