@@ -610,6 +610,7 @@ mod libsolv_c {
                 virtual_packages: Vec::new(),
                 available_packages: [libsolv_repodata],
                 specs,
+                constraints: Vec::new(),
                 pinned_packages: Vec::new(),
                 timeout: None,
                 channel_priority: ChannelPriority::default(),
