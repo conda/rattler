@@ -37,7 +37,7 @@ target-version = "py38"
 
 [tool.mypy]
 python_version = "3.8"
-files = ["rattler", "tests"]
+files = ["rattler", "tests", "examples"]
 strict = true
 enable_error_code = ["redundant-expr", "truthy-bool", "ignore-without-code"]
 disable_error_code = ["empty-body"]

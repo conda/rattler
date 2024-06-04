@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.23.2...rattler_solve-v0.24.0) - 2024-06-03
+
+### Added
+- add constraints to solve ([#713](https://github.com/mamba-org/rattler/pull/713))
+
 ## [0.23.2](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.23.1...rattler_solve-v0.23.2) - 2024-05-28
 
 ### Fixed

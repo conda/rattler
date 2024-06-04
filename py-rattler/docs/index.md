@@ -16,6 +16,17 @@ Rattler is written in Rust and tries to provide a clean API to its functionaliti
 With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects.
 Py-rattler is the python bindings for rattler.
 
+## Quick-Start
+
+Let's see an example to learn some of the functionality the library has to offer.
+
+```python
+--8<-- "examples\solve_and_install.py"
+```
+
+Py-rattler provides friendly high level functions to download dependencies and create environments.
+The `solve` and `install` functions are excellent examples of such high-level functions.
+
 ## What is conda & conda-forge?
 
 The conda ecosystem provides **cross-platform**, **binary** packages that you can use with **any programming language**.
@@ -64,79 +75,6 @@ $ conda install py-rattler
 ```shell
 $ mamba install py-rattler -c conda-forge
 ```
-
-## Quick-Start
-
-Let's see an example to learn some of the functionality the library has to offer.
-
-```python
-
-import asyncio
-
-from rattler import fetch_repo_data, solve, link, Channel, Platform, MatchSpec, VirtualPackage
-
-def download_callback(done, total):
-    print("", end = "\r")
-    print(f'{done/1024/1024:.2f}MiB/{total/1024/1024:.2f}MiB', end = "\r")
-    if done == total:
-        print()
-
-async def main():
-    # channel to use to get the dependencies
-    channel = Channel("conda-forge")
-
-    # list of dependencies to install in the env
-    match_specs = [
-        MatchSpec("python ~=3.12.*"),
-        MatchSpec("pip"),
-        MatchSpec("requests 2.31.0")
-    ]
-
-    # list of platforms to get the repo data
-    platforms = [Platform.current(), Platform("noarch")]
-
-    virtual_packages = [p.into_generic() for p in VirtualPackage.current()]
-
-    cache_path = "/tmp/py-rattler-cache/"
-    env_path = "/tmp/env-path/env"
-
-    print("started fetching repo_data")
-    repo_data = await fetch_repo_data(
-        channels = [channel],
-        platforms = platforms,
-        cache_path = f"{cache_path}/repodata",
-        callback = download_callback,
-    )
-    print("finished fetching repo_data")
-
-    solved_dependencies = solve(
-        specs = match_specs,
-        available_packages = repo_data,
-        virtual_packages = virtual_packages,
-    )
-    print("solved required dependencies")
-
-    await link(
-        dependencies = solved_dependencies,
-        target_prefix = env_path,
-        cache_dir = f"{cache_path}/pkgs",
-    )
-    print(f"created environment: {env_path}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-
-```
-
-Py-rattler provides friendly high level functions to download
-dependencies and create environments. This is done through the
-`fetch_repo_data`, `solve` and `link` functions.
-
-- `fetch_repo_data` as the name implies, fetches repo data from conda registries.
-- `solve` function solves the requirements to get all the packages
-  which would be required to create the environment.
-- `link` function takes a list of solved dependencies to create an
-  environment.
 
 ## Next Steps
 

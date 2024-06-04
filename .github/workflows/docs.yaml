@@ -37,8 +37,6 @@ jobs:
 
       - uses: prefix-dev/setup-pixi@v0.8.0
         with:
-          pixi-version: v0.13.0
-          cache: true
           manifest-path: py-rattler/pixi.toml
 
       - name: Setup Pages
