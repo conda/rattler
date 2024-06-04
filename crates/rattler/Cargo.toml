@@ -1,6 +1,6 @@
 [package]
 name = "rattler"
-version = "0.26.2"
+version = "0.26.3"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust library to install conda environments"
@@ -36,11 +36,11 @@ memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
 rattler_cache = { path = "../rattler_cache", version = "0.1.0", default-features = false }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.25.1", default-features = false }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.25.2", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "0.19.4", default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.20.8", default-features = false }
-rattler_shell = { path = "../rattler_shell", version = "0.20.7", default-features = false }
-rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.21.2", default-features = false, features = ["reqwest"] }
+rattler_shell = { path = "../rattler_shell", version = "0.20.8", default-features = false }
+rattler_package_streaming = { path = "../rattler_package_streaming", version = "0.21.3", default-features = false, features = ["reqwest"] }
 reflink-copy = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true, features = ["stream", "json", "gzip"] }

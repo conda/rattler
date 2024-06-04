@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.5](https://github.com/baszalmstra/rattler/compare/rattler_repodata_gateway-v0.20.4...rattler_repodata_gateway-v0.20.5) - 2024-06-04
+
+### Other
+- remove lfs ([#512](https://github.com/baszalmstra/rattler/pull/512))
+
 ## [0.20.4](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.20.3...rattler_repodata_gateway-v0.20.4) - 2024-06-03
 
 ### Other

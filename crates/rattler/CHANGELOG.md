@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.3](https://github.com/baszalmstra/rattler/compare/rattler-v0.26.2...rattler-v0.26.3) - 2024-06-04
+
+### Other
+- remove lfs ([#512](https://github.com/baszalmstra/rattler/pull/512))
+- move the cache tooling into its own crate for reuse downstream ([#721](https://github.com/baszalmstra/rattler/pull/721))
+
 ## [0.26.2](https://github.com/mamba-org/rattler/compare/rattler-v0.26.1...rattler-v0.26.2) - 2024-06-03
 
 ### Other

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.16](https://github.com/baszalmstra/rattler/compare/rattler_index-v0.19.15...rattler_index-v0.19.16) - 2024-06-04
+
+### Other
+- remove lfs ([#512](https://github.com/baszalmstra/rattler/pull/512))
+
 ## [0.19.15](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.14...rattler_index-v0.19.15) - 2024-06-03
 
 ### Other

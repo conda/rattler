@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/baszalmstra/rattler/compare/file_url-v0.1.1...file_url-v0.1.2) - 2024-06-04
+
+### Added
+- parse url and path as matchspec ([#704](https://github.com/baszalmstra/rattler/pull/704))
+
 ## [0.1.1](https://github.com/mamba-org/rattler/compare/file_url-v0.1.0...file_url-v0.1.1) - 2024-05-14
 
 ### Added

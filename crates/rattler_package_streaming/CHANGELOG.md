@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.3](https://github.com/baszalmstra/rattler/compare/rattler_package_streaming-v0.21.2...rattler_package_streaming-v0.21.3) - 2024-06-04
+
+### Other
+- remove lfs ([#512](https://github.com/baszalmstra/rattler/pull/512))
+
 ## [0.21.2](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.1...rattler_package_streaming-v0.21.2) - 2024-06-03
 
 ### Fixed
