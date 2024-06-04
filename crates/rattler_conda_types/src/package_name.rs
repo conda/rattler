@@ -47,7 +47,7 @@ impl PackageName {
 }
 
 /// An error that is returned when conversion from a string to a [`PackageName`] fails.
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, PartialEq)]
 pub enum InvalidPackageNameError {
     /// The package name contains illegal characters
     #[error("'{0}' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .")]

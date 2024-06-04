@@ -15,8 +15,8 @@ use std::path::PathBuf;
 #[cfg(feature = "cli-tools")]
 pub mod cli;
 pub mod install;
-pub mod package_cache;
-pub mod validation;
+pub use rattler_cache::package_cache;
+pub use rattler_cache::validation;
 
 /// A helper function that returns a [`Channel`] instance that points to an empty channel on disk
 /// that is bundled with this repository.
@@ -40,9 +40,7 @@ pub(crate) fn get_test_data_dir() -> PathBuf {
 
 /// Returns the default cache directory used by rattler.
 pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
-    Ok(dirs::cache_dir()
-        .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
-        .join("rattler/cache"))
+    rattler_cache::default_cache_dir()
 }
 
 #[cfg(test)]
