@@ -390,6 +390,7 @@ mod test {
     use std::{
         convert::Infallible, fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc,
     };
+    use std::path::PathBuf;
 
     use assert_matches::assert_matches;
     use axum::{
@@ -413,7 +414,11 @@ mod test {
     use url::Url;
 
     use super::PackageCache;
-    use crate::{get_test_data_dir, validation::validate_package_directory};
+    use crate::validation::validate_package_directory;
+
+    fn get_test_data_dir() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
+    }
 
     #[tokio::test]
     pub async fn test_package_cache() {
