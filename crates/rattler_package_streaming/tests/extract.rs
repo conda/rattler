@@ -1,11 +1,16 @@
+use std::{
+    fs::File,
+    io::Read,
+    path::{Path, PathBuf},
+};
+
 use rattler_conda_types::package::IndexJson;
-use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
-use rattler_package_streaming::ExtractError;
+use rattler_package_streaming::{
+    read::{extract_conda, extract_tar_bz2},
+    ExtractError,
+};
 use rstest::rstest;
 use rstest_reuse::{self, apply, template};
-use std::fs::File;
-use std::io::Read;
-use std::path::{Path, PathBuf};
 use url::Url;
 
 fn test_data_dir() -> PathBuf {
@@ -137,18 +142,21 @@ fn test_stream_info(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &str
 }
 
 #[apply(conda_archives)]
-fn read_package_file(#[case] input: &str, #[case] _sha256: &str, #[case] _md5: &str) {
-    let file_path = Path::new(input);
+fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &str) {
+    let file_path = tools::download_and_cache_file(input.clone(), sha256).unwrap();
     let index_json: IndexJson =
-        rattler_package_streaming::seek::read_package_file(test_data_dir().join(file_path))
-            .unwrap();
+        rattler_package_streaming::seek::read_package_file(file_path).unwrap();
     let name = format!(
         "{}-{}-{}",
         index_json.name.as_normalized(),
         index_json.version,
         index_json.build
     );
-    assert!(input.starts_with(&name));
+    assert!(input
+        .path_segments()
+        .and_then(|s| s.last())
+        .unwrap()
+        .starts_with(&name));
 }
 
 #[apply(tar_bz2_archives)]
@@ -248,14 +256,19 @@ async fn test_extract_url_async(#[case] url: &str, #[case] sha256: &str, #[case]
 
 #[rstest]
 fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)] cutoff: usize) {
-    let input = "conda-22.11.1-py38haa244fe_1.conda";
+    let package_path = tools::download_and_cache_file(
+        "https://conda.anaconda.org/conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda"
+            .parse()
+            .unwrap(),
+        "a8a44c5ff2b2f423546d49721ba2e3e632233c74a813c944adf8e5742834930e",
+    )
+    .unwrap();
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
-    let file_path = Path::new(input);
-    let target_dir = temp_dir.join(file_path.file_stem().unwrap());
+    let target_dir = temp_dir.join(package_path.file_stem().unwrap());
     let result = extract_conda(
         FlakyReader {
-            reader: File::open(test_data_dir().join(file_path)).unwrap(),
+            reader: File::open(package_path).unwrap(),
             total_read: 0,
             cutoff,
         },

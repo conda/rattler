@@ -143,23 +143,24 @@ mod tests {
     };
 
     use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord, Version};
+    use url::Url;
 
     use crate::{
-        get_repodata_record, get_test_data_dir,
+        get_repodata_record,
         install::{
             link_package, unlink_package, InstallDriver, InstallOptions, PythonInfo, Transaction,
         },
     };
 
-    async fn link_ruff(target_prefix: &Path, package: &str) -> PrefixRecord {
+    async fn link_ruff(target_prefix: &Path, package_url: Url, sha256_hash: &str) -> PrefixRecord {
+        let package_path = tools::download_and_cache_file_async(package_url, sha256_hash)
+            .await
+            .unwrap();
+
         let package_dir = tempfile::TempDir::new().unwrap();
 
         // Create package cache
-        rattler_package_streaming::fs::extract(
-            &get_test_data_dir().join(package),
-            package_dir.path(),
-        )
-        .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let py_info =
             PythonInfo::from_version(&Version::from_str("3.10").unwrap(), Platform::Linux64)
@@ -180,7 +181,7 @@ mod tests {
         .await
         .unwrap();
 
-        let repodata_record = get_repodata_record(package);
+        let repodata_record = get_repodata_record(&package_path);
         // Construct a PrefixRecord for the package
 
         PrefixRecord::from_repodata_record(repodata_record, None, None, paths, None, None)
@@ -189,8 +190,14 @@ mod tests {
     #[tokio::test]
     async fn test_unlink_package() {
         let environment_dir = tempfile::TempDir::new().unwrap();
-        let prefix_record =
-            link_ruff(environment_dir.path(), "ruff-0.0.171-py310h298983d_0.conda").await;
+        let prefix_record = link_ruff(
+            environment_dir.path(),
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
+        )
+        .await;
         let conda_meta_path = environment_dir.path().join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path).unwrap();
 
@@ -220,7 +227,8 @@ mod tests {
             .remove_empty_directories(&transaction, &[], environment_dir.path())
             .unwrap();
 
-        // check that the environment is completely empty except for the conda-meta folder
+        // check that the environment is completely empty except for the conda-meta
+        // folder
         let entries = std::fs::read_dir(environment_dir.path())
             .unwrap()
             .collect::<Vec<_>>();
@@ -233,7 +241,10 @@ mod tests {
         let target_prefix = tempfile::TempDir::new().unwrap();
         let prefix_record = link_ruff(
             target_prefix.path(),
-            "pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2",
+            "https://conda.anaconda.org/conda-forge/noarch/pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"
+                .parse()
+                .unwrap(),
+            "81644bcb60d295f7923770b41daf2d90152ef54b9b094c26513be50fccd62125",
         )
         .await;
 
@@ -278,7 +289,8 @@ mod tests {
             .remove_empty_directories(&transaction, &[], target_prefix.path())
             .unwrap();
 
-        // check that the environment is completely empty except for the conda-meta folder
+        // check that the environment is completely empty except for the conda-meta
+        // folder
         let entries = std::fs::read_dir(target_prefix.path())
             .unwrap()
             .collect::<Vec<_>>();

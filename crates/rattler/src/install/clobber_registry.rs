@@ -288,15 +288,21 @@ mod tests {
 
     use crate::install::test_utils::*;
     use crate::{
-        get_repodata_record,
+        get_repodata_record, get_test_data_dir,
         install::{transaction, InstallDriver, InstallOptions, PythonInfo},
         package_cache::PackageCache,
     };
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 = get_repodata_record("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_2 = get_repodata_record("clobber/clobber-2-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_3 = get_repodata_record("clobber/clobber-3-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-2-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_3 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-3-0.1.0-h4616a5c_0.tar.bz2"),
+        );
 
         vec![
             TransactionOperation::Install(repodata_record_1),
@@ -306,10 +312,12 @@ mod tests {
     }
 
     fn test_python_noarch_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 =
-            get_repodata_record("clobber/clobber-pynoarch-1-0.1.0-pyh4616a5c_0.tar.bz2");
-        let repodata_record_2 =
-            get_repodata_record("clobber/clobber-pynoarch-2-0.1.0-pyh4616a5c_0.tar.bz2");
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-pynoarch-1-0.1.0-pyh4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-pynoarch-2-0.1.0-pyh4616a5c_0.tar.bz2"),
+        );
 
         vec![
             TransactionOperation::Install(repodata_record_1),
@@ -318,12 +326,15 @@ mod tests {
     }
 
     fn test_operations_nested() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 =
-            get_repodata_record("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_2 =
-            get_repodata_record("clobber/clobber-nested-2-0.1.0-h4616a5c_0.tar.bz2");
-        let repodata_record_3 =
-            get_repodata_record("clobber/clobber-nested-3-0.1.0-h4616a5c_0.tar.bz2");
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-nested-1-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-nested-2-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_3 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-nested-3-0.1.0-h4616a5c_0.tar.bz2"),
+        );
 
         vec![
             TransactionOperation::Install(repodata_record_1),
@@ -333,9 +344,15 @@ mod tests {
     }
 
     fn test_operations_update() -> Vec<RepoDataRecord> {
-        let repodata_record_1 = get_repodata_record("clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2");
-        let repodata_record_2 = get_repodata_record("clobber/clobber-2-0.2.0-h4616a5c_0.tar.bz2");
-        let repodata_record_3 = get_repodata_record("clobber/clobber-3-0.2.0-h4616a5c_0.tar.bz2");
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-1-0.2.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_2 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-2-0.2.0-h4616a5c_0.tar.bz2"),
+        );
+        let repodata_record_3 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-3-0.2.0-h4616a5c_0.tar.bz2"),
+        );
 
         vec![repodata_record_1, repodata_record_2, repodata_record_3]
     }

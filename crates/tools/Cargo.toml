@@ -15,7 +15,7 @@ fslock = { workspace = true }
 dirs = { workspace = true }
 thiserror = { workspace = true }
 rattler_digest = { path = "../rattler_digest" }
-reqwest = { workspace = true, default-features = false, features = ["blocking", "rustls"] }
+reqwest = { workspace = true, default-features = false, features = ["blocking", "rustls-tls"] }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 
