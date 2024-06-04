@@ -135,14 +135,18 @@ jobs:
         run: |
           echo "CARGO_TEST_OPTIONS=${CARGO_TEST_OPTIONS} --exclude tools" >> $GITHUB_OUTPUT
 
+      - name: Install cargo nextest
+        if: ${{ !matrix.skip-tests }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
       - name: Run tests
         if: ${{ !matrix.skip-tests }}
         run: >
-          cargo test 
+          cargo nextest run
           --workspace 
           --features ${{ env.DEFAULT_FEATURES }} 
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
-          -- 
-          --nocapture
