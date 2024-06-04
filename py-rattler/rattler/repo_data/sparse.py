@@ -50,9 +50,9 @@ class SparseRepoData:
         --------
         ```python
         >>> from rattler import Channel, ChannelConfig
-        >>> channel = Channel("conda-forge", ChannelConfig())
-        >>> subdir = "test-data/conda-forge/noarch"
-        >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> subdir = "test-data/dummy/noarch"
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> package_names = sparse_data.package_names()
         >>> package_names
@@ -72,9 +72,9 @@ class SparseRepoData:
         --------
         ```python
         >>> from rattler import Channel, ChannelConfig, RepoDataRecord, PackageName
-        >>> channel = Channel("conda-forge", ChannelConfig())
-        >>> subdir = "test-data/conda-forge/noarch"
-        >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> subdir = "test-data/dummy/noarch"
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> package_name = PackageName(sparse_data.package_names()[0])
         >>> records = sparse_data.load_records(package_name)
@@ -97,12 +97,12 @@ class SparseRepoData:
         --------
         ```python
         >>> from rattler import Channel, ChannelConfig
-        >>> channel = Channel("conda-forge", ChannelConfig())
-        >>> subdir = "test-data/conda-forge/noarch"
-        >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> subdir = "test-data/dummy/noarch"
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data.subdir
-        'test-data/conda-forge/noarch'
+        'test-data/dummy/noarch'
         >>>
         ```
         """
@@ -124,9 +124,9 @@ class SparseRepoData:
         --------
         ```python
         >>> from rattler import Channel, ChannelConfig, PackageName
-        >>> channel = Channel("conda-forge")
-        >>> subdir = "test-data/conda-forge/linux-64"
-        >>> path = "../test-data/channels/conda-forge/linux-64/repodata.json"
+        >>> channel = Channel("dummy")
+        >>> subdir = "test-data/dummy/linux-64"
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> package_name = PackageName("python")
         >>> SparseRepoData.load_records_recursive([sparse_data], [package_name])
@@ -159,12 +159,12 @@ class SparseRepoData:
         --------
         ```python
         >>> from rattler import Channel, ChannelConfig
-        >>> channel = Channel("conda-forge", ChannelConfig())
-        >>> subdir = "test-data/conda-forge/noarch"
-        >>> path = "../test-data/channels/conda-forge/noarch/repodata.json"
+        >>> channel = Channel("dummy", ChannelConfig())
+        >>> subdir = "test-data/dummy/noarch"
+        >>> path = "../test-data/channels/dummy/linux-64/repodata.json"
         >>> sparse_data = SparseRepoData(channel, subdir, path)
         >>> sparse_data
-        SparseRepoData(subdir="test-data/conda-forge/noarch")
+        SparseRepoData(subdir="test-data/dummy/noarch")
         >>>
         ```
         """
