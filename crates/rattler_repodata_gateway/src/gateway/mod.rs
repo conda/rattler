@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+mod direct_url_gateway;
 mod error;
 mod local_subdir;
 mod query;
@@ -336,9 +337,10 @@ mod test {
     };
 
     use dashmap::DashSet;
-    use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
+    use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, PackageName, Platform};
     use rstest::rstest;
     use url::Url;
+    use rattler_conda_types::ParseStrictness::Strict;
 
     use crate::{
         fetch::CacheAction,
@@ -398,6 +400,28 @@ mod test {
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
+    async fn test_direct_url_spec_from_gateway() {
+        let gateway = Gateway::new();
+
+        let index = remote_conda_forge().await;
+
+        let records = gateway
+            .query(
+                vec![index.channel()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/mamba-1.4.7-py310h51d5547_0.conda", Strict).unwrap()].into_iter(),
+                // vec![MatchSpec::from_str("mamba=1.4.7=py310h51d5547_0", Strict).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        eprintln!("records: {:?}", records);
+        assert_eq!(total_records, 4413);
     }
 
     #[rstest]

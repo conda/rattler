@@ -8,6 +8,8 @@ use std::{
     future::IntoFuture,
     sync::Arc,
 };
+use rattler_cache::package_cache::PackageCache;
+use crate::gateway::direct_url_gateway::DirectUrlQuery;
 
 /// Represents a query to execute with a [`Gateway`].
 ///
@@ -120,6 +122,7 @@ impl GatewayQuery {
         // Package names that we have or will issue requests for.
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
+        let mut pending_direct_url_specs = vec![];
         for spec in self.specs {
             if let Some(name) = &spec.name {
                 seen.insert(name.clone());
@@ -128,14 +131,50 @@ impl GatewayQuery {
                     .or_insert_with(Vec::new)
                     .push(spec);
             }
+            else if spec.url.is_some() {
+                pending_direct_url_specs.push(spec);
+            }
+        }
+
+        // Prefetch the direct url specs
+        let mut direct_url_records = vec![];
+        for spec in pending_direct_url_specs {
+            if let Some(url) = &spec.url {
+                // If the spec has a URL, we do not need to fetch it from the repodata.
+                let package_cache = PackageCache::new(self.gateway.cache.clone());
+
+                let query = DirectUrlQuery::new(url.clone(), package_cache, self.gateway.client.clone());
+                let record = query.execute().await?;
+
+                // Add dependencies of record to pending_package_specs
+                if self.recursive {
+                    for dependency in &record.package_record.depends {
+                        let dependency_name = PackageName::new_unchecked(
+                            dependency.split_once(' ').unwrap_or((dependency, "")).0,
+                        );
+                        if seen.insert(dependency_name.clone()) {
+                            pending_package_specs.insert(dependency_name.clone(), vec![dependency_name.into()]);
+                        }
+                    }
+                }
+
+                direct_url_records.push(record);
+            }
         }
 
         // A list of futures to fetch the records for the pending package names. The main task
         // awaits these futures.
         let mut pending_records = FuturesUnordered::new();
 
-        // The resulting list of repodata records.
-        let mut result = vec![RepoData::default(); subdirs.len()];
+        // The resulting list of repodata records + 1 for the direct_url_repodata.
+        let mut result = vec![RepoData::default(); subdirs.len() + 1];
+
+        // Add the direct_url_repodata to the result.
+        let direct_url_repodata = RepoData {
+            len: direct_url_records.len(),
+            shards: vec![Arc::from(direct_url_records)],
+        };
+        result.push(direct_url_repodata);
 
         // Loop until all pending package names have been fetched.
         loop {

@@ -1,5 +1,6 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
+use crate::gateway::direct_url_gateway::DirectUrlQueryError;
 use rattler_conda_types::Channel;
 use rattler_networking::Redact;
 use reqwest_middleware::Error;
@@ -34,6 +35,9 @@ pub enum GatewayError {
 
     #[error("the operation was cancelled")]
     Cancelled,
+
+    #[error("the direct url query failed")]
+    DirectUrlQueryError(#[from] DirectUrlQueryError),
 }
 
 impl From<Cancelled> for GatewayError {

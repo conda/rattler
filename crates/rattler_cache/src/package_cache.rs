@@ -91,6 +91,21 @@ impl From<&PackageRecord> for CacheKey {
     }
 }
 
+impl From<&Url> for CacheKey {
+    fn from(url: &Url) -> Self {
+        if let Some(archive) = ArchiveIdentifier::try_from_url(&url){
+            return archive.into()
+        }
+        // Not a normal archive, so we use the url as the cache key
+        CacheKey {
+            name: url.to_string(),
+            version: "_".to_string(),
+            build_string: "_".to_string(),
+            sha256: None
+        }
+    }
+}
+
 impl Display for CacheKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
