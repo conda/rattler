@@ -2538,6 +2538,7 @@ dependencies = [
  "memmap2",
  "once_cell",
  "parking_lot",
+ "rattler_cache",
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
@@ -2556,6 +2557,29 @@ dependencies = [
  "tracing",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "rattler_cache"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "digest",
+ "dirs",
+ "fxhash",
+ "itertools 0.12.1",
+ "parking_lot",
+ "rattler_conda_types",
+ "rattler_digest",
+ "rattler_networking",
+ "rattler_package_streaming",
+ "reqwest 0.12.4",
+ "reqwest-middleware",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]
