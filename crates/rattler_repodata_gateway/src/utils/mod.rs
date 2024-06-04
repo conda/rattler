@@ -79,7 +79,7 @@ pub(crate) mod test {
         let mut lock = fslock::LockFile::open(&parent_dir.join(".lock")).unwrap();
         loop {
             if lock.try_lock_with_pid().unwrap() {
-               break;
+                break;
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
