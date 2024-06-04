@@ -1,7 +1,14 @@
-//! This module provides the [`SparseRepoData`] which is a struct to enable only sparsely loading records
-//! from a `repodata.json` file.
+//! This module provides the [`SparseRepoData`] which is a struct to enable only
+//! sparsely loading records from a `repodata.json` file.
 
 #![allow(clippy::mem_forget)]
+
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt, io,
+    marker::PhantomData,
+    path::Path,
+};
 
 use bytes::Bytes;
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
@@ -14,18 +21,14 @@ use serde::{
     Deserialize, Deserializer,
 };
 use serde_json::value::RawValue;
-use std::{
-    collections::{HashSet, VecDeque},
-    fmt, io,
-    marker::PhantomData,
-    path::Path,
-};
 use superslice::Ext;
 
-/// A struct to enable loading records from a `repodata.json` file on demand. Since most of the time you
-/// don't need all the records from the `repodata.json` this can help provide some significant speedups.
+/// A struct to enable loading records from a `repodata.json` file on demand.
+/// Since most of the time you don't need all the records from the
+/// `repodata.json` this can help provide some significant speedups.
 pub struct SparseRepoData {
-    /// Data structure that holds an index into the the records stored in a repo data.
+    /// Data structure that holds an index into the the records stored in a repo
+    /// data.
     inner: SparseRepoDataInner,
 
     /// The channel from which this data was downloaded.
@@ -34,8 +37,8 @@ pub struct SparseRepoData {
     /// The subdirectory from where the repodata is downloaded
     subdir: String,
 
-    /// A function that can be used to patch the package record after it has been parsed.
-    /// This is mainly used to add `pip` to `python` if desired
+    /// A function that can be used to patch the package record after it has
+    /// been parsed. This is mainly used to add `pip` to `python` if desired
     patch_record_fn: Option<fn(&mut PackageRecord)>,
 }
 
@@ -55,29 +58,33 @@ impl SparseRepoDataInner {
     }
 }
 
-/// A struct that holds a memory map of a `repodata.json` file and also a self-referential field which
-/// indexes the data in the memory map with a sparsely parsed json struct. See [`LazyRepoData`].
+/// A struct that holds a memory map of a `repodata.json` file and also a
+/// self-referential field which indexes the data in the memory map with a
+/// sparsely parsed json struct. See [`LazyRepoData`].
 #[ouroboros::self_referencing]
 struct MemmappedSparseRepoDataInner {
     /// Memory map of the `repodata.json` file
     memory_map: memmap2::Mmap,
 
-    /// Sparsely parsed json content of the memory map. This data struct holds references into the memory
-    /// map so we have to use ouroboros to make this legal.
+    /// Sparsely parsed json content of the memory map. This data struct holds
+    /// references into the memory map so we have to use ouroboros to make
+    /// this legal.
     #[borrows(memory_map)]
     #[covariant]
     repo_data: LazyRepoData<'this>,
 }
 
-/// A struct that holds a reference to the bytes of a `repodata.json` file and also a self-referential
-/// field which indexes the data in the `bytes` with a sparsely parsed json struct. See [`LazyRepoData`].
+/// A struct that holds a reference to the bytes of a `repodata.json` file and
+/// also a self-referential field which indexes the data in the `bytes` with a
+/// sparsely parsed json struct. See [`LazyRepoData`].
 #[ouroboros::self_referencing]
 struct BytesSparseRepoDataInner {
     /// Bytes of the `repodata.json` file
     bytes: Bytes,
 
-    /// Sparsely parsed json content of the file's bytes. This data struct holds references into the
-    /// bytes so we have to use ouroboros to make this legal.
+    /// Sparsely parsed json content of the file's bytes. This data struct holds
+    /// references into the bytes so we have to use ouroboros to make this
+    /// legal.
     #[borrows(bytes)]
     #[covariant]
     repo_data: LazyRepoData<'this>,
@@ -86,8 +93,8 @@ struct BytesSparseRepoDataInner {
 impl SparseRepoData {
     /// Construct an instance of self from a file on disk and a [`Channel`].
     ///
-    /// The `patch_function` can be used to patch the package record after it has been parsed
-    /// (e.g. to add `pip` to `python`).
+    /// The `patch_function` can be used to patch the package record after it
+    /// has been parsed (e.g. to add `pip` to `python`).
     pub fn new(
         channel: Channel,
         subdir: impl Into<String>,
@@ -112,8 +119,8 @@ impl SparseRepoData {
 
     /// Construct an instance of self from a bytes and a [`Channel`].
     ///
-    /// The `patch_function` can be used to patch the package record after it has been parsed
-    /// (e.g. to add `pip` to `python`).
+    /// The `patch_function` can be used to patch the package record after it
+    /// has been parsed (e.g. to add `pip` to `python`).
     pub fn from_bytes(
         channel: Channel,
         subdir: impl Into<String>,
@@ -136,8 +143,9 @@ impl SparseRepoData {
 
     /// Returns an iterator over all package names in this repodata file.
     ///
-    /// This works by iterating over all elements in the `packages` and `conda_packages` fields of
-    /// the repodata and returning the unique package names.
+    /// This works by iterating over all elements in the `packages` and
+    /// `conda_packages` fields of the repodata and returning the unique
+    /// package names.
     pub fn package_names(&self) -> impl Iterator<Item = &'_ str> + '_ {
         let repo_data = self.inner.borrow_repo_data();
         repo_data
@@ -172,12 +180,12 @@ impl SparseRepoData {
         Ok(records)
     }
 
-    /// Given a set of [`SparseRepoData`]s load all the records for the packages with the specified
-    /// names and all the packages these records depend on.
+    /// Given a set of [`SparseRepoData`]s load all the records for the packages
+    /// with the specified names and all the packages these records depend
+    /// on.
     ///
-    /// This will parse the records for the specified packages as well as all the packages these records
-    /// depend on.
-    ///
+    /// This will parse the records for the specified packages as well as all
+    /// the packages these records depend on.
     pub fn load_records_recursive<'a>(
         repo_data: impl IntoIterator<Item = &'a SparseRepoData>,
         package_names: impl IntoIterator<Item = PackageName>,
@@ -188,7 +196,8 @@ impl SparseRepoData {
         // Construct the result map
         let mut result: Vec<_> = (0..repo_data.len()).map(|_| Vec::new()).collect();
 
-        // Construct a set of packages that we have seen and have been added to the pending list.
+        // Construct a set of packages that we have seen and have been added to the
+        // pending list.
         let mut seen: HashSet<PackageName> = package_names.into_iter().collect();
 
         // Construct a queue to store packages in that still need to be processed
@@ -258,8 +267,9 @@ struct LazyRepoData<'i> {
     #[serde(borrow, deserialize_with = "deserialize_filename_and_raw_record")]
     packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
-    /// The conda packages contained in the repodata.json file (under a different key for
-    /// backwards compatibility with previous conda versions)
+    /// The conda packages contained in the repodata.json file (under a
+    /// different key for backwards compatibility with previous conda
+    /// versions)
     #[serde(
         borrow,
         default,
@@ -314,16 +324,17 @@ fn parse_records<'i>(
     Ok(result)
 }
 
-/// A helper function that immediately loads the records for the given packages (and their dependencies).
-/// Records for the specified packages are loaded from the repodata files.
-/// The `patch_record_fn` is applied to each record after it has been parsed and can mutate the record after
-/// it has been loaded.
+/// A helper function that immediately loads the records for the given packages
+/// (and their dependencies). Records for the specified packages are loaded from
+/// the repodata files. The `patch_record_fn` is applied to each record after it
+/// has been parsed and can mutate the record after it has been loaded.
 pub async fn load_repo_data_recursively(
     repo_data_paths: impl IntoIterator<Item = (Channel, impl Into<String>, impl AsRef<Path>)>,
     package_names: impl IntoIterator<Item = PackageName>,
     patch_function: Option<fn(&mut PackageRecord)>,
 ) -> Result<Vec<Vec<RepoDataRecord>>, io::Error> {
-    // Open the different files and memory map them to get access to their bytes. Do this in parallel.
+    // Open the different files and memory map them to get access to their bytes. Do
+    // this in parallel.
     let lazy_repo_data = stream::iter(repo_data_paths)
         .map(|(channel, subdir, path)| {
             let path = path.as_ref().to_path_buf();
@@ -392,26 +403,30 @@ fn deserialize_filename_and_raw_record<'d, D: Deserializer<'d>>(
     let mut entries: Vec<(PackageFilename<'d>, &'d RawValue)> =
         deserializer.deserialize_map(MapVisitor(PhantomData))?;
 
-    // Although in general the filenames are sorted in repodata.json this doesnt necessarily mean
-    // that the records are also sorted by package name.
+    // Although in general the filenames are sorted in repodata.json this doesnt
+    // necessarily mean that the records are also sorted by package name.
     //
-    // To illustrate, the following filenames are properly sorted by filename but they are NOT
-    // properly sorted by package name.
+    // To illustrate, the following filenames are properly sorted by filename but
+    // they are NOT properly sorted by package name.
     // - clang-format-12.0.1-default_he082bbe_4.tar.bz2 (package name: clang-format)
-    // - clang-format-13-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format-13)
+    // - clang-format-13-13.0.0-default_he082bbe_0.tar.bz2 (package name:
+    //   clang-format-13)
     // - clang-format-13.0.0-default_he082bbe_0.tar.bz2 (package name: clang-format)
     //
-    // Because most use-cases involve finding filenames by package name we reorder the entries here
-    // by package name. This enables use the binary search for the packages we need.
+    // Because most use-cases involve finding filenames by package name we reorder
+    // the entries here by package name. This enables use the binary search for
+    // the packages we need.
     //
-    // Since (in most cases) the repodata is already ordered by filename which does closely resemble
-    // ordering by package name this sort operation will most likely be very fast.
+    // Since (in most cases) the repodata is already ordered by filename which does
+    // closely resemble ordering by package name this sort operation will most
+    // likely be very fast.
     entries.sort_unstable_by(|(a, _), (b, _)| a.package.cmp(b.package));
 
     Ok(entries)
 }
 
-/// A struct that holds both a filename and the part of the filename thats just the package name.
+/// A struct that holds both a filename and the part of the filename thats just
+/// the package name.
 struct PackageFilename<'i> {
     package: &'i str,
     filename: &'i str,
@@ -442,17 +457,22 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
 
 #[cfg(test)]
 mod test {
-    use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
+    use std::path::{Path, PathBuf};
+
     use bytes::Bytes;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
-    use std::path::{Path, PathBuf};
+
+    use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
+    use crate::utils::test::fetch_repo_data;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
     }
 
-    fn default_repo_datas() -> Vec<(Channel, &'static str, PathBuf)> {
+    async fn default_repo_datas() -> Vec<(Channel, &'static str, PathBuf)> {
+        tokio::try_join!(fetch_repo_data("linux-64"), fetch_repo_data("noarch")).unwrap();
+
         let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
         vec![
             (
@@ -468,8 +488,9 @@ mod test {
         ]
     }
 
-    fn default_repo_data_bytes() -> Vec<(Channel, &'static str, Bytes)> {
+    async fn default_repo_data_bytes() -> Vec<(Channel, &'static str, Bytes)> {
         default_repo_datas()
+            .await
             .into_iter()
             .map(|(channel, subdir, path)| {
                 let bytes = std::fs::read(path).unwrap();
@@ -498,8 +519,13 @@ mod test {
     async fn load_sparse(
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Vec<Vec<RepoDataRecord>> {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+
+        //"linux-sha=20021d1dff9941ccf189f27404e296c54bc37fc4600c7027b366c03fc0bfa89e"
+        //"noarch-sha=05e0c4ce7be29f36949c33cce782f21aecfbdd41f9e3423839670fb38fc5d691"
+
         load_repo_data_recursively(
-            default_repo_datas(),
+            default_repo_datas().await,
             package_names
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
@@ -534,7 +560,8 @@ mod test {
             .map(std::vec::Vec::len)
             .sum::<usize>();
 
-        // Number of records should still be 3. The duplicate package name should be ignored.
+        // Number of records should still be 3. The duplicate package name should be
+        // ignored.
         assert_eq!(total_records, 3);
     }
 
@@ -597,7 +624,7 @@ mod test {
         assert_eq!(total_records, 16065);
 
         // Bytes
-        let repo_datas = default_repo_data_bytes();
+        let repo_datas = default_repo_data_bytes().await;
         let sparse_empty_data = load_sparse_from_bytes(&repo_datas, package_names);
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
@@ -605,8 +632,10 @@ mod test {
         assert_eq!(total_records, 16065);
     }
 
-    #[test]
-    fn load_complete_records() {
+    #[tokio::test]
+    async fn load_complete_records() {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+
         let mut records = Vec::new();
         for path in [
             test_dir().join("channels/conda-forge/noarch/repodata.json"),

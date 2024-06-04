@@ -9,27 +9,28 @@ mod repo_data;
 mod sharded_subdir;
 mod subdir;
 
-pub use barrier_cell::BarrierCell;
-pub use builder::GatewayBuilder;
-pub use channel_config::{ChannelConfig, SourceConfig};
-pub use error::GatewayError;
-pub use query::GatewayQuery;
-pub use repo_data::RepoData;
-
-use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
-use dashmap::{mapref::entry::Entry, DashMap};
-use file_url::url_to_path;
-use local_subdir::LocalSubdirClient;
-use rattler_conda_types::{Channel, MatchSpec, Platform};
-use reqwest_middleware::ClientWithMiddleware;
-use std::collections::HashSet;
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{Arc, Weak},
 };
+
+pub use barrier_cell::BarrierCell;
+pub use builder::GatewayBuilder;
+pub use channel_config::{ChannelConfig, SourceConfig};
+use dashmap::{mapref::entry::Entry, DashMap};
+pub use error::GatewayError;
+use file_url::url_to_path;
+use local_subdir::LocalSubdirClient;
+pub use query::GatewayQuery;
+use rattler_conda_types::{Channel, MatchSpec, Platform};
+pub use repo_data::RepoData;
+use reqwest_middleware::ClientWithMiddleware;
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 use tracing::instrument;
+
+use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
 
 /// Central access point for high level queries about
 /// [`rattler_conda_types::RepoDataRecord`]s from different channels.
@@ -76,18 +77,21 @@ impl SubdirSelection {
 }
 
 impl Gateway {
-    /// Constructs a simple gateway with the default configuration. Use [`Gateway::builder`] if you
-    /// want more control over how the gateway is constructed.
+    /// Constructs a simple gateway with the default configuration. Use
+    /// [`Gateway::builder`] if you want more control over how the gateway
+    /// is constructed.
     pub fn new() -> Self {
         Gateway::builder().finish()
     }
 
-    /// Constructs a new gateway with the given client and channel configuration.
+    /// Constructs a new gateway with the given client and channel
+    /// configuration.
     pub fn builder() -> GatewayBuilder {
         GatewayBuilder::default()
     }
 
-    /// Constructs a new `GatewayQuery` which can be used to query repodata records.
+    /// Constructs a new `GatewayQuery` which can be used to query repodata
+    /// records.
     pub fn query<AsChannel, ChannelIter, PlatformIter, PackageNameIter, IntoMatchSpec>(
         &self,
         channels: ChannelIter,
@@ -214,11 +218,13 @@ impl GatewayInner {
             }
         };
 
-        // At this point we have exclusive write access to this specific entry. All other tasks
-        // will find a pending entry and will wait for the records to become available.
+        // At this point we have exclusive write access to this specific entry. All
+        // other tasks will find a pending entry and will wait for the records
+        // to become available.
         //
-        // Let's start by creating the subdir. If an error occurs we immediately return the error.
-        // This will drop the sender and all other waiting tasks will receive an error.
+        // Let's start by creating the subdir. If an error occurs we immediately return
+        // the error. This will drop the sender and all other waiting tasks will
+        // receive an error.
         let subdir = Arc::new(self.create_subdir(channel, platform, reporter).await?);
 
         // Store the fetched files in the entry.
@@ -227,8 +233,8 @@ impl GatewayInner {
             PendingOrFetched::Fetched(subdir.clone()),
         );
 
-        // Send the records to all waiting tasks. We don't care if there are no receivers, so we
-        // drop the error.
+        // Send the records to all waiting tasks. We don't care if there are no
+        // receivers, so we drop the error.
         let _ = sender.send(subdir.clone());
 
         Ok(subdir)
@@ -291,8 +297,8 @@ impl GatewayInner {
         match subdir_data {
             Ok(client) => Ok(Subdir::Found(client)),
             Err(GatewayError::SubdirNotFoundError(err)) if platform != Platform::NoArch => {
-                // If the subdir was not found and the platform is not `noarch` we assume its just
-                // empty.
+                // If the subdir was not found and the platform is not `noarch` we assume its
+                // just empty.
                 tracing::info!(
                     "subdir {} of channel {} was not found, ignoring",
                     err.subdir,
@@ -322,26 +328,34 @@ enum PendingOrFetched<T> {
 
 #[cfg(test)]
 mod test {
-    use crate::fetch::CacheAction;
-    use crate::gateway::Gateway;
-    use crate::utils::simple_channel_server::SimpleChannelServer;
-    use crate::{GatewayError, RepoData, Reporter, SourceConfig};
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+        sync::Arc,
+        time::Instant,
+    };
+
     use dashmap::DashSet;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
     use rstest::rstest;
-    use std::path::{Path, PathBuf};
-    use std::str::FromStr;
-    use std::sync::Arc;
-    use std::time::Instant;
     use url::Url;
 
-    fn local_conda_forge() -> Channel {
+    use crate::{
+        fetch::CacheAction,
+        gateway::Gateway,
+        utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
+        GatewayError, RepoData, Reporter, SourceConfig,
+    };
+
+    async fn local_conda_forge() -> Channel {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
         Channel::from_directory(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
     }
 
     async fn remote_conda_forge() -> SimpleChannelServer {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
         SimpleChannelServer::new(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
@@ -354,7 +368,7 @@ mod test {
 
         let records = gateway
             .query(
-                vec![local_conda_forge()],
+                vec![local_conda_forge().await],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )

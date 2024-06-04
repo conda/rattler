@@ -8,17 +8,13 @@ from rattler import Platform, index
 
 
 @pytest.fixture
-def package_directory(tmp_path) -> Path:
-    data_dir = Path(os.path.join(os.path.dirname(__file__), "../../../test-data/"))
-
-    win_filename = "ruff-0.0.171-py310h298983d_0.conda"
-    noarch_filename = "pytweening-1.0.4-pyhd8ed1ab_0.tar.bz2"
+def package_directory(tmp_path, package_file_ruff: Path, package_file_pytweening: Path) -> Path:
     win_subdir = tmp_path / "win-64"
     noarch_subdir = tmp_path / "noarch"
     win_subdir.mkdir()
     noarch_subdir.mkdir()
-    shutil.copy(data_dir / win_filename, win_subdir / win_filename)
-    shutil.copy(data_dir / noarch_filename, noarch_subdir / noarch_filename)
+    shutil.copy(package_file_ruff, win_subdir)
+    shutil.copy(package_file_pytweening, noarch_subdir)
     return tmp_path
 
 

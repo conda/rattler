@@ -38,6 +38,14 @@ impl PyIndexJson {
             .map_err(PyRattlerError::from)?)
     }
 
+    /// Parses the package file from a path.
+    #[staticmethod]
+    pub fn from_path(path: PathBuf) -> PyResult<Self> {
+        Ok(IndexJson::from_path(path)
+            .map(Into::into)
+            .map_err(PyRattlerError::from)?)
+    }
+
     /// Parses the object by looking up the appropriate file from the root of the specified Conda
     /// archive directory, using a format appropriate for the file type.
     ///

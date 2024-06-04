@@ -399,8 +399,8 @@ mod test {
         http::{Request, StatusCode},
         middleware,
         middleware::Next,
-        response::Response,
-        routing::get_service,
+        response::{Redirect, Response},
+        routing::get,
         Router,
     };
     use bytes::Bytes;
@@ -410,7 +410,6 @@ mod test {
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio_stream::StreamExt;
-    use tower_http::services::ServeDir;
     use url::Url;
 
     use super::PackageCache;
@@ -422,8 +421,8 @@ mod test {
 
     #[tokio::test]
     pub async fn test_package_cache() {
-        let tar_archive_path =
-            get_test_data_dir().join("ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2");
+        let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(),
+                                             "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
 
         // Read the paths.json file straight from the tar file.
         let paths = {
@@ -527,16 +526,27 @@ mod test {
         FailAfterBytes(usize),
     }
 
+    async fn redirect_to_anaconda(
+        axum::extract::Path((channel, subdir, file)): axum::extract::Path<(String, String, String)>,
+    ) -> Redirect {
+        Redirect::permanent(&format!(
+            "https://conda.anaconda.org/{channel}/{subdir}/{file}"
+        ))
+    }
+
     async fn test_flaky_package_cache(archive_name: &str, middleware: Middleware) {
         let static_dir = get_test_data_dir();
         println!("Serving files from {}", static_dir.display());
+
         // Construct a service that serves raw files from the test directory
-        let service = get_service(ServeDir::new(static_dir));
+        // build our application with a route
+        let router = Router::new()
+            // `GET /` goes to `root`
+            .route("/:channel/:subdir/:file", get(redirect_to_anaconda));
 
         // Construct a router that returns data from the static dir but fails the first
         // try.
         let request_count = Arc::new(Mutex::new(0));
-        let router = Router::new().route_service("/*key", service);
 
         let router = match middleware {
             Middleware::FailTheFirstTwoRequests => router.layer(middleware::from_fn_with_state(
@@ -603,8 +613,8 @@ mod test {
 
     #[tokio::test]
     async fn test_flaky() {
-        let tar_bz2 = "ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2";
-        let conda = "conda-22.11.1-py38haa244fe_1.conda";
+        let tar_bz2 = "conda-forge/win-64/conda-22.9.0-py310h5588dad_2.tar.bz2";
+        let conda = "conda-forge/win-64/conda-22.11.1-py38haa244fe_1.conda";
 
         test_flaky_package_cache(tar_bz2, Middleware::FailTheFirstTwoRequests).await;
         test_flaky_package_cache(conda, Middleware::FailTheFirstTwoRequests).await;
