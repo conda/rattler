@@ -387,10 +387,10 @@ impl DownloadReporter for PassthroughReporter {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
     use std::{
         convert::Infallible, fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc,
     };
-    use std::path::PathBuf;
 
     use assert_matches::assert_matches;
     use axum::{

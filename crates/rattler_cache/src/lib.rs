@@ -9,5 +9,3 @@ pub fn default_cache_dir() -> anyhow::Result<PathBuf> {
         .ok_or_else(|| anyhow::anyhow!("could not determine cache directory for current platform"))?
         .join("rattler/cache"))
 }
-
-
