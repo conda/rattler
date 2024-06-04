@@ -464,6 +464,7 @@ mod test {
     use rstest::rstest;
 
     use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
+    use crate::utils::test::fetch_repo_data;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -513,24 +514,6 @@ mod test {
             .into_iter()
             .map(|name| PackageName::try_from(name.as_ref()).unwrap());
         SparseRepoData::load_records_recursive(&sparse, package_names, None).unwrap()
-    }
-
-    async fn fetch_repo_data(subdir: &str) -> Result<(), reqwest::Error> {
-        let path = test_dir().join(format!("channels/conda-forge/{}/repodata.json", subdir));
-        if path.exists() {
-            return Ok(());
-        } else {
-            tokio::fs::create_dir_all(path.parent().unwrap())
-                .await
-                .unwrap();
-        }
-        let data = reqwest::get(format!(
-            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{}/repodata.json",
-            subdir
-        ))
-        .await?;
-        tokio::fs::write(path, data.bytes().await?).await.unwrap();
-        Ok(())
     }
 
     async fn load_sparse(
@@ -650,8 +633,10 @@ mod test {
         assert_eq!(total_records, 16065);
     }
 
-    #[test]
-    fn load_complete_records() {
+    #[tokio::test]
+    async fn load_complete_records() {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
+
         let mut records = Vec::new();
         for path in [
             test_dir().join("channels/conda-forge/noarch/repodata.json"),
