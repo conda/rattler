@@ -18,7 +18,7 @@ itertools.workspace = true
 parking_lot.workspace = true
 rattler_conda_types = { version = "0.25.1", path = "../rattler_conda_types", default-features = false }
 rattler_digest = { version = "0.19.4", path = "../rattler_digest", default-features = false }
-rattler_networking = { version = "0.20.8", path = "../rattler_networking", default-features = false}
+rattler_networking = { version = "0.20.8", path = "../rattler_networking", default-features = false }
 rattler_package_streaming = { version = "0.21.2", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 reqwest.workspace = true
 tokio.workspace = true
@@ -37,3 +37,4 @@ rstest.workspace = true
 tempfile.workspace = true
 tokio-stream.workspace = true
 tower-http = { workspace = true, features = ["fs"] }
+tools = { path = "../tools" }

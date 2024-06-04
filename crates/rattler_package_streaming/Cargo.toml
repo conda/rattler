@@ -38,8 +38,9 @@ wasm = ["zstd/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
+tools = { path = "../tools" }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }
-assert_matches = { workspace = true }
