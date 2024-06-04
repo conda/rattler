@@ -5,6 +5,7 @@ use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::sync::Arc;
+use url::Url;
 
 use crate::Channel;
 use crate::ChannelConfig;
@@ -142,6 +143,8 @@ pub struct MatchSpec {
     /// The sha256 hash of the package
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
+    /// The url of the package
+    pub url: Option<Url>,
 }
 
 impl Display for MatchSpec {
@@ -248,6 +251,7 @@ impl MatchSpec {
                 namespace: self.namespace,
                 md5: self.md5,
                 sha256: self.sha256,
+                url: self.url,
             },
         )
     }
@@ -292,6 +296,8 @@ pub struct NamelessMatchSpec {
     /// The sha256 hash of the package
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
+    /// The url of the package
+    pub url: Option<Url>,
 }
 
 impl NamelessMatchSpec {
@@ -366,6 +372,7 @@ impl From<MatchSpec> for NamelessMatchSpec {
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
+            url: spec.url,
         }
     }
 }
@@ -384,6 +391,7 @@ impl MatchSpec {
             namespace: spec.namespace,
             md5: spec.md5,
             sha256: spec.sha256,
+            url: spec.url,
         }
     }
 }
