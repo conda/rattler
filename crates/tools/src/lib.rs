@@ -1,4 +1,7 @@
 pub mod libsolv_bindings;
+mod test_files;
+
+pub use test_files::{download_and_cache_file, download_and_cache_file_async};
 
 use std::{
     fs,

@@ -27,16 +27,7 @@ class PathsJson:
               slower than manually iterating over the archive entries with
               custom logic as this skips over the rest of the archive
 
-        Examples
-        --------
-        ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
-        ... )
-        >>> paths_json
-        PathsJson()
-        >>>
-        ```
+
         """
         return PathsJson._from_py_paths_json(PyPathsJson.from_package_archive(path))
 
@@ -50,6 +41,17 @@ class PathsJson:
         from the file at the specified path, parse the JSON string and return the
         resulting object. If the file is not in a parsable format or if the file
         could not read, this function returns an error.
+
+         Examples
+        --------
+        ```python
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
+        ... )
+        >>> paths_json
+        PathsJson()
+        >>>
+        ```
         """
         return PathsJson._from_py_paths_json(PyPathsJson.from_path(Path(path)))
 
@@ -120,8 +122,8 @@ class PathsJson:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> paths_json.paths
         [PathsEntry(), ...]
@@ -138,8 +140,8 @@ class PathsJson:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> paths_json.paths_version
         1
@@ -177,12 +179,12 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.relative_path
-        'bin/2to3'
+        'Lib/site-packages/conda-22.9.0-py3.8.egg-info/PKG-INFO'
         >>>
         ```
         """
@@ -196,8 +198,8 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.no_link
@@ -215,8 +217,8 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.path_type
@@ -235,8 +237,8 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.prefix_placeholder
@@ -257,12 +259,12 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.sha256.hex()
-        '863589436be82be20e3efbe0e36f20510747b1892b3cbcb398c4c48ad7e96fcc'
+        '1323efbd9b3abb527b06435392b39de11710eb3a814e87a8174230c8f5a0826a'
         >>>
         ```
         """
@@ -277,12 +279,12 @@ class PathsEntry:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> entry.size_in_bytes
-        347
+        1229
         >>>
         ```
         """
@@ -320,13 +322,13 @@ class PathType:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> path_type = entry.path_type
         >>> path_type.hardlink
-        False
+        True
         >>>
         ```
         """
@@ -340,13 +342,13 @@ class PathType:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> path_type = entry.path_type
         >>> path_type.softlink
-        True
+        False
         >>>
         ```
         """
@@ -360,8 +362,8 @@ class PathType:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[0]
         >>> path_type = entry.path_type
@@ -402,8 +404,8 @@ class PrefixPlaceholder:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
         >>> entry.prefix_placeholder.file_mode
@@ -422,8 +424,8 @@ class PrefixPlaceholder:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
         >>> entry.prefix_placeholder.placeholder
@@ -462,8 +464,8 @@ class FileMode:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
         >>> file_mode = entry.prefix_placeholder.file_mode
@@ -482,8 +484,8 @@ class FileMode:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
         >>> file_mode = entry.prefix_placeholder.file_mode
@@ -501,8 +503,8 @@ class FileMode:
         Examples
         --------
         ```python
-        >>> paths_json = PathsJson.from_package_archive(
-        ...     "../test-data/conda-22.9.0-py38haa244fe_2.tar.bz2"
+        >>> paths_json = PathsJson.from_path(
+        ...     "../test-data/conda-22.9.0-py38haa244fe_2-paths.json"
         ... )
         >>> entry = paths_json.paths[-1]
         >>> file_mode = entry.prefix_placeholder.file_mode

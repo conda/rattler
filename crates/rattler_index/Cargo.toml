@@ -21,3 +21,4 @@ walkdir = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+tools = { path = "../tools" }

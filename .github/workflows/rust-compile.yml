@@ -86,7 +86,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          lfs: ${{ !matrix.skip-tests }}
 
       - name: Install Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1

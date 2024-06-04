@@ -12,23 +12,30 @@ class IndexJson:
     _inner: PyIndexJson
 
     @staticmethod
+    def from_path(path: os.PathLike[str]) -> IndexJson:
+        """
+        Parses an `index.json` file pointed to by the path.
+
+        Examples
+        --------
+        ```python
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
+        ... )
+        >>> idx_json
+        IndexJson()
+        >>>
+        ```
+        """
+        return IndexJson._from_py_index_json(PyIndexJson.from_path(path))
+
+    @staticmethod
     def from_package_archive(path: os.PathLike[str]) -> IndexJson:
         """
         Parses the package file from archive.
         Note: If you want to extract multiple `info/*` files then this will be slightly
               slower than manually iterating over the archive entries with
               custom logic as this skips over the rest of the archive
-
-        Examples
-        --------
-        ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
-        ... )
-        >>> idx_json
-        IndexJson()
-        >>>
-        ```
         """
         return IndexJson._from_py_index_json(PyIndexJson.from_package_archive(path))
 
@@ -76,11 +83,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.arch
-        'ppc64le'
+        'x86_64'
         >>>
         ```
         """
@@ -97,11 +104,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.build
-        'h2c4edbf_0_cpython'
+        'py38haa244fe_1'
         >>>
         ```
         """
@@ -116,11 +123,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.build_number
-        0
+        1
         >>>
         ```
         """
@@ -134,11 +141,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
-        >>> idx_json.constrains
-        ['python_abi 3.10.* *_cp310']
+        >>> idx_json.constrains # doctest: +ELLIPSIS
+        ['conda-content-trust >=0.1.1', ..., 'conda-env >=2.6', 'conda-build >=3']
         >>>
         ```
         """
@@ -152,11 +159,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
-        >>> idx_json.depends
-        ['bzip2 >=1.0.8,<2.0a0', ..., 'xz >=5.2.6,<5.3.0a0']
+        >>> idx_json.depends # doctest: +ELLIPSIS
+        ['conda-package-handling >=1.3.0', ..., 'tqdm >=4']
         >>>
         ```
         """
@@ -172,8 +179,8 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.features
         >>>
@@ -192,11 +199,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.license
-        'Python-2.0'
+        'BSD-3-Clause'
         >>>
         ```
         """
@@ -213,8 +220,8 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.license_family
         >>>
@@ -233,11 +240,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.name
-        PackageName("python")
+        PackageName("conda")
         >>>
         ```
         """
@@ -251,11 +258,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.platform
-        'linux'
+        'win'
         >>>
         ```
         """
@@ -272,11 +279,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.subdir
-        'linux-ppc64le'
+        'win-64'
         >>>
         ```
         """
@@ -293,11 +300,11 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.timestamp
-        datetime.datetime(2022, 8, 22, 20, 39, 2, 467000, tzinfo=datetime.timezone.utc)
+        datetime.datetime(2022, 12, 7, 23, 45, 42, 50000, tzinfo=datetime.timezone.utc)
         >>>
         ```
         """
@@ -316,8 +323,8 @@ class IndexJson:
         Examples
         --------
         ```python
-        >>> idx_json = IndexJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> idx_json = IndexJson.from_path(
+        ...     "../test-data/conda-22.11.1-py38haa244fe_1-index.json"
         ... )
         >>> idx_json.track_features
         []

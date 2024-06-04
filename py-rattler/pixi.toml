@@ -11,8 +11,6 @@ license = "BSD-3-Clause"
 
 [tasks]
 
-[dependencies]
-
 [feature.build.dependencies]
 maturin = "~=1.2.2"
 pip = "~=23.2.1"
@@ -71,3 +69,7 @@ build-docs = { cmd = "mkdocs build" }
 #build = { features = ["build"], solve-group = "default" }
 test = { features = ["build", "test"], solve-group = "default" }
 docs = ["docs"]
+
+[dependencies]
+requests = ">=2.32.3,<2.33"
+types-requests = ">=2.32.0.20240602,<2.32.1"

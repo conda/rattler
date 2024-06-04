@@ -21,17 +21,6 @@ class RunExportsJson:
         Note: If you want to extract multiple `info/*` files then this will be slightly
               slower than manually iterating over the archive entries with
               custom logic as this skips over the rest of the archive
-
-        Examples
-        --------
-        ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
-        ... )
-        >>> run_exports
-        RunExportsJson()
-        >>>
-        ```
         """
         return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_package_archive(path))
 
@@ -45,6 +34,17 @@ class RunExportsJson:
         from the file at the specified path, parse the JSON string and return the
         resulting object. If the file is not in a parsable format or if the file
         could not read, this function returns an error.
+
+        Examples
+        --------
+        ```python
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
+        ... )
+        >>> run_exports
+        RunExportsJson()
+        >>>
+        ```
         """
         return RunExportsJson._from_py_run_exports_json(PyRunExportsJson.from_path(Path(path)))
 
@@ -92,8 +92,8 @@ class RunExportsJson:
         Examples
         --------
         ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports.weak
         ['python_abi 3.10.* *_cp310']
@@ -110,8 +110,8 @@ class RunExportsJson:
         Examples
         --------
         ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports.strong
         []
@@ -130,8 +130,8 @@ class RunExportsJson:
         Examples
         --------
         ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports.noarch
         ['python']
@@ -148,8 +148,8 @@ class RunExportsJson:
         Examples
         --------
         ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports.weak_constrains
         []
@@ -166,8 +166,8 @@ class RunExportsJson:
         Examples
         --------
         ```python
-        >>> run_exports = RunExportsJson.from_package_archive(
-        ...     "../test-data/with-symlinks/python-3.10.6-h2c4edbf_0_cpython.tar.bz2"
+        >>> run_exports = RunExportsJson.from_path(
+        ...     "../test-data/python-3.10.6-h2c4edbf_0_cpython-run_exports.json"
         ... )
         >>> run_exports.strong_constrains
         []

@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
+assertion_line: 794
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
