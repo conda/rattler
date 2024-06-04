@@ -1,4 +1,4 @@
-use std::{borrow::Cow, path::PathBuf, str::FromStr};
+use std::{borrow::Cow, str::FromStr};
 
 use nom::{
     branch::alt,
@@ -13,30 +13,40 @@ use nom::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
+use typed_path::Utf8TypedPath;
 use url::Url;
 
 use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
+use crate::utils::url::parse_scheme;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    package::ArchiveType,
+    utils::path::is_path,
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
         ParseVersionSpecError,
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness, VersionSpec,
+    ParseChannelError, ParseStrictness, ParseVersionError, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
-#[derive(Debug, Clone, Error)]
+#[derive(Debug, Clone, Error, PartialEq)]
 pub enum ParseMatchSpecError {
     /// The path or url of the package was invalid
     #[error("invalid package path or url")]
     InvalidPackagePathOrUrl,
+
+    /// Invalid package spec url
+    #[error("invalid package spec url")]
+    InvalidPackageUrl(#[from] url::ParseError),
+
+    /// Invalid version in path or url
+    #[error(transparent)]
+    InvalidPackagePathOrUrlVersion(#[from] ParseVersionError),
 
     /// Invalid bracket in match spec
     #[error("invalid bracket")]
@@ -122,11 +132,6 @@ fn strip_if(input: &str) -> (&str, Option<&str>) {
     //     .map(|(spec, if_statement)| (spec, Some(if_statement)))
     //     .unwrap_or_else(|| (input, None))
     (input, None)
-}
-
-/// Returns true if the specified string represents a package path.
-fn is_package_file(input: &str) -> bool {
-    ArchiveType::try_from(input).is_some()
 }
 
 /// An optimized data structure to store key value pairs in between a bracket
@@ -380,22 +385,23 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2. Is the spec a tarball?
-    if is_package_file(input) {
-        let _url = match Url::parse(input) {
-            Ok(url) => url,
-            #[cfg(target_arch = "wasm32")]
-            Err(_) => return Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
-            #[cfg(not(target_arch = "wasm32"))]
-            Err(_) => match PathBuf::from_str(input) {
-                Ok(path) => Url::from_file_path(path)
-                    .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl)?,
-                Err(_) => return Err(ParseMatchSpecError::InvalidPackagePathOrUrl),
-            },
-        };
-
-        // TODO: Implementing package file specs
-        unimplemented!()
+    // 2.a Is the spec an url, parse it as an url
+    if parse_scheme(input).is_some() {
+        let url = Url::parse(input)?;
+        return Ok(MatchSpec {
+            url: Some(url),
+            ..MatchSpec::default()
+        });
+    }
+    // 2.b Is the spec a path, parse it as an url
+    if is_path(input) {
+        let path = Utf8TypedPath::from(input);
+        let url = file_url::file_path_to_url(path)
+            .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+        return Ok(MatchSpec {
+            url: Some(url),
+            ..MatchSpec::default()
+        });
     }
 
     // 3. Strip off brackets portion
@@ -507,6 +513,7 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
     use smallvec::smallvec;
+    use url::Url;
 
     use super::{
         split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
@@ -757,11 +764,17 @@ mod tests {
         // Please keep this list sorted.
         let specs = [
             "blas *.* mkl",
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
             "foo=1.0=py27_0",
             "foo==1.0=py27_0",
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
+            "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2",
             "python 3.8.* *_cpython",
             "pytorch=*=cuda*",
             "x264 >=1!164.3095,<1!165",
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            "conda-forge::foo[version=1.0.*]",
+            "conda-forge::foo[version=1.0.*, build_number=\">6\"]",
         ];
 
         let evaluated: BTreeMap<_, _> = specs
@@ -819,5 +832,68 @@ mod tests {
     fn test_empty_namespace() {
         let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
         assert!(spec.namespace.is_none());
+    }
+
+    #[test]
+    fn test_parsing_url() {
+        let spec = MatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
+            Strict,
+        )
+        .unwrap();
+
+        assert_eq!(spec.url, Some(Url::parse("https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda").unwrap()));
+    }
+
+    #[test]
+    fn test_parsing_path() {
+        let spec = MatchSpec::from_str(
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
+            Strict,
+        )
+        .unwrap();
+        assert_eq!(
+            spec.url,
+            Some(
+                Url::parse("file://C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2")
+                    .unwrap()
+            )
+        );
+
+        let spec = MatchSpec::from_str(
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            Strict,
+        )
+        .unwrap();
+
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
+        );
+
+        let spec = MatchSpec::from_str("C:\\Users\\user\\Downloads\\package", Strict).unwrap();
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("file://C:/Users/user/Downloads/package").unwrap())
+        );
+        let spec = MatchSpec::from_str("/home/user/Downloads/package", Strict).unwrap();
+
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("file:/home/user/Downloads/package").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_non_happy_url_parsing() {
+        let err = MatchSpec::from_str("http://username@", Strict).expect_err("Invalid url");
+        assert_eq!(err.to_string(), "invalid package spec url");
+
+        let err = MatchSpec::from_str("bla/bla", Strict)
+            .expect_err("Should try to parse as name not url");
+        assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
+
+        let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
+        assert_eq!(err.to_string(), "invalid package path or url");
     }
 }
