@@ -84,15 +84,16 @@ pub trait Shell {
             .map(|path| path.to_string_lossy().into_owned())
             .collect_vec();
         // Replace, Append, or Prepend the path variable to the paths.
+        let path_var = self.path_var(platform);
         match modification_behavior {
             PathModificationBehavior::Replace => (),
-            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
-            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
+            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
+            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_seperator(platform));
 
-        self.set_env_var(f, "PATH", paths_string.as_str())
+        self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
 
     /// The extension that shell scripts for this interpreter usually use.
@@ -111,6 +112,17 @@ pub trait Shell {
             ":"
         } else {
             ";"
+        }
+    }
+
+    /// Returns the name of the PATH variable for the given platform. On
+    /// Windows, path variables are case-insensitive but not all shells treat
+    /// them case-insensitive.
+    fn path_var(&self, platform: &Platform) -> &str {
+        if platform.is_windows() {
+            "Path"
+        } else {
+            "PATH"
         }
     }
 
@@ -230,15 +242,16 @@ impl Shell for Bash {
             .collect_vec();
 
         // Replace, Append, or Prepend the path variable to the paths.
+        let path_var = self.path_var(platform);
         match modification_behavior {
             PathModificationBehavior::Replace => (),
-            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var("PATH")),
-            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var("PATH")),
+            PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
+            PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
         let paths_string = paths_vec.join(self.path_seperator(platform));
 
-        self.set_env_var(f, "PATH", paths_string.as_str())
+        self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
 
     fn extension(&self) -> &str {
@@ -547,7 +560,7 @@ impl Shell for NuShell {
     }
 
     fn run_script(&self, f: &mut impl Write, path: &Path) -> std::fmt::Result {
-        writeln!(f, "source \"{}\"", path.to_string_lossy())
+        writeln!(f, "source-env \"{}\"", path.to_string_lossy())
     }
 
     fn set_path(
@@ -555,7 +568,7 @@ impl Shell for NuShell {
         f: &mut impl Write,
         paths: &[PathBuf],
         modification_behavior: PathModificationBehavior,
-        _platform: &Platform,
+        platform: &Platform,
     ) -> std::fmt::Result {
         let path = paths
             .iter()
@@ -563,15 +576,16 @@ impl Shell for NuShell {
             .join(", ");
 
         // Replace, Append, or Prepend the path variable to the paths.
+        let path_var = self.path_var(platform);
         match modification_behavior {
             PathModificationBehavior::Replace => {
-                writeln!(f, "$env.PATH = [{path}]")
+                writeln!(f, "$env.{path_var} = [{path}]",)
             }
             PathModificationBehavior::Prepend => {
-                writeln!(f, "$env.PATH = ($env.PATH | prepend [{path}])")
+                writeln!(f, "$env.{path_var} = ($env.{path_var} | prepend [{path}])")
             }
             PathModificationBehavior::Append => {
-                writeln!(f, "$env.PATH = ($env.PATH | append [{path}])")
+                writeln!(f, "$env.{path_var} = ($env.{path_var} | append [{path}])")
             }
         }
     }
