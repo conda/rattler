@@ -213,7 +213,7 @@ mod tests {
     use rattler_conda_types::{Platform, PrefixRecord, RepoDataRecord};
 
     use crate::{
-        get_repodata_record,
+        get_repodata_record, get_test_data_dir,
         install::{
             test_utils::execute_transaction, transaction, InstallDriver, InstallOptions,
             TransactionOperation,
@@ -222,8 +222,9 @@ mod tests {
     };
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
-        let repodata_record_1 =
-            get_repodata_record("link-scripts/link-scripts-0.1.0-h4616a5c_0.conda");
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("link-scripts/link-scripts-0.1.0-h4616a5c_0.conda"),
+        );
 
         vec![TransactionOperation::Install(repodata_record_1)]
     }

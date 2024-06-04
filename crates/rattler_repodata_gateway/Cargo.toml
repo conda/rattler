@@ -71,6 +71,7 @@ tokio = { workspace = true, features = ["rt-multi-thread"] }
 tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] }
 tracing-test = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.25.1", default-features = false }
+fslock = { workspace = true }
 
 [features]
 default = ['native-tls']

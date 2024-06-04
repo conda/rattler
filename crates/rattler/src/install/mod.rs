@@ -849,12 +849,17 @@ mod test {
         let environment_dir = tempfile::TempDir::new().unwrap();
         let package_dir = tempfile::TempDir::new().unwrap();
 
-        // Create package cache
-        rattler_package_streaming::fs::extract(
-            &get_test_data_dir().join("ruff-0.0.171-py310h298983d_0.conda"),
-            package_dir.path(),
+        let package_path = tools::download_and_cache_file_async(
+            "https://conda.anaconda.org/conda-forge/win-64/ruff-0.0.171-py310h298983d_0.conda"
+                .parse()
+                .unwrap(),
+            "25c755b97189ee066576b4ae3999d5e7ff4406d236b984742194e63941838dcd",
         )
+        .await
         .unwrap();
+
+        // Create package cache
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let install_driver = InstallDriver::default();
 

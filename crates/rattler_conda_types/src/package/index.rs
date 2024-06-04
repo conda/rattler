@@ -90,11 +90,14 @@ mod test {
     #[test]
     pub fn test_reconstruct_index_json() {
         let package_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("zlib-1.2.8-vc10_0.tar.bz2"),
-            package_dir.path(),
+        let package_path = tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/win-64/zlib-1.2.8-vc10_0.tar.bz2"
+                .parse()
+                .unwrap(),
+            "ee9172dbe9ebd158e8e68d6d0f7dc2060f0c8230b44d2e9a3595b7cd7336b915",
         )
         .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         insta::assert_yaml_snapshot!(IndexJson::from_package_directory(package_dir.path()).unwrap());
     }
@@ -103,11 +106,15 @@ mod test {
     #[cfg(unix)]
     pub fn test_reconstruct_index_json_with_symlinks() {
         let package_dir = tempfile::tempdir().unwrap();
-        rattler_package_streaming::fs::extract(
-            &crate::get_test_data_dir().join("with-symlinks/zlib-1.2.8-3.tar.bz2"),
-            package_dir.path(),
+
+        let package_path = tools::download_and_cache_file(
+            "https://conda.anaconda.org/conda-forge/linux-64/zlib-1.2.8-3.tar.bz2"
+                .parse()
+                .unwrap(),
+            "85fcb6906b8686fe6341db89b4e6fc2631ad69ee6eab2f4823bfd64ae0b20ac8",
         )
         .unwrap();
+        rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let package_dir = package_dir.into_path();
         println!("{}", package_dir.display());
