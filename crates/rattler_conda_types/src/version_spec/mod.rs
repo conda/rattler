@@ -480,6 +480,16 @@ mod tests {
     }
 
     #[test]
+    fn issue_722() {
+        assert_eq!(
+            VersionSpec::from_str("0.2.18.*.", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("0.2.18.*", ParseStrictness::Lenient).unwrap()
+        );
+
+        assert!(VersionSpec::from_str("0.2.18.*.", ParseStrictness::Strict).is_err());
+    }
+
+    #[test]
     fn issue_star_operator() {
         assert_eq!(
             VersionSpec::from_str(">=*", ParseStrictness::Lenient).unwrap(),

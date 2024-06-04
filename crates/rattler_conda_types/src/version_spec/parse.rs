@@ -280,15 +280,17 @@ fn logical_constraint_parser(
 ///
 /// This is an edge case found in the anaconda main repodata as `mkl 2023.*.*`.
 pub fn looks_like_infinite_starts_with(input: &str) -> bool {
-    let mut input = input;
+    let mut input = input.strip_suffix('.').unwrap_or(input);
     while !input.is_empty() {
         match input.strip_suffix(".*") {
             Some(rest) if rest.is_empty() => {
-                // If we were able to continuously strip the `.*` pattern, then we found a
-                // match.
+                // If we were able to continuously strip the `.*` pattern,
+                // then we found a match.
                 return true;
             }
-            Some(rest) => input = rest,
+            Some(rest) => {
+                input = rest;
+            }
             None => return false,
         }
     }
@@ -515,6 +517,8 @@ mod test {
     fn test_looks_like_infinite_starts_with() {
         assert!(looks_like_infinite_starts_with(".*"));
         assert!(looks_like_infinite_starts_with(".*.*"));
+        assert!(looks_like_infinite_starts_with(".*."));
+        assert!(!looks_like_infinite_starts_with("."));
         assert!(!looks_like_infinite_starts_with(".0.*"));
         assert!(!looks_like_infinite_starts_with(""));
         assert!(!looks_like_infinite_starts_with(""));
