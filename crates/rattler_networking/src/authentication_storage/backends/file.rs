@@ -1,12 +1,19 @@
 //! file storage for passwords.
 use anyhow::Result;
 use fslock::LockFile;
-use once_cell::sync::Lazy;
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
 use std::{path::PathBuf, sync::Mutex};
 
 use crate::authentication_storage::StorageBackend;
 use crate::Authentication;
+
+#[derive(Clone, Debug)]
+struct FileStorageCache {
+    cache: BTreeMap<String, Authentication>,
+    file_exists: bool,
+}
 
 /// A struct that implements storage and access of authentication
 /// information backed by a on-disk JSON file
@@ -14,6 +21,11 @@ use crate::Authentication;
 pub struct FileStorage {
     /// The path to the JSON file
     pub path: PathBuf,
+
+    /// The cache of the file storage
+    /// This is used to avoid reading the file from disk every time
+    /// a credential is accessed
+    cache: Arc<Mutex<FileStorageCache>>,
 }
 
 /// An error that can occur when accessing the file storage
@@ -32,83 +44,103 @@ pub enum FileStorageError {
     JSONError(#[from] serde_json::Error),
 }
 
+/// Lock the file storage file for reading and writing. This will block until the lock is
+/// acquired.
+fn lock_file_storage(path: &Path, write: bool) -> Result<Option<LockFile>, FileStorageError> {
+    if !write && !path.exists() {
+        return Ok(None);
+    }
+
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    let path = path.with_extension("lock");
+    let mut lock = fslock::LockFile::open(&path)
+        .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
+
+    // First try to lock the file without block. If we can't immediately get the lock we block and issue a debug message.
+    if !lock
+        .try_lock_with_pid()
+        .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?
+    {
+        tracing::debug!("waiting for lock on {}", path.to_string_lossy());
+        lock.lock_with_pid()
+            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
+    }
+
+    Ok(Some(lock))
+}
+
+impl FileStorageCache {
+    pub fn from_path(path: &Path) -> Result<Self, FileStorageError> {
+        let file_exists = path.exists();
+        let cache = if file_exists {
+            lock_file_storage(path, false)?;
+            let file = std::fs::File::open(path)?;
+            let reader = std::io::BufReader::new(file);
+            serde_json::from_reader(reader)?
+        } else {
+            BTreeMap::new()
+        };
+
+        Ok(Self { cache, file_exists })
+    }
+}
+
 impl FileStorage {
     /// Create a new file storage with the given path
-    pub fn new(path: PathBuf) -> Self {
-        Self { path }
+    pub fn new(path: PathBuf) -> Result<Self, FileStorageError> {
+        // read the JSON file if it exists, and store it in the cache
+        let cache = Arc::new(Mutex::new(FileStorageCache::from_path(&path)?));
+
+        Ok(Self { path, cache })
     }
 
-    /// Lock the file storage file for reading and writing. This will block until the lock is
-    /// acquired.
-    fn lock(&self) -> Result<LockFile, FileStorageError> {
-        std::fs::create_dir_all(self.path.parent().unwrap())?;
-        let path = self.path.with_extension("lock");
-        let mut lock = fslock::LockFile::open(&path)
-            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?;
-
-        // First try to lock the file without block. If we can't immediately get the lock we block and issue a debug message.
-        if !lock
-            .try_lock_with_pid()
-            .map_err(|e| FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e))?
-        {
-            tracing::debug!("waiting for lock on {}", path.to_string_lossy());
-            lock.lock_with_pid().map_err(|e| {
-                FileStorageError::FailedToLock(path.to_string_lossy().into_owned(), e)
-            })?;
-        }
-
-        Ok(lock)
-    }
-
-    /// Read the JSON file and deserialize it into a `HashMap`, or return an empty `HashMa`p if the
+    /// Read the JSON file and deserialize it into a `BTreeMap`, or return an empty `BTreeMap` if the
     /// file does not exist
-    fn read_json(&self) -> Result<HashMap<String, Authentication>, FileStorageError> {
-        if !self.path.exists() {
-            static WARN_GUARD: Lazy<Mutex<HashSet<PathBuf>>> =
-                Lazy::new(|| Mutex::new(HashSet::new()));
-            let mut guard = WARN_GUARD.lock().unwrap();
-            if !guard.insert(self.path.clone()) {
-                tracing::warn!(
-                    "Can't find path for file storage on {}",
-                    self.path.to_string_lossy()
-                );
-            }
-            return Ok(HashMap::new());
-        }
-        let file = std::fs::File::open(&self.path)?;
-        let reader = std::io::BufReader::new(file);
-        let dict = serde_json::from_reader(reader)?;
-        Ok(dict)
+    fn read_json(&self) -> Result<BTreeMap<String, Authentication>, FileStorageError> {
+        let new_cache = FileStorageCache::from_path(&self.path)?;
+        let mut cache = self.cache.lock().unwrap();
+        cache.cache = new_cache.cache;
+        cache.file_exists = new_cache.file_exists;
+
+        Ok(cache.cache.clone())
     }
 
-    /// Serialize the given `HashMap` and write it to the JSON file
-    fn write_json(&self, dict: &HashMap<String, Authentication>) -> Result<(), FileStorageError> {
+    /// Serialize the given `BTreeMap` and write it to the JSON file
+    fn write_json(&self, dict: &BTreeMap<String, Authentication>) -> Result<(), FileStorageError> {
+        let _lock = lock_file_storage(&self.path, true)?;
+
         let file = std::fs::File::create(&self.path)?;
         let writer = std::io::BufWriter::new(file);
         serde_json::to_writer(writer, dict)?;
+
+        // Store the new data in the cache
+        let mut cache = self.cache.lock().unwrap();
+        cache.cache = dict.clone();
+        cache.file_exists = true;
+
         Ok(())
     }
 }
 
 impl StorageBackend for FileStorage {
     fn store(&self, host: &str, authentication: &crate::Authentication) -> Result<()> {
-        let _lock = self.lock()?;
         let mut dict = self.read_json()?;
         dict.insert(host.to_string(), authentication.clone());
         Ok(self.write_json(&dict)?)
     }
 
     fn get(&self, host: &str) -> Result<Option<crate::Authentication>> {
-        let _lock = self.lock()?;
-        let dict = self.read_json()?;
-        Ok(dict.get(host).cloned())
+        let cache = self.cache.lock().unwrap();
+        Ok(cache.cache.get(host).cloned())
     }
 
     fn delete(&self, host: &str) -> Result<()> {
-        let _lock = self.lock()?;
         let mut dict = self.read_json()?;
-        dict.remove(host);
-        Ok(self.write_json(&dict)?)
+        if dict.remove(host).is_some() {
+            Ok(self.write_json(&dict)?)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -117,14 +149,21 @@ impl Default for FileStorage {
         let mut path = dirs::home_dir().unwrap();
         path.push(".rattler");
         path.push("credentials.json");
-        Self { path }
+        Self::new(path.clone()).unwrap_or(Self {
+            path,
+            cache: Arc::new(Mutex::new(FileStorageCache {
+                cache: BTreeMap::new(),
+                file_exists: false,
+            })),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use insta::assert_snapshot;
+    use std::{fs, io::Write};
     use tempfile::tempdir;
 
     #[test]
@@ -132,7 +171,7 @@ mod tests {
         let file = tempdir().unwrap();
         let path = file.path().join("test.json");
 
-        let storage = FileStorage::new(path.clone());
+        let storage = FileStorage::new(path.clone()).unwrap();
 
         assert_eq!(storage.get("test").unwrap(), None);
 
@@ -144,11 +183,30 @@ mod tests {
             Some(Authentication::CondaToken("password".to_string()))
         );
 
+        storage
+            .store(
+                "bearer",
+                &Authentication::BearerToken("password".to_string()),
+            )
+            .unwrap();
+        storage
+            .store(
+                "basic",
+                &Authentication::BasicHTTP {
+                    username: "user".to_string(),
+                    password: "password".to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_snapshot!(fs::read_to_string(&path).unwrap());
+
         storage.delete("test").unwrap();
         assert_eq!(storage.get("test").unwrap(), None);
 
         let mut file = std::fs::File::create(&path).unwrap();
         file.write_all(b"invalid json").unwrap();
-        assert!(storage.get("test").is_err());
+
+        assert!(FileStorage::new(path.clone()).is_err());
     }
 }

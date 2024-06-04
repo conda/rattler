@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version.workspace = true
+version = "0.24.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -11,26 +11,25 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-rattler_conda_types = { workspace = true }
-rattler_digest = { workspace = true }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.25.1", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "0.19.4", default-features = false }
 libc = { workspace = true, optional = true }
-anyhow = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 url = { workspace = true }
-hex = { workspace = true }
 tempfile = { workspace = true }
-rattler_libsolv_c = { workspace = true, optional = true }
+rattler_libsolv_c = { path="../rattler_libsolv_c", version = "0.19.3", default-features = false, optional = true }
 resolvo = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
 insta = { workspace = true, features = ["yaml"] }
 once_cell = { workspace = true }
-rattler_repodata_gateway = { path = "../rattler_repodata_gateway", features = ["sparse"] }
+rattler_repodata_gateway = { path = "../rattler_repodata_gateway", default-features = false, features = ["sparse"] }
 rstest = { workspace = true }
 serde_json = { workspace = true }
 similar-asserts = { workspace = true }
@@ -39,8 +38,9 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
 url = { workspace = true }
 
 [features]
-default = ["libsolv_c"]
+default = ["resolvo"]
 libsolv_c = ["rattler_libsolv_c", "libc"]
+resolvo = ["dep:resolvo", "dep:futures"]
 
 [[bench]]
 name = "bench"

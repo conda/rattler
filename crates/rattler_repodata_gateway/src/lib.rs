@@ -49,7 +49,7 @@
 //!     let result = match result {
 //!         Err(err) => {
 //!             panic!("{:?}", err);
-//!         },
+//!         }
 //!         Ok(result) => result
 //!     };
 //!
@@ -61,7 +61,16 @@
 //! ```
 
 pub mod fetch;
+mod reporter;
 #[cfg(feature = "sparse")]
 pub mod sparse;
-
 mod utils;
+pub use reporter::Reporter;
+
+#[cfg(feature = "gateway")]
+mod gateway;
+
+#[cfg(feature = "gateway")]
+pub use gateway::{
+    ChannelConfig, Gateway, GatewayBuilder, GatewayError, RepoData, SourceConfig, SubdirSelection,
+};

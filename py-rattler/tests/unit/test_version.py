@@ -1,5 +1,5 @@
 import pytest
-from rattler import Version
+from rattler import Version, VersionWithSource
 
 
 def test_version_dash_normalisation() -> None:
@@ -17,3 +17,8 @@ def test_version_dash_normalisation() -> None:
 
     with pytest.raises(Exception):
         Version("1-.0dev+3.4-")
+
+
+def test_compare_with_source() -> None:
+    """Tests that comparing a Version with a VersionWithSource works as expected."""
+    assert Version("1.0") == VersionWithSource("1.00")

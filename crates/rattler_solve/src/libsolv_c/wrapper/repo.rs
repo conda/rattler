@@ -28,13 +28,14 @@ impl<'pool> Drop for Repo<'pool> {
 
 impl<'pool> Repo<'pool> {
     /// Constructs a repo in the provided pool, associated to the given url
-    pub fn new(pool: &Pool, url: impl AsRef<str>) -> Repo<'_> {
+    pub fn new(pool: &Pool, url: impl AsRef<str>, priority: i32) -> Repo<'_> {
         let c_url = c_string(url);
 
         unsafe {
             let repo_ptr = ffi::repo_create(pool.raw_ptr(), c_url.as_ptr());
-            let non_null_ptr = NonNull::new(repo_ptr).expect("repo ptr was null");
-            Repo(non_null_ptr, PhantomData::default())
+            let mut non_null_ptr = NonNull::new(repo_ptr).expect("repo ptr was null");
+            non_null_ptr.as_mut().priority = priority;
+            Repo(non_null_ptr, PhantomData)
         }
     }
 
@@ -120,7 +121,7 @@ mod tests {
     #[test]
     fn test_repo_creation() {
         let pool = Pool::default();
-        let mut _repo = Repo::new(&pool, "conda-forge");
+        let mut _repo = Repo::new(&pool, "conda-forge", 0);
     }
 
     #[test]
@@ -132,7 +133,7 @@ mod tests {
         {
             // Create a pool and a repo
             let pool = Pool::default();
-            let repo = Repo::new(&pool, "conda-forge");
+            let repo = Repo::new(&pool, "conda-forge", 0);
 
             // Add a solvable with a particular name
             let solvable_id = repo.add_solvable();
@@ -148,7 +149,7 @@ mod tests {
 
         // Create a clean pool and repo
         let pool = Pool::default();
-        let repo = Repo::new(&pool, "conda-forge");
+        let repo = Repo::new(&pool, "conda-forge", 0);
 
         // Open and read the .solv file
         let mode = c_string("rb");

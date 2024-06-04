@@ -22,17 +22,27 @@ use std::borrow::Cow;
 use std::fmt::LowerHex;
 use std::ops::Deref;
 
-/// Deserialize into [`Output`] of a [`Digest`]
+/// Deserialize the [`Output`] of a [`Digest`].
+///
+/// If the deserializer is human-readable, it will parse the digest from a hex
+/// string. Otherwise, it will deserialize raw bytes.
 pub fn deserialize<'de, D, Dig: Digest>(deserializer: D) -> Result<Output<Dig>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let str = Cow::<'de, str>::deserialize(deserializer)?;
-    super::parse_digest_from_hex::<Dig>(str.as_ref())
-        .ok_or_else(|| Error::custom("failed to parse digest"))
+    if deserializer.is_human_readable() {
+        let str = Cow::<'de, str>::deserialize(deserializer)?;
+        super::parse_digest_from_hex::<Dig>(str.as_ref())
+            .ok_or_else(|| Error::custom("failed to parse digest"))
+    } else {
+        Output::<Dig>::deserialize(deserializer)
+    }
 }
 
-/// Serialize into a string
+/// Serializes the [`Output`] of a [`Digest`].
+///
+/// If the serializer is human-readable, it will write the digest as a hex
+/// string. Otherwise, it will deserialize raw bytes.
 pub fn serialize<'a, S: Serializer, Dig: Digest>(
     digest: &'a Output<Dig>,
     s: S,
@@ -40,7 +50,11 @@ pub fn serialize<'a, S: Serializer, Dig: Digest>(
 where
     &'a Output<Dig>: LowerHex,
 {
-    format!("{digest:x}").serialize(s)
+    if s.is_human_readable() {
+        format!("{digest:x}").serialize(s)
+    } else {
+        digest.serialize(s)
+    }
 }
 
 /// Wrapper type for easily serializing a Hash

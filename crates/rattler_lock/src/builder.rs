@@ -1,15 +1,19 @@
 //! Builder for the creation of lock files.
 
-use crate::{
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PypiPackageData, PypiPackageEnvironmentData,
-};
-use fxhash::FxHashMap;
-use indexmap::{IndexMap, IndexSet};
-use rattler_conda_types::Platform;
 use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
+};
+
+use fxhash::FxHashMap;
+use indexmap::{IndexMap, IndexSet};
+use pep508_rs::ExtraName;
+use rattler_conda_types::Platform;
+
+use crate::{
+    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, Package, PypiIndexes, PypiPackageData,
+    PypiPackageEnvironmentData,
 };
 
 /// A struct to incrementally build a lock-file.
@@ -30,6 +34,23 @@ impl LockFileBuilder {
         Self::default()
     }
 
+    /// Sets the pypi indexes for an environment.
+    pub fn set_pypi_indexes(
+        &mut self,
+        environment_data: impl Into<String>,
+        indexes: PypiIndexes,
+    ) -> &mut Self {
+        self.environments
+            .entry(environment_data.into())
+            .or_insert_with(|| EnvironmentData {
+                channels: vec![],
+                packages: FxHashMap::default(),
+                indexes: None,
+            })
+            .indexes = Some(indexes);
+        self
+    }
+
     /// Sets the metadata for an environment.
     pub fn set_channels(
         &mut self,
@@ -41,6 +62,7 @@ impl LockFileBuilder {
             .or_insert_with(|| EnvironmentData {
                 channels: vec![],
                 packages: FxHashMap::default(),
+                indexes: None,
             })
             .channels = channels.into_iter().map(Into::into).collect();
         self
@@ -48,9 +70,9 @@ impl LockFileBuilder {
 
     /// Adds a conda locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::with_conda_package`] but differs in that it takes a
-    /// mutable reference to self instead of consuming it. This allows for a more fluent with
-    /// chaining calls.
+    /// This function is similar to [`Self::with_conda_package`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    /// This allows for a more fluent with chaining calls.
     pub fn add_conda_package(
         &mut self,
         environment: impl Into<String>,
@@ -64,6 +86,7 @@ impl LockFileBuilder {
             .or_insert_with(|| EnvironmentData {
                 channels: vec![],
                 packages: HashMap::default(),
+                indexes: None,
             });
 
         // Add the package to the list of packages.
@@ -81,9 +104,9 @@ impl LockFileBuilder {
 
     /// Adds a pypi locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::with_pypi_package`] but differs in that it takes a
-    /// mutable reference to self instead of consuming it. This allows for a more fluent with
-    /// chaining calls.
+    /// This function is similar to [`Self::with_pypi_package`] but differs in
+    /// that it takes a mutable reference to self instead of consuming it.
+    /// This allows for a more fluent with chaining calls.
     pub fn add_pypi_package(
         &mut self,
         environment: impl Into<String>,
@@ -98,6 +121,7 @@ impl LockFileBuilder {
             .or_insert_with(|| EnvironmentData {
                 channels: vec![],
                 packages: HashMap::default(),
+                indexes: None,
             });
 
         // Add the package to the list of packages.
@@ -119,9 +143,9 @@ impl LockFileBuilder {
 
     /// Adds a conda locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::add_conda_package`] but differs in that it consumes
-    /// `self` instead of taking a mutable reference. This allows for a better interface when
-    /// modifying an existing instance.
+    /// This function is similar to [`Self::add_conda_package`] but differs in
+    /// that it consumes `self` instead of taking a mutable reference. This
+    /// allows for a better interface when modifying an existing instance.
     pub fn with_conda_package(
         mut self,
         environment: impl Into<String>,
@@ -132,11 +156,44 @@ impl LockFileBuilder {
         self
     }
 
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn with_package(
+        mut self,
+        environment: impl Into<String>,
+        platform: Platform,
+        locked_package: Package,
+    ) -> Self {
+        self.add_package(environment, platform, locked_package);
+        self
+    }
+
+    /// Adds a package from another environment to a specific environment and
+    /// platform.
+    pub fn add_package(
+        &mut self,
+        environment: impl Into<String>,
+        platform: Platform,
+        locked_package: Package,
+    ) -> &mut Self {
+        match locked_package {
+            Package::Conda(p) => {
+                self.add_conda_package(environment, platform, p.package_data().clone())
+            }
+            Package::Pypi(p) => self.add_pypi_package(
+                environment,
+                platform,
+                p.package_data().clone(),
+                p.environment_data().clone(),
+            ),
+        }
+    }
+
     /// Adds a pypi locked package to a specific environment and platform.
     ///
-    /// This function is similar to [`Self::add_pypi_package`] but differs in that it consumes
-    /// `self` instead of taking a mutable reference. This allows for a better interface when
-    /// modifying an existing instance.
+    /// This function is similar to [`Self::add_pypi_package`] but differs in
+    /// that it consumes `self` instead of taking a mutable reference. This
+    /// allows for a better interface when modifying an existing instance.
     pub fn with_pypi_package(
         mut self,
         environment: impl Into<String>,
@@ -158,6 +215,16 @@ impl LockFileBuilder {
         self
     }
 
+    /// Sets the channels of an environment.
+    pub fn with_pypi_indexes(
+        mut self,
+        environment: impl Into<String>,
+        indexes: PypiIndexes,
+    ) -> Self {
+        self.set_pypi_indexes(environment, indexes);
+        self
+    }
+
     /// Build a [`LockFile`]
     pub fn finish(self) -> LockFile {
         let (environment_lookup, environments) = self
@@ -169,6 +236,7 @@ impl LockFileBuilder {
 
         LockFile {
             inner: Arc::new(LockFileInner {
+                version: FileFormatVersion::LATEST,
                 conda_packages: self.conda_packages.into_iter().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
                 pypi_environment_package_datas: self
@@ -186,7 +254,7 @@ impl LockFileBuilder {
 /// Similar to [`PypiPackageEnvironmentData`] but hashable.
 #[derive(Hash, PartialEq, Eq)]
 struct HashablePypiPackageEnvironmentData {
-    extras: BTreeSet<String>,
+    extras: BTreeSet<ExtraName>,
 }
 
 impl From<HashablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {

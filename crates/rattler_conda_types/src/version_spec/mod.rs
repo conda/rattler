@@ -1,23 +1,27 @@
-//! This module contains code to work with "versionspec". It represents the version part of
-//! [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
+//! This module contains code to work with "versionspec". It represents the
+//! version part of [`crate::MatchSpec`], e.g.: `>=3.4,<4.0`.
 
 mod constraint;
 pub(crate) mod parse;
 pub(crate) mod version_tree;
 
-use crate::version_spec::version_tree::ParseVersionTreeError;
-use crate::{ParseVersionError, Version};
+use std::{
+    convert::TryFrom,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
+
+pub(crate) use constraint::is_start_of_version_constraint;
 use constraint::Constraint;
+use parse::ParseConstraintError;
 use serde::{Deserialize, Serialize, Serializer};
-use std::convert::TryFrom;
-use std::fmt::{Display, Formatter};
-use std::str::FromStr;
 use thiserror::Error;
 use version_tree::VersionTree;
 
-use crate::version::StrictVersion;
-pub(crate) use constraint::is_start_of_version_constraint;
-use parse::ParseConstraintError;
+use crate::{
+    version::StrictVersion, version_spec::version_tree::ParseVersionTreeError, ParseStrictness,
+    ParseVersionError, Version,
+};
 
 /// An operator to compare two versions.
 #[allow(missing_docs)]
@@ -91,8 +95,8 @@ pub enum VersionOperators {
     Exact(EqualityOperator),
 }
 
-/// Logical operator used two compare groups of version comparisions. E.g. `>=3.4,<4.0` or
-/// `>=3.4|<4.0`,
+/// Logical operator used two compare groups of version comparisions. E.g.
+/// `>=3.4,<4.0` or `>=3.4|<4.0`,
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum LogicalOperator {
     /// All comparators must evaluate to true for the group to evaluate to true.
@@ -160,25 +164,48 @@ impl FromStr for VersionSpec {
     type Err = ParseVersionSpecError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        fn parse_tree(tree: VersionTree<'_>) -> Result<VersionSpec, ParseVersionSpecError> {
+        VersionSpec::from_str(s, ParseStrictness::Lenient)
+    }
+}
+
+impl VersionSpec {
+    /// Parse a [`VersionSpec`] from a string.
+    pub fn from_str(
+        source: &str,
+        strictness: ParseStrictness,
+    ) -> Result<Self, ParseVersionSpecError> {
+        fn parse_tree(
+            tree: VersionTree<'_>,
+            strictness: ParseStrictness,
+        ) -> Result<VersionSpec, ParseVersionSpecError> {
             match tree {
-                VersionTree::Term(str) => Ok(Constraint::from_str(str)
+                VersionTree::Term(str) => Ok(Constraint::from_str(str, strictness)
                     .map_err(ParseVersionSpecError::InvalidConstraint)?
                     .into()),
                 VersionTree::Group(op, groups) => Ok(VersionSpec::Group(
                     op,
                     groups
                         .into_iter()
-                        .map(parse_tree)
+                        .map(|group| parse_tree(group, strictness))
                         .collect::<Result<_, ParseVersionSpecError>>()?,
                 )),
             }
         }
 
         let version_tree =
-            VersionTree::try_from(s).map_err(ParseVersionSpecError::InvalidVersionTree)?;
+            VersionTree::try_from(source).map_err(ParseVersionSpecError::InvalidVersionTree)?;
 
-        parse_tree(version_tree)
+        parse_tree(version_tree, strictness)
+    }
+}
+
+impl Display for VersionOperators {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionOperators::Range(r) => write!(f, "{r}"),
+            VersionOperators::StrictRange(r) => write!(f, "{r}"),
+            VersionOperators::Exact(r) => write!(f, "{r}"),
+        }
     }
 }
 
@@ -307,24 +334,33 @@ impl VersionSpec {
 
 #[cfg(test)]
 mod tests {
-    use crate::version_spec::{EqualityOperator, LogicalOperator, RangeOperator};
-    use crate::{Version, VersionSpec};
     use std::str::FromStr;
+
+    use assert_matches::assert_matches;
+    use rstest::rstest;
+
+    use crate::{
+        version_spec::{
+            parse::ParseConstraintError, EqualityOperator, LogicalOperator, ParseVersionSpecError,
+            RangeOperator,
+        },
+        ParseStrictness, Version, VersionSpec,
+    };
 
     #[test]
     fn test_simple() {
         assert_eq!(
-            VersionSpec::from_str("1.2.3"),
+            VersionSpec::from_str("1.2.3", ParseStrictness::Strict),
             Ok(VersionSpec::Exact(
                 EqualityOperator::Equals,
-                Version::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap(),
             ))
         );
         assert_eq!(
-            VersionSpec::from_str(">=1.2.3"),
+            VersionSpec::from_str(">=1.2.3", ParseStrictness::Strict),
             Ok(VersionSpec::Range(
                 RangeOperator::GreaterEquals,
-                Version::from_str("1.2.3").unwrap()
+                Version::from_str("1.2.3").unwrap(),
             ))
         );
     }
@@ -332,42 +368,42 @@ mod tests {
     #[test]
     fn test_group() {
         assert_eq!(
-            VersionSpec::from_str(">=1.2.3,<2.0.0"),
+            VersionSpec::from_str(">=1.2.3,<2.0.0", ParseStrictness::Strict),
             Ok(VersionSpec::Group(
                 LogicalOperator::And,
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        Version::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap(),
                     ),
                     VersionSpec::Range(RangeOperator::Less, Version::from_str("2.0.0").unwrap()),
-                ]
+                ],
             ))
         );
         assert_eq!(
-            VersionSpec::from_str(">=1.2.3|<1.0.0"),
+            VersionSpec::from_str(">=1.2.3|<1.0.0", ParseStrictness::Strict),
             Ok(VersionSpec::Group(
                 LogicalOperator::Or,
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        Version::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap(),
                     ),
                     VersionSpec::Range(RangeOperator::Less, Version::from_str("1.0.0").unwrap()),
-                ]
+                ],
             ))
         );
         assert_eq!(
-            VersionSpec::from_str("((>=1.2.3)|<1.0.0)"),
+            VersionSpec::from_str("((>=1.2.3)|<1.0.0)", ParseStrictness::Strict),
             Ok(VersionSpec::Group(
                 LogicalOperator::Or,
                 vec![
                     VersionSpec::Range(
                         RangeOperator::GreaterEquals,
-                        Version::from_str("1.2.3").unwrap()
+                        Version::from_str("1.2.3").unwrap(),
                     ),
                     VersionSpec::Range(RangeOperator::Less, Version::from_str("1.0.0").unwrap()),
-                ]
+                ],
             ))
         );
     }
@@ -375,10 +411,10 @@ mod tests {
     #[test]
     fn test_matches() {
         let v1 = Version::from_str("1.2.0").unwrap();
-        let vs1 = VersionSpec::from_str(">=1.2.3,<2.0.0").unwrap();
+        let vs1 = VersionSpec::from_str(">=1.2.3,<2.0.0", ParseStrictness::Strict).unwrap();
         assert!(!vs1.matches(&v1));
 
-        let vs2 = VersionSpec::from_str("1.2").unwrap();
+        let vs2 = VersionSpec::from_str("1.2", ParseStrictness::Strict).unwrap();
         assert!(vs2.matches(&v1));
 
         let v2 = Version::from_str("1.2.3").unwrap();
@@ -391,18 +427,29 @@ mod tests {
         assert!(!vs1.matches(&v3));
         assert!(!vs2.matches(&v3));
 
-        let vs3 = VersionSpec::from_str(">=1!1.2,<1!2").unwrap();
+        let vs3 = VersionSpec::from_str(">=1!1.2,<1!2", ParseStrictness::Strict).unwrap();
         assert!(vs3.matches(&v3));
     }
 
     #[test]
     fn issue_204() {
-        assert!(VersionSpec::from_str(">=3.8<3.9").is_err());
+        assert!(VersionSpec::from_str(">=3.8<3.9", ParseStrictness::Strict).is_err());
+    }
+
+    #[rstest]
+    #[case("2.38.*", true)]
+    #[case("2.38.0.*", true)]
+    #[case("2.38.0.1*", false)]
+    #[case("2.38.0a.*", false)]
+    fn issue_685(#[case] spec: &str, #[case] starts_with: bool) {
+        let spec = VersionSpec::from_str(spec, ParseStrictness::Strict).unwrap();
+        let version = &Version::from_str("2.38").unwrap();
+        assert_eq!(spec.matches(version), starts_with);
     }
 
     #[test]
     fn issue_225() {
-        let spec = VersionSpec::from_str("~=2.4").unwrap();
+        let spec = VersionSpec::from_str("~=2.4", ParseStrictness::Strict).unwrap();
         assert!(!spec.matches(&Version::from_str("3.1").unwrap()));
         assert!(spec.matches(&Version::from_str("2.4").unwrap()));
         assert!(spec.matches(&Version::from_str("2.5").unwrap()));
@@ -412,8 +459,97 @@ mod tests {
     #[test]
     fn issue_235() {
         assert_eq!(
-            VersionSpec::from_str(">2.10*").unwrap(),
-            VersionSpec::from_str(">=2.10").unwrap()
+            VersionSpec::from_str(">2.10*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str(">=2.10", ParseStrictness::Strict).unwrap()
+        );
+    }
+
+    #[test]
+    fn issue_mkl_double() {
+        assert_eq!(
+            VersionSpec::from_str("2023.*.*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("2023.*", ParseStrictness::Lenient).unwrap()
+        );
+        assert!(VersionSpec::from_str("2023.*.*", ParseStrictness::Strict).is_err());
+        assert_matches!(
+            VersionSpec::from_str("2023.*.0", ParseStrictness::Lenient).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::RegexConstraintsNotSupported
+            )
+        );
+    }
+
+    #[test]
+    fn issue_star_operator() {
+        assert_eq!(
+            VersionSpec::from_str(">=*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("*", ParseStrictness::Lenient).unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("==*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("*", ParseStrictness::Lenient).unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("=*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("*", ParseStrictness::Lenient).unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("~=*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("*", ParseStrictness::Lenient).unwrap()
+        );
+        assert_eq!(
+            VersionSpec::from_str("<=*", ParseStrictness::Lenient).unwrap(),
+            VersionSpec::from_str("*", ParseStrictness::Lenient).unwrap()
+        );
+
+        assert_matches!(
+            VersionSpec::from_str(">*", ParseStrictness::Lenient).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("!=*", ParseStrictness::Lenient).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("<*", ParseStrictness::Lenient).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+
+        assert_matches!(
+            VersionSpec::from_str(">=*", ParseStrictness::Strict).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("==*", ParseStrictness::Strict).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("=*", ParseStrictness::Strict).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("~=*", ParseStrictness::Strict).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
+        );
+        assert_matches!(
+            VersionSpec::from_str("<=*", ParseStrictness::Strict).unwrap_err(),
+            ParseVersionSpecError::InvalidConstraint(
+                ParseConstraintError::GlobVersionIncompatibleWithOperator(_)
+            )
         );
     }
 }

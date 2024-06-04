@@ -2,7 +2,6 @@ use rattler_conda_types::{PackageRecord, RepoDataRecord};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 use std::cmp::Ordering;
-use std::hash::Hash;
 use url::Url;
 
 /// A locked conda dependency is just a [`PackageRecord`] with some additional information on where

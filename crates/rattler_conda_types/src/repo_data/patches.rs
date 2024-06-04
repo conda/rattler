@@ -3,10 +3,11 @@
 use fxhash::{FxHashMap, FxHashSet};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
+use std::collections::BTreeSet;
 use std::io;
 use std::path::Path;
 
-use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData};
+use crate::{package::ArchiveType, PackageRecord, PackageUrl, RepoData, Shard};
 
 /// Represents a Conda repodata patch.
 ///
@@ -97,7 +98,7 @@ pub struct PackageRecordPatch {
 
     /// Package identifiers of packages that are equivalent to this package but from other
     /// ecosystems.
-    pub purls: Option<Vec<PackageUrl>>,
+    pub purls: Option<BTreeSet<PackageUrl>>,
 }
 
 /// Repodata patch instructions for a single subdirectory. See [`RepoDataPatch`] for more
@@ -143,7 +144,60 @@ impl PackageRecord {
             self.license_family = license_family.clone();
         }
         if let Some(package_urls) = &patch.purls {
-            self.purls = package_urls.clone();
+            self.purls = Some(package_urls.clone());
+        }
+    }
+}
+
+/// Apply a patch to a repodata file
+/// Note that we currently do not handle `revoked` instructions
+pub fn apply_patches_impl(
+    packages: &mut FxHashMap<String, PackageRecord>,
+    conda_packages: &mut FxHashMap<String, PackageRecord>,
+    removed: &mut FxHashSet<String>,
+    instructions: &PatchInstructions,
+) {
+    for (pkg, patch) in instructions.packages.iter() {
+        if let Some(record) = packages.get_mut(pkg) {
+            record.apply_patch(patch);
+        }
+
+        // also apply the patch to the conda packages
+        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
+            assert!(archive_type == ArchiveType::TarBz2);
+            if let Some(record) = conda_packages.get_mut(&format!("{pkg_name}.conda")) {
+                record.apply_patch(patch);
+            }
+        }
+    }
+
+    for (pkg, patch) in instructions.conda_packages.iter() {
+        if let Some(record) = conda_packages.get_mut(pkg) {
+            record.apply_patch(patch);
+        }
+    }
+
+    // remove packages that have been removed
+    for pkg in instructions.remove.iter() {
+        if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
+            match archive_type {
+                ArchiveType::TarBz2 => {
+                    if packages.remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+
+                    // also remove equivalent .conda package if it exists
+                    let conda_pkg_name = format!("{pkg_name}.conda");
+                    if conda_packages.remove_entry(&conda_pkg_name).is_some() {
+                        removed.insert(conda_pkg_name);
+                    }
+                }
+                ArchiveType::Conda => {
+                    if conda_packages.remove_entry(pkg).is_some() {
+                        removed.insert(pkg.clone());
+                    }
+                }
+            }
         }
     }
 }
@@ -152,52 +206,25 @@ impl RepoData {
     /// Apply a patch to a repodata file
     /// Note that we currently do not handle `revoked` instructions
     pub fn apply_patches(&mut self, instructions: &PatchInstructions) {
-        for (pkg, patch) in instructions.packages.iter() {
-            if let Some(record) = self.packages.get_mut(pkg) {
-                record.apply_patch(patch);
-            }
+        apply_patches_impl(
+            &mut self.packages,
+            &mut self.conda_packages,
+            &mut self.removed,
+            instructions,
+        );
+    }
+}
 
-            // also apply the patch to the conda packages
-            if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-                assert!(archive_type == ArchiveType::TarBz2);
-                if let Some(record) = self.conda_packages.get_mut(&format!("{pkg_name}.conda")) {
-                    record.apply_patch(patch);
-                }
-            }
-        }
-
-        for (pkg, patch) in instructions.conda_packages.iter() {
-            if let Some(record) = self.conda_packages.get_mut(pkg) {
-                record.apply_patch(patch);
-            }
-        }
-
-        let mut removed = FxHashSet::<String>::default();
-        // remove packages that have been removed
-        for pkg in instructions.remove.iter() {
-            if let Some((pkg_name, archive_type)) = ArchiveType::split_str(pkg) {
-                match archive_type {
-                    ArchiveType::TarBz2 => {
-                        if self.packages.remove_entry(pkg).is_some() {
-                            removed.insert(pkg.clone());
-                        }
-
-                        // also remove equivalent .conda package if it exists
-                        let conda_pkg_name = format!("{pkg_name}.conda");
-                        if self.conda_packages.remove_entry(&conda_pkg_name).is_some() {
-                            removed.insert(conda_pkg_name);
-                        }
-                    }
-                    ArchiveType::Conda => {
-                        if self.conda_packages.remove_entry(pkg).is_some() {
-                            removed.insert(pkg.clone());
-                        }
-                    }
-                }
-            }
-        }
-
-        self.removed.extend(removed.into_iter());
+impl Shard {
+    /// Apply a patch to a shard
+    /// Note that we currently do not handle `revoked` instructions
+    pub fn apply_patches(&mut self, instructions: &PatchInstructions) {
+        apply_patches_impl(
+            &mut self.packages,
+            &mut self.conda_packages,
+            &mut self.removed,
+            instructions,
+        );
     }
 }
 

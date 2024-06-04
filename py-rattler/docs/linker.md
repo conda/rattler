@@ -1,3 +1,0 @@
-# link
-
-::: rattler.linker.linker

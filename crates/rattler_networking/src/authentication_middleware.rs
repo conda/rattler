@@ -1,5 +1,4 @@
 //! `reqwest` middleware that authenticates requests with data from the `AuthenticationStorage`
-
 use crate::{Authentication, AuthenticationStorage};
 use async_trait::async_trait;
 use base64::prelude::BASE64_STANDARD;
@@ -21,11 +20,15 @@ impl Middleware for AuthenticationMiddleware {
     async fn handle(
         &self,
         req: Request,
-        extensions: &mut task_local_extensions::Extensions,
+        extensions: &mut http::Extensions,
         next: Next<'_>,
     ) -> reqwest_middleware::Result<Response> {
-        let url = req.url().clone();
+        // If an `Authorization` header is already present, don't authenticate
+        if req.headers().get(reqwest::header::AUTHORIZATION).is_some() {
+            return next.run(req, extensions).await;
+        }
 
+        let url = req.url().clone();
         match self.auth_storage.get_by_url(url) {
             Err(_) => {
                 // Forward error to caller (invalid URL)
@@ -37,7 +40,7 @@ impl Middleware for AuthenticationMiddleware {
                 let mut req = req;
                 *req.url_mut() = url;
 
-                let req = Self::authenticate_request(req, &auth)?;
+                let req = Self::authenticate_request(req, &auth).await?;
                 next.run(req, extensions).await
             }
         }
@@ -73,7 +76,7 @@ impl AuthenticationMiddleware {
     }
 
     /// Authenticate the given request with the given authentication information
-    fn authenticate_request(
+    async fn authenticate_request(
         mut req: reqwest::Request,
         auth: &Option<Authentication>,
     ) -> reqwest_middleware::Result<reqwest::Request> {
@@ -142,7 +145,7 @@ mod tests {
         async fn handle(
             &self,
             req: Request,
-            _: &mut task_local_extensions::Extensions,
+            _: &mut http::Extensions,
             _: Next<'_>,
         ) -> reqwest_middleware::Result<Response> {
             self.captured_tx
@@ -176,7 +179,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
 
         let host = "test.example.com";
         let authentication = Authentication::CondaToken("testtoken".to_string());
@@ -191,7 +194,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
 
         let host = "conda.example.com";
 
@@ -245,7 +248,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
         let host = "bearer.example.com";
 
         // Make sure the keyring is empty
@@ -305,7 +308,7 @@ mod tests {
         let mut storage = AuthenticationStorage::new();
         storage.add_backend(Arc::from(FileStorage::new(
             tdir.path().to_path_buf().join("auth.json"),
-        )));
+        )?));
         let host = "basic.example.com";
 
         // Make sure the keyring is empty
@@ -383,7 +386,7 @@ mod tests {
             let mut storage = AuthenticationStorage::new();
             storage.add_backend(Arc::from(FileStorage::new(
                 tdir.path().to_path_buf().join("auth.json"),
-            )));
+            )?));
 
             let authentication = Authentication::BearerToken("testtoken".to_string());
 
@@ -398,6 +401,35 @@ mod tests {
                 assert_eq!(retrieved.1, None);
             }
         }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_rattler_auth_file_env_var_handling() -> anyhow::Result<()> {
+        let tdir = tempdir()?;
+
+        let storage = temp_env::with_var(
+            "RATTLER_AUTH_FILE",
+            Some(
+                tdir.path()
+                    .to_path_buf()
+                    .join("auth.json")
+                    .to_str()
+                    .unwrap(),
+            ),
+            || AuthenticationStorage::from_env().unwrap(),
+        );
+
+        let host = "test.example.com";
+        let authentication = Authentication::CondaToken("testtoken".to_string());
+        storage.store(host, &authentication)?;
+
+        let file = tdir.path().join("auth.json");
+        assert_eq!(
+            std::fs::read_to_string(file)?,
+            "{\"test.example.com\":{\"CondaToken\":\"testtoken\"}}"
+        );
 
         Ok(())
     }

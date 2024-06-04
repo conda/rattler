@@ -83,6 +83,17 @@ impl PyVersion {
         })
     }
 
+    /// Extend a version to a specified length by adding `0s` if necessary
+    pub fn extend_to_length(&self, length: usize) -> PyResult<Self> {
+        Ok(Self {
+            inner: self
+                .inner
+                .extend_to_length(length)
+                .map_err(PyRattlerError::from)?
+                .into_owned(),
+        })
+    }
+
     /// Returns a list of segments of the version. It does not contain
     /// the local segment of the version. See `local_segments` for
     /// local segments in version.
@@ -171,6 +182,20 @@ impl PyVersion {
             .bump(VersionBumpType::Segment(index))
             .map(Into::into)
             .map_err(PyRattlerError::from)?)
+    }
+
+    /// Returns a new version where the last segment is an "alpha" segment (ie. `.0a0`)
+    pub fn with_alpha(&self) -> Self {
+        Self {
+            inner: self.inner.with_alpha().into_owned(),
+        }
+    }
+
+    /// Returns a new version where the local segment is removed (e.g. `1.0+local` -> `1.0`)
+    pub fn remove_local(&self) -> Self {
+        Self {
+            inner: self.inner.remove_local().into_owned(),
+        }
     }
 
     /// Compute the hash of the version.

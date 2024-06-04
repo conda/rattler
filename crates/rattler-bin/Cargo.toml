@@ -1,6 +1,6 @@
 [package]
 name = "rattler-bin"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust binary for common Conda operations"
@@ -10,6 +10,7 @@ repository.workspace = true
 license.workspace = true
 readme.workspace = true
 default-run = "rattler"
+publish = false
 
 [[bin]]
 name = "rattler"
@@ -24,21 +25,20 @@ rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gate
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
-dirs = { workspace = true }
 futures = { workspace = true }
 indicatif = { workspace = true }
-itertools = { workspace = true }
 once_cell = { workspace = true }
-rattler = { workspace = true }
-rattler_conda_types = { workspace = true }
-rattler_networking = { workspace = true }
-rattler_repodata_gateway = { workspace = true, features = ["sparse"] }
-rattler_solve = { workspace = true, features = ["resolvo", "libsolv_c"] }
-rattler_virtual_packages = { workspace = true }
+rattler = { path="../rattler", version = "0.26.2", default-features = false, features = ["indicatif"] }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.25.1", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.8", default-features = false }
+rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.20.4", default-features = false, features = ["gateway"] }
+rattler_solve = { path="../rattler_solve", version = "0.24.0", default-features = false, features = ["resolvo", "libsolv_c"] }
+rattler_virtual_packages = { path="../rattler_virtual_packages", version = "0.19.14", default-features = false }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+itertools = { workspace = true }
 
 [package.metadata.release]
 # Dont publish the binary

@@ -64,7 +64,7 @@ pub fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_env = "musl")))]
 mod test {
     use crate::Mode;
 

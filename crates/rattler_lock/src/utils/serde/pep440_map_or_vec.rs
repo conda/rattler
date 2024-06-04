@@ -26,17 +26,21 @@ impl<'de> DeserializeAs<'de, Vec<Requirement>> for Pep440MapOrVec {
             MapOrVec::Vec(v) => v,
             MapOrVec::Map(m) => m
                 .into_iter()
-                .map(|(name, spec)| pep508_rs::Requirement {
-                    name,
-                    extras: None,
-                    version_or_url: if spec.is_empty() {
-                        None
-                    } else {
-                        Some(VersionOrUrl::VersionSpecifier(spec))
-                    },
-                    marker: None,
+                .map(|(name, spec)| {
+                    Ok::<_, pep508_rs::InvalidNameError>(pep508_rs::Requirement {
+                        name: pep508_rs::PackageName::new(name)?,
+                        extras: Vec::new(),
+                        version_or_url: if spec.is_empty() {
+                            None
+                        } else {
+                            Some(VersionOrUrl::VersionSpecifier(spec))
+                        },
+                        marker: None,
+                        origin: None,
+                    })
                 })
-                .collect(),
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(serde::de::Error::custom)?,
         })
     }
 }

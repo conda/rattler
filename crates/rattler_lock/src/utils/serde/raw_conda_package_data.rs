@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use url::Url;
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
@@ -85,9 +86,8 @@ pub(crate) struct RawCondaPackageData<'a> {
     pub license: Cow<'a, Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_family: Cow<'a, Option<String>>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub purls: Cow<'a, Vec<PackageUrl>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purls: Cow<'a, Option<BTreeSet<PackageUrl>>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Cow<'a, Option<u64>>,
@@ -124,6 +124,7 @@ impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
                 timestamp: value.timestamp,
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
+                run_exports: None,
             },
             url: value.url.into_owned(),
             file_name: value.file_name.into_owned(),

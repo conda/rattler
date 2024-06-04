@@ -1,28 +1,35 @@
-use super::matcher::{StringMatcher, StringMatcherParseError};
-use super::MatchSpec;
-use crate::build_spec::{BuildNumberSpec, ParseBuildNumberSpecError};
-use crate::package::ArchiveType;
-use crate::version_spec::version_tree::{recognize_constraint, recognize_version};
-use crate::version_spec::{is_start_of_version_constraint, ParseVersionSpecError};
-use crate::{
-    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, VersionSpec,
+use std::{borrow::Cow, path::PathBuf, str::FromStr};
+
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
+    character::complete::{char, multispace0, one_of},
+    combinator::{opt, recognize},
+    error::{context, ContextError, ParseError},
+    multi::{separated_list0, separated_list1},
+    sequence::{delimited, preceded, separated_pair, terminated},
+    Finish, IResult,
 };
-use nom::branch::alt;
-use nom::bytes::complete::{tag, take_till1, take_until, take_while, take_while1};
-use nom::character::complete::{char, multispace0, one_of};
-use nom::combinator::{opt, recognize};
-use nom::error::{context, ContextError, ParseError};
-use nom::multi::{separated_list0, separated_list1};
-use nom::sequence::{delimited, preceded, separated_pair, terminated};
-use nom::{Finish, IResult};
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
-use std::borrow::Cow;
-use std::path::PathBuf;
-use std::str::FromStr;
 use thiserror::Error;
 use url::Url;
+
+use super::{
+    matcher::{StringMatcher, StringMatcherParseError},
+    MatchSpec,
+};
+use crate::{
+    build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    package::ArchiveType,
+    version_spec::{
+        is_start_of_version_constraint,
+        version_tree::{recognize_constraint, recognize_version},
+        ParseVersionSpecError,
+    },
+    Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
+    ParseChannelError, ParseStrictness, VersionSpec,
+};
 
 /// The type of parse error that occurred when parsing match spec.
 #[derive(Debug, Clone, Error)]
@@ -84,20 +91,31 @@ impl FromStr for MatchSpec {
     type Err = ParseMatchSpecError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse(s)
+        Self::from_str(s, ParseStrictness::Lenient)
     }
 }
 
-/// Strips a comment from a match spec. A comment is preceded by a '#' followed by the comment
-/// itself. This functions splits the matchspec into the matchspec and comment part.
+impl MatchSpec {
+    /// Parses a [`MatchSpec`] from a string with a given strictness.
+    pub fn from_str(
+        source: &str,
+        strictness: ParseStrictness,
+    ) -> Result<Self, ParseMatchSpecError> {
+        matchspec_parser(source, strictness)
+    }
+}
+
+/// Strips a comment from a match spec. A comment is preceded by a '#' followed
+/// by the comment itself. This functions splits the matchspec into the
+/// matchspec and comment part.
 fn strip_comment(input: &str) -> (&str, Option<&str>) {
     input
         .split_once('#')
         .map_or_else(|| (input, None), |(spec, comment)| (spec, Some(comment)))
 }
 
-/// Strips any if statements from the matchspec. `if` statements in matchspec are "anticipating
-/// future compatibility issues".
+/// Strips any if statements from the matchspec. `if` statements in matchspec
+/// are "anticipating future compatibility issues".
 fn strip_if(input: &str) -> (&str, Option<&str>) {
     // input
     //     .split_once("if")
@@ -111,10 +129,10 @@ fn is_package_file(input: &str) -> bool {
     ArchiveType::try_from(input).is_some()
 }
 
-/// An optimized data structure to store key value pairs in between a bracket string
-/// `[key1=value1, key2=value2]`. The optimization stores two such values on the stack and otherwise
-/// allocates a vector on the heap. Two is chosen because that seems to be more than enough for
-/// most use cases.
+/// An optimized data structure to store key value pairs in between a bracket
+/// string `[key1=value1, key2=value2]`. The optimization stores two such values
+/// on the stack and otherwise allocates a vector on the heap. Two is chosen
+/// because that seems to be more than enough for most use cases.
 type BracketVec<'a> = SmallVec<[(&'a str, &'a str); 2]>;
 
 /// A parse combinator to filter whitespace if front and after another parser.
@@ -174,8 +192,8 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
     }
 }
 
-/// Strips the brackets part of the matchspec returning the rest of the matchspec and  the contents
-/// of the brackets as a `Vec<&str>`.
+/// Strips the brackets part of the matchspec returning the rest of the
+/// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
     if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
@@ -197,13 +215,14 @@ fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMa
 fn parse_bracket_vec_into_components(
     bracket: BracketVec<'_>,
     match_spec: NamelessMatchSpec,
+    strictness: ParseStrictness,
 ) -> Result<NamelessMatchSpec, ParseMatchSpecError> {
     let mut match_spec = match_spec;
 
     for elem in bracket {
         let (key, value) = elem;
         match key {
-            "version" => match_spec.version = Some(VersionSpec::from_str(value)?),
+            "version" => match_spec.version = Some(VersionSpec::from_str(value, strictness)?),
             "build" => match_spec.build = Some(StringMatcher::from_str(value)?),
             "build_number" => match_spec.build_number = Some(BuildNumberSpec::from_str(value)?),
             "sha256" => {
@@ -264,7 +283,7 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
         let version_glob = terminated(opt(tag(".")), tag("*"));
 
         // Matches a version followed by an optional version glob
-        let version_followed_by_glob = terminated(recognize_version, opt(version_glob));
+        let version_followed_by_glob = terminated(recognize_version(true), opt(version_glob));
 
         // Just matches the glob operator ("*")
         let just_star = tag("*");
@@ -309,10 +328,17 @@ impl FromStr for NamelessMatchSpec {
     type Err = ParseMatchSpecError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
+        Self::from_str(input, ParseStrictness::Lenient)
+    }
+}
+
+impl NamelessMatchSpec {
+    /// Parses a [`NamelessMatchSpec`] from a string with a given strictness.
+    pub fn from_str(input: &str, strictness: ParseStrictness) -> Result<Self, ParseMatchSpecError> {
         // Strip off brackets portion
         let (input, brackets) = strip_brackets(input.trim())?;
         let mut match_spec =
-            parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default())?;
+            parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
         // Get the version and optional build string
         let input = input.trim();
@@ -331,7 +357,7 @@ impl FromStr for NamelessMatchSpec {
 
             // Parse the version spec
             match_spec.version = Some(
-                VersionSpec::from_str(version_str.as_ref())
+                VersionSpec::from_str(version_str.as_ref(), strictness)
                     .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
             );
 
@@ -346,7 +372,10 @@ impl FromStr for NamelessMatchSpec {
 
 /// Parses a conda match spec.
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
-fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
+fn matchspec_parser(
+    input: &str,
+    strictness: ParseStrictness,
+) -> Result<MatchSpec, ParseMatchSpecError> {
     // Step 1. Strip '#' and `if` statement
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
@@ -372,7 +401,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     // 3. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
     let mut nameless_match_spec =
-        parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default())?;
+        parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
     // 4. Strip off parens portion
     // TODO: What is this? I've never seen in
@@ -394,17 +423,21 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
     };
 
     nameless_match_spec.namespace = namespace
+        .map(str::trim)
+        .filter(|namespace| !namespace.is_empty())
         .map(ToOwned::to_owned)
         .or(nameless_match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
+        let channel_config = ChannelConfig::default_with_root_dir(
+            std::env::current_dir().expect("Could not get current directory"),
+        );
         if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            nameless_match_spec.channel =
-                Some(Channel::from_str(channel, &ChannelConfig::default())?.into());
+            nameless_match_spec.channel = Some(Channel::from_str(channel, &channel_config)?.into());
             nameless_match_spec.subdir = Some(subdir.to_string());
         } else {
             nameless_match_spec.channel =
-                Some(Channel::from_str(channel_str, &ChannelConfig::default())?.into());
+                Some(Channel::from_str(channel_str, &channel_config)?.into());
         }
     }
 
@@ -431,13 +464,14 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
         let version_str = if let (Some(version_str), true) =
             (version_str.strip_prefix("=="), build_str.is_none())
         {
-            // If the version starts with `==` and the build string is none we strip the `==` part.
+            // If the version starts with `==` and the build string is none we strip the
+            // `==` part.
             Cow::Borrowed(version_str)
         } else if let Some(version_str_part) = version_str.strip_prefix('=') {
             let not_a_group = !version_str_part.contains(['=', ',', '|']);
             if not_a_group {
-                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a *
-                // if it doesnt have one already.
+                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a
+                // * if it doesnt have one already.
                 if build_str.is_none() && !version_str_part.ends_with('*') {
                     Cow::Owned(format!("{version_str_part}*"))
                 } else {
@@ -453,7 +487,7 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
         // Parse the version spec
         match_spec.version = Some(
-            VersionSpec::from_str(version_str.as_ref())
+            VersionSpec::from_str(version_str.as_ref(), strictness)
                 .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
         );
 
@@ -467,20 +501,27 @@ fn parse(input: &str) -> Result<MatchSpec, ParseMatchSpecError> {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+
     use assert_matches::assert_matches;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use serde::Serialize;
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
-    use std::sync::Arc;
+    use smallvec::smallvec;
 
     use super::{
         split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
         ParseMatchSpecError,
     };
-    use crate::match_spec::parse::parse_bracket_list;
-    use crate::{BuildNumberSpec, Channel, ChannelConfig, NamelessMatchSpec, VersionSpec};
-    use smallvec::smallvec;
+    use crate::{
+        match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
+        NamelessMatchSpec, ParseStrictness::*, VersionSpec,
+    };
+
+    fn channel_config() -> ChannelConfig {
+        ChannelConfig::default_with_root_dir(
+            std::env::current_dir().expect("Could not get current directory"),
+        )
+    }
 
     #[test]
     fn test_strip_brackets() {
@@ -549,9 +590,9 @@ mod tests {
     #[test]
     fn test_nameless_match_spec() {
         insta::assert_yaml_snapshot!([
-            NamelessMatchSpec::from_str("3.8.* *_cpython").unwrap(),
-            NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]").unwrap(),
-            NamelessMatchSpec::from_str("=1.0 py27_0").unwrap(),
+            NamelessMatchSpec::from_str("3.8.* *_cpython", Strict).unwrap(),
+            NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("=1.0 py27_0", Strict).unwrap(),
         ],
         @r###"
         ---
@@ -567,38 +608,50 @@ mod tests {
 
     #[test]
     fn test_match_spec_more() {
-        let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]").unwrap();
+        let spec = MatchSpec::from_str("conda-forge::foo[version=\"1.0.*\"]", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
-        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
+        );
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
         );
 
-        let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]").unwrap();
+        let spec = MatchSpec::from_str("conda-forge::foo[version=1.0.*]", Strict).unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
-        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
+        );
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
         );
 
-        let spec =
-            MatchSpec::from_str(r#"conda-forge::foo[version=1.0.*, build_number=">6"]"#).unwrap();
+        let spec = MatchSpec::from_str(
+            r#"conda-forge::foo[version=1.0.*, build_number=">6"]"#,
+            Strict,
+        )
+        .unwrap();
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
-        assert_eq!(spec.version, Some(VersionSpec::from_str("1.0.*").unwrap()));
+        assert_eq!(
+            spec.version,
+            Some(VersionSpec::from_str("1.0.*", Strict).unwrap())
+        );
         assert_eq!(
             spec.channel,
             Some(
-                Channel::from_str("conda-forge", &ChannelConfig::default())
+                Channel::from_str("conda-forge", &channel_config())
                     .map(Arc::new)
                     .unwrap()
             )
@@ -611,13 +664,13 @@ mod tests {
 
     #[test]
     fn test_hash_spec() {
-        let spec = MatchSpec::from_str("conda-forge::foo[md5=1234567890]");
+        let spec = MatchSpec::from_str("conda-forge::foo[md5=1234567890]", Strict);
         assert_matches!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
 
-        let spec = MatchSpec::from_str("conda-forge::foo[sha256=1234567890]");
+        let spec = MatchSpec::from_str("conda-forge::foo[sha256=1234567890]", Strict);
         assert_matches!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
 
-        let spec = MatchSpec::from_str("conda-forge::foo[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3]").unwrap();
+        let spec = MatchSpec::from_str("conda-forge::foo[sha256=315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3]", Strict).unwrap();
         assert_eq!(
             spec.sha256,
             Some(
@@ -628,8 +681,11 @@ mod tests {
             )
         );
 
-        let spec =
-            MatchSpec::from_str("conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]").unwrap();
+        let spec = MatchSpec::from_str(
+            "conda-forge::foo[md5=8b1a9953c4611296a827abf8c47804d7]",
+            Strict,
+        )
+        .unwrap();
         assert_eq!(
             spec.md5,
             Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap())
@@ -713,7 +769,7 @@ mod tests {
             .map(|spec| {
                 (
                     spec,
-                    MatchSpec::from_str(spec).map_or_else(
+                    MatchSpec::from_str(spec, Strict).map_or_else(
                         |err| MatchSpecOrError::Error {
                             error: err.to_string(),
                         },
@@ -740,7 +796,7 @@ mod tests {
     #[test]
     fn test_invalid_bracket_key() {
         let _unknown_key = String::from("unknown");
-        let spec = MatchSpec::from_str("conda-forge::foo[unknown=1.0.*]");
+        let spec = MatchSpec::from_str("conda-forge::foo[unknown=1.0.*]", Strict);
         assert_matches!(
             spec,
             Err(ParseMatchSpecError::InvalidBracketKey(_unknown_key))
@@ -749,7 +805,7 @@ mod tests {
 
     #[test]
     fn test_invalid_number_of_colons() {
-        let spec = MatchSpec::from_str("conda-forge::::foo[version=\"1.0.*\"]");
+        let spec = MatchSpec::from_str("conda-forge::::foo[version=\"1.0.*\"]", Strict);
         assert_matches!(spec, Err(ParseMatchSpecError::InvalidNumberOfColons));
     }
 
@@ -757,5 +813,11 @@ mod tests {
     fn test_missing_package_name() {
         let package_name = strip_package_name("");
         assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
+    }
+
+    #[test]
+    fn test_empty_namespace() {
+        let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
+        assert!(spec.namespace.is_none());
     }
 }

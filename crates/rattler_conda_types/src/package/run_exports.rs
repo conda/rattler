@@ -1,15 +1,17 @@
 use std::path::Path;
 
-use super::PackageFile;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
 
+use super::PackageFile;
+
 /// A representation of the `run_exports.json` file found in package archives.
 ///
-/// The `run_exports.json` file contains information about the run exports of a package
+/// The `run_exports.json` file contains information about the run exports of a
+/// package
 #[serde_as]
 #[skip_serializing_none]
-#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
+#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Hash, Clone)]
 pub struct RunExportsJson {
     /// weak run exports apply a dependency from host to run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -17,15 +19,18 @@ pub struct RunExportsJson {
     /// strong run exports apply a dependency from build to host and run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong: Vec<String>,
-    /// noarch run exports apply a run export only to noarch packages (other run exports are ignored)
-    /// for example, python uses this to apply a dependency on python to all noarch packages, but not to
+    /// noarch run exports apply a run export only to noarch packages (other run
+    /// exports are ignored) for example, python uses this to apply a
+    /// dependency on python to all noarch packages, but not to
     /// the python_abi package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub noarch: Vec<String>,
-    /// weak constrains apply a constrain dependency from host to build, or run to host
+    /// weak constrains apply a constrain dependency from host to build, or run
+    /// to host
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub weak_constrains: Vec<String>,
-    /// strong constrains apply a constrain dependency from build to host and run
+    /// strong constrains apply a constrain dependency from build to host and
+    /// run
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub strong_constrains: Vec<String>,
 }
@@ -37,6 +42,22 @@ impl PackageFile for RunExportsJson {
 
     fn from_str(str: &str) -> Result<Self, std::io::Error> {
         serde_json::from_str(str).map_err(Into::into)
+    }
+}
+
+impl RunExportsJson {
+    /// Construct an empty `RunExportsJson`
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Test if all fields are empty
+    pub fn is_empty(&self) -> bool {
+        self.weak.is_empty()
+            && self.strong.is_empty()
+            && self.noarch.is_empty()
+            && self.weak_constrains.is_empty()
+            && self.strong_constrains.is_empty()
     }
 }
 

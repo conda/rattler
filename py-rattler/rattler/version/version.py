@@ -17,6 +17,8 @@ class Version:
     Version comparison is case-insensitive.
     """
 
+    _version: PyVersion
+
     def __init__(self, version: str) -> None:
         if isinstance(version, str):
             self._version = PyVersion(version)
@@ -60,6 +62,9 @@ class Version:
         >>> v = Version('1.0')
         >>> v.bump_major()
         Version("2.0")
+        >>> v = Version('9d')
+        >>> v.bump_major()
+        Version("10a")
         >>>
         ```
         """
@@ -77,9 +82,8 @@ class Version:
         >>> v.bump_minor()
         Version("1.1")
         >>>
-        >>> Version("1").bump_minor() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1").bump_minor()
+        Version("1.1")
         >>>
         ```
         """
@@ -96,10 +100,12 @@ class Version:
         >>> v = Version('1.0.5')
         >>> v.bump_patch()
         Version("1.0.6")
+        >>> v = Version('1.1.1e')
+        >>> v.bump_patch()
+        Version("1.1.2a")
         >>>
-        >>> Version("1.5").bump_patch() # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1.5").bump_patch()
+        Version("1.5.1")
         >>>
         ```
         """
@@ -136,13 +142,69 @@ class Version:
         >>> Version("1.5").bump_segment(-5) # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         exceptions.VersionBumpException
-        >>> Version("1.5").bump_segment(5) # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        exceptions.VersionBumpException
+        >>> Version("1.5").bump_segment(5)
+        Version("1.5.0.0.0.1")
         >>>
         ```
         """
         return Version._from_py_version(self._version.bump_segment(index))
+
+    def with_alpha(self) -> Version:
+        """
+        Returns a new version where the last segment of this version has
+        been bumped with an alpha character. If the last segment contains a
+        character, nothing is added.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0')
+        >>> v.with_alpha()
+        Version("1.0.0a0")
+        >>> v = Version('1.0.f')
+        >>> v.with_alpha()
+        Version("1.0.f")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.with_alpha())
+
+    def remove_local(self) -> Version:
+        """
+        Returns a new version where the local segment of the version has been removed.
+        Leaves the version unchanged if it does not have a local segment.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1.0+3.4')
+        >>> v.remove_local()
+        Version("1.0")
+        >>> v = Version('1.0')
+        >>> v.remove_local()
+        Version("1.0")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.remove_local())
+
+    def extend_to_length(self, length: int) -> Version:
+        """
+        Returns a new version that is extended with `0s` to the specified length.
+
+        Examples
+        --------
+        ```python
+        >>> v = Version('1')
+        >>> v.extend_to_length(3)
+        Version("1.0.0")
+        >>> v = Version('4!1.2+3.4')
+        >>> v.extend_to_length(4)
+        Version("4!1.2.0.0+3.4")
+        >>>
+        ```
+        """
+        return Version._from_py_version(self._version.extend_to_length(length))
 
     @property
     def has_local(self) -> bool:

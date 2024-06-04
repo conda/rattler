@@ -20,11 +20,8 @@ impl<'de> DeserializeAs<'de, chrono::DateTime<chrono::Utc>> for Timestamp {
         };
 
         // Convert the timestamp to a UTC timestamp
-        Ok(chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-            chrono::NaiveDateTime::from_timestamp_micros(microseconds)
-                .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))?,
-            chrono::Utc,
-        ))
+        chrono::DateTime::from_timestamp_micros(microseconds)
+            .ok_or_else(|| D::Error::custom("got invalid timestamp, timestamp out of range"))
     }
 }
 

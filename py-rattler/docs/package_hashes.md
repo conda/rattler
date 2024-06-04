@@ -1,0 +1,3 @@
+# PackageHashes
+
+::: rattler.lock.PackageHashes

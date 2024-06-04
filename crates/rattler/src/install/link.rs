@@ -1,12 +1,13 @@
 //! This module contains the logic to link a give file from the package cache into the target directory.
 //! See [`link_file`] for more information.
-use crate::install::python::PythonInfo;
 use memmap2::Mmap;
+use once_cell::sync::Lazy;
 use rattler_conda_types::package::{FileMode, PathType, PathsEntry, PrefixPlaceholder};
-use rattler_conda_types::{NoArchType, Platform};
-use rattler_digest::HashingWriter;
+use rattler_conda_types::Platform;
 use rattler_digest::Sha256;
+use rattler_digest::{HashingWriter, Sha256Hash};
 use reflink_copy::reflink;
+use regex::Regex;
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Formatter;
@@ -61,10 +62,6 @@ pub enum LinkFileError {
     #[error("unexpected io operation while {0}")]
     IoError(String, #[source] std::io::Error),
 
-    /// The parent directory of the destination file could not be created.
-    #[error("failed to create parent directory")]
-    FailedToCreateParentDirectory(#[source] std::io::Error),
-
     /// The source file could not be opened.
     #[error("could not open source file for reading")]
     FailedToOpenSourceFile(#[source] std::io::Error),
@@ -101,6 +98,10 @@ pub enum LinkFileError {
     /// No Python version was specified when installing a noarch package.
     #[error("cannot install noarch python files because there is no python version specified ")]
     MissingPythonInfo,
+
+    /// The hash of the file could not be computed.
+    #[error("failed to compute the sha256 hash of the file")]
+    FailedToComputeSha(#[source] std::io::Error),
 }
 
 /// The successful result of calling [`link_file`].
@@ -120,6 +121,9 @@ pub struct LinkedFile {
 
     /// The way the file was linked
     pub method: LinkMethod,
+
+    /// The original prefix placeholder that was replaced
+    pub prefix_placeholder: Option<String>,
 }
 
 /// Installs a single file from a `package_dir` to the the `target_dir`. Replaces any
@@ -131,8 +135,8 @@ pub struct LinkedFile {
 /// [`crate::install::InstallOptions::target_prefix`] for more information.
 #[allow(clippy::too_many_arguments)] // TODO: Fix this properly
 pub fn link_file(
-    noarch_type: NoArchType,
     path_json_entry: &PathsEntry,
+    destination_relative_path: PathBuf,
     package_dir: &Path,
     target_dir: &Path,
     target_prefix: &str,
@@ -140,37 +144,11 @@ pub fn link_file(
     allow_hard_links: bool,
     allow_ref_links: bool,
     target_platform: Platform,
-    target_python: Option<&PythonInfo>,
     apple_codesign_behavior: AppleCodeSignBehavior,
-    clobber_rename: Option<&PathBuf>,
 ) -> Result<LinkedFile, LinkFileError> {
     let source_path = package_dir.join(&path_json_entry.relative_path);
 
-    // Determine the destination path
-    let destination_relative_path = if noarch_type.is_python() {
-        match target_python {
-            Some(python_info) => {
-                python_info.get_python_noarch_target_path(&path_json_entry.relative_path)
-            }
-            None => return Err(LinkFileError::MissingPythonInfo),
-        }
-    } else if let Some(clobber_rename) = clobber_rename {
-        clobber_rename.into()
-    } else {
-        path_json_entry.relative_path.as_path().into()
-    };
-
     let destination_path = target_dir.join(&destination_relative_path);
-
-    // Ensure that all directories up to the path exist.
-    if let Some(parent) = destination_path.parent() {
-        std::fs::create_dir_all(parent).map_err(LinkFileError::FailedToCreateParentDirectory)?;
-    }
-
-    // If the file already exists it most likely means that the file is clobbered. This means that
-    // different packages are writing to the same file. This function simply reports back to the
-    // caller that this is the case but there is no special handling here.
-    let clobbered = clobber_rename.is_some();
 
     // Temporary variables to store intermediate computations in. If we already computed the file
     // size or the sha hash we dont have to recompute them at the end of the function.
@@ -218,6 +196,7 @@ pub fn link_file(
             &mut destination_writer,
             placeholder,
             &target_prefix,
+            &target_platform,
             *file_mode,
         )
         .map_err(|err| LinkFileError::IoError(String::from("replacing placeholders"), err))?;
@@ -262,9 +241,16 @@ pub fn link_file(
                 }
 
                 // The file on disk changed from the original file so the hash and file size
-                // also became invalid.
-                sha256 = None;
-                file_size = None;
+                // also became invalid. Let's recompute them.
+                sha256 = Some(
+                    rattler_digest::compute_file_digest::<Sha256>(&destination_path)
+                        .map_err(LinkFileError::FailedToComputeSha)?,
+                );
+                file_size = Some(
+                    std::fs::symlink_metadata(&destination_path)
+                        .map_err(LinkFileError::FailedToOpenDestinationFile)?
+                        .len(),
+                );
             }
         }
         LinkMethod::Patched(*file_mode)
@@ -281,11 +267,28 @@ pub fn link_file(
     // Compute the final SHA256 if we didnt already or if its not stored in the paths.json entry.
     let sha256 = if let Some(sha256) = sha256 {
         sha256
+    } else if link_method == LinkMethod::Softlink {
+        // we hash the content of the symlink file. Note that this behavior is different from
+        // conda or mamba (where the target of the symlink is hashed). However, hashing the target
+        // of the symlink is more tricky in our case as we link everything in parallel and would have to
+        // potentially "wait" for dependencies to be available.
+        // This needs to be taken into account when verifying an installation.
+        let linked_path = destination_path
+            .read_link()
+            .map_err(LinkFileError::FailedToReadSymlink)?;
+        rattler_digest::compute_bytes_digest::<Sha256>(
+            linked_path.as_os_str().to_string_lossy().as_bytes(),
+        )
     } else if let Some(sha256) = path_json_entry.sha256 {
         sha256
-    } else {
+    } else if path_json_entry.path_type == PathType::HardLink {
         rattler_digest::compute_file_digest::<Sha256>(&destination_path)
-            .map_err(LinkFileError::FailedToOpenDestinationFile)?
+            .map_err(LinkFileError::FailedToComputeSha)?
+    } else {
+        // This is either a softlink or a directory.
+        // Computing the hash for a directory is not possible.
+        // This hash is `0000...0000`
+        Sha256Hash::default()
     };
 
     // Compute the final file size if we didnt already.
@@ -299,12 +302,18 @@ pub fn link_file(
         metadata.len()
     };
 
+    let prefix_placeholder: Option<String> = path_json_entry
+        .prefix_placeholder
+        .as_ref()
+        .map(|p| p.placeholder.clone());
+
     Ok(LinkedFile {
-        clobbered,
+        clobbered: false,
         sha256,
         file_size,
-        relative_path: destination_relative_path.into_owned(),
+        relative_path: destination_relative_path,
         method: link_method,
+        prefix_placeholder,
     })
 }
 
@@ -380,25 +389,17 @@ fn reflink_to_destination(
                 })?;
             }
             Err(e) if e.kind() == ErrorKind::Unsupported && allow_hard_links => {
-                return hardlink_to_destination(source_path, destination_path)
+                return hardlink_to_destination(source_path, destination_path);
             }
             Err(e) if e.kind() == ErrorKind::Unsupported && !allow_hard_links => {
-                return copy_to_destination(source_path, destination_path)
+                return copy_to_destination(source_path, destination_path);
             }
-            Err(e) => {
+            Err(_) => {
                 return if allow_hard_links {
-                    tracing::debug!(
-                        "failed to reflink {}: {e}, falling back to hard linking.",
-                        destination_path.display()
-                    );
                     hardlink_to_destination(source_path, destination_path)
                 } else {
-                    tracing::debug!(
-                        "failed to reflink {}: {e}, falling back to copying.",
-                        destination_path.display()
-                    );
                     copy_to_destination(source_path, destination_path)
-                }
+                };
             }
         }
     }
@@ -438,7 +439,6 @@ fn symlink_to_destination(
     let linked_path = source_path
         .read_link()
         .map_err(LinkFileError::FailedToReadSymlink)?;
-
     loop {
         match symlink(&linked_path, destination_path) {
             Ok(_) => return Ok(LinkMethod::Softlink),
@@ -486,9 +486,10 @@ fn copy_to_destination(
 /// See both [`copy_and_replace_cstring_placeholder`] and [`copy_and_replace_textual_placeholder`]
 pub fn copy_and_replace_placeholders(
     source_bytes: &[u8],
-    destination: impl Write,
+    mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    target_platform: &Platform,
     file_mode: FileMode,
 ) -> Result<(), std::io::Error> {
     match file_mode {
@@ -498,18 +499,73 @@ pub fn copy_and_replace_placeholders(
                 destination,
                 prefix_placeholder,
                 target_prefix,
+                target_platform,
             )?;
         }
         FileMode::Binary => {
-            copy_and_replace_cstring_placeholder(
-                source_bytes,
-                destination,
-                prefix_placeholder,
-                target_prefix,
-            )?;
+            // conda does not replace the prefix in the binary files on windows
+            // DLLs are loaded quite differently anyways (there is no rpath, for example).
+            if target_platform.is_windows() {
+                destination.write_all(source_bytes)?;
+            } else {
+                copy_and_replace_cstring_placeholder(
+                    source_bytes,
+                    destination,
+                    prefix_placeholder,
+                    target_prefix,
+                )?;
+            }
         }
     }
     Ok(())
+}
+
+static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
+    // ^(#!      // pretty much the whole match string
+    // (?:[ ]*)  // allow spaces between #! and beginning of
+    //           // the executable path
+    // (/(?:\\ |[^ \n\r\t])*)  // the executable is the next
+    //                         // text block without an
+    //                         // escaped space or non-space
+    //                         // whitespace character
+    // (.*))$    // the rest of the line can contain option
+    //           // flags and end whole_shebang group
+    Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
+});
+
+/// Finds if the shebang line length is valid.
+fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
+    const MAX_SHEBANG_LENGTH_LINUX: usize = 127;
+    const MAX_SHEBANG_LENGTH_MACOS: usize = 512;
+
+    if platform.is_linux() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_LINUX
+    } else if platform.is_osx() {
+        shebang.len() <= MAX_SHEBANG_LENGTH_MACOS
+    } else {
+        true
+    }
+}
+
+/// Long shebangs are invalid (longer than 127 on Linux / 512 on macOS characters).
+/// This function replaces long shebangs with a shebang that uses `/usr/bin/env` to find the
+/// executable.
+fn replace_long_shebang(shebang: &str, platform: &Platform) -> String {
+    if is_valid_shebang_length(shebang, platform) {
+        shebang.to_string()
+    } else {
+        assert!(shebang.starts_with("#!"));
+        if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
+            let shebang_path = &captures[2];
+            let filename = shebang_path
+                .rsplit_once('/')
+                .map_or(shebang_path, |(_, f)| f);
+            format!("#!/usr/bin/env {}{}", filename, &captures[3])
+        } else {
+            tracing::warn!("Could not replace shebang ({})", shebang);
+            shebang.to_string()
+        }
+    }
 }
 
 /// Given the contents of a file copy it to the `destination` and in the process replace the
@@ -524,10 +580,23 @@ pub fn copy_and_replace_textual_placeholder(
     mut destination: impl Write,
     prefix_placeholder: &str,
     target_prefix: &str,
+    target_platform: &Platform,
 ) -> Result<(), std::io::Error> {
     // Get the prefixes as bytes
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
+
+    // check if we have a shebang. We need to handle it differently because it has a maximum length
+    // that can be exceeded in very long target prefix's.
+    if target_platform.is_unix() && source_bytes.starts_with(b"#!") {
+        // extract first line
+        let (first, rest) =
+            source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
+        let first_line = String::from_utf8_lossy(first);
+        let replaced = first_line.replace(prefix_placeholder, target_prefix);
+        destination.write_all(replace_long_shebang(&replaced, target_platform).as_bytes())?;
+        source_bytes = rest;
+    }
 
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
@@ -541,7 +610,6 @@ pub fn copy_and_replace_textual_placeholder(
             // The old prefix was not found in the (remaining) source bytes.
             // Write the rest of the bytes
             destination.write_all(source_bytes)?;
-
             return Ok(());
         }
     }
@@ -565,34 +633,41 @@ pub fn copy_and_replace_cstring_placeholder(
     let old_prefix = prefix_placeholder.as_bytes();
     let new_prefix = target_prefix.as_bytes();
 
-    // Compute the padding required when replacing the old prefix with the new one. If the old
-    // prefix is longer than the new one we need to add padding to ensure that the entire part
-    // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
-    // ensures that the text will remain a valid nul-terminated string.
-    let padding = vec![b'\0'; old_prefix.len().saturating_sub(new_prefix.len())];
-
     loop {
         if let Some(index) = memchr::memmem::find(source_bytes, old_prefix) {
+            // write all bytes up to the old prefix, followed by the new prefix.
+            destination.write_all(&source_bytes[..index])?;
+
             // Find the end of the c-style string. The nul terminator basically.
             let mut end = index + old_prefix.len();
             while end < source_bytes.len() && source_bytes[end] != b'\0' {
                 end += 1;
             }
 
-            // Determine the total length of the c-string.
-            let len = end - index;
+            let mut out = Vec::new();
+            let mut old_bytes = &source_bytes[index..end];
+            let old_len = old_bytes.len();
 
-            // Get the suffix part (this is the text after the prefix by up until the nul
-            // terminator). E.g. in `old-prefix/some/path\0` the suffix would be `/some/path`.
-            let suffix = &source_bytes[index + old_prefix.len()..end];
+            // replace all occurrences of the old prefix with the new prefix
+            while let Some(index) = memchr::memmem::find(old_bytes, old_prefix) {
+                out.write_all(&old_bytes[..index])?;
+                out.write_all(new_prefix)?;
+                old_bytes = &old_bytes[index + old_prefix.len()..];
+            }
+            out.write_all(old_bytes)?;
+            // write everything up to the old length
+            if out.len() > old_len {
+                destination.write_all(&out[..old_len])?;
+            } else {
+                destination.write_all(&out)?;
+            }
 
-            // Write all bytes up to the old prefix, then the new prefix followed by suffix and
-            // padding.
-            destination.write_all(&source_bytes[..index])?;
-            destination.write_all(&new_prefix[..len.min(new_prefix.len())])?;
-            destination
-                .write_all(&suffix[..len.saturating_sub(new_prefix.len()).min(suffix.len())])?;
-            destination.write_all(&padding)?;
+            // Compute the padding required when replacing the old prefix(es) with the new one. If the old
+            // prefix is longer than the new one we need to add padding to ensure that the entire part
+            // will hold the same number of bytes. We do this by adding '\0's (e.g. nul terminators). This
+            // ensures that the text will remain a valid nul-terminated string.
+            let padding = old_len.saturating_sub(out.len());
+            destination.write_all(&vec![0; padding])?;
 
             // Continue with the rest of the bytes.
             source_bytes = &source_bytes[end..];
@@ -623,6 +698,7 @@ fn has_executable_permissions(permissions: &Permissions) -> bool {
 
 #[cfg(test)]
 mod test {
+    use rattler_conda_types::Platform;
     use rstest::rstest;
     use std::io::Cursor;
 
@@ -646,6 +722,7 @@ mod test {
             &mut output,
             prefix_placeholder,
             target_prefix,
+            &Platform::Linux64,
         )
         .unwrap();
         assert_eq!(
@@ -683,5 +760,65 @@ mod test {
         )
         .unwrap();
         assert_eq!(&output.into_inner(), expected_output);
+    }
+
+    #[test]
+    fn replace_binary_path_var() {
+        let input =
+            b"beginrandomdataPATH=/placeholder/etc/share:/placeholder/bin/:\x00somemoretext";
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_cstring_placeholder(input, &mut output, "/placeholder", "/target")
+            .unwrap();
+        let out = &output.into_inner();
+        assert_eq!(out, b"beginrandomdataPATH=/target/etc/share:/target/bin/:\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00somemoretext");
+        assert_eq!(out.len(), input.len());
+    }
+
+    #[test]
+    fn test_replace_long_shebang() {
+        let short_shebang = "#!/path/to/python -x 123";
+        let replaced = super::replace_long_shebang(short_shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/path/to/python -x 123");
+
+        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/python -o test -x";
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env python -o test -x");
+
+        let replaced = super::replace_long_shebang(shebang, &Platform::Osx64);
+        assert_eq!(replaced, shebang);
+
+        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/pyt\\ hon -o test -x";
+        let replaced = super::replace_long_shebang(shebang_with_escapes, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o test -x");
+
+        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
+        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
+    }
+
+    #[test]
+    fn test_replace_long_prefix_in_text_file() {
+        let test_data_dir =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
+        let test_file = test_data_dir.join("shebang_test.txt");
+        let prefix_placeholder = "/this/is/placeholder";
+        let mut target_prefix = "/super/long/".to_string();
+        for _ in 0..15 {
+            target_prefix.push_str("verylongstring/");
+        }
+        let input = std::fs::read(test_file).unwrap();
+        let mut output = Cursor::new(Vec::new());
+        super::copy_and_replace_textual_placeholder(
+            &input,
+            &mut output,
+            prefix_placeholder,
+            &target_prefix,
+            &Platform::Linux64,
+        )
+        .unwrap();
+
+        let output = output.into_inner();
+        let replaced = String::from_utf8_lossy(&output);
+        insta::assert_snapshot!(replaced);
     }
 }

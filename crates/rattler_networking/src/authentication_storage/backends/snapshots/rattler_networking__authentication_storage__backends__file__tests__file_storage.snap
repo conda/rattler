@@ -1,0 +1,5 @@
+---
+source: crates/rattler_networking/src/authentication_storage/backends/file.rs
+expression: "fs::read_to_string(&path).unwrap()"
+---
+{"basic":{"BasicHTTP":{"username":"user","password":"password"}},"bearer":{"BearerToken":"password"},"test":{"CondaToken":"password"}}

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_package_streaming"
-version.workspace = true
+version = "0.21.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Extract and stream of Conda package archives"
@@ -14,11 +14,10 @@ readme.workspace = true
 bzip2 = { workspace = true }
 chrono = { workspace = true }
 futures-util = { workspace = true }
-itertools = { workspace = true }
 num_cpus = { workspace = true }
-rattler_conda_types = { workspace = true }
-rattler_digest = { workspace = true }
-rattler_networking = { workspace = true }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.25.1", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "0.19.4", default-features = false }
+rattler_networking = { path="../rattler_networking", version = "0.20.8", default-features = false }
 reqwest = { workspace = true, features = ["stream"], optional = true }
 reqwest-middleware = { workspace = true, optional = true }
 serde_json = { workspace = true }
@@ -39,8 +38,9 @@ wasm = ["zstd/wasm"]
 reqwest = ["dep:reqwest-middleware", "dep:reqwest"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros"] }
+assert_matches = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
+tools = { path = "../tools" }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }
-tools = { path = "../tools" }

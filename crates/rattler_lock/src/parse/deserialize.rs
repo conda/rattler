@@ -1,11 +1,13 @@
+use crate::file_format_version::FileFormatVersion;
 use crate::utils::serde::RawCondaPackageData;
 use crate::{
     Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    ParseCondaLockError, PypiPackageData, PypiPackageEnvironmentData,
+    ParseCondaLockError, PypiIndexes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
 };
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use itertools::{Either, Itertools};
+use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use serde::Deserialize;
 use serde_yaml::Value;
@@ -22,6 +24,8 @@ struct DeserializableLockFile<'d> {
 #[derive(Deserialize)]
 struct DeserializableEnvironment {
     channels: Vec<Channel>,
+    #[serde(flatten)]
+    indexes: Option<PypiIndexes>,
     packages: BTreeMap<Platform, Vec<DeserializablePackageSelector>>,
 }
 
@@ -39,7 +43,7 @@ enum DeserializablePackageSelector {
         conda: Url,
     },
     Pypi {
-        pypi: Url,
+        pypi: UrlOrPath,
         #[serde(flatten)]
         runtime: DeserializablePypiPackageEnvironmentData,
     },
@@ -48,7 +52,7 @@ enum DeserializablePackageSelector {
 #[derive(Hash, Deserialize, Eq, PartialEq)]
 struct DeserializablePypiPackageEnvironmentData {
     #[serde(default)]
-    extras: BTreeSet<String>,
+    extras: BTreeSet<ExtraName>,
 }
 
 impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentData {
@@ -60,7 +64,10 @@ impl From<DeserializablePypiPackageEnvironmentData> for PypiPackageEnvironmentDa
 }
 
 /// Parses a [`LockFile`] from a [`serde_yaml::Value`].
-pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockError> {
+pub fn parse_from_document(
+    document: Value,
+    version: FileFormatVersion,
+) -> Result<LockFile, ParseCondaLockError> {
     let raw: DeserializableLockFile<'_> =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
@@ -80,7 +87,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
     let pypi_url_lookup = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.url, idx))
+        .map(|(idx, p)| (&p.url_or_path, idx))
         .collect::<FxHashMap<_, _>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
@@ -92,6 +99,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                 name.clone(),
                 EnvironmentData {
                     channels: env.channels,
+                    indexes: env.indexes,
                     packages: env
                         .packages
                         .into_iter()
@@ -106,7 +114,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
                                                     ParseCondaLockError::MissingPackage(
                                                         name.clone(),
                                                         platform,
-                                                        conda,
+                                                        UrlOrPath::Url(conda),
                                                     )
                                                 })?,
                                             )
@@ -143,6 +151,7 @@ pub fn parse_from_document(document: Value) -> Result<LockFile, ParseCondaLockEr
 
     Ok(LockFile {
         inner: Arc::new(LockFileInner {
+            version,
             environments,
             environment_lookup,
             conda_packages,

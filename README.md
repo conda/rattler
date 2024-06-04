@@ -11,6 +11,7 @@
 ![License][license-badge]
 [![Build Status][build-badge]][build]
 [![Project Chat][chat-badge]][chat-url]
+[![Pixi Badge][pixi-badge]][pixi-url]
 [![docs main][docs-main-badge]][docs-main]
 [![python docs main][py-docs-main-badge]][py-docs-main]
 
@@ -23,6 +24,8 @@
 [docs-main]: https://mamba-org.github.io/rattler
 [py-docs-main-badge]: https://img.shields.io/badge/python_docs-main-yellow.svg?style=flat-square
 [py-docs-main]: https://mamba-org.github.io/rattler/py-rattler
+[pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json
+[pixi-url]: https://pixi.sh
 
 Rattler is a library that provides common functionality used within the conda ecosystem ([what is conda & conda-forge?](#what-is-conda--conda-forge)).
 The goal of the library is to enable programs and other libraries to easily interact with the conda ecosystem without being dependent on Python.
@@ -31,7 +34,7 @@ Its primary use case is as a library that you can use to provide conda related w
 Rattler is written in Rust and tries to provide a clean API to its functionalities (see: [Components](#components)). 
 With the primary goal in mind we aim to provide bindings to different languages to make it easy to integrate Rattler in non-rust projects.
 
-Rattler is actively used within the https://prefix.dev backend.
+Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler-build](https://github.com/prefix-dev/rattler-build), and the https://prefix.dev backend.
 
 ## Showcase
 
@@ -44,7 +47,7 @@ This is an example of installing an environment containing `cowpy` and all its d
 
 Before you begin, make sure you have the following prerequisites:
 - A recent version of [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
-- A recent version of [micromamba](https://github.com/mamba-org/micromamba-releases)
+- A recent version of [pixi](https://github.com/prefix-dev/pixi)
 
 Follow these steps to clone, compile, and run the rattler project:
 ```shell
@@ -52,12 +55,8 @@ Follow these steps to clone, compile, and run the rattler project:
 git clone --recursive https://github.com/mamba-org/rattler.git
 cd rattler
 
-# Set up an environment with the required dependencies for compiling rattler and libsolv:
-micromamba create -f environment.yml
-micromamba activate rattler-env
-
 # Compile and execute rattler to create a JupyterLab instance:
-cargo run --release --bin rattler create jupyterlab
+pixi run rattler create jupyterlab
 ```
 
 The above command will execute the `rattler` executable in release mode.
@@ -95,10 +94,17 @@ Rattler consists of several crates that provide different functionalities.
 * **rattler_shell**: code to activate an existing environment and run programs in it.
 * **rattler_solve**: a backend agnostic library to solve the package satisfiability problem.
 * **rattler_virtual_packages**: a crate to detect system capabilities.
+* **rattler_index**: create local conda channels from local packages.
 * **rattler**: functionality to create complete environments from scratch using the crates above.
+* **rattler-lock**: a library to create and parse lockfiles for conda environments.
+* **rattler-networking**: common functionality for networking, like authentication, mirroring and more.
 * **rattler-bin**: an example of a package manager using all the crates above (see: [showcase](#showcase))
 
 You can find these crates in the `crates` folder.
+
+Additionally, we provide Python bindings for most of the functionalities provided by the above crates.
+A python package `py-rattler` is available on [conda-forge](https://prefix.dev/channels/conda-forge/packages/py-rattler) and [PyPI](https://pypi.org/project/py-rattler/).
+Documatation for the python bindings can be found [here](https://mamba-org.github.io/rattler/py-rattler).
 
 ## What is conda & conda-forge?
 

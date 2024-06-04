@@ -8,6 +8,7 @@ mod channel_data;
 mod explicit_environment_spec;
 mod match_spec;
 mod no_arch_type;
+mod parse_mode;
 mod platform;
 mod repo_data;
 mod repo_data_record;
@@ -22,7 +23,7 @@ mod package_name;
 pub mod prefix_record;
 
 pub use build_spec::{BuildNumber, BuildNumberSpec, ParseBuildNumberSpecError};
-pub use channel::{Channel, ChannelConfig, ParseChannelError};
+pub use channel::{Channel, ChannelConfig, NamedChannelOrUrl, ParseChannelError};
 pub use channel_data::{ChannelData, ChannelDataPackage};
 pub use explicit_environment_spec::{
     ExplicitEnvironmentEntry, ExplicitEnvironmentSpec, PackageArchiveHash,
@@ -34,9 +35,11 @@ pub use match_spec::parse::ParseMatchSpecError;
 pub use match_spec::{MatchSpec, NamelessMatchSpec};
 pub use no_arch_type::{NoArchKind, NoArchType};
 pub use package_name::{InvalidPackageNameError, PackageName};
+pub use parse_mode::ParseStrictness;
 pub use platform::{Arch, ParseArchError, ParsePlatformError, Platform};
 pub use prefix_record::PrefixRecord;
 pub use repo_data::patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch};
+pub use repo_data::sharded::{Shard, ShardedRepodata, ShardedSubdirInfo};
 pub use repo_data::{
     compute_package_url, ChannelInfo, ConvertSubdirError, PackageRecord, RepoData,
 };
@@ -44,7 +47,7 @@ pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
 pub use version::{
     Component, ParseVersionError, ParseVersionErrorKind, StrictVersion, Version, VersionBumpError,
-    VersionBumpType, VersionWithSource,
+    VersionBumpType, VersionExtendError, VersionWithSource,
 };
 pub use version_spec::VersionSpec;
 

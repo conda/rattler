@@ -275,10 +275,10 @@ impl From<MatchSpecId> for Id {
 
 #[cfg(test)]
 mod test {
-    use std::{ffi::CString, str::FromStr};
+    use std::ffi::CString;
 
     use super::super::pool::Pool;
-    use rattler_conda_types::MatchSpec;
+    use rattler_conda_types::{MatchSpec, ParseStrictness};
 
     #[test]
     fn test_pool_string_interning() {
@@ -319,7 +319,7 @@ mod test {
     #[test]
     fn test_matchspec_interning() {
         // Create a matchspec
-        let spec = MatchSpec::from_str("foo=1.0=py27_0").unwrap();
+        let spec = MatchSpec::from_str("foo=1.0=py27_0", ParseStrictness::Lenient).unwrap();
         // Intern it into the pool
         let pool = Pool::default();
         pool.intern_matchspec(&spec);

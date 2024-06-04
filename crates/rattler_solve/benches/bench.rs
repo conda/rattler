@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
+use rattler_conda_types::ParseStrictness::Strict;
 use rattler_conda_types::{Channel, ChannelConfig, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{SolverImpl, SolverTask};
-use std::str::FromStr;
 
 fn conda_json_path() -> String {
     format!(
@@ -22,7 +22,11 @@ fn conda_json_path_noarch() -> String {
 
 fn read_sparse_repodata(path: &str) -> SparseRepoData {
     SparseRepoData::new(
-        Channel::from_str("dummy", &ChannelConfig::default()).unwrap(),
+        Channel::from_str(
+            "dummy",
+            &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
+        )
+        .unwrap(),
         "dummy".to_string(),
         path,
         None,
@@ -39,7 +43,7 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
 
     let specs = specs
         .iter()
-        .map(|s| MatchSpec::from_str(s).unwrap())
+        .map(|s| MatchSpec::from_str(s, Strict).unwrap())
         .collect::<Vec<MatchSpec>>();
 
     let json_file = conda_json_path();
@@ -59,12 +63,8 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         b.iter(|| {
             rattler_solve::libsolv_c::Solver
                 .solve(black_box(SolverTask {
-                    available_packages: &available_packages,
-                    locked_packages: vec![],
-                    pinned_packages: vec![],
-                    virtual_packages: vec![],
                     specs: specs.clone(),
-                    timeout: None,
+                    ..SolverTask::from_iter(&available_packages)
                 }))
                 .unwrap()
         });
@@ -75,12 +75,8 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
         b.iter(|| {
             rattler_solve::resolvo::Solver
                 .solve(black_box(SolverTask {
-                    available_packages: &available_packages,
-                    locked_packages: vec![],
-                    pinned_packages: vec![],
-                    virtual_packages: vec![],
                     specs: specs.clone(),
-                    timeout: None,
+                    ..SolverTask::from_iter(&available_packages)
                 }))
                 .unwrap()
         });

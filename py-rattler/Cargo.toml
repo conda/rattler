@@ -1,8 +1,9 @@
 [package]
 name = "py-rattler"
-version = "0.2.1"
+version = "0.6.2"
 edition = "2021"
 license = "BSD-3-Clause"
+publish = false
 
 [lib]
 name = "rattler"
@@ -10,23 +11,19 @@ crate-type = ["cdylib"]
 
 [features]
 default = ["native-tls"]
-native-tls = [
-    "rattler_networking/native-tls",
-    "rattler_repodata_gateway/native-tls",
-]
-rustls-tls = [
-    "rattler_networking/rustls-tls",
-    "rattler_repodata_gateway/rustls-tls",
-]
+native-tls = ["rattler_networking/native-tls", "rattler_repodata_gateway/native-tls"]
+rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-tls"]
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
-anyhow = "1.0.75"
-futures = "0.3.28"
+anyhow = "1.0.82"
+chrono = { version = "0.4" }
+futures = "0.3.30"
 
-rattler = { path = "../crates/rattler", default-features = false }
+rattler = { path = "../crates/rattler", default-features = false, features = ["indicatif"] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
     "sparse",
+    "gateway",
 ] }
 rattler_conda_types = { path = "../crates/rattler_conda_types", default-features = false }
 rattler_digest = { path = "../crates/rattler_digest" }
@@ -37,25 +34,28 @@ rattler_solve = { path = "../crates/rattler_solve", default-features = false, fe
     "resolvo",
 ] }
 rattler_index = { path = "../crates/rattler_index" }
-
-pyo3 = { version = "0.19", features = [
+rattler_lock = { path = "../crates/rattler_lock", default-features = false }
+rattler_package_streaming = { path = "../crates/rattler_package_streaming", default-features = false }
+pyo3 = { version = "0.20", features = [
     "abi3-py38",
     "extension-module",
     "multiple-pymethods",
+    "chrono"
 ] }
-pyo3-asyncio = { version = "0.19", features = ["tokio-runtime"] }
-tokio = { version = "1.32" }
+pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
+tokio = { version = "1.37" }
 
-reqwest = { version = "0.11.22", default-features = false }
-reqwest-middleware = "0.2.4"
+reqwest = { version = "0.12.3", default-features = false }
+reqwest-middleware = "0.3.0"
 
-thiserror = "1.0.44"
-url = "2.4.1"
+thiserror = "1.0.61"
+url = "2.5.0"
 
 openssl = { version = "0.10", optional = true }
+pep508_rs = "0.6.0"
 
 [build-dependencies]
-pyo3-build-config = "0.20"
+pyo3-build-config = "0.21"
 
 
 [patch.crates-io]

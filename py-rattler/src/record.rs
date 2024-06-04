@@ -11,8 +11,8 @@ use rattler_conda_types::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
 use crate::{
-    error::PyRattlerError, package_name::PyPackageName, prefix_paths::PyPrefixPaths,
-    version::PyVersion,
+    error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
+    prefix_paths::PyPrefixPaths, version::PyVersion,
 };
 
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
@@ -198,12 +198,18 @@ impl PyRecord {
         self.as_package_record().subdir.clone()
     }
 
+    /// The noarch type this package implements, if any.
+    #[getter]
+    pub fn noarch(&self) -> PyNoArchType {
+        self.as_package_record().noarch.into()
+    }
+
     /// The date this entry was created.
     #[getter]
     pub fn timestamp(&self) -> Option<i64> {
         self.as_package_record()
             .timestamp
-            .map(|time| time.timestamp())
+            .map(|time| time.timestamp_millis())
     }
 
     /// Track features are nowadays only used to downweight packages
@@ -217,12 +223,12 @@ impl PyRecord {
 
     /// The version of the package.
     #[getter]
-    pub fn version(&self) -> PyVersion {
-        self.as_package_record()
-            .version
-            .clone()
-            .into_version()
-            .into()
+    pub fn version(&self) -> (PyVersion, String) {
+        let version = &self.as_package_record().version;
+        (
+            version.version().clone().into(),
+            version.as_str().into_owned(),
+        )
     }
 
     /// The filename of the package.

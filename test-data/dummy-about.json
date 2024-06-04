@@ -1,0 +1,12 @@
+{
+  "channels": [
+    "https://conda.anaconda.org/conda-forge"
+  ],
+  "description": "A dummy description.",
+  "dev_url": "https://github.com/mamba-org/rattler",
+  "doc_url": "https://mamba-org.github.io/rattler/py-rattler/",
+  "home": "http://github.com/mamba-org/rattler",
+  "license": "BSD-3-Clause",
+  "source_url": "https://github.com/mamba-org/rattler",
+  "summary": "A dummy summary."
+}

@@ -53,7 +53,8 @@ impl PyArch {
 ///////////////////////////
 
 #[pyclass]
-#[derive(Clone)]
+#[repr(transparent)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct PyPlatform {
     pub inner: Platform,
 }

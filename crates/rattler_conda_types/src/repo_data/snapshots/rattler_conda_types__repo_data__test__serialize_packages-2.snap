@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 460
+assertion_line: 470
 expression: json
 ---
 {
@@ -25,8 +25,8 @@ expression: json
       "timestamp": 1605110689658,
       "version": "1.2.3"
     },
-    "baz-1.0-unix_py36h1af98f8_2\u0000.tar.bz2": {
-      "build": "unix_py36h1af98f8_2\u0000",
+    "baz-1.0-unix_py36h1af98f8_2.tar.bz2": {
+      "build": "unix_py36h1af98f8_2",
       "build_number": 1,
       "depends": [
         "__unix"
@@ -41,8 +41,8 @@ expression: json
       "timestamp": 1605110689658,
       "version": "1.2.3"
     },
-    "baz-2.0-unix_py36h1af98f8_2\u0000.tar.bz2": {
-      "build": "unix_py36h1af98f8_2\u0000",
+    "baz-2.0-unix_py36h1af98f8_2.tar.bz2": {
+      "build": "unix_py36h1af98f8_2",
       "build_number": 1,
       "depends": [],
       "license": "MIT",
@@ -52,7 +52,7 @@ expression: json
       "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "2.0"
     },
     "bors-1.0-bla_1.tar.bz2": {
@@ -108,7 +108,7 @@ expression: json
       "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "2.0"
     },
     "bors-2.1-bla_1.tar.bz2": {
@@ -122,7 +122,7 @@ expression: json
       "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "2.1"
     },
     "foo-3.0.2-py36h1af98f8_1.conda": {
@@ -136,7 +136,7 @@ expression: json
       "sha256": "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "3.0.2"
     },
     "foo-3.0.2-py36h1af98f8_1.tar.bz2": {
@@ -153,6 +153,20 @@ expression: json
       "timestamp": 1605110689658,
       "version": "3.0.2"
     },
+    "foo-3.0.2-py36h1af98f8_2.conda": {
+      "build": "py36h1af98f8_2",
+      "build_number": 2,
+      "depends": [],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "fb731d9290f0bcbf3a054665f33ec94f",
+      "name": "foo",
+      "sha256": "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1715610974,
+      "version": "3.0.2"
+    },
     "foo-4.0.2-py36h1af98f8_2.tar.bz2": {
       "build": "py36h1af98f8_2",
       "build_number": 1,
@@ -164,7 +178,7 @@ expression: json
       "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "4.0.2"
     },
     "foobar-2.0-bla_1.tar.bz2": {
@@ -196,7 +210,7 @@ expression: json
       "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
       "size": 414494,
       "subdir": "linux-64",
-      "timestamp": 1605110689658,
+      "timestamp": 1715610974,
       "version": "2.1"
     }
   },

@@ -1,32 +1,36 @@
 //! Provides an solver implementation based on the [`resolvo`] crate.
 
-use crate::{IntoRepoData, SolveError, SolverRepoData, SolverTask};
-use rattler_conda_types::package::ArchiveType;
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    fmt::{Display, Formatter},
+    marker::PhantomData,
+    ops::Deref,
+    rc::Rc,
+};
+
+use chrono::{DateTime, Utc};
+use itertools::Itertools;
 use rattler_conda_types::{
-    GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageRecord, ParseMatchSpecError,
-    RepoDataRecord,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageName,
+    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
     SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
     VersionSetId,
 };
-use std::{
-    cell::RefCell,
-    cmp::Ordering,
-    collections::HashMap,
-    fmt::{Display, Formatter},
-    marker::PhantomData,
-    ops::Deref,
-    str::FromStr,
-};
 
-use itertools::Itertools;
+use crate::{
+    resolvo::conda_util::CompareStrategy, ChannelPriority, IntoRepoData, SolveError, SolveStrategy,
+    SolverRepoData, SolverTask,
+};
 
 mod conda_util;
 
-/// Represents the information required to load available packages into libsolv for a single channel
-/// and platform combination
+/// Represents the information required to load available packages into libsolv
+/// for a single channel and platform combination
 #[derive(Clone)]
 pub struct RepoData<'a> {
     /// The actual records after parsing `repodata.json`
@@ -55,7 +59,7 @@ impl<'a> From<NamelessMatchSpec> for SolverMatchSpec<'a> {
     fn from(value: NamelessMatchSpec) -> Self {
         Self {
             inner: value,
-            _marker: PhantomData::default(),
+            _marker: PhantomData,
         }
     }
 }
@@ -104,13 +108,36 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
-#[derive(Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Eq, PartialEq)]
 enum SolverPackageRecord<'a> {
     Record(&'a RepoDataRecord),
     VirtualPackage(&'a GenericVirtualPackage),
 }
 
+impl<'a> PartialOrd<Self> for SolverPackageRecord<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for SolverPackageRecord<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name()
+            .cmp(other.name())
+            .then_with(|| self.version().cmp(other.version()))
+            .then_with(|| self.build_number().cmp(&other.build_number()))
+            .then_with(|| self.timestamp().cmp(&other.timestamp()))
+    }
+}
+
 impl<'a> SolverPackageRecord<'a> {
+    fn name(&self) -> &PackageName {
+        match self {
+            SolverPackageRecord::Record(rec) => &rec.package_record.name,
+            SolverPackageRecord::VirtualPackage(rec) => &rec.name,
+        }
+    }
+
     fn version(&self) -> &rattler_conda_types::Version {
         match self {
             SolverPackageRecord::Record(rec) => rec.package_record.version.version(),
@@ -157,7 +184,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
 /// Dependency provider for conda
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider<'a> {
-    pool: Pool<SolverMatchSpec<'a>, String>,
+    pool: Rc<Pool<SolverMatchSpec<'a>, String>>,
 
     records: HashMap<NameId, Candidates>,
 
@@ -167,9 +194,14 @@ pub(crate) struct CondaDependencyProvider<'a> {
     parse_match_spec_cache: RefCell<HashMap<&'a str, VersionSetId>>,
 
     stop_time: Option<std::time::SystemTime>,
+
+    strategy: SolveStrategy,
+
+    direct_dependencies: HashSet<NameId>,
 }
 
 impl<'a> CondaDependencyProvider<'a> {
+    #[allow(clippy::too_many_arguments)]
     pub fn from_solver_task(
         repodata: impl IntoIterator<Item = RepoData<'a>>,
         favored_records: &'a [RepoDataRecord],
@@ -177,8 +209,11 @@ impl<'a> CondaDependencyProvider<'a> {
         virtual_packages: &'a [GenericVirtualPackage],
         match_specs: &[MatchSpec],
         stop_time: Option<std::time::SystemTime>,
-    ) -> Self {
-        let pool = Pool::default();
+        channel_priority: ChannelPriority,
+        exclude_newer: Option<DateTime<Utc>>,
+        strategy: SolveStrategy,
+    ) -> Result<Self, SolveError> {
+        let pool = Rc::new(Pool::default());
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
         // Add virtual packages to the records
@@ -188,6 +223,13 @@ impl<'a> CondaDependencyProvider<'a> {
                 pool.intern_solvable(name, SolverPackageRecord::VirtualPackage(virtual_package));
             records.entry(name).or_default().candidates.push(solvable);
         }
+
+        // Compute the direct dependencies
+        let direct_dependencies = match_specs
+            .iter()
+            .filter_map(|spec| spec.name.as_ref())
+            .map(|name| pool.intern_package_name(name.as_normalized()))
+            .collect();
 
         // TODO: Normalize these channel names to urls so we can compare them correctly.
         let channel_specific_specs = match_specs
@@ -200,47 +242,70 @@ impl<'a> CondaDependencyProvider<'a> {
 
         // Add additional records
         for repo_datas in repodata {
-            // Iterate over all records and dedup records that refer to the same package data but with
-            // different archive types. This can happen if you have two variants of the same package but
-            // with different extensions. We prefer `.conda` packages over `.tar.bz`.
+            // Iterate over all records and dedup records that refer to the same package
+            // data but with different archive types. This can happen if you
+            // have two variants of the same package but with different
+            // extensions. We prefer `.conda` packages over `.tar.bz`.
             //
-            // Its important to insert the records in the same same order as how they were presented to this
-            // function to ensure that each solve is deterministic. Iterating over HashMaps is not
-            // deterministic at runtime so instead we store the values in a Vec as we iterate over the
-            // records. This guarentees that the order of records remains the same over runs.
+            // Its important to insert the records in the same order as how they were
+            // presented to this function to ensure that each solve is
+            // deterministic. Iterating over HashMaps is not deterministic at
+            // runtime so instead we store the values in a Vec as we iterate over the
+            // records. This guarentees that the order of records remains the same over
+            // runs.
             let mut ordered_repodata = Vec::with_capacity(repo_datas.records.len());
-            let mut package_to_type: HashMap<&str, (ArchiveType, usize)> =
+            let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
                 HashMap::with_capacity(repo_datas.records.len());
 
             for record in repo_datas.records {
+                // Determine if this record will be excluded.
+                let excluded = matches!((&exclude_newer, &record.package_record.timestamp),
+                    (Some(exclude_newer), Some(record_timestamp))
+                        if record_timestamp > exclude_newer);
+
                 let (file_name, archive_type) = ArchiveType::split_str(&record.file_name)
                     .unwrap_or((&record.file_name, ArchiveType::TarBz2));
                 match package_to_type.get_mut(file_name) {
                     None => {
                         let idx = ordered_repodata.len();
                         ordered_repodata.push(record);
-                        package_to_type.insert(file_name, (archive_type, idx));
+                        package_to_type.insert(file_name, (archive_type, idx, excluded));
                     }
-                    Some((prev_archive_type, idx)) => match archive_type.cmp(prev_archive_type) {
-                        Ordering::Greater => {
-                            // A previous package has a worse package "type", we'll use the current record
-                            // instead.
+                    Some((prev_archive_type, idx, previous_excluded)) => {
+                        if *previous_excluded && !excluded {
+                            // The previous package would have been excluded by the solver. If the
+                            // current record won't be excluded we should always use that.
                             *prev_archive_type = archive_type;
                             ordered_repodata[*idx] = record;
-                        }
-                        Ordering::Less => {
-                            // A previous package that we already stored is actually a package of a better
-                            // "type" so we'll just use that instead (.conda > .tar.bz)
-                        }
-                        Ordering::Equal => {
-                            if record != ordered_repodata[*idx] {
-                                unreachable!(
-                                    "found duplicate record with different values for {}",
-                                    &record.file_name
-                                );
+                            *previous_excluded = false;
+                        } else if excluded && !*previous_excluded {
+                            // The previous package would not have been excluded
+                            // by the solver but
+                            // this one will, so we'll keep the previous one
+                            // regardless of the type.
+                        } else {
+                            match archive_type.cmp(prev_archive_type) {
+                                Ordering::Greater => {
+                                    // A previous package has a worse package "type", we'll use the
+                                    // current record instead.
+                                    *prev_archive_type = archive_type;
+                                    ordered_repodata[*idx] = record;
+                                    *previous_excluded = excluded;
+                                }
+                                Ordering::Less => {
+                                    // A previous package that we already stored
+                                    // is actually a package of a better
+                                    // "type" so we'll just use that instead
+                                    // (.conda > .tar.bz)
+                                }
+                                Ordering::Equal => {
+                                    return Err(SolveError::DuplicateRecords(
+                                        record.file_name.clone(),
+                                    ));
+                                }
                             }
                         }
-                    },
+                    }
                 }
             }
 
@@ -251,6 +316,19 @@ impl<'a> CondaDependencyProvider<'a> {
                     pool.intern_solvable(package_name, SolverPackageRecord::Record(record));
                 let candidates = records.entry(package_name).or_default();
                 candidates.candidates.push(solvable_id);
+
+                // Filter out any records that are newer than a specific date.
+                match (&exclude_newer, &record.package_record.timestamp) {
+                    (Some(exclude_newer), Some(record_timestamp))
+                        if record_timestamp > exclude_newer =>
+                    {
+                        let reason = pool.intern_string(format!(
+                            "the package is uploaded after the cutoff date of {exclude_newer}"
+                        ));
+                        candidates.excluded.push((solvable_id, reason));
+                    }
+                    _ => {}
+                }
 
                 // Add to excluded when package is not in the specified channel.
                 if !channel_specific_specs.is_empty() {
@@ -265,7 +343,8 @@ impl<'a> CondaDependencyProvider<'a> {
                         if let Some(spec_channel) = &spec.channel {
                             if record.channel != spec_channel.base_url.to_string() {
                                 tracing::debug!("Ignoring {} from {} because it was not requested from that channel.", &record.package_record.name.as_normalized(), &record.channel);
-                                // Add record to the excluded with reason of being in the non requested channel.
+                                // Add record to the excluded with reason of being in the non
+                                // requested channel.
                                 let message = format!(
                                     "candidate not in requested channel: '{}'",
                                     spec_channel
@@ -283,10 +362,13 @@ impl<'a> CondaDependencyProvider<'a> {
                 }
 
                 // Enforce channel priority
-                // This functions makes the assumtion that the records are given in order of the channels.
-                if let Some(first_channel) = package_name_found_in_channel
-                    .get(&record.package_record.name.as_normalized().to_string())
-                {
+                // This function makes the assumption that the records are given in order of the
+                // channels.
+                if let (Some(first_channel), ChannelPriority::Strict) = (
+                    package_name_found_in_channel
+                        .get(&record.package_record.name.as_normalized().to_string()),
+                    channel_priority,
+                ) {
                     // Add the record to the excluded list when it is from a different channel.
                     if first_channel != &&record.channel {
                         tracing::debug!(
@@ -331,13 +413,15 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.locked = Some(solvable);
         }
 
-        Self {
+        Ok(Self {
             pool,
             records,
             matchspec_to_highest_version: RefCell::default(),
             parse_match_spec_cache: RefCell::default(),
             stop_time,
-        }
+            strategy,
+            direct_dependencies,
+        })
     }
 }
 
@@ -348,26 +432,46 @@ pub enum CancelReason {
 }
 
 impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a> {
-    fn pool(&self) -> &Pool<SolverMatchSpec<'a>, String> {
-        &self.pool
+    fn pool(&self) -> Rc<Pool<SolverMatchSpec<'a>, String>> {
+        self.pool.clone()
     }
 
-    fn sort_candidates(
+    async fn sort_candidates(
         &self,
         solver: &SolverCache<SolverMatchSpec<'a>, String, Self>,
         solvables: &mut [SolvableId],
     ) {
+        if solvables.is_empty() {
+            // Short circuit if there are no solvables to sort
+            return;
+        }
+
         let mut highest_version_spec = self.matchspec_to_highest_version.borrow_mut();
+
+        let strategy = match self.strategy {
+            SolveStrategy::Highest => CompareStrategy::Default,
+            SolveStrategy::LowestVersion => CompareStrategy::LowestVersion,
+            SolveStrategy::LowestVersionDirect => {
+                if self
+                    .direct_dependencies
+                    .contains(&self.pool.resolve_solvable(solvables[0]).name_id())
+                {
+                    CompareStrategy::LowestVersion
+                } else {
+                    CompareStrategy::Default
+                }
+            }
+        };
         solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec)
+            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy)
         });
     }
 
-    fn get_candidates(&self, name: NameId) -> Option<Candidates> {
+    async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
         self.records.get(&name).cloned()
     }
 
-    fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
+    async fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
         let mut dependencies = KnownDependencies::default();
         let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
             return Dependencies::Known(dependencies);
@@ -399,7 +503,8 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
     }
 }
 
-/// Displays the different candidates by their version and sorted by their version
+/// Displays the different candidates by their version and sorted by their
+/// version
 pub struct CondaSolvableDisplay;
 
 impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
@@ -445,7 +550,11 @@ impl super::SolverImpl for Solver {
             &task.virtual_packages,
             task.specs.clone().as_ref(),
             stop_time,
-        );
+            task.channel_priority,
+            task.exclude_newer,
+            task.strategy,
+        )?;
+        let pool = provider.pool.clone();
 
         // Construct the requirements that the solver needs to satisfy.
         let root_requirements = task
@@ -459,27 +568,38 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
+        let root_constraints = task
+            .constraints
+            .iter()
+            .map(|spec| {
+                let (name, spec) = spec.clone().into_nameless();
+                let name = name.expect("cannot use matchspec without a name");
+                let name_id = provider.pool.intern_package_name(name.as_normalized());
+                provider.pool.intern_version_set(name_id, spec.into())
+            })
+            .collect();
+
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver
-            .solve(root_requirements)
-            .map_err(|unsolvable_or_cancelled| {
+        let solvables = solver.solve(root_requirements, root_constraints).map_err(
+            |unsolvable_or_cancelled| {
                 match unsolvable_or_cancelled {
                     UnsolvableOrCancelled::Unsolvable(problem) => {
                         SolveError::Unsolvable(vec![problem
-                            .display_user_friendly(&solver, &CondaSolvableDisplay)
+                            .display_user_friendly(&solver, pool, &CondaSolvableDisplay)
                             .to_string()])
                     }
                     // We are not doing this as of yet
                     // put a generic message in here for now
                     UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
                 }
-            })?;
+            },
+        )?;
 
         // Get the resulting packages from the solver.
         let required_records = solvables
             .into_iter()
-            .filter_map(|id| match *solver.pool().resolve_solvable(id).inner() {
+            .filter_map(|id| match *solver.pool.resolve_solvable(id).inner() {
                 SolverPackageRecord::Record(rec) => Some(rec.clone()),
                 SolverPackageRecord::VirtualPackage(_) => None,
             })
@@ -497,7 +617,7 @@ fn parse_match_spec<'a>(
     if let Some(spec_id) = parse_match_spec_cache.get(spec_str) {
         Ok(*spec_id)
     } else {
-        let match_spec = MatchSpec::from_str(spec_str)?;
+        let match_spec = MatchSpec::from_str(spec_str, ParseStrictness::Lenient)?;
         let (name, spec) = match_spec.into_nameless();
         let dependency_name = pool.intern_package_name(
             name.as_ref()
