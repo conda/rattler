@@ -35,6 +35,7 @@ memchr = { workspace = true }
 memmap2 = { workspace = true }
 once_cell = { workspace = true }
 parking_lot = { workspace = true }
+rattler_cache = { path = "../rattler_cache", version = "0.1.0", default-features = false }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.25.1", default-features = false }
 rattler_digest = { path = "../rattler_digest", version = "0.19.4", default-features = false }
 rattler_networking = { path = "../rattler_networking", version = "0.20.8", default-features = false }
