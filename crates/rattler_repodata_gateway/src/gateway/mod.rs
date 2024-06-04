@@ -347,7 +347,8 @@ mod test {
         GatewayError, RepoData, Reporter, SourceConfig,
     };
 
-    fn local_conda_forge() -> Channel {
+    async fn local_conda_forge() -> Channel {
+        tokio::try_join!(fetch_repo_data("noarch"), fetch_repo_data("linux-64")).unwrap();
         Channel::from_directory(
             &Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/channels/conda-forge"),
         )
@@ -367,7 +368,7 @@ mod test {
 
         let records = gateway
             .query(
-                vec![local_conda_forge()],
+                vec![local_conda_forge().await],
                 vec![Platform::Linux64, Platform::NoArch],
                 vec![PackageName::from_str("rubin-env").unwrap()].into_iter(),
             )
