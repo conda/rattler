@@ -132,7 +132,7 @@ mod test {
         std::fs::copy(package_path, &path).unwrap();
 
         let url = Url::from_file_path(path).unwrap();
-        let package_cache = PackageCache::new(PathBuf::from("/tmp"));
+        let package_cache = PackageCache::new(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         let query = DirectUrlQuery::new(url.clone(), package_cache, client);
 
