@@ -118,15 +118,15 @@ mod test {
     #[tokio::test]
     async fn test_direct_url_path_query() {
         let package_path = tools::download_and_cache_file_async(
-            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-main.tar.bz2"
+            "https://conda.anaconda.org/conda-forge/win-64/zlib-1.2.8-vc10_0.tar.bz2"
                 .parse()
                 .unwrap(),
-            "476873c6289c3b7320b3fd6c0b31da67aa557abcf5c85a0583150ad4796cc575",
+            "ee9172dbe9ebd158e8e68d6d0f7dc2060f0c8230b44d2e9a3595b7cd7336b915",
         )
         .await
         .unwrap();
 
-        let path = temp_dir().join("not_a_conda_archive_style_name.conda");
+        let path = temp_dir().join("not_a_conda_archive_style_name.tar.bz2");
 
         // copy path into fake filename into tmp
         std::fs::copy(package_path, &path).unwrap();
@@ -139,7 +139,7 @@ mod test {
         assert_eq!(query.url.clone(), url);
 
         let repodata_record = query.await.unwrap();
-        assert_eq!(repodata_record.package_record.name.as_normalized(), "andes");
-        assert_eq!(repodata_record.package_record.version.as_str(), "1.8.3");
+        assert_eq!(repodata_record.package_record.name.as_normalized(), "zlib");
+        assert_eq!(repodata_record.package_record.version.as_str(), "1.2.8");
     }
 }
