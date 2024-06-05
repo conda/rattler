@@ -89,18 +89,13 @@ impl IntoFuture for DirectUrlQuery {
 #[cfg(test)]
 mod test {
     use std::env::temp_dir;
-    use std::path::{Path, PathBuf};
-
-    /// Returns the path to the test data directory
-    fn test_data_path() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
-    }
+    use std::path::PathBuf;
+    use url::Url;
+    use super::*;
+    use rattler_cache::package_cache::PackageCache;
 
     #[tokio::test]
     async fn test_direct_url_query() {
-        use super::*;
-        use url::Url;
-
         let url = Url::parse(
             "https://conda.anaconda.org/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
         )
@@ -122,12 +117,19 @@ mod test {
 
     #[tokio::test]
     async fn test_direct_url_path_query() {
-        use super::*;
-        use url::Url;
+        let package_path = tools::download_and_cache_file_async(
+            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-main.tar.bz2"
+                .parse()
+                .unwrap(),
+            "476873c6289c3b7320b3fd6c0b31da67aa557abcf5c85a0583150ad4796cc575",
+        )
+            .await.unwrap();
+
         let path = temp_dir().join("not_a_conda_archive_style_name.conda");
+
         // copy path into fake filename into tmp
         std::fs::copy(
-            test_data_path().join("andes-1.8.3-pyhd8ed1ab_0.conda"),
+            package_path,
             &path,
         )
         .unwrap();
