@@ -86,7 +86,6 @@ impl IntoFuture for DirectUrlQuery {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use std::env::temp_dir;
