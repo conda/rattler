@@ -337,10 +337,10 @@ mod test {
     };
 
     use dashmap::DashSet;
+    use rattler_conda_types::ParseStrictness::Strict;
     use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, PackageName, Platform};
     use rstest::rstest;
     use url::Url;
-    use rattler_conda_types::ParseStrictness::Strict;
 
     use crate::{
         fetch::CacheAction,

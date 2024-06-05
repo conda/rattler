@@ -1,15 +1,15 @@
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
+use crate::gateway::direct_url_gateway::DirectUrlQuery;
 use crate::Reporter;
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
+use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, PackageName, Platform};
 use std::{
     collections::{HashMap, HashSet},
     future::IntoFuture,
     sync::Arc,
 };
-use rattler_cache::package_cache::PackageCache;
-use crate::gateway::direct_url_gateway::DirectUrlQuery;
 
 /// Represents a query to execute with a [`Gateway`].
 ///
@@ -124,15 +124,14 @@ impl GatewayQuery {
         let mut pending_package_specs = HashMap::new();
         let mut pending_direct_url_specs = vec![];
         for spec in self.specs {
-            if let Some(name) = &spec.name {
+            if spec.url.is_some() {
+                pending_direct_url_specs.push(spec);
+            } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
                     .entry(name.clone())
                     .or_insert_with(Vec::new)
                     .push(spec);
-            }
-            else if spec.url.is_some() {
-                pending_direct_url_specs.push(spec);
             }
         }
 
@@ -143,8 +142,10 @@ impl GatewayQuery {
                 // If the spec has a URL, we do not need to fetch it from the repodata.
                 let package_cache = PackageCache::new(self.gateway.cache.clone());
 
-                let query = DirectUrlQuery::new(url.clone(), package_cache, self.gateway.client.clone());
-                let record = query.execute().await?;
+                let query =
+                    DirectUrlQuery::new(url.clone(), package_cache, self.gateway.client.clone());
+
+                let record = query.await?;
 
                 // Add dependencies of record to pending_package_specs
                 if self.recursive {
@@ -153,7 +154,8 @@ impl GatewayQuery {
                             dependency.split_once(' ').unwrap_or((dependency, "")).0,
                         );
                         if seen.insert(dependency_name.clone()) {
-                            pending_package_specs.insert(dependency_name.clone(), vec![dependency_name.into()]);
+                            pending_package_specs
+                                .insert(dependency_name.clone(), vec![dependency_name.into()]);
                         }
                     }
                 }
@@ -244,6 +246,7 @@ impl GatewayQuery {
                 }
             }
         }
+        dbg!(&seen);
 
         Ok(result)
     }

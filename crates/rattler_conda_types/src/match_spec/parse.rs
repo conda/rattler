@@ -20,6 +20,7 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
+use crate::package::ArchiveIdentifier;
 use crate::utils::url::parse_scheme;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
@@ -388,8 +389,18 @@ fn matchspec_parser(
     // 2.a Is the spec an url, parse it as an url
     if parse_scheme(input).is_some() {
         let url = Url::parse(input)?;
+
+        let archive = ArchiveIdentifier::try_from_url(&url);
+        let name = archive.and_then(|a| a.try_into().ok());
+
+        // TODO: This should also work without a proper name from the url filename
+        if name.is_none() {
+            return Err(ParseMatchSpecError::MissingPackageName);
+        }
+
         return Ok(MatchSpec {
             url: Some(url),
+            name,
             ..MatchSpec::default()
         });
     }
@@ -398,8 +409,18 @@ fn matchspec_parser(
         let path = Utf8TypedPath::from(input);
         let url = file_url::file_path_to_url(path)
             .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
+
+        let archive = ArchiveIdentifier::try_from_url(&url);
+        let name = archive.and_then(|a| a.try_into().ok());
+
+        // TODO: This should also work without a proper name from the url filename
+        if name.is_none() {
+            return Err(ParseMatchSpecError::MissingPackageName);
+        }
+
         return Ok(MatchSpec {
             url: Some(url),
+            name,
             ..MatchSpec::default()
         });
     }
@@ -870,22 +891,16 @@ mod tests {
             spec.url,
             Some(Url::parse("file:/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2").unwrap())
         );
-
-        let spec = MatchSpec::from_str("C:\\Users\\user\\Downloads\\package", Strict).unwrap();
-        assert_eq!(
-            spec.url,
-            Some(Url::parse("file://C:/Users/user/Downloads/package").unwrap())
-        );
-        let spec = MatchSpec::from_str("/home/user/Downloads/package", Strict).unwrap();
-
-        assert_eq!(
-            spec.url,
-            Some(Url::parse("file:/home/user/Downloads/package").unwrap())
-        );
     }
 
     #[test]
     fn test_non_happy_url_parsing() {
+        let spec = MatchSpec::from_str("C:\\Users\\user\\Downloads\\package", Strict).unwrap_err();
+        assert_matches!(spec, ParseMatchSpecError::MissingPackageName);
+
+        let spec = MatchSpec::from_str("/home/user/Downloads/package", Strict).unwrap_err();
+        assert_matches!(spec, ParseMatchSpecError::MissingPackageName);
+
         let err = MatchSpec::from_str("http://username@", Strict).expect_err("Invalid url");
         assert_eq!(err.to_string(), "invalid package spec url");
 

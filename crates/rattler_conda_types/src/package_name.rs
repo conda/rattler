@@ -1,3 +1,4 @@
+use crate::package::ArchiveIdentifier;
 use crate::utils::serde::DeserializeFromStrUnchecked;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, DeserializeFromStr};
@@ -16,7 +17,7 @@ use thiserror::Error;
 /// This struct explicitly does not implement [`std::fmt::Display`] because its ambiguous if that
 /// would display the source or the normalized version. Simply call `as_source` or `as_normalized`
 /// to make the distinction.
-#[derive(Debug, Clone, Eq, DeserializeFromStr)]
+#[derive(Debug, Default, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
     normalized: Option<String>,
     source: String,
@@ -59,6 +60,14 @@ impl TryFrom<&String> for PackageName {
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         value.clone().try_into()
+    }
+}
+
+impl TryFrom<ArchiveIdentifier> for PackageName {
+    type Error = InvalidPackageNameError;
+
+    fn try_from(value: ArchiveIdentifier) -> Result<Self, Self::Error> {
+        value.name.try_into()
     }
 }
 

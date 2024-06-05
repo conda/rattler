@@ -22,7 +22,7 @@ use std::{
 ///
 /// It is also possible to convert directly from a [`Version`] but the [`Display`] implementation
 /// is then used to generate the string representation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct VersionWithSource {
     version: Version,
     source: Option<Box<str>>,
