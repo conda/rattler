@@ -174,11 +174,18 @@ impl GatewayQuery {
         let mut pending_records = FuturesUnordered::new();
 
         // The resulting list of repodata records + 1 for the direct_url_repodata.
-        let len = subdirs.len() + (if !direct_url_repodata.is_empty() { 1 } else { 0 });
+        let len = subdirs.len()
+            + (if !direct_url_repodata.is_empty() {
+                1
+            } else {
+                0
+            });
         let mut result = vec![RepoData::default(); len];
 
         // Add the direct_url_repodata to the result.
-        if !direct_url_repodata.is_empty() { result.push(direct_url_repodata) };
+        if !direct_url_repodata.is_empty() {
+            result.push(direct_url_repodata)
+        };
 
         // Loop until all pending package names have been fetched.
         loop {
