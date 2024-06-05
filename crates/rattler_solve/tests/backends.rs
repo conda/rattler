@@ -109,6 +109,7 @@ fn installed_package(
             legacy_bz2_md5: None,
             purls: None,
             run_exports: None,
+            direct_url: None,
         },
     }
 }
@@ -536,7 +537,7 @@ macro_rules! solver_backend_tests {
 
             let result = <$T>::default().solve(task);
             match result {
-               Err(rattler_solve::SolveError::DuplicateRecords(_)) => {},
+               Err(rattler_solve::SolveError::DuplicateRecords(_)) => {}
                 _ => panic!("expected a DuplicateRecord error"),
             }
         }
@@ -665,6 +666,11 @@ mod resolvo {
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
     };
+    use rattler_conda_types::{
+        MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
+    };
+    use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
+    use url::Url;
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
@@ -784,6 +790,89 @@ mod resolvo {
             Version::from_str("1.2.1").unwrap(),
             "expected highest compatible version of bors"
         );
+    }
+
+    /// Try to solve a package with a direct url, and then try to do it again without having it in the repodata.
+    #[test]
+    fn test_solve_on_url() {
+        let url_str =
+            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2";
+        let url = Url::parse(url_str).unwrap();
+
+        // Create a match spec for a package that is not in the repodata
+        let specs: Vec<_> = vec![MatchSpec::from_str(url_str, ParseStrictness::Lenient).unwrap()];
+
+        // Create RepoData with only the package from the url, so the solver can find it
+        let mut package_record = PackageRecord {
+            // Only defining the name, version and url is enough for the solver to find the package
+            direct_url: Some(url.clone()),
+            name: "_libgcc_mutex".parse().unwrap(),
+            version: VersionWithSource::from_str("0.1").unwrap(),
+            // No dependencies!
+            ..Default::default()
+        };
+        let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
+            package_record: package_record.clone(),
+            // Mocking the rest of the fields
+            file_name: url_str.to_string(),
+            url: url.clone(),
+            channel: "".to_string(),
+        }];
+
+        // Completely clean solver task, except for the specs and RepoData
+        let task = SolverTask {
+            locked_packages: vec![],
+            virtual_packages: vec![],
+            specs: specs.clone(),
+            constraints: vec![],
+            pinned_packages: vec![],
+            exclude_newer: None,
+            strategy: SolveStrategy::default(),
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let pkgs = rattler_solve::resolvo::Solver::default()
+            .solve(task)
+            .unwrap();
+
+        assert_eq!(pkgs.len(), 1);
+        assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
+        assert_eq!(pkgs[0].package_record.direct_url, Some(url.clone()));
+        assert_eq!(
+            pkgs[0].package_record.version,
+            Version::from_str("0.1").unwrap(),
+            "expected lowest version of _libgcc_mutex"
+        );
+
+        // -----------------------------------------------------------------------------------------
+        // Break the url in the repodata, making it not a direct url record.
+        package_record.direct_url = None;
+
+        let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
+            package_record,
+            // Mocking the rest of the fields
+            file_name: url_str.to_string(),
+            url: url.clone(),
+            channel: "".to_string(),
+        }];
+
+        // Completely clean solver task, except for the specs and RepoData
+        let task = SolverTask {
+            locked_packages: vec![],
+            virtual_packages: vec![],
+            specs,
+            constraints: vec![],
+            pinned_packages: vec![],
+            exclude_newer: None,
+            strategy: SolveStrategy::default(),
+            ..SolverTask::from_iter([&repo_data])
+        };
+
+        let solve_error = rattler_solve::resolvo::Solver::default()
+            .solve(task)
+            .unwrap_err();
+
+        assert!(matches!(solve_error, SolveError::Unsolvable(_)));
     }
 }
 

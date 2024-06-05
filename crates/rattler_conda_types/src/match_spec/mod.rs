@@ -327,6 +327,13 @@ impl NamelessMatchSpec {
             }
         }
 
+        // Match on the url, only happens with direct url dependencies
+        if let Some(url_spec) = self.url.as_ref() {
+            if Some(url_spec) != record.direct_url.as_ref() {
+                return false;
+            }
+        }
+
         true
     }
 }
