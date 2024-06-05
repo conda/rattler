@@ -88,11 +88,11 @@ impl IntoFuture for DirectUrlQuery {
 
 #[cfg(test)]
 mod test {
+    use super::*;
+    use rattler_cache::package_cache::PackageCache;
     use std::env::temp_dir;
     use std::path::PathBuf;
     use url::Url;
-    use super::*;
-    use rattler_cache::package_cache::PackageCache;
 
     #[tokio::test]
     async fn test_direct_url_query() {
@@ -123,16 +123,13 @@ mod test {
                 .unwrap(),
             "476873c6289c3b7320b3fd6c0b31da67aa557abcf5c85a0583150ad4796cc575",
         )
-            .await.unwrap();
+        .await
+        .unwrap();
 
         let path = temp_dir().join("not_a_conda_archive_style_name.conda");
 
         // copy path into fake filename into tmp
-        std::fs::copy(
-            package_path,
-            &path,
-        )
-        .unwrap();
+        std::fs::copy(package_path, &path).unwrap();
 
         let url = Url::from_file_path(path).unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
