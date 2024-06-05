@@ -163,20 +163,22 @@ impl GatewayQuery {
                 direct_url_records.push(record);
             }
         }
+        // Create a RepoData for the direct_url_records
+        let direct_url_repodata = RepoData {
+            len: direct_url_records.len(),
+            shards: vec![Arc::from(direct_url_records)],
+        };
 
         // A list of futures to fetch the records for the pending package names. The main task
         // awaits these futures.
         let mut pending_records = FuturesUnordered::new();
 
         // The resulting list of repodata records + 1 for the direct_url_repodata.
-        let mut result = vec![RepoData::default(); subdirs.len() + 1];
+        let len = subdirs.len() + (if !direct_url_repodata.is_empty() { 1 } else { 0 });
+        let mut result = vec![RepoData::default(); len];
 
         // Add the direct_url_repodata to the result.
-        let direct_url_repodata = RepoData {
-            len: direct_url_records.len(),
-            shards: vec![Arc::from(direct_url_records)],
-        };
-        result.push(direct_url_repodata);
+        if !direct_url_repodata.is_empty() { result.push(direct_url_repodata) };
 
         // Loop until all pending package names have been fetched.
         loop {
@@ -246,7 +248,6 @@ impl GatewayQuery {
                 }
             }
         }
-        dbg!(&seen);
 
         Ok(result)
     }
