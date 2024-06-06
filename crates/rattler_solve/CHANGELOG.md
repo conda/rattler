@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.2](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.24.1...rattler_solve-v0.24.2) - 2024-06-06
+
+### Added
+- serialize packages from lock file individually ([#728](https://github.com/mamba-org/rattler/pull/728))
+
 ## [0.24.1](https://github.com/baszalmstra/rattler/compare/rattler_solve-v0.24.0...rattler_solve-v0.24.1) - 2024-06-04
 
 ### Other
