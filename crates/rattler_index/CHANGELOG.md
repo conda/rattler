@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.17](https://github.com/mamba-org/rattler/compare/rattler_index-v0.19.16...rattler_index-v0.19.17) - 2024-06-06
+
+### Other
+- make package_record_from_* functions public ([#726](https://github.com/mamba-org/rattler/pull/726))
+
 ## [0.19.16](https://github.com/baszalmstra/rattler/compare/rattler_index-v0.19.15...rattler_index-v0.19.16) - 2024-06-04
 
 ### Other
