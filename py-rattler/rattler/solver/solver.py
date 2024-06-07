@@ -180,7 +180,7 @@ async def solve_with_sparse_repodata(
         RepoDataRecord._from_py_record(solved_package)
         for solved_package in await py_solve_with_sparse_repodata(
             specs=[spec._match_spec if isinstance(spec, MatchSpec) else PyMatchSpec(str(spec), True) for spec in specs],
-            repodata=[package._sparse for package in sparse_repodata],
+            sparse_repodata=[package._sparse for package in sparse_repodata],
             locked_packages=[package._record for package in locked_packages or []],
             pinned_packages=[package._record for package in pinned_packages or []],
             virtual_packages=[
