@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import pytest
 
@@ -7,7 +8,7 @@ from rattler import (
     ChannelPriority,
     RepoDataRecord,
     Channel,
-    Gateway,
+    Gateway, SparseRepoData, MatchSpec, solve_with_sparse_repodata,
 )
 
 
@@ -138,3 +139,24 @@ async def test_solve_constraints(gateway: Gateway, dummy_channel: Channel) -> No
 
     assert solved_data[0].file_name == "foobar-2.1-bla_1.tar.bz2"
     assert solved_data[1].file_name == "bors-1.0-bla_1.tar.bz2"
+
+
+@pytest.mark.asyncio
+async def test_solve_with_repodata() -> None:
+    linux64_chan = Channel("conda-forge")
+    data_dir = os.path.join(os.path.dirname(__file__), "../../../test-data/")
+    linux64_path = os.path.join(data_dir, "channels/dummy/linux-64/repodata.json")
+    linux64_data = SparseRepoData(
+        channel=linux64_chan,
+        subdir="linux-64",
+        path=linux64_path,
+    )
+
+    solved_data = await solve_with_sparse_repodata(
+        [MatchSpec("foobar")],
+        [linux64_data],
+    )
+
+    assert isinstance(solved_data, list)
+    assert isinstance(solved_data[0], RepoDataRecord)
+    assert len(solved_data) == 2
