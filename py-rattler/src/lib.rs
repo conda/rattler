@@ -63,7 +63,7 @@ use repo_data::{
 };
 use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
-use solver::py_solve;
+use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::PyVersion;
 use virtual_package::PyVirtualPackage;
 
@@ -141,6 +141,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyIndexJson>().unwrap();
 
     m.add_function(wrap_pyfunction!(py_solve, m).unwrap())
+        .unwrap();
+    m.add_function(wrap_pyfunction!(py_solve_with_sparse_repodata, m).unwrap())
         .unwrap();
     m.add_function(wrap_pyfunction!(get_rattler_version, m).unwrap())
         .unwrap();
