@@ -7,7 +7,6 @@ use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
     ops::Deref,
-    rc::Rc,
 };
 
 use chrono::{DateTime, Utc};
@@ -17,9 +16,9 @@ use rattler_conda_types::{
     PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
-    Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
-    SolvableId, Solver as LibSolvRsSolver, SolverCache, UnsolvableOrCancelled, VersionSet,
-    VersionSetId,
+    utils::{Pool, VersionSet},
+    Candidates, Dependencies, DependencyProvider, Interner, KnownDependencies, NameId, SolvableId,
+    Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled, VersionSetId,
 };
 
 use crate::{
@@ -80,31 +79,6 @@ impl<'a> Deref for SolverMatchSpec<'a> {
 
 impl<'a> VersionSet for SolverMatchSpec<'a> {
     type V = SolverPackageRecord<'a>;
-
-    fn contains(&self, v: &Self::V) -> bool {
-        match v {
-            SolverPackageRecord::Record(rec) => self.inner.matches(&rec.package_record),
-            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
-                version,
-                build_string,
-                ..
-            }) => {
-                if let Some(spec) = self.inner.version.as_ref() {
-                    if !spec.matches(version) {
-                        return false;
-                    }
-                }
-
-                if let Some(build_match) = self.inner.build.as_ref() {
-                    if !build_match.matches(build_string) {
-                        return false;
-                    }
-                }
-
-                true
-            }
-        }
-    }
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
@@ -184,7 +158,7 @@ impl<'a> Display for SolverPackageRecord<'a> {
 /// Dependency provider for conda
 #[derive(Default)]
 pub(crate) struct CondaDependencyProvider<'a> {
-    pool: Rc<Pool<SolverMatchSpec<'a>, String>>,
+    pool: Pool<SolverMatchSpec<'a>, String>,
 
     records: HashMap<NameId, Candidates>,
 
@@ -213,7 +187,7 @@ impl<'a> CondaDependencyProvider<'a> {
         exclude_newer: Option<DateTime<Utc>>,
         strategy: SolveStrategy,
     ) -> Result<Self, SolveError> {
-        let pool = Rc::new(Pool::default());
+        let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
 
         // Add virtual packages to the records
@@ -431,16 +405,49 @@ pub enum CancelReason {
     Timeout,
 }
 
-impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a> {
-    fn pool(&self) -> Rc<Pool<SolverMatchSpec<'a>, String>> {
-        self.pool.clone()
+impl<'a> Interner for CondaDependencyProvider<'a> {
+    fn display_solvable(&self, solvable: SolvableId) -> impl Display + '_ {
+        &self.pool.resolve_solvable(solvable).record
     }
 
-    async fn sort_candidates(
-        &self,
-        solver: &SolverCache<SolverMatchSpec<'a>, String, Self>,
-        solvables: &mut [SolvableId],
-    ) {
+    fn display_name(&self, name: NameId) -> impl Display + '_ {
+        self.pool.resolve_package_name(name)
+    }
+
+    fn display_version_set(&self, version_set: VersionSetId) -> impl Display + '_ {
+        self.pool.resolve_version_set(version_set)
+    }
+
+    fn display_string(&self, string_id: StringId) -> impl Display + '_ {
+        self.pool.resolve_string(string_id)
+    }
+
+    fn version_set_name(&self, version_set: VersionSetId) -> NameId {
+        self.pool.resolve_version_set_package_name(version_set)
+    }
+
+    fn solvable_name(&self, solvable: SolvableId) -> NameId {
+        self.pool.resolve_solvable(solvable).name
+    }
+
+    fn display_merged_solvables(&self, solvables: &[SolvableId]) -> impl Display + '_ {
+        if solvables.is_empty() {
+            return String::new();
+        }
+
+        let versions = solvables
+            .iter()
+            .map(|&id| self.pool.resolve_solvable(id).record.version())
+            .sorted()
+            .format(" | ");
+
+        let name = self.display_solvable_name(solvables[0]);
+        format!("{name} {versions}")
+    }
+}
+
+impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
+    async fn sort_candidates(&self, solver: &SolverCache<Self>, solvables: &mut [SolvableId]) {
         if solvables.is_empty() {
             // Short circuit if there are no solvables to sort
             return;
@@ -454,7 +461,7 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
             SolveStrategy::LowestVersionDirect => {
                 if self
                     .direct_dependencies
-                    .contains(&self.pool.resolve_solvable(solvables[0]).name_id())
+                    .contains(&self.pool.resolve_solvable(solvables[0]).name)
                 {
                     CompareStrategy::LowestVersion
                 } else {
@@ -473,7 +480,7 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
 
     async fn get_dependencies(&self, solvable: SolvableId) -> Dependencies {
         let mut dependencies = KnownDependencies::default();
-        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).inner() else {
+        let SolverPackageRecord::Record(rec) = self.pool.resolve_solvable(solvable).record else {
             return Dependencies::Known(dependencies);
         };
 
@@ -493,6 +500,47 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
         Dependencies::Known(dependencies)
     }
 
+    async fn filter_candidates(
+        &self,
+        candidates: &[SolvableId],
+        version_set: VersionSetId,
+        inverse: bool,
+    ) -> Vec<SolvableId> {
+        let spec = self.pool.resolve_version_set(version_set);
+
+        candidates
+            .into_iter()
+            .copied()
+            .filter(|c| {
+                let record = &self.pool.resolve_solvable(*c).record;
+                match record {
+                    SolverPackageRecord::Record(rec) => {
+                        spec.matches(&rec.package_record) != inverse
+                    }
+                    SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
+                        version,
+                        build_string,
+                        ..
+                    }) => {
+                        if let Some(spec) = spec.version.as_ref() {
+                            if !spec.matches(version) {
+                                return inverse;
+                            }
+                        }
+
+                        if let Some(build_match) = spec.build.as_ref() {
+                            if !build_match.matches(build_string) {
+                                return inverse;
+                            }
+                        }
+
+                        !inverse
+                    }
+                }
+            })
+            .collect()
+    }
+
     fn should_cancel_with_value(&self) -> Option<Box<dyn std::any::Any>> {
         if let Some(stop_time) = self.stop_time {
             if std::time::SystemTime::now() > stop_time {
@@ -500,25 +548,6 @@ impl<'a> DependencyProvider<SolverMatchSpec<'a>> for CondaDependencyProvider<'a>
             }
         }
         None
-    }
-}
-
-/// Displays the different candidates by their version and sorted by their
-/// version
-pub struct CondaSolvableDisplay;
-
-impl SolvableDisplay<SolverMatchSpec<'_>> for CondaSolvableDisplay {
-    fn display_candidates(
-        &self,
-        pool: &Pool<SolverMatchSpec<'_>, String>,
-        merged_candidates: &[SolvableId],
-    ) -> String {
-        merged_candidates
-            .iter()
-            .map(|&id| pool.resolve_solvable(id).inner().version())
-            .sorted()
-            .map(ToString::to_string)
-            .join(" | ")
     }
 }
 
@@ -554,7 +583,6 @@ impl super::SolverImpl for Solver {
             task.exclude_newer,
             task.strategy,
         )?;
-        let pool = provider.pool.clone();
 
         // Construct the requirements that the solver needs to satisfy.
         let root_requirements = task
@@ -586,7 +614,7 @@ impl super::SolverImpl for Solver {
                 match unsolvable_or_cancelled {
                     UnsolvableOrCancelled::Unsolvable(problem) => {
                         SolveError::Unsolvable(vec![problem
-                            .display_user_friendly(&solver, pool, &CondaSolvableDisplay)
+                            .display_user_friendly(&solver)
                             .to_string()])
                     }
                     // We are not doing this as of yet
@@ -599,10 +627,12 @@ impl super::SolverImpl for Solver {
         // Get the resulting packages from the solver.
         let required_records = solvables
             .into_iter()
-            .filter_map(|id| match *solver.pool.resolve_solvable(id).inner() {
-                SolverPackageRecord::Record(rec) => Some(rec.clone()),
-                SolverPackageRecord::VirtualPackage(_) => None,
-            })
+            .filter_map(
+                |id| match solver.provider().pool.resolve_solvable(id).record {
+                    SolverPackageRecord::Record(rec) => Some(rec.clone()),
+                    SolverPackageRecord::VirtualPackage(_) => None,
+                },
+            )
             .collect();
 
         Ok(required_records)
