@@ -1,0 +1,7 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: result.unwrap_err()
+---
+Cannot solve the request because of: The following packages are incompatible
+└─ issue_717 * cannot be installed because there are no viable options:
+   └─ issue_717 2.1 is excluded because the constrains 'ray[default,data] >=2.9.0,<3.0.0' failed to parse: 'ray[default,data]' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .
