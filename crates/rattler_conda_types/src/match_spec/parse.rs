@@ -20,10 +20,9 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-use crate::utils::url::parse_scheme;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
-    utils::path::is_path,
+    utils::{path::is_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
@@ -200,7 +199,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
 /// Strips the brackets part of the matchspec returning the rest of the
 /// matchspec and  the contents of the brackets as a `Vec<&str>`.
 fn strip_brackets(input: &str) -> Result<(Cow<'_, str>, BracketVec<'_>), ParseMatchSpecError> {
-    if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))"#).captures(input) {
+    if let Some(matches) = lazy_regex::regex!(r#".*(?:(\[.*\]))$"#).captures(input) {
         let bracket_str = matches.get(1).unwrap().as_str();
         let bracket_contents = parse_bracket_list(bracket_str)?;
 
@@ -895,5 +894,13 @@ mod tests {
 
         let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
         assert_eq!(err.to_string(), "invalid package path or url");
+    }
+
+    #[test]
+    fn test_issue_717() {
+        assert_matches!(
+            MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
+            Err(ParseMatchSpecError::InvalidPackageName(_))
+        );
     }
 }
