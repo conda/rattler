@@ -137,7 +137,7 @@ pub fn py_solve_with_sparse_repodata(
                 .filter_map(|match_spec| match_spec.inner.name.clone());
 
             let available_packages = SparseRepoData::load_records_recursive(
-                sparse_repodata.iter().map(|s| Arc::as_ref(s)),
+                sparse_repodata.iter().map(Arc::as_ref),
                 package_names,
                 None,
             )?;
