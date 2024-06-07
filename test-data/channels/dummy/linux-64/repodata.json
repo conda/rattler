@@ -214,6 +214,23 @@
       "subdir": "linux-64",
       "timestamp": 1715610974000,
       "version": "2.1"
+    },
+    "issue_717-2.1-bla_1.tar.bz2": {
+      "build": "issue_717",
+      "build_number": 0,
+      "depends": [],
+      "constrains": [
+        "ray[default,data] >=2.9.0,<3.0.0"
+      ],
+      "license": "MIT",
+      "license_family": "MIT",
+      "md5": "bc13aa58e2092bcb0b97c561373d3905",
+      "name": "issue_717",
+      "sha256": "97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a",
+      "size": 414494,
+      "subdir": "linux-64",
+      "timestamp": 1715610974000,
+      "version": "2.1"
     }
   },
   "packages.conda": {},
