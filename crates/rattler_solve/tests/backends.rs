@@ -802,14 +802,13 @@ mod resolvo {
         let specs: Vec<_> = vec![MatchSpec::from_str(url_str, ParseStrictness::Lenient).unwrap()];
 
         // Create RepoData with only the package from the url, so the solver can find it
-        let package_record = PackageRecord {
+        let package_record = PackageRecord::new(
             // // Only defining the name, version and url is enough for the solver to find the package
             // direct_url: Some(url.clone()),
-            name: "_libgcc_mutex".parse().unwrap(),
-            version: VersionWithSource::from_str("0.1").unwrap(),
-            // No dependencies!
-            ..Default::default()
-        };
+            "_libgcc_mutex".parse().unwrap(),
+            VersionWithSource::from_str("0.1").unwrap(),
+            "0".to_string(),
+        );
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record: package_record.clone(),
             // Mocking the rest of the fields

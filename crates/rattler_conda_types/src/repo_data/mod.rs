@@ -80,7 +80,7 @@ pub struct ChannelInfo {
 #[serde_as]
 #[skip_serializing_none]
 #[sorted]
-#[derive(Debug, Default, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, Clone, Hash)]
 pub struct PackageRecord {
     /// Optionally the architecture the package supports
     pub arch: Option<String>,

@@ -17,7 +17,7 @@ use thiserror::Error;
 /// This struct explicitly does not implement [`std::fmt::Display`] because its ambiguous if that
 /// would display the source or the normalized version. Simply call `as_source` or `as_normalized`
 /// to make the distinction.
-#[derive(Debug, Default, Clone, Eq, DeserializeFromStr)]
+#[derive(Debug, Clone, Eq, DeserializeFromStr)]
 pub struct PackageName {
     normalized: Option<String>,
     source: String,

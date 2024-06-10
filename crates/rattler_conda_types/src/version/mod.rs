@@ -133,7 +133,7 @@ pub use with_source::VersionWithSource;
 /// this problem by appending an underscore to plain version numbers:
 ///
 /// 1.0.1_ < 1.0.1a =>  True   # ensure correct ordering for openssl
-#[derive(Clone, Eq, Default)]
+#[derive(Clone, Eq)]
 pub struct Version {
     /// Individual components of the version.
     ///
