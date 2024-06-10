@@ -1,7 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
-mod direct_url_gateway;
+mod direct_url_query;
 mod error;
 mod local_subdir;
 mod query;

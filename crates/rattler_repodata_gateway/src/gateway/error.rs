@@ -1,6 +1,6 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
-use crate::gateway::direct_url_gateway::DirectUrlQueryError;
+use crate::gateway::direct_url_query::DirectUrlQueryError;
 use rattler_conda_types::Channel;
 use rattler_networking::Redact;
 use reqwest_middleware::Error;

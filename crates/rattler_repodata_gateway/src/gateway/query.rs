@@ -10,7 +10,7 @@ use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
-use crate::{gateway::direct_url_gateway::DirectUrlQuery, Reporter};
+use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
 
 /// Represents a query to execute with a [`Gateway`].
 ///
@@ -141,7 +141,6 @@ impl GatewayQuery {
             }
         }
 
-        // The resulting list of repodata records + 1 for the direct_url_repodata.
         let len = subdirs.len();
         let mut result = vec![RepoData::default(); len];
 
