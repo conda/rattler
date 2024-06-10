@@ -20,7 +20,7 @@ class SparseRepoData:
         self,
         channel: Channel,
         subdir: str,
-        path: os.PathLike[str],
+        path: os.PathLike[str] | str,
     ) -> None:
         if not isinstance(channel, Channel):
             raise TypeError(
@@ -37,7 +37,7 @@ class SparseRepoData:
                 "SparseRepoData constructor received unsupported type "
                 f" {type(path).__name__!r} for the `path` parameter"
             )
-        self._sparse = PySparseRepoData(channel._channel, subdir, path)
+        self._sparse = PySparseRepoData(channel._channel, subdir, str(path))
 
     def package_names(self) -> List[str]:
         """

@@ -691,6 +691,20 @@ mod resolvo {
     }
 
     #[test]
+    fn test_issue_717() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            dummy_channel_json_path(),
+            SimpleSolveTask {
+                specs: &["issue_717"],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        // We expect an error here. `bors` is pinnend to 1, but we try to install `>=2`.
+        insta::assert_snapshot!(result.unwrap_err());
+    }
+
+    #[test]
     fn test_exclude_newer_error() {
         let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
 

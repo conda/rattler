@@ -79,3 +79,6 @@ native-tls = ['reqwest/native-tls', 'reqwest/native-tls-alpn']
 rustls-tls = ['reqwest/rustls-tls']
 sparse = ["rattler_conda_types", "memmap2", "ouroboros", "superslice", "itertools", "serde_json/raw_value"]
 gateway = ["sparse", "http", "http-cache-semantics", "parking_lot", "async-trait"]
+
+[package.metadata.docs.rs]
+features = ["sparse", "gateway"]

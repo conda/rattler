@@ -487,13 +487,31 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         let mut parse_match_spec_cache = self.parse_match_spec_cache.borrow_mut();
         for depends in rec.package_record.depends.iter() {
             let version_set_id =
-                parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache).unwrap();
+                match parse_match_spec(&self.pool, depends, &mut parse_match_spec_cache) {
+                    Ok(version_set_id) => version_set_id,
+                    Err(e) => {
+                        let reason = self.pool.intern_string(format!(
+                            "the dependency '{depends}' failed to parse: {e}",
+                        ));
+
+                        return Dependencies::Unknown(reason);
+                    }
+                };
             dependencies.requirements.push(version_set_id);
         }
 
         for constrains in rec.package_record.constrains.iter() {
             let version_set_id =
-                parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache).unwrap();
+                match parse_match_spec(&self.pool, constrains, &mut parse_match_spec_cache) {
+                    Ok(version_set_id) => version_set_id,
+                    Err(e) => {
+                        let reason = self.pool.intern_string(format!(
+                            "the constrains '{constrains}' failed to parse: {e}",
+                        ));
+
+                        return Dependencies::Unknown(reason);
+                    }
+                };
             dependencies.constrains.push(version_set_id);
         }
 
