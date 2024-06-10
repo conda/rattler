@@ -1,9 +1,10 @@
-use crate::resolvo::{CondaDependencyProvider, SolverMatchSpec};
+use std::{cmp::Ordering, collections::HashMap};
+
 use futures::future::FutureExt;
 use rattler_conda_types::Version;
 use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
-use std::cmp::Ordering;
-use std::collections::HashMap;
+
+use crate::resolvo::CondaDependencyProvider;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -13,26 +14,26 @@ pub(super) enum CompareStrategy {
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn compare_candidates<'a>(
+pub(super) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
-    solver: &SolverCache<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
+    solver: &SolverCache<CondaDependencyProvider<'_>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
     >,
     strategy: CompareStrategy,
 ) -> Ordering {
-    let pool = solver.pool();
+    let pool = &solver.provider().pool;
 
     let a_solvable = pool.resolve_solvable(a);
     let b_solvable = pool.resolve_solvable(b);
 
-    let a_record = &a_solvable.inner();
-    let b_record = &b_solvable.inner();
+    let a_record = &a_solvable.record;
+    let b_record = &b_solvable.record;
 
-    // First compare by "tracked_features". If one of the packages has a tracked feature it is
-    // sorted below the one that doesn't have the tracked feature.
+    // First compare by "tracked_features". If one of the packages has a tracked
+    // feature it is sorted below the one that doesn't have the tracked feature.
     let a_has_tracked_features = !a_record.track_features().is_empty();
     let b_has_tracked_features = !b_record.track_features().is_empty();
     match a_has_tracked_features.cmp(&b_has_tracked_features) {
@@ -60,7 +61,8 @@ pub(super) fn compare_candidates<'a>(
     // return Ordering::Equal;
 
     // Otherwise, compare the dependencies of the variants. If there are similar
-    // dependencies select the variant that selects the highest version of the dependency.
+    // dependencies select the variant that selects the highest version of the
+    // dependency.
     let (a_dependencies, b_dependencies) = match (
         solver
             .get_or_cache_dependencies(a)
@@ -72,7 +74,8 @@ pub(super) fn compare_candidates<'a>(
             .expect("get_or_cache_dependencies failed"),
     ) {
         (Ok(a_deps), Ok(b_deps)) => (a_deps, b_deps),
-        // If either call fails, it's likely due to solver cancellation; thus, we can't compare dependencies
+        // If either call fails, it's likely due to solver cancellation; thus, we can't compare
+        // dependencies
         _ => return Ordering::Equal,
     };
 
@@ -154,9 +157,9 @@ pub(super) fn compare_candidates<'a>(
     b_record.timestamp().cmp(&a_record.timestamp())
 }
 
-pub(super) fn find_highest_version<'a>(
+pub(super) fn find_highest_version(
     match_spec_id: VersionSetId,
-    solver: &SolverCache<SolverMatchSpec<'a>, String, CondaDependencyProvider<'a>>,
+    solver: &SolverCache<CondaDependencyProvider<'_>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
@@ -177,11 +180,11 @@ pub(super) fn find_highest_version<'a>(
                 return None;
             };
 
-            let pool = solver.pool();
+            let pool = &solver.provider().pool;
 
             candidates
                 .iter()
-                .map(|id| pool.resolve_solvable(*id).inner())
+                .map(|id| &pool.resolve_solvable(*id).record)
                 .fold(None, |init, record| {
                     Some(init.map_or_else(
                         || {

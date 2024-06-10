@@ -2997,9 +2997,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7b73dc355efbb88c372550b92bf17d36bf555ecf319a4783a5b8b7c34488bc5"
+checksum = "4e3520f5062db83765158b91a17d01c8309feab0a8327e0991cd7bb33e9d5fdb"
 dependencies = [
  "ahash",
  "bitvec",
