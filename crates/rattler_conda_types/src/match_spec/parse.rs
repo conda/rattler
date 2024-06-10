@@ -1,13 +1,13 @@
-use std::{borrow::Cow, str::FromStr};
+use std::{borrow::Cow, ops::Not, str::FromStr};
 
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_till1, take_until, take_while, take_while1},
-    character::complete::{char, multispace0, one_of},
+    character::complete::{char, multispace0, one_of, space0},
     combinator::{opt, recognize},
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, preceded, separated_pair, terminated},
+    sequence::{delimited, separated_pair, terminated},
     Finish, IResult,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -29,7 +29,9 @@ use crate::{
         ParseVersionSpecError,
     },
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
-    ParseChannelError, ParseStrictness, ParseVersionError, VersionSpec,
+    ParseChannelError, ParseStrictness,
+    ParseStrictness::{Lenient, Strict},
+    ParseVersionError, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -74,6 +76,10 @@ pub enum ParseMatchSpecError {
     /// Invalid version and build
     #[error("Unable to parse version spec: {0}")]
     InvalidVersionAndBuild(String),
+
+    /// Invalid build string
+    #[error("The build string '{0}' is not valid it can only contain alphanumeric characters and underscores")]
+    InvalidBuildString(String),
 
     /// Invalid version spec
     #[error(transparent)]
@@ -250,17 +256,40 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
-    match take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(input)
-        .finish()
-    {
-        Ok((input, name)) => Ok((PackageName::from_str(name.trim())?, input.trim())),
-        Err(nom::error::Error { .. }) => Err(ParseMatchSpecError::MissingPackageName),
+fn strip_package_name(
+    input: &str,
+    strictness: ParseStrictness,
+) -> Result<(PackageName, &str), ParseMatchSpecError> {
+    // In lenient mode, version specifiers can directly follow the package name. In
+    // strict mode this is not allowed.
+    let (package_name, rest) = if strictness == Lenient {
+        let (rest, name) =
+            take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
+                input.trim(),
+            )
+            .finish()
+            .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
+        (name, rest)
+    } else {
+        input
+            .trim()
+            .split_once(|c: char| c.is_whitespace())
+            .unwrap_or((input, ""))
+    };
+
+    let trimmed_package_name = package_name.trim();
+    if trimmed_package_name.is_empty() {
+        return Err(ParseMatchSpecError::MissingPackageName);
     }
+
+    Ok((PackageName::from_str(trimmed_package_name)?, rest.trim()))
 }
 
 /// Splits a string into version and build constraints.
-fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
+fn split_version_and_build(
+    input: &str,
+    strictness: ParseStrictness,
+) -> Result<(&str, Option<&str>), ParseMatchSpecError> {
     fn parse_version_constraint_or_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         input: &'a str,
     ) -> IResult<&'a str, &'a str, E> {
@@ -292,39 +321,48 @@ fn split_version_and_build(input: &str) -> Result<(&str, Option<&str>), ParseMat
         // Just matches the glob operator ("*")
         let just_star = tag("*");
 
-        recognize(preceded(
-            tag("="),
+        recognize(
+            // tag("="),
             alt((version_followed_by_glob, just_star)),
-        ))(input)
-    }
-
-    fn parse_version_and_build_seperator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-        input: &'a str,
-    ) -> IResult<&'a str, &'a str, E> {
-        terminated(
-            alt((parse_special_equality, parse_version_group)),
-            opt(one_of(" =")),
         )(input)
     }
 
-    match parse_version_and_build_seperator(input).finish() {
+    fn parse_version_and_build_seperator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+        strictness: ParseStrictness,
+    ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
+        move |input: &'a str| {
+            if strictness == Lenient {
+                terminated(
+                    alt((parse_special_equality, parse_version_group)),
+                    opt(one_of(" =")),
+                )(input)
+            } else {
+                terminated(alt((parse_special_equality, parse_version_group)), space0)(input)
+            }
+        }
+    }
+
+    match parse_version_and_build_seperator(strictness)(input).finish() {
         Ok((rest, version)) => {
-            let build_number = rest.trim();
+            let build_string = rest.trim();
+
+            // Check validity of the build string
+            if strictness == Strict
+                && build_string.contains(|c: char| !c.is_alphanumeric() && c != '_' && c != '*')
+            {
+                return Err(ParseMatchSpecError::InvalidBuildString(
+                    build_string.to_owned(),
+                ));
+            }
+
             Ok((
                 version.trim(),
-                if build_number.is_empty() {
-                    None
-                } else {
-                    Some(build_number)
-                },
+                build_string.is_empty().not().then_some(build_string),
             ))
         }
-        Err(e @ nom::error::VerboseError { .. }) => {
-            eprintln!("{}", nom::error::convert_error(input, e));
-            Err(ParseMatchSpecError::InvalidVersionAndBuild(
-                input.to_string(),
-            ))
-        }
+        Err(nom::error::VerboseError { .. }) => Err(ParseMatchSpecError::InvalidVersionAndBuild(
+            input.to_string(),
+        )),
     }
 }
 
@@ -351,13 +389,17 @@ impl NamelessMatchSpec {
                 return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
             }
 
-            let (version_str, build_str) = split_version_and_build(input)?;
+            let (version_str, build_str) = split_version_and_build(input, strictness)?;
 
             let version_str = if version_str.find(char::is_whitespace).is_some() {
                 Cow::Owned(version_str.replace(char::is_whitespace, ""))
             } else {
                 Cow::Borrowed(version_str)
             };
+
+            // Under certum circumstances we strip the `=` part of the version string. See
+            // the function documentation for more info.
+            let version_str = optionally_strip_equals(&version_str, build_str, strictness);
 
             // Parse the version spec
             match_spec.version = Some(
@@ -447,7 +489,7 @@ fn matchspec_parser(
     }
 
     // Step 6. Strip off the package name from the input
-    let (name, input) = strip_package_name(input)?;
+    let (name, input) = strip_package_name(input, strictness)?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
 
     // Step 7. Otherwise sort our version + build
@@ -457,7 +499,7 @@ fn matchspec_parser(
             return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
         }
 
-        let (version_str, build_str) = split_version_and_build(input)?;
+        let (version_str, build_str) = split_version_and_build(input, strictness)?;
 
         let version_str = if version_str.find(char::is_whitespace).is_some() {
             Cow::Owned(version_str.replace(char::is_whitespace, ""))
@@ -465,30 +507,9 @@ fn matchspec_parser(
             Cow::Borrowed(version_str)
         };
 
-        // Special case handling for version strings that start with `=`.
-        let version_str = if let (Some(version_str), true) =
-            (version_str.strip_prefix("=="), build_str.is_none())
-        {
-            // If the version starts with `==` and the build string is none we strip the
-            // `==` part.
-            Cow::Borrowed(version_str)
-        } else if let Some(version_str_part) = version_str.strip_prefix('=') {
-            let not_a_group = !version_str_part.contains(['=', ',', '|']);
-            if not_a_group {
-                // If the version starts with `=`, is not part of a group (e.g. 1|2) we append a
-                // * if it doesnt have one already.
-                if build_str.is_none() && !version_str_part.ends_with('*') {
-                    Cow::Owned(format!("{version_str_part}*"))
-                } else {
-                    Cow::Borrowed(version_str_part)
-                }
-            } else {
-                // Version string is part of a group, return the non-stripped version string
-                version_str
-            }
-        } else {
-            version_str
-        };
+        // Under certain circumstantances we strip the `=` or `==` parts of the version
+        // string. See the function for more info.
+        let version_str = optionally_strip_equals(&version_str, build_str, strictness);
 
         // Parse the version spec
         match_spec.version = Some(
@@ -504,12 +525,62 @@ fn matchspec_parser(
     Ok(match_spec)
 }
 
+/// In some circumstainces we strip the `=` or `==` parts of the version string.
+/// This is for conda legacy reasons. This function implements that behavior and
+/// returns the stripped/updated version.
+///
+/// Most of this is only done in lenient mode. In strict mode we don't do any of
+/// this.
+fn optionally_strip_equals<'a>(
+    version_str: &'a str,
+    build_str: Option<&str>,
+    strictness: ParseStrictness,
+) -> Cow<'a, str> {
+    // If the version doesn't start with `=` then don't strip anything.
+    let Some(version_without_equals) = version_str.strip_prefix('=') else {
+        return version_str.into();
+    };
+
+    // If we are not in lenient mode then stop processing at this point. Any other
+    // special case parsing behavior is only part of lenient mode parsing.
+    if strictness != Lenient {
+        return version_str.into();
+    }
+
+    // In lenient mode we have special case handling of version strings that start
+    // with `==`. If the version starts with `==` and the build string is none
+    // we strip the `==` part.
+    //
+    // This results in versions like `==1.0.*.*` being parsed as `1.0.*`.
+    // `==1.0.*.*` is considered a regex pattern and therefor not supported, but
+    // `1.0.*.*` is parsed as `1.0.*` in lenient mode. This is all very
+    // confusing and weird and is therefor only enabled in lenient parsing mode.
+    if let (Some(version_without_equals_equals), None) =
+        (version_without_equals.strip_prefix('='), build_str)
+    {
+        return version_without_equals_equals.into();
+    }
+
+    // Check if this version is part of a grouping or not. E.g. `2|>3|=4`
+    let is_grouping = !version_without_equals.contains(['=', ',', '|']);
+
+    // If the version is not part of a grouping and doesn't end in a `*` then we add
+    // a `*`.
+    if !is_grouping && version_without_equals.ends_with('*') {
+        return format!("{version_without_equals}*").into();
+    }
+
+    // Otherwise just strip the equals sign
+    version_without_equals.into()
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
     use assert_matches::assert_matches;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
+    use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
     use url::Url;
@@ -520,7 +591,7 @@ mod tests {
     };
     use crate::{
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseStrictness::*, VersionSpec,
+        NamelessMatchSpec, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -560,36 +631,62 @@ mod tests {
     #[test]
     fn test_split_version_and_build() {
         assert_matches!(
-            split_version_and_build("==1.0=py27_0"),
+            split_version_and_build("==1.0=py27_0", Lenient),
             Ok(("==1.0", Some("py27_0")))
         );
-        assert_matches!(split_version_and_build("=*=cuda"), Ok(("=*", Some("cuda"))));
         assert_matches!(
-            split_version_and_build("=1.2.3 0"),
+            split_version_and_build("=*=cuda", Lenient),
+            Ok(("=*", Some("cuda")))
+        );
+        assert_matches!(
+            split_version_and_build("=1.2.3 0", Lenient),
             Ok(("=1.2.3", Some("0")))
         );
-        assert_matches!(split_version_and_build("1.2.3=0"), Ok(("1.2.3", Some("0"))));
         assert_matches!(
-            split_version_and_build(">=1.0 , < 2.0 py34_0"),
+            split_version_and_build("1.2.3=0", Lenient),
+            Ok(("1.2.3", Some("0")))
+        );
+        assert_matches!(
+            split_version_and_build(">=1.0 , < 2.0 py34_0", Lenient),
             Ok((">=1.0 , < 2.0", Some("py34_0")))
         );
         assert_matches!(
-            split_version_and_build(">=1.0 , < 2.0 =py34_0"),
+            split_version_and_build(">=1.0 , < 2.0 =py34_0", Lenient),
             Ok((">=1.0 , < 2.0", Some("=py34_0")))
         );
-        assert_matches!(split_version_and_build("=1.2.3 "), Ok(("=1.2.3", None)));
         assert_matches!(
-            split_version_and_build(">1.8,<2|==1.7"),
+            split_version_and_build("=1.2.3 ", Lenient),
+            Ok(("=1.2.3", None))
+        );
+        assert_matches!(
+            split_version_and_build(">1.8,<2|==1.7", Lenient),
             Ok((">1.8,<2|==1.7", None))
         );
         assert_matches!(
-            split_version_and_build("* openblas_0"),
+            split_version_and_build("* openblas_0", Lenient),
             Ok(("*", Some("openblas_0")))
         );
-        assert_matches!(split_version_and_build("* *"), Ok(("*", Some("*"))));
         assert_matches!(
-            split_version_and_build(">=1!164.3095,<1!165"),
+            split_version_and_build("* *", Lenient),
+            Ok(("*", Some("*")))
+        );
+        assert_matches!(
+            split_version_and_build(">=1!164.3095,<1!165", Lenient),
             Ok((">=1!164.3095,<1!165", None))
+        );
+
+        assert_matches!(
+            split_version_and_build("==1!164.3095,<1!165=py27_0", Strict),
+            Err(ParseMatchSpecError::InvalidBuildString(_))
+        );
+
+        assert_matches!(
+            split_version_and_build("3.8.* *_cpython", Lenient),
+            Ok(("3.8.*", Some("*_cpython")))
+        );
+        assert_matches!(
+            split_version_and_build("3.8.* *_cpython", Strict),
+            Ok(("3.8.*", Some("*_cpython")))
         );
     }
 
@@ -750,8 +847,10 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_from_str() {
+    #[rstest]
+    #[case::lenient(Lenient)]
+    #[case::strict(Strict)]
+    fn test_from_str(#[case] strictness: ParseStrictness) {
         #[derive(Serialize)]
         #[serde(untagged)]
         enum MatchSpecOrError {
@@ -774,6 +873,7 @@ mod tests {
             "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
             "conda-forge::foo[version=1.0.*]",
             "conda-forge::foo[version=1.0.*, build_number=\">6\"]",
+            "python ==2.7.*.*|>=3.6",
         ];
 
         let evaluated: BTreeMap<_, _> = specs
@@ -781,7 +881,7 @@ mod tests {
             .map(|spec| {
                 (
                     spec,
-                    MatchSpec::from_str(spec, Strict).map_or_else(
+                    MatchSpec::from_str(spec, strictness).map_or_else(
                         |err| MatchSpecOrError::Error {
                             error: err.to_string(),
                         },
@@ -790,7 +890,7 @@ mod tests {
                 )
             })
             .collect();
-        insta::assert_yaml_snapshot!("parsed matchspecs", evaluated);
+        insta::assert_yaml_snapshot!(format!("test_from_string_{strictness:?}"), evaluated);
     }
 
     #[test]
@@ -823,7 +923,7 @@ mod tests {
 
     #[test]
     fn test_missing_package_name() {
-        let package_name = strip_package_name("");
+        let package_name = strip_package_name("", Lenient);
         assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
     }
 
@@ -902,5 +1002,17 @@ mod tests {
             MatchSpec::from_str("ray[default,data] >=2.9.0,<3.0.0", Strict),
             Err(ParseMatchSpecError::InvalidPackageName(_))
         );
+    }
+
+    #[test]
+    fn test_issue_736() {
+        let ms1 = MatchSpec::from_str("python ==2.7.*.*|>=3.6", Lenient).expect("nameful");
+        let ms2 = NamelessMatchSpec::from_str("==2.7.*.*|>=3.6", Lenient).expect("nameless");
+
+        let (_, spec) = ms1.into_nameless();
+        assert_eq!(spec, ms2);
+
+        MatchSpec::from_str("python ==2.7.*.*|>=3.6", Strict).expect_err("nameful");
+        NamelessMatchSpec::from_str("==2.7.*.*|>=3.6", Strict).expect_err("nameless");
     }
 }
