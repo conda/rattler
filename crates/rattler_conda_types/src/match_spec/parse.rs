@@ -7,7 +7,7 @@ use nom::{
     combinator::{opt, recognize},
     error::{context, ContextError, ParseError},
     multi::{separated_list0, separated_list1},
-    sequence::{delimited, separated_pair, terminated},
+    sequence::{delimited, preceded, separated_pair, terminated},
     Finish, IResult,
 };
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
@@ -321,10 +321,10 @@ fn split_version_and_build(
         // Just matches the glob operator ("*")
         let just_star = tag("*");
 
-        recognize(
-            // tag("="),
+        recognize(preceded(
+            tag("="),
             alt((version_followed_by_glob, just_star)),
-        )(input)
+        ))(input)
     }
 
     fn parse_version_and_build_seperator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
@@ -337,7 +337,7 @@ fn split_version_and_build(
                     opt(one_of(" =")),
                 )(input)
             } else {
-                terminated(alt((parse_special_equality, parse_version_group)), space0)(input)
+                terminated(parse_version_group, space0)(input)
             }
         }
     }
@@ -631,6 +631,11 @@ mod tests {
     #[test]
     fn test_split_version_and_build() {
         assert_matches!(
+            split_version_and_build("2.7|>=3.6", Lenient),
+            Ok(("2.7|>=3.6", None))
+        );
+
+        assert_matches!(
             split_version_and_build("==1.0=py27_0", Lenient),
             Ok(("==1.0", Some("py27_0")))
         );
@@ -891,6 +896,41 @@ mod tests {
             })
             .collect();
         insta::assert_yaml_snapshot!(format!("test_from_string_{strictness:?}"), evaluated);
+    }
+
+    #[rstest]
+    #[case::lenient(Lenient)]
+    #[case::strict(Strict)]
+    fn test_nameless_from_str(#[case] strictness: ParseStrictness) {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum NamelessSpecOrError {
+            Error { error: String },
+            Spec(NamelessMatchSpec),
+        }
+
+        // A list of matchspecs to parse.
+        // Please keep this list sorted.
+        let specs = ["2.7|>=3.6"];
+
+        let evaluated: BTreeMap<_, _> = specs
+            .iter()
+            .map(|spec| {
+                (
+                    spec,
+                    NamelessMatchSpec::from_str(spec, strictness).map_or_else(
+                        |err| NamelessSpecOrError::Error {
+                            error: err.to_string(),
+                        },
+                        NamelessSpecOrError::Spec,
+                    ),
+                )
+            })
+            .collect();
+        insta::assert_yaml_snapshot!(
+            format!("test_nameless_from_string_{strictness:?}"),
+            evaluated
+        );
     }
 
     #[test]
