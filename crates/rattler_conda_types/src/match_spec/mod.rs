@@ -411,14 +411,14 @@ impl Matches<PackageRecord> for MatchSpec {
 impl Matches<RepoDataRecord> for MatchSpec {
     /// Match a [`MatchSpec`] against a [`RepoDataRecord`]
     fn matches(&self, other: &RepoDataRecord) -> bool {
-        if !self.matches(&other.package_record) {
-            return false;
-        }
-
         if let Some(url_spec) = self.url.as_ref() {
             if url_spec != &other.url {
                 return false;
             }
+        }
+
+        if !self.matches(&other.package_record) {
+            return false;
         }
 
         true

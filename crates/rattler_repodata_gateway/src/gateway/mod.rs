@@ -337,8 +337,10 @@ mod test {
     };
 
     use dashmap::DashSet;
-    use rattler_conda_types::ParseStrictness::Strict;
-    use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, PackageName, Platform};
+    use rattler_conda_types::{
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Strict, Platform,
+        RepoDataRecord,
+    };
     use rstest::rstest;
     use url::Url;
 
@@ -406,22 +408,103 @@ mod test {
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::new();
 
-        let index = remote_conda_forge().await;
+        let index = local_conda_forge().await;
 
         let records = gateway
             .query(
-                vec![index.channel()],
+                vec![index.clone()],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/mamba-1.4.7-py310h51d5547_0.conda", Strict).unwrap()].into_iter(),
-                // vec![MatchSpec::from_str("mamba=1.4.7=py310h51d5547_0", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()].into_iter(),
+
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let non_openssl_direct_records = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() != "openssl")
+            .collect::<Vec<_>>()
+            .len();
+
+        let records = gateway
+            .query(
+                vec![index],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("openssl 3.0.4 h166bdaf_2", Strict).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let non_openssl_total_records = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() != "openssl")
+            .collect::<Vec<_>>()
+            .len();
+
+        // The total records without the matchspec should be the same.
+        assert_eq!(non_openssl_total_records, non_openssl_direct_records);
+    }
+
+    // Make sure that the direct url version of openssl is used instead of the one from the normal channel.
+    #[tokio::test]
+    async fn test_select_forced_url_instead_of_deps() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![
+                    MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
+                     MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()
+                ].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let total_records_single_openssl: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records_single_openssl, 4644);
+
+        // There should be only one record for the openssl package.
+        let openssl_records: Vec<&RepoDataRecord> = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() == "openssl")
+            .collect();
+        assert_eq!(openssl_records.len(), 1);
+
+        let gateway = Gateway::new();
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap()]
+                    .into_iter(),
             )
             .recursive(true)
             .await
             .unwrap();
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
-        eprintln!("records: {:?}", records);
-        assert_eq!(total_records, 4413);
+
+        // The total number of records should be greater than the number of records
+        // fetched when selecting the openssl with a direct url.
+        assert!(total_records > total_records_single_openssl);
+        assert_eq!(total_records, 4692);
+
+        let openssl_records: Vec<&RepoDataRecord> = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() == "openssl")
+            .collect();
+        assert!(openssl_records.len() > 1);
     }
 
     #[rstest]

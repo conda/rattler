@@ -126,7 +126,12 @@ impl GatewayQuery {
         let mut direct_url_specs = vec![];
         for spec in self.specs {
             if spec.url.is_some() {
-                direct_url_specs.push(spec);
+                let name = spec
+                    .name
+                    .clone()
+                    .expect("direct url spec should always have a name");
+                seen.insert(name.clone());
+                direct_url_specs.push(spec.clone());
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
@@ -137,7 +142,7 @@ impl GatewayQuery {
         }
 
         // The resulting list of repodata records + 1 for the direct_url_repodata.
-        let len = subdirs.len() + usize::from(!&direct_url_specs.is_empty());
+        let len = subdirs.len();
         let mut result = vec![RepoData::default(); len];
 
         // A list of futures to fetch the records for the pending package names. The
@@ -145,7 +150,7 @@ impl GatewayQuery {
         let mut pending_records = FuturesUnordered::new();
 
         // Push the direct url queries to the pending_records.
-        for spec in direct_url_specs {
+        for spec in direct_url_specs.clone() {
             let gateway = self.gateway.clone();
             pending_records.push(
                 async move {
@@ -208,7 +213,7 @@ impl GatewayQuery {
                         // Extract the dependencies from the records and recursively add them to the
                         // list of package names that we need to fetch.
                         for record in records.iter() {
-                            if !request_specs.iter().any(|spec| spec.matches(&record.package_record)) {
+                            if !request_specs.iter().any(|spec| spec.matches(record)) {
                                 // Do not recurse into records that do not match to root spec.
                                 continue;
                             }
