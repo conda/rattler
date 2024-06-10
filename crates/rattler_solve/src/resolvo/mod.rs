@@ -155,9 +155,11 @@ impl<'a> Display for SolverPackageRecord<'a> {
     }
 }
 
-/// Dependency provider for conda
+/// An implement of [`resolvo::DependencyProvider`] that implements the
+/// ecosystem behavior for conda. This allows resolvo to solve for conda
+/// packages.
 #[derive(Default)]
-pub(crate) struct CondaDependencyProvider<'a> {
+pub struct CondaDependencyProvider<'a> {
     pool: Pool<SolverMatchSpec<'a>, String>,
 
     records: HashMap<NameId, Candidates>,
@@ -175,8 +177,9 @@ pub(crate) struct CondaDependencyProvider<'a> {
 }
 
 impl<'a> CondaDependencyProvider<'a> {
+    /// Constructs a new provider.
     #[allow(clippy::too_many_arguments)]
-    pub fn from_solver_task(
+    pub fn new(
         repodata: impl IntoIterator<Item = RepoData<'a>>,
         favored_records: &'a [RepoDataRecord],
         locked_records: &'a [RepoDataRecord],
@@ -397,6 +400,11 @@ impl<'a> CondaDependencyProvider<'a> {
             direct_dependencies,
         })
     }
+
+    /// Returns all package names
+    pub fn package_names(&self) -> impl Iterator<Item = NameId> + '_ {
+        self.records.keys().copied()
+    }
 }
 
 /// The reason why the solver was cancelled
@@ -590,7 +598,7 @@ impl super::SolverImpl for Solver {
             .map(|timeout| std::time::SystemTime::now() + timeout);
 
         // Construct a provider that can serve the data.
-        let provider = CondaDependencyProvider::from_solver_task(
+        let provider = CondaDependencyProvider::new(
             task.available_packages.into_iter().map(|r| r.into()),
             &task.locked_packages,
             &task.pinned_packages,

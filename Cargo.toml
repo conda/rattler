@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/*"]
+members = ["crates/*", "tools/*"]
 resolver = "2"
 
 # See: https://docs.rs/insta/latest/insta/#optional-faster-runs
@@ -156,3 +156,6 @@ zstd = { version = "0.13.1", default-features = false }
 
 [profile.release]
 debug = true
+
+[patch.crates-io]
+resolvo = { path = "../resolvo" }
