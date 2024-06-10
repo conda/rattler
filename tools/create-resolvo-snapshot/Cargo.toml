@@ -14,7 +14,7 @@ clap = { workspace = true }
 itertools = { workspace = true }
 rattler_cache = { path = "../../crates/rattler_cache" }
 rattler_conda_types = { path = "../../crates/rattler_conda_types" }
-rattler_repodata_gateway = { path = "../../crates/rattler_repodata_gateway" }
+rattler_repodata_gateway = { path = "../../crates/rattler_repodata_gateway", default-features = false, features = ["rustls-tls"] }
 rattler_solve = { path = "../../crates/rattler_solve" }
 reqwest = { workspace = true }
 resolvo = { workspace = true, features = ["serde"] }
