@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 890
+assertion_line: 904
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
@@ -40,6 +40,8 @@ python 3.8.* *_cpython:
   build: "*_cpython"
 python ==2.7.*.*|>=3.6:
   error: "invalid version constraint: regex constraints are not supported"
+python=3.9:
+  error: "'python=3.9' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
 pytorch=*=cuda*:
   error: "'pytorch=*=cuda*' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
 "x264 >=1!164.3095,<1!165":

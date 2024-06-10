@@ -562,16 +562,21 @@ fn optionally_strip_equals<'a>(
     }
 
     // Check if this version is part of a grouping or not. E.g. `2|>3|=4`
-    let is_grouping = !version_without_equals.contains(['=', ',', '|']);
-
-    // If the version is not part of a grouping and doesn't end in a `*` then we add
-    // a `*`.
-    if !is_grouping && version_without_equals.ends_with('*') {
-        return format!("{version_without_equals}*").into();
+    let is_grouping = version_without_equals.contains(['=', ',', '|']);
+    if is_grouping {
+        // If the version string forms a group we leave it untouched.
+        return version_str.into();
     }
 
-    // Otherwise just strip the equals sign
-    version_without_equals.into()
+    // If the version is not part of a grouping and doesn't end in a `*` and there
+    // is no build string then we add a `*`.
+    if build_str.is_none() && !version_without_equals.ends_with('*') {
+        format!("{version_without_equals}*").into()
+    } else {
+        // Otherwise if it is not part of a group we simply remove the `=` without
+        // adding the `*`.
+        version_without_equals.into()
+    }
 }
 
 #[cfg(test)]
@@ -879,6 +884,7 @@ mod tests {
             "conda-forge::foo[version=1.0.*]",
             "conda-forge::foo[version=1.0.*, build_number=\">6\"]",
             "python ==2.7.*.*|>=3.6",
+            "python=3.9",
         ];
 
         let evaluated: BTreeMap<_, _> = specs
