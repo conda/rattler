@@ -153,18 +153,17 @@ impl GatewayQuery {
             let gateway = self.gateway.clone();
             pending_records.push(
                 async move {
+                    let url = spec
+                        .clone()
+                        .url
+                        .expect("direct url spec should always have an url");
                     let package_cache = PackageCache::new(gateway.cache.clone());
-                    let query = DirectUrlQuery::new(
-                        spec.clone()
-                            .url
-                            .expect("direct url spec should always have an url"),
-                        package_cache,
-                        gateway.client.clone(),
-                    );
+                    let query =
+                        DirectUrlQuery::new(url.clone(), package_cache, gateway.client.clone());
                     query
                         .execute()
                         .await
-                        .map_err(GatewayError::DirectUrlQueryError)
+                        .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))
                         .map(|records| (0, vec![spec], records))
                 }
                 .boxed(),

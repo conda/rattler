@@ -36,8 +36,8 @@ pub enum GatewayError {
     #[error("the operation was cancelled")]
     Cancelled,
 
-    #[error("the direct url query failed")]
-    DirectUrlQueryError(#[from] DirectUrlQueryError),
+    #[error("the direct url query failed for {0}")]
+    DirectUrlQueryError(String, #[source] DirectUrlQueryError),
 }
 
 impl From<Cancelled> for GatewayError {
