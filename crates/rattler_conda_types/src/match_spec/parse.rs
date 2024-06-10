@@ -525,6 +525,8 @@ fn matchspec_parser(
     Ok(match_spec)
 }
 
+/// HERE BE DRAGONS!
+///
 /// In some circumstainces we strip the `=` or `==` parts of the version string.
 /// This is for conda legacy reasons. This function implements that behavior and
 /// returns the stripped/updated version.
