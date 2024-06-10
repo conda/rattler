@@ -261,7 +261,7 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
 /// # Returns
 ///
 /// A vector of path entries
-fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
+pub fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
     if platform.is_windows() {
         vec![
             prefix.to_path_buf(),

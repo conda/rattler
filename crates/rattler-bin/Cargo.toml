@@ -28,11 +28,11 @@ console = { workspace = true, features = ["windows-console-colors"] }
 futures = { workspace = true }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.26.3", default-features = false, features = ["indicatif"] }
+rattler = { path="../rattler", version = "0.26.4", default-features = false, features = ["indicatif"] }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.25.2", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.20.8", default-features = false }
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.20.5", default-features = false, features = ["gateway"] }
-rattler_solve = { path="../rattler_solve", version = "0.24.1", default-features = false, features = ["resolvo", "libsolv_c"] }
+rattler_solve = { path="../rattler_solve", version = "0.24.2", default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { path="../rattler_virtual_packages", version = "0.19.15", default-features = false }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }

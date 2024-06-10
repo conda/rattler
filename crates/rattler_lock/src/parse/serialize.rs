@@ -1,14 +1,20 @@
-use crate::file_format_version::FileFormatVersion;
-use crate::utils::serde::RawCondaPackageData;
-use crate::{Channel, EnvironmentPackageData, LockFile, PypiIndexes, PypiPackageData, UrlOrPath};
+use std::{
+    borrow::Cow,
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashSet},
+};
+
 use itertools::Itertools;
 use pep508_rs::ExtraName;
 use rattler_conda_types::Platform;
 use serde::{Serialize, Serializer};
-use std::borrow::Cow;
-use std::collections::{BTreeSet, HashSet};
-use std::{cmp::Ordering, collections::BTreeMap};
 use url::Url;
+
+use crate::{
+    file_format_version::FileFormatVersion, utils::serde::RawCondaPackageData, Channel,
+    CondaPackage, EnvironmentPackageData, LockFile, Package, PypiIndexes, PypiPackage,
+    PypiPackageData, UrlOrPath,
+};
 
 #[derive(Serialize)]
 struct SerializableLockFile<'a> {
@@ -31,6 +37,37 @@ struct SerializableEnvironment<'a> {
 enum SerializablePackageData<'a> {
     Conda(RawCondaPackageData<'a>),
     Pypi(&'a PypiPackageData),
+}
+
+impl Serialize for Package {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Package::Conda(p) => p.serialize(serializer),
+            Package::Pypi(p) => p.serialize(serializer),
+        }
+    }
+}
+
+impl Serialize for CondaPackage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageData::Conda(RawCondaPackageData::from(self.package_data()))
+            .serialize(serializer)
+    }
+}
+
+impl Serialize for PypiPackage {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageData::Pypi(self.package_data()).serialize(serializer)
+    }
 }
 
 #[derive(Serialize, Eq, PartialEq)]
@@ -97,8 +134,9 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
     }
 }
 
-/// First sort packages just by their filename. Since most of the time the urls end
-/// in the packages filename this causes the urls to be sorted by package name.
+/// First sort packages just by their filename. Since most of the time the urls
+/// end in the packages filename this causes the urls to be sorted by package
+/// name.
 fn compare_url_by_filename(a: &Url, b: &Url) -> Ordering {
     if let (Some(a), Some(b)) = (
         a.path_segments()
@@ -240,8 +278,8 @@ impl Serialize for LockFile {
         // Only retain the packages that are used in the environments.
         packages.retain(|p| used_urls_in_envs.contains(&p.url()));
 
-        // Sort the packages in a deterministic order. See [`SerializablePackageData`] for more
-        // information.
+        // Sort the packages in a deterministic order. See [`SerializablePackageData`]
+        // for more information.
         packages.sort();
 
         let raw = SerializableLockFile {

@@ -37,7 +37,7 @@ from rattler.lock import (
     PypiPackageData,
     PypiPackageEnvironmentData,
 )
-from rattler.solver import solve
+from rattler.solver import solve, solve_with_sparse_repodata
 
 __version__ = _get_rattler_version()
 del _get_rattler_version
@@ -72,6 +72,7 @@ __all__ = [
     "PypiPackageData",
     "PypiPackageEnvironmentData",
     "solve",
+    "solve_with_sparse_repodata",
     "Platform",
     "install",
     "index",

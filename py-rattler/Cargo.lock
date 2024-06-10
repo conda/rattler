@@ -2519,7 +2519,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.26.3"
+version = "0.26.4"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2627,7 +2627,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.16"
+version = "0.19.17"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2640,7 +2640,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.11"
+version = "0.22.12"
 dependencies = [
  "chrono",
  "file_url",
@@ -2776,7 +2776,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.20.8"
+version = "0.20.9"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
@@ -2791,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "0.24.1"
+version = "0.24.2"
 dependencies = [
  "chrono",
  "futures",

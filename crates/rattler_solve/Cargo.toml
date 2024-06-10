@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "0.24.1"
+version = "0.24.2"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -45,3 +45,6 @@ resolvo = ["dep:resolvo", "dep:futures"]
 [[bench]]
 name = "bench"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true

@@ -16,7 +16,8 @@ use std::{
 use fs_err::File;
 use walkdir::WalkDir;
 
-fn package_record_from_index_json<T: Read>(
+/// Extract the package record from an `index.json` file.
+pub fn package_record_from_index_json<T: Read>(
     file: &Path,
     index_json_reader: &mut T,
 ) -> Result<PackageRecord, std::io::Error> {
@@ -54,7 +55,10 @@ fn package_record_from_index_json<T: Read>(
     Ok(package_record)
 }
 
-fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Error> {
+/// Extract the package record from a `.tar.bz2` package file.
+/// This function will look for the `info/index.json` file in the conda package and extract the
+/// package record from it.
+pub fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Error> {
     let reader = std::fs::File::open(file)?;
     let mut archive = read::stream_tar_bz2(reader);
     for entry in archive.entries()?.flatten() {
@@ -70,7 +74,10 @@ fn package_record_from_tar_bz2(file: &Path) -> Result<PackageRecord, std::io::Er
     ))
 }
 
-fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Error> {
+/// Extract the package record from a `.conda` package file.
+/// This function will look for the `info/index.json` file in the conda package and extract the
+/// package record from it.
+pub fn package_record_from_conda(file: &Path) -> Result<PackageRecord, std::io::Error> {
     let reader = std::fs::File::open(file)?;
     let mut archive = seek::stream_conda_info(reader).expect("Could not open conda file");
 
