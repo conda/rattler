@@ -14,10 +14,10 @@ pub(super) enum CompareStrategy {
 
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn compare_candidates<'a>(
+pub(super) fn compare_candidates(
     a: SolvableId,
     b: SolvableId,
-    solver: &SolverCache<CondaDependencyProvider<'a>>,
+    solver: &SolverCache<CondaDependencyProvider<'_>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,
@@ -157,9 +157,9 @@ pub(super) fn compare_candidates<'a>(
     b_record.timestamp().cmp(&a_record.timestamp())
 }
 
-pub(super) fn find_highest_version<'a>(
+pub(super) fn find_highest_version(
     match_spec_id: VersionSetId,
-    solver: &SolverCache<CondaDependencyProvider<'a>>,
+    solver: &SolverCache<CondaDependencyProvider<'_>>,
     match_spec_highest_version: &mut HashMap<
         VersionSetId,
         Option<(rattler_conda_types::Version, bool)>,

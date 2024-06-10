@@ -527,7 +527,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         let spec = self.pool.resolve_version_set(version_set);
 
         candidates
-            .into_iter()
+            .iter()
             .copied()
             .filter(|c| {
                 let record = &self.pool.resolve_solvable(*c).record;
