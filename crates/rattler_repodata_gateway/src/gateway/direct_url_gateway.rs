@@ -1,4 +1,5 @@
 use std::future::IntoFuture;
+use std::sync::Arc;
 
 use futures::FutureExt;
 use rattler_cache::package_cache::{PackageCache, PackageCacheError};
@@ -42,7 +43,7 @@ impl DirectUrlQuery {
 
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
-    pub async fn execute(self) -> Result<RepoDataRecord, DirectUrlQueryError> {
+    pub async fn execute(self) -> Result<Arc<[RepoDataRecord]>, DirectUrlQueryError> {
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
         let package_dir = self
@@ -67,19 +68,19 @@ impl DirectUrlQuery {
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
 
-        Ok(RepoDataRecord {
+        Ok(Arc::new([RepoDataRecord {
             package_record,
             // File name is the same as the url.
             file_name: self.url.clone().to_string(),
             url: self.url.clone(),
             // Fake channel as it is unused in this case.
             channel: "virtual_direct_url_channel".to_string(),
-        })
+        }]))
     }
 }
 
 impl IntoFuture for DirectUrlQuery {
-    type Output = Result<RepoDataRecord, DirectUrlQueryError>;
+    type Output = Result<Arc<[RepoDataRecord]>, DirectUrlQueryError>;
 
     type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
 
@@ -112,10 +113,25 @@ mod test {
         let repodata_record = query.await.unwrap();
 
         assert_eq!(
-            repodata_record.package_record.name.as_normalized(),
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .name
+                .as_normalized(),
             "boltons"
         );
-        assert_eq!(repodata_record.package_record.version.as_str(), "24.0.0");
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .version
+                .as_str(),
+            "24.0.0"
+        );
     }
 
     #[tokio::test]
@@ -142,7 +158,25 @@ mod test {
         assert_eq!(query.url.clone(), url);
 
         let repodata_record = query.await.unwrap();
-        assert_eq!(repodata_record.package_record.name.as_normalized(), "zlib");
-        assert_eq!(repodata_record.package_record.version.as_str(), "1.2.8");
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .name
+                .as_normalized(),
+            "zlib"
+        );
+        assert_eq!(
+            repodata_record
+                .as_ref()
+                .first()
+                .unwrap()
+                .package_record
+                .version
+                .as_str(),
+            "1.2.8"
+        );
     }
 }

@@ -123,10 +123,10 @@ impl GatewayQuery {
         // Package names that we have or will issue requests for.
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
-        let mut pending_direct_url_specs = vec![];
+        let mut direct_url_specs = vec![];
         for spec in self.specs {
             if spec.url.is_some() {
-                pending_direct_url_specs.push(spec);
+                direct_url_specs.push(spec);
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
@@ -136,52 +136,36 @@ impl GatewayQuery {
             }
         }
 
-        // Prefetch the direct url specs
-        let mut direct_url_records = vec![];
-        for spec in pending_direct_url_specs {
-            if let Some(url) = &spec.url {
-                // If the spec has a URL, we do not need to fetch it from the repodata.
-                let package_cache = PackageCache::new(self.gateway.cache.clone());
-
-                let query =
-                    DirectUrlQuery::new(url.clone(), package_cache, self.gateway.client.clone());
-
-                let record = query.await?;
-
-                // Add dependencies of record to pending_package_specs
-                if self.recursive {
-                    for dependency in &record.package_record.depends {
-                        let dependency_name = PackageName::new_unchecked(
-                            dependency.split_once(' ').unwrap_or((dependency, "")).0,
-                        );
-                        if seen.insert(dependency_name.clone()) {
-                            pending_package_specs
-                                .insert(dependency_name.clone(), vec![dependency_name.into()]);
-                        }
-                    }
-                }
-
-                direct_url_records.push(record);
-            }
-        }
-        // Create a RepoData for the direct_url_records
-        let direct_url_repodata = RepoData {
-            len: direct_url_records.len(),
-            shards: vec![Arc::from(direct_url_records)],
-        };
+        // The resulting list of repodata records + 1 for the direct_url_repodata.
+        let len = subdirs.len() + usize::from(!&direct_url_specs.is_empty());
+        let mut result = vec![RepoData::default(); len];
 
         // A list of futures to fetch the records for the pending package names. The
         // main task awaits these futures.
         let mut pending_records = FuturesUnordered::new();
 
-        // The resulting list of repodata records + 1 for the direct_url_repodata.
-        let len = subdirs.len() + usize::from(!direct_url_repodata.is_empty());
-        let mut result = vec![RepoData::default(); len];
-
-        // Add the direct_url_repodata to the result.
-        if !direct_url_repodata.is_empty() {
-            result.push(direct_url_repodata);
-        };
+        // Push the direct url queries to the pending_records.
+        for spec in direct_url_specs {
+            let gateway = self.gateway.clone();
+            pending_records.push(
+                async move {
+                    let package_cache = PackageCache::new(gateway.cache.clone());
+                    let query = DirectUrlQuery::new(
+                        spec.clone()
+                            .url
+                            .expect("direct url spec should always have an url"),
+                        package_cache,
+                        gateway.client.clone(),
+                    );
+                    query
+                        .execute()
+                        .await
+                        .map_err(GatewayError::DirectUrlQueryError)
+                        .map(|records| (0, vec![spec], records))
+                }
+                .boxed(),
+            );
+        }
 
         // Loop until all pending package names have been fetched.
         loop {
@@ -192,17 +176,20 @@ impl GatewayQuery {
                     let specs = specs.clone();
                     let package_name = package_name.clone();
                     let reporter = self.reporter.clone();
-                    pending_records.push(async move {
-                        let barrier_cell = subdir.clone();
-                        let subdir = barrier_cell.wait().await;
-                        match subdir.as_ref() {
-                            Subdir::Found(subdir) => subdir
-                                .get_or_fetch_package_records(&package_name, reporter)
-                                .await
-                                .map(|records| (subdir_idx, specs, records)),
-                            Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
+                    pending_records.push(
+                        async move {
+                            let barrier_cell = subdir.clone();
+                            let subdir = barrier_cell.wait().await;
+                            match subdir.as_ref() {
+                                Subdir::Found(subdir) => subdir
+                                    .get_or_fetch_package_records(&package_name, reporter)
+                                    .await
+                                    .map(|records| (subdir_idx, specs, records)),
+                                Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
+                            }
                         }
-                    });
+                        .boxed(),
+                    );
                 }
             }
 
@@ -226,6 +213,7 @@ impl GatewayQuery {
                                 continue;
                             }
                             for dependency in &record.package_record.depends {
+                                // Use only the name for transitive dependencies.
                                 let dependency_name = PackageName::new_unchecked(
                                     dependency.split_once(' ').unwrap_or((dependency, "")).0,
                                 );
