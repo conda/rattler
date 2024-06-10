@@ -1,4 +1,4 @@
-use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, VersionSpec};
+use crate::{build_spec::BuildNumberSpec, PackageName, PackageRecord, RepoDataRecord, VersionSpec};
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, skip_serializing_none, DisplayFromStr};
@@ -196,47 +196,6 @@ impl Display for MatchSpec {
 }
 
 impl MatchSpec {
-    /// Match a [`MatchSpec`] against a [`PackageRecord`]
-    pub fn matches(&self, record: &PackageRecord) -> bool {
-        if let Some(name) = self.name.as_ref() {
-            if name != &record.name {
-                return false;
-            }
-        }
-
-        if let Some(spec) = self.version.as_ref() {
-            if !spec.matches(&record.version) {
-                return false;
-            }
-        }
-
-        if let Some(build_string) = self.build.as_ref() {
-            if !build_string.matches(&record.build) {
-                return false;
-            }
-        }
-
-        if let Some(build_number) = self.build_number.as_ref() {
-            if !build_number.matches(&record.build_number) {
-                return false;
-            }
-        }
-
-        if let Some(md5_spec) = self.md5.as_ref() {
-            if Some(md5_spec) != record.md5.as_ref() {
-                return false;
-            }
-        }
-
-        if let Some(sha256_spec) = self.sha256.as_ref() {
-            if Some(sha256_spec) != record.sha256.as_ref() {
-                return false;
-            }
-        }
-
-        true
-    }
-
     /// Decomposes this instance into a [`NamelessMatchSpec`] and a name.
     pub fn into_nameless(self) -> (Option<PackageName>, NamelessMatchSpec) {
         (
@@ -298,44 +257,6 @@ pub struct NamelessMatchSpec {
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
     pub url: Option<Url>,
-}
-
-impl NamelessMatchSpec {
-    /// Match a [`MatchSpec`] against a [`PackageRecord`]
-    pub fn matches(&self, record: &PackageRecord) -> bool {
-        if let Some(spec) = self.version.as_ref() {
-            if !spec.matches(&record.version) {
-                return false;
-            }
-        }
-
-        if let Some(build_string) = self.build.as_ref() {
-            if !build_string.matches(&record.build) {
-                return false;
-            }
-        }
-
-        if let Some(md5_spec) = self.md5.as_ref() {
-            if Some(md5_spec) != record.md5.as_ref() {
-                return false;
-            }
-        }
-
-        if let Some(sha256_spec) = self.sha256.as_ref() {
-            if Some(sha256_spec) != record.sha256.as_ref() {
-                return false;
-            }
-        }
-
-        // Match on the url, only happens with direct url dependencies
-        if let Some(url_spec) = self.url.as_ref() {
-            if Some(url_spec) != record.direct_url.as_ref() {
-                return false;
-            }
-        }
-
-        true
-    }
 }
 
 impl Display for NamelessMatchSpec {
@@ -426,6 +347,101 @@ where
     }
 }
 
+/// A trait that defines the behavior of matching a spec against a record.
+pub trait Matches<T> {
+    /// Match a [`MatchSpec`] against a [`T`]
+    /// Matching it to a record means that the record is valid for the spec.
+    fn matches(&self, other: &T) -> bool;
+}
+
+impl Matches<PackageRecord> for NamelessMatchSpec {
+    /// Match a [`NamelessMatchSpec`] against a [`PackageRecord`]
+    fn matches(&self, other: &PackageRecord) -> bool {
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&other.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&other.build) {
+                return false;
+            }
+        }
+
+        if let Some(build_number) = self.build_number.as_ref() {
+            if !build_number.matches(&other.build_number) {
+                return false;
+            }
+        }
+
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if Some(md5_spec) != other.md5.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if Some(sha256_spec) != other.sha256.as_ref() {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Matches<PackageRecord> for MatchSpec {
+    /// Match a [`MatchSpec`] against a [`PackageRecord`]
+    fn matches(&self, other: &PackageRecord) -> bool {
+        if let Some(name) = self.name.as_ref() {
+            if name != &other.name {
+                return false;
+            }
+        }
+
+        if !self.clone().into_nameless().1.matches(other) {
+            return false;
+        }
+
+        true
+    }
+}
+
+impl Matches<RepoDataRecord> for MatchSpec {
+    /// Match a [`MatchSpec`] against a [`RepoDataRecord`]
+    fn matches(&self, other: &RepoDataRecord) -> bool {
+        if !self.matches(&other.package_record) {
+            return false;
+        }
+
+        if let Some(url_spec) = self.url.as_ref() {
+            if url_spec != &other.url {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+impl Matches<RepoDataRecord> for NamelessMatchSpec {
+    /// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`]
+    fn matches(&self, other: &RepoDataRecord) -> bool {
+        if !self.matches(&other.package_record) {
+            return false;
+        }
+
+        if let Some(url_spec) = self.url.as_ref() {
+            if url_spec != &other.url {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -433,7 +449,8 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseStrictness::*, Version,
+        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
+        ParseStrictness::*, RepoDataRecord, Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -529,6 +546,40 @@ mod tests {
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
         assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn test_layered_matches() {
+        let repodata_record = RepoDataRecord {
+            package_record: PackageRecord::new(
+                PackageName::new_unchecked("mamba"),
+                Version::from_str("1.0").unwrap(),
+                String::from(""),
+            ),
+            file_name: String::from("mamba-1.0-py37_0"),
+            url: url::Url::parse("https://mamba.io/mamba-1.0-py37_0.conda").unwrap(),
+            channel: String::from("mamba"),
+        };
+        let package_record = repodata_record.clone().package_record;
+
+        // Test with basic spec
+        let match_spec = MatchSpec::from_str("mamba[version==1.0]", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+
+        assert!(match_spec.matches(&repodata_record));
+        assert!(match_spec.matches(&package_record));
+        assert!(nameless_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&package_record));
+
+        // Test with url spec
+        let match_spec =
+            MatchSpec::from_str("https://mamba.io/mamba-1.0-py37_0.conda", Strict).unwrap();
+        let nameless_spec = match_spec.clone().into_nameless().1;
+
+        assert!(match_spec.matches(&repodata_record));
+        assert!(match_spec.matches(&package_record));
+        assert!(nameless_spec.matches(&repodata_record));
+        assert!(nameless_spec.matches(&package_record));
     }
 
     #[test]

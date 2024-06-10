@@ -60,12 +60,10 @@ impl DirectUrlQuery {
         // Extract package record from index json
         let index_json = IndexJson::from_package_directory(package_dir)?;
         let package_record = PackageRecord::from_index_json(
-            index_json, // Size
-            None,       // sha256
-            None,       // md5
-            None,
-        )?
-        .with_package_url(self.url.clone());
+            index_json, None, // Size
+            None, // sha256
+            None, // md5
+        )?;
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
 

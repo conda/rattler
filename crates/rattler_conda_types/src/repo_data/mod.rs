@@ -103,10 +103,6 @@ pub struct PackageRecord {
     #[serde(default)]
     pub depends: Vec<String>,
 
-    /// The package's url which isn't part of an real pacakge record but injected by the direct url query.
-    #[serde(skip)]
-    pub direct_url: Option<Url>,
-
     /// Features are a deprecated way to specify different feature sets for the
     /// conda solver. This is not supported anymore and should not be used.
     /// Instead, `mutex` packages should be used to specify
@@ -191,9 +187,7 @@ pub struct PackageRecord {
 
 impl Display for PackageRecord {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(url) = &self.direct_url {
-            write!(f, "{url}")
-        } else if self.build.is_empty() {
+        if self.build.is_empty() {
             write!(f, "{} {}", self.name.as_normalized(), self.version,)
         } else {
             write!(
@@ -317,7 +311,6 @@ impl PackageRecord {
             version: version.into(),
             purls: None,
             run_exports: None,
-            direct_url: None,
         }
     }
 
@@ -436,14 +429,7 @@ impl PackageRecord {
             version: index.version,
             purls: None,
             run_exports: None,
-            direct_url: None,
         })
-    }
-
-    /// Add url to the [`PackageRecord`]
-    pub fn with_package_url(mut self, url: Url) -> Self {
-        self.direct_url = Some(url);
-        self
     }
 }
 

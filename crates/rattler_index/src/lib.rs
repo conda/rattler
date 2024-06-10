@@ -49,7 +49,6 @@ fn package_record_from_index_json<T: Read>(
         legacy_bz2_size: None,
         purls: None,
         run_exports: None,
-        direct_url: None,
     };
 
     Ok(package_record)

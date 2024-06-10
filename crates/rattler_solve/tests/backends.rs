@@ -109,7 +109,6 @@ fn installed_package(
             legacy_bz2_md5: None,
             purls: None,
             run_exports: None,
-            direct_url: None,
         },
     }
 }
@@ -803,9 +802,9 @@ mod resolvo {
         let specs: Vec<_> = vec![MatchSpec::from_str(url_str, ParseStrictness::Lenient).unwrap()];
 
         // Create RepoData with only the package from the url, so the solver can find it
-        let mut package_record = PackageRecord {
-            // Only defining the name, version and url is enough for the solver to find the package
-            direct_url: Some(url.clone()),
+        let package_record = PackageRecord {
+            // // Only defining the name, version and url is enough for the solver to find the package
+            // direct_url: Some(url.clone()),
             name: "_libgcc_mutex".parse().unwrap(),
             version: VersionWithSource::from_str("0.1").unwrap(),
             // No dependencies!
@@ -837,7 +836,7 @@ mod resolvo {
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
-        assert_eq!(pkgs[0].package_record.direct_url, Some(url.clone()));
+        assert_eq!(pkgs[0].url, url.clone());
         assert_eq!(
             pkgs[0].package_record.version,
             Version::from_str("0.1").unwrap(),
@@ -846,13 +845,11 @@ mod resolvo {
 
         // -----------------------------------------------------------------------------------------
         // Break the url in the repodata, making it not a direct url record.
-        package_record.direct_url = None;
 
         let repo_data: Vec<RepoDataRecord> = vec![RepoDataRecord {
             package_record,
-            // Mocking the rest of the fields
             file_name: url_str.to_string(),
-            url: url.clone(),
+            url: Url::from_str("https://false.dont").unwrap(),
             channel: "".to_string(),
         }];
 

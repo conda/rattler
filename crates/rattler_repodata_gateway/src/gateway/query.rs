@@ -1,15 +1,16 @@
-use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
-use crate::gateway::direct_url_gateway::DirectUrlQuery;
-use crate::Reporter;
-use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
-use itertools::Itertools;
-use rattler_cache::package_cache::PackageCache;
-use rattler_conda_types::{Channel, MatchSpec, PackageName, Platform};
 use std::{
     collections::{HashMap, HashSet},
     future::IntoFuture,
     sync::Arc,
 };
+
+use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
+use itertools::Itertools;
+use rattler_cache::package_cache::PackageCache;
+use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
+
+use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
+use crate::{gateway::direct_url_gateway::DirectUrlQuery, Reporter};
 
 /// Represents a query to execute with a [`Gateway`].
 ///
@@ -94,8 +95,8 @@ impl GatewayQuery {
             .cartesian_product(self.platforms.into_iter())
             .collect_vec();
 
-        // Create barrier cells for each subdirectory. This can be used to wait until the subdir
-        // becomes available.
+        // Create barrier cells for each subdirectory. This can be used to wait until
+        // the subdir becomes available.
         let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
         for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
@@ -169,28 +170,23 @@ impl GatewayQuery {
             shards: vec![Arc::from(direct_url_records)],
         };
 
-        // A list of futures to fetch the records for the pending package names. The main task
-        // awaits these futures.
+        // A list of futures to fetch the records for the pending package names. The
+        // main task awaits these futures.
         let mut pending_records = FuturesUnordered::new();
 
         // The resulting list of repodata records + 1 for the direct_url_repodata.
-        let len = subdirs.len()
-            + (if !direct_url_repodata.is_empty() {
-                1
-            } else {
-                0
-            });
+        let len = subdirs.len() + usize::from(!direct_url_repodata.is_empty());
         let mut result = vec![RepoData::default(); len];
 
         // Add the direct_url_repodata to the result.
         if !direct_url_repodata.is_empty() {
-            result.push(direct_url_repodata)
+            result.push(direct_url_repodata);
         };
 
         // Loop until all pending package names have been fetched.
         loop {
-            // Iterate over all pending package names and create futures to fetch them from all
-            // subdirs.
+            // Iterate over all pending package names and create futures to fetch them from
+            // all subdirs.
             for (package_name, specs) in pending_package_specs.drain() {
                 for (subdir_idx, subdir) in subdirs.iter().cloned() {
                     let specs = specs.clone();

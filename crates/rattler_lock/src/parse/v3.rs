@@ -173,7 +173,6 @@ pub fn parse_v3_or_lower(
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
                             run_exports: None,
-                            direct_url: None,
                         },
                         url: value.url,
                         file_name: None,

@@ -13,8 +13,8 @@ use std::{
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageName,
-    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     Candidates, Dependencies, DependencyProvider, KnownDependencies, NameId, Pool, SolvableDisplay,
@@ -83,7 +83,7 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 
     fn contains(&self, v: &Self::V) -> bool {
         match v {
-            SolverPackageRecord::Record(rec) => self.inner.matches(&rec.package_record),
+            SolverPackageRecord::Record(rec) => self.inner.matches(*rec),
             SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                 version,
                 build_string,
