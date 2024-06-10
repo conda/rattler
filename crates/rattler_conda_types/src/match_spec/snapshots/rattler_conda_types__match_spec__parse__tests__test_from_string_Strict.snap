@@ -1,0 +1,49 @@
+---
+source: crates/rattler_conda_types/src/match_spec/parse.rs
+assertion_line: 904
+expression: evaluated
+---
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
+  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+blas *.* mkl:
+  name: blas
+  version: "*"
+  build: mkl
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
+  name: foo
+  version: 1.0.*
+  build_number:
+    op: Gt
+    rhs: 6
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"conda-forge::foo[version=1.0.*]":
+  name: foo
+  version: 1.0.*
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+foo=1.0=py27_0:
+  error: "'foo=1.0=py27_0' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+foo==1.0=py27_0:
+  error: "'foo==1.0=py27_0' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
+  url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
+"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
+  url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
+python 3.8.* *_cpython:
+  name: python
+  version: 3.8.*
+  build: "*_cpython"
+python ==2.7.*.*|>=3.6:
+  error: "invalid version constraint: regex constraints are not supported"
+python=3.9:
+  error: "'python=3.9' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+pytorch=*=cuda*:
+  error: "'pytorch=*=cuda*' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+"x264 >=1!164.3095,<1!165":
+  name: x264
+  version: ">=1!164.3095,<1!165"
