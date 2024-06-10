@@ -400,8 +400,34 @@ impl Matches<PackageRecord> for MatchSpec {
             }
         }
 
-        if !self.clone().into_nameless().1.matches(other) {
-            return false;
+        if let Some(spec) = self.version.as_ref() {
+            if !spec.matches(&other.version) {
+                return false;
+            }
+        }
+
+        if let Some(build_string) = self.build.as_ref() {
+            if !build_string.matches(&other.build) {
+                return false;
+            }
+        }
+
+        if let Some(build_number) = self.build_number.as_ref() {
+            if !build_number.matches(&other.build_number) {
+                return false;
+            }
+        }
+
+        if let Some(md5_spec) = self.md5.as_ref() {
+            if Some(md5_spec) != other.md5.as_ref() {
+                return false;
+            }
+        }
+
+        if let Some(sha256_spec) = self.sha256.as_ref() {
+            if Some(sha256_spec) != other.sha256.as_ref() {
+                return false;
+            }
         }
 
         true
@@ -428,14 +454,14 @@ impl Matches<RepoDataRecord> for MatchSpec {
 impl Matches<RepoDataRecord> for NamelessMatchSpec {
     /// Match a [`NamelessMatchSpec`] against a [`RepoDataRecord`]
     fn matches(&self, other: &RepoDataRecord) -> bool {
-        if !self.matches(&other.package_record) {
-            return false;
-        }
-
         if let Some(url_spec) = self.url.as_ref() {
             if url_spec != &other.url {
                 return false;
             }
+        }
+
+        if !self.matches(&other.package_record) {
+            return false;
         }
 
         true
