@@ -6,7 +6,6 @@ use std::{
 
 use futures::{select_biased, stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
-use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
@@ -157,9 +156,8 @@ impl GatewayQuery {
                         .clone()
                         .url
                         .expect("direct url spec should always have an url");
-                    let package_cache = PackageCache::new(gateway.cache.clone());
                     let query =
-                        DirectUrlQuery::new(url.clone(), package_cache, gateway.client.clone());
+                        DirectUrlQuery::new(url.clone(), gateway.package_cache.clone(), gateway.client.clone());
                     query
                         .execute()
                         .await

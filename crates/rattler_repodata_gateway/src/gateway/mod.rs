@@ -30,6 +30,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 use tracing::instrument;
+use rattler_cache::package_cache::PackageCache;
 
 use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
 
@@ -139,6 +140,9 @@ struct GatewayInner {
 
     /// The directory to store any cache
     cache: PathBuf,
+
+    /// The package cache, stored to reuse memory cache
+    package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,

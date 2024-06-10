@@ -5,6 +5,7 @@ use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::path::PathBuf;
 use std::sync::Arc;
+use rattler_cache::package_cache::PackageCache;
 
 /// A builder for constructing a [`Gateway`].
 #[derive(Default)]
@@ -85,6 +86,8 @@ impl GatewayBuilder {
                 .join("rattler/cache")
         });
 
+        let package_cache = PackageCache::new(cache.clone());
+
         let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
         Gateway {
             inner: Arc::new(GatewayInner {
@@ -92,6 +95,7 @@ impl GatewayBuilder {
                 client,
                 channel_config: self.channel_config,
                 cache,
+                package_cache,
                 concurrent_requests_semaphore: Arc::new(tokio::sync::Semaphore::new(
                     max_concurrent_requests,
                 )),
