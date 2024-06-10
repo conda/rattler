@@ -1,8 +1,11 @@
+use std::future::IntoFuture;
+
 use futures::FutureExt;
 use rattler_cache::package_cache::{PackageCache, PackageCacheError};
-use rattler_conda_types::package::{IndexJson, PackageFile};
-use rattler_conda_types::{ConvertSubdirError, PackageRecord, RepoDataRecord};
-use std::future::IntoFuture;
+use rattler_conda_types::{
+    package::{IndexJson, PackageFile},
+    ConvertSubdirError, PackageRecord, RepoDataRecord,
+};
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
@@ -37,7 +40,8 @@ impl DirectUrlQuery {
         }
     }
 
-    /// Execute the Repodata query using the cache as a source for the index.json
+    /// Execute the Repodata query using the cache as a source for the
+    /// index.json
     pub async fn execute(self) -> Result<RepoDataRecord, DirectUrlQueryError> {
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
@@ -88,11 +92,12 @@ impl IntoFuture for DirectUrlQuery {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::{env::temp_dir, path::PathBuf};
+
     use rattler_cache::package_cache::PackageCache;
-    use std::env::temp_dir;
-    use std::path::PathBuf;
     use url::Url;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_direct_url_query() {

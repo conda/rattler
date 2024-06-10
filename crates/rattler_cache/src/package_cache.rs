@@ -292,7 +292,7 @@ impl PackageCache {
                     return Err(err);
                 }
 
-                // Determine whether or not to retry based on the retry policy
+                // Determine whether to retry based on the retry policy
                 let execute_after = match retry_policy.should_retry(request_start, current_try) {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),
