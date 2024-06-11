@@ -10,6 +10,7 @@ use rattler_digest::{Md5Hash, Sha256Hash};
 #[cfg(feature = "reqwest")]
 use rattler_networking::Redact;
 
+pub mod archive;
 pub mod read;
 pub mod seek;
 
