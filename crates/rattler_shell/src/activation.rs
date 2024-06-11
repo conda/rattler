@@ -747,7 +747,7 @@ mod tests {
         // Create an activator for the environment
         let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
         let activation_env = activator
-            .run_activation(ActivationVariables::default())
+            .run_activation(ActivationVariables::default(), None)
             .unwrap();
 
         // Diff with the current environment
