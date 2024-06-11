@@ -2,7 +2,6 @@
 use fxhash::{FxHashMap, FxHashSet};
 use rattler_digest::Sha256Hash;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use crate::PackageRecord;
 
@@ -24,7 +23,15 @@ pub struct ShardedSubdirInfo {
 
     /// The base url of the subdirectory. This is the location where the actual
     /// packages are stored.
-    pub base_url: Url,
+    ///
+    /// This is used to construct the full url of the packages.
+    pub base_url: String,
+
+    /// The base url of the individual shards. This is the location where the actual
+    /// packages are stored.
+    ///
+    /// This is used to construct the full url of the shard.
+    pub shards_base_url: String,
 }
 
 /// An individual shard that contains repodata for a single package name.
