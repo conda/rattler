@@ -37,7 +37,7 @@ pub struct RepoData {
     pub info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(serialize_with = "sort_map_alphabetically")]
+    #[serde(default, serialize_with = "sort_map_alphabetically")]
     pub packages: FxHashMap<String, PackageRecord>,
 
     /// The conda packages contained in the repodata.json file (under a
