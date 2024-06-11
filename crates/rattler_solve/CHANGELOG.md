@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.24.2...rattler_solve-v0.25.0) - 2024-06-11
+
+### Fixed
+- This fixes parsing of `ray[default,data] >=2.9.0,<3.0.0` ([#732](https://github.com/mamba-org/rattler/pull/732))
+
+### Other
+- bump resolvo to 0.6.0 ([#733](https://github.com/mamba-org/rattler/pull/733))
+- Document all features on docs.rs ([#734](https://github.com/mamba-org/rattler/pull/734))
+
 ## [0.24.2](https://github.com/mamba-org/rattler/compare/rattler_solve-v0.24.1...rattler_solve-v0.24.2) - 2024-06-06
 
 ### Added

@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.4](https://github.com/mamba-org/rattler/compare/rattler_libsolv_c-v0.19.3...rattler_libsolv_c-v0.19.4) - 2024-06-11
+
+### Other
+- update README.md
+
 ## [0.19.3](https://github.com/mamba-org/rattler/compare/rattler_libsolv_c-v0.19.2...rattler_libsolv_c-v0.19.3) - 2024-04-19
 
 ### Other
