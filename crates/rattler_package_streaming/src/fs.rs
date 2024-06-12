@@ -68,29 +68,20 @@ pub fn extract_directory_from_tar_bz2(
     dest_directory: &Path,
 ) -> Result<(), std::io::Error> {
     let reader = std::fs::File::open(archive_path)?;
-    eprintln!("File openeded");
     let mut archive = read::stream_tar_bz2(reader);
 
     for entry in archive.entries()? {
         let mut entry = entry?;
         let path = entry.path()?;
-        eprintln!("Entry path is {:?}", path);
 
         if let Ok(stripped_path) = path.strip_prefix(directory_to_extract) {
-            eprintln!("Stripped path  {:?}", stripped_path);
             let dest_file = dest_directory.join(stripped_path);
             if let Some(parent_folder) = dest_file.parent() {
-                eprintln!("Parent folder is {:?}", parent_folder);
                 if !parent_folder.exists() {
-                    eprintln!("Creating parent folder");
                     std::fs::create_dir_all(parent_folder)?;
-                    eprintln!("Parent folder created");
                 }
             }
-            eprintln!("Created ");
-            eprintln!("Creating file {:?} ", dest_file);
             let mut dest_file = std::fs::File::create(dest_file)?;
-            eprintln!("Copying");
             std::io::copy(&mut entry, &mut dest_file)?;
         }
     }
