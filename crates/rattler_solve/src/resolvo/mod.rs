@@ -580,14 +580,8 @@ impl super::SolverImpl for Solver {
             .iter()
             .map(|spec| {
                 let (name, nameless_spec) = spec.clone().into_nameless();
-                let name = if let Some(name) = name {
-                    name.as_normalized().to_string()
-                } else if let Some(url) = &nameless_spec.url {
-                    url.to_string()
-                } else {
-                    panic!("Cannot use matchspec without a name")
-                };
-                let name_id = provider.pool.intern_package_name(name.as_str());
+                let name = name.expect("cannot use matchspec without a name");
+                let name_id = provider.pool.intern_package_name(name.as_normalized());
                 provider
                     .pool
                     .intern_version_set(name_id, nameless_spec.into())
