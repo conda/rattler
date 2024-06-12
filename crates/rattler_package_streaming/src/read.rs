@@ -1,8 +1,6 @@
 //! Functions that enable extracting or streaming a Conda package for objects that implement the
 //! [`std::io::Read`] trait.
 
-use crate::{read, seek};
-
 use super::{ExtractError, ExtractResult};
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
@@ -87,61 +85,4 @@ pub fn extract_conda(reader: impl Read, destination: &Path) -> Result<ExtractRes
     let (_, sha256) = sha256_reader.finalize();
 
     Ok(ExtractResult { sha256, md5 })
-}
-
-/// Extracts a folder from a tar.bz2 archive.
-pub fn folder_from_tar_bz2(
-    archive_path: &Path,
-    find_path: &Path,
-    dest_folder: &Path,
-) -> Result<(), std::io::Error> {
-    let reader = std::fs::File::open(archive_path)?;
-    let mut archive = read::stream_tar_bz2(reader);
-
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?;
-        if let Ok(stripped_path) = path.strip_prefix(find_path) {
-            let dest_file = dest_folder.join(stripped_path);
-            if let Some(parent_folder) = dest_file.parent() {
-                if !parent_folder.exists() {
-                    std::fs::create_dir_all(parent_folder)?;
-                }
-            }
-            let mut dest_file = std::fs::File::create(dest_file)?;
-            std::io::copy(&mut entry, &mut dest_file)?;
-        }
-    }
-    Ok(())
-}
-
-/// Extracts a folder from a conda archive.
-pub fn folder_from_conda(
-    archive_path: &Path,
-    find_path: &Path,
-    dest_folder: &Path,
-) -> Result<(), std::io::Error> {
-    let reader = std::fs::File::open(archive_path)?;
-
-    let mut archive = if find_path.starts_with("info") {
-        seek::stream_conda_info(reader).expect("Could not open conda file")
-    } else {
-        todo!("Not implemented yet");
-    };
-
-    for entry in archive.entries()? {
-        let mut entry = entry?;
-        let path = entry.path()?;
-        if let Ok(stripped_path) = path.strip_prefix(find_path) {
-            let dest_file = dest_folder.join(stripped_path);
-            if let Some(parent_folder) = dest_file.parent() {
-                if !parent_folder.exists() {
-                    std::fs::create_dir_all(parent_folder)?;
-                }
-            }
-            let mut dest_file = std::fs::File::create(dest_file)?;
-            std::io::copy(&mut entry, &mut dest_file)?;
-        }
-    }
-    Ok(())
 }
