@@ -95,9 +95,30 @@ impl GatewayQuery {
             .cartesian_product(self.platforms.into_iter())
             .collect_vec();
 
+        // Package names that we have or will issue requests for.
+        let mut seen = HashSet::new();
+        let mut pending_package_specs = HashMap::new();
+        let mut direct_url_specs = vec![];
+        for spec in self.specs {
+            if spec.url.is_some() {
+                let name = spec
+                    .name
+                    .clone()
+                    .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
+                seen.insert(name.clone());
+                direct_url_specs.push(spec.clone());
+            } else if let Some(name) = &spec.name {
+                seen.insert(name.clone());
+                pending_package_specs
+                    .entry(name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(spec);
+            }
+        }
+
         // Create barrier cells for each subdirectory. This can be used to wait until
         // the subdir becomes available.
-        let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
+        let mut subdirs = Vec::with_capacity(channels_and_platforms.len() + direct_url_specs.is_empty() as usize);
         let mut pending_subdirs = FuturesUnordered::new();
         for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
             // Create a barrier so work that need this subdir can await it.
@@ -118,27 +139,6 @@ impl GatewayQuery {
                     Err(e) => Err(e),
                 }
             });
-        }
-
-        // Package names that we have or will issue requests for.
-        let mut seen = HashSet::new();
-        let mut pending_package_specs = HashMap::new();
-        let mut direct_url_specs = vec![];
-        for spec in self.specs {
-            if spec.url.is_some() {
-                let name = spec
-                    .name
-                    .clone()
-                    .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
-                seen.insert(name.clone());
-                direct_url_specs.push(spec.clone());
-            } else if let Some(name) = &spec.name {
-                seen.insert(name.clone());
-                pending_package_specs
-                    .entry(name.clone())
-                    .or_insert_with(Vec::new)
-                    .push(spec);
-            }
         }
 
         let len = subdirs.len();
@@ -179,7 +179,8 @@ impl GatewayQuery {
                             ));
                         }
                     }
-                    Ok((0, vec![spec], record))
+                    // Push the direct url record into the last subdir
+                    Ok((len - 1, vec![spec], record))
                 }
                 .boxed(),
             );
