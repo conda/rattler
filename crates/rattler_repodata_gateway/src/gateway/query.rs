@@ -9,6 +9,7 @@ use itertools::Itertools;
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
+use crate::GatewayError::MatchSpecNoName;
 use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
 
 /// Represents a query to execute with a [`Gateway`].
@@ -161,11 +162,25 @@ impl GatewayQuery {
                         gateway.package_cache.clone(),
                         gateway.client.clone(),
                     );
-                    query
+
+                    let record = query
                         .execute()
                         .await
-                        .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))
-                        .map(|records| (0, vec![spec], records))
+                        .map_err(|e| GatewayError::DirectUrlQueryError(url.to_string(), e))?;
+
+                    // Check if record actually has the same name
+                    if let Some(record) = record.first() {
+                        dbg!(&record);
+                        let spec_name = spec.clone().name.ok_or(MatchSpecNoName(spec.clone()))?;
+                        if record.package_record.name != spec_name {
+                            // Using as_source to get the closest to the retrieved input.
+                            return Err(GatewayError::NotMatchingNameUrl(
+                                record.package_record.name.as_source().to_string(),
+                                spec_name.as_source().to_string(),
+                            ));
+                        }
+                    }
+                    Ok((0, vec![spec], record))
                 }
                 .boxed(),
             );

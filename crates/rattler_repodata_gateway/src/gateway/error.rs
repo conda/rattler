@@ -41,6 +41,9 @@ pub enum GatewayError {
 
     #[error("the match spec: '{0}' doesn't contain a name")]
     MatchSpecNoName(MatchSpec),
+
+    #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
+    NotMatchingNameUrl(String, String),
 }
 
 impl From<Cancelled> for GatewayError {
