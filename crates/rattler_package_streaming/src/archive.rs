@@ -55,16 +55,14 @@ impl TryFrom<PathBuf> for LocalArchive {
 
 #[cfg(test)]
 mod tests {
-    
+
     use tempfile::{tempdir, TempDir};
-    
-    
 
     use crate::write::{write_conda_package, write_tar_bz2_package, CompressionLevel};
 
     use super::*;
     use std::fs::{self, File};
-    use std::io::{Read};
+    use std::io::Read;
 
     fn create_tar_bz2_archive_with_folder() -> (TempDir, PathBuf) {
         let temp_dir = tempdir().unwrap();
