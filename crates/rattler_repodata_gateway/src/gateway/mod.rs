@@ -24,13 +24,13 @@ pub use error::GatewayError;
 use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 pub use query::GatewayQuery;
+use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 use tracing::instrument;
-use rattler_cache::package_cache::PackageCache;
 
 use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
 
@@ -341,6 +341,8 @@ mod test {
     };
 
     use dashmap::DashSet;
+    use rattler_cache::default_cache_dir;
+    use rattler_cache::package_cache::PackageCache;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Strict, Platform,
         RepoDataRecord,
@@ -410,7 +412,10 @@ mod test {
 
     #[tokio::test]
     async fn test_direct_url_spec_from_gateway() {
-        let gateway = Gateway::new();
+        let gateway = Gateway::builder()
+            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join("pkgs")))
+            .with_cache_dir(default_cache_dir().unwrap().join("repodata"))
+            .finish();
 
         let index = local_conda_forge().await;
 
@@ -419,7 +424,6 @@ mod test {
                 vec![index.clone()],
                 vec![Platform::Linux64],
                 vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()].into_iter(),
-
             )
             .recursive(true)
             .await
@@ -456,7 +460,10 @@ mod test {
     // Make sure that the direct url version of openssl is used instead of the one from the normal channel.
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
-        let gateway = Gateway::new();
+        let gateway = Gateway::builder()
+            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join("pkgs")))
+            .with_cache_dir(default_cache_dir().unwrap().join("repodata"))
+            .finish();
 
         let index = local_conda_forge().await;
 
@@ -466,7 +473,7 @@ mod test {
                 vec![Platform::Linux64],
                 vec![
                     MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
-                     MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()
+                    MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap(),
                 ].into_iter(),
             )
             .recursive(true)

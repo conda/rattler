@@ -156,8 +156,11 @@ impl GatewayQuery {
                         .clone()
                         .url
                         .expect("direct url spec should always have an url");
-                    let query =
-                        DirectUrlQuery::new(url.clone(), gateway.package_cache.clone(), gateway.client.clone());
+                    let query = DirectUrlQuery::new(
+                        url.clone(),
+                        gateway.package_cache.clone(),
+                        gateway.client.clone(),
+                    );
                     query
                         .execute()
                         .await
