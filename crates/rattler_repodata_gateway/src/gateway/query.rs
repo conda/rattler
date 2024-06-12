@@ -170,7 +170,6 @@ impl GatewayQuery {
 
                     // Check if record actually has the same name
                     if let Some(record) = record.first() {
-                        dbg!(&record);
                         let spec_name = spec.clone().name.ok_or(MatchSpecNoName(spec.clone()))?;
                         if record.package_record.name != spec_name {
                             // Using as_source to get the closest to the retrieved input.
