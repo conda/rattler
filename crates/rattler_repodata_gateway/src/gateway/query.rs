@@ -128,7 +128,7 @@ impl GatewayQuery {
                 let name = spec
                     .name
                     .clone()
-                    .expect("direct url spec should always have a name");
+                    .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
                 seen.insert(name.clone());
                 direct_url_specs.push(spec.clone());
             } else if let Some(name) = &spec.name {
@@ -155,7 +155,7 @@ impl GatewayQuery {
                     let url = spec
                         .clone()
                         .url
-                        .expect("direct url spec should always have an url");
+                        .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
                     let query = DirectUrlQuery::new(
                         url.clone(),
                         gateway.package_cache.clone(),

@@ -333,6 +333,7 @@ enum PendingOrFetched<T> {
 
 #[cfg(test)]
 mod test {
+    use assert_matches::assert_matches;
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
@@ -516,6 +517,32 @@ mod test {
             .filter(|record| record.package_record.name.as_normalized() == "openssl")
             .collect();
         assert!(openssl_records.len() > 1);
+    }
+
+    #[tokio::test]
+    async fn test_nameless_matchspec_error() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        let mut matchspec = MatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2",
+            Strict,
+        )
+        .unwrap();
+        matchspec.name = None;
+
+        let gateway_error = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap_err();
+
+        assert_matches!(gateway_error, GatewayError::MatchSpecNoName(_))
     }
 
     #[rstest]

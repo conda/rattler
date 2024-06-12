@@ -1,7 +1,7 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
 use crate::gateway::direct_url_query::DirectUrlQueryError;
-use rattler_conda_types::Channel;
+use rattler_conda_types::{Channel, MatchSpec};
 use rattler_networking::Redact;
 use reqwest_middleware::Error;
 use simple_spawn_blocking::Cancelled;
@@ -38,6 +38,9 @@ pub enum GatewayError {
 
     #[error("the direct url query failed for {0}")]
     DirectUrlQueryError(String, #[source] DirectUrlQueryError),
+
+    #[error("the match spec: '{0}' doesn't contain a name")]
+    MatchSpecNoName(MatchSpec),
 }
 
 impl From<Cancelled> for GatewayError {
