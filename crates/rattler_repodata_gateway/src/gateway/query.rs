@@ -106,7 +106,7 @@ impl GatewayQuery {
                     .clone()
                     .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
                 seen.insert(name.clone());
-                direct_url_specs.push(spec.clone());
+                direct_url_specs.push(spec);
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
