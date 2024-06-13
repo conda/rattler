@@ -94,7 +94,7 @@ impl GatewayQuery {
             .cartesian_product(self.platforms.into_iter())
             .collect_vec();
 
-        // Package names that we have or will issue requests for.
+        // Collect all the specs that have a direct url and the ones that have a name.
         let mut seen = HashSet::new();
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = vec![];
