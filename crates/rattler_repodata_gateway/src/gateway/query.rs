@@ -202,7 +202,9 @@ impl GatewayQuery {
                                     .get_or_fetch_package_records(&package_name, reporter)
                                     .await
                                     .map(|records| (subdir_idx, specs, records)),
-                                Subdir::NotFound => Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![]))),
+                                Subdir::NotFound => {
+                                    Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
+                                }
                             }
                         }
                         .boxed(),
