@@ -41,9 +41,9 @@ impl DirectUrlQuery {
     ) -> Self {
         Self {
             url,
+            sha256,
             client,
             package_cache,
-            sha256,
         }
     }
 

@@ -116,7 +116,7 @@ impl GatewayQuery {
         }
 
         // Result offset for direct url queries.
-        let direct_url_offset = if direct_url_specs.is_empty() { 0 } else { 1 };
+        let direct_url_offset = usize::from(!direct_url_specs.is_empty());
 
         // Create barrier cells for each subdirectory.
         // This can be used to wait until the subdir becomes available.
@@ -157,7 +157,7 @@ impl GatewayQuery {
                         url.clone(),
                         gateway.package_cache.clone(),
                         gateway.client.clone(),
-                        spec.sha256.clone(),
+                        spec.sha256,
                     );
 
                     let record = query
