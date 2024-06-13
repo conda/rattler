@@ -484,13 +484,14 @@ mod test {
 
         let index = local_conda_forge().await;
 
+        let openssl_url = "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2";
         let records = gateway
             .query(
                 vec![index.clone()],
                 vec![Platform::Linux64],
                 vec![
                     MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
-                    MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap(),
+                    MatchSpec::from_str(openssl_url, Strict).unwrap(),
                 ].into_iter(),
             )
             .recursive(true)
@@ -508,6 +509,15 @@ mod test {
             .collect();
         assert_eq!(openssl_records.len(), 1);
 
+        // Test if the first repodata subdir contains only the direct url package.
+        let first_subdir = records.iter().next().unwrap();
+        assert_eq!(first_subdir.len, 1);
+        let openssl_record = first_subdir.iter().find(|record| record.package_record.name.as_normalized() == "openssl").unwrap();
+        assert_eq!(openssl_record.url.as_str(), openssl_url);
+
+        // ------------------------------------------------------------
+        // Now we query for the openssl package without the direct url.
+        // ------------------------------------------------------------
         let gateway = Gateway::new();
         let records = gateway
             .query(
