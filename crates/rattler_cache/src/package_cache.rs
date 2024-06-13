@@ -63,6 +63,20 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
+    /// Adds a sha256 hash of the archive.
+    pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
+        self.sha256 = Some(sha256);
+        self
+    }
+
+    /// Potentially adds a sha256 hash of the archive.
+    pub fn with_opt_sha256(mut self, sha256: Option<Sha256Hash>) -> Self {
+        self.sha256 = sha256;
+        self
+    }
+}
+
+impl CacheKey {
     /// Return the sha256 hash of the package if it is known.
     pub fn sha256(&self) -> Option<Sha256Hash> {
         self.sha256
@@ -87,21 +101,6 @@ impl From<&PackageRecord> for CacheKey {
             version: record.version.to_string(),
             build_string: record.build.clone(),
             sha256: record.sha256,
-        }
-    }
-}
-
-impl From<&Url> for CacheKey {
-    fn from(url: &Url) -> Self {
-        if let Some(archive) = ArchiveIdentifier::try_from_url(url) {
-            return archive.into();
-        }
-        // Not a normal archive, so we use the url as the cache key
-        CacheKey {
-            name: url.to_string(),
-            version: "_".to_string(),
-            build_string: "_".to_string(),
-            sha256: None,
         }
     }
 }

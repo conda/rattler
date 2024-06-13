@@ -1,17 +1,19 @@
-use std::future::IntoFuture;
-use std::sync::Arc;
+use std::{future::IntoFuture, sync::Arc};
 
 use futures::FutureExt;
-use rattler_cache::package_cache::{PackageCache, PackageCacheError};
+use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::{
-    package::{IndexJson, PackageFile},
+    package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
 };
+use rattler_digest::Sha256Hash;
 use url::Url;
 
 pub(crate) struct DirectUrlQuery {
     /// The url to query
     url: Url,
+    /// Optional Sha256 of the file
+    sha256: Option<Sha256Hash>,
     /// The client to use for fetching the package
     client: reqwest_middleware::ClientWithMiddleware,
     /// The cache to use for storing the package
@@ -26,6 +28,8 @@ pub enum DirectUrlQueryError {
     IndexJson(#[from] std::io::Error),
     #[error(transparent)]
     ConvertSubdir(#[from] ConvertSubdirError),
+    #[error("could not determine archive identifier from url filename '{0}'")]
+    InvalidFilename(String),
 }
 
 impl DirectUrlQuery {
@@ -33,24 +37,36 @@ impl DirectUrlQuery {
         url: Url,
         package_cache: PackageCache,
         client: reqwest_middleware::ClientWithMiddleware,
+        sha256: Option<Sha256Hash>,
     ) -> Self {
         Self {
             url,
             client,
             package_cache,
+            sha256,
         }
     }
 
     /// Execute the Repodata query using the cache as a source for the
     /// index.json
     pub async fn execute(self) -> Result<Arc<[RepoDataRecord]>, DirectUrlQueryError> {
+        // Convert the url to an archive identifier.
+        let Some(archive_identifier) = ArchiveIdentifier::try_from_url(&self.url) else {
+            let filename = self.url.path_segments().and_then(Iterator::last);
+            return Err(DirectUrlQueryError::InvalidFilename(
+                filename.unwrap_or("").to_string(),
+            ));
+        };
+
+        // Construct a cache key
+        let cache_key = CacheKey::from(archive_identifier).with_opt_sha256(self.sha256);
+
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
         let package_dir = self
             .package_cache
             .get_or_fetch_from_url(
-                // Using the url as cache key
-                &self.url,
+                cache_key,
                 self.url.clone(),
                 self.client.clone(),
                 // Should we add a reporter?
@@ -61,9 +77,10 @@ impl DirectUrlQuery {
         // Extract package record from index json
         let index_json = IndexJson::from_package_directory(package_dir)?;
         let package_record = PackageRecord::from_index_json(
-            index_json, None, // Size
-            None, // sha256
-            None, // md5
+            index_json,
+            None,        // Size
+            self.sha256, // sha256
+            None,        // md5
         )?;
 
         tracing::debug!("Package record build from direct url: {:?}", package_record);
@@ -106,7 +123,7 @@ mod test {
         .unwrap();
         let package_cache = PackageCache::new(PathBuf::from("/tmp"));
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 
         assert_eq!(query.url.clone(), url);
 
@@ -145,15 +162,10 @@ mod test {
         .await
         .unwrap();
 
-        let path = temp_dir().join("not_a_conda_archive_style_name.tar.bz2");
-
-        // copy path into fake filename into tmp
-        std::fs::copy(package_path, &path).unwrap();
-
-        let url = Url::from_file_path(path).unwrap();
+        let url = Url::from_file_path(package_path).unwrap();
         let package_cache = PackageCache::new(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
-        let query = DirectUrlQuery::new(url.clone(), package_cache, client);
+        let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 
         assert_eq!(query.url.clone(), url);
 

@@ -157,6 +157,7 @@ impl GatewayQuery {
                         url.clone(),
                         gateway.package_cache.clone(),
                         gateway.client.clone(),
+                        spec.sha256.clone(),
                     );
 
                     let record = query
