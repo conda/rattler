@@ -105,7 +105,7 @@ impl GatewayQuery {
                     .clone()
                     .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
                 seen.insert(name.clone());
-                direct_url_specs.push((spec.clone(), url));
+                direct_url_specs.push((spec.clone(), url, name));
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
@@ -149,11 +149,10 @@ impl GatewayQuery {
         let mut pending_records = FuturesUnordered::new();
 
         // Push the direct url queries to the pending_records.
-        for spec in direct_url_specs.clone() {
+        for (spec, url, name) in direct_url_specs {
             let gateway = self.gateway.clone();
             pending_records.push(
                 async move {
-                    let url = spec.1;
                     let query = DirectUrlQuery::new(
                         url.clone(),
                         gateway.package_cache.clone(),
@@ -167,21 +166,16 @@ impl GatewayQuery {
 
                     // Check if record actually has the same name
                     if let Some(record) = record.first() {
-                        let spec_name = spec
-                            .0
-                            .clone()
-                            .name
-                            .ok_or(GatewayError::MatchSpecWithoutName(spec.0.clone()))?;
-                        if record.package_record.name != spec_name {
+                        if record.package_record.name != name {
                             // Using as_source to get the closest to the retrieved input.
-                            return Err(GatewayError::NotMatchingNameUrl(
+                            return Err(GatewayError::UrlRecordNameMismatch(
                                 record.package_record.name.as_source().to_string(),
-                                spec_name.as_source().to_string(),
+                                name.as_source().to_string(),
                             ));
                         }
                     }
                     // Push the direct url in the first subdir result for channel priority logic.
-                    Ok((0, vec![spec.0], record))
+                    Ok((0, vec![spec], record))
                 }
                 .boxed(),
             );
