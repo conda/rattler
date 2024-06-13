@@ -160,8 +160,8 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
             )
             .recursive(true),
     )
-        .await
-        .context("failed to load repodata")?;
+    .await
+    .context("failed to load repodata")?;
 
     // Determine the number of recors
     let total_records: usize = repo_data.iter().map(RepoData::len).sum();
@@ -206,7 +206,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         "Virtual packages:\n{}\n",
         virtual_packages
             .iter()
-            .format_with("\n", |i, f| f(&format_args!("  - {i}", )))
+            .format_with("\n", |i, f| f(&format_args!("  - {i}",)))
     );
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
@@ -343,7 +343,7 @@ fn wrap_in_progress<T, F: FnOnce() -> T>(msg: impl Into<Cow<'static, str>>, func
 }
 
 /// Displays a spinner with the given message while running the specified function to completion.
-async fn wrap_in_async_progress<T, F: IntoFuture<Output=T>>(
+async fn wrap_in_async_progress<T, F: IntoFuture<Output = T>>(
     msg: impl Into<Cow<'static, str>>,
     fut: F,
 ) -> T {
