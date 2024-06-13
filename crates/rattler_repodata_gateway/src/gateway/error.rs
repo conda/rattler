@@ -1,6 +1,7 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
-use rattler_conda_types::Channel;
+use crate::gateway::direct_url_query::DirectUrlQueryError;
+use rattler_conda_types::{Channel, MatchSpec};
 use rattler_networking::Redact;
 use reqwest_middleware::Error;
 use simple_spawn_blocking::Cancelled;
@@ -34,6 +35,15 @@ pub enum GatewayError {
 
     #[error("the operation was cancelled")]
     Cancelled,
+
+    #[error("the direct url query failed for {0}")]
+    DirectUrlQueryError(String, #[source] DirectUrlQueryError),
+
+    #[error("the match spec '{0}' does not specify a name")]
+    MatchSpecWithoutName(MatchSpec),
+
+    #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
+    UrlRecordNameMismatch(String, String),
 }
 
 impl From<Cancelled> for GatewayError {

@@ -12,8 +12,8 @@ use std::{
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use rattler_conda_types::{
-    package::ArchiveType, GenericVirtualPackage, MatchSpec, NamelessMatchSpec, PackageName,
-    PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
+    package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
+    PackageName, PackageRecord, ParseMatchSpecError, ParseStrictness, RepoDataRecord,
 };
 use resolvo::{
     utils::{Pool, VersionSet},
@@ -540,9 +540,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
             .filter(|c| {
                 let record = &self.pool.resolve_solvable(*c).record;
                 match record {
-                    SolverPackageRecord::Record(rec) => {
-                        spec.matches(&rec.package_record) != inverse
-                    }
+                    SolverPackageRecord::Record(rec) => spec.matches(*rec) != inverse,
                     SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                         version,
                         build_string,
@@ -615,10 +613,12 @@ impl super::SolverImpl for Solver {
             .specs
             .iter()
             .map(|spec| {
-                let (name, spec) = spec.clone().into_nameless();
+                let (name, nameless_spec) = spec.clone().into_nameless();
                 let name = name.expect("cannot use matchspec without a name");
                 let name_id = provider.pool.intern_package_name(name.as_normalized());
-                provider.pool.intern_version_set(name_id, spec.into())
+                provider
+                    .pool
+                    .intern_version_set(name_id, nameless_spec.into())
             })
             .collect();
 

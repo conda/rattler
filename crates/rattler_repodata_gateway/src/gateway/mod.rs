@@ -1,6 +1,7 @@
 mod barrier_cell;
 mod builder;
 mod channel_config;
+mod direct_url_query;
 mod error;
 mod local_subdir;
 mod query;
@@ -23,6 +24,7 @@ pub use error::GatewayError;
 use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 pub use query::GatewayQuery;
+use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
@@ -138,6 +140,9 @@ struct GatewayInner {
 
     /// The directory to store any cache
     cache: PathBuf,
+
+    /// The package cache, stored to reuse memory cache
+    package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
@@ -328,6 +333,7 @@ enum PendingOrFetched<T> {
 
 #[cfg(test)]
 mod test {
+    use assert_matches::assert_matches;
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
@@ -336,7 +342,12 @@ mod test {
     };
 
     use dashmap::DashSet;
-    use rattler_conda_types::{Channel, ChannelConfig, PackageName, Platform};
+    use rattler_cache::default_cache_dir;
+    use rattler_cache::package_cache::PackageCache;
+    use rattler_conda_types::{
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Strict, Platform,
+        RepoDataRecord,
+    };
     use rstest::rstest;
     use url::Url;
 
@@ -398,6 +409,171 @@ mod test {
 
         let total_records: usize = records.iter().map(RepoData::len).sum();
         assert_eq!(total_records, 45060);
+    }
+
+    #[tokio::test]
+    async fn test_direct_url_spec_from_gateway() {
+        let gateway = Gateway::builder()
+            .with_package_cache(PackageCache::new(
+                default_cache_dir()
+                    .unwrap()
+                    .join(rattler_cache::PACKAGE_CACHE_DIR),
+            ))
+            .with_cache_dir(
+                default_cache_dir()
+                    .unwrap()
+                    .join(rattler_cache::REPODATA_CACHE_DIR),
+            )
+            .finish();
+
+        let index = local_conda_forge().await;
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let non_openssl_direct_records = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() != "openssl")
+            .collect::<Vec<_>>()
+            .len();
+
+        let records = gateway
+            .query(
+                vec![index],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("openssl 3.0.4 h166bdaf_2", Strict).unwrap()].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let non_openssl_total_records = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() != "openssl")
+            .collect::<Vec<_>>()
+            .len();
+
+        // The total records without the matchspec should be the same.
+        assert_eq!(non_openssl_total_records, non_openssl_direct_records);
+    }
+
+    // Make sure that the direct url version of openssl is used instead of the one from the normal channel.
+    #[tokio::test]
+    async fn test_select_forced_url_instead_of_deps() {
+        let gateway = Gateway::builder()
+            .with_package_cache(PackageCache::new(
+                default_cache_dir()
+                    .unwrap()
+                    .join(rattler_cache::PACKAGE_CACHE_DIR),
+            ))
+            .with_cache_dir(
+                default_cache_dir()
+                    .unwrap()
+                    .join(rattler_cache::REPODATA_CACHE_DIR),
+            )
+            .finish();
+
+        let index = local_conda_forge().await;
+
+        let openssl_url =
+            "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2";
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![
+                    MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap(),
+                    MatchSpec::from_str(openssl_url, Strict).unwrap(),
+                ]
+                .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let total_records_single_openssl: usize = records.iter().map(RepoData::len).sum();
+        assert_eq!(total_records_single_openssl, 4644);
+
+        // There should be only one record for the openssl package.
+        let openssl_records: Vec<&RepoDataRecord> = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() == "openssl")
+            .collect();
+        assert_eq!(openssl_records.len(), 1);
+
+        // Test if the first repodata subdir contains only the direct url package.
+        let first_subdir = records.iter().next().unwrap();
+        assert_eq!(first_subdir.len, 1);
+        let openssl_record = first_subdir
+            .iter()
+            .find(|record| record.package_record.name.as_normalized() == "openssl")
+            .unwrap();
+        assert_eq!(openssl_record.url.as_str(), openssl_url);
+
+        // ------------------------------------------------------------
+        // Now we query for the openssl package without the direct url.
+        // ------------------------------------------------------------
+        let gateway = Gateway::new();
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![MatchSpec::from_str("mamba 0.9.2 py39h951de11_0", Strict).unwrap()]
+                    .into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+
+        // The total number of records should be greater than the number of records
+        // fetched when selecting the openssl with a direct url.
+        assert!(total_records > total_records_single_openssl);
+        assert_eq!(total_records, 4692);
+
+        let openssl_records: Vec<&RepoDataRecord> = records
+            .iter()
+            .flat_map(RepoData::iter)
+            .filter(|record| record.package_record.name.as_normalized() == "openssl")
+            .collect();
+        assert!(openssl_records.len() > 1);
+    }
+
+    #[tokio::test]
+    async fn test_nameless_matchspec_error() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        let mut matchspec = MatchSpec::from_str(
+            "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2",
+            Strict,
+        )
+        .unwrap();
+        matchspec.name = None;
+
+        let gateway_error = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(true)
+            .await
+            .unwrap_err();
+
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_))
     }
 
     #[rstest]

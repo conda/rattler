@@ -1,3 +1,4 @@
+use crate::package::ArchiveIdentifier;
 use crate::utils::serde::DeserializeFromStrUnchecked;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, DeserializeFromStr};
@@ -59,6 +60,14 @@ impl TryFrom<&String> for PackageName {
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         value.clone().try_into()
+    }
+}
+
+impl TryFrom<ArchiveIdentifier> for PackageName {
+    type Error = InvalidPackageNameError;
+
+    fn try_from(value: ArchiveIdentifier) -> Result<Self, Self::Error> {
+        value.name.try_into()
     }
 }
 

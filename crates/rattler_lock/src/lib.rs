@@ -109,6 +109,7 @@ pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
 pub use pypi::{PypiPackageData, PypiPackageEnvironmentData, PypiSourceTreeHashable};
 pub use pypi_indexes::{FindLinksUrlOrPath, PypiIndexes};
+pub use rattler_conda_types::Matches;
 pub use url_or_path::UrlOrPath;
 
 /// The name of the default environment in a [`LockFile`]. This is the

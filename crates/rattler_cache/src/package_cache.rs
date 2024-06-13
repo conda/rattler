@@ -63,6 +63,20 @@ pub struct CacheKey {
 }
 
 impl CacheKey {
+    /// Adds a sha256 hash of the archive.
+    pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
+        self.sha256 = Some(sha256);
+        self
+    }
+
+    /// Potentially adds a sha256 hash of the archive.
+    pub fn with_opt_sha256(mut self, sha256: Option<Sha256Hash>) -> Self {
+        self.sha256 = sha256;
+        self
+    }
+}
+
+impl CacheKey {
     /// Return the sha256 hash of the package if it is known.
     pub fn sha256(&self) -> Option<Sha256Hash> {
         self.sha256
@@ -277,7 +291,7 @@ impl PackageCache {
                     return Err(err);
                 }
 
-                // Determine whether or not to retry based on the retry policy
+                // Determine whether to retry based on the retry policy
                 let execute_after = match retry_policy.should_retry(request_start, current_try) {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),

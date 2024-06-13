@@ -54,6 +54,8 @@ tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
 percent-encoding = { workspace = true }
+rattler_cache = { version = "0.1.0", path = "../rattler_cache" }
+rattler_package_streaming = { version = "0.21.2", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
@@ -72,6 +74,7 @@ tower-http = { workspace = true, features = ["fs", "compression-gzip", "trace"] 
 tracing-test = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.25.2", default-features = false }
 fslock = { workspace = true }
+tools = { path="../tools" }
 
 [features]
 default = ['native-tls']

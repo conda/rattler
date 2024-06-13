@@ -47,7 +47,9 @@ async fn main() {
         let repodata = rattler_repodata_gateway::fetch::fetch_repo_data(
             channel.platform_url(subdir),
             client.clone().into(),
-            rattler_cache::default_cache_dir().unwrap().join("repodata"),
+            rattler_cache::default_cache_dir()
+                .unwrap()
+                .join(rattler_cache::REPODATA_CACHE_DIR),
             FetchRepoDataOptions::default(),
             None,
         )

@@ -4,6 +4,7 @@ use clap::ValueEnum;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use rattler::install::{IndicatifReporter, Installer};
+use rattler::package_cache::PackageCache;
 use rattler::{
     default_cache_dir,
     install::{Transaction, TransactionOperation},
@@ -143,7 +144,10 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // Get the package names from the matchspecs so we can only load the package records that we need.
     let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join("repodata"))
+        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
+        .with_package_cache(PackageCache::new(
+            cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
+        ))
         .with_client(download_client.clone())
         .finish();
 
@@ -204,7 +208,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         "Virtual packages:\n{}\n",
         virtual_packages
             .iter()
-            .format_with("\n", |i, f| f(&format_args!("  - {i}",)),)
+            .format_with("\n", |i, f| f(&format_args!("  - {i}",)))
     );
 
     // Now that we parsed and downloaded all information, construct the packaging problem that we
@@ -283,11 +287,18 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 /// Prints the operations of the transaction to the console.
 fn print_transaction(transaction: &Transaction<PrefixRecord, RepoDataRecord>) {
     let format_record = |r: &RepoDataRecord| {
+        let direct_url_print = if r.clone().channel.is_empty() {
+            r.url.as_str()
+        } else {
+            ""
+        };
+
         format!(
-            "{} {} {}",
+            "{} {} {} {}",
             r.package_record.name.as_normalized(),
             r.package_record.version,
-            r.package_record.build
+            r.package_record.build,
+            direct_url_print,
         )
     };
 

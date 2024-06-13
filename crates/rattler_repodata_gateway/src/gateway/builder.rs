@@ -1,6 +1,7 @@
 use crate::gateway::GatewayInner;
 use crate::{ChannelConfig, Gateway};
 use dashmap::DashMap;
+use rattler_cache::package_cache::PackageCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::path::PathBuf;
@@ -12,6 +13,7 @@ pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<ClientWithMiddleware>,
     cache: Option<PathBuf>,
+    package_cache: Option<PackageCache>,
     max_concurrent_requests: Option<usize>,
 }
 
@@ -54,9 +56,21 @@ impl GatewayBuilder {
         self
     }
 
+    /// Add package cache to the builder to store packages.
+    pub fn with_package_cache(mut self, package_cache: PackageCache) -> Self {
+        self.set_package_cache(package_cache);
+        self
+    }
+
     /// Set the directory to use for caching repodata.
     pub fn set_cache_dir(&mut self, cache: impl Into<PathBuf>) -> &mut Self {
         self.cache = Some(cache.into());
+        self
+    }
+
+    /// Set the directory to use for caching packages.
+    pub fn set_package_cache(&mut self, package_cache: PackageCache) -> &mut Self {
+        self.package_cache = Some(package_cache);
         self
     }
 
@@ -85,6 +99,10 @@ impl GatewayBuilder {
                 .join("rattler/cache")
         });
 
+        let package_cache = self.package_cache.unwrap_or(PackageCache::new(
+            cache.join(rattler_cache::PACKAGE_CACHE_DIR),
+        ));
+
         let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
         Gateway {
             inner: Arc::new(GatewayInner {
@@ -92,6 +110,7 @@ impl GatewayBuilder {
                 client,
                 channel_config: self.channel_config,
                 cache,
+                package_cache,
                 concurrent_requests_semaphore: Arc::new(tokio::sync::Semaphore::new(
                     max_concurrent_requests,
                 )),

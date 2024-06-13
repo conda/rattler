@@ -762,6 +762,7 @@ mod tests {
         env_diff.remove("CONDA_PREFIX");
         env_diff.remove("Path");
         env_diff.remove("PATH");
+        env_diff.remove("LINENO");
 
         insta::assert_yaml_snapshot!("after_activation", env_diff);
     }

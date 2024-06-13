@@ -34,6 +34,7 @@ rattler_networking = { path="../rattler_networking", version = "0.20.8", default
 rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.20.5", default-features = false, features = ["gateway"] }
 rattler_solve = { path="../rattler_solve", version = "0.24.2", default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { path="../rattler_virtual_packages", version = "0.19.15", default-features = false }
+rattler_cache = { path="../rattler_cache", version = "0.1.0", default-features = false }
 reqwest = { workspace = true }
 reqwest-middleware = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

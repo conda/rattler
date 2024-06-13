@@ -1,11 +1,12 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 904
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  name: foo
   url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
+  name: foo
   url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 blas *.* mkl:
   name: blas
@@ -31,8 +32,10 @@ foo=1.0=py27_0:
 foo==1.0=py27_0:
   error: "'foo==1.0=py27_0' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
 "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
+  name: py-rattler
   url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
 "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
+  name: boost-cpp
   url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
 python 3.8.* *_cpython:
   name: python
