@@ -74,7 +74,7 @@ impl ShardedSubdir {
         let shards_base_url = Url::options()
             .base_url(Some(&index_base_url))
             .parse(&sharded_repodata.info.shards_base_url)
-            .map_err(|_| {
+            .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `shards_base_url`: {}",
                     &sharded_repodata.info.shards_base_url
@@ -83,7 +83,7 @@ impl ShardedSubdir {
         let package_base_url = Url::options()
             .base_url(Some(&index_base_url))
             .parse(&sharded_repodata.info.base_url)
-            .map_err(|_| {
+            .map_err(|_e| {
                 GatewayError::Generic(format!(
                     "shard index contains invalid `base_url`: {}",
                     &sharded_repodata.info.base_url

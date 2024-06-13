@@ -119,7 +119,7 @@ impl GatewayQuery {
         // Create barrier cells for each subdirectory. This can be used to wait until
         // the subdir becomes available.
         let mut subdirs =
-            Vec::with_capacity(channels_and_platforms.len() + direct_url_specs.is_empty() as usize);
+            Vec::with_capacity(channels_and_platforms.len() + usize::from(direct_url_specs.is_empty()));
         let mut pending_subdirs = FuturesUnordered::new();
         for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
             // Create a barrier so work that need this subdir can await it.
