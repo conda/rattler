@@ -169,7 +169,11 @@ impl GatewayQuery {
 
                     // Check if record actually has the same name
                     if let Some(record) = record.first() {
-                        let spec_name = spec.0.clone().name.ok_or(GatewayError::MatchSpecWithoutName(spec.0.clone()))?;
+                        let spec_name = spec
+                            .0
+                            .clone()
+                            .name
+                            .ok_or(GatewayError::MatchSpecWithoutName(spec.0.clone()))?;
                         if record.package_record.name != spec_name {
                             // Using as_source to get the closest to the retrieved input.
                             return Err(GatewayError::NotMatchingNameUrl(
@@ -181,7 +185,7 @@ impl GatewayQuery {
                     // Push the direct url in the first subdir for channel priority logic.
                     Ok((0, vec![spec.0], record))
                 }
-                    .boxed(),
+                .boxed(),
             );
         }
 
@@ -202,11 +206,15 @@ impl GatewayQuery {
                                 Subdir::Found(subdir) => subdir
                                     .get_or_fetch_package_records(&package_name, reporter)
                                     .await
-                                    .map(|records| (subdir_idx + direct_url_offset, specs, records)),
-                                Subdir::NotFound => Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![]))),
+                                    .map(|records| {
+                                        (subdir_idx + direct_url_offset, specs, records)
+                                    }),
+                                Subdir::NotFound => {
+                                    Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
+                                }
                             }
                         }
-                            .boxed(),
+                        .boxed(),
                     );
                 }
             }
