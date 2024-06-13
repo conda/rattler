@@ -349,7 +349,7 @@ where
 
 /// A trait that defines the behavior of matching a spec against a record.
 pub trait Matches<T> {
-    /// Match a [`MatchSpec`] against a [`T`]
+    /// Match a [`MatchSpec`] against a record.
     /// Matching it to a record means that the record is valid for the spec.
     fn matches(&self, other: &T) -> bool;
 }
