@@ -99,13 +99,13 @@ impl GatewayQuery {
         let mut pending_package_specs = HashMap::new();
         let mut direct_url_specs = vec![];
         for spec in self.specs {
-            if spec.url.is_some() {
+            if let Some(url) = spec.url.clone() {
                 let name = spec
                     .name
                     .clone()
                     .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
                 seen.insert(name.clone());
-                direct_url_specs.push(spec);
+                direct_url_specs.push((spec.clone(), url));
             } else if let Some(name) = &spec.name {
                 seen.insert(name.clone());
                 pending_package_specs
@@ -155,10 +155,7 @@ impl GatewayQuery {
             let gateway = self.gateway.clone();
             pending_records.push(
                 async move {
-                    let url = spec
-                        .clone()
-                        .url
-                        .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
+                    let url = spec.1;
                     let query = DirectUrlQuery::new(
                         url.clone(),
                         gateway.package_cache.clone(),
@@ -172,7 +169,7 @@ impl GatewayQuery {
 
                     // Check if record actually has the same name
                     if let Some(record) = record.first() {
-                        let spec_name = spec.clone().name.ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
+                        let spec_name = spec.0.clone().name.ok_or(GatewayError::MatchSpecWithoutName(spec.0.clone()))?;
                         if record.package_record.name != spec_name {
                             // Using as_source to get the closest to the retrieved input.
                             return Err(GatewayError::NotMatchingNameUrl(
@@ -182,7 +179,7 @@ impl GatewayQuery {
                         }
                     }
                     // Push the direct url in the first subdir for channel priority logic.
-                    Ok((0, vec![spec], record))
+                    Ok((0, vec![spec.0], record))
                 }
                     .boxed(),
             );
