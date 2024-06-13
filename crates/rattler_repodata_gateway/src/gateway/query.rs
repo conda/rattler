@@ -202,7 +202,7 @@ impl GatewayQuery {
                                     .get_or_fetch_package_records(&package_name, reporter)
                                     .await
                                     .map(|records| (subdir_idx, specs, records)),
-                                Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
+                                Subdir::NotFound => Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![]))),
                             }
                         }
                         .boxed(),
@@ -219,7 +219,7 @@ impl GatewayQuery {
 
                 // Handle any records that were fetched
                 records = pending_records.select_next_some() => {
-                    let (subdir_idx, request_specs, records) = records?;
+                    let (result_idx, request_specs, records) = records?;
 
                     if self.recursive {
                         // Extract the dependencies from the records and recursively add them to the
@@ -243,7 +243,7 @@ impl GatewayQuery {
 
                     // Add the records to the result
                     if records.len() > 0 {
-                        let result = &mut result[subdir_idx];
+                        let result = &mut result[result_idx];
                         result.len += records.len();
                         result.shards.push(records);
                     }
