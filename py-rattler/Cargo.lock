@@ -2347,7 +2347,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.6.2"
+version = "0.6.3"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2999,9 +2999,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e7b73dc355efbb88c372550b92bf17d36bf555ecf319a4783a5b8b7c34488bc5"
+checksum = "ee094f3d073e5efe649c7f24c237657fa4c613eb9becca896ed682f31ca389c2"
 dependencies = [
  "ahash",
  "bitvec",

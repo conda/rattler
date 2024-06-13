@@ -79,7 +79,7 @@ use matcher::StringMatcher;
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));
 ///
-/// let spec = MatchSpec::from_str("foo=1.0=py27_0", Strict).unwrap();
+/// let spec = MatchSpec::from_str("foo 1.0 py27_0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str("==1.0", Strict).unwrap()));
 /// assert_eq!(spec.build, Some(StringMatcher::from_str("py27_0").unwrap()));

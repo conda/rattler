@@ -109,7 +109,7 @@ async def test_solve_channel_priority_disabled(
 ) -> None:
     solved_data = await solve(
         [conda_forge_channel, pytorch_channel],
-        ["pytorch-cpu=0.4.1=py36_cpu_1"],
+        ["pytorch-cpu 0.4.1 py36_cpu_1"],
         platforms=["linux-64"],
         gateway=gateway,
         channel_priority=ChannelPriority.Disabled,

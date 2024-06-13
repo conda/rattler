@@ -1,17 +1,20 @@
 #![deny(missing_docs)]
 
-//! This crate provides helper functions to activate and deactivate virtual environments.
+//! This crate provides helper functions to activate and deactivate virtual
+//! environments.
 
-use std::collections::HashMap;
-use std::process::ExitStatus;
 use std::{
+    collections::HashMap,
+    ffi::OsStr,
     fs,
     path::{Path, PathBuf},
+    process::ExitStatus,
 };
 
-use crate::shell::{Shell, ShellScript};
 use indexmap::IndexMap;
 use rattler_conda_types::Platform;
+
+use crate::shell::{Shell, ShellScript};
 
 const ENV_START_SEPERATOR: &str = "____RATTLER_ENV_START____";
 
@@ -27,14 +30,18 @@ pub enum PathModificationBehavior {
     Prepend,
 }
 
-/// A struct that contains the values of the environment variables that are relevant for the activation process.
-/// The values are stored as strings. Currently, only the `PATH` and `CONDA_PREFIX` environment variables are used.
+/// A struct that contains the values of the environment variables that are
+/// relevant for the activation process. The values are stored as strings.
+/// Currently, only the `PATH` and `CONDA_PREFIX` environment variables are
+/// used.
 #[derive(Default, Clone)]
 pub struct ActivationVariables {
-    /// The value of the `CONDA_PREFIX` environment variable that contains the activated conda prefix path
+    /// The value of the `CONDA_PREFIX` environment variable that contains the
+    /// activated conda prefix path
     pub conda_prefix: Option<PathBuf>,
 
-    /// The value of the `PATH` environment variable that contains the paths to the executables
+    /// The value of the `PATH` environment variable that contains the paths to
+    /// the executables
     pub path: Option<Vec<PathBuf>>,
 
     /// The type of behavior of what should happen with the defined paths.
@@ -42,7 +49,8 @@ pub struct ActivationVariables {
 }
 
 impl ActivationVariables {
-    /// Create a new `ActivationVariables` struct from the environment variables.
+    /// Create a new `ActivationVariables` struct from the environment
+    /// variables.
     pub fn from_env() -> Result<Self, std::env::VarError> {
         Ok(Self {
             conda_prefix: std::env::var("CONDA_PREFIX").ok().map(PathBuf::from),
@@ -53,7 +61,8 @@ impl ActivationVariables {
 }
 
 /// A struct that holds values for the activation and deactivation
-/// process of an environment, e.g. activation scripts to execute or environment variables to set.
+/// process of an environment, e.g. activation scripts to execute or environment
+/// variables to set.
 #[derive(Debug)]
 pub struct Activator<T: Shell + 'static> {
     /// The path to the root of the conda environment
@@ -126,7 +135,8 @@ pub enum ActivationError {
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
     InvalidEnvVarFileJson(serde_json::Error, PathBuf),
 
-    /// An error that can occur wiht malformed JSON when parsing files in the `env_vars.d` directory
+    /// An error that can occur wiht malformed JSON when parsing files in the
+    /// `env_vars.d` directory
     #[error("Malformed JSON: not a plain JSON object in file {file:?}")]
     InvalidEnvVarFileJsonNoObject {
         /// The path to the file that contains the malformed JSON
@@ -162,8 +172,9 @@ pub enum ActivationError {
 }
 
 /// Collect all environment variables that are set in a conda environment.
-/// The environment variables are collected from the `state` file and the `env_vars.d` directory in the given prefix
-/// and are returned as a ordered map.
+/// The environment variables are collected from the `state` file and the
+/// `env_vars.d` directory in the given prefix and are returned as a ordered
+/// map.
 ///
 /// # Arguments
 ///
@@ -175,7 +186,8 @@ pub enum ActivationError {
 ///
 /// # Errors
 ///
-/// If the `state` file or the `env_vars.d` directory cannot be read, an error is returned.
+/// If the `state` file or the `env_vars.d` directory cannot be read, an error
+/// is returned.
 fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, ActivationError> {
     let state_file = prefix.join("conda-meta/state");
     let pkg_env_var_dir = prefix.join("etc/conda/env_vars.d");
@@ -224,7 +236,8 @@ fn collect_env_vars(prefix: &Path) -> Result<IndexMap<String, String>, Activatio
     if state_file.exists() {
         let state_json = fs::read_to_string(&state_file)?;
 
-        // load json but preserve the order of dicts - for this we use the serde preserve_order feature
+        // load json but preserve the order of dicts - for this we use the serde
+        // preserve_order feature
         let state_json: serde_json::Value = serde_json::from_str(&state_json)
             .map_err(|e| ActivationError::InvalidEnvVarFileJson(e, state_file.clone()))?;
 
@@ -276,12 +289,14 @@ pub fn prefix_path_entries(prefix: &Path, platform: &Platform) -> Vec<PathBuf> {
     }
 }
 
-/// The result of a activation. It contains the activation script and the new path entries.
-/// The activation script already sets the PATH environment variable, but for "environment stacking"
-/// purposes it's useful to have the new path entries separately.
+/// The result of a activation. It contains the activation script and the new
+/// path entries. The activation script already sets the PATH environment
+/// variable, but for "environment stacking" purposes it's useful to have the
+/// new path entries separately.
 pub struct ActivationResult<T: Shell + 'static> {
-    /// The activation script that sets the environment variables, runs activation/deactivation scripts
-    /// and sets the new PATH environment variable
+    /// The activation script that sets the environment variables, runs
+    /// activation/deactivation scripts and sets the new PATH environment
+    /// variable
     pub script: ShellScript<T>,
     /// The new path entries that are added to the PATH environment variable
     pub path: Vec<PathBuf>,
@@ -338,7 +353,8 @@ impl<T: Shell + Clone> Activator<T> {
     }
 
     /// Create an activation script for a given shell and platform. This
-    /// returns a tuple of the newly computed PATH variable and the activation script.
+    /// returns a tuple of the newly computed PATH variable and the activation
+    /// script.
     pub fn activation(
         &self,
         variables: ActivationVariables,
@@ -369,7 +385,8 @@ impl<T: Shell + Clone> Activator<T> {
 
         script.set_path(path.as_slice(), variables.path_modification_behavior)?;
 
-        // deliberately not taking care of `CONDA_SHLVL` or any other complications at this point
+        // deliberately not taking care of `CONDA_SHLVL` or any other complications at
+        // this point
         script.set_env_var("CONDA_PREFIX", &self.target_prefix.to_string_lossy())?;
 
         for (key, value) in &self.env_vars {
@@ -383,17 +400,21 @@ impl<T: Shell + Clone> Activator<T> {
         Ok(ActivationResult { script, path })
     }
 
-    /// Runs the activation script and returns the environment variables changed in the environment
-    /// after running the script.
+    /// Runs the activation script and returns the environment variables changed
+    /// in the environment after running the script.
+    ///
+    /// If the `environment` parameter is not `None`, then it will overwrite the
+    /// parent environment variables when running the activation script.
     pub fn run_activation(
         &self,
         variables: ActivationVariables,
+        environment: Option<HashMap<&OsStr, &OsStr>>,
     ) -> Result<HashMap<String, String>, ActivationError> {
         let activation_script = self.activation(variables)?.script;
 
-        // Create a script that starts by emitting all environment variables, then runs the
-        // activation script followed by again emitting all environment variables. Any changes
-        // should then become visible.
+        // Create a script that starts by emitting all environment variables, then runs
+        // the activation script followed by again emitting all environment
+        // variables. Any changes should then become visible.
         let mut activation_detection_script =
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
@@ -410,16 +431,23 @@ impl<T: Shell + Clone> Activator<T> {
             .path()
             .join(format!("activation.{}", self.shell_type.extension()));
 
-        // Write the activation script to the temporary file, closing the file afterwards
+        // Write the activation script to the temporary file, closing the file
+        // afterwards
         fs::write(
             &activation_script_path,
             activation_detection_script.contents()?,
         )?;
         // Get only the path to the temporary file
-        let activation_result = self
+        let mut activation_command = self
             .shell_type
-            .create_run_script_command(&activation_script_path)
-            .output()?;
+            .create_run_script_command(&activation_script_path);
+
+        // Overwrite the environment variables with the ones provided
+        if let Some(environment) = environment.clone() {
+            activation_command.env_clear().envs(environment);
+        }
+
+        let activation_result = activation_command.output()?;
 
         if !activation_result.status.success() {
             return Err(ActivationError::FailedToRunActivationScript {
@@ -455,16 +483,14 @@ impl<T: Shell + Clone> Activator<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::shell;
-    use std::collections::BTreeMap;
-    use std::str::FromStr;
+    use std::{collections::BTreeMap, str::FromStr};
 
-    use super::*;
     use tempdir::TempDir;
 
+    use super::*;
     #[cfg(unix)]
     use crate::activation::PathModificationBehavior;
-    use crate::shell::ShellEnum;
+    use crate::{shell, shell::ShellEnum};
 
     #[test]
     fn test_collect_scripts() {
@@ -657,7 +683,8 @@ mod tests {
         let script = get_script(shell::CmdExe, PathModificationBehavior::Append);
         assert!(script.contains("\r\n"));
         let script = script.replace("\r\n", "\n");
-        // Filter out the \r\n line endings for the snapshot so that insta + git works smoothly
+        // Filter out the \r\n line endings for the snapshot so that insta + git works
+        // smoothly
         insta::assert_snapshot!("test_activation_script_cmd_append", script);
         let script =
             get_script(shell::CmdExe, PathModificationBehavior::Replace).replace("\r\n", "\n");
@@ -720,7 +747,7 @@ mod tests {
         // Create an activator for the environment
         let activator = Activator::from_path(&env, shell.clone(), Platform::current()).unwrap();
         let activation_env = activator
-            .run_activation(ActivationVariables::default())
+            .run_activation(ActivationVariables::default(), None)
             .unwrap();
 
         // Diff with the current environment

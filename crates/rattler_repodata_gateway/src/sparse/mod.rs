@@ -264,7 +264,11 @@ struct LazyRepoData<'i> {
     info: Option<ChannelInfo>,
 
     /// The tar.bz2 packages contained in the repodata.json file
-    #[serde(borrow, deserialize_with = "deserialize_filename_and_raw_record")]
+    #[serde(
+        borrow,
+        default,
+        deserialize_with = "deserialize_filename_and_raw_record"
+    )]
     packages: Vec<(PackageFilename<'i>, &'i RawValue)>,
 
     /// The conda packages contained in the repodata.json file (under a
@@ -460,6 +464,7 @@ mod test {
     use std::path::{Path, PathBuf};
 
     use bytes::Bytes;
+    use itertools::Itertools;
     use rattler_conda_types::{Channel, ChannelConfig, PackageName, RepoData, RepoDataRecord};
     use rstest::rstest;
 
@@ -659,5 +664,25 @@ mod test {
     #[case("clang-format-13-13.0.1-default_he082bbe_0.tar.bz2", "clang-format-13")]
     fn test_deserialize_package_name(#[case] filename: &str, #[case] result: &str) {
         assert_eq!(PackageFilename::try_from(filename).unwrap().package, result);
+    }
+
+    #[test]
+    fn test_deserialize_empty_json() {
+        let json = r#"{}"#;
+        let repo_data: RepoData = serde_json::from_str(json).unwrap();
+        let sparse_repodata = SparseRepoData::from_bytes(
+            Channel::from_str(
+                "conda-forge",
+                &ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap()),
+            )
+            .unwrap(),
+            "noarch",
+            Bytes::from(json),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(repo_data.packages.len(), 0);
+        assert_eq!(sparse_repodata.package_names().try_len().unwrap(), 0);
     }
 }
