@@ -74,7 +74,7 @@ impl DirectUrlQuery {
             file_name: self.url.clone().to_string(),
             url: self.url.clone(),
             // Fake channel as it is unused in this case.
-            channel: "virtual_direct_url_channel".to_string(),
+            channel: "".to_string(),
         }]))
     }
 }
