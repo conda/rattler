@@ -272,7 +272,7 @@ impl Installer {
             PackageCache::new(
                 default_cache_dir()
                     .expect("failed to determine default cache directory")
-                    .join("pkgs"),
+                    .join(rattler_cache::PACKAGE_CACHE_DIR),
             )
         });
 

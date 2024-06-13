@@ -101,7 +101,7 @@ impl GatewayBuilder {
 
         let package_cache = self
             .package_cache
-            .unwrap_or(PackageCache::new(cache.clone()));
+            .unwrap_or(PackageCache::new(cache.join(rattler_cache::PACKAGE_CACHE_DIR)));
 
         let max_concurrent_requests = self.max_concurrent_requests.unwrap_or(100);
         Gateway {

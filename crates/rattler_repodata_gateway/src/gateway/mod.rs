@@ -414,8 +414,8 @@ mod test {
     #[tokio::test]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
-            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join("pkgs")))
-            .with_cache_dir(default_cache_dir().unwrap().join("repodata"))
+            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join(rattler_cache::PACKAGE_CACHE_DIR)))
+            .with_cache_dir(default_cache_dir().unwrap().join(rattler_cache::REPODATA_CACHE_DIR))
             .finish();
 
         let index = local_conda_forge().await;
@@ -462,8 +462,8 @@ mod test {
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
         let gateway = Gateway::builder()
-            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join("pkgs")))
-            .with_cache_dir(default_cache_dir().unwrap().join("repodata"))
+            .with_package_cache(PackageCache::new(default_cache_dir().unwrap().join(rattler_cache::PACKAGE_CACHE_DIR)))
+            .with_cache_dir(default_cache_dir().unwrap().join(rattler_cache::REPODATA_CACHE_DIR))
             .finish();
 
         let index = local_conda_forge().await;

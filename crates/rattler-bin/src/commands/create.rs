@@ -144,8 +144,8 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
 
     // Get the package names from the matchspecs so we can only load the package records that we need.
     let gateway = Gateway::builder()
-        .with_cache_dir(cache_dir.join("repodata"))
-        .with_package_cache(PackageCache::new(cache_dir))
+        .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
+        .with_package_cache(PackageCache::new(cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR)))
         .with_client(download_client.clone())
         .finish();
 
