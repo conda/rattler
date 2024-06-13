@@ -115,17 +115,18 @@ impl GatewayQuery {
             }
         }
 
-        // Prepare subdir vec, with direct url offset prepended.
+        // Result offset for direct url queries.
         let direct_url_offset = if direct_url_specs.is_empty() { 0 } else { 1 };
-        let mut subdirs = Vec::with_capacity(channels_and_platforms.len() + direct_url_offset);
 
         // Create barrier cells for each subdirectory.
         // This can be used to wait until the subdir becomes available.
+        let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
         for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
             // Create a barrier so work that need this subdir can await it.
             let barrier = Arc::new(BarrierCell::new());
-            subdirs.push((subdir_idx, barrier.clone()));
+            // Set the subdir to prepend the direct url queries in the result.
+            subdirs.push((subdir_idx + direct_url_offset, barrier.clone()));
 
             let inner = self.gateway.clone();
             let reporter = self.reporter.clone();
@@ -142,9 +143,6 @@ impl GatewayQuery {
                 }
             });
         }
-
-        let len = subdirs.len();
-        let mut result = vec![RepoData::default(); len];
 
         // A list of futures to fetch the records for the pending package names.
         // The main task awaits these futures.
@@ -182,12 +180,15 @@ impl GatewayQuery {
                             ));
                         }
                     }
-                    // Push the direct url in the first subdir for channel priority logic.
+                    // Push the direct url in the first subdir result for channel priority logic.
                     Ok((0, vec![spec.0], record))
                 }
                 .boxed(),
             );
         }
+
+        let len = subdirs.len() + direct_url_offset;
+        let mut result = vec![RepoData::default(); len];
 
         // Loop until all pending package names have been fetched.
         loop {
@@ -206,12 +207,8 @@ impl GatewayQuery {
                                 Subdir::Found(subdir) => subdir
                                     .get_or_fetch_package_records(&package_name, reporter)
                                     .await
-                                    .map(|records| {
-                                        (subdir_idx + direct_url_offset, specs, records)
-                                    }),
-                                Subdir::NotFound => {
-                                    Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![])))
-                                }
+                                    .map(|records| (subdir_idx, specs, records)),
+                                Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
                             }
                         }
                         .boxed(),
