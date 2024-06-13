@@ -79,31 +79,6 @@ impl<'a> Deref for SolverMatchSpec<'a> {
 
 impl<'a> VersionSet for SolverMatchSpec<'a> {
     type V = SolverPackageRecord<'a>;
-
-    fn contains(&self, v: &Self::V) -> bool {
-        match v {
-            SolverPackageRecord::Record(rec) => self.inner.matches(*rec),
-            SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
-                version,
-                build_string,
-                ..
-            }) => {
-                if let Some(spec) = self.inner.version.as_ref() {
-                    if !spec.matches(version) {
-                        return false;
-                    }
-                }
-
-                if let Some(build_match) = self.inner.build.as_ref() {
-                    if !build_match.matches(build_string) {
-                        return false;
-                    }
-                }
-
-                true
-            }
-        }
-    }
 }
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
