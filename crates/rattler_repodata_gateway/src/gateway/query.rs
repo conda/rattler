@@ -104,7 +104,7 @@ impl GatewayQuery {
                 let name = spec
                     .name
                     .clone()
-                    .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
+                    .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
                 seen.insert(name.clone());
                 direct_url_specs.push(spec);
             } else if let Some(name) = &spec.name {
@@ -116,10 +116,12 @@ impl GatewayQuery {
             }
         }
 
-        // Create barrier cells for each subdirectory. This can be used to wait until
-        // the subdir becomes available.
-        let mut subdirs =
-            Vec::with_capacity(channels_and_platforms.len() + usize::from(direct_url_specs.is_empty()));
+        // Prepare subdir vec, with direct url offset prepended.
+        let direct_url_offset = if direct_url_specs.is_empty() { 0 } else { 1 };
+        let mut subdirs = Vec::with_capacity(channels_and_platforms.len() + direct_url_offset);
+
+        // Create barrier cells for each subdirectory.
+        // This can be used to wait until the subdir becomes available.
         let mut pending_subdirs = FuturesUnordered::new();
         for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
             // Create a barrier so work that need this subdir can await it.
@@ -145,8 +147,8 @@ impl GatewayQuery {
         let len = subdirs.len();
         let mut result = vec![RepoData::default(); len];
 
-        // A list of futures to fetch the records for the pending package names. The
-        // main task awaits these futures.
+        // A list of futures to fetch the records for the pending package names.
+        // The main task awaits these futures.
         let mut pending_records = FuturesUnordered::new();
 
         // Push the direct url queries to the pending_records.
@@ -157,7 +159,7 @@ impl GatewayQuery {
                     let url = spec
                         .clone()
                         .url
-                        .ok_or(GatewayError::MatchSpecNoName(spec.clone()))?;
+                        .ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
                     let query = DirectUrlQuery::new(
                         url.clone(),
                         gateway.package_cache.clone(),
@@ -171,7 +173,7 @@ impl GatewayQuery {
 
                     // Check if record actually has the same name
                     if let Some(record) = record.first() {
-                        let spec_name = spec.clone().name.ok_or(MatchSpecNoName(spec.clone()))?;
+                        let spec_name = spec.clone().name.ok_or(GatewayError::MatchSpecWithoutName(spec.clone()))?;
                         if record.package_record.name != spec_name {
                             // Using as_source to get the closest to the retrieved input.
                             return Err(GatewayError::NotMatchingNameUrl(
@@ -180,10 +182,10 @@ impl GatewayQuery {
                             ));
                         }
                     }
-                    // Push the direct url record into the last subdir
-                    Ok((len - 1, vec![spec], record))
+                    // Push the direct url in the first subdir for channel priority logic.
+                    Ok((0, vec![spec], record))
                 }
-                .boxed(),
+                    .boxed(),
             );
         }
 
@@ -204,11 +206,11 @@ impl GatewayQuery {
                                 Subdir::Found(subdir) => subdir
                                     .get_or_fetch_package_records(&package_name, reporter)
                                     .await
-                                    .map(|records| (subdir_idx, specs, records)),
-                                Subdir::NotFound => Ok((subdir_idx, specs, Arc::from(vec![]))),
+                                    .map(|records| (subdir_idx + direct_url_offset, specs, records)),
+                                Subdir::NotFound => Ok((subdir_idx + direct_url_offset, specs, Arc::from(vec![]))),
                             }
                         }
-                        .boxed(),
+                            .boxed(),
                     );
                 }
             }
