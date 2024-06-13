@@ -9,7 +9,6 @@ use itertools::Itertools;
 use rattler_conda_types::{Channel, MatchSpec, Matches, PackageName, Platform};
 
 use super::{subdir::Subdir, BarrierCell, GatewayError, GatewayInner, RepoData};
-use crate::GatewayError::MatchSpecNoName;
 use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
 
 /// Represents a query to execute with a [`Gateway`].
