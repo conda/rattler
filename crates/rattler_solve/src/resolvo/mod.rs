@@ -541,7 +541,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 let record = &self.pool.resolve_solvable(*c).record;
                 match record {
                     SolverPackageRecord::Record(rec) => {
-                        spec.matches(&rec.package_record) != inverse
+                        spec.matches(*rec) != inverse
                     }
                     SolverPackageRecord::VirtualPackage(GenericVirtualPackage {
                         version,
