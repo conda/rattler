@@ -1,4 +1,4 @@
-use super::{Component, StrictVersion, Version};
+use super::{Component, NumeralWithLeadingZeros, StrictVersion, Version};
 use crate::version::flags::Flags;
 use crate::version::segment::Segment;
 use crate::version::{ComponentVec, SegmentVec};
@@ -65,6 +65,9 @@ pub enum ParseVersionErrorKind {
     /// The string contained an invalid numeral
     #[error("invalid number")]
     InvalidNumeral(ParseIntError),
+    /// Numbers with leading zeros can't be parsed as integers without information
+    #[error("unexpected leading zeros in a number e.g. `01` or `000`")]
+    IntegerWithLeadingZero,
     /// The string contained an empty version component
     #[error("expected a version component e.g. `2` or `rc`")]
     EmptyVersionComponent,
@@ -77,11 +80,11 @@ pub enum ParseVersionErrorKind {
     /// Expected a version component
     #[error("expected a version component e.g. `2` or `rc`")]
     ExpectedComponent,
-    /// Expected a segment seperator
+    /// Expected a segment separator
     #[error("expected a '.', '-', or '_'")]
     ExpectedSegmentSeparator,
     /// Cannot mix and match dashes and underscores
-    #[error("cannot use both underscores and dashes as version segment seperators")]
+    #[error("cannot use both underscores and dashes as version segment separators")]
     CannotMixAndMatchDashesAndUnderscores,
     /// Expected the end of the string
     #[error("encountered more characters but expected none")]
@@ -121,8 +124,39 @@ pub fn epoch_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
 /// Parses a numeral from the input, fails if the parsed digits cannot be represented by an `u64`.
 fn numeral_parser(input: &str) -> IResult<&str, u64, ParseVersionErrorKind> {
     let (rest, digits) = digit1(input)?;
+
+    if digits.starts_with('0') && digits.len() > 1 {
+        return Err(nom::Err::Error(
+            ParseVersionErrorKind::IntegerWithLeadingZero,
+        ));
+    }
+
     match u64::from_str(digits) {
         Ok(numeral) => Ok((rest, numeral)),
+        Err(e) => Err(nom::Err::Failure(ParseVersionErrorKind::InvalidNumeral(e))),
+    }
+}
+
+/// Parses a numeral with leading zeros from the input, fails if the parsed digits cannot be represented by an `u64`.
+fn numeral_with_leading_zeros_parser(
+    input: &str,
+) -> IResult<&str, NumeralWithLeadingZeros, ParseVersionErrorKind> {
+    let (rest, digits) = digit1(input)?;
+
+    let mut leading_zeros = input.chars().take_while(|c| c == &'0').count();
+    match u64::from_str(digits) {
+        Ok(value) => {
+            if value == 0 {
+                leading_zeros -= 1;
+            }
+            Ok((
+                rest,
+                NumeralWithLeadingZeros {
+                    numeral: value,
+                    leading_zeros,
+                },
+            ))
+        }
         Err(e) => Err(nom::Err::Failure(ParseVersionErrorKind::InvalidNumeral(e))),
     }
 }
@@ -132,6 +166,11 @@ fn component_parser<'i>(input: &'i str) -> IResult<&'i str, Component, ParseVers
     alt((
         // Parse a numeral
         map(numeral_parser, Component::Numeral),
+        // Parse a numeral with leading zeros
+        map(
+            numeral_with_leading_zeros_parser,
+            Component::NumeralWithLeadingZeros,
+        ),
         // Parse special case components
         value(Component::Post, tag_no_case("post")),
         value(Component::Dev, tag_no_case("dev")),
@@ -485,6 +524,7 @@ mod test {
             "1-2_3",
             "1.0.1_",
             "1.0.1-",
+            "1.000",
             "1.0.1post.za",
             "1@2",
             "1_",

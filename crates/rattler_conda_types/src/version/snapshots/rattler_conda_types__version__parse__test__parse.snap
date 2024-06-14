@@ -43,13 +43,13 @@ expression: index_map
         },
     ),
     "1-2-3_": Error(
-        "cannot use both underscores and dashes as version segment seperators",
+        "cannot use both underscores and dashes as version segment separators",
     ),
     "1-2_3": Error(
-        "cannot use both underscores and dashes as version segment seperators",
+        "cannot use both underscores and dashes as version segment separators",
     ),
     "1-_": Error(
-        "cannot use both underscores and dashes as version segment seperators",
+        "cannot use both underscores and dashes as version segment separators",
     ),
     "1.0.1-": Version(
         Version {
@@ -69,6 +69,12 @@ expression: index_map
             local: [],
         },
     ),
+    "1.000": Version(
+        Version {
+            version: [[0], [1], [0, 000]],
+            local: [],
+        },
+    ),
     "1@2": Error(
         "encountered more characters but expected none",
     ),
@@ -79,7 +85,7 @@ expression: index_map
         },
     ),
     "1_-": Error(
-        "cannot use both underscores and dashes as version segment seperators",
+        "cannot use both underscores and dashes as version segment separators",
     ),
     "1_2_3": Version(
         Version {

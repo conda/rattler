@@ -674,11 +674,21 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
     }
 }
 
+#[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct NumeralWithLeadingZeros {
+    leading_zeros: usize,
+    numeral: u64,
+}
+
 /// Either a number, literal or the infinity.
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum Component {
     /// Numeral Component.
     Numeral(u64),
+
+    /// components like '000' or '012' which can't be represented as numbers
+    /// but also shouldn't be compared lexicographically
+    NumeralWithLeadingZeros(NumeralWithLeadingZeros),
 
     /// Post should always be ordered greater than anything else.
     Post,
@@ -785,15 +795,22 @@ impl Ord for Component {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             // Numbers are always ordered higher than strings
-            (Component::Numeral(_), Component::Iden(_) | Component::UnderscoreOrDash { .. }) => {
-                Ordering::Greater
-            }
-            (Component::Iden(_) | Component::UnderscoreOrDash { .. }, Component::Numeral(_)) => {
-                Ordering::Less
-            }
+            (
+                Component::Numeral(_) | Component::NumeralWithLeadingZeros(_),
+                Component::Iden(_) | Component::UnderscoreOrDash { .. },
+            ) => Ordering::Greater,
+            (
+                Component::Iden(_) | Component::UnderscoreOrDash { .. },
+                Component::Numeral(_) | Component::NumeralWithLeadingZeros(_),
+            ) => Ordering::Less,
 
             // Compare numbers and identifiers normally amongst themselves.
             (Component::Numeral(a), Component::Numeral(b)) => a.cmp(b),
+            (Component::NumeralWithLeadingZeros(a), Component::NumeralWithLeadingZeros(b)) => {
+                a.numeral.cmp(&b.numeral)
+            }
+            (Component::Numeral(a), Component::NumeralWithLeadingZeros(b)) => a.cmp(&b.numeral),
+            (Component::NumeralWithLeadingZeros(a), Component::Numeral(b)) => a.numeral.cmp(b),
             (Component::Iden(a), Component::Iden(b)) => a.cmp(b),
             (Component::Post, Component::Post) => Ordering::Equal,
             (Component::Dev, Component::Dev) => Ordering::Equal,
@@ -826,6 +843,10 @@ impl Display for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Component::Numeral(n) => write!(f, "{n}"),
+            Component::NumeralWithLeadingZeros(NumeralWithLeadingZeros {
+                leading_zeros,
+                numeral,
+            }) => write!(f, "{z}{n}", z = "0".repeat(*leading_zeros), n = numeral),
             Component::Iden(s) => write!(f, "{s}"),
             Component::Post => write!(f, "post"),
             Component::Dev => write!(f, "dev"),
@@ -839,6 +860,10 @@ impl Debug for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Component::Numeral(n) => write!(f, "{n}"),
+            Component::NumeralWithLeadingZeros(NumeralWithLeadingZeros {
+                leading_zeros,
+                numeral,
+            }) => write!(f, "{z}{n}", z = "0".repeat(*leading_zeros), n = numeral),
             Component::Iden(s) => write!(f, "'{s}'"),
             Component::Post => write!(f, "inf"),
             Component::Dev => write!(f, "'DEV'"),
