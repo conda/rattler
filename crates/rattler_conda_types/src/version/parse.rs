@@ -145,15 +145,15 @@ fn numeral_with_leading_zeros_parser(
 
     let mut leading_zeros = input.chars().take_while(|c| c == &'0').count();
     match u64::from_str(digits) {
-        Ok(value) => {
-            if value == 0 {
+        Ok(numeral) => {
+            if numeral == 0 {
                 leading_zeros -= 1;
             }
             Ok((
                 rest,
                 NumeralWithLeadingZeros {
-                    numeral: value,
                     leading_zeros,
+                    numeral,
                 },
             ))
         }

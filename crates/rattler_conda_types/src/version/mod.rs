@@ -676,8 +676,8 @@ impl<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> fmt::Display for SegmentForma
 
 #[derive(Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct NumeralWithLeadingZeros {
-    leading_zeros: usize,
-    numeral: u64,
+    pub leading_zeros: usize,
+    pub numeral: u64,
 }
 
 /// Either a number, literal or the infinity.

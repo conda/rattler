@@ -20,6 +20,11 @@ impl From<Component> for PyComponent {
         match value {
             Component::Iden(v) => Self::String(v.to_string()),
             Component::Numeral(n) => Self::Number(n),
+            Component::NumeralWithLeadingZeros(v) => Self::String(format!(
+                "{z}{n}",
+                z = "0".repeat(v.leading_zeros),
+                n = v.numeral
+            )),
             Component::Dev => Self::String("dev".to_string()),
             Component::Post => Self::String("post".to_string()),
             Component::UnderscoreOrDash { .. } => Self::String("_".to_string()),
