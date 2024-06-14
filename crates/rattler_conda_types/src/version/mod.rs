@@ -763,7 +763,10 @@ impl Component {
 
     /// Checks whether a component is [`Component::Numeral`]
     pub fn is_numeric(&self) -> bool {
-        matches!(self, Component::Numeral(_))
+        matches!(
+            self,
+            Component::Numeral(_) | Component::NumeralWithLeadingZeros(_)
+        )
     }
 
     /// Checks whether the component is a zero.
@@ -860,10 +863,9 @@ impl Debug for Component {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Component::Numeral(n) => write!(f, "{n}"),
-            Component::NumeralWithLeadingZeros(NumeralWithLeadingZeros {
-                leading_zeros,
-                numeral,
-            }) => write!(f, "{z}{n}", z = "0".repeat(*leading_zeros), n = numeral),
+            Component::NumeralWithLeadingZeros(NumeralWithLeadingZeros { numeral, .. }) => {
+                write!(f, "{n}", n = numeral)
+            }
             Component::Iden(s) => write!(f, "'{s}'"),
             Component::Post => write!(f, "inf"),
             Component::Dev => write!(f, "'DEV'"),
