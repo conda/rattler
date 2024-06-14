@@ -6,7 +6,7 @@ use std::{
     collections::{HashMap, HashSet},
     fmt::{Display, Formatter},
     marker::PhantomData,
-    ops::Deref,
+    ops::Deref, str::FromStr,
 };
 
 use chrono::{DateTime, Utc};
@@ -174,6 +174,8 @@ pub struct CondaDependencyProvider<'a> {
     strategy: SolveStrategy,
 
     direct_dependencies: HashSet<NameId>,
+
+    cached_versions: HashMap<PackageName, rattler_conda_types::Version>
 }
 
 impl<'a> CondaDependencyProvider<'a> {
@@ -189,6 +191,7 @@ impl<'a> CondaDependencyProvider<'a> {
         channel_priority: ChannelPriority,
         exclude_newer: Option<DateTime<Utc>>,
         strategy: SolveStrategy,
+        cached_versions: HashMap<PackageName, rattler_conda_types::Version>,
     ) -> Result<Self, SolveError> {
         let pool = Pool::default();
         let mut records: HashMap<NameId, Candidates> = HashMap::default();
@@ -390,6 +393,10 @@ impl<'a> CondaDependencyProvider<'a> {
             candidates.locked = Some(solvable);
         }
 
+        let cached_versions = HashMap::from([
+            (PackageName::try_from("boltons").unwrap(), rattler_conda_types::Version::from_str("21.0.0").unwrap()),
+        ]);
+
         Ok(Self {
             pool,
             records,
@@ -398,6 +405,7 @@ impl<'a> CondaDependencyProvider<'a> {
             stop_time,
             strategy,
             direct_dependencies,
+            cached_versions,
         })
     }
 
@@ -478,7 +486,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
             }
         };
         solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy)
+            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy, self.cached_versions.clone())
         });
     }
 
@@ -608,6 +616,7 @@ impl super::SolverImpl for Solver {
             task.channel_priority,
             task.exclude_newer,
             task.strategy,
+            task.cached_packages.clone(),
         )?;
 
         // Construct the requirements that the solver needs to satisfy.

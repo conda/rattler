@@ -9,10 +9,10 @@ pub mod libsolv_c;
 #[cfg(feature = "resolvo")]
 pub mod resolvo;
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use chrono::{DateTime, Utc};
-use rattler_conda_types::{GenericVirtualPackage, MatchSpec, RepoDataRecord};
+use rattler_conda_types::{GenericVirtualPackage, MatchSpec, PackageName, RepoDataRecord, Version};
 
 /// Represents a solver implementation, capable of solving [`SolverTask`]s
 pub trait SolverImpl {
@@ -149,6 +149,9 @@ pub struct SolverTask<TAvailablePackagesIterator> {
 
     /// The solve strategy.
     pub strategy: SolveStrategy,
+
+    /// Cached packages.
+    pub cached_packages: HashMap<PackageName, Version>,
 }
 
 impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
@@ -166,6 +169,7 @@ impl<'r, I: IntoIterator<Item = &'r RepoDataRecord>> FromIterator<I>
             channel_priority: ChannelPriority::default(),
             exclude_newer: None,
             strategy: SolveStrategy::default(),
+            cached_packages: Default::default(),
         }
     }
 }
