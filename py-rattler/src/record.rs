@@ -139,8 +139,10 @@ impl PyRecord {
 
     /// A deprecated md5 hash.
     #[getter]
-    pub fn legacy_bz2_md5(&self) -> Option<String> {
-        self.as_package_record().legacy_bz2_md5.clone()
+    pub fn legacy_bz2_md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.as_package_record()
+            .legacy_bz2_md5
+            .map(|md5| PyBytes::new(py, &md5))
     }
 
     /// A deprecated package archive size.

@@ -110,7 +110,8 @@ pub struct PackageRecord {
     pub features: Option<String>,
 
     /// A deprecated md5 hash
-    pub legacy_bz2_md5: Option<String>,
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub legacy_bz2_md5: Option<Md5Hash>,
 
     /// A deprecated package archive size.
     pub legacy_bz2_size: Option<u64>,
