@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/mamba-org/rattler/compare/rattler_cache-v0.1.0...rattler_cache-v0.1.1) - 2024-06-17
+
+### Added
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+
 ## [0.1.0](https://github.com/baszalmstra/rattler/releases/tag/rattler_cache-v0.1.0) - 2024-06-04
 
 ### Other
