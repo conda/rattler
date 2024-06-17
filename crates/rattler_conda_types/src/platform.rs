@@ -33,6 +33,8 @@ pub enum Platform {
 
     EmscriptenWasm32,
     WasiWasm32,
+
+    ZosZ,
 }
 
 impl PartialOrd for Platform {
@@ -65,6 +67,7 @@ pub enum Arch {
     Riscv32,
     Riscv64,
     Wasm32,
+    Z,
 }
 
 impl Platform {
@@ -225,6 +228,7 @@ impl Platform {
             Platform::Win32 | Platform::Win64 | Platform::WinArm64 => Some("win"),
             Platform::EmscriptenWasm32 => Some("emscripten"),
             Platform::WasiWasm32 => Some("wasi"),
+            Platform::ZosZ => Some("zos"),
         }
     }
 }
@@ -270,6 +274,7 @@ impl FromStr for Platform {
             "win-arm64" => Platform::WinArm64,
             "emscripten-wasm32" => Platform::EmscriptenWasm32,
             "wasi-wasm32" => Platform::WasiWasm32,
+            "zos-z" => Platform::ZosZ,
             string => {
                 return Err(ParsePlatformError {
                     string: string.to_owned(),
@@ -300,6 +305,7 @@ impl From<Platform> for &'static str {
             Platform::WinArm64 => "win-arm64",
             Platform::EmscriptenWasm32 => "emscripten-wasm32",
             Platform::WasiWasm32 => "wasi-wasm32",
+            Platform::ZosZ => "zos-z",
             Platform::Unknown => "unknown",
         }
     }
@@ -324,6 +330,7 @@ impl Platform {
             Platform::LinuxAarch64 => Some(Arch::Aarch64),
             Platform::WinArm64 | Platform::OsxArm64 => Some(Arch::Arm64),
             Platform::EmscriptenWasm32 | Platform::WasiWasm32 => Some(Arch::Wasm32),
+            Platform::ZosZ => Some(Arch::Z),
         }
     }
 }
@@ -392,6 +399,7 @@ impl FromStr for Arch {
             "riscv32" => Arch::Riscv32,
             "riscv64" => Arch::Riscv64,
             "wasm32" => Arch::Wasm32,
+            "z" => Arch::Z,
             string => {
                 return Err(ParseArchError {
                     string: string.to_owned(),
@@ -416,6 +424,7 @@ impl From<Arch> for &'static str {
             Arch::Riscv32 => "riscv32",
             Arch::Riscv64 => "riscv64",
             Arch::Wasm32 => "wasm32",
+            Arch::Z => "z",
         }
     }
 }
@@ -472,6 +481,7 @@ mod tests {
             Platform::WasiWasm32
         );
         assert_eq!("noarch".parse::<Platform>().unwrap(), Platform::NoArch);
+        assert_eq!("zos-z".parse::<Platform>().unwrap(), Platform::ZosZ);
     }
 
     #[test]
@@ -485,6 +495,7 @@ mod tests {
         assert_eq!(Platform::Linux64.to_string(), "linux-64");
         assert_eq!(Platform::Linux32.to_string(), "linux-32");
         assert_eq!(Platform::LinuxAarch64.to_string(), "linux-aarch64");
+        assert_eq!(Platform::ZosZ.to_string(), "zos-z");
     }
 
     #[test]
@@ -507,5 +518,6 @@ mod tests {
         assert_eq!(Platform::EmscriptenWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::WasiWasm32.arch(), Some(Arch::Wasm32));
         assert_eq!(Platform::NoArch.arch(), None);
+        assert_eq!(Platform::ZosZ.arch(), Some(Arch::Z));
     }
 }

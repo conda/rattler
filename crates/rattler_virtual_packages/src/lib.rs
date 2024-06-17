@@ -332,6 +332,8 @@ impl Archspec {
             Platform::LinuxS390X => "s390x",
             Platform::LinuxRiscv32 => "riscv32",
             Platform::LinuxRiscv64 => "riscv64",
+            // IBM Zos is a special case. It is not supported by archspec as far as I can see.
+            Platform::ZosZ => return None,
 
             // TODO: There must be a minimal aarch64 version that windows supports.
             Platform::WinArm64 => "aarch64",
