@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use pyo3::{
-    exceptions::PyTypeError, intern, pyclass, pymethods, FromPyObject, PyAny, PyErr, PyResult,
+    exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, FromPyObject, PyAny,
+    PyErr, PyResult, Python,
 };
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
@@ -162,8 +163,10 @@ impl PyRecord {
 
     /// Optionally a MD5 hash of the package archive.
     #[getter]
-    pub fn md5(&self) -> Option<String> {
-        self.as_package_record().md5.map(|md5| format!("{md5:X}"))
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+        self.as_package_record()
+            .md5
+            .map(|md5| PyBytes::new(py, &md5))
     }
 
     /// Package name of the Record.
@@ -180,10 +183,10 @@ impl PyRecord {
 
     /// Optionally a SHA256 hash of the package archive.
     #[getter]
-    pub fn sha256(&self) -> Option<String> {
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
         self.as_package_record()
             .sha256
-            .map(|sha| format!("{sha:X}"))
+            .map(|sha| PyBytes::new(py, &sha))
     }
 
     /// Optionally the size of the package archive in bytes.

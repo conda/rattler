@@ -242,7 +242,7 @@ class PackageRecord:
         return self._record.features
 
     @property
-    def legacy_bz2_md5(self) -> Optional[str]:
+    def legacy_bz2_md5(self) -> Optional[bytes]:
         """
         A deprecated md5 hash.
         """
@@ -295,7 +295,7 @@ class PackageRecord:
         return self._record.license_family
 
     @property
-    def md5(self) -> Optional[str]:
+    def md5(self) -> Optional[bytes]:
         """
         Optionally a MD5 hash of the package archive.
 
@@ -306,8 +306,8 @@ class PackageRecord:
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
-        >>> record.md5
-        '5E5A97795DE72F8CC3BAF3D9EA6327A2'
+        >>> record.md5.hex()
+        '5e5a97795de72f8cc3baf3d9ea6327a2'
         >>>
         ```
         """
@@ -380,7 +380,7 @@ class PackageRecord:
         return self._record.platform
 
     @property
-    def sha256(self) -> Optional[str]:
+    def sha256(self) -> Optional[bytes]:
         """
         Optionally a SHA256 hash of the package archive.
 
@@ -391,8 +391,8 @@ class PackageRecord:
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
-        >>> record.sha256
-        '4E50B3D90A351C9D47D239D3F90FCE4870DF2526E4F7FEF35203AB3276A6DFC9'
+        >>> record.sha256.hex()
+        '4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9'
         >>>
         """
         return self._record.sha256
