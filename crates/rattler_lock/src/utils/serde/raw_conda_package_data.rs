@@ -57,7 +57,8 @@ pub(crate) struct RawCondaPackageData<'a> {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legacy_bz2_md5: Cow<'a, Option<String>>,
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
+    pub legacy_bz2_md5: Option<Md5Hash>,
 
     // Dependencies
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -109,7 +110,7 @@ impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
                 constrains: value.constrains.into_owned(),
                 depends: value.depends.into_owned(),
                 features: value.features.into_owned(),
-                legacy_bz2_md5: value.legacy_bz2_md5.into_owned(),
+                legacy_bz2_md5: value.legacy_bz2_md5,
                 legacy_bz2_size: value.legacy_bz2_size.into_owned(),
                 license: value.license.into_owned(),
                 license_family: value.license_family.into_owned(),
@@ -151,7 +152,7 @@ impl<'a> From<&'a CondaPackageData> for RawCondaPackageData<'a> {
             platform: Cow::Borrowed(&value.package_record.platform),
             arch: Cow::Borrowed(&value.package_record.arch),
             md5: value.package_record.md5,
-            legacy_bz2_md5: Cow::Borrowed(&value.package_record.legacy_bz2_md5),
+            legacy_bz2_md5: value.package_record.legacy_bz2_md5,
             sha256: value.package_record.sha256,
             size: Cow::Borrowed(&value.package_record.size),
             legacy_bz2_size: Cow::Borrowed(&value.package_record.legacy_bz2_size),
