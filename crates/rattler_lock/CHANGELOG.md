@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.13](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.12...rattler_lock-v0.22.13) - 2024-06-17
+
+### Added
+- return pybytes for sha256 and md5 everywhere and use md5 hash for legacy bz2 md5 ([#752](https://github.com/mamba-org/rattler/pull/752))
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+
 ## [0.22.12](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.11...rattler_lock-v0.22.12) - 2024-06-06
 
 ### Added

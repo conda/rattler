@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.25.2...rattler_conda_types-v0.26.0) - 2024-06-17
+
+### Added
+- add support for zos-z ([#753](https://github.com/mamba-org/rattler/pull/753))
+- return pybytes for sha256 and md5 everywhere and use md5 hash for legacy bz2 md5 ([#752](https://github.com/mamba-org/rattler/pull/752))
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+- add shards_base_url and write shards atomically ([#747](https://github.com/mamba-org/rattler/pull/747))
+
+### Fixed
+- allow empty json repodata ([#745](https://github.com/mamba-org/rattler/pull/745))
+- lenient and strict parsing of equality signs ([#738](https://github.com/mamba-org/rattler/pull/738))
+- This fixes parsing of `ray[default,data] >=2.9.0,<3.0.0` ([#732](https://github.com/mamba-org/rattler/pull/732))
+
 ## [0.25.2](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.25.1...rattler_conda_types-v0.25.2) - 2024-06-04
 
 ### Added
