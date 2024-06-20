@@ -250,7 +250,7 @@ impl GatewayQuery {
 
                         for record in records.iter() {
                             if !request_specs.iter().any(|spec| spec.matches(record)) {
-                                // Do not recurse into records that do not match to root spec.
+                                // Do not return records that do not match to root spec.
                                 continue;
                             }
                             result.len += 1;
