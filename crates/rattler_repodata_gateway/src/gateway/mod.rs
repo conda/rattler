@@ -345,8 +345,8 @@ mod test {
     use rattler_cache::default_cache_dir;
     use rattler_cache::package_cache::PackageCache;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Strict, ParseStrictness::Lenient, Platform,
-        RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Lenient,
+        ParseStrictness::Strict, Platform, RepoDataRecord,
     };
     use rstest::rstest;
     use url::Url;
@@ -557,11 +557,7 @@ mod test {
         let index = local_conda_forge().await;
 
         // Try a complex spec
-        let matchspec = MatchSpec::from_str(
-            "openssl=3.*=*_1",
-            Lenient,
-        )
-        .unwrap();
+        let matchspec = MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap();
 
         let records = gateway
             .query(
@@ -577,11 +573,7 @@ mod test {
         assert!(total_records == 3);
 
         // Try another spec
-        let matchspec = MatchSpec::from_str(
-            "openssl=3",
-            Lenient,
-        )
-        .unwrap();
+        let matchspec = MatchSpec::from_str("openssl=3", Lenient).unwrap();
 
         let records = gateway
             .query(
@@ -597,16 +589,8 @@ mod test {
         assert!(total_records == 9);
 
         // Try with multiple specs
-        let matchspec1 = MatchSpec::from_str(
-            "openssl=3",
-            Lenient,
-        )
-        .unwrap();
-        let matchspec2 = MatchSpec::from_str(
-            "openssl=1",
-            Lenient,
-        )
-        .unwrap();
+        let matchspec1 = MatchSpec::from_str("openssl=3", Lenient).unwrap();
+        let matchspec2 = MatchSpec::from_str("openssl=1", Lenient).unwrap();
 
         let records = gateway
             .query(
