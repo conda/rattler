@@ -249,7 +249,7 @@ impl GatewayQuery {
                         let result = &mut result[result_idx];
 
                         for record in records.iter() {
-                            if !request_specs.iter().any(|spec| spec.matches(record)) {
+                            if !self.recursive && !request_specs.iter().any(|spec| spec.matches(record)) {
                                 // Do not return records that do not match to root spec.
                                 continue;
                             }
