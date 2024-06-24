@@ -22,6 +22,7 @@ use serde::{
 };
 use serde_json::value::RawValue;
 use superslice::Ext;
+use thiserror::Error;
 
 /// A struct to enable loading records from a `repodata.json` file on demand.
 /// Since most of the time you don't need all the records from the
@@ -447,13 +448,22 @@ impl<'de> Deserialize<'de> for PackageFilename<'de> {
     }
 }
 
+/// Error when parsing a package filename
+#[derive(Error, Debug)]
+pub enum PackageFilenameError {
+    /// The package filename must contain at least two `-`
+    #[error("package filename ({0}) must contain at least two `-`")]
+    NotEnoughDashes(String),
+}
+
 impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
-    type Error = &'static str;
+    type Error = PackageFilenameError;
 
     fn try_from(s: &'de str) -> Result<Self, Self::Error> {
-        let package = s.rsplitn(3, '-').nth(2).ok_or(
-            "package filename must contain at least two dashes (e.g. `foo-1.2.3-0.tar.bz2`",
-        )?;
+        let package = s
+            .rsplitn(3, '-')
+            .nth(2)
+            .ok_or(PackageFilenameError::NotEnoughDashes(s.to_string()))?;
         Ok(PackageFilename {
             package,
             filename: s,
