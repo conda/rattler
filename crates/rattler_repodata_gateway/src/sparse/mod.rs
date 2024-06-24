@@ -451,7 +451,9 @@ impl<'de> TryFrom<&'de str> for PackageFilename<'de> {
     type Error = &'static str;
 
     fn try_from(s: &'de str) -> Result<Self, Self::Error> {
-        let package = s.rsplitn(3, '-').nth(2).ok_or("invalid filename")?;
+        let package = s.rsplitn(3, '-').nth(2).ok_or(
+            "package filename must contain at least two dashes (e.g. `foo-1.2.3-0.tar.bz2`",
+        )?;
         Ok(PackageFilename {
             package,
             filename: s,
