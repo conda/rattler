@@ -336,6 +336,8 @@ impl Version {
     /// will return the version: `3a.4`.
     pub fn with_segments(&self, segments: impl RangeBounds<usize>) -> Option<Version> {
         // Determine the actual bounds to use
+        // println!("{:?}", self.segments);
+        // println!("{:?}", self.components);
         let segment_count = self.segment_count();
         let start_segment_idx = match segments.start_bound() {
             Bound::Included(idx) => *idx,
@@ -398,6 +400,8 @@ impl Version {
                 .and_then(|idx| flags.with_local_segment_index(idx))
                 .expect("the number of segments must always be smaller so this should never fail");
         }
+        // println!("{:?}", segments);
+        // println!("{:?}", components);
 
         Some(Version {
             components,
@@ -1343,6 +1347,13 @@ mod test {
                 .with_segments(..)
                 .unwrap(),
             Version::from_str("3!4.5a.6b+7.8").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("0.11.0.post1+g1b5f1f6")
+                .unwrap()
+                .with_segments(..3)
+                .unwrap(),
+            Version::from_str("0.11.0+g1b5f1f6").unwrap()
         );
     }
 
