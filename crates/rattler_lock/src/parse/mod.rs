@@ -84,16 +84,22 @@ mod test {
 
     #[test]
     fn test_stability() {
-        let lock_file = LockFile::from_path(
+        let lock_file_original = LockFile::from_path(
             &Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../test-data/conda-lock/v5/stability.yml"),
+                .join("../../test-data/conda-lock/v5/stability-original.yml"),
+        )
+        .unwrap();
+        let lock_file_shuffled = LockFile::from_path(
+            &Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test-data/conda-lock/v5/stability-shuffled.yml"),
         )
         .unwrap();
 
-        let output = serde_yaml::to_string(&lock_file).expect("could not deserialize");
-        let lock_file = LockFile::from_str(&output).unwrap();
-        let output2 = serde_yaml::to_string(&lock_file).expect("could not deserialize");
+        let output_original =
+            serde_yaml::to_string(&lock_file_original).expect("could not deserialize");
+        let output_shuffled =
+            serde_yaml::to_string(&lock_file_shuffled).expect("could not deserialize");
 
-        assert_eq!(output, output2);
+        assert_eq!(output_original, output_shuffled);
     }
 }
