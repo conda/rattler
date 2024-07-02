@@ -380,7 +380,10 @@ impl Version {
             };
             segments.push(segment);
 
-            for component in segment_iter.components() {
+            // We skip over implicit default `0` components because we also copy
+            // the implicit default flag so it would result in double-`0`s.
+            let implicit_default = usize::from(segment_iter.has_implicit_default());
+            for component in segment_iter.components().skip(implicit_default) {
                 components.push(component.clone());
             }
         }
@@ -389,7 +392,9 @@ impl Version {
         let local_start_idx = segments.len();
         for segment_iter in self.local_segments() {
             segments.push(segment_iter.segment);
-            for component in segment_iter.components() {
+
+            let implicit_default = usize::from(segment_iter.has_implicit_default());
+            for component in segment_iter.components().skip(implicit_default) {
                 components.push(component.clone());
             }
         }
@@ -400,8 +405,6 @@ impl Version {
                 .and_then(|idx| flags.with_local_segment_index(idx))
                 .expect("the number of segments must always be smaller so this should never fail");
         }
-        // println!("{:?}", segments);
-        // println!("{:?}", components);
 
         Some(Version {
             components,
