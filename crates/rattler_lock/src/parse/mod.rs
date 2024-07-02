@@ -81,4 +81,19 @@ mod test {
 
         insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 5 is supported.");
     }
+
+    #[test]
+    fn test_stability() {
+        let lock_file = LockFile::from_path(
+            &Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test-data/conda-lock/v5/stability.yml"),
+        )
+        .unwrap();
+
+        let output = serde_yaml::to_string(&lock_file).expect("could not deserialize");
+        let lock_file = LockFile::from_str(&output).unwrap();
+        let output2 = serde_yaml::to_string(&lock_file).expect("could not deserialize");
+
+        assert_eq!(output, output2);
+    }
 }
