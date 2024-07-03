@@ -378,7 +378,10 @@ impl Version {
             };
             segments.push(segment);
 
-            for component in segment_iter.components() {
+            // We skip over implicit default `0` components because we also copy
+            // the implicit default flag so it would result in double-`0`s.
+            let implicit_default = usize::from(segment_iter.has_implicit_default());
+            for component in segment_iter.components().skip(implicit_default) {
                 components.push(component.clone());
             }
         }
@@ -387,7 +390,9 @@ impl Version {
         let local_start_idx = segments.len();
         for segment_iter in self.local_segments() {
             segments.push(segment_iter.segment);
-            for component in segment_iter.components() {
+
+            let implicit_default = usize::from(segment_iter.has_implicit_default());
+            for component in segment_iter.components().skip(implicit_default) {
                 components.push(component.clone());
             }
         }
@@ -1343,6 +1348,13 @@ mod test {
                 .with_segments(..)
                 .unwrap(),
             Version::from_str("3!4.5a.6b+7.8").unwrap()
+        );
+        assert_eq!(
+            Version::from_str("0.11.0.post1+g1b5f1f6")
+                .unwrap()
+                .with_segments(..3)
+                .unwrap(),
+            Version::from_str("0.11.0+g1b5f1f6").unwrap()
         );
     }
 
