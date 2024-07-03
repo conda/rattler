@@ -60,10 +60,7 @@ impl Ord for PypiPackageData {
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
             .then_with(|| self.url_or_path.cmp(&other.url_or_path))
-            .then_with(|| match (&self.hash, &other.hash) {
-                (Some(self_hash), Some(other_hash)) => self_hash.cmp(other_hash),
-                _ => Ordering::Equal,
-            })
+            .then_with(|| self.hash.cmp(&other.hash))
     }
 }
 
