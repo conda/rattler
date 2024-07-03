@@ -36,7 +36,7 @@ pub enum FileStorageError {
     IOError(#[from] std::io::Error),
 
     /// Failed to lock the file storage file
-    #[error("failed to lock file storage file {0}.")]
+    #[error("failed to lock file storage file {0}")]
     FailedToLock(String, #[source] std::io::Error),
 
     /// An error occurred when (de)serializing the credentials

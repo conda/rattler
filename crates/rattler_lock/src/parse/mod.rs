@@ -19,7 +19,7 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     ParseError(#[from] serde_yaml::Error),
 
-    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported.")]
+    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported")]
     IncompatibleVersion {
         lock_file_version: u64,
         max_supported_version: FileFormatVersion,
@@ -79,7 +79,7 @@ mod test {
         .err()
         .unwrap();
 
-        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 5 is supported.");
+        insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 5 is supported");
     }
 
     // This test verifies the deterministic ordering of lock files. It does so by comparing the serialized

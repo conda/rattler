@@ -258,7 +258,7 @@ fn version_part_parser<'i>(
             Ok((rest, Some(separator))) => (rest, separator),
 
             Err(nom::Err::Error(_)) => {
-                // If an error occured we convert it to a segment separator not found error instead.
+                // If an error occurred we convert it to a segment separator not found error instead.
                 break Err(nom::Err::Error(
                     ParseVersionErrorKind::ExpectedSegmentSeparator,
                 ));
@@ -284,7 +284,7 @@ fn version_part_parser<'i>(
         let (rest, segment) = match segment_parser(components, rest) {
             Ok(result) => result,
             Err(nom::Err::Error(_)) => {
-                // If parsing of a segment failed, check if perhaps the seperator is followed by an
+                // If parsing of a segment failed, check if perhaps the separator is followed by an
                 // underscore or dash.
                 match trailing_dash_underscore_parser(rest, dash_or_underscore)? {
                     (rest, (Some(component), dash_or_underscore)) => {
