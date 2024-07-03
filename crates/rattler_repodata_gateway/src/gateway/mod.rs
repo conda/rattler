@@ -355,7 +355,7 @@ mod test {
         fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
-        GatewayError, RepoData, Reporter, SourceConfig,
+        GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -632,6 +632,16 @@ mod test {
 
     #[tokio::test]
     async fn test_clear_cache() {
+        #[derive(Default)]
+        struct Downloads {
+            urls: DashSet<Url>,
+        }
+        impl Reporter for Arc<Downloads> {
+            fn on_download_complete(&self, url: &Url, _index: usize) {
+                self.urls.insert(url.clone());
+            }
+        }
+
         let local_channel = remote_conda_forge().await;
 
         // Create a gateway with a custom channel configuration that disables caching.
@@ -645,16 +655,7 @@ mod test {
             })
             .finish();
 
-        #[derive(Default)]
-        struct Downloads {
-            urls: DashSet<Url>,
-        }
         let downloads = Arc::new(Downloads::default());
-        impl Reporter for Arc<Downloads> {
-            fn on_download_complete(&self, url: &Url, _index: usize) {
-                self.urls.insert(url.clone());
-            }
-        }
 
         // Construct a simpel query
         let query = gateway
@@ -678,7 +679,7 @@ mod test {
         );
 
         // Now clear the cache and run the query again.
-        gateway.clear_repodata_cache(&local_channel.channel(), Default::default());
+        gateway.clear_repodata_cache(&local_channel.channel(), SubdirSelection::default());
         query.clone().execute().await.unwrap();
         assert!(
             !downloads.urls.is_empty(),
