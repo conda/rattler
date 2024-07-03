@@ -191,8 +191,8 @@ packages:
   - kind: pypi
     name: kiwisolver
     version: 1.3.2
-    url: "https://files.pythonhosted.org/packages/1f/99/58fe27c8e4a3de823f9fc28ab2c415347efc4139f1c85cac65a008007210/kiwisolver-1.3.2-cp39-cp39-manylinux_2_12_x86_64.manylinux2010_x86_64.whl"
-    sha256: 30fa008c172355c7768159983a7270cb23838c4d7db73d6c0f6b60dde0d432c6
+    url: "https://files.pythonhosted.org/packages/04/9d/4ccf8ad52441787ed4ae97132f62dc52ce6556406d4b5a7128f00a15511d/kiwisolver-1.3.2-cp39-cp39-win_amd64.whl"
+    sha256: eedd3b59190885d1ebdf6c5e0ca56828beb1949b4dfe6e5d0256a461429ac386
   - kind: pypi
     name: kiwisolver
     version: 1.3.2
@@ -201,8 +201,8 @@ packages:
   - kind: pypi
     name: kiwisolver
     version: 1.3.2
-    url: "https://files.pythonhosted.org/packages/04/9d/4ccf8ad52441787ed4ae97132f62dc52ce6556406d4b5a7128f00a15511d/kiwisolver-1.3.2-cp39-cp39-win_amd64.whl"
-    sha256: eedd3b59190885d1ebdf6c5e0ca56828beb1949b4dfe6e5d0256a461429ac386
+    url: "https://files.pythonhosted.org/packages/1f/99/58fe27c8e4a3de823f9fc28ab2c415347efc4139f1c85cac65a008007210/kiwisolver-1.3.2-cp39-cp39-manylinux_2_12_x86_64.manylinux2010_x86_64.whl"
+    sha256: 30fa008c172355c7768159983a7270cb23838c4d7db73d6c0f6b60dde0d432c6
   - kind: conda
     name: ld_impl_linux-64
     version: 2.36.1
@@ -313,8 +313,8 @@ packages:
   - kind: pypi
     name: matplotlib
     version: 3.5.1
-    url: "https://files.pythonhosted.org/packages/6a/52/703f568256a3e614a448503a698557d7832b7893fd63d3f7c2ebb54cd6e2/matplotlib-3.5.1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl"
-    sha256: 87900c67c0f1728e6db17c6809ec05c025c6624dcf96a8020326ea15378fe8e7
+    url: "https://files.pythonhosted.org/packages/07/2e/0122487af85f542f8d65a883b6470f044ddb9d0159c95488a6747314d231/matplotlib-3.5.1-cp39-cp39-macosx_10_9_x86_64.whl"
+    sha256: edf5e4e1d5fb22c18820e8586fb867455de3b109c309cb4fce3aaed85d9468d1
     requires_dist:
       - cycler >=0.10
       - fonttools >=4.22.0
@@ -328,8 +328,8 @@ packages:
   - kind: pypi
     name: matplotlib
     version: 3.5.1
-    url: "https://files.pythonhosted.org/packages/07/2e/0122487af85f542f8d65a883b6470f044ddb9d0159c95488a6747314d231/matplotlib-3.5.1-cp39-cp39-macosx_10_9_x86_64.whl"
-    sha256: edf5e4e1d5fb22c18820e8586fb867455de3b109c309cb4fce3aaed85d9468d1
+    url: "https://files.pythonhosted.org/packages/6a/52/703f568256a3e614a448503a698557d7832b7893fd63d3f7c2ebb54cd6e2/matplotlib-3.5.1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl"
+    sha256: 87900c67c0f1728e6db17c6809ec05c025c6624dcf96a8020326ea15378fe8e7
     requires_dist:
       - cycler >=0.10
       - fonttools >=4.22.0
@@ -376,8 +376,8 @@ packages:
   - kind: pypi
     name: numpy
     version: 1.22.2
-    url: "https://files.pythonhosted.org/packages/fb/65/d5d8303c7dd6a46964cc360e6d95137821493bbd7e4644165afdac13149e/numpy-1.22.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-    sha256: 94dd11d9f13ea1be17bac39c1942f527cbf7065f94953cf62dfe805653da2f8f
+    url: "https://files.pythonhosted.org/packages/4b/23/140ec5a509d992fe39db17200e96c00fd29603c1531ce633ef93dbad5e9e/numpy-1.22.2-cp39-cp39-win_amd64.whl"
+    sha256: 59153979d60f5bfe9e4c00e401e24dfe0469ef8da6d68247439d3278f30a180f
   - kind: pypi
     name: numpy
     version: 1.22.2
@@ -386,8 +386,8 @@ packages:
   - kind: pypi
     name: numpy
     version: 1.22.2
-    url: "https://files.pythonhosted.org/packages/4b/23/140ec5a509d992fe39db17200e96c00fd29603c1531ce633ef93dbad5e9e/numpy-1.22.2-cp39-cp39-win_amd64.whl"
-    sha256: 59153979d60f5bfe9e4c00e401e24dfe0469ef8da6d68247439d3278f30a180f
+    url: "https://files.pythonhosted.org/packages/fb/65/d5d8303c7dd6a46964cc360e6d95137821493bbd7e4644165afdac13149e/numpy-1.22.2-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+    sha256: 94dd11d9f13ea1be17bac39c1942f527cbf7065f94953cf62dfe805653da2f8f
   - kind: conda
     name: openssl
     version: 3.0.0
@@ -431,11 +431,6 @@ packages:
   - kind: pypi
     name: pillow
     version: 9.0.1
-    url: "https://files.pythonhosted.org/packages/f3/3b/d7bb231b3bc1414252e77463dc63554c1aeccffe0798524467aca7bad089/Pillow-9.0.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
-    sha256: d3c5c79ab7dfce6d88f1ba639b77e77a17ea33a01b07b99840d6ed08031cb2a7
-  - kind: pypi
-    name: pillow
-    version: 9.0.1
     url: "https://files.pythonhosted.org/packages/03/a3/f61a9a7ff7969cdef2a6e0383a346eb327495d20d25a2de5a088dbb543a6/Pillow-9.0.1.tar.gz"
     sha256: 6c8bc8238a7dfdaf7a75f5ec5a663f4173f8c367e5a39f87e720495e1eed75fa
   - kind: pypi
@@ -443,6 +438,11 @@ packages:
     version: 9.0.1
     url: "https://files.pythonhosted.org/packages/6c/96/e905dd0ffa0f9599187d57eba08bc9b911817f35a4dfd6345bceb991261d/Pillow-9.0.1-cp39-cp39-win_amd64.whl"
     sha256: f25ed6e28ddf50de7e7ea99d7a976d6a9c415f03adcaac9c41ff6ff41b6d86ac
+  - kind: pypi
+    name: pillow
+    version: 9.0.1
+    url: "https://files.pythonhosted.org/packages/f3/3b/d7bb231b3bc1414252e77463dc63554c1aeccffe0798524467aca7bad089/Pillow-9.0.1-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl"
+    sha256: d3c5c79ab7dfce6d88f1ba639b77e77a17ea33a01b07b99840d6ed08031cb2a7
   - kind: conda
     name: pip
     version: 22.0.3

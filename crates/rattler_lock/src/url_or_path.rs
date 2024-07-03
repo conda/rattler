@@ -2,6 +2,7 @@ use file_url::url_to_path;
 use itertools::Itertools;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::hash::Hash;
 use std::path::Path;
 use std::{
@@ -25,6 +26,23 @@ pub enum UrlOrPath {
 
     /// A local (or networked) path.
     Path(PathBuf),
+}
+
+impl PartialOrd<Self> for UrlOrPath {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for UrlOrPath {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (UrlOrPath::Url(self_url), UrlOrPath::Url(other_url)) => self_url.cmp(other_url),
+            (UrlOrPath::Path(self_path), UrlOrPath::Path(other_path)) => self_path.cmp(other_path),
+            (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Greater,
+            (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Less,
+        }
+    }
 }
 
 impl PartialEq for UrlOrPath {

@@ -81,4 +81,29 @@ mod test {
 
         insta::assert_snapshot!(format!("{}", err), @"found newer lockfile format version 1000, but only up to including version 5 is supported");
     }
+
+    // This test verifies the deterministic ordering of lock files. It does so by comparing the serialized
+    // YAML output of two lock files: one with the original ordering and another with a shuffled ordering.
+    // The test ensures that, despite the initial difference in order, the serialization process results
+    // in identical YAML strings.
+    #[test]
+    fn test_deterministic_lock_file_ordering() {
+        let lock_file_original = LockFile::from_path(
+            &Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test-data/conda-lock/v5/stability-original.yml"),
+        )
+        .unwrap();
+        let lock_file_shuffled = LockFile::from_path(
+            &Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../test-data/conda-lock/v5/stability-shuffled.yml"),
+        )
+        .unwrap();
+
+        let output_original =
+            serde_yaml::to_string(&lock_file_original).expect("could not deserialize");
+        let output_shuffled =
+            serde_yaml::to_string(&lock_file_shuffled).expect("could not deserialize");
+
+        assert_eq!(output_original, output_shuffled);
+    }
 }

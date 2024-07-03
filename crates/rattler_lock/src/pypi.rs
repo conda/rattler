@@ -59,6 +59,8 @@ impl Ord for PypiPackageData {
         self.name
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
+            .then_with(|| self.url_or_path.cmp(&other.url_or_path))
+            .then_with(|| self.hash.cmp(&other.hash))
     }
 }
 
