@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::skip_serializing_none;
@@ -17,6 +19,18 @@ pub enum PackageHashes {
     Sha256(Sha256Hash),
     /// Contains both hashes
     Md5Sha256(Md5Hash, Sha256Hash),
+}
+
+impl PartialOrd for PackageHashes {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackageHashes {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.to_vec().cmp(&other.to_vec())
+    }
 }
 
 impl PackageHashes {
@@ -44,6 +58,14 @@ impl PackageHashes {
         match self {
             PackageHashes::Sha256(_) => None,
             PackageHashes::Md5(md5) | PackageHashes::Md5Sha256(md5, _) => Some(md5),
+        }
+    }
+
+    fn to_vec(&self) -> Vec<u8> {
+        match self {
+            PackageHashes::Sha256(sha256) => sha256.to_vec(),
+            PackageHashes::Md5(md5) => md5.to_vec(),
+            PackageHashes::Md5Sha256(md5, sha256) => [md5.to_vec(), sha256.to_vec()].concat(),
         }
     }
 }
