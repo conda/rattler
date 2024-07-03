@@ -927,8 +927,10 @@ mod tests {
         let packages_dir = tempfile::tempdir().unwrap();
         let cache = PackageCache::new(packages_dir.path());
 
-        let mut install_options = InstallOptions::default();
-        install_options.python_info = Some(python_info.clone());
+        let install_options = InstallOptions {
+            python_info: Some(python_info.clone()),
+            ..Default::default()
+        };
 
         execute_transaction(
             transaction,

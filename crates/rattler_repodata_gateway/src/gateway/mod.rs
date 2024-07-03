@@ -355,7 +355,7 @@ mod test {
         fetch::CacheAction,
         gateway::Gateway,
         utils::{simple_channel_server::SimpleChannelServer, test::fetch_repo_data},
-        GatewayError, RepoData, Reporter, SourceConfig,
+        GatewayError, RepoData, Reporter, SourceConfig, SubdirSelection,
     };
 
     async fn local_conda_forge() -> Channel {
@@ -512,7 +512,7 @@ mod test {
         assert_eq!(openssl_records.len(), 1);
 
         // Test if the first repodata subdir contains only the direct url package.
-        let first_subdir = records.iter().next().unwrap();
+        let first_subdir = records.first().unwrap();
         assert_eq!(first_subdir.len, 1);
         let openssl_record = first_subdir
             .iter()
@@ -573,7 +573,7 @@ mod test {
             .await
             .unwrap_err();
 
-        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_))
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
     }
 
     #[rstest]
@@ -595,7 +595,7 @@ mod test {
             )
             .await;
 
-        assert_matches::assert_matches!(err, Err(GatewayError::SubdirNotFoundError(_)))
+        assert_matches::assert_matches!(err, Err(GatewayError::SubdirNotFoundError(_)));
     }
 
     #[ignore]
@@ -632,6 +632,16 @@ mod test {
 
     #[tokio::test]
     async fn test_clear_cache() {
+        #[derive(Default)]
+        struct Downloads {
+            urls: DashSet<Url>,
+        }
+        impl Reporter for Arc<Downloads> {
+            fn on_download_complete(&self, url: &Url, _index: usize) {
+                self.urls.insert(url.clone());
+            }
+        }
+
         let local_channel = remote_conda_forge().await;
 
         // Create a gateway with a custom channel configuration that disables caching.
@@ -645,16 +655,7 @@ mod test {
             })
             .finish();
 
-        #[derive(Default)]
-        struct Downloads {
-            urls: DashSet<Url>,
-        }
         let downloads = Arc::new(Downloads::default());
-        impl Reporter for Arc<Downloads> {
-            fn on_download_complete(&self, url: &Url, _index: usize) {
-                self.urls.insert(url.clone());
-            }
-        }
 
         // Construct a simpel query
         let query = gateway
@@ -667,7 +668,7 @@ mod test {
 
         // Run the query once. We expect some activity.
         query.clone().execute().await.unwrap();
-        assert!(downloads.urls.len() > 0, "there should be some urls");
+        assert!(!downloads.urls.is_empty(), "there should be some urls");
         downloads.urls.clear();
 
         // Run the query a second time.
@@ -678,10 +679,10 @@ mod test {
         );
 
         // Now clear the cache and run the query again.
-        gateway.clear_repodata_cache(&local_channel.channel(), Default::default());
+        gateway.clear_repodata_cache(&local_channel.channel(), SubdirSelection::default());
         query.clone().execute().await.unwrap();
         assert!(
-            downloads.urls.len() > 0,
+            !downloads.urls.is_empty(),
             "after clearing the cache there should be new urls fetched"
         );
     }

@@ -154,7 +154,7 @@ fn read_package_file(#[case] input: Url, #[case] sha256: &str, #[case] _md5: &st
     );
     assert!(input
         .path_segments()
-        .and_then(|s| s.last())
+        .and_then(Iterator::last)
         .unwrap()
         .starts_with(&name));
 }

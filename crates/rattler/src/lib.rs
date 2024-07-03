@@ -59,7 +59,7 @@ pub(crate) fn get_repodata_record(package_path: impl AsRef<std::path::Path>) -> 
     let index_json = read_package_file::<IndexJson>(&package_path).unwrap();
 
     // find size and hash
-    let size = fs::metadata(&package_path).unwrap().len();
+    let size = fs::metadata(package_path).unwrap().len();
     let sha256 = rattler_digest::compute_file_digest::<Sha256>(&package_path).unwrap();
     let md5 = rattler_digest::compute_file_digest::<Md5>(&package_path).unwrap();
 
@@ -76,7 +76,7 @@ pub(crate) fn get_repodata_record(package_path: impl AsRef<std::path::Path>) -> 
             .and_then(|f| f.to_str())
             .unwrap()
             .to_string(),
-        url: url::Url::from_file_path(&package_path).unwrap(),
+        url: url::Url::from_file_path(package_path).unwrap(),
         channel: "test".to_string(),
     }
 }

@@ -498,6 +498,7 @@ mod test {
     }
 
     /// A helper middleware function that fails the first two requests.
+    #[allow(clippy::type_complexity)]
     async fn fail_with_half_package(
         State((count, bytes)): State<(Arc<Mutex<i32>>, Arc<Mutex<usize>>)>,
         req: Request<Body>,
@@ -525,7 +526,7 @@ mod test {
             let bytes = buffer.into_iter().take(byte_count).collect::<Vec<u8>>();
             // Create a stream that ends prematurely
             let stream = stream::iter(vec![
-                Ok::<_, Infallible>(Bytes::from_iter(bytes.into_iter())),
+                Ok::<_, Infallible>(bytes.into_iter().collect::<Bytes>()),
                 // The stream ends after sending partial data, simulating a premature close
             ]);
             let body = Body::from_stream(stream);
