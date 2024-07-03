@@ -61,6 +61,7 @@ impl PackageHashes {
         }
     }
 
+    /// Returns bit pattern
     fn to_vec(&self) -> Vec<u8> {
         match self {
             PackageHashes::Sha256(sha256) => sha256.to_vec(),
