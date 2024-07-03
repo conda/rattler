@@ -843,9 +843,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let pkgs = rattler_solve::resolvo::Solver
-            .solve(task)
-            .unwrap();
+        let pkgs = rattler_solve::resolvo::Solver.solve(task).unwrap();
 
         assert_eq!(pkgs.len(), 1);
         assert_eq!(pkgs[0].package_record.name.as_normalized(), "_libgcc_mutex");
@@ -878,9 +876,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let solve_error = rattler_solve::resolvo::Solver
-            .solve(task)
-            .unwrap_err();
+        let solve_error = rattler_solve::resolvo::Solver.solve(task).unwrap_err();
 
         assert!(matches!(solve_error, SolveError::Unsolvable(_)));
     }
