@@ -19,7 +19,7 @@ pub enum ParseCondaLockError {
     #[error(transparent)]
     ParseError(#[from] serde_yaml::Error),
 
-    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported.")]
+    #[error("found newer lockfile format version {lock_file_version}, but only up to including version {max_supported_version} is supported")]
     IncompatibleVersion {
         lock_file_version: u64,
         max_supported_version: FileFormatVersion,

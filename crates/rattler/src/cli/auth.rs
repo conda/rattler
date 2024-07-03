@@ -56,24 +56,24 @@ pub enum AuthenticationCLIError {
 
     /// Basic authentication needs a username and a password. The password is
     /// missing here.
-    #[error("Password must be provided when using basic authentication.")]
+    #[error("Password must be provided when using basic authentication")]
     MissingPassword,
 
     /// Authentication has not been provided in the input parameters.
-    #[error("No authentication method provided.")]
+    #[error("No authentication method provided")]
     NoAuthenticationMethod,
 
     /// Bad authentication method when using prefix.dev
-    #[error("Authentication with prefix.dev requires a token. Use `--token` to provide one.")]
+    #[error("Authentication with prefix.dev requires a token. Use `--token` to provide one")]
     PrefixDevBadMethod,
 
     /// Bad authentication method when using anaconda.org
-    #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one.")]
+    #[error("Authentication with anaconda.org requires a conda token. Use `--conda-token` to provide one")]
     AnacondaOrgBadMethod,
 
     /// Wrapper for errors that are generated from the underlying storage system
     /// (keyring or file system)
-    #[error("Failed to interact with the authentication storage system.")]
+    #[error("Failed to interact with the authentication storage system")]
     StorageError(#[source] anyhow::Error),
 }
 
