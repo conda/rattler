@@ -843,7 +843,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let pkgs = rattler_solve::resolvo::Solver::default()
+        let pkgs = rattler_solve::resolvo::Solver
             .solve(task)
             .unwrap();
 
@@ -878,7 +878,7 @@ mod resolvo {
             ..SolverTask::from_iter([&repo_data])
         };
 
-        let solve_error = rattler_solve::resolvo::Solver::default()
+        let solve_error = rattler_solve::resolvo::Solver
             .solve(task)
             .unwrap_err();
 

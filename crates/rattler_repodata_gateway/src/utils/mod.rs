@@ -64,7 +64,7 @@ pub(crate) mod test {
     }
 
     pub(crate) async fn fetch_repo_data(subdir: &str) -> Result<(), reqwest::Error> {
-        let path = test_dir().join(format!("channels/conda-forge/{}/repodata.json", subdir));
+        let path = test_dir().join(format!("channels/conda-forge/{subdir}/repodata.json"));
 
         // Early out if the file already eixsts
         if path.exists() {
@@ -92,8 +92,7 @@ pub(crate) mod test {
         // Download the file and persist after download
         let mut file = NamedTempFile::new_in(parent_dir).unwrap();
         let data = reqwest::get(format!(
-            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{}/repodata.json",
-            subdir
+            "https://rattler-test.pixi.run/test-data/channels/conda-forge/{subdir}/repodata.json"
         ))
         .await?;
         tokio::fs::write(&mut file, data.bytes().await?)

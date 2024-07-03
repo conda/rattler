@@ -512,7 +512,7 @@ mod test {
         assert_eq!(openssl_records.len(), 1);
 
         // Test if the first repodata subdir contains only the direct url package.
-        let first_subdir = records.iter().next().unwrap();
+        let first_subdir = records.first().unwrap();
         assert_eq!(first_subdir.len, 1);
         let openssl_record = first_subdir
             .iter()
@@ -573,7 +573,7 @@ mod test {
             .await
             .unwrap_err();
 
-        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_))
+        assert_matches!(gateway_error, GatewayError::MatchSpecWithoutName(_));
     }
 
     #[rstest]
@@ -595,7 +595,7 @@ mod test {
             )
             .await;
 
-        assert_matches::assert_matches!(err, Err(GatewayError::SubdirNotFoundError(_)))
+        assert_matches::assert_matches!(err, Err(GatewayError::SubdirNotFoundError(_)));
     }
 
     #[ignore]
@@ -667,7 +667,7 @@ mod test {
 
         // Run the query once. We expect some activity.
         query.clone().execute().await.unwrap();
-        assert!(downloads.urls.len() > 0, "there should be some urls");
+        assert!(!downloads.urls.is_empty(), "there should be some urls");
         downloads.urls.clear();
 
         // Run the query a second time.
@@ -681,7 +681,7 @@ mod test {
         gateway.clear_repodata_cache(&local_channel.channel(), Default::default());
         query.clone().execute().await.unwrap();
         assert!(
-            downloads.urls.len() > 0,
+            !downloads.urls.is_empty(),
             "after clearing the cache there should be new urls fetched"
         );
     }

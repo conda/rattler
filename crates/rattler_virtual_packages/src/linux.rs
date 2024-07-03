@@ -125,6 +125,6 @@ mod test {
     #[cfg(target_os = "linux")]
     pub fn doesnt_crash() {
         let version = super::try_detect_linux_version();
-        println!("Linux {:?}", version);
+        println!("Linux {version:?}");
     }
 }
