@@ -60,6 +60,15 @@ impl Ord for PypiPackageData {
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
             .then_with(|| self.url_or_path.cmp(&other.url_or_path))
+            .then_with(|| {
+                match (
+                    serde_json::to_string(&self.hash),
+                    serde_json::to_string(&other.hash),
+                ) {
+                    (Ok(self_hash), Ok(other_hash)) => self_hash.cmp(&other_hash),
+                    _ => Ordering::Equal,
+                }
+            })
     }
 }
 
