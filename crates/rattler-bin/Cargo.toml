@@ -25,7 +25,6 @@ rustls-tls = ["reqwest/rustls-tls", "rattler/rustls-tls", "rattler_repodata_gate
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
-futures = { workspace = true }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
 rattler = { path="../rattler", version = "0.26.5", default-features = false, features = ["indicatif"] }

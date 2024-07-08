@@ -53,7 +53,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 cmake = "0.1.50"
 console = { version = "0.15.8", features = ["windows-console-colors"] }
 criterion = "0.5"
-dashmap = "5.5.3"
+dashmap = "6.0.1"
 difference = "2.0.0"
 digest = "0.10.7"
 dirs = "5.0.1"
@@ -77,8 +77,8 @@ humantime = "2.1.0"
 indexmap = "2.2.6"
 indicatif = "0.17.8"
 insta = { version = "1.38.0" }
-itertools = "0.12.1"
-json-patch = "1.2.0"
+itertools = "0.13.0"
+json-patch = "2.0.0"
 keyring = "2.3.2"
 lazy-regex = "3.1.0"
 lazy_static = "1.4.0"
@@ -107,12 +107,12 @@ reflink-copy = "0.1.16"
 regex = "1.10.4"
 reqwest = { version = "0.12.3", default-features = false }
 reqwest-middleware = "0.3.0"
-reqwest-retry = "0.5.0"
+reqwest-retry = "0.6.0"
 resolvo = { version = "0.6.1" }
-retry-policies = { version = "0.3.0", default-features = false }
+retry-policies = { version = "0.4.0", default-features = false }
 rmp-serde = { version = "1.2.0" }
-rstest = { version = "0.19.0" }
-rstest_reuse = "0.6.0"
+rstest = { version = "0.21.0" }
+rstest_reuse = "0.7.0"
 serde = { version = "1.0.198" }
 serde_json = { version = "1.0.116" }
 serde_repr = "0.1"
@@ -146,7 +146,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false }
 tracing-test = { version = "0.2.4" }
 trybuild = { version = "1.0.91" }
-typed-path = { version = "0.8.0" }
+typed-path = { version = "0.9.0" }
 url = { version = "2.5.0" }
 uuid = { version = "1.8.0", default-features = false }
 walkdir = "2.5.0"

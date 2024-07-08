@@ -19,17 +19,14 @@ rustls-tls = ['reqwest/rustls-tls', "google-cloud-auth?/rustls-tls"]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
-bytes = { workspace = true }
 chrono = { workspace = true }
 dirs = { workspace = true }
 fslock = { workspace = true }
-futures = { workspace = true }
-google-cloud-auth = { workspace = true, default-features = false, optional = true }
+google-cloud-auth = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
 keyring = { workspace = true }
 netrc-rs = { workspace = true }
-pin-project-lite = {  workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
 retry-policies = { workspace = true }
