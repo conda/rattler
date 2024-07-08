@@ -257,9 +257,7 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(
-    input: &str,
-) -> Result<(PackageName, &str), ParseMatchSpecError> {
+fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
     let (rest, package_name) =
         take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
             input.trim(),
