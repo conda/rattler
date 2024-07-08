@@ -6,6 +6,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_repodata_gateway-v0.20.5...rattler_repodata_gateway-v0.21.0) - 2024-07-08
+
+### Added
+- improve error message when parsing file name ([#757](https://github.com/mamba-org/rattler/pull/757))
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+- add shards_base_url and write shards atomically ([#747](https://github.com/mamba-org/rattler/pull/747))
+
+### Fixed
+- direct_url query for windows ([#768](https://github.com/mamba-org/rattler/pull/768))
+- Fix GatewayQuery.query to filter records based on provided specs ([#756](https://github.com/mamba-org/rattler/pull/756))
+- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+- allow empty json repodata ([#745](https://github.com/mamba-org/rattler/pull/745))
+
+### Other
+- document gateway features ([#737](https://github.com/mamba-org/rattler/pull/737))
+
 ## [0.20.5](https://github.com/baszalmstra/rattler/compare/rattler_repodata_gateway-v0.20.4...rattler_repodata_gateway-v0.20.5) - 2024-06-04
 
 ### Other

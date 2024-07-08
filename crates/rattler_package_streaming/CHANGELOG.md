@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.4](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.3...rattler_package_streaming-v0.21.4) - 2024-07-08
+
+### Fixed
+- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+
 ## [0.21.3](https://github.com/baszalmstra/rattler/compare/rattler_package_streaming-v0.21.2...rattler_package_streaming-v0.21.3) - 2024-06-04
 
 ### Other

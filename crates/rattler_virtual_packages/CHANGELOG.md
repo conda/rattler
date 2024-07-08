@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.16](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.15...rattler_virtual_packages-v0.19.16) - 2024-07-08
+
+### Added
+- add support for zos-z ([#753](https://github.com/mamba-org/rattler/pull/753))
+
+### Fixed
+- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+
 ## [0.19.15](https://github.com/baszalmstra/rattler/compare/rattler_virtual_packages-v0.19.14...rattler_virtual_packages-v0.19.15) - 2024-06-04
 
 ### Other
