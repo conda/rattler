@@ -432,7 +432,12 @@ mod test {
             .query(
                 vec![index.clone()],
                 vec![Platform::Win64],
-                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str(
+                    "https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda",
+                    Strict,
+                )
+                .unwrap()]
+                .into_iter(),
             )
             .recursive(true)
             .await
