@@ -79,7 +79,7 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("The build string '{0}' is not valid it can only contain alphanumeric characters and underscores")]
+    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores")]
     InvalidBuildString(String),
 
     /// Invalid version spec
