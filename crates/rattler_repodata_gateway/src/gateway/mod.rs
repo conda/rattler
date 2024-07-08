@@ -345,8 +345,8 @@ mod test {
     use rattler_cache::default_cache_dir;
     use rattler_cache::package_cache::PackageCache;
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Strict, Platform,
-        RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Lenient,
+        ParseStrictness::Strict, Platform, RepoDataRecord,
     };
     use rstest::rstest;
     use url::Url;
@@ -548,6 +548,62 @@ mod test {
             .filter(|record| record.package_record.name.as_normalized() == "openssl")
             .collect();
         assert!(openssl_records.len() > 1);
+    }
+
+    #[tokio::test]
+    async fn test_flter_with_specs() {
+        let gateway = Gateway::new();
+
+        let index = local_conda_forge().await;
+
+        // Try a complex spec
+        let matchspec = MatchSpec::from_str("openssl=3.*=*_1", Lenient).unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert!(total_records == 3);
+
+        // Try another spec
+        let matchspec = MatchSpec::from_str("openssl=3", Lenient).unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert!(total_records == 9);
+
+        // Try with multiple specs
+        let matchspec1 = MatchSpec::from_str("openssl=3", Lenient).unwrap();
+        let matchspec2 = MatchSpec::from_str("openssl=1", Lenient).unwrap();
+
+        let records = gateway
+            .query(
+                vec![index.clone()],
+                vec![Platform::Linux64],
+                vec![matchspec1, matchspec2].into_iter(),
+            )
+            .recursive(false)
+            .await
+            .unwrap();
+
+        let total_records: usize = records.iter().map(RepoData::len).sum();
+        assert!(total_records == 49);
     }
 
     #[tokio::test]

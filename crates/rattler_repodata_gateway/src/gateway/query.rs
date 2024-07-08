@@ -247,8 +247,15 @@ impl GatewayQuery {
                     // Add the records to the result
                     if records.len() > 0 {
                         let result = &mut result[result_idx];
-                        result.len += records.len();
-                        result.shards.push(records);
+
+                        for record in records.iter() {
+                            if !self.recursive && !request_specs.iter().any(|spec| spec.matches(record)) {
+                                // Do not return records that do not match to root spec.
+                                continue;
+                            }
+                            result.len += 1;
+                            result.shards.push(Arc::new([record.clone()]));
+                        }
                     }
                 }
 
