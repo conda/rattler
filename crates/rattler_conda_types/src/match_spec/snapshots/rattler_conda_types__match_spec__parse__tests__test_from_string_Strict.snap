@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
+assertion_line: 915
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
@@ -28,9 +29,9 @@ blas *.* mkl:
     base_url: "https://conda.anaconda.org/conda-forge/"
     name: conda-forge
 foo=1.0=py27_0:
-  error: "'foo=1.0=py27_0' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 foo==1.0=py27_0:
-  error: "'foo==1.0=py27_0' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
   name: py-rattler
   url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
@@ -43,10 +44,13 @@ python 3.8.* *_cpython:
   build: "*_cpython"
 python ==2.7.*.*|>=3.6:
   error: "invalid version constraint: regex constraints are not supported"
+python=*:
+  error: "invalid version constraint: '*' is incompatible with '=' operator'"
 python=3.9:
-  error: "'python=3.9' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+  name: python
+  version: 3.9.*
 pytorch=*=cuda*:
-  error: "'pytorch=*=cuda*' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or ."
+  error: "The build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
 "x264 >=1!164.3095,<1!165":
   name: x264
   version: ">=1!164.3095,<1!165"

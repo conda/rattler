@@ -20,9 +20,9 @@ use super::{
     matcher::{StringMatcher, StringMatcherParseError},
     MatchSpec,
 };
-use crate::package::ArchiveIdentifier;
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
+    package::ArchiveIdentifier,
     utils::{path::is_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
@@ -79,7 +79,7 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("The build string '{0}' is not valid it can only contain alphanumeric characters and underscores")]
+    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores")]
     InvalidBuildString(String),
 
     /// Invalid version spec
@@ -257,26 +257,13 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Strip the package name from the input.
-fn strip_package_name(
-    input: &str,
-    strictness: ParseStrictness,
-) -> Result<(PackageName, &str), ParseMatchSpecError> {
-    // In lenient mode, version specifiers can directly follow the package name. In
-    // strict mode this is not allowed.
-    let (package_name, rest) = if strictness == Lenient {
-        let (rest, name) =
-            take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
-                input.trim(),
-            )
-            .finish()
-            .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
-        (name, rest)
-    } else {
-        input
-            .trim()
-            .split_once(|c: char| c.is_whitespace())
-            .unwrap_or((input, ""))
-    };
+fn strip_package_name(input: &str) -> Result<(PackageName, &str), ParseMatchSpecError> {
+    let (rest, package_name) =
+        take_while1(|c: char| !c.is_whitespace() && !is_start_of_version_constraint(c))(
+            input.trim(),
+        )
+        .finish()
+        .map_err(|_err: nom::error::Error<_>| ParseMatchSpecError::MissingPackageName)?;
 
     let trimmed_package_name = package_name.trim();
     if trimmed_package_name.is_empty() {
@@ -510,7 +497,7 @@ fn matchspec_parser(
     }
 
     // Step 6. Strip off the package name from the input
-    let (name, input) = strip_package_name(input, strictness)?;
+    let (name, input) = strip_package_name(input)?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
 
     // Step 7. Otherwise sort our version + build
@@ -908,6 +895,7 @@ mod tests {
             "conda-forge::foo[version=1.0.*, build_number=\">6\"]",
             "python ==2.7.*.*|>=3.6",
             "python=3.9",
+            "python=*",
         ];
 
         let evaluated: BTreeMap<_, _> = specs
@@ -992,7 +980,7 @@ mod tests {
 
     #[test]
     fn test_missing_package_name() {
-        let package_name = strip_package_name("", Lenient);
+        let package_name = strip_package_name("");
         assert_matches!(package_name, Err(ParseMatchSpecError::MissingPackageName));
     }
 

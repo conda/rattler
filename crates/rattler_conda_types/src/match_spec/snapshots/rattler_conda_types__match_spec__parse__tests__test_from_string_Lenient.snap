@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 904
+assertion_line: 917
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
@@ -49,6 +49,9 @@ python 3.8.* *_cpython:
 python ==2.7.*.*|>=3.6:
   name: python
   version: 2.7.*|>=3.6
+python=*:
+  name: python
+  version: "*"
 python=3.9:
   name: python
   version: 3.9.*
