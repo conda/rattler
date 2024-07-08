@@ -1,6 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 917
+assertion_line: 915
 expression: evaluated
 ---
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
@@ -29,9 +29,9 @@ blas *.* mkl:
     base_url: "https://conda.anaconda.org/conda-forge/"
     name: conda-forge
 foo=1.0=py27_0:
-  error: "The build string '=py27_0' is not valid it can only contain alphanumeric characters and underscores"
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 foo==1.0=py27_0:
-  error: "The build string '=py27_0' is not valid it can only contain alphanumeric characters and underscores"
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
   name: py-rattler
   url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
@@ -50,7 +50,7 @@ python=3.9:
   name: python
   version: 3.9.*
 pytorch=*=cuda*:
-  error: "The build string '=cuda*' is not valid it can only contain alphanumeric characters and underscores"
+  error: "The build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
 "x264 >=1!164.3095,<1!165":
   name: x264
   version: ">=1!164.3095,<1!165"
