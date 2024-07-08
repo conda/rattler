@@ -138,11 +138,13 @@ pub fn parse_v3_or_lower(
         let pkg: EnvironmentPackageData = match kind {
             LockedPackageKindV3::Conda(value) => {
                 let md5 = match value.hash {
-                    PackageHashes::Md5(md5) => Some(md5),
+                    PackageHashes::Md5(md5) | PackageHashes::Md5Sha256(md5, _) => Some(md5),
                     PackageHashes::Sha256(_) => None,
                 };
                 let sha256 = match value.hash {
-                    PackageHashes::Sha256(sha256) => Some(sha256),
+                    PackageHashes::Sha256(sha256) | PackageHashes::Md5Sha256(_, sha256) => {
+                        Some(sha256)
+                    }
                     PackageHashes::Md5(_) => None,
                 };
 
