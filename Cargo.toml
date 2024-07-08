@@ -7,7 +7,7 @@ resolver = "2"
 opt-level = 3
 
 [workspace.package]
-categories = ["conda"]
+categories = ["development-tools"]
 homepage = "https://github.com/mamba-org/rattler"
 repository = "https://github.com/mamba-org/rattler"
 license = "BSD-3-Clause"
