@@ -7,7 +7,7 @@ use std::{
     future::Future,
     path::PathBuf,
     sync::Arc,
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use fxhash::FxHashMap;
@@ -296,7 +296,7 @@ impl PackageCache {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),
                 };
-                let duration = SystemTime::now().duration_since(execute_after).expect("the retry duration is out of range");
+                let duration = execute_after.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO);
 
                 // Wait for a second to let the remote service restore itself. This increases the
                 // chance of success.
