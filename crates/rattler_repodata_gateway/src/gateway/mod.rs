@@ -431,8 +431,13 @@ mod test {
         let records = gateway
             .query(
                 vec![index.clone()],
-                vec![Platform::Linux64],
-                vec![MatchSpec::from_str("https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2", Strict).unwrap()].into_iter(),
+                vec![Platform::Win64],
+                vec![MatchSpec::from_str(
+                    "https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda",
+                    Strict,
+                )
+                .unwrap()]
+                .into_iter(),
             )
             .recursive(true)
             .await
@@ -449,7 +454,7 @@ mod test {
             .query(
                 vec![index],
                 vec![Platform::Linux64],
-                vec![MatchSpec::from_str("openssl 3.0.4 h166bdaf_2", Strict).unwrap()].into_iter(),
+                vec![MatchSpec::from_str("openssl 3.3.1 h2466b09_1", Strict).unwrap()].into_iter(),
             )
             .recursive(true)
             .await
@@ -485,7 +490,7 @@ mod test {
         let index = local_conda_forge().await;
 
         let openssl_url =
-            "https://conda.anaconda.org/conda-forge/linux-64/openssl-3.0.4-h166bdaf_2.tar.bz2";
+            "https://conda.anaconda.org/conda-forge/win-64/openssl-3.3.1-h2466b09_1.conda";
         let records = gateway
             .query(
                 vec![index.clone()],
