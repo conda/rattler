@@ -150,3 +150,8 @@ jobs:
           --target ${{ matrix.target }}
           ${{ steps.build-options.outputs.CARGO_BUILD_OPTIONS}} 
           ${{ steps.test-options.outputs.CARGO_TEST_OPTIONS}} 
+
+      - name: Run doctests
+        if: ${{ !matrix.skip-tests }}
+        run: >
+          cargo test --doc
