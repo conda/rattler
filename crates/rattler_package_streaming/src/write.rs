@@ -308,7 +308,7 @@ pub fn write_conda_package<W: Write + Seek>(
             .expect("1-1-2023 00:00:00 should convert into datetime")
     };
 
-    let options = zip::write::FileOptions::default()
+    let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Stored)
         .last_modified_time(last_modified_time);
 
