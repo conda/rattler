@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.13](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.12...rattler_lock-v0.22.13) - 2024-07-08
+
+### Added
+- Only save md5 in lock file if no sha256 is present ([#764](https://github.com/mamba-org/rattler/pull/764))
+- return pybytes for sha256 and md5 everywhere and use md5 hash for legacy bz2 md5 ([#752](https://github.com/mamba-org/rattler/pull/752))
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+
+### Fixed
+- lock file stability issues with PyPI types ([#761](https://github.com/mamba-org/rattler/pull/761))
+- errors should not contain trailing punctuation ([#763](https://github.com/mamba-org/rattler/pull/763))
+
+### Other
+- revert only save md5 in lock file if no sha256 is present ([#766](https://github.com/mamba-org/rattler/pull/766))
+
 ## [0.22.12](https://github.com/mamba-org/rattler/compare/rattler_lock-v0.22.11...rattler_lock-v0.22.12) - 2024-06-06
 
 ### Added

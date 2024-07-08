@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_shell-v0.20.9...rattler_shell-v0.21.0) - 2024-07-08
+
+### Added
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+- allow passing custom environment to run_activation ([#743](https://github.com/mamba-org/rattler/pull/743))
+
 ## [0.20.9](https://github.com/mamba-org/rattler/compare/rattler_shell-v0.20.8...rattler_shell-v0.20.9) - 2024-06-06
 
 ### Other

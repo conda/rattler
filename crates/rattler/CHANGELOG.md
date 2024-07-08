@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.5](https://github.com/mamba-org/rattler/compare/rattler-v0.26.4...rattler-v0.26.5) - 2024-07-08
+
+### Added
+- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+
+### Fixed
+- errors should not contain trailing punctuation ([#763](https://github.com/mamba-org/rattler/pull/763))
+- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+
 ## [0.26.4](https://github.com/mamba-org/rattler/compare/rattler-v0.26.3...rattler-v0.26.4) - 2024-06-06
 
 ### Other
