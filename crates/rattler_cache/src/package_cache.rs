@@ -7,9 +7,9 @@ use std::{
     future::Future,
     path::PathBuf,
     sync::Arc,
+    time::SystemTime,
 };
 
-use chrono::Utc;
 use fxhash::FxHashMap;
 use itertools::Itertools;
 use parking_lot::Mutex;
@@ -252,7 +252,7 @@ impl PackageCache {
         retry_policy: impl RetryPolicy + Send + 'static,
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<PathBuf, PackageCacheError> {
-        let request_start = Utc::now();
+        let request_start = SystemTime::now();
         let cache_key = pkg.into();
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
@@ -296,7 +296,7 @@ impl PackageCache {
                     RetryDecision::Retry { execute_after } => execute_after,
                     RetryDecision::DoNotRetry => return Err(err),
                 };
-                let duration = (execute_after - Utc::now()).to_std().expect("the retry duration is out of range");
+                let duration = SystemTime::now().duration_since(execute_after).expect("the retry duration is out of range");
 
                 // Wait for a second to let the remote service restore itself. This increases the
                 // chance of success.
@@ -401,9 +401,13 @@ impl DownloadReporter for PassthroughReporter {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
     use std::{
-        convert::Infallible, fs::File, future::IntoFuture, net::SocketAddr, path::Path, sync::Arc,
+        convert::Infallible,
+        fs::File,
+        future::IntoFuture,
+        net::SocketAddr,
+        path::{Path, PathBuf},
+        sync::Arc,
     };
 
     use assert_matches::assert_matches;

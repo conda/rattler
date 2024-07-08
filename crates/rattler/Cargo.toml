@@ -19,14 +19,11 @@ indicatif = ['dep:indicatif', 'dep:console']
 
 [dependencies]
 anyhow = { workspace = true }
-bytes = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, optional = true }
 digest = { workspace = true }
 dirs = { workspace = true }
 fs-err = { workspace = true }
 futures = { workspace = true }
-fxhash = { workspace = true }
 humantime = { workspace = true }
 indexmap = { workspace = true }
 indicatif = { workspace = true, optional = true }
@@ -50,7 +47,6 @@ simple_spawn_blocking = { path = "../simple_spawn_blocking", version = "1.0", de
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "io-util", "macros"] }
-tokio-stream = { workspace = true, features = ["sync"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 uuid = { workspace = true, features = ["v4", "fast-rng"] }

@@ -4,13 +4,13 @@
 //! This module also provides the [`DoNotRetryPolicy`] which is useful if you do not want to retry
 //! anything.
 
-use chrono::{DateTime, Utc};
 pub use retry_policies::{policies::*, Jitter, RetryDecision, RetryPolicy};
+use std::time::SystemTime;
 
 /// A simple [`RetryPolicy`] that just never retries.
 pub struct DoNotRetryPolicy;
 impl RetryPolicy for DoNotRetryPolicy {
-    fn should_retry(&self, _: DateTime<Utc>, _: u32) -> RetryDecision {
+    fn should_retry(&self, _: SystemTime, _: u32) -> RetryDecision {
         RetryDecision::DoNotRetry
     }
 }
