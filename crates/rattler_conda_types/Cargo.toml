@@ -23,6 +23,7 @@ purl = { workspace = true, features = ["serde"] }
 rattler_digest = { path = "../rattler_digest", version = "0.19.4", default-features = false, features = ["serde"] }
 rattler_macros = { path = "../rattler_macros", version = "0.19.4", default-features = false }
 regex = { workspace = true }
+simd-json = { version = "*", features = ["serde_impl"]}
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }

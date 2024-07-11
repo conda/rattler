@@ -12,6 +12,8 @@ use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
+use simd_json;
+
 /// Information about every file installed with the package.
 ///
 /// This struct is similar to the [`crate::package::PathsJson`] struct. The difference is that this
@@ -269,7 +271,11 @@ impl FromStr for PrefixRecord {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s).map_err(Into::into)
+        // let mut d = s.to_vec();
+        unsafe {
+            simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into)
+        }
+        // serde_json::from_str(s).map_err(Into::into)
     }
 }
 
