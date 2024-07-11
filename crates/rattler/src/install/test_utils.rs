@@ -10,8 +10,8 @@ use crate::{
     package_cache::PackageCache,
 };
 
-/// Install a package into the environment and write a `conda-meta` file that contains information
-/// about how the file was linked.
+/// Install a package into the environment and write a `conda-meta` file that
+/// contains information about how the file was linked.
 pub async fn install_package_to_environment(
     target_prefix: &Path,
     package_dir: PathBuf,
@@ -19,7 +19,8 @@ pub async fn install_package_to_environment(
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
 ) -> anyhow::Result<()> {
-    // Link the contents of the package into our environment. This returns all the paths that were linked.
+    // Link the contents of the package into our environment. This returns all the
+    // paths that were linked.
     let paths = crate::install::link_package(
         &package_dir,
         target_prefix,
@@ -78,6 +79,9 @@ pub async fn execute_operation(
     let remove_record = op.record_to_remove();
 
     if let Some(remove_record) = remove_record {
+        install_driver
+            .clobber_registry()
+            .unregister_paths(remove_record);
         unlink_package(target_prefix, remove_record).await.unwrap();
     }
 

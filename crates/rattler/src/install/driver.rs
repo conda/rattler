@@ -71,7 +71,7 @@ impl InstallDriverBuilder {
         prefix_records: impl IntoIterator<Item = &'i PrefixRecord>,
     ) -> Self {
         Self {
-            clobber_registry: Some(ClobberRegistry::from_prefix_records(prefix_records)),
+            clobber_registry: Some(ClobberRegistry::new(prefix_records)),
             ..self
         }
     }
