@@ -178,7 +178,7 @@ impl PrefixRecord {
     pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+        Self::from_str_mut(&mut str)
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
@@ -265,6 +265,15 @@ impl PrefixRecord {
         }
         Ok(records)
     }
+
+    fn from_str_mut(s: &mut str) -> Result<Self, std::io::Error>  {
+        // let mut d = s.to_vec();
+        unsafe {
+            simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into)
+        }
+        // serde_json::from_str(s).map_err(Into::into)
+    }
+    
 }
 
 impl FromStr for PrefixRecord {
@@ -272,10 +281,10 @@ impl FromStr for PrefixRecord {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // let mut d = s.to_vec();
-        unsafe {
-            simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into)
-        }
-        // serde_json::from_str(s).map_err(Into::into)
+        // unsafe {
+        //     simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into)
+        // }
+        serde_json::from_str(s).map_err(Into::into)
     }
 }
 

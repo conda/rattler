@@ -127,7 +127,7 @@ smallvec = { version = "1.13.2", features = [
     "const_generics",
     "union",
 ] }
-strum = { version = "0.26.2", features = ["derive"] }
+strum = { version = "0.26.3", features = ["derive"] }
 superslice = "1.0.0"
 syn = "2.0.59"
 sysinfo = "0.30.10"
