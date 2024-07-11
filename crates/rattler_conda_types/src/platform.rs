@@ -8,7 +8,7 @@ use thiserror::Error;
 
 /// A platform supported by Conda.
 #[allow(missing_docs)]
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash, EnumIter)]
+#[derive(EnumIter, Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Platform {
     NoArch,
     Unknown,
