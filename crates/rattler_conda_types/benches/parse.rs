@@ -1,7 +1,5 @@
-use std::{fs, path::PathBuf};
-
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rattler_conda_types::{PrefixRecord, Version};
+use rattler_conda_types::Version;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("parse simple version", |b| {

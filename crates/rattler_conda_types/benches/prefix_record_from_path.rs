@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use rattler_conda_types::{PrefixRecord, Version};
+use rattler_conda_types::PrefixRecord;
 
 fn process_json_files_from_dir(dir: PathBuf) {
     let entries = fs::read_dir(dir).expect("Directory not found");
@@ -19,8 +19,8 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             process_json_files_from_dir(black_box(black_box(
                 "/Users/graf/projects/oss/rattler-1/test-data/conda-meta".into(),
-            )))
-        })
+            )));
+        });
     });
 }
 
