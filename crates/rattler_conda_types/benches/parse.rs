@@ -34,7 +34,11 @@ fn criterion_benchmark(c: &mut Criterion) {
     //     b.iter(|| black_box("(>=2.1.0,<3.0)|(~=3.2.1,~3.2.2.1)|(==4.1)").parse::<Version>());
     // });
     c.bench_function("process_json_files", |b| {
-        b.iter(|| process_json_files_from_dir(black_box(black_box("/Users/graf/projects/oss/rattler-1/test-data/conda-meta".into()))))
+        b.iter(|| {
+            process_json_files_from_dir(black_box(black_box(
+                "/Users/graf/projects/oss/rattler-1/test-data/conda-meta".into(),
+            )))
+        })
     });
 }
 

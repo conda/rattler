@@ -266,14 +266,11 @@ impl PrefixRecord {
         Ok(records)
     }
 
-    fn from_str_mut(s: &mut str) -> Result<Self, std::io::Error>  {
+    fn from_str_mut(s: &mut str) -> Result<Self, std::io::Error> {
         // let mut d = s.to_vec();
-        unsafe {
-            simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into)
-        }
+        unsafe { simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into) }
         // serde_json::from_str(s).map_err(Into::into)
     }
-    
 }
 
 impl FromStr for PrefixRecord {
