@@ -51,3 +51,7 @@ tools = { path = "../tools" }
 [[bench]]
 name = "parse"
 harness = false
+
+[[bench]]
+name = "prefix_record_from_path"
+harness = false

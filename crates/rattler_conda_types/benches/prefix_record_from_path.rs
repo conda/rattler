@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{env::current_dir, fs, path::PathBuf};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rattler_conda_types::PrefixRecord;
@@ -16,10 +16,9 @@ fn process_json_files_from_dir(dir: PathBuf) {
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("process_json_files", |b| {
+        let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         b.iter(|| {
-            process_json_files_from_dir(black_box(black_box(
-                "/Users/graf/projects/oss/rattler-1/test-data/conda-meta".into(),
-            )));
+            process_json_files_from_dir(black_box(manifest_dir.join("../../test-data/conda-meta")));
         });
     });
 }
