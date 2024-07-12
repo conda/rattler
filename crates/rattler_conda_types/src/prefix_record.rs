@@ -178,7 +178,7 @@ impl PrefixRecord {
     pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str_mut(&mut str)
+        simd_json::serde::from_slice(&mut str.into_bytes()).map_err(Into::into)
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.
@@ -264,14 +264,6 @@ impl PrefixRecord {
             }
         }
         Ok(records)
-    }
-
-    fn from_str_mut(s: &mut str) -> Result<Self, std::io::Error> {
-        // here we are using unsafe block for as_bytes_mut which has the same safety guarantees as str::as_bytes_mut
-        // quoting: "the caller must ensure that the content of the slice is valid UTF-8
-        // before the borrow ends and the underlying `str` is used."
-        // In our case, underlying `str` is not used after the borrow ends.
-        unsafe { simd_json::serde::from_slice(s.as_bytes_mut()).map_err(Into::into) }
     }
 }
 
