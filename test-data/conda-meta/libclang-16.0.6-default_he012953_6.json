@@ -1,0 +1,41 @@
+{
+  "build": "default_he012953_6",
+  "build_number": 6,
+  "depends": [
+    "libclang13 16.0.6 default_h83d0a53_6",
+    "libcxx >=16.0.6",
+    "libllvm16 >=16.0.6,<16.1.0a0"
+  ],
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "license_family": "Apache",
+  "md5": "6b2e9797198d41ce8d39cd7f3a1df8be",
+  "name": "libclang",
+  "sha256": "96c82354ed2dfffdbac9f86ee9f13bd99c8e18aaf52a106ebb95ecfc69012ecc",
+  "size": 22237,
+  "subdir": "osx-arm64",
+  "timestamp": 1711067424414,
+  "version": "16.0.6",
+  "fn": "libclang-16.0.6-default_he012953_6.conda",
+  "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libclang-16.0.6-default_he012953_6.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/libclang-16.0.6-default_he012953_6",
+  "files": [
+    "lib/libclang.dylib"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/libclang.dylib",
+        "path_type": "softlink",
+        "sha256": "f44b4aa7e8c1e9c44d8b416d0c3b5f45efc7c262f3a68b5da439f9b9d426a5e6",
+        "sha256_in_prefix": "b21bda9dc968764f05662c1ab7a1162e1ce2323f70c74f3f74e8a50993535d4d",
+        "size_in_bytes": 32545758
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/graf/Library/Caches/rattler/cache/pkgs/libclang-16.0.6-default_he012953_6",
+    "type": 1
+  }
+}

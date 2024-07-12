@@ -1,0 +1,58 @@
+{
+  "build": "haab561b_3",
+  "build_number": 3,
+  "depends": [
+    "libcxx >=16",
+    "libxml2 >=2.12.1,<3.0.0a0",
+    "libzlib >=1.2.13,<1.3.0a0",
+    "zstd >=1.5.5,<1.6.0a0"
+  ],
+  "license": "Apache-2.0 WITH LLVM-exception",
+  "license_family": "Apache",
+  "md5": "9900d62ede9ce25b569beeeab1da094e",
+  "name": "libllvm16",
+  "sha256": "f240f3776b02c39a32ce7397d6f2de072510321c835f4def452fc62e5c3babc0",
+  "size": 23347663,
+  "subdir": "osx-arm64",
+  "timestamp": 1701374993634,
+  "version": "16.0.6",
+  "fn": "libllvm16-16.0.6-haab561b_3.conda",
+  "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libllvm16-16.0.6-haab561b_3.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/libllvm16-16.0.6-haab561b_3",
+  "files": [
+    "lib/libLLVM-16.dylib",
+    "lib/libLTO.16.dylib",
+    "lib/libRemarks.16.dylib"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/libLLVM-16.dylib",
+        "path_type": "hardlink",
+        "sha256": "9c5f6edfe892125b54079313ce97e6c2adbe8afae774ab3c11636e5aaa08617f",
+        "sha256_in_prefix": "9c5f6edfe892125b54079313ce97e6c2adbe8afae774ab3c11636e5aaa08617f",
+        "size_in_bytes": 115211968
+      },
+      {
+        "_path": "lib/libLTO.16.dylib",
+        "path_type": "hardlink",
+        "sha256": "ea1ebccc11fd1e7362dc4a430002eb6d500b4b85f03065b956e61dda5bd04316",
+        "sha256_in_prefix": "ea1ebccc11fd1e7362dc4a430002eb6d500b4b85f03065b956e61dda5bd04316",
+        "size_in_bytes": 121536
+      },
+      {
+        "_path": "lib/libRemarks.16.dylib",
+        "path_type": "hardlink",
+        "sha256": "77195c04c300aa3268b3265de5232b0595c04b986c82842bb56450af9fb8b685",
+        "sha256_in_prefix": "77195c04c300aa3268b3265de5232b0595c04b986c82842bb56450af9fb8b685",
+        "size_in_bytes": 17920
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/graf/Library/Caches/rattler/cache/pkgs/libllvm16-16.0.6-haab561b_3",
+    "type": 1
+  }
+}

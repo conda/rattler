@@ -176,7 +176,7 @@ impl PrefixRecord {
     pub fn from_reader(mut reader: impl Read) -> Result<Self, std::io::Error> {
         let mut str = String::new();
         reader.read_to_string(&mut str)?;
-        Self::from_str(&str)
+        simd_json::serde::from_slice(&mut str.into_bytes()).map_err(Into::into)
     }
 
     /// Creates a `PrefixRecord` from a `RepoDataRecord`.

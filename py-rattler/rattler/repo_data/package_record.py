@@ -78,7 +78,7 @@ class PackageRecord:
         ... ]
         >>> sorted = PackageRecord.sort_topologically(records)
         >>> sorted[0].name
-        PackageName("vc")
+        PackageName("python_abi")
         >>>
         ```
         """

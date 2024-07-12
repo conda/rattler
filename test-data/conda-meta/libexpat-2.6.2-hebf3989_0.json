@@ -1,0 +1,48 @@
+{
+  "build": "hebf3989_0",
+  "build_number": 0,
+  "constrains": [
+    "expat 2.6.2.*"
+  ],
+  "depends": [],
+  "license": "MIT",
+  "license_family": "MIT",
+  "md5": "e3cde7cfa87f82f7cb13d482d5e0ad09",
+  "name": "libexpat",
+  "sha256": "ba7173ac30064ea901a4c9fb5a51846dcc25512ceb565759be7d18cbf3e5415e",
+  "size": 63655,
+  "subdir": "osx-arm64",
+  "timestamp": 1710362424980,
+  "version": "2.6.2",
+  "fn": "libexpat-2.6.2-hebf3989_0.conda",
+  "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libexpat-2.6.2-hebf3989_0.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/libexpat-2.6.2-hebf3989_0",
+  "files": [
+    "lib/libexpat.1.9.2.dylib",
+    "lib/libexpat.1.dylib"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/libexpat.1.9.2.dylib",
+        "path_type": "hardlink",
+        "sha256": "b562a16090be21bbb048f64cd2214540aceffff777d0ff311a8a49f8b5970b54",
+        "sha256_in_prefix": "b562a16090be21bbb048f64cd2214540aceffff777d0ff311a8a49f8b5970b54",
+        "size_in_bytes": 182320
+      },
+      {
+        "_path": "lib/libexpat.1.dylib",
+        "path_type": "softlink",
+        "sha256": "b562a16090be21bbb048f64cd2214540aceffff777d0ff311a8a49f8b5970b54",
+        "sha256_in_prefix": "7414a9068ed1b7fc126fe02b25b7263b70e63468ef1932e4cae3ba738c1f2bd1",
+        "size_in_bytes": 182320
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/graf/Library/Caches/rattler/cache/pkgs/libexpat-2.6.2-hebf3989_0",
+    "type": 1
+  }
+}

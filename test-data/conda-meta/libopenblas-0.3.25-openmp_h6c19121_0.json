@@ -1,0 +1,68 @@
+{
+  "build": "openmp_h6c19121_0",
+  "build_number": 0,
+  "constrains": [
+    "openblas >=0.3.25,<0.3.26.0a0"
+  ],
+  "depends": [
+    "libgfortran 5.*",
+    "libgfortran5 >=12.3.0",
+    "llvm-openmp >=16.0.6"
+  ],
+  "license": "BSD-3-Clause",
+  "license_family": "BSD",
+  "md5": "a1843550403212b9dedeeb31466ade03",
+  "name": "libopenblas",
+  "sha256": "b112e0d500bc0314ea8d393efac3ab8c67857e5a2b345348c98e703ee92723e5",
+  "size": 2896390,
+  "subdir": "osx-arm64",
+  "timestamp": 1700535987588,
+  "version": "0.3.25",
+  "fn": "libopenblas-0.3.25-openmp_h6c19121_0.conda",
+  "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libopenblas-0.3.25-openmp_h6c19121_0.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/libopenblas-0.3.25-openmp_h6c19121_0",
+  "files": [
+    "lib/libopenblas.0.dylib",
+    "lib/libopenblas_armv8p-r0.3.25.dylib",
+    "lib/libopenblas_vortexp-r0.3.25.dylib",
+    "lib/libopenblasp-r0.3.25.dylib"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/libopenblas.0.dylib",
+        "path_type": "hardlink",
+        "sha256": "fdfcb8e25338e3e765f88d0743bdc0cedeaf96d27d2a7d79f3636056eb598c0c",
+        "sha256_in_prefix": "fdfcb8e25338e3e765f88d0743bdc0cedeaf96d27d2a7d79f3636056eb598c0c",
+        "size_in_bytes": 10419552
+      },
+      {
+        "_path": "lib/libopenblas_armv8p-r0.3.25.dylib",
+        "path_type": "softlink",
+        "sha256": "fdfcb8e25338e3e765f88d0743bdc0cedeaf96d27d2a7d79f3636056eb598c0c",
+        "sha256_in_prefix": "0ccfb934aa18d08846d20251006a1e8c5f3e2061aff0e38b5d466b7c7ee06d2e",
+        "size_in_bytes": 10419552
+      },
+      {
+        "_path": "lib/libopenblas_vortexp-r0.3.25.dylib",
+        "path_type": "softlink",
+        "sha256": "fdfcb8e25338e3e765f88d0743bdc0cedeaf96d27d2a7d79f3636056eb598c0c",
+        "sha256_in_prefix": "0ccfb934aa18d08846d20251006a1e8c5f3e2061aff0e38b5d466b7c7ee06d2e",
+        "size_in_bytes": 10419552
+      },
+      {
+        "_path": "lib/libopenblasp-r0.3.25.dylib",
+        "path_type": "softlink",
+        "sha256": "fdfcb8e25338e3e765f88d0743bdc0cedeaf96d27d2a7d79f3636056eb598c0c",
+        "sha256_in_prefix": "0ccfb934aa18d08846d20251006a1e8c5f3e2061aff0e38b5d466b7c7ee06d2e",
+        "size_in_bytes": 10419552
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/graf/Library/Caches/rattler/cache/pkgs/libopenblas-0.3.25-openmp_h6c19121_0",
+    "type": 1
+  }
+}

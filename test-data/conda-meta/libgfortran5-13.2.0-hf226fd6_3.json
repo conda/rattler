@@ -1,0 +1,90 @@
+{
+  "build": "hf226fd6_3",
+  "build_number": 3,
+  "constrains": [
+    "libgfortran 5.0.0 13_2_0_*_3"
+  ],
+  "depends": [
+    "llvm-openmp >=8.0.0"
+  ],
+  "license": "GPL-3.0-only WITH GCC-exception-3.1",
+  "license_family": "GPL",
+  "md5": "66ac81d54e95c534ae488726c1f698ea",
+  "name": "libgfortran5",
+  "sha256": "bafc679eedb468a86aa4636061c55966186399ee0a04b605920d208d97ac579a",
+  "size": 997381,
+  "subdir": "osx-arm64",
+  "timestamp": 1707330687590,
+  "version": "13.2.0",
+  "fn": "libgfortran5-13.2.0-hf226fd6_3.conda",
+  "url": "https://conda.anaconda.org/conda-forge/osx-arm64/libgfortran5-13.2.0-hf226fd6_3.conda",
+  "channel": "https://conda.anaconda.org/conda-forge/",
+  "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/libgfortran5-13.2.0-hf226fd6_3",
+  "files": [
+    "lib/libgcc_s.1.1.dylib",
+    "lib/libgfortran.5.dylib",
+    "lib/libgfortran.dylib",
+    "lib/libgomp.1.dylib",
+    "lib/libgomp.dylib",
+    "lib/libquadmath.0.dylib",
+    "lib/libquadmath.dylib"
+  ],
+  "paths_data": {
+    "paths_version": 1,
+    "paths": [
+      {
+        "_path": "lib/libgcc_s.1.1.dylib",
+        "path_type": "hardlink",
+        "sha256": "ed9da7ae9b076f3106a21ec57c10d4e69eaf7f2d15ccc6a94445a7df2d2d8193",
+        "sha256_in_prefix": "ed9da7ae9b076f3106a21ec57c10d4e69eaf7f2d15ccc6a94445a7df2d2d8193",
+        "size_in_bytes": 145008
+      },
+      {
+        "_path": "lib/libgfortran.5.dylib",
+        "path_type": "hardlink",
+        "sha256": "247ece33a9762f8d90212b012ad4d4666f496adcb3b8da7e9d92358e9549e83e",
+        "sha256_in_prefix": "247ece33a9762f8d90212b012ad4d4666f496adcb3b8da7e9d92358e9549e83e",
+        "size_in_bytes": 3717376
+      },
+      {
+        "_path": "lib/libgfortran.dylib",
+        "path_type": "softlink",
+        "sha256": "247ece33a9762f8d90212b012ad4d4666f496adcb3b8da7e9d92358e9549e83e",
+        "sha256_in_prefix": "f748a87f144eadfba593194f68f6cb11c472191773624240e34be4e98e7c1483",
+        "size_in_bytes": 3717376
+      },
+      {
+        "_path": "lib/libgomp.1.dylib",
+        "path_type": "softlink",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256_in_prefix": "9d723a8d879991df43f245cfd3f3a992b187ee533c2e75fc83c3143f65341c74",
+        "size_in_bytes": 0
+      },
+      {
+        "_path": "lib/libgomp.dylib",
+        "path_type": "softlink",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "sha256_in_prefix": "9d723a8d879991df43f245cfd3f3a992b187ee533c2e75fc83c3143f65341c74",
+        "size_in_bytes": 0
+      },
+      {
+        "_path": "lib/libquadmath.0.dylib",
+        "path_type": "hardlink",
+        "sha256": "e30027a4c139dfc8d083b20b470697a71fd6511d9255ee537c44302ce097dd19",
+        "sha256_in_prefix": "e30027a4c139dfc8d083b20b470697a71fd6511d9255ee537c44302ce097dd19",
+        "size_in_bytes": 337904
+      },
+      {
+        "_path": "lib/libquadmath.dylib",
+        "path_type": "softlink",
+        "sha256": "e30027a4c139dfc8d083b20b470697a71fd6511d9255ee537c44302ce097dd19",
+        "sha256_in_prefix": "f818e8772aa2ea713faaf3040bcb5f3f63d6e28ca299955bdc8e8778c267bf47",
+        "size_in_bytes": 337904
+      }
+    ]
+  },
+  "link": {
+    "source": "/Users/graf/Library/Caches/rattler/cache/pkgs/libgfortran5-13.2.0-hf226fd6_3",
+    "type": 1
+  }
+}
