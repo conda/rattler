@@ -12,8 +12,6 @@ use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use simd_json;
-
 /// Information about every file installed with the package.
 ///
 /// This struct is similar to the [`crate::package::PathsJson`] struct. The difference is that this

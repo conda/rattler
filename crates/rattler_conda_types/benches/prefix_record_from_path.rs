@@ -1,4 +1,4 @@
-use std::{env::current_dir, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rattler_conda_types::PrefixRecord;
