@@ -20,7 +20,7 @@ use super::{
 };
 use crate::install::link_script::LinkScriptError;
 
-/// Packages can mostly be installed in isolation and therefor in parallel.
+/// Packages can mostly be installed in isolation and therefore in parallel.
 /// However, when installing a large number of packages at the same time the
 /// different installation tasks start competing for resources. The
 /// [`InstallDriver`] helps to assist in making sure that tasks don't starve
