@@ -3,6 +3,7 @@ mod error;
 mod indicatif;
 mod reporter;
 use std::{
+    collections::HashMap,
     future::ready,
     path::{Path, PathBuf},
     sync::Arc,
@@ -26,9 +27,10 @@ use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
 
 use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::install::link_script::LinkScriptError;
 use crate::{
     default_cache_dir,
-    install::link_script::PrePostLinkResult,
+    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
     package_cache::{CacheReporter, PackageCache},
 };
 
@@ -55,15 +57,18 @@ pub struct InstallationResult {
     /// The transaction that was applied
     pub transaction: Transaction<PrefixRecord, RepoDataRecord>,
 
-    /// The result of running pre-processing steps. `None` if no
+    /// The result of running pre link scripts. `None` if no
     /// pre-processing was performed, possibly because link scripts were
     /// disabled.
-    pub pre_process_result: Option<PrePostLinkResult>,
+    pub pre_link_script_result: Option<PrePostLinkResult>,
 
-    /// The result of running post-processing steps. `None` if no
+    /// The result of running post link scripts. `None` if no
     /// post-processing was performed, possibly because link scripts were
     /// disabled.
-    pub post_process_result: Option<PrePostLinkResult>,
+    pub post_link_script_result: Option<Result<PrePostLinkResult, LinkScriptError>>,
+
+    /// The paths that were clobbered during the installation process.
+    pub clobbered_paths: HashMap<PathBuf, ClobberedPath>,
 }
 
 impl Installer {
@@ -312,8 +317,9 @@ impl Installer {
         if transaction.operations.is_empty() {
             return Ok(InstallationResult {
                 transaction,
-                pre_process_result: None,
-                post_process_result: None,
+                pre_link_script_result: None,
+                post_link_script_result: None,
+                clobbered_paths: HashMap::default(),
             });
         }
 
@@ -389,6 +395,7 @@ impl Installer {
                     let reporter = reporter
                         .as_deref()
                         .map(move |r| (r, r.on_unlink_start(idx, record)));
+                    driver.clobber_registry().unregister_paths(record);
                     unlink_package(prefix.as_ref(), record).await.map_err(|e| {
                         InstallerError::UnlinkError(record.repodata_record.file_name.clone(), e)
                     })?;
@@ -432,9 +439,7 @@ impl Installer {
         drop(pending_futures);
 
         // Post process the transaction
-        let post_process_result = driver
-            .post_process(&transaction, prefix.as_ref())
-            .map_err(InstallerError::PostProcessingFailed)?;
+        let post_process_result = driver.post_process(&transaction, prefix.as_ref())?;
 
         if let Some(reporter) = &self.reporter {
             reporter.on_transaction_complete();
@@ -442,8 +447,9 @@ impl Installer {
 
         Ok(InstallationResult {
             transaction,
-            pre_process_result,
-            post_process_result,
+            pre_link_script_result: pre_process_result,
+            post_link_script_result: post_process_result.post_link_result,
+            clobbered_paths: post_process_result.clobbered_paths,
         })
     }
 }

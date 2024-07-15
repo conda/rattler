@@ -1,13 +1,13 @@
 //! Functions for running link scripts (pre-unlink and post-link) for a package
-use std::borrow::Borrow;
 use std::{
+    borrow::Borrow,
     collections::{HashMap, HashSet},
     path::Path,
 };
-use thiserror::Error;
 
 use rattler_conda_types::{PackageName, PackageRecord, Platform, PrefixRecord};
 use rattler_shell::shell::{Bash, CmdExe, ShellEnum};
+use thiserror::Error;
 
 use super::{InstallDriver, Transaction};
 
@@ -15,17 +15,19 @@ use super::{InstallDriver, Transaction};
 #[derive(Debug, thiserror::Error)]
 pub enum LinkScriptError {
     /// An error occurred while reading the message file
-    #[error("Error reading message file: {0}")]
-    MessageError(#[from] std::io::Error),
+    #[error("{0}")]
+    IoError(String, #[source] std::io::Error),
 }
 
 /// The type of link script to run
 pub enum LinkScriptType {
     /// The pre-unlink script (run before the package is unlinked)
-    /// This is stored in the environment as `bin/.{name}-pre-unlink.sh` or `Scripts/.{name}-pre-unlink.bat`
+    /// This is stored in the environment as `bin/.{name}-pre-unlink.sh` or
+    /// `Scripts/.{name}-pre-unlink.bat`
     PreUnlink,
     /// The post-link script (run after the package is linked)
-    /// This is stored in the environment as `bin/.{name}-post-link.sh` or `Scripts/.{name}-post-link.bat`
+    /// This is stored in the environment as `bin/.{name}-post-link.sh` or
+    /// `Scripts/.{name}-post-link.bat`
     PostLink,
 }
 
@@ -69,6 +71,7 @@ impl ToString for LinkScriptType {
 pub struct PrePostLinkResult {
     /// Messages from the link scripts
     pub messages: HashMap<PackageName, String>,
+
     /// Packages that failed to run the link scripts
     pub failed_packages: Vec<PackageName>,
 }
@@ -94,8 +97,8 @@ pub fn run_link_scripts<'a>(
         target_prefix.to_string_lossy().to_string(),
     );
 
-    // prefix records are topologically sorted, so we can be sure that all dependencies are
-    // installed before the package itself.
+    // prefix records are topologically sorted, so we can be sure that all
+    // dependencies are installed before the package itself.
     let mut failed_packages = Vec::new();
     let mut messages = HashMap::<PackageName, String>::new();
     for record in prefix_records {
@@ -138,7 +141,15 @@ pub fn run_link_scripts<'a>(
 
             let message_file = target_prefix.join(".messages.txt");
             if message_file.exists() {
-                let message = std::fs::read_to_string(&message_file)?;
+                let message = std::fs::read_to_string(&message_file).map_err(|err| {
+                    LinkScriptError::IoError(
+                        format!(
+                            "error reading message file from {0}",
+                            message_file.display()
+                        ),
+                        err,
+                    )
+                })?;
                 tracing::info!(
                     "Message from {} for {}: {}",
                     link_script_type.to_string(),
@@ -147,7 +158,15 @@ pub fn run_link_scripts<'a>(
                 );
                 messages.insert(prec.name.clone(), message);
                 // Remove the message file
-                std::fs::remove_file(&message_file)?;
+                std::fs::remove_file(&message_file).map_err(|err| {
+                    LinkScriptError::IoError(
+                        format!(
+                            "error removing message file from {0}",
+                            message_file.display()
+                        ),
+                        err,
+                    )
+                })?;
             } else {
                 messages.insert(prec.name.clone(), "".to_string());
             }
@@ -161,7 +180,8 @@ pub fn run_link_scripts<'a>(
 }
 
 impl InstallDriver {
-    /// Run any post-link scripts that are part of the packages that are being installed.
+    /// Run any post-link scripts that are part of the packages that are being
+    /// installed.
     pub fn run_post_link_scripts<Old, New>(
         &self,
         transaction: &Transaction<Old, New>,
@@ -190,7 +210,8 @@ impl InstallDriver {
         )
     }
 
-    /// Run any post-link scripts that are part of the packages that are being installed.
+    /// Run any post-link scripts that are part of the packages that are being
+    /// installed.
     pub fn run_pre_unlink_scripts<Old, New>(
         &self,
         transaction: &Transaction<Old, New>,

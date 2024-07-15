@@ -1,25 +1,32 @@
-use super::clobber_registry::ClobberRegistry;
-use super::link_script::{PrePostLinkError, PrePostLinkResult};
-use super::unlink::{recursively_remove_empty_directories, UnlinkError};
-use super::Transaction;
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard},
+};
+
 use indexmap::IndexSet;
 use itertools::Itertools;
-use rattler_conda_types::prefix_record::PathType;
-use rattler_conda_types::{PackageRecord, PrefixRecord};
-use simple_spawn_blocking::tokio::run_blocking_task;
-use simple_spawn_blocking::Cancelled;
-use std::borrow::Borrow;
-use std::collections::HashSet;
-use std::path::Path;
-use std::sync::MutexGuard;
-use std::sync::{Arc, Mutex};
+use rattler_conda_types::{prefix_record::PathType, PackageRecord, PrefixRecord};
+use simple_spawn_blocking::{tokio::run_blocking_task, Cancelled};
+use thiserror::Error;
 use tokio::sync::{AcquireError, OwnedSemaphorePermit, Semaphore};
 
-/// Packages can mostly be installed in isolation and therefor in parallel. However, when installing
-/// a large number of packages at the same time the different installation tasks start competing for
-/// resources. The [`InstallDriver`] helps to assist in making sure that tasks don't starve
-/// each other from resource as well as making sure that due to the large number of requests the
-/// process doesn't try to acquire more resources than the system has available.
+use super::{
+    clobber_registry::{ClobberError, ClobberRegistry, ClobberedPath},
+    link_script::{PrePostLinkError, PrePostLinkResult},
+    unlink::{recursively_remove_empty_directories, UnlinkError},
+    Transaction,
+};
+use crate::install::link_script::LinkScriptError;
+
+/// Packages can mostly be installed in isolation and therefore in parallel.
+/// However, when installing a large number of packages at the same time the
+/// different installation tasks start competing for resources. The
+/// [`InstallDriver`] helps to assist in making sure that tasks don't starve
+/// each other from resource as well as making sure that due to the large number
+/// of requests the process doesn't try to acquire more resources than the
+/// system has available.
 pub struct InstallDriver {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Arc<Mutex<ClobberRegistry>>,
@@ -41,6 +48,28 @@ pub struct InstallDriverBuilder {
     io_concurrency_semaphore: Option<Arc<Semaphore>>,
     clobber_registry: Option<ClobberRegistry>,
     execute_link_scripts: bool,
+}
+
+/// The result of the post-processing step.
+#[derive(Debug)]
+pub struct PostProcessResult {
+    /// The result of running the post link scripts. This is only present if
+    /// running the scripts is allowed.
+    pub post_link_result: Option<Result<PrePostLinkResult, LinkScriptError>>,
+
+    /// The paths that were clobbered during the installation process.
+    pub clobbered_paths: HashMap<PathBuf, ClobberedPath>,
+}
+
+/// An error that might have occurred during post-processing
+#[derive(Debug, Error)]
+pub enum PostProcessingError {
+    #[error("failed to unclobber clobbered files")]
+    ClobberError(#[from] ClobberError),
+
+    /// Failed to determine the currently installed packages.
+    #[error("failed to determine the installed packages")]
+    FailedToDetectInstalledPackages(#[source] std::io::Error),
 }
 
 impl InstallDriverBuilder {
@@ -71,7 +100,7 @@ impl InstallDriverBuilder {
         prefix_records: impl IntoIterator<Item = &'i PrefixRecord>,
     ) -> Self {
         Self {
-            clobber_registry: Some(ClobberRegistry::from_prefix_records(prefix_records)),
+            clobber_registry: Some(ClobberRegistry::new(prefix_records)),
             ..self
         }
     }
@@ -103,8 +132,9 @@ impl InstallDriver {
         InstallDriverBuilder::default()
     }
 
-    /// Returns a permit that will allow the caller to perform IO operations. This is used to make
-    /// sure that the system doesn't try to acquire more IO resources than the system has available.
+    /// Returns a permit that will allow the caller to perform IO operations.
+    /// This is used to make sure that the system doesn't try to acquire
+    /// more IO resources than the system has available.
     pub async fn acquire_io_permit(&self) -> Result<Option<OwnedSemaphorePermit>, AcquireError> {
         match self.io_concurrency_semaphore.clone() {
             None => Ok(None),
@@ -112,13 +142,14 @@ impl InstallDriver {
         }
     }
 
-    /// Return a locked reference to the paths registry. This is used to make sure that the same
-    /// path is not installed twice.
+    /// Return a locked reference to the paths registry. This is used to make
+    /// sure that the same path is not installed twice.
     pub fn clobber_registry(&self) -> MutexGuard<'_, ClobberRegistry> {
         self.clobber_registry.lock().unwrap()
     }
 
-    /// Call this before any packages are installed to perform any pre processing that is required.
+    /// Call this before any packages are installed to perform any pre
+    /// processing that is required.
     pub fn pre_process<Old: Borrow<PrefixRecord>, New>(
         &self,
         transaction: &Transaction<Old, New>,
@@ -138,9 +169,10 @@ impl InstallDriver {
         Ok(None)
     }
 
-    /// Runs a blocking task that will execute on a seperate thread. The task is not started until
-    /// an IO permit is acquired. This is used to make sure that the system doesn't try to acquire
-    /// more IO resources than the system has available.
+    /// Runs a blocking task that will execute on a seperate thread. The task is
+    /// not started until an IO permit is acquired. This is used to make
+    /// sure that the system doesn't try to acquire more IO resources than
+    /// the system has available.
     pub async fn run_blocking_io_task<
         T: Send + 'static,
         E: Send + From<Cancelled> + 'static,
@@ -158,18 +190,19 @@ impl InstallDriver {
         .await
     }
 
-    /// Call this after all packages have been installed to perform any post processing that is
-    /// required.
+    /// Call this after all packages have been installed to perform any post
+    /// processing that is required.
     ///
-    /// This function will select a winner among multiple packages that might write to a single package
-    /// and will also execute any `post-link.sh/bat` scripts
+    /// This function will select a winner among multiple packages that might
+    /// write to a single package and will also execute any
+    /// `post-link.sh/bat` scripts
     pub fn post_process<Old: Borrow<PrefixRecord> + AsRef<New>, New: AsRef<PackageRecord>>(
         &self,
         transaction: &Transaction<Old, New>,
         target_prefix: &Path,
-    ) -> Result<Option<PrePostLinkResult>, PrePostLinkError> {
+    ) -> Result<PostProcessResult, PostProcessingError> {
         let prefix_records = PrefixRecord::collect_from_prefix(target_prefix)
-            .map_err(PrePostLinkError::FailedToDetectInstalledPackages)?;
+            .map_err(PostProcessingError::FailedToDetectInstalledPackages)?;
 
         let required_packages =
             PackageRecord::sort_topologically(prefix_records.iter().collect::<Vec<_>>());
@@ -179,27 +212,24 @@ impl InstallDriver {
                 tracing::warn!("Failed to remove empty directories: {} (ignored)", e);
             });
 
-        self.clobber_registry()
-            .unclobber(&required_packages, target_prefix)
-            .unwrap_or_else(|e| {
-                tracing::error!("Error unclobbering packages: {:?}", e);
-            });
+        let clobbered_paths = self
+            .clobber_registry()
+            .unclobber(&required_packages, target_prefix)?;
 
-        if self.execute_link_scripts {
-            match self.run_post_link_scripts(transaction, &required_packages, target_prefix) {
-                Ok(res) => {
-                    return Ok(Some(res));
-                }
-                Err(e) => {
-                    tracing::error!("Error running post-link scripts: {:?}", e);
-                }
-            }
-        }
+        let post_link_result = if self.execute_link_scripts {
+            Some(self.run_post_link_scripts(transaction, &required_packages, target_prefix))
+        } else {
+            None
+        };
 
-        Ok(None)
+        Ok(PostProcessResult {
+            post_link_result,
+            clobbered_paths,
+        })
     }
 
-    /// Remove all empty directories that are not part of the new prefix records.
+    /// Remove all empty directories that are not part of the new prefix
+    /// records.
     pub fn remove_empty_directories<Old: Borrow<PrefixRecord>, New>(
         &self,
         transaction: &Transaction<Old, New>,
@@ -232,7 +262,8 @@ impl InstallDriver {
 
             let is_python_noarch = record.repodata_record.package_record.noarch.is_python();
 
-            // Sort the directories by length, so that we delete the deepest directories first.
+            // Sort the directories by length, so that we delete the deepest directories
+            // first.
             let mut directories: IndexSet<_> = removed_directories.into_iter().sorted().collect();
 
             while let Some(directory) = directories.pop() {
@@ -244,8 +275,9 @@ impl InstallDriver {
                     &keep_directories,
                 )?;
 
-                // The directory is not empty which means our parent directory is also not empty,
-                // recursively remove the parent directory from the set as well.
+                // The directory is not empty which means our parent directory is also not
+                // empty, recursively remove the parent directory from the set
+                // as well.
                 while let Some(parent) = removed_until.parent() {
                     if !directories.shift_remove(parent) {
                         break;

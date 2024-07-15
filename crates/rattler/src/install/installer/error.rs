@@ -1,8 +1,12 @@
-use crate::install::link_script::PrePostLinkError;
-use crate::install::unlink::UnlinkError;
-use crate::install::{InstallError, TransactionError};
-use crate::package_cache::PackageCacheError;
 use simple_spawn_blocking::Cancelled;
+
+use crate::{
+    install::{
+        clobber_registry::ClobberError, driver::PostProcessingError, link_script::PrePostLinkError,
+        unlink::UnlinkError, InstallError, TransactionError,
+    },
+    package_cache::PackageCacheError,
+};
 
 /// An error returned by the installer
 #[derive(Debug, thiserror::Error)]
@@ -39,6 +43,10 @@ pub enum InstallerError {
     #[error("post-processing failed")]
     PostProcessingFailed(#[source] PrePostLinkError),
 
+    /// A clobbering error occured
+    #[error("failed to unclobber clobbered files")]
+    ClobberError(#[from] ClobberError),
+
     /// The operation was cancelled
     #[error("the operation was cancelled")]
     Cancelled,
@@ -47,5 +55,16 @@ pub enum InstallerError {
 impl From<Cancelled> for InstallerError {
     fn from(_: Cancelled) -> Self {
         InstallerError::Cancelled
+    }
+}
+
+impl From<PostProcessingError> for InstallerError {
+    fn from(value: PostProcessingError) -> Self {
+        match value {
+            PostProcessingError::ClobberError(err) => InstallerError::ClobberError(err),
+            PostProcessingError::FailedToDetectInstalledPackages(err) => {
+                InstallerError::FailedToDetectInstalledPackages(err)
+            }
+        }
     }
 }
