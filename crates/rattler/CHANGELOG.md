@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/mamba-org/rattler/compare/rattler-v0.26.5...rattler-v0.27.0) - 2024-07-15
+
+### Fixed
+- unclobber issue when packages are named differently ([#776](https://github.com/mamba-org/rattler/pull/776))
+
+### Other
+- bump dependencies and remove unused ones ([#771](https://github.com/mamba-org/rattler/pull/771))
+
 ## [0.26.5](https://github.com/mamba-org/rattler/compare/rattler-v0.26.4...rattler-v0.26.5) - 2024-07-08
 
 ### Added

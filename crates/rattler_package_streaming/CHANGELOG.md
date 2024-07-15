@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.5](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.4...rattler_package_streaming-v0.21.5) - 2024-07-15
+
+### Other
+- bump zip to 2.1.3 ([#772](https://github.com/mamba-org/rattler/pull/772))
+
 ## [0.21.4](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.3...rattler_package_streaming-v0.21.4) - 2024-07-08
 
 ### Fixed
