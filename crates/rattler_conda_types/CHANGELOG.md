@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.0...rattler_conda_types-v0.26.1) - 2024-07-15
+
+### Other
+- PrefixRecord deserialization using simd ([#777](https://github.com/mamba-org/rattler/pull/777))
+
 ## [0.26.0](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.25.2...rattler_conda_types-v0.26.0) - 2024-07-08
 
 ### Added
