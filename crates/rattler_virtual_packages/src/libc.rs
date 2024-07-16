@@ -49,8 +49,10 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
         Ok(output) => output,
     };
 
-    parse_glibc_ldd_version(String::from_utf8_lossy(&output.stdout))?
-        .map(|version| (String::from("glibc"), version))
+    Ok(
+        parse_glibc_ldd_version(&String::from_utf8_lossy(&output.stdout))?
+            .map(|version| (String::from("glibc"), version)),
+    )
 }
 
 #[cfg(any(test, unix))]
