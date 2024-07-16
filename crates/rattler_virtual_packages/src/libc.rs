@@ -62,7 +62,7 @@ fn parse_glibc_ldd_version(input: &str) -> Result<Option<Version>, DetectLibCErr
     });
 
     if let Some(version_match) = GNU_LIBC_RE
-        .captures(&input)
+        .captures(input)
         .and_then(|captures| captures.get(1))
         .map(|version_match| version_match.as_str())
     {
