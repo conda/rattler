@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.18](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.17...rattler_virtual_packages-v0.19.18) - 2024-07-16
+
+### Fixed
+- add gentoo support for glibc ([#779](https://github.com/mamba-org/rattler/pull/779))
+
 ## [0.19.17](https://github.com/mamba-org/rattler/compare/rattler_virtual_packages-v0.19.16...rattler_virtual_packages-v0.19.17) - 2024-07-15
 
 ### Other
