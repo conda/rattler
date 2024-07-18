@@ -151,23 +151,29 @@ impl ExplicitEnvironmentSpec {
         Self::from_reader(File::open(path)?)
     }
 
-    /// Writes an explicit environment spec to file
-    pub fn to_path(&self, path: impl AsRef<Path>) -> Result<(), std::io::Error> {
-        let plat = match self.platform {
-            Some(p) => p.as_str(),
-            None => "",
-        };
-        let mut out = String::new();
-        out.push_str("# This file may be used to create an environment using:\n");
-        out.push_str("# $ conda create --name <env> --file <this file>\n");
-        out.push_str(&format!("# platform: {plat}\n"));
-        out.push_str("@EXPLICIT\n");
+    /// Converts an [`ExplicitEnvironmentSpec`] to a string representing a valid explicit
+    /// environment file
+    pub fn to_string(&self) -> String {
+        let mut s = String::new();
 
-        for p in self.packages.iter() {
-            out.push_str(&format!("{}\n", p.url.as_str()));
+        if let Some(plat) = &self.platform {
+            s.push_str(&format!("# platform: {plat}\n"));
         }
 
-        fs::write(path, out)?;
+        s.push_str("@EXPLICIT\n");
+
+        for p in &self.packages {
+            s.push_str(&format!("{}\n", p.url.as_str()));
+        }
+
+        s
+    }
+
+    /// Writes an explicit environment spec to file
+    pub fn to_path(&self, path: impl AsRef<Path>) -> Result<(), std::io::Error> {
+        let s = self.to_string();
+
+        fs::write(path, s)?;
 
         Ok(())
     }
@@ -270,6 +276,28 @@ mod test {
     #[case::ros_noetic_linux_64("explicit-envs/ros-noetic_linux-64.txt")]
     #[case::vs2015_runtime_win_64("explicit-envs/vs2015_runtime_win-64.txt")]
     #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
+    fn test_to_string(#[case] path: &str) {
+        let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
+        let env_cmp = ExplicitEnvironmentSpec::from_str(&env.to_string()).unwrap();
+
+        assert_eq!(env.platform, env_cmp.platform);
+        assert_eq!(
+            env.packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>(),
+            env_cmp
+                .packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::ros_noetic_linux_64("explicit-envs/ros-noetic_linux-64.txt")]
+    #[case::vs2015_runtime_win_64("explicit-envs/vs2015_runtime_win-64.txt")]
+    #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
     fn test_to_path(#[case] path: &str) {
         let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
 
@@ -293,8 +321,6 @@ mod test {
                 .map(|entry| entry.url.clone())
                 .collect::<Vec<_>>()
         );
-
-        tmp_dir.close().unwrap()
     }
 
     #[test]
