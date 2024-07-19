@@ -153,7 +153,7 @@ impl ExplicitEnvironmentSpec {
 
     /// Converts an [`ExplicitEnvironmentSpec`] to a string representing a valid explicit
     /// environment file
-    pub fn to_string(&self) -> String {
+    pub fn to_spec_string(&self) -> String {
         let mut s = String::new();
 
         if let Some(plat) = &self.platform {
@@ -171,7 +171,7 @@ impl ExplicitEnvironmentSpec {
 
     /// Writes an explicit environment spec to file
     pub fn to_path(&self, path: impl AsRef<Path>) -> Result<(), std::io::Error> {
-        let s = self.to_string();
+        let s = self.to_spec_string();
 
         fs::write(path, s)?;
 
@@ -276,9 +276,9 @@ mod test {
     #[case::ros_noetic_linux_64("explicit-envs/ros-noetic_linux-64.txt")]
     #[case::vs2015_runtime_win_64("explicit-envs/vs2015_runtime_win-64.txt")]
     #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
-    fn test_to_string(#[case] path: &str) {
+    fn test_to_spec_string(#[case] path: &str) {
         let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
-        let env_cmp = ExplicitEnvironmentSpec::from_str(&env.to_string()).unwrap();
+        let env_cmp = ExplicitEnvironmentSpec::from_str(&env.to_spec_string()).unwrap();
 
         assert_eq!(env.platform, env_cmp.platform);
         assert_eq!(
