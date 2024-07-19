@@ -24,6 +24,7 @@ pub use {
     entry_point::EntryPoint,
     files::Files,
     has_prefix::HasPrefix,
+    has_prefix::HasPrefixEntry,
     index::IndexJson,
     link::{LinkJson, NoArchLinks, PythonEntryPoints},
     no_link::NoLink,
