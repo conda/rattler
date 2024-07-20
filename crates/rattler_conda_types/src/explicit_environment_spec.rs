@@ -11,7 +11,7 @@
 
 use crate::{ParsePlatformError, Platform};
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read, path::Path, str::FromStr};
+use std::{fs, fs::File, io::Read, path::Path, str::FromStr};
 use url::Url;
 
 /// An [`ExplicitEnvironmentSpec`] represents an explicit environment specification. Packages are
@@ -150,6 +150,33 @@ impl ExplicitEnvironmentSpec {
     pub fn from_path(path: &Path) -> Result<Self, ParseExplicitEnvironmentSpecError> {
         Self::from_reader(File::open(path)?)
     }
+
+    /// Converts an [`ExplicitEnvironmentSpec`] to a string representing a valid explicit
+    /// environment file
+    pub fn to_spec_string(&self) -> String {
+        let mut s = String::new();
+
+        if let Some(plat) = &self.platform {
+            s.push_str(&format!("# platform: {plat}\n"));
+        }
+
+        s.push_str("@EXPLICIT\n");
+
+        for p in &self.packages {
+            s.push_str(&format!("{}\n", p.url.as_str()));
+        }
+
+        s
+    }
+
+    /// Writes an explicit environment spec to file
+    pub fn to_path(&self, path: impl AsRef<Path>) -> Result<(), std::io::Error> {
+        let s = self.to_spec_string();
+
+        fs::write(path, s)?;
+
+        Ok(())
+    }
 }
 
 impl FromStr for ExplicitEnvironmentSpec {
@@ -242,6 +269,57 @@ mod test {
         assert_matches!(
             ExplicitEnvironmentSpec::from_str("# platform: notaplatform\n@EXPLICIT"),
             Err(ParseExplicitEnvironmentSpecError::InvalidPlatform(_))
+        );
+    }
+
+    #[rstest]
+    #[case::ros_noetic_linux_64("explicit-envs/ros-noetic_linux-64.txt")]
+    #[case::vs2015_runtime_win_64("explicit-envs/vs2015_runtime_win-64.txt")]
+    #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
+    fn test_to_spec_string(#[case] path: &str) {
+        let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
+        let env_cmp = ExplicitEnvironmentSpec::from_str(&env.to_spec_string()).unwrap();
+
+        assert_eq!(env.platform, env_cmp.platform);
+        assert_eq!(
+            env.packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>(),
+            env_cmp
+                .packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[rstest]
+    #[case::ros_noetic_linux_64("explicit-envs/ros-noetic_linux-64.txt")]
+    #[case::vs2015_runtime_win_64("explicit-envs/vs2015_runtime_win-64.txt")]
+    #[case::xtensor_linux_64("explicit-envs/xtensor_linux-64.txt")]
+    fn test_to_path(#[case] path: &str) {
+        let env = ExplicitEnvironmentSpec::from_path(&get_test_data_dir().join(path)).unwrap();
+
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let file_path = tmp_dir.path().join("temp_explicit_env.txt");
+
+        assert_matches!(env.to_path(file_path.clone()), Ok(()));
+
+        // Check file content round trip
+        let round_trip_env = ExplicitEnvironmentSpec::from_path(&file_path).unwrap();
+
+        assert_eq!(env.platform, round_trip_env.platform);
+        assert_eq!(
+            env.packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>(),
+            round_trip_env
+                .packages
+                .iter()
+                .map(|entry| entry.url.clone())
+                .collect::<Vec<_>>()
         );
     }
 
