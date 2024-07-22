@@ -1,40 +1,43 @@
-use std::borrow::Cow;
-use std::fmt::{Display, Formatter};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::{
+    borrow::Cow,
+    fmt::{Display, Formatter},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
-use crate::utils::path::is_path;
-use crate::utils::url::parse_scheme;
 use file_url::directory_path_to_url;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
+use crate::utils::{path::is_path, url::parse_scheme};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
-/// The `ChannelConfig` describes properties that are required to resolve "simple" channel names to
-/// channel URLs.
+/// The `ChannelConfig` describes properties that are required to resolve
+/// "simple" channel names to channel URLs.
 ///
-/// When working with [`Channel`]s you want to resolve them to a Url. The Url describes where to
-/// find the data in the channel. Working with URLs is less user friendly since most of the time
-/// users only use channels from one particular server. Conda solves this by allowing users not to
-/// specify a full Url but instead only specify the name of the channel and reading the primary
+/// When working with [`Channel`]s you want to resolve them to a Url. The Url
+/// describes where to find the data in the channel. Working with URLs is less
+/// user friendly since most of the time users only use channels from one
+/// particular server. Conda solves this by allowing users not to specify a full
+/// Url but instead only specify the name of the channel and reading the primary
 /// server address from a configuration file (e.g. `.condarc`).
 #[derive(Debug, Clone, Serialize, Deserialize, Hash)]
 pub struct ChannelConfig {
-    /// A url to prefix to channel names that don't start with a Url. Usually this Url refers to
-    /// the `https://conda.anaconda.org` server but users are free to change this. This allows
-    /// naming channels just by their name instead of their entire Url (e.g. "conda-forge" actually
-    /// refers to `<https://conda.anaconda.org/conda-forge>`).
+    /// A url to prefix to channel names that don't start with a Url. Usually
+    /// this Url refers to the `https://conda.anaconda.org` server but users are free to change this. This allows
+    /// naming channels just by their name instead of their entire Url (e.g.
+    /// "conda-forge" actually refers to `<https://conda.anaconda.org/conda-forge>`).
     ///
     /// The default value is: <https://conda.anaconda.org>
     pub channel_alias: Url,
 
-    /// For local channels, the root directory from which to resolve relative paths.
-    /// Most of the time you would initialize this with the current working directory.
+    /// For local channels, the root directory from which to resolve relative
+    /// paths. Most of the time you would initialize this with the current
+    /// working directory.
     pub root_dir: PathBuf,
 }
 
@@ -58,7 +61,8 @@ impl ChannelConfig {
     }
 }
 
-/// Represents a channel description as either a name (e.g. `conda-forge`) or a base url.
+/// Represents a channel description as either a name (e.g. `conda-forge`) or a
+/// base url.
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum NamedChannelOrUrl {
     /// A named channel
@@ -71,7 +75,8 @@ pub enum NamedChannelOrUrl {
 impl NamedChannelOrUrl {
     /// Returns the string representation of the channel.
     ///
-    /// This method ensures that if the channel is a url, it does not end with a `/`.
+    /// This method ensures that if the channel is a url, it does not end with a
+    /// `/`.
     pub fn as_str(&self) -> &str {
         match self {
             NamedChannelOrUrl::Name(name) => name,
@@ -117,11 +122,42 @@ impl Display for NamedChannelOrUrl {
     }
 }
 
+impl FromStr for NamedChannelOrUrl {
+    type Err = url::ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if parse_scheme(s).is_some() {
+            Ok(NamedChannelOrUrl::Url(Url::from_str(s)?))
+        } else {
+            Ok(NamedChannelOrUrl::Name(s.to_string()))
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for NamedChannelOrUrl {
+    fn deserialize<D>(deserializer: D) -> Result<NamedChannelOrUrl, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        NamedChannelOrUrl::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl serde::Serialize for NamedChannelOrUrl {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_str().serialize(serializer)
+    }
+}
+
 /// `Channel`s are the primary source of package information.
 #[derive(Debug, Clone, Serialize, Eq, PartialEq, Hash)]
 pub struct Channel {
-    /// The platforms supported by this channel, or None if no explicit platforms have been
-    /// specified.
+    /// The platforms supported by this channel, or None if no explicit
+    /// platforms have been specified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platforms: Option<Vec<Platform>>,
 
@@ -247,7 +283,8 @@ impl Channel {
     ///
     /// # Panics
     ///
-    /// Panics if the path is not an absolute path or could not be canonicalized.
+    /// Panics if the path is not an absolute path or could not be
+    /// canonicalized.
     pub fn from_directory(path: &Path) -> Self {
         let path = if path.is_absolute() {
             Cow::Borrowed(path)
@@ -279,7 +316,8 @@ impl Channel {
         }
     }
 
-    /// Returns the base Url of the channel. This does not include the platform part.
+    /// Returns the base Url of the channel. This does not include the platform
+    /// part.
     pub fn base_url(&self) -> &Url {
         &self.base_url
     }
@@ -299,8 +337,8 @@ impl Channel {
             .collect()
     }
 
-    /// Returns the platforms explicitly mentioned in the channel or the default platforms of the
-    /// current system.
+    /// Returns the platforms explicitly mentioned in the channel or the default
+    /// platforms of the current system.
     pub fn platforms_or_default(&self) -> &[Platform] {
         if let Some(platforms) = &self.platforms {
             platforms.as_slice()
@@ -375,8 +413,8 @@ fn parse_platforms(channel: &str) -> Result<(Option<Vec<Platform>>, &str), Parse
     Ok((None, channel))
 }
 
-/// Returns the default platforms. These are based on the platform this binary was build for as well
-/// as platform agnostic platforms.
+/// Returns the default platforms. These are based on the platform this binary
+/// was build for as well as platform agnostic platforms.
 pub(crate) const fn default_platforms() -> &'static [Platform] {
     const CURRENT_PLATFORMS: [Platform; 2] = [Platform::current(), Platform::NoArch];
     &CURRENT_PLATFORMS
@@ -405,9 +443,11 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::str::FromStr;
+
     use url::Url;
+
+    use super::*;
 
     #[test]
     fn test_parse_platforms() {

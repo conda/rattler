@@ -1,0 +1,23 @@
+---
+source: crates/rattler_conda_types/src/environment_yaml.rs
+assertion_line: 186
+expression: "EnvironmentYaml::from_path(&path).unwrap()"
+input_file: test-data/environments/mamba_dev_extra.environment.yaml
+---
+channels:
+  - conda-forge
+dependencies:
+  - ccache
+  - clang-tools
+  - clang
+  - clangxx
+  - lld
+  - cmake-format
+  - ruff
+  - python-lsp-server-base
+  - ruff-lsp
+  - jupyterlab
+  - ipython
+  - ipdb
+  - gh
+  - go-task
