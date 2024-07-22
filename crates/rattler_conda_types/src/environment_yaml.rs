@@ -184,7 +184,7 @@ mod tests {
             "../../../test-data/environments",
             "*.environment.yaml",
             |path| {
-                insta::assert_yaml_snapshot!(EnvironmentYaml::from_path(&path).unwrap());
+                insta::assert_yaml_snapshot!(EnvironmentYaml::from_path(path).unwrap());
             }
         );
     }

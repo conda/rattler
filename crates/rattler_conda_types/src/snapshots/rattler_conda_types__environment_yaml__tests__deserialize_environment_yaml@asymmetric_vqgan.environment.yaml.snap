@@ -1,7 +1,7 @@
 ---
 source: crates/rattler_conda_types/src/environment_yaml.rs
-assertion_line: 186
-expression: "EnvironmentYaml::from_path(&path).unwrap()"
+assertion_line: 187
+expression: "EnvironmentYaml::from_path(path).unwrap()"
 input_file: test-data/environments/asymmetric_vqgan.environment.yaml
 ---
 channels:
@@ -31,3 +31,6 @@ dependencies:
       - transformers==4.6.0
       - torchmetrics==0.6
       - academictorrents==2.3.3
+      - "-e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers"
+      - "-e git+https://github.com/openai/CLIP.git@main#egg=clip"
+      - "-e ."
