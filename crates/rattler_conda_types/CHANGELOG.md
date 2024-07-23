@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.2](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.1...rattler_conda_types-v0.26.2) - 2024-07-23
+
+### Added
+- `environment.yaml` type ([#786](https://github.com/mamba-org/rattler/pull/786))
+- Add to_path() method to ExplicitEnvironmentSpec ([#781](https://github.com/mamba-org/rattler/pull/781))
+- expose `HasPrefixEntry` for public use ([#784](https://github.com/mamba-org/rattler/pull/784))
+
 ## [0.26.1](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.0...rattler_conda_types-v0.26.1) - 2024-07-15
 
 ### Other
