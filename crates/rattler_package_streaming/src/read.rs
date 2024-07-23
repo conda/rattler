@@ -57,34 +57,35 @@ pub fn extract_conda(reader: impl Read, destination: &Path) -> Result<ExtractRes
     loop {
         match read_zipfile_from_stream(&mut md5_reader) {
             Ok(Some(file)) => {
-            // If an error occurs while we are reading the contents of the zip we don't want to
-            // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
-            // the `file` in case the stack unwinds.
-            let mut file = ManuallyDrop::new(file);
+                // If an error occurs while we are reading the contents of the zip we don't want to
+                // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
+                // the `file` in case the stack unwinds.
+                let mut file = ManuallyDrop::new(file);
 
-            if file
-                .mangled_name()
-                .file_name()
-                .map(OsStr::to_string_lossy)
-                .map_or(false, |file_name| file_name.ends_with(".tar.zst"))
-            {
-                stream_tar_zst(&mut *file)?.unpack(destination)?;
-            } else {
-                // Manually read to the end of the stream if that didn't happen.
-                std::io::copy(&mut *file, &mut std::io::sink())?;
+                if file
+                    .mangled_name()
+                    .file_name()
+                    .map(OsStr::to_string_lossy)
+                    .map_or(false, |file_name| file_name.ends_with(".tar.zst"))
+                {
+                    stream_tar_zst(&mut *file)?.unpack(destination)?;
+                } else {
+                    // Manually read to the end of the stream if that didn't happen.
+                    std::io::copy(&mut *file, &mut std::io::sink())?;
+                }
+
+                // Take the file out of the [`ManuallyDrop`] to properly drop it.
+                let _ = ManuallyDrop::into_inner(file);
             }
-
-            // Take the file out of the [`ManuallyDrop`] to properly drop it.
-            let _ = ManuallyDrop::into_inner(file);
-        }
-        Ok(None) => {
-            // No more files to read
-            break;
-        }
-        Err(e) => {
-            // Handle the error here
-            eprintln!("Error reading zip file: {:?} at path {:?}", e, destination);
-            return Err(e);
+            Ok(None) => {
+                // No more files to read
+                break;
+            }
+            Err(e) => {
+                // Handle the error here
+                eprintln!("Error reading zip file: {:?} at path {:?}", e, destination);
+                return Err(ExtractError::ZipError(e));
+            }
         }
     }
 
