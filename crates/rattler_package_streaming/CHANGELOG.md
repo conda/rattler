@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.7](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.6...rattler_package_streaming-v0.21.7) - 2024-07-23
+
+### Other
+- updated the following local packages: rattler_conda_types
+
 ## [0.21.6](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.5...rattler_package_streaming-v0.21.6) - 2024-07-23
 
 ### Other

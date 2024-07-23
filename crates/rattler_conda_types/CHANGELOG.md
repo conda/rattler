@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.3](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.2...rattler_conda_types-v0.26.3) - 2024-07-23
+
+### Fixed
+- channel `base_url` requires trailing slash ([#787](https://github.com/mamba-org/rattler/pull/787))
+
 ## [0.26.2](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.1...rattler_conda_types-v0.26.2) - 2024-07-23
 
 ### Added
