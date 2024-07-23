@@ -109,9 +109,8 @@ impl NamedChannelOrUrl {
         };
         let base_url = self.into_base_url(config);
         Channel {
-            platforms: None,
-            base_url,
             name,
+            ..Channel::from_url(base_url)
         }
     }
 }
