@@ -28,16 +28,19 @@ serde = { workspace = true, features = ["derive", "rc"] }
 serde_json = { workspace = true }
 serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["indexmap_2"] }
+serde-untagged = { workspace = true }
+serde_yaml = { workspace = true }
 smallvec = { workspace = true, features = ["serde", "const_new", "const_generics", "union"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
+indexmap = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }
-insta = { workspace = true, features = ["yaml", "redactions", "toml"] }
+insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob"] }
 rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
 tempfile = { workspace = true }
 rstest = { workspace = true }

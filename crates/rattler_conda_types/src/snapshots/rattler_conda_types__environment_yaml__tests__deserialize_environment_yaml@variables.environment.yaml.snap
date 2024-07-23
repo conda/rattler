@@ -1,0 +1,13 @@
+---
+source: crates/rattler_conda_types/src/environment_yaml.rs
+assertion_line: 187
+expression: "EnvironmentYaml::from_path(&path).unwrap()"
+input_file: test-data/environments/variables.environment.yaml
+---
+name: test
+channels:
+  - conda-forge
+dependencies:
+  - numpy
+variables:
+  MY_ENV_VAR: My Value
