@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 fs-err = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.26.3", default-features = false }
-rattler_digest = { path="../rattler_digest", version = "0.19.5", default-features = false }
+rattler_digest = { path="../rattler_digest", version = "1.0.0", default-features = false }
 rattler_package_streaming = { path="../rattler_package_streaming", version = "0.21.7", default-features = false }
 serde_json = { workspace = true }
 tracing = { workspace = true }
