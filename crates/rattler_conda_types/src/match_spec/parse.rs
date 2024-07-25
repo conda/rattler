@@ -276,7 +276,7 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Parses an url or path like string into an url.
-fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
     // Is the spec an url, parse it as an url
     if parse_scheme(input).is_some() {
         return Url::parse(input)
