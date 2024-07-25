@@ -609,17 +609,24 @@ impl super::SolverImpl for Solver {
         )?;
 
         // Construct the requirements that the solver needs to satisfy.
-        let root_requirements = task
-            .specs
-            .iter()
-            .map(|spec| {
-                let (name, nameless_spec) = spec.clone().into_nameless();
-                let name = name.expect("cannot use matchspec without a name");
-                let name_id = provider.pool.intern_package_name(name.as_normalized());
-                provider
-                    .pool
-                    .intern_version_set(name_id, nameless_spec.into())
-            })
+        let virtual_package_requirements = task.virtual_packages.iter().map(|spec| {
+            let name_id = provider.pool.intern_package_name(spec.name.as_normalized());
+            provider
+                .pool
+                .intern_version_set(name_id, NamelessMatchSpec::default().into())
+        });
+
+        let root_requirements = task.specs.iter().map(|spec| {
+            let (name, nameless_spec) = spec.clone().into_nameless();
+            let name = name.expect("cannot use matchspec without a name");
+            let name_id = provider.pool.intern_package_name(name.as_normalized());
+            provider
+                .pool
+                .intern_version_set(name_id, nameless_spec.into())
+        });
+
+        let all_requirements = virtual_package_requirements
+            .chain(root_requirements)
             .collect();
 
         let root_constraints = task
@@ -635,7 +642,7 @@ impl super::SolverImpl for Solver {
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver.solve(root_requirements, root_constraints).map_err(
+        let solvables = solver.solve(all_requirements, root_constraints).map_err(
             |unsolvable_or_cancelled| {
                 match unsolvable_or_cancelled {
                     UnsolvableOrCancelled::Unsolvable(problem) => {

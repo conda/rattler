@@ -35,8 +35,11 @@ pub fn get_required_packages(
         let transaction_type = transaction.transaction_type(id);
 
         // Retrieve the repodata record corresponding to this solvable
-        let (repo_index, solvable_index) =
-            get_solvable_indexes(pool, repo_mapping, solvable_index_id, id);
+        let Some((repo_index, solvable_index)) =
+            get_solvable_indexes(pool, repo_mapping, solvable_index_id, id)
+        else {
+            continue;
+        };
         let repodata_record = repodata_records[repo_index][solvable_index];
 
         match transaction_type as u32 {
@@ -61,15 +64,14 @@ fn get_solvable_indexes(
     repo_mapping: &HashMap<RepoId, usize>,
     solvable_index_id: StringId,
     id: SolvableId,
-) -> (usize, usize) {
+) -> Option<(usize, usize)> {
     let solvable = id.resolve_raw(pool);
-    let solvable_index =
-        solvable::lookup_num(solvable.as_ptr(), solvable_index_id).unwrap() as usize;
+    let solvable_index = solvable::lookup_num(solvable.as_ptr(), solvable_index_id)? as usize;
 
     // Safe because there are no active mutable borrows of any solvable at this stage
     let repo_id = RepoId::from_ffi_solvable(unsafe { solvable.as_ref() });
 
     let repo_index = repo_mapping[&repo_id];
 
-    (repo_index, solvable_index)
+    Some((repo_index, solvable_index))
 }
