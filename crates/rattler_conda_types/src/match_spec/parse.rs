@@ -261,7 +261,7 @@ fn parse_bracket_vec_into_components(
                 };
 
                 match_spec.url = Some(url);
-            },
+            }
             "subdir" => match_spec.subdir = Some(value.to_string()),
             // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
             // to the match spec.
