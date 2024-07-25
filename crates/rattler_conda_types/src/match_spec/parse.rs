@@ -606,13 +606,13 @@ fn optionally_strip_equals<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::{str::FromStr, sync::Arc};
-    use indexmap::IndexMap;
     use assert_matches::assert_matches;
+    use indexmap::IndexMap;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
+    use std::{str::FromStr, sync::Arc};
     use url::Url;
 
     use super::{
@@ -1063,7 +1063,11 @@ mod tests {
     #[test]
     fn test_namespace() {
         // Test with url channel and url in brackets
-        let spec = MatchSpec::from_str("https://a.b.c/conda-forge:namespace:foo[url=https://a.b/c/d/p-1-b_0.conda]", Strict).unwrap();
+        let spec = MatchSpec::from_str(
+            "https://a.b.c/conda-forge:namespace:foo[url=https://a.b/c/d/p-1-b_0.conda]",
+            Strict,
+        )
+        .unwrap();
         assert_eq!(spec.namespace, Some("namespace".to_owned()));
         assert_eq!(spec.name, Some("foo".parse().unwrap()));
         assert_eq!(spec.channel.unwrap().name(), "conda-forge");
