@@ -144,7 +144,6 @@ pub struct MatchSpec {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
-    #[serde(deserialize_with = "deserialize_url")]
     pub url: Option<Url>,
 }
 
@@ -257,7 +256,6 @@ pub struct NamelessMatchSpec {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
     pub sha256: Option<Sha256Hash>,
     /// The url of the package
-    #[serde(deserialize_with = "deserialize_url")]
     pub url: Option<Url>,
 }
 
@@ -346,19 +344,6 @@ where
                 .map_err(serde::de::Error::custom)
         }
         None => Ok(None),
-    }
-}
-
-/// Deserialize matchspec url from string
-fn deserialize_url<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let s: Option<String> = Option::deserialize(deserializer)?;
-
-    match s {
-        None => Ok(None),
-        Some(s) => parse::parse_url_like(s.as_ref()).map_err(serde::de::Error::custom),
     }
 }
 
@@ -639,44 +624,5 @@ mod tests {
             .map(|s| s.to_string())
             .collect::<Vec<String>>()
             .join("\n"));
-    }
-
-    #[test]
-    fn test_deserialize_url_in_nameless_match_spec() {
-        // Test with a valid URL
-        let json = json!({
-            "url": "https://test.com/conda/file-0.1-bla_1.conda"
-        });
-        let result: Result<NamelessMatchSpec, _> = serde_json::from_value(json);
-        assert_eq!(
-            result.unwrap().url.unwrap().as_str(),
-            "https://test.com/conda/file-0.1-bla_1.conda"
-        );
-
-        // Test with a valid file path
-        let json = json!({
-            "url": "/home/user/file.conda"
-        });
-        let result: Result<NamelessMatchSpec, _> = serde_json::from_value(json);
-        assert_eq!(
-            result.unwrap().url.unwrap().as_str(),
-            "file:///home/user/file.conda"
-        );
-
-        // Test with a valid windows path
-        let json = json!({
-            "url": "C:\\Users\\user\\file.conda"
-        });
-        let result: Result<NamelessMatchSpec, _> = serde_json::from_value(json);
-        assert_eq!(
-            result.unwrap().url.unwrap().as_str(),
-            "file:///C:/Users/user/file.conda"
-        );
-        // Test with None
-        let json = json!({
-            "url": null
-        });
-        let result: Result<NamelessMatchSpec, _> = serde_json::from_value(json);
-        assert!(result.unwrap().url.is_none());
     }
 }
