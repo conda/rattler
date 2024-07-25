@@ -1,5 +1,6 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
+assertion_line: 497
 expression: json
 ---
 {
@@ -123,6 +124,23 @@ expression: json
       "subdir": "linux-64",
       "timestamp": 1715610974,
       "version": "2.1"
+    },
+    "cuda-version-12.5-hd4f0392_3.conda": {
+      "build": "hd4f0392_3",
+      "build_number": 3,
+      "constrains": [
+        "__cuda >=12.1"
+      ],
+      "depends": [],
+      "license": "LicenseRef-NVIDIA-End-User-License-Agreement",
+      "license_family": "LicenseRef-NVIDIA-End-User-License-Agreement",
+      "md5": "6ae1a563a4aa61e55e8ae8260f0d021b",
+      "name": "cuda-version",
+      "sha256": "e45a5d14909296abd0784a073da9ee5c420fa58671fbc999f8a9ec898cf3486b",
+      "size": 21151,
+      "subdir": "noarch",
+      "timestamp": 1716314536803,
+      "version": "12.5"
     },
     "foo-3.0.2-py36h1af98f8_1.conda": {
       "build": "py36h1af98f8_1",
