@@ -188,7 +188,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
         separated_pair(parse_key, char('='), parse_value)(input)
     }
 
-    /// Parses a list of `key=value` pairs separate by commas
+    /// Parses a list of `key=value` pairs separated by commas
     fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
         separated_list0(whitespace_enclosed(char(',')), parse_key_value)(input)
     }
