@@ -54,10 +54,6 @@ pub enum ParseMatchSpecError {
     #[error("invalid bracket")]
     InvalidBracket,
 
-    /// Invalid number of colons in match spec
-    #[error("invalid number of colons")]
-    InvalidNumberOfColons,
-
     /// Invalid channel provided in match spec
     #[error("invalid channel")]
     ParseChannelError(#[from] ParseChannelError),
@@ -277,6 +273,11 @@ fn parse_bracket_vec_into_components(
 
 /// Parses an url or path like string into an url.
 pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+    // Skip if channel is provided, this avoids parsing namespaces as urls
+    if input.contains("::") {
+        return Ok(None);
+    }
+
     // Is the spec an url, parse it as an url
     if parse_scheme(input).is_some() {
         return Url::parse(input)
@@ -473,49 +474,49 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2. parse as url
-    if let Some(url) = parse_url_like(input)? {
-        let archive = ArchiveIdentifier::try_from_url(&url);
-        let name = archive.and_then(|a| a.try_into().ok());
-
-        // TODO: This should also work without a proper name from the url filename
-        if name.is_none() {
-            return Err(ParseMatchSpecError::MissingPackageName);
-        }
-
-        // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-        // information. e.g. when a version is provided in the url is not the
-        // actual version this might be a problem when solving.
-        return Ok(MatchSpec {
-            url: Some(url),
-            name,
-            ..MatchSpec::default()
-        });
-    }
-
-    // 3. Strip off brackets portion
+    // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
     let mut nameless_match_spec =
         parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
-    // 4. Strip off parens portion
+    // 3. Strip off parens portion
     // TODO: What is this? I've never seen it
 
-    // 5. Strip of '::' channel and namespace
-    let mut input_split = input.split(':').fuse();
-    let (input, namespace, channel_str) = match (
-        input_split.next(),
-        input_split.next(),
-        input_split.next(),
-        input_split.next(),
-    ) {
-        (Some(input), None, _, _) => (input, None, None),
-        (Some(namespace), Some(input), None, _) => (input, Some(namespace), None),
-        (Some(channel_str), Some(namespace), Some(input), None) => {
-            (input, Some(namespace), Some(channel_str))
+    // 4. Parse as url
+    if nameless_match_spec.url.is_none() {
+        if let Some(url) = parse_url_like(&input)? {
+            let archive = ArchiveIdentifier::try_from_url(&url);
+            let name = archive.and_then(|a| a.try_into().ok());
+
+            // TODO: This should also work without a proper name from the url filename
+            if name.is_none() {
+                return Err(ParseMatchSpecError::MissingPackageName);
+            }
+
+            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+            // information. e.g. when a version is provided in the url is not the
+            // actual version this might be a problem when solving.
+            return Ok(MatchSpec {
+                url: Some(url),
+                name,
+                ..MatchSpec::default()
+            });
         }
-        _ => return Err(ParseMatchSpecError::InvalidNumberOfColons),
-    };
+    }
+
+    // 5. Strip of ':' to find channel and namespace
+    // This assumes the [*] portions is stripped off, and then strip reverse to
+    // ignore the first colon As that might be in the channel url.
+    let mut input_split = input.rsplitn(3, ':').fuse();
+    let (input, namespace, channel_str) =
+        match (input_split.next(), input_split.next(), input_split.next()) {
+            (Some(input), None, _) => (input, None, None),
+            (Some(input), Some(namespace), None) => (input, Some(namespace), None),
+            (Some(input), Some(namespace), Some(channel_str)) => {
+                (input, Some(namespace), Some(channel_str))
+            }
+            (None, _, _) => ("", None, None),
+        };
 
     nameless_match_spec.namespace = namespace
         .map(str::trim)
@@ -527,13 +528,9 @@ fn matchspec_parser(
         let channel_config = ChannelConfig::default_with_root_dir(
             std::env::current_dir().expect("Could not get current directory"),
         );
-        if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            nameless_match_spec.channel = Some(Channel::from_str(channel, &channel_config)?.into());
-            nameless_match_spec.subdir = Some(subdir.to_string());
-        } else {
-            nameless_match_spec.channel =
-                Some(Channel::from_str(channel_str, &channel_config)?.into());
-        }
+        // No subdir split, assume subdir is not part of the channel url.
+        let channel = Channel::from_str(channel_str, &channel_config)?;
+        nameless_match_spec.channel = Some(channel.into());
     }
 
     // Step 6. Strip off the package name from the input
@@ -609,8 +606,8 @@ fn optionally_strip_equals<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, str::FromStr, sync::Arc};
-
+    use std::{str::FromStr, sync::Arc};
+    use indexmap::IndexMap;
     use assert_matches::assert_matches;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use rstest::rstest;
@@ -624,7 +621,7 @@ mod tests {
     };
     use crate::{
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseStrictness, ParseStrictness::*, VersionSpec,
+        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -952,9 +949,10 @@ mod tests {
             "python ==2.7.*.*|>=3.6",
             "python=3.9",
             "python=*",
+            "https://software.repos.intel.com/python/conda::python[version=3.9]",
         ];
 
-        let evaluated: BTreeMap<_, _> = specs
+        let evaluated: IndexMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
@@ -989,7 +987,7 @@ mod tests {
             "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
         ];
 
-        let evaluated: BTreeMap<_, _> = specs
+        let evaluated: IndexMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
@@ -1032,9 +1030,22 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_number_of_colons() {
+    fn test_invalid_channel_name() {
         let spec = MatchSpec::from_str("conda-forge::::foo[version=\"1.0.*\"]", Strict);
-        assert_matches!(spec, Err(ParseMatchSpecError::InvalidNumberOfColons));
+        assert_matches!(
+            spec,
+            Err(ParseMatchSpecError::ParseChannelError(
+                ParseChannelError::InvalidName(_)
+            ))
+        );
+
+        let spec = MatchSpec::from_str("conda-forge\\::foo[version=\"1.0.*\"]", Strict);
+        assert_matches!(
+            spec,
+            Err(ParseMatchSpecError::ParseChannelError(
+                ParseChannelError::InvalidName(_)
+            ))
+        );
     }
 
     #[test]
@@ -1047,6 +1058,19 @@ mod tests {
     fn test_empty_namespace() {
         let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
         assert!(spec.namespace.is_none());
+    }
+
+    #[test]
+    fn test_namespace() {
+        // Test with url channel and url in brackets
+        let spec = MatchSpec::from_str("https://a.b.c/conda-forge:namespace:foo[url=https://a.b/c/d/p-1-b_0.conda]", Strict).unwrap();
+        assert_eq!(spec.namespace, Some("namespace".to_owned()));
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.channel.unwrap().name(), "conda-forge");
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("https://a.b/c/d/p-1-b_0.conda").unwrap())
+        );
     }
 
     #[test]

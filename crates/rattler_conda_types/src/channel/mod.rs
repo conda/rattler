@@ -198,6 +198,10 @@ impl Channel {
                 }
             }
         } else {
+            // Validate that the channel is a valid name
+            if channel.contains(|c| c == ':' || c == '\\') {
+                return Err(ParseChannelError::InvalidName(channel.to_owned()));
+            }
             Channel {
                 platforms,
                 ..Channel::from_name(channel, config)
@@ -366,6 +370,10 @@ pub enum ParseChannelError {
     /// Error when the path is invalid.
     #[error("invalid path '{0}'")]
     InvalidPath(String),
+
+    /// Error when the channel name is invalid.
+    #[error("invalid channel name: '{0}'")]
+    InvalidName(String),
 
     /// The root directory is not an absolute path
     #[error("root directory from channel config is not an absolute path")]
