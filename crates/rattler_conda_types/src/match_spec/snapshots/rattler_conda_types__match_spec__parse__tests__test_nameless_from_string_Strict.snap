@@ -1,7 +1,8 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 930
 expression: evaluated
 ---
 2.7|>=3.6:
   version: "==2.7|>=3.6"
+"https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2":
+  url: "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"

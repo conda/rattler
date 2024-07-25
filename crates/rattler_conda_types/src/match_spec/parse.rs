@@ -79,7 +79,8 @@ pub enum ParseMatchSpecError {
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores")]
+    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
+    )]
     InvalidBuildString(String),
 
     /// Invalid version spec
@@ -107,7 +108,7 @@ impl FromStr for MatchSpec {
     type Err = ParseMatchSpecError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s, ParseStrictness::Lenient)
+        Self::from_str(s, Lenient)
     }
 }
 
@@ -187,7 +188,7 @@ fn parse_bracket_list(input: &str) -> Result<BracketVec<'_>, ParseMatchSpecError
         separated_pair(parse_key, char('='), parse_value)(input)
     }
 
-    /// Parses a list of `key=value` pairs seperate by commas
+    /// Parses a list of `key=value` pairs separated by commas
     fn parse_key_value_list(input: &str) -> IResult<&str, Vec<(&str, &str)>> {
         separated_list0(whitespace_enclosed(char(',')), parse_key_value)(input)
     }
@@ -249,11 +250,47 @@ fn parse_bracket_vec_into_components(
                 );
             }
             "fn" => match_spec.file_name = Some(value.to_string()),
+            "url" => {
+                // Is the spec an url, parse it as an url
+                let url = if parse_scheme(value).is_some() {
+                    Url::parse(value)?
+                }
+                // 2 Is the spec a path, parse it as an url
+                else if is_path(value) {
+                    let path = Utf8TypedPath::from(value);
+                    file_url::file_path_to_url(path)
+                        .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
+                } else {
+                    return Err(ParseMatchSpecError::InvalidPackagePathOrUrl);
+                };
+
+                match_spec.url = Some(url);
+            }
+            // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
+            // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
         }
     }
 
     Ok(match_spec)
+}
+
+/// Parses an url or path like string into an url.
+fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+    // Is the spec an url, parse it as an url
+    if parse_scheme(input).is_some() {
+        return Url::parse(input)
+            .map(Some)
+            .map_err(ParseMatchSpecError::from);
+    }
+    // Is the spec a path, parse it as an url
+    if is_path(input) {
+        let path = Utf8TypedPath::from(input);
+        return file_url::file_path_to_url(path)
+            .map(Some)
+            .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl);
+    }
+    Ok(None)
 }
 
 /// Strip the package name from the input.
@@ -353,12 +390,47 @@ fn split_version_and_build(
         )),
     }
 }
+/// Parse version and build string.
+fn parse_version_and_build(
+    input: &str,
+    strictness: ParseStrictness,
+) -> Result<(Option<VersionSpec>, Option<StringMatcher>), ParseMatchSpecError> {
+    if input.find('[').is_some() {
+        return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
+    }
+
+    let (version_str, build_str) = split_version_and_build(input, strictness)?;
+
+    let version_str = if version_str.find(char::is_whitespace).is_some() {
+        Cow::Owned(version_str.replace(char::is_whitespace, ""))
+    } else {
+        Cow::Borrowed(version_str)
+    };
+
+    // Under certain circumstances we strip the `=` or `==` parts of the version
+    // string. See the function for more info.
+    let version_str = optionally_strip_equals(&version_str, build_str, strictness);
+
+    // Parse the version spec
+    let version = Some(
+        VersionSpec::from_str(version_str.as_ref(), strictness)
+            .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
+    );
+
+    // Parse the build string
+    let mut build = None;
+    if let Some(build_str) = build_str {
+        build = Some(StringMatcher::from_str(build_str)?);
+    }
+
+    Ok((version, build))
+}
 
 impl FromStr for NamelessMatchSpec {
     type Err = ParseMatchSpecError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
-        Self::from_str(input, ParseStrictness::Lenient)
+        Self::from_str(input, Lenient)
     }
 }
 
@@ -367,37 +439,24 @@ impl NamelessMatchSpec {
     pub fn from_str(input: &str, strictness: ParseStrictness) -> Result<Self, ParseMatchSpecError> {
         // Strip off brackets portion
         let (input, brackets) = strip_brackets(input.trim())?;
+        let input = input.trim();
+
+        // Parse url or path spec
+        if let Some(url) = parse_url_like(input)? {
+            return Ok(NamelessMatchSpec {
+                url: Some(url),
+                ..NamelessMatchSpec::default()
+            });
+        }
+
         let mut match_spec =
             parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
         // Get the version and optional build string
-        let input = input.trim();
         if !input.is_empty() {
-            if input.find('[').is_some() {
-                return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
-            }
-
-            let (version_str, build_str) = split_version_and_build(input, strictness)?;
-
-            let version_str = if version_str.find(char::is_whitespace).is_some() {
-                Cow::Owned(version_str.replace(char::is_whitespace, ""))
-            } else {
-                Cow::Borrowed(version_str)
-            };
-
-            // Under certum circumstances we strip the `=` part of the version string. See
-            // the function documentation for more info.
-            let version_str = optionally_strip_equals(&version_str, build_str, strictness);
-
-            // Parse the version spec
-            match_spec.version = Some(
-                VersionSpec::from_str(version_str.as_ref(), strictness)
-                    .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
-            );
-
-            if let Some(build) = build_str {
-                match_spec.build = Some(StringMatcher::from_str(build)?);
-            }
+            let (version, build) = parse_version_and_build(input, strictness)?;
+            match_spec.version = version;
+            match_spec.build = build;
         }
 
         Ok(match_spec)
@@ -414,10 +473,8 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2.a Is the spec an url, parse it as an url
-    if parse_scheme(input).is_some() {
-        let url = Url::parse(input)?;
-
+    // 2. parse as url
+    if let Some(url) = parse_url_like(input)? {
         let archive = ArchiveIdentifier::try_from_url(&url);
         let name = archive.and_then(|a| a.try_into().ok());
 
@@ -426,26 +483,9 @@ fn matchspec_parser(
             return Err(ParseMatchSpecError::MissingPackageName);
         }
 
-        return Ok(MatchSpec {
-            url: Some(url),
-            name,
-            ..MatchSpec::default()
-        });
-    }
-    // 2.b Is the spec a path, parse it as an url
-    if is_path(input) {
-        let path = Utf8TypedPath::from(input);
-        let url = file_url::file_path_to_url(path)
-            .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?;
-
-        let archive = ArchiveIdentifier::try_from_url(&url);
-        let name = archive.and_then(|a| a.try_into().ok());
-
-        // TODO: This should also work without a proper name from the url filename
-        if name.is_none() {
-            return Err(ParseMatchSpecError::MissingPackageName);
-        }
-
+        // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+        // information. e.g. when a version is provided in the url is not the
+        // actual version this might be a problem when solving.
         return Ok(MatchSpec {
             url: Some(url),
             name,
@@ -459,7 +499,7 @@ fn matchspec_parser(
         parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
     // 4. Strip off parens portion
-    // TODO: What is this? I've never seen in
+    // TODO: What is this? I've never seen it
 
     // 5. Strip of '::' channel and namespace
     let mut input_split = input.split(':').fuse();
@@ -500,34 +540,12 @@ fn matchspec_parser(
     let (name, input) = strip_package_name(input)?;
     let mut match_spec = MatchSpec::from_nameless(nameless_match_spec, Some(name));
 
-    // Step 7. Otherwise sort our version + build
+    // Step 7. Otherwise, sort our version + build
     let input = input.trim();
     if !input.is_empty() {
-        if input.find('[').is_some() {
-            return Err(ParseMatchSpecError::MultipleBracketSectionsNotAllowed);
-        }
-
-        let (version_str, build_str) = split_version_and_build(input, strictness)?;
-
-        let version_str = if version_str.find(char::is_whitespace).is_some() {
-            Cow::Owned(version_str.replace(char::is_whitespace, ""))
-        } else {
-            Cow::Borrowed(version_str)
-        };
-
-        // Under certain circumstantances we strip the `=` or `==` parts of the version
-        // string. See the function for more info.
-        let version_str = optionally_strip_equals(&version_str, build_str, strictness);
-
-        // Parse the version spec
-        match_spec.version = Some(
-            VersionSpec::from_str(version_str.as_ref(), strictness)
-                .map_err(ParseMatchSpecError::InvalidVersionSpec)?,
-        );
-
-        if let Some(build) = build_str {
-            match_spec.build = Some(StringMatcher::from_str(build)?);
-        }
+        let (version, build) = parse_version_and_build(input, strictness)?;
+        match_spec.version = version;
+        match_spec.build = build;
     }
 
     Ok(match_spec)
@@ -535,7 +553,7 @@ fn matchspec_parser(
 
 /// HERE BE DRAGONS!
 ///
-/// In some circumstainces we strip the `=` or `==` parts of the version string.
+/// In some circumstances we strip the `=` or `==` parts of the version string.
 /// This is for conda legacy reasons. This function implements that behavior and
 /// returns the stripped/updated version.
 ///
@@ -786,6 +804,44 @@ mod tests {
     }
 
     #[test]
+    fn test_nameless_url() {
+        let url_str =
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda";
+        let url = Url::parse(url_str).unwrap();
+        let spec1 = NamelessMatchSpec::from_str(url_str, Strict).unwrap();
+        assert_eq!(spec1.url, Some(url.clone()));
+
+        let spec_with_brackets =
+            NamelessMatchSpec::from_str(format!("[url={}]", url_str).as_str(), Strict).unwrap();
+        assert_eq!(spec_with_brackets.url, Some(url));
+    }
+
+    #[test]
+    fn test_nameless_url_path() {
+        // Windows
+        let win_path_str = "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2";
+        let spec = NamelessMatchSpec::from_str(win_path_str, Strict).unwrap();
+        let win_path = file_url::file_path_to_url(win_path_str).unwrap();
+        assert_eq!(spec.url, Some(win_path.clone()));
+
+        let spec_with_brackets =
+            NamelessMatchSpec::from_str(format!("[url={}]", win_path_str).as_str(), Strict)
+                .unwrap();
+        assert_eq!(spec_with_brackets.url, Some(win_path));
+
+        // Unix
+        let unix_path_str = "/users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2";
+        let spec = NamelessMatchSpec::from_str(unix_path_str, Strict).unwrap();
+        let unix_path = file_url::file_path_to_url(unix_path_str).unwrap();
+        assert_eq!(spec.url, Some(unix_path.clone()));
+
+        let spec_with_brackets =
+            NamelessMatchSpec::from_str(format!("[url={}]", unix_path_str).as_str(), Strict)
+                .unwrap();
+        assert_eq!(spec_with_brackets.url, Some(unix_path));
+    }
+
+    #[test]
     fn test_hash_spec() {
         let spec = MatchSpec::from_str("conda-forge::foo[md5=1234567890]", Strict);
         assert_matches!(spec, Err(ParseMatchSpecError::InvalidHashDigest));
@@ -928,7 +984,10 @@ mod tests {
 
         // A list of matchspecs to parse.
         // Please keep this list sorted.
-        let specs = ["2.7|>=3.6"];
+        let specs = [
+            "2.7|>=3.6",
+            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+        ];
 
         let evaluated: BTreeMap<_, _> = specs
             .iter()
@@ -1036,7 +1095,7 @@ mod tests {
         let spec = MatchSpec::from_str("/home/user/Downloads/package", Strict).unwrap_err();
         assert_matches!(spec, ParseMatchSpecError::MissingPackageName);
 
-        let err = MatchSpec::from_str("http://username@", Strict).expect_err("Invalid url");
+        let err = MatchSpec::from_str("https://username@", Strict).expect_err("Invalid url");
         assert_eq!(err.to_string(), "invalid package spec url");
 
         let err = MatchSpec::from_str("bla/bla", Strict)
