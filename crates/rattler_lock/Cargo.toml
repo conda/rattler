@@ -16,7 +16,7 @@ fxhash = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 itertools = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.26.3", default-features = false }
-rattler_digest = { path = "../rattler_digest", version = "0.19.5", default-features = false }
+rattler_digest = { path = "../rattler_digest", version = "1.0.0", default-features = false }
 file_url = { path = "../file_url", version = "0.1.3" }
 pep508_rs = { workspace = true, features = ["serde"] }
 pep440_rs = { workspace = true, features = ["serde"] }
