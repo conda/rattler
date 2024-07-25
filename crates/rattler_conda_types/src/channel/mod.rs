@@ -549,6 +549,12 @@ mod tests {
             channel.base_url().to_string(),
             "https://conda.anaconda.org/conda-forge/"
         );
+
+        let channel = Channel::from_str(
+            "https://conda.anaconda.org/conda-forge/label/rust_dev",
+            &config,
+        );
+        assert_eq!(channel.unwrap().name(), "conda-forge/label/rust_dev",);
     }
 
     #[test]
