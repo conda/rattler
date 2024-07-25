@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.4](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.3...rattler_conda_types-v0.26.4) - 2024-07-25
+
+### Fixed
+- url parsing for namelessmatchspec and cleanup functions ([#790](https://github.com/mamba-org/rattler/pull/790))
+
+### Other
+- mark some crates 1.0 ([#789](https://github.com/mamba-org/rattler/pull/789))
+
 ## [0.26.3](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.2...rattler_conda_types-v0.26.3) - 2024-07-23
 
 ### Fixed
