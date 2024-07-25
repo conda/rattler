@@ -2,6 +2,7 @@
 //! [`tokio::io::AsyncRead`] trait.
 
 use crate::{ExtractError, ExtractResult};
+use std::io::Read;
 use std::path::Path;
 use tokio::io::AsyncRead;
 use tokio_util::io::SyncIoBridge;
@@ -33,14 +34,18 @@ pub async fn extract_tar_bz2(
 pub async fn extract_conda(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
+    extract_fn: fn(Box<dyn Read>, &Path) -> Result<ExtractResult, ExtractError>,
 ) -> Result<ExtractResult, ExtractError> {
     // Create a async -> sync bridge
     let reader = SyncIoBridge::new(Box::pin(reader));
 
     // Spawn a block task to perform the extraction
     let destination = destination.to_owned();
-    match tokio::task::spawn_blocking(move || crate::read::extract_conda(reader, &destination))
-        .await
+    match tokio::task::spawn_blocking(move || {
+        let reader: Box<dyn Read> = Box::new(reader);
+        extract_fn(reader, &destination)
+    })
+    .await
     {
         Ok(result) => result,
         Err(err) => {

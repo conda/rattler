@@ -6,7 +6,7 @@ use std::{
 
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda, extract_tar_bz2},
+    read::{extract_conda_via_streaming, extract_tar_bz2},
     ExtractError,
 };
 use rstest::rstest;
@@ -111,7 +111,7 @@ fn test_extract_conda(#[case] input: Url, #[case] sha256: &str, #[case] md5: &st
     println!("Target dir: {}", temp_dir.display());
     let file_path = tools::download_and_cache_file(input, sha256).unwrap();
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-    let result = extract_conda(
+    let result = extract_conda_via_streaming(
         File::open(test_data_dir().join(file_path)).unwrap(),
         &target_dir,
     )
@@ -211,11 +211,12 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
         .unwrap();
 
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-    let result = rattler_package_streaming::tokio::async_read::extract_conda(
+    let result: rattler_package_streaming::ExtractResult = rattler_package_streaming::tokio::async_read::extract_conda(
         tokio::fs::File::open(&test_data_dir().join(file_path))
             .await
             .unwrap(),
         &target_dir,
+        rattler_package_streaming::read::extract_conda_via_streaming
     )
     .await
     .unwrap();
@@ -266,7 +267,7 @@ fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)]
     let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
     println!("Target dir: {}", temp_dir.display());
     let target_dir = temp_dir.join(package_path.file_stem().unwrap());
-    let result = extract_conda(
+    let result = extract_conda_via_streaming(
         FlakyReader {
             reader: File::open(package_path).unwrap(),
             total_read: 0,
