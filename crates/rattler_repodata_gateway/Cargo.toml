@@ -35,7 +35,7 @@ ouroboros = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
 rattler_conda_types = { path = "../rattler_conda_types", version = "0.26.3", default-features = false, optional = true }
-rattler_digest = { path = "../rattler_digest", version = "0.19.5", default-features = false, features = ["tokio", "serde"] }
+rattler_digest = { path = "../rattler_digest", version = "1.0.0", default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { path = "../rattler_networking", version = "0.20.10", default-features = false }
 reqwest = { workspace = true, features = ["stream", "http2"] }
 reqwest-middleware = { workspace = true }
