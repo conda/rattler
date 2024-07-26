@@ -96,28 +96,35 @@ pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-    // Construct the destination path if it doesnt exist yet
-    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-
-    // Wrap the reading in aditional readers that will compute the hashes of the file while its
-    // being read.
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-
-    // Iterate over all entries in the zip-file and extract them one-by-one
-    while let Some(file) = read_zipfile_from_stream(&mut md5_reader)? {
-        extract_zipfile(file, destination)?
-    }
-
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-
-    // Get the hashes
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    Ok(ExtractResult { sha256, md5 })
+        // delete destination first, as this method is usually used as a fallback from a failed streaming decompression
+        if destination.exists() {
+            std::fs::remove_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+        }
+        std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+    
+        let mut buffer = Vec::new();
+        let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
+        let mut md5_reader =
+            rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+        md5_reader.read_to_end(&mut buffer)?;
+    
+        // The stream must be seekable when decompressing zip archives using data descriptors
+        let cursor = Cursor::new(buffer);
+    
+        let mut archive = ZipArchive::new(cursor)?;
+    
+        for i in 0..archive.len() {
+            let file = archive.by_index(i)?;
+            extract_zipfile(file, destination)?;
+        }
+        // Read the file to the end to make sure the hash is properly computed.
+        std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+    
+        // Get the hashes
+        let (sha256_reader, md5) = md5_reader.finalize();
+        let (_, sha256) = sha256_reader.finalize();
+    
+        Ok(ExtractResult { sha256, md5 })
 }
 
 fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), ExtractError> {
