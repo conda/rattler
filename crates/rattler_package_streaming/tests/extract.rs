@@ -211,15 +211,16 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
         .unwrap();
 
     let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-    let result: rattler_package_streaming::ExtractResult = rattler_package_streaming::tokio::async_read::extract_conda(
-        tokio::fs::File::open(&test_data_dir().join(file_path))
-            .await
-            .unwrap(),
-        &target_dir,
-        rattler_package_streaming::read::extract_conda_via_streaming
-    )
-    .await
-    .unwrap();
+    let result: rattler_package_streaming::ExtractResult =
+        rattler_package_streaming::tokio::async_read::extract_conda(
+            tokio::fs::File::open(&test_data_dir().join(file_path))
+                .await
+                .unwrap(),
+            &target_dir,
+            rattler_package_streaming::read::extract_conda_via_streaming,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(&format!("{:x}", result.sha256), sha256);
     assert_eq!(&format!("{:x}", result.md5), md5);

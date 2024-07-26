@@ -14,11 +14,12 @@ use tokio_util::io::StreamReader;
 use url::Url;
 
 /// zipfiles may use data descriptors to signal that the decompressor needs to seek ahead in the buffer
-/// to find the compressed data length. 
+/// to find the compressed data length.
 /// Since we stream the package over a non seekable HTTP connection, this condition will cause an error during
 /// decompression. In this case, we fallback to reading the whole data to a buffer before attempting decompression.
 /// Read more in https://github.com/conda-incubator/rattler/issues/794
-const DATA_DESCRIPTOR_ERROR_MESSAGE: &'static str = "The file length is not available in the local header";
+const DATA_DESCRIPTOR_ERROR_MESSAGE: &'static str =
+    "The file length is not available in the local header";
 
 fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
     response
@@ -163,7 +164,7 @@ pub async fn extract_conda(
             if (zip_error
                 .to_string()
                 .contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
-        {   
+        {
             println!("FALLING BACK TO LOCAL MODE");
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;

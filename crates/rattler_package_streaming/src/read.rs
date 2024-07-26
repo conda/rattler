@@ -5,6 +5,7 @@ use super::{ExtractError, ExtractResult};
 use std::io::Cursor;
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
+use rattler_digest::HashingReader;
 use zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
 
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
@@ -80,51 +81,40 @@ pub fn extract_conda_via_streaming(
         // Take the file out of the [`ManuallyDrop`] to properly drop it.
         let _ = ManuallyDrop::into_inner(file);
     }
-
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-
-    // Get the hashes
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    Ok(ExtractResult { sha256, md5 })
+    compute_hashes(md5_reader)
 }
 
-/// Extracts the contents of a `.conda` package archive.
+/// Extracts the contents of a `.conda` package archive by first fully dumping the reader
+/// into a in-memory buffer, instead of streaming the reader
 pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
 ) -> Result<ExtractResult, ExtractError> {
-        // delete destination first, as this method is usually used as a fallback from a failed streaming decompression
-        if destination.exists() {
-            std::fs::remove_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-        }
-        std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-    
-        let mut buffer = Vec::new();
-        let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-        let mut md5_reader =
-            rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-        md5_reader.read_to_end(&mut buffer)?;
-    
-        // The stream must be seekable when decompressing zip archives using data descriptors
-        let cursor = Cursor::new(buffer);
-    
-        let mut archive = ZipArchive::new(cursor)?;
-    
-        for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
-            extract_zipfile(file, destination)?;
-        }
-        // Read the file to the end to make sure the hash is properly computed.
-        std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-    
-        // Get the hashes
-        let (sha256_reader, md5) = md5_reader.finalize();
-        let (_, sha256) = sha256_reader.finalize();
-    
-        Ok(ExtractResult { sha256, md5 })
+    // delete destination first, as this method is usually used as a fallback from a failed streaming decompression
+    if destination.exists() {
+        std::fs::remove_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+    }
+    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
+
+    let mut buffer = Vec::new();
+    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
+    let mut md5_reader =
+        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
+    md5_reader.read_to_end(&mut buffer)?;
+
+    // The stream must be seekable when decompressing zip archives using data descriptors
+    let cursor = Cursor::new(buffer);
+
+    let mut archive = ZipArchive::new(cursor)?;
+
+    for i in 0..archive.len() {
+        let file = archive.by_index(i)?;
+        extract_zipfile(file, destination)?;
+    }
+    // Read the file to the end to make sure the hash is properly computed.
+    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+
+    compute_hashes(md5_reader)
 }
 
 fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), ExtractError> {
@@ -151,42 +141,13 @@ fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), Extr
     Ok(())
 }
 
-/// Extracts the contents of a `.conda` package archive by first fully dumping the reader
-/// into a in-memory buffer, instead of streaming the reader
-pub fn extract_conda_from_local_buffer(
-    reader: impl Read,
-    destination: &Path,
-) -> Result<ExtractResult, ExtractError> {
-    // delete destination first, since this method is used as a fallback of a failed streaming installation
-    if destination.exists() {
-        std::fs::remove_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-    }
+fn compute_hashes<R: Read>(mut md5_reader: HashingReader<HashingReader<R, rattler_digest::Sha256>, rattler_digest::Md5>) -> Result<ExtractResult, ExtractError>  {
+     // Read the file to the end to make sure the hash is properly computed.
+     std::io::copy(&mut md5_reader, &mut std::io::sink())?;
 
-    // Construct the destination path if it doesnt exist yet
-    std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
-
-    let mut buffer = Vec::new();
-    let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
-    let mut md5_reader =
-        rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    md5_reader.read_to_end(&mut buffer)?;
-
-    // Create a Cursor from the buffer
-    let cursor = Cursor::new(buffer);
-
-    // Create a ZipArchive from the cursor
-    let mut archive = ZipArchive::new(cursor)?;
-
-    for i in 0..archive.len() {
-        let file = archive.by_index(i)?;
-        extract_zipfile(file, destination)?;
-    }
-    // Read the file to the end to make sure the hash is properly computed.
-    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
-
-    // Get the hashes
-    let (sha256_reader, md5) = md5_reader.finalize();
-    let (_, sha256) = sha256_reader.finalize();
-
-    Ok(ExtractResult { sha256, md5 })
+     // Get the hashes
+     let (sha256_reader, md5) = md5_reader.finalize();
+     let (_, sha256) = sha256_reader.finalize();
+ 
+     Ok(ExtractResult { sha256, md5 })
 }
