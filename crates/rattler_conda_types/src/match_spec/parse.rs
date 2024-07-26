@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Not, str::FromStr};
+use std::{borrow::Cow, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -32,7 +32,7 @@ use crate::{
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness,
     ParseStrictness::{Lenient, Strict},
-    ParseVersionError, VersionSpec,
+    ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -465,6 +465,26 @@ impl NamelessMatchSpec {
     }
 }
 
+/// Parse channel and subdir from a string.
+fn parse_channel_and_subdir(
+    input: &str,
+) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
+    let channel_config = ChannelConfig::default_with_root_dir(
+        std::env::current_dir().expect("Could not get current directory"),
+    );
+
+    if let Some((channel, subdir)) = input.rsplit_once('/') {
+        // If the subdir is a platform, we assume the channel has a subdir
+        if Platform::from_str(subdir).is_ok() {
+            return Ok((
+                Some(Channel::from_str(channel, &channel_config)?),
+                Some(subdir.to_string()),
+            ));
+        }
+    }
+    Ok((Some(Channel::from_str(input, &channel_config)?), None))
+}
+
 /// Parses a conda match spec.
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
 fn matchspec_parser(
@@ -526,12 +546,9 @@ fn matchspec_parser(
         .or(nameless_match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
-        let channel_config = ChannelConfig::default_with_root_dir(
-            std::env::current_dir().expect("Could not get current directory"),
-        );
-        // No subdir split, assume subdir is not part of the channel url.
-        let channel = Channel::from_str(channel_str, &channel_config)?;
-        nameless_match_spec.channel = Some(channel.into());
+        let (channel, subdir) = parse_channel_and_subdir(channel_str)?;
+        nameless_match_spec.channel = nameless_match_spec.channel.or(channel.map(Arc::new));
+        nameless_match_spec.subdir = nameless_match_spec.subdir.or(subdir);
     }
 
     // Step 6. Strip off the package name from the input
@@ -607,18 +624,19 @@ fn optionally_strip_equals<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::{str::FromStr, sync::Arc};
+
     use assert_matches::assert_matches;
     use indexmap::IndexMap;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use rstest::rstest;
     use serde::Serialize;
     use smallvec::smallvec;
-    use std::{str::FromStr, sync::Arc};
     use url::Url;
 
     use super::{
-        split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
-        ParseMatchSpecError,
+        parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
+        BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::{
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
@@ -1153,5 +1171,44 @@ mod tests {
 
         MatchSpec::from_str("python ==2.7.*.*|>=3.6", Strict).expect_err("nameful");
         NamelessMatchSpec::from_str("==2.7.*.*|>=3.6", Strict).expect_err("nameless");
+    }
+
+    #[test]
+    fn test_parse_channel_subdir() {
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge/linux-64").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, Some("linux-64".to_string()));
+
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge/label/test").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge/label/test", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) =
+            parse_channel_and_subdir("conda-forge/linux-64/label/test").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge/linux-64/label/test", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) = parse_channel_and_subdir("*/linux-64").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("*", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, Some("linux-64".to_string()));
     }
 }

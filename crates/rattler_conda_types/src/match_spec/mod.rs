@@ -95,7 +95,7 @@ use matcher::StringMatcher;
 /// assert_eq!(spec.channel, Some(Channel::from_str("conda-forge", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
 /// assert_eq!(spec.subdir, Some("linux-64".to_string()));
 ///
-/// let spec = MatchSpec::from_str(r#"*::foo >=1.0[subdir="linux-64"]"#, Strict).unwrap();
+/// let spec = MatchSpec::from_str("*/linux-64::foo >=1.0", Strict).unwrap();
 /// assert_eq!(spec.name, Some(PackageName::new_unchecked("foo")));
 /// assert_eq!(spec.version, Some(VersionSpec::from_str(">=1.0", Strict).unwrap()));
 /// assert_eq!(spec.channel, Some(Channel::from_str("*", &channel_config).map(|channel| Arc::new(channel)).unwrap()));
