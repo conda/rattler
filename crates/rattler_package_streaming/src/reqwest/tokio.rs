@@ -166,7 +166,7 @@ pub async fn extract_conda(
                 .to_string()
                 .contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
-            tracing::warn!("Failed to stream conda package due to the presence of data descriptors. Falling back to non streaming decompression");
+            tracing::debug!("Failed to stream decompress conda package from '{}' due to the presence of data descriptors. Falling back to non streaming decompression;", url);
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
             crate::tokio::async_read::extract_conda(
