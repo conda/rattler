@@ -11,6 +11,7 @@ use std::sync::Arc;
 use tokio::io::BufReader;
 use tokio_util::either::Either;
 use tokio_util::io::StreamReader;
+use tracing;
 use url::Url;
 
 /// zipfiles may use data descriptors to signal that the decompressor needs to seek ahead in the buffer
@@ -139,7 +140,6 @@ pub async fn extract_conda(
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
-    println!("USING NORMAL MODE");
     let reader = get_reader(
         url.clone(),
         client.clone(),
@@ -160,12 +160,13 @@ pub async fn extract_conda(
             }
             Ok(result)
         }
+        // https://github.com/conda-incubator/rattler/issues/794
         Err(ExtractError::ZipError(zip_error))
             if (zip_error
                 .to_string()
                 .contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
-            println!("FALLING BACK TO LOCAL MODE");
+            tracing::warn!("Failed to stream conda package due to the presence of data descriptors. Falling back to non streaming decompression");
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
             crate::tokio::async_read::extract_conda(
