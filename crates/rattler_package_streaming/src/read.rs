@@ -2,10 +2,10 @@
 //! [`std::io::Read`] trait.
 
 use super::{ExtractError, ExtractResult};
+use rattler_digest::HashingReader;
 use std::io::Cursor;
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
-use rattler_digest::HashingReader;
 use zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
 
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
@@ -141,13 +141,15 @@ fn extract_zipfile(zip_file: ZipFile<'_>, destination: &Path) -> Result<(), Extr
     Ok(())
 }
 
-fn compute_hashes<R: Read>(mut md5_reader: HashingReader<HashingReader<R, rattler_digest::Sha256>, rattler_digest::Md5>) -> Result<ExtractResult, ExtractError>  {
-     // Read the file to the end to make sure the hash is properly computed.
-     std::io::copy(&mut md5_reader, &mut std::io::sink())?;
+fn compute_hashes<R: Read>(
+    mut md5_reader: HashingReader<HashingReader<R, rattler_digest::Sha256>, rattler_digest::Md5>,
+) -> Result<ExtractResult, ExtractError> {
+    // Read the file to the end to make sure the hash is properly computed.
+    std::io::copy(&mut md5_reader, &mut std::io::sink())?;
 
-     // Get the hashes
-     let (sha256_reader, md5) = md5_reader.finalize();
-     let (_, sha256) = sha256_reader.finalize();
- 
-     Ok(ExtractResult { sha256, md5 })
+    // Get the hashes
+    let (sha256_reader, md5) = md5_reader.finalize();
+    let (_, sha256) = sha256_reader.finalize();
+
+    Ok(ExtractResult { sha256, md5 })
 }
