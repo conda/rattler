@@ -10,7 +10,7 @@ pub use input::cache_repodata;
 use input::{add_repodata_records, add_solv_file, add_virtual_packages};
 pub use libc_byte_slice::LibcByteSlice;
 use output::get_required_packages;
-use rattler_conda_types::RepoDataRecord;
+use rattler_conda_types::{MatchSpec, NamelessMatchSpec, RepoDataRecord};
 use wrapper::{
     flags::SolverFlag,
     pool::{Pool, Verbosity},
@@ -237,6 +237,17 @@ impl super::SolverImpl for Solver {
         for spec in task.constraints {
             let id = pool.intern_matchspec(&spec);
             goal.install(id, true);
+        }
+
+        // Add virtual packages to the queue. We want to install these as part of the
+        // solution as well. This ensures that if a package only has a constraint on a
+        // virtual package, the virtual package is installed.
+        for virtual_package in task.virtual_packages {
+            let id = pool.intern_matchspec(&MatchSpec::from_nameless(
+                NamelessMatchSpec::default(),
+                Some(virtual_package.name),
+            ));
+            goal.install(id, false);
         }
 
         // Construct a solver and solve the problems in the queue

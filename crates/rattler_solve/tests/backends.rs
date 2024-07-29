@@ -202,6 +202,7 @@ fn read_conda_forge_sparse_repo_data() -> &'static SparseRepoData {
 macro_rules! solver_backend_tests {
     ($T:path) => {
         use chrono::{DateTime, Utc};
+        use itertools::Itertools;
 
         #[test]
         fn test_solve_quetz() {
@@ -561,6 +562,41 @@ macro_rules! solver_backend_tests {
             assert_eq!(operations[0].file_name, "bors-1.0-bla_1.tar.bz2");
             assert_eq!(operations[1].file_name, "foobar-2.1-bla_1.tar.bz2");
         }
+
+        #[test]
+        fn test_virtual_package_constrains() {
+            // This tests that a package that has a constrains on a virtual package is
+            // properly restricted.
+            let result = solve::<$T>(
+                dummy_channel_json_path(),
+                SimpleSolveTask {
+                    specs: &["cuda-version"],
+                    virtual_packages: vec![GenericVirtualPackage {
+                        name: "__cuda".parse().unwrap(),
+                        version: Version::from_str("1").unwrap(),
+                        build_string: "0".to_string(),
+                    }],
+                    ..SimpleSolveTask::default()
+                },
+            );
+
+            let output = match result {
+                Ok(pkgs) => pkgs
+                    .iter()
+                    .format_with("\n", |pkg, f| {
+                        f(&format_args!(
+                            "{}={}={}",
+                            pkg.package_record.name.as_normalized(),
+                            pkg.package_record.version.as_str(),
+                            &pkg.package_record.build
+                        ))
+                    })
+                    .to_string(),
+                Err(e) => e.to_string(),
+            };
+
+            insta::assert_snapshot!(output);
+        }
     };
 }
 
@@ -661,15 +697,16 @@ mod libsolv_c {
 
 #[cfg(feature = "resolvo")]
 mod resolvo {
-    use super::{
-        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
-        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
-    };
     use rattler_conda_types::{
         MatchSpec, PackageRecord, ParseStrictness, RepoDataRecord, VersionWithSource,
     };
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
+
+    use super::{
+        dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
+        GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
+    };
 
     solver_backend_tests!(rattler_solve::resolvo::Solver);
 
@@ -805,7 +842,8 @@ mod resolvo {
         );
     }
 
-    /// Try to solve a package with a direct url, and then try to do it again without having it in the repodata.
+    /// Try to solve a package with a direct url, and then try to do it again
+    /// without having it in the repodata.
     #[test]
     fn test_solve_on_url() {
         let url_str =
@@ -817,8 +855,8 @@ mod resolvo {
 
         // Create RepoData with only the package from the url, so the solver can find it
         let package_record = PackageRecord::new(
-            // // Only defining the name, version and url is enough for the solver to find the package
-            // direct_url: Some(url.clone()),
+            // // Only defining the name, version and url is enough for the solver to find the
+            // package direct_url: Some(url.clone()),
             "_libgcc_mutex".parse().unwrap(),
             VersionWithSource::from_str("0.1").unwrap(),
             "0".to_string(),
