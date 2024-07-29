@@ -61,25 +61,7 @@ pub fn extract_conda_via_streaming(
 
     // Iterate over all entries in the zip-file and extract them one-by-one
     while let Some(file) = read_zipfile_from_stream(&mut md5_reader)? {
-        // If an error occurs while we are reading the contents of the zip we don't want to
-        // seek to the end of the file. Using [`ManuallyDrop`] we prevent `drop` to be called on
-        // the `file` in case the stack unwinds.
-        let mut file = ManuallyDrop::new(file);
-
-        if file
-            .mangled_name()
-            .file_name()
-            .map(OsStr::to_string_lossy)
-            .map_or(false, |file_name| file_name.ends_with(".tar.zst"))
-        {
-            stream_tar_zst(&mut *file)?.unpack(destination)?;
-        } else {
-            // Manually read to the end of the stream if that didn't happen.
-            std::io::copy(&mut *file, &mut std::io::sink())?;
-        }
-
-        // Take the file out of the [`ManuallyDrop`] to properly drop it.
-        let _ = ManuallyDrop::into_inner(file);
+        extract_zipfile(file, destination)?;
     }
     compute_hashes(md5_reader)
 }
