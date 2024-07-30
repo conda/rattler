@@ -84,7 +84,7 @@ pub fn extract_conda_via_buffering(
     let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
     let mut md5_reader =
         rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    
+
     copy(&mut md5_reader, &mut temp_file)?;
     temp_file.seek(SeekFrom::Start(0))?;
     let mut archive = ZipArchive::new(temp_file)?;
