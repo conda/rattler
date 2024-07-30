@@ -3,9 +3,10 @@
 
 use super::{ExtractError, ExtractResult};
 use rattler_digest::HashingReader;
-use std::io::Cursor;
+use std::io::{copy, Seek, SeekFrom};
 use std::mem::ManuallyDrop;
 use std::{ffi::OsStr, io::Read, path::Path};
+use tempfile::SpooledTempFile;
 use zip::read::{read_zipfile_from_stream, ZipArchive, ZipFile};
 
 /// Returns the `.tar.bz2` as a decompressed `tar::Archive`. The `tar::Archive` can be used to
@@ -66,8 +67,8 @@ pub fn extract_conda_via_streaming(
     compute_hashes(md5_reader)
 }
 
-/// Extracts the contents of a `.conda` package archive by first fully dumping the reader
-/// into a in-memory buffer, instead of streaming the reader
+/// Extracts the contents of a `.conda` package archive by first fully reading the streaming, instead
+/// of attempting on the fly-decompression.
 pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
@@ -78,16 +79,17 @@ pub fn extract_conda_via_buffering(
     }
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    let mut buffer = Vec::new();
+    // Create a SpooledTempFile with a 5MB limit
+    let mut temp_file = SpooledTempFile::new(5 * 1024 * 1024);
     let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
     let mut md5_reader =
         rattler_digest::HashingReader::<_, rattler_digest::Md5>::new(sha256_reader);
-    md5_reader.read_to_end(&mut buffer)?;
+    copy(&mut md5_reader, &mut temp_file)?;
 
-    // The stream must be seekable when decompressing zip archives using data descriptors
-    let cursor = Cursor::new(buffer);
+    // Seek the temp_file to the start
+    temp_file.seek(SeekFrom::Start(0))?;
 
-    let mut archive = ZipArchive::new(cursor)?;
+    let mut archive = ZipArchive::new(temp_file)?;
 
     for i in 0..archive.len() {
         let file = archive.by_index(i)?;

@@ -13,6 +13,7 @@ use tokio_util::either::Either;
 use tokio_util::io::StreamReader;
 use tracing;
 use url::Url;
+use zip::result::ZipError;
 
 /// zipfiles may use data descriptors to signal that the decompressor needs to seek ahead in the buffer
 /// to find the compressed data length.
@@ -146,13 +147,7 @@ pub async fn extract_conda(
         reporter.clone(),
     )
     .await?;
-    match crate::tokio::async_read::extract_conda(
-        reader,
-        destination,
-        crate::read::extract_conda_via_streaming,
-    )
-    .await
-    {
+    match crate::tokio::async_read::extract_conda(reader, destination).await {
         Ok(result) => {
             if let Some(reporter) = &reporter {
                 reporter.on_download_complete();
@@ -160,20 +155,13 @@ pub async fn extract_conda(
             Ok(result)
         }
         // https://github.com/conda-incubator/rattler/issues/794
-        Err(ExtractError::ZipError(zip_error))
-            if (zip_error
-                .to_string()
-                .contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
+        Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
+            if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {
-            tracing::debug!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression;", url);
+            tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
             let new_reader =
                 get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
-            crate::tokio::async_read::extract_conda(
-                new_reader,
-                destination,
-                crate::read::extract_conda_via_buffering,
-            )
-            .await
+            crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination).await
         }
         Err(e) => Err(e),
     }

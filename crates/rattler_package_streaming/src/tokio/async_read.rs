@@ -31,7 +31,35 @@ pub async fn extract_tar_bz2(
 }
 
 /// Extracts the contents of a `.conda` package archive.
+/// This will perform on-the-fly decompression by streamign the reader.
 pub async fn extract_conda(
+    reader: impl AsyncRead + Send + 'static,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    extract_conda_internal(
+        reader,
+        destination,
+        crate::read::extract_conda_via_streaming,
+    )
+    .await
+}
+
+/// Extracts the contents of a `.conda` package archive by first fully reading the streaming, instead
+/// of attempting on the fly-decompression.
+pub async fn extract_conda_via_buffering(
+    reader: impl AsyncRead + Send + 'static,
+    destination: &Path,
+) -> Result<ExtractResult, ExtractError> {
+    extract_conda_internal(
+        reader,
+        destination,
+        crate::read::extract_conda_via_buffering,
+    )
+    .await
+}
+
+/// Extracts the contents of a `.conda` package archive using the provided extraction function
+pub async fn extract_conda_internal(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
     extract_fn: fn(Box<dyn Read>, &Path) -> Result<ExtractResult, ExtractError>,

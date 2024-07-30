@@ -6,7 +6,7 @@ use std::{
 
 use rattler_conda_types::package::IndexJson;
 use rattler_package_streaming::{
-    read::{extract_conda_via_streaming, extract_tar_bz2},
+    read::{extract_conda_via_buffering, extract_conda_via_streaming, extract_tar_bz2},
     ExtractError,
 };
 use rstest::rstest;
@@ -217,7 +217,6 @@ async fn test_extract_conda_async(#[case] input: Url, #[case] sha256: &str, #[ca
                 .await
                 .unwrap(),
             &target_dir,
-            rattler_package_streaming::read::extract_conda_via_streaming,
         )
         .await
         .unwrap();
@@ -279,6 +278,36 @@ fn test_extract_flaky_conda(#[values(0, 1, 13, 50, 74, 150, 8096, 16384, 20000)]
     .expect_err("this should error out and not panic");
 
     assert_matches::assert_matches!(result, ExtractError::IoError(_));
+}
+
+#[rstest]
+fn test_extract_data_descriptor_package_fails_streaming_and_uses_buffering() {
+    let package_path = "tests/resources/ca-certificates-2024.7.4-hbcca054_0.conda";
+
+    let temp_dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
+    println!("Target dir: {}", temp_dir.display());
+    let target_dir = temp_dir.join("package_using_data_descriptors");
+    let result = extract_conda_via_streaming(File::open(package_path).unwrap(), &target_dir)
+        .expect_err("this should error out and not panic");
+
+    assert_matches::assert_matches!(
+        result,
+        ExtractError::ZipError(zip::result::ZipError::UnsupportedArchive(
+            "The file length is not available in the local header"
+        ))
+    );
+
+    let new_result =
+        extract_conda_via_buffering(File::open(package_path).unwrap(), &target_dir).unwrap();
+
+    assert_eq!(
+        &format!("{:x}", new_result.sha256),
+        "6a5d6d8a1a7552dbf8c617312ef951a77d2dac09f2aeaba661deebce603a7a97"
+    );
+    assert_eq!(
+        &format!("{:x}", new_result.md5),
+        "a1d1adb5a5dc516dfb3dccc7b9b574a9"
+    );
 }
 
 struct FlakyReader<R: Read> {
