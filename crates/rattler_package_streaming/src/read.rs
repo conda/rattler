@@ -67,8 +67,7 @@ pub fn extract_conda_via_streaming(
     compute_hashes(md5_reader)
 }
 
-/// Extracts the contents of a `.conda` package archive by first fully reading the streaming, instead
-/// of attempting on the fly-decompression.
+/// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
 pub fn extract_conda_via_buffering(
     reader: impl Read,
     destination: &Path,
