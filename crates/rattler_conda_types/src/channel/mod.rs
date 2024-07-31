@@ -12,7 +12,10 @@ use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
-use crate::utils::{path::is_path, url::parse_scheme};
+use crate::utils::{
+    path::is_path,
+    url::{add_trailing_slash, parse_scheme},
+};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
@@ -94,7 +97,7 @@ impl NamedChannelOrUrl {
                 }
                 base_url
             }
-            NamedChannelOrUrl::Url(url) => url,
+            NamedChannelOrUrl::Url(url) => add_trailing_slash(&url).into_owned(),
         }
     }
 
@@ -666,5 +669,28 @@ mod tests {
                 .as_str(),
             "https://prefix.dev/conda-forge"
         );
+    }
+
+    #[test]
+    fn compare_with_or_without_backslash() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
+        };
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+        let channel_with_backslash =
+            Channel::from_str("https://conda.anaconda.org/conda-forge/", &channel_config).unwrap();
+        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
+
+        let channel_with_backslash = Channel::from_str("conda-forge/", &channel_config).unwrap();
+        let channel =
+            Channel::from_str("https://conda.anaconda.org/conda-forge", &channel_config).unwrap();
+        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
+
+        let named_channel = NamedChannelOrUrl::Name("conda-forge".to_string());
+        let channel = named_channel.into_channel(&channel_config);
+        let channel_with_backslash =
+            Channel::from_str("https://conda.anaconda.org/conda-forge/", &channel_config).unwrap();
+        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
     }
 }
