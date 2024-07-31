@@ -59,3 +59,34 @@ python=*:
   channel:
     base_url: "https://software.repos.intel.com/python/conda/"
     name: python/conda
+"https://c.com/p/conda/linux-64::python[version=3.9]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://c.com/p/conda/"
+    name: p/conda
+  subdir: linux-64
+"https://c.com/p/conda::python[version=3.9, subdir=linux-64]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://c.com/p/conda/"
+    name: p/conda
+  subdir: linux-64
+"conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
+"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
+  name: python
+  version: "==3.9"
+  build_number:
+    op: Eq
+    rhs: 0
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
