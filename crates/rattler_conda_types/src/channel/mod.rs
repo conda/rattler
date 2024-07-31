@@ -692,5 +692,9 @@ mod tests {
         let channel_with_backslash =
             Channel::from_str("https://conda.anaconda.org/conda-forge/", &channel_config).unwrap();
         assert_eq!(channel.base_url(), channel_with_backslash.base_url());
+        assert_eq!(
+            channel.base_url().as_str(),
+            "https://conda.anaconda.org/conda-forge/"
+        );
     }
 }
