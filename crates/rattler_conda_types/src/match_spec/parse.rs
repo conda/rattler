@@ -529,15 +529,9 @@ fn matchspec_parser(
     // This assumes the [*] portions is stripped off, and then strip reverse to
     // ignore the first colon As that might be in the channel url.
     let mut input_split = input.rsplitn(3, ':').fuse();
-    let (input, namespace, channel_str) =
-        match (input_split.next(), input_split.next(), input_split.next()) {
-            (Some(input), None, _) => (input, None, None),
-            (Some(input), Some(namespace), None) => (input, Some(namespace), None),
-            (Some(input), Some(namespace), Some(channel_str)) => {
-                (input, Some(namespace), Some(channel_str))
-            }
-            (None, _, _) => ("", None, None),
-        };
+    let input = input_split.next().unwrap_or("");
+    let namespace = input_split.next();
+    let channel_str = input_split.next();
 
     nameless_match_spec.namespace = namespace
         .map(str::trim)
