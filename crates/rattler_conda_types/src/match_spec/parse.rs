@@ -969,6 +969,9 @@ mod tests {
             "python=3.9",
             "python=*",
             "https://software.repos.intel.com/python/conda::python[version=3.9]",
+            "https://software.repos.intel.com/python/conda/linux-64::python[version=3.9]",
+            "https://software.repos.intel.com/python/conda::python[version=3.9, subdir=linux-64]"
+            "https://software.repos.intel.com/python/conda/linux-64::python[version=3.9, subdir=linux-64]",
         ];
 
         let evaluated: IndexMap<_, _> = specs
