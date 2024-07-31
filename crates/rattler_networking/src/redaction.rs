@@ -22,17 +22,22 @@ pub const DEFAULT_REDACTION_STR: &str = "********";
 /// let redacted_url = redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url);
 /// ```
 pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
+    let mut url = url.clone();
+    if let Some(_) = url.password() {
+        url.set_password(Some(redaction))
+            .expect("Failed to redact password");
+    }
+
     let mut segments = url.path_segments()?;
     match (segments.next(), segments.next()) {
         (Some("t"), Some(_)) => {
             let remainder = segments.collect_vec();
             let redacted_path = format!(
-                "t/{redaction}{seperator}{remainder}",
-                seperator = if remainder.is_empty() { "" } else { "/" },
+                "t/{redaction}{separator}{remainder}",
+                separator = if remainder.is_empty() { "" } else { "/" },
                 remainder = remainder.iter().format("/")
             );
 
-            let mut url = url.clone();
             url.set_path(&redacted_path);
             Some(url)
         }

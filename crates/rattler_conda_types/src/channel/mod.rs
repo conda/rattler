@@ -6,6 +6,7 @@ use std::{
 };
 
 use file_url::directory_path_to_url;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
@@ -15,6 +16,7 @@ use super::{ParsePlatformError, Platform};
 use crate::utils::{path::is_path, url::parse_scheme};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
+const DEFAULT_REDACTION_STR: &str = "********";
 
 /// The `ChannelConfig` describes properties that are required to resolve
 /// "simple" channel names to channel URLs.
@@ -56,7 +58,11 @@ impl ChannelConfig {
         if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
             NamedChannelOrUrl::Name(stripped.trim_matches('/').to_string())
         } else {
-            NamedChannelOrUrl::Url(base_url.clone())
+            NamedChannelOrUrl::Url(
+                redact_known_secrets_from_url(base_url, DEFAULT_REDACTION_STR)
+                    .parse()
+                    .unwrap(),
+            )
         }
     }
 }
@@ -149,6 +155,33 @@ impl serde::Serialize for NamedChannelOrUrl {
         S: Serializer,
     {
         self.as_str().serialize(serializer)
+    }
+}
+
+pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> String {
+    let mut url = url.clone();
+    if let Some(_) = url.password() {
+        url.set_password(Some(redaction))
+            .expect("Failed to redact password");
+    }
+
+    if let Some(mut segments) = url.path_segments() {
+        match (segments.next(), segments.next()) {
+            (Some("t"), Some(_)) => {
+                let remainder = segments.collect_vec();
+                let redacted_path = format!(
+                    "t/{redaction}{separator}{remainder}",
+                    separator = if remainder.is_empty() { "" } else { "/" },
+                    remainder = remainder.iter().format("/")
+                );
+
+                url.set_path(&redacted_path);
+                url.to_string()
+            }
+            _ => url.to_string(),
+        }
+    } else {
+        url.to_string()
     }
 }
 
@@ -348,7 +381,7 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        self.base_url.to_string()
+        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR)
     }
 }
 
@@ -649,6 +682,28 @@ mod tests {
     }
 
     #[test]
+    fn channel_canonical_name() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
+
+        assert_eq!(channel.canonical_name(), "http://localhost:1234/");
+
+        let channel = Channel::from_str("http://user:password@localhost:1234", &config).unwrap();
+
+        assert_eq!(
+            channel.canonical_name(),
+            "http://user:********@localhost:1234/"
+        );
+
+        let channel =
+            Channel::from_str("http://localhost:1234/t/secretfoo/blablub", &config).unwrap();
+        assert_eq!(
+            channel.canonical_name(),
+            "http://localhost:1234/t/********/blablub/"
+        );
+    }
+
+    #[test]
     fn config_canonical_name() {
         let channel_config = ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
@@ -665,6 +720,23 @@ mod tests {
                 .canonical_name(&Url::from_str("https://prefix.dev/conda-forge/").unwrap())
                 .as_str(),
             "https://prefix.dev/conda-forge"
+        );
+        assert_eq!(
+            channel_config
+                .canonical_name(
+                    &Url::from_str("https://prefix.dev/t/mysecrettoken/conda-forge/").unwrap()
+                )
+                .as_str(),
+            "https://prefix.dev/t/********/conda-forge"
+        );
+
+        assert_eq!(
+            channel_config
+                .canonical_name(
+                    &Url::from_str("https://user:secret@prefix.dev/conda-forge/").unwrap()
+                )
+                .as_str(),
+            "https://user:********@prefix.dev/conda-forge"
         );
     }
 }
