@@ -199,7 +199,7 @@ impl Channel {
             }
         } else {
             // Validate that the channel is a valid name
-            if channel.contains(&[':', '\\']) {
+            if channel.contains([':', '\\']) {
                 return Err(ParseChannelError::InvalidName(channel.to_owned()));
             }
             Channel {

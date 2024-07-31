@@ -822,7 +822,7 @@ mod tests {
         assert_eq!(spec1.url, Some(url.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", url_str).as_str(), Strict).unwrap();
+            NamelessMatchSpec::from_str(format!("[url={url_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(url));
     }
 
@@ -835,8 +835,7 @@ mod tests {
         assert_eq!(spec.url, Some(win_path.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", win_path_str).as_str(), Strict)
-                .unwrap();
+            NamelessMatchSpec::from_str(format!("[url={win_path_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(win_path));
 
         // Unix
@@ -846,8 +845,7 @@ mod tests {
         assert_eq!(spec.url, Some(unix_path.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", unix_path_str).as_str(), Strict)
-                .unwrap();
+            NamelessMatchSpec::from_str(format!("[url={unix_path_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(unix_path));
     }
 
