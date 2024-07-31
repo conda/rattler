@@ -23,7 +23,7 @@ pub const DEFAULT_REDACTION_STR: &str = "********";
 /// ```
 pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
     let mut url = url.clone();
-    if let Some(_) = url.password() {
+    if url.password().is_some() {
         url.set_password(Some(redaction))
             .expect("Failed to redact password");
     }
