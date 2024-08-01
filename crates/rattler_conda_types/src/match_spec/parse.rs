@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Not, str::FromStr};
+use std::{borrow::Cow, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -32,7 +32,7 @@ use crate::{
     Channel, ChannelConfig, InvalidPackageNameError, NamelessMatchSpec, PackageName,
     ParseChannelError, ParseStrictness,
     ParseStrictness::{Lenient, Strict},
-    ParseVersionError, VersionSpec,
+    ParseVersionError, Platform, VersionSpec,
 };
 
 /// The type of parse error that occurred when parsing match spec.
@@ -53,10 +53,6 @@ pub enum ParseMatchSpecError {
     /// Invalid bracket in match spec
     #[error("invalid bracket")]
     InvalidBracket,
-
-    /// Invalid number of colons in match spec
-    #[error("invalid number of colons")]
-    InvalidNumberOfColons,
 
     /// Invalid channel provided in match spec
     #[error("invalid channel")]
@@ -266,6 +262,7 @@ fn parse_bracket_vec_into_components(
 
                 match_spec.url = Some(url);
             }
+            "subdir" => match_spec.subdir = Some(value.to_string()),
             // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -276,7 +273,12 @@ fn parse_bracket_vec_into_components(
 }
 
 /// Parses an url or path like string into an url.
-fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
+    // Skip if channel is provided, this avoids parsing namespaces as urls
+    if input.contains("::") {
+        return Ok(None);
+    }
+
     // Is the spec an url, parse it as an url
     if parse_scheme(input).is_some() {
         return Url::parse(input)
@@ -463,6 +465,26 @@ impl NamelessMatchSpec {
     }
 }
 
+/// Parse channel and subdir from a string.
+fn parse_channel_and_subdir(
+    input: &str,
+) -> Result<(Option<Channel>, Option<String>), ParseMatchSpecError> {
+    let channel_config = ChannelConfig::default_with_root_dir(
+        std::env::current_dir().expect("Could not get current directory"),
+    );
+
+    if let Some((channel, subdir)) = input.rsplit_once('/') {
+        // If the subdir is a platform, we assume the channel has a subdir
+        if Platform::from_str(subdir).is_ok() {
+            return Ok((
+                Some(Channel::from_str(channel, &channel_config)?),
+                Some(subdir.to_string()),
+            ));
+        }
+    }
+    Ok((Some(Channel::from_str(input, &channel_config)?), None))
+}
+
 /// Parses a conda match spec.
 /// This is based on: <https://github.com/conda/conda/blob/master/conda/models/match_spec.py#L569>
 fn matchspec_parser(
@@ -473,49 +495,43 @@ fn matchspec_parser(
     let (input, _comment) = strip_comment(input);
     let (input, _if_clause) = strip_if(input);
 
-    // 2. parse as url
-    if let Some(url) = parse_url_like(input)? {
-        let archive = ArchiveIdentifier::try_from_url(&url);
-        let name = archive.and_then(|a| a.try_into().ok());
-
-        // TODO: This should also work without a proper name from the url filename
-        if name.is_none() {
-            return Err(ParseMatchSpecError::MissingPackageName);
-        }
-
-        // Only return the 'url' and 'name' to avoid miss parsing the rest of the
-        // information. e.g. when a version is provided in the url is not the
-        // actual version this might be a problem when solving.
-        return Ok(MatchSpec {
-            url: Some(url),
-            name,
-            ..MatchSpec::default()
-        });
-    }
-
-    // 3. Strip off brackets portion
+    // 2. Strip off brackets portion
     let (input, brackets) = strip_brackets(input.trim())?;
     let mut nameless_match_spec =
         parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
 
-    // 4. Strip off parens portion
+    // 3. Strip off parens portion
     // TODO: What is this? I've never seen it
 
-    // 5. Strip of '::' channel and namespace
-    let mut input_split = input.split(':').fuse();
-    let (input, namespace, channel_str) = match (
-        input_split.next(),
-        input_split.next(),
-        input_split.next(),
-        input_split.next(),
-    ) {
-        (Some(input), None, _, _) => (input, None, None),
-        (Some(namespace), Some(input), None, _) => (input, Some(namespace), None),
-        (Some(channel_str), Some(namespace), Some(input), None) => {
-            (input, Some(namespace), Some(channel_str))
+    // 4. Parse as url
+    if nameless_match_spec.url.is_none() {
+        if let Some(url) = parse_url_like(&input)? {
+            let archive = ArchiveIdentifier::try_from_url(&url);
+            let name = archive.and_then(|a| a.try_into().ok());
+
+            // TODO: This should also work without a proper name from the url filename
+            if name.is_none() {
+                return Err(ParseMatchSpecError::MissingPackageName);
+            }
+
+            // Only return the 'url' and 'name' to avoid miss parsing the rest of the
+            // information. e.g. when a version is provided in the url is not the
+            // actual version this might be a problem when solving.
+            return Ok(MatchSpec {
+                url: Some(url),
+                name,
+                ..MatchSpec::default()
+            });
         }
-        _ => return Err(ParseMatchSpecError::InvalidNumberOfColons),
-    };
+    }
+
+    // 5. Strip of ':' to find channel and namespace
+    // This assumes the [*] portions is stripped off, and then strip reverse to
+    // ignore the first colon As that might be in the channel url.
+    let mut input_split = input.rsplitn(3, ':').fuse();
+    let input = input_split.next().unwrap_or("");
+    let namespace = input_split.next();
+    let channel_str = input_split.next();
 
     nameless_match_spec.namespace = namespace
         .map(str::trim)
@@ -524,16 +540,9 @@ fn matchspec_parser(
         .or(nameless_match_spec.namespace);
 
     if let Some(channel_str) = channel_str {
-        let channel_config = ChannelConfig::default_with_root_dir(
-            std::env::current_dir().expect("Could not get current directory"),
-        );
-        if let Some((channel, subdir)) = channel_str.rsplit_once('/') {
-            nameless_match_spec.channel = Some(Channel::from_str(channel, &channel_config)?.into());
-            nameless_match_spec.subdir = Some(subdir.to_string());
-        } else {
-            nameless_match_spec.channel =
-                Some(Channel::from_str(channel_str, &channel_config)?.into());
-        }
+        let (channel, subdir) = parse_channel_and_subdir(channel_str)?;
+        nameless_match_spec.channel = nameless_match_spec.channel.or(channel.map(Arc::new));
+        nameless_match_spec.subdir = nameless_match_spec.subdir.or(subdir);
     }
 
     // Step 6. Strip off the package name from the input
@@ -609,9 +618,10 @@ fn optionally_strip_equals<'a>(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, str::FromStr, sync::Arc};
+    use std::{str::FromStr, sync::Arc};
 
     use assert_matches::assert_matches;
+    use indexmap::IndexMap;
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
     use rstest::rstest;
     use serde::Serialize;
@@ -619,12 +629,12 @@ mod tests {
     use url::Url;
 
     use super::{
-        split_version_and_build, strip_brackets, strip_package_name, BracketVec, MatchSpec,
-        ParseMatchSpecError,
+        parse_channel_and_subdir, split_version_and_build, strip_brackets, strip_package_name,
+        BracketVec, MatchSpec, ParseMatchSpecError,
     };
     use crate::{
         match_spec::parse::parse_bracket_list, BuildNumberSpec, Channel, ChannelConfig,
-        NamelessMatchSpec, ParseStrictness, ParseStrictness::*, VersionSpec,
+        NamelessMatchSpec, ParseChannelError, ParseStrictness, ParseStrictness::*, VersionSpec,
     };
 
     fn channel_config() -> ChannelConfig {
@@ -812,7 +822,7 @@ mod tests {
         assert_eq!(spec1.url, Some(url.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", url_str).as_str(), Strict).unwrap();
+            NamelessMatchSpec::from_str(format!("[url={url_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(url));
     }
 
@@ -825,8 +835,7 @@ mod tests {
         assert_eq!(spec.url, Some(win_path.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", win_path_str).as_str(), Strict)
-                .unwrap();
+            NamelessMatchSpec::from_str(format!("[url={win_path_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(win_path));
 
         // Unix
@@ -836,8 +845,7 @@ mod tests {
         assert_eq!(spec.url, Some(unix_path.clone()));
 
         let spec_with_brackets =
-            NamelessMatchSpec::from_str(format!("[url={}]", unix_path_str).as_str(), Strict)
-                .unwrap();
+            NamelessMatchSpec::from_str(format!("[url={unix_path_str}]").as_str(), Strict).unwrap();
         assert_eq!(spec_with_brackets.url, Some(unix_path));
     }
 
@@ -952,9 +960,15 @@ mod tests {
             "python ==2.7.*.*|>=3.6",
             "python=3.9",
             "python=*",
+            "https://software.repos.intel.com/python/conda::python[version=3.9]",
+            "https://c.com/p/conda/linux-64::python[version=3.9]",
+            "https://c.com/p/conda::python[version=3.9, subdir=linux-64]",
+            // subdir in brackets take precedence
+            "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
+            "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
         ];
 
-        let evaluated: BTreeMap<_, _> = specs
+        let evaluated: IndexMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
@@ -989,7 +1003,7 @@ mod tests {
             "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
         ];
 
-        let evaluated: BTreeMap<_, _> = specs
+        let evaluated: IndexMap<_, _> = specs
             .iter()
             .map(|spec| {
                 (
@@ -1032,9 +1046,22 @@ mod tests {
     }
 
     #[test]
-    fn test_invalid_number_of_colons() {
+    fn test_invalid_channel_name() {
         let spec = MatchSpec::from_str("conda-forge::::foo[version=\"1.0.*\"]", Strict);
-        assert_matches!(spec, Err(ParseMatchSpecError::InvalidNumberOfColons));
+        assert_matches!(
+            spec,
+            Err(ParseMatchSpecError::ParseChannelError(
+                ParseChannelError::InvalidName(_)
+            ))
+        );
+
+        let spec = MatchSpec::from_str("conda-forge\\::foo[version=\"1.0.*\"]", Strict);
+        assert_matches!(
+            spec,
+            Err(ParseMatchSpecError::ParseChannelError(
+                ParseChannelError::InvalidName(_)
+            ))
+        );
     }
 
     #[test]
@@ -1047,6 +1074,23 @@ mod tests {
     fn test_empty_namespace() {
         let spec = MatchSpec::from_str("conda-forge::foo", Strict).unwrap();
         assert!(spec.namespace.is_none());
+    }
+
+    #[test]
+    fn test_namespace() {
+        // Test with url channel and url in brackets
+        let spec = MatchSpec::from_str(
+            "https://a.b.c/conda-forge:namespace:foo[url=https://a.b/c/d/p-1-b_0.conda]",
+            Strict,
+        )
+        .unwrap();
+        assert_eq!(spec.namespace, Some("namespace".to_owned()));
+        assert_eq!(spec.name, Some("foo".parse().unwrap()));
+        assert_eq!(spec.channel.unwrap().name(), "conda-forge");
+        assert_eq!(
+            spec.url,
+            Some(Url::parse("https://a.b/c/d/p-1-b_0.conda").unwrap())
+        );
     }
 
     #[test]
@@ -1124,5 +1168,44 @@ mod tests {
 
         MatchSpec::from_str("python ==2.7.*.*|>=3.6", Strict).expect_err("nameful");
         NamelessMatchSpec::from_str("==2.7.*.*|>=3.6", Strict).expect_err("nameless");
+    }
+
+    #[test]
+    fn test_parse_channel_subdir() {
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge/linux-64").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, Some("linux-64".to_string()));
+
+        let (channel, subdir) = parse_channel_and_subdir("conda-forge/label/test").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge/label/test", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) =
+            parse_channel_and_subdir("conda-forge/linux-64/label/test").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("conda-forge/linux-64/label/test", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, None);
+
+        let (channel, subdir) = parse_channel_and_subdir("*/linux-64").unwrap();
+        assert_eq!(
+            channel.unwrap(),
+            Channel::from_str("*", &channel_config()).unwrap()
+        );
+        assert_eq!(subdir, Some("linux-64".to_string()));
     }
 }

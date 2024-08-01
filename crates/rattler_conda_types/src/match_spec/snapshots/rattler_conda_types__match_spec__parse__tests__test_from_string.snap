@@ -1,0 +1,37 @@
+---
+source: crates/rattler_conda_types/src/match_spec/parse.rs
+expression: evaluated
+---
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  name: foo
+  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
+  name: foo
+  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
+  name: foo
+  version: 1.0.*
+  build_number:
+    op: Gt
+    rhs: 6
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"conda-forge::foo[version=1.0.*]":
+  name: foo
+  version: 1.0.*
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
+  name: py-rattler
+  url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
+"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
+  name: boost-cpp
+  url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
+"https://software.repos.intel.com/python/conda::python[version=3.9]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://software.repos.intel.com/python/conda/"
+    name: python/conda

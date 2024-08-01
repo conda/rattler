@@ -1,33 +1,14 @@
 ---
 source: crates/rattler_conda_types/src/match_spec/parse.rs
-assertion_line: 915
 expression: evaluated
 ---
-/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
-  name: foo
-  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
-"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
-  name: foo
-  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 blas *.* mkl:
   name: blas
   version: "*"
   build: mkl
-"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
+"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
   name: foo
-  version: 1.0.*
-  build_number:
-    op: Gt
-    rhs: 6
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
-    name: conda-forge
-"conda-forge::foo[version=1.0.*]":
-  name: foo
-  version: 1.0.*
-  channel:
-    base_url: "https://conda.anaconda.org/conda-forge/"
-    name: conda-forge
+  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 foo=1.0=py27_0:
   error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 foo==1.0=py27_0:
@@ -42,15 +23,70 @@ python 3.8.* *_cpython:
   name: python
   version: 3.8.*
   build: "*_cpython"
-python ==2.7.*.*|>=3.6:
-  error: "invalid version constraint: regex constraints are not supported"
-python=*:
-  error: "invalid version constraint: '*' is incompatible with '=' operator'"
-python=3.9:
-  name: python
-  version: 3.9.*
 pytorch=*=cuda*:
   error: "The build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
 "x264 >=1!164.3095,<1!165":
   name: x264
   version: ">=1!164.3095,<1!165"
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  name: foo
+  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"conda-forge::foo[version=1.0.*]":
+  name: foo
+  version: 1.0.*
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"conda-forge::foo[version=1.0.*, build_number=\">6\"]":
+  name: foo
+  version: 1.0.*
+  build_number:
+    op: Gt
+    rhs: 6
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+python ==2.7.*.*|>=3.6:
+  error: "invalid version constraint: regex constraints are not supported"
+python=3.9:
+  name: python
+  version: 3.9.*
+python=*:
+  error: "invalid version constraint: '*' is incompatible with '=' operator'"
+"https://software.repos.intel.com/python/conda::python[version=3.9]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://software.repos.intel.com/python/conda/"
+    name: python/conda
+"https://c.com/p/conda/linux-64::python[version=3.9]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://c.com/p/conda/"
+    name: p/conda
+  subdir: linux-64
+"https://c.com/p/conda::python[version=3.9, subdir=linux-64]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://c.com/p/conda/"
+    name: p/conda
+  subdir: linux-64
+"conda-forge/linux-32::python[version=3.9, subdir=linux-64]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
+"conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]":
+  name: python
+  version: "==3.9"
+  build_number:
+    op: Eq
+    rhs: 0
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
