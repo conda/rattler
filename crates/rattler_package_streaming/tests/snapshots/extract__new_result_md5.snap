@@ -1,5 +1,0 @@
----
-source: crates/rattler_package_streaming/tests/extract.rs
-expression: "&format!(\"{:x}\", new_result.md5)"
----
-a1d1adb5a5dc516dfb3dccc7b9b574a9
