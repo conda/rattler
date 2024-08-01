@@ -12,7 +12,10 @@ use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
-use crate::utils::{path::is_path, url::parse_scheme};
+use crate::utils::{
+    path::is_path,
+    url::{add_trailing_slash, parse_scheme},
+};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
@@ -85,8 +88,9 @@ impl NamedChannelOrUrl {
     }
 
     /// Converts the channel to a base url using the given configuration.
+    /// This method ensures that the base url always ends with a `/`.
     pub fn into_base_url(self, config: &ChannelConfig) -> Url {
-        match self {
+        let url = match self {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
                 if let Ok(mut segments) = base_url.path_segments_mut() {
@@ -95,7 +99,8 @@ impl NamedChannelOrUrl {
                 base_url
             }
             NamedChannelOrUrl::Url(url) => url,
-        }
+        };
+        add_trailing_slash(&url).into_owned()
     }
 
     /// Converts this instance into a channel.
@@ -680,5 +685,37 @@ mod tests {
                 .as_str(),
             "https://prefix.dev/conda-forge"
         );
+    }
+
+    #[test]
+    fn compare_channel_with_or_without_backslash() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
+        };
+
+        // Normal channel should have backslash
+        let test_channels = vec![
+            "conda-forge",
+            "conda-forge/",
+            "https://conda.anaconda.org/conda-forge",
+            "https://conda.anaconda.org/conda-forge/",
+        ];
+
+        for channel_str in test_channels {
+            let channel = Channel::from_str(channel_str, &channel_config).unwrap();
+            assert!(channel.base_url().as_str().ends_with('/'));
+            assert!(!channel.base_url().as_str().ends_with("//"));
+
+            let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
+            let base_url = named_channel.clone().into_base_url(&channel_config);
+            let base_url_str = base_url.as_str();
+            assert!(base_url_str.ends_with('/'));
+            assert!(!base_url_str.ends_with("//"));
+
+            let channel = named_channel.into_channel(&channel_config);
+            assert!(channel.base_url().as_str().ends_with('/'));
+            assert!(!channel.base_url().as_str().ends_with("//"));
+        }
     }
 }

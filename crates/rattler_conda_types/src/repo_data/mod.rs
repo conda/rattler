@@ -6,7 +6,6 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    borrow::Cow,
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     path::Path,
@@ -20,6 +19,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
 
+use crate::utils::url::add_trailing_slash;
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
@@ -272,17 +272,6 @@ pub fn compute_package_url(
     absolute_url
         .join(filename)
         .expect("failed to join base_url and filename")
-}
-
-fn add_trailing_slash(url: &Url) -> Cow<'_, Url> {
-    let path = url.path();
-    if path.ends_with('/') {
-        Cow::Borrowed(url)
-    } else {
-        let mut url = url.clone();
-        url.set_path(&format!("{path}/"));
-        Cow::Owned(url)
-    }
 }
 
 impl PackageRecord {
