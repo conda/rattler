@@ -55,8 +55,8 @@ impl ChannelConfig {
 
     /// Strip the channel alias if the base url is "under" the channel alias.
     /// This returns the name of the channel (for example "conda-forge" for
-    /// "https://conda.anaconda.org/conda-forge" when the channel alias is
-    /// "https://conda.anaconda.org").
+    /// `https://conda.anaconda.org/conda-forge` when the channel alias is
+    /// `https://conda.anaconda.org`).
     pub fn strip_channel_alias(&self, base_url: &Url) -> Option<String> {
         base_url
             .as_str()
@@ -115,9 +115,7 @@ impl NamedChannelOrUrl {
     pub fn into_channel(self, config: &ChannelConfig) -> Channel {
         let name = match &self {
             NamedChannelOrUrl::Name(name) => Some(name.clone()),
-            NamedChannelOrUrl::Url(base_url) => {
-                config.strip_channel_alias(base_url).map(|name| name)
-            }
+            NamedChannelOrUrl::Url(base_url) => config.strip_channel_alias(base_url),
         };
         let base_url = self.into_base_url(config);
         Channel {
