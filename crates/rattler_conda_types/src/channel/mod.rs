@@ -18,7 +18,6 @@ use crate::utils::{path::is_path, url::parse_scheme};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
 
-
 /// The `ChannelConfig` describes properties that are required to resolve
 /// "simple" channel names to channel URLs.
 ///
@@ -354,9 +353,9 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR).unwrap_or_else(|| {
-            self.base_url.clone()
-        }).to_string()
+        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR)
+            .unwrap_or_else(|| self.base_url.clone())
+            .to_string()
     }
 }
 

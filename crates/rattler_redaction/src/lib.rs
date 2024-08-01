@@ -23,9 +23,7 @@ pub const DEFAULT_REDACTION_STR: &str = "********";
 pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
     let mut url = url.clone();
     if url.password().is_some() {
-        url.set_password(Some(redaction)).map_err(|e| {
-            println!("Failed to redact password: {:?}", e);
-        }).ok()?;
+        url.set_password(Some(redaction)).ok()?;
     }
 
     let mut segments = url.path_segments()?;
@@ -38,7 +36,7 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
             );
 
             for (idx, segment) in remainder.iter().enumerate() {
-                redacted_path.push_str(&segment);
+                redacted_path.push_str(segment);
                 // if the original url ends with a slash, we need to add it to the redacted path
                 if idx < remainder.len() - 1 || url.path().ends_with('/') {
                     redacted_path.push('/');
@@ -119,13 +117,16 @@ mod test {
                 &Url::from_str("https://conda.anaconda.org/conda-forge/noarch/repodata.json")
                     .unwrap(),
                 "helloworld"
-            ).unwrap(),
+            )
+            .unwrap(),
             Url::from_str("https://conda.anaconda.org/conda-forge/noarch/repodata.json").unwrap(),
         );
 
         let redacted = redact_known_secrets_from_url(
             &Url::from_str("https://user:secret@prefix.dev/conda-forge").unwrap(),
-            DEFAULT_REDACTION_STR).unwrap();
+            DEFAULT_REDACTION_STR,
+        )
+        .unwrap();
 
         assert_eq!(
             redacted.to_string(),
@@ -134,7 +135,9 @@ mod test {
 
         let redacted = redact_known_secrets_from_url(
             &Url::from_str("https://user:secret@prefix.dev/conda-forge/").unwrap(),
-            DEFAULT_REDACTION_STR).unwrap();
+            DEFAULT_REDACTION_STR,
+        )
+        .unwrap();
 
         assert_eq!(
             redacted.to_string(),
