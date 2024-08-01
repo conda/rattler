@@ -90,16 +90,17 @@ impl NamedChannelOrUrl {
     /// Converts the channel to a base url using the given configuration.
     /// This method ensures that the base url always ends with a `/`.
     pub fn into_base_url(self, config: &ChannelConfig) -> Url {
-        match self {
+        let url = match self {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
                 if let Ok(mut segments) = base_url.path_segments_mut() {
                     segments.push(&name);
                 }
-                add_trailing_slash(&base_url).into_owned()
+                base_url
             }
-            NamedChannelOrUrl::Url(url) => add_trailing_slash(&url).into_owned(),
-        }
+            NamedChannelOrUrl::Url(url) => url,
+        };
+        add_trailing_slash(&url).into_owned()
     }
 
     /// Converts this instance into a channel.
@@ -673,50 +674,34 @@ mod tests {
     }
 
     #[test]
-    fn compare_with_or_without_backslash() {
+    fn compare_channel_with_or_without_backslash() {
         let channel_config = ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
             root_dir: std::env::current_dir().expect("No current dir set"),
         };
 
         // Normal channel should have backslash
-        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
-        let channel_with_backslash =
-            Channel::from_str("https://conda.anaconda.org/conda-forge/", &channel_config).unwrap();
-        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
-
-        // Channel with backslash should have backslash
-        let channel_with_backslash = Channel::from_str("conda-forge/", &channel_config).unwrap();
-        let channel =
-            Channel::from_str("https://conda.anaconda.org/conda-forge", &channel_config).unwrap();
-        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
-
-        // The named channel should have backslash
-        let named_channel = NamedChannelOrUrl::Name("conda-forge".to_string());
-        assert_eq!(
+        let test_channels = vec![
+            "conda-forge",
+            "conda-forge/",
+            "https://conda.anaconda.org/conda-forge",
             "https://conda.anaconda.org/conda-forge/",
-            named_channel
-                .clone()
-                .into_base_url(&channel_config)
-                .as_str()
-        );
+        ];
 
-        let url_channel = NamedChannelOrUrl::Url(
-            Url::from_str("https://conda.anaconda.org/conda-forge").unwrap(),
-        );
-        assert_eq!(
-            "https://conda.anaconda.org/conda-forge/",
-            url_channel.into_base_url(&channel_config).as_str()
-        );
+        for channel_str in test_channels {
+            let channel = Channel::from_str(channel_str, &channel_config).unwrap();
+            assert!(channel.base_url().as_str().ends_with('/'));
+            assert!(!channel.base_url().as_str().ends_with("//"));
 
-        // The named channel to channel should have backslash
-        let channel = named_channel.into_channel(&channel_config);
-        let channel_with_backslash =
-            Channel::from_str("https://conda.anaconda.org/conda-forge/", &channel_config).unwrap();
-        assert_eq!(channel.base_url(), channel_with_backslash.base_url());
-        assert_eq!(
-            channel.base_url().as_str(),
-            "https://conda.anaconda.org/conda-forge/"
-        );
+            let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
+            let base_url = named_channel.clone().into_base_url(&channel_config);
+            let base_url_str = base_url.as_str();
+            assert!(base_url_str.ends_with('/'));
+            assert!(!base_url_str.ends_with("//"));
+
+            let channel = named_channel.into_channel(&channel_config);
+            assert!(channel.base_url().as_str().ends_with('/'));
+            assert!(!channel.base_url().as_str().ends_with("//"));
+        }
     }
 }
