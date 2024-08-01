@@ -693,10 +693,21 @@ mod tests {
 
         // The named channel should have backslash
         let named_channel = NamedChannelOrUrl::Name("conda-forge".to_string());
-        assert_eq!("https://conda.anaconda.org/conda-forge/", named_channel.clone().into_base_url(&channel_config).as_str());
+        assert_eq!(
+            "https://conda.anaconda.org/conda-forge/",
+            named_channel
+                .clone()
+                .into_base_url(&channel_config)
+                .as_str()
+        );
 
-        let url_channel = NamedChannelOrUrl::Url(Url::from_str("https://conda.anaconda.org/conda-forge").unwrap());
-        assert_eq!("https://conda.anaconda.org/conda-forge/", url_channel.into_base_url(&channel_config).as_str());
+        let url_channel = NamedChannelOrUrl::Url(
+            Url::from_str("https://conda.anaconda.org/conda-forge").unwrap(),
+        );
+        assert_eq!(
+            "https://conda.anaconda.org/conda-forge/",
+            url_channel.into_base_url(&channel_config).as_str()
+        );
 
         // The named channel to channel should have backslash
         let channel = named_channel.into_channel(&channel_config);
