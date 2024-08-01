@@ -11,7 +11,16 @@ use std::sync::Arc;
 use tokio::io::BufReader;
 use tokio_util::either::Either;
 use tokio_util::io::StreamReader;
+use tracing;
 use url::Url;
+use zip::result::ZipError;
+
+/// zipfiles may use data descriptors to signal that the decompressor needs to seek ahead in the buffer
+/// to find the compressed data length.
+/// Since we stream the package over a non seekable HTTP connection, this condition will cause an error during
+/// decompression. In this case, we fallback to reading the whole data to a buffer before attempting decompression.
+/// Read more in https://github.com/conda-incubator/rattler/issues/794
+const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
 
 fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
     response
@@ -131,12 +140,31 @@ pub async fn extract_conda(
     reporter: Option<Arc<dyn DownloadReporter>>,
 ) -> Result<ExtractResult, ExtractError> {
     // The `response` is used to stream in the package data
-    let reader = get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
-    let result = crate::tokio::async_read::extract_conda(reader, destination).await?;
-    if let Some(reporter) = &reporter {
-        reporter.on_download_complete();
+    let reader = get_reader(
+        url.clone(),
+        client.clone(),
+        expected_sha256,
+        reporter.clone(),
+    )
+    .await?;
+    match crate::tokio::async_read::extract_conda(reader, destination).await {
+        Ok(result) => {
+            if let Some(reporter) = &reporter {
+                reporter.on_download_complete();
+            }
+            Ok(result)
+        }
+        // https://github.com/conda-incubator/rattler/issues/794
+        Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
+            if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
+        {
+            tracing::warn!("Failed to stream decompress conda package from '{}' due to the presence of zip data descriptors. Falling back to non streaming decompression", url);
+            let new_reader =
+                get_reader(url.clone(), client, expected_sha256, reporter.clone()).await?;
+            crate::tokio::async_read::extract_conda_via_buffering(new_reader, destination).await
+        }
+        Err(e) => Err(e),
     }
-    Ok(result)
 }
 
 /// Extracts the contents a package archive from the specified remote location. The type of package

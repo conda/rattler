@@ -1,5 +1,5 @@
 use rattler_conda_types::package::ArchiveType;
-use rattler_package_streaming::read::{extract_conda, extract_tar_bz2};
+use rattler_package_streaming::read::{extract_conda_via_streaming, extract_tar_bz2};
 use rattler_package_streaming::write::{
     write_conda_package, write_tar_bz2_package, CompressionLevel,
 };
@@ -209,7 +209,7 @@ fn test_rewrite_conda() {
 
         let name = file_path.file_stem().unwrap().to_string_lossy();
         let target_dir = temp_dir.join(file_path.file_stem().unwrap());
-        extract_conda(File::open(&file_path).unwrap(), &target_dir).unwrap();
+        extract_conda_via_streaming(File::open(&file_path).unwrap(), &target_dir).unwrap();
 
         let new_archive = temp_dir.join(format!(
             "{}-new.conda",

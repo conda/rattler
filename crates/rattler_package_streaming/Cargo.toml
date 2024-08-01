@@ -26,6 +26,7 @@ tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
 tokio-util = { workspace = true, features = ["io-util"] }
+tracing = { workspace = true }
 url = { workspace = true }
 zip = { workspace = true, features = ["deflate", "time"] }
 zstd = { workspace = true, features = ["zstdmt"] }
@@ -44,3 +45,4 @@ tools = { path = "../tools" }
 walkdir = { workspace = true }
 rstest = { workspace = true }
 rstest_reuse = { workspace = true }
+insta = { workspace = true, features = ["yaml"] }
