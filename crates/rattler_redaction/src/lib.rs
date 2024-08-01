@@ -14,11 +14,13 @@ pub const DEFAULT_REDACTION_STR: &str = "********";
 /// # Example
 ///
 /// ```rust
-/// # use rattler_networking::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
+/// # use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
 /// # use url::Url;
 ///
 /// let url = Url::parse("https://conda.anaconda.org/t/12345677/conda-forge/noarch/repodata.json").unwrap();
 /// let redacted_url = redact_known_secrets_from_url(&url, DEFAULT_REDACTION_STR).unwrap_or(url);
+/// // or you can use the shorthand
+/// let redacted_url = url.redact();
 /// ```
 pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> {
     let mut url = url.clone();
