@@ -6,17 +6,18 @@ use std::{
 };
 
 use file_url::directory_path_to_url;
-use itertools::Itertools;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
+use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
+
 use super::{ParsePlatformError, Platform};
 use crate::utils::{path::is_path, url::parse_scheme};
 
 const DEFAULT_CHANNEL_ALIAS: &str = "https://conda.anaconda.org";
-const DEFAULT_REDACTION_STR: &str = "********";
+
 
 /// The `ChannelConfig` describes properties that are required to resolve
 /// "simple" channel names to channel URLs.
@@ -60,8 +61,7 @@ impl ChannelConfig {
         } else {
             NamedChannelOrUrl::Url(
                 redact_known_secrets_from_url(base_url, DEFAULT_REDACTION_STR)
-                    .parse()
-                    .unwrap(),
+                    .unwrap_or_else(|| base_url.clone()),
             )
         }
     }
@@ -155,33 +155,6 @@ impl serde::Serialize for NamedChannelOrUrl {
         S: Serializer,
     {
         self.as_str().serialize(serializer)
-    }
-}
-
-pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> String {
-    let mut url = url.clone();
-    if url.password().is_some() {
-        url.set_password(Some(redaction))
-            .expect("Failed to redact password");
-    }
-
-    if let Some(mut segments) = url.path_segments() {
-        match (segments.next(), segments.next()) {
-            (Some("t"), Some(_)) => {
-                let remainder = segments.collect_vec();
-                let redacted_path = format!(
-                    "t/{redaction}{separator}{remainder}",
-                    separator = if remainder.is_empty() { "" } else { "/" },
-                    remainder = remainder.iter().format("/")
-                );
-
-                url.set_path(&redacted_path);
-                url.to_string()
-            }
-            _ => url.to_string(),
-        }
-    } else {
-        url.to_string()
     }
 }
 
@@ -381,7 +354,9 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR)
+        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR).unwrap_or_else(|| {
+            self.base_url.clone()
+        }).to_string()
     }
 }
 

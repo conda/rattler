@@ -37,6 +37,7 @@ tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
+rattler_redaction = { path = "../rattler_redaction" }
 
 [dev-dependencies]
 rand = { workspace = true }

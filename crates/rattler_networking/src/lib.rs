@@ -17,7 +17,3 @@ pub mod authentication_storage;
 pub mod mirror_middleware;
 pub mod oci_middleware;
 pub mod retry_policies;
-
-mod redaction;
-
-pub use redaction::{redact_known_secrets_from_url, Redact, DEFAULT_REDACTION_STR};

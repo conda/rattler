@@ -84,7 +84,7 @@ use blake2::digest::{FixedOutput, Update};
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
-use rattler_networking::Redact;
+use rattler_redaction::Redact;
 use reqwest::{
     header::{HeaderMap, HeaderValue},
     Response, StatusCode,
