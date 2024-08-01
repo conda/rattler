@@ -405,8 +405,6 @@ impl Version {
                 .and_then(|idx| flags.with_local_segment_index(idx))
                 .expect("the number of segments must always be smaller so this should never fail");
         }
-        // println!("{:?}", segments);
-        // println!("{:?}", components);
 
         Some(Version {
             components,
