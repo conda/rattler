@@ -696,7 +696,7 @@ mod tests {
             channel_config
                 .canonical_name(&Url::from_str("https://prefix.dev/conda-forge/").unwrap())
                 .as_str(),
-            "https://prefix.dev/conda-forge"
+            "https://prefix.dev/conda-forge/"
         );
         assert_eq!(
             channel_config
@@ -704,7 +704,7 @@ mod tests {
                     &Url::from_str("https://prefix.dev/t/mysecrettoken/conda-forge/").unwrap()
                 )
                 .as_str(),
-            "https://prefix.dev/t/********/conda-forge"
+            "https://prefix.dev/t/********/conda-forge/"
         );
 
         assert_eq!(
@@ -713,7 +713,7 @@ mod tests {
                     &Url::from_str("https://user:secret@prefix.dev/conda-forge/").unwrap()
                 )
                 .as_str(),
-            "https://user:********@prefix.dev/conda-forge"
+            "https://user:********@prefix.dev/conda-forge/"
         );
     }
 }

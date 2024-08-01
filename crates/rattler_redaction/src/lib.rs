@@ -38,7 +38,7 @@ pub fn redact_known_secrets_from_url(url: &Url, redaction: &str) -> Option<Url> 
             for (idx, segment) in remainder.iter().enumerate() {
                 redacted_path.push_str(segment);
                 // if the original url ends with a slash, we need to add it to the redacted path
-                if idx < remainder.len() - 1 || url.path().ends_with('/') {
+                if idx < remainder.len() - 1 {
                     redacted_path.push('/');
                 }
             }
