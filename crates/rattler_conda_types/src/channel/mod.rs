@@ -11,7 +11,7 @@ use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
-use rattler_redaction::{redact_known_secrets_from_url, DEFAULT_REDACTION_STR};
+use rattler_redaction::Redact;
 
 use super::{ParsePlatformError, Platform};
 use crate::utils::{path::is_path, url::parse_scheme};
@@ -53,15 +53,23 @@ impl ChannelConfig {
         }
     }
 
+    /// Strip the channel alias if the base url is "under" the channel alias.
+    /// This returns the name of the channel (for example "conda-forge" for
+    /// "https://conda.anaconda.org/conda-forge" when the channel alias is
+    /// "https://conda.anaconda.org").
+    pub fn strip_channel_alias(&self, base_url: &Url) -> Option<String> {
+        base_url
+            .as_str()
+            .strip_prefix(self.channel_alias.as_str())
+            .map(|s| s.trim_end_matches('/').to_string())
+    }
+
     /// Returns the canonical name of a channel with the given base url.
-    pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
+    pub fn canonical_name(&self, base_url: &Url) -> String {
         if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
-            NamedChannelOrUrl::Name(stripped.trim_matches('/').to_string())
+            stripped.trim_end_matches('/').to_string()
         } else {
-            NamedChannelOrUrl::Url(
-                redact_known_secrets_from_url(base_url, DEFAULT_REDACTION_STR)
-                    .unwrap_or_else(|| base_url.clone()),
-            )
+            base_url.clone().redact().to_string()
         }
     }
 }
@@ -107,10 +115,9 @@ impl NamedChannelOrUrl {
     pub fn into_channel(self, config: &ChannelConfig) -> Channel {
         let name = match &self {
             NamedChannelOrUrl::Name(name) => Some(name.clone()),
-            NamedChannelOrUrl::Url(base_url) => match config.canonical_name(base_url) {
-                NamedChannelOrUrl::Name(name) => Some(name),
-                NamedChannelOrUrl::Url(_) => None,
-            },
+            NamedChannelOrUrl::Url(base_url) => {
+                config.strip_channel_alias(base_url).map(|name| name)
+            }
         };
         let base_url = self.into_base_url(config);
         Channel {
@@ -353,9 +360,7 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        redact_known_secrets_from_url(&self.base_url, DEFAULT_REDACTION_STR)
-            .unwrap_or_else(|| self.base_url.clone())
-            .to_string()
+        self.base_url.clone().redact().to_string()
     }
 }
 
