@@ -2,7 +2,7 @@ use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
 use crate::gateway::direct_url_query::DirectUrlQueryError;
 use rattler_conda_types::{Channel, MatchSpec};
-use rattler_networking::Redact;
+use rattler_redaction::Redact;
 use reqwest_middleware::Error;
 use simple_spawn_blocking::Cancelled;
 use std::fmt::{Display, Formatter};

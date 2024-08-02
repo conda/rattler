@@ -8,7 +8,7 @@ use zip::result::ZipError;
 use rattler_digest::{Md5Hash, Sha256Hash};
 
 #[cfg(feature = "reqwest")]
-use rattler_networking::Redact;
+use rattler_redaction::Redact;
 
 pub mod read;
 pub mod seek;

@@ -11,6 +11,8 @@ use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
+use rattler_redaction::Redact;
+
 use super::{ParsePlatformError, Platform};
 use crate::utils::{
     path::is_path,
@@ -54,12 +56,23 @@ impl ChannelConfig {
         }
     }
 
+    /// Strip the channel alias if the base url is "under" the channel alias.
+    /// This returns the name of the channel (for example "conda-forge" for
+    /// `https://conda.anaconda.org/conda-forge` when the channel alias is
+    /// `https://conda.anaconda.org`).
+    pub fn strip_channel_alias(&self, base_url: &Url) -> Option<String> {
+        base_url
+            .as_str()
+            .strip_prefix(self.channel_alias.as_str())
+            .map(|s| s.trim_end_matches('/').to_string())
+    }
+
     /// Returns the canonical name of a channel with the given base url.
-    pub fn canonical_name(&self, base_url: &Url) -> NamedChannelOrUrl {
+    pub fn canonical_name(&self, base_url: &Url) -> String {
         if let Some(stripped) = base_url.as_str().strip_prefix(self.channel_alias.as_str()) {
-            NamedChannelOrUrl::Name(stripped.trim_matches('/').to_string())
+            stripped.trim_end_matches('/').to_string()
         } else {
-            NamedChannelOrUrl::Url(base_url.clone())
+            base_url.clone().redact().to_string()
         }
     }
 }
@@ -107,10 +120,7 @@ impl NamedChannelOrUrl {
     pub fn into_channel(self, config: &ChannelConfig) -> Channel {
         let name = match &self {
             NamedChannelOrUrl::Name(name) => Some(name.clone()),
-            NamedChannelOrUrl::Url(base_url) => match config.canonical_name(base_url) {
-                NamedChannelOrUrl::Name(name) => Some(name),
-                NamedChannelOrUrl::Url(_) => None,
-            },
+            NamedChannelOrUrl::Url(base_url) => config.strip_channel_alias(base_url),
         };
         let base_url = self.into_base_url(config);
         Channel {
@@ -357,7 +367,7 @@ impl Channel {
 
     /// Returns the canonical name of the channel
     pub fn canonical_name(&self) -> String {
-        self.base_url.to_string()
+        self.base_url.clone().redact().to_string()
     }
 }
 
@@ -668,6 +678,28 @@ mod tests {
     }
 
     #[test]
+    fn channel_canonical_name() {
+        let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
+        let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
+
+        assert_eq!(channel.canonical_name(), "http://localhost:1234/");
+
+        let channel = Channel::from_str("http://user:password@localhost:1234", &config).unwrap();
+
+        assert_eq!(
+            channel.canonical_name(),
+            "http://user:********@localhost:1234/"
+        );
+
+        let channel =
+            Channel::from_str("http://localhost:1234/t/secretfoo/blablub", &config).unwrap();
+        assert_eq!(
+            channel.canonical_name(),
+            "http://localhost:1234/t/********/blablub/"
+        );
+    }
+
+    #[test]
     fn config_canonical_name() {
         let channel_config = ChannelConfig {
             channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
@@ -683,7 +715,24 @@ mod tests {
             channel_config
                 .canonical_name(&Url::from_str("https://prefix.dev/conda-forge/").unwrap())
                 .as_str(),
-            "https://prefix.dev/conda-forge"
+            "https://prefix.dev/conda-forge/"
+        );
+        assert_eq!(
+            channel_config
+                .canonical_name(
+                    &Url::from_str("https://prefix.dev/t/mysecrettoken/conda-forge/").unwrap()
+                )
+                .as_str(),
+            "https://prefix.dev/t/********/conda-forge/"
+        );
+
+        assert_eq!(
+            channel_config
+                .canonical_name(
+                    &Url::from_str("https://user:secret@prefix.dev/conda-forge/").unwrap()
+                )
+                .as_str(),
+            "https://user:********@prefix.dev/conda-forge/"
         );
     }
 
