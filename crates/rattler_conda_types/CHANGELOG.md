@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.26.3...rattler_conda_types-v0.27.0) - 2024-08-02
+
+### Fixed
+- redact secrets in the `canonical_name` functions ([#801](https://github.com/baszalmstra/rattler/pull/801))
+- make `base_url` of `Channel` always contain a trailing slash ([#800](https://github.com/baszalmstra/rattler/pull/800))
+- parse channel in matchspec string ([#792](https://github.com/baszalmstra/rattler/pull/792))
+- constraints on virtual packages were ignored ([#795](https://github.com/baszalmstra/rattler/pull/795))
+- url parsing for namelessmatchspec and cleanup functions ([#790](https://github.com/baszalmstra/rattler/pull/790))
+
+### Other
+- mark some crates 1.0 ([#789](https://github.com/baszalmstra/rattler/pull/789))
+
 ## [0.26.3](https://github.com/mamba-org/rattler/compare/rattler_conda_types-v0.26.2...rattler_conda_types-v0.26.3) - 2024-07-23
 
 ### Fixed

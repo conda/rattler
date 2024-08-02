@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.3](https://github.com/baszalmstra/rattler/compare/rattler-v0.27.2...rattler-v0.27.3) - 2024-08-02
+
+### Other
+- mark some crates 1.0 ([#789](https://github.com/baszalmstra/rattler/pull/789))
+
 ## [0.27.2](https://github.com/mamba-org/rattler/compare/rattler-v0.27.1...rattler-v0.27.2) - 2024-07-23
 
 ### Other
