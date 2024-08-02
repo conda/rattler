@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0](https://github.com/baszalmstra/rattler/compare/rattler_networking-v0.20.10...rattler_networking-v0.21.0) - 2024-08-02
+
+### Fixed
+- redact secrets in the `canonical_name` functions ([#801](https://github.com/baszalmstra/rattler/pull/801))
+
 ## [0.20.10](https://github.com/mamba-org/rattler/compare/rattler_networking-v0.20.9...rattler_networking-v0.20.10) - 2024-07-15
 
 ### Other
