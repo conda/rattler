@@ -2681,7 +2681,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.27.2"
+version = "0.27.3"
 dependencies = [
  "anyhow",
  "console",
@@ -2719,7 +2719,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "anyhow",
  "digest",
@@ -2741,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.26.3"
+version = "0.27.0"
 dependencies = [
  "chrono",
  "file_url",
@@ -2755,6 +2755,7 @@ dependencies = [
  "purl",
  "rattler_digest",
  "rattler_macros",
+ "rattler_redaction",
  "regex",
  "serde",
  "serde-untagged",
@@ -2788,7 +2789,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.21"
+version = "0.19.22"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2801,7 +2802,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.16"
+version = "0.22.17"
 dependencies = [
  "chrono",
  "file_url",
@@ -2830,7 +2831,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.20.10"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2856,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.21.7"
+version = "0.22.0"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2865,6 +2866,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
+ "rattler_redaction",
  "reqwest 0.12.4",
  "reqwest-middleware",
  "serde_json",
@@ -2873,14 +2875,24 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-util",
+ "tracing",
  "url",
  "zip",
  "zstd",
 ]
 
 [[package]]
+name = "rattler_redaction"
+version = "0.1.0"
+dependencies = [
+ "reqwest 0.12.4",
+ "reqwest-middleware",
+ "url",
+]
+
+[[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.3"
+version = "0.21.4"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2910,6 +2922,7 @@ dependencies = [
  "rattler_conda_types",
  "rattler_digest",
  "rattler_networking",
+ "rattler_redaction",
  "reqwest 0.12.4",
  "reqwest-middleware",
  "rmp-serde",
@@ -2930,7 +2943,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.21.3"
+version = "0.21.4"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
@@ -2945,7 +2958,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "futures",
@@ -2961,7 +2974,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "archspec",
  "libloading",
