@@ -50,6 +50,7 @@ mod tests {
 
         assert!(!is_absolute_path("conda-forge/label/rust_dev"));
         assert!(!is_absolute_path("~/foo"));
+        assert!(!is_absolute_path("~\\foo"));
         assert!(!is_absolute_path("./foo"));
         assert!(!is_absolute_path("../foo"));
         assert!(!is_absolute_path("foo"));
