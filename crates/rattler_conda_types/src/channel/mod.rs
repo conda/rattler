@@ -454,8 +454,7 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
     }
 
     // Parse the `~/` as the home folder
-    if let Ok(user_path) = path.strip_prefix("~/")
-    {
+    if let Ok(user_path) = path.strip_prefix("~/") {
         return Ok(Utf8TypedPathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
@@ -534,7 +533,10 @@ mod tests {
 
         let binding = dirs::home_dir().unwrap();
         let home_dir = binding.to_str().unwrap();
-        assert_eq!(absolute_path("~/unix_dir", &current_dir).unwrap().as_str(), format!("{home_dir}/unix_dir").as_str());
+        assert_eq!(
+            absolute_path("~/unix_dir", &current_dir).unwrap().as_str(),
+            format!("{home_dir}/unix_dir").as_str()
+        );
     }
 
     #[test]
