@@ -98,6 +98,8 @@ rust ~=1.2.3:
   channel:
     base_url: "file://<ROOT>/channel/dir/"
     name: ~/channel/dir
+"~\\windows_channel::package":
+  error: invalid channel
 "./relative/channel::package":
   name: package
   channel:

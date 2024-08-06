@@ -968,6 +968,7 @@ mod tests {
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
             "rust ~=1.2.3",
             "~/channel/dir::package",
+            "~\\windows_channel::package",
             "./relative/channel::package",
         ];
 

@@ -26,7 +26,6 @@ pub(crate) fn is_path(path: &str) -> bool {
     if path.starts_with("./")
         || path.starts_with("..")
         || path.starts_with("~/")
-        || path.starts_with("~\\")
         || path.starts_with('/')
         || path.starts_with("\\\\")
         || path.starts_with("//")
@@ -42,6 +41,7 @@ pub(crate) fn is_path(path: &str) -> bool {
 mod tests {
     #[test]
     fn test_is_absolute_path() {
+        use super::is_absolute_path;
         assert!(is_absolute_path("/foo"));
         assert!(is_absolute_path("/C:/foo"));
         assert!(is_absolute_path("C:/foo"));
@@ -50,14 +50,15 @@ mod tests {
 
         assert!(!is_absolute_path("conda-forge/label/rust_dev"));
         assert!(!is_absolute_path("~/foo"));
-        assert!(!is_absolute_path("~\\foo"));
         assert!(!is_absolute_path("./foo"));
         assert!(!is_absolute_path("../foo"));
         assert!(!is_absolute_path("foo"));
+        assert!(!is_absolute_path("~\\foo"));
     }
 
     #[test]
     fn test_is_path() {
+        use super::is_path;
         assert!(is_path("/foo"));
         assert!(is_path("/C:/foo"));
         assert!(is_path("C:/foo"));
@@ -66,8 +67,9 @@ mod tests {
 
         assert!(is_path("./conda-forge/label/rust_dev"));
         assert!(is_path("~/foo"));
-        assert!(is_path("~\\foo"));
         assert!(is_path("./foo"));
         assert!(is_path("../foo"));
+
+        assert!(!is_path("~\\foo"));
     }
 }

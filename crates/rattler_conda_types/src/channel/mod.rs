@@ -443,20 +443,26 @@ pub(crate) const fn default_platforms() -> &'static [Platform] {
 
 /// Returns the specified path as an absolute path
 fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
+    // Non parsable path
+    if path.starts_with("~\\") {
+        return Err(ParseChannelError::InvalidPath(path.to_owned()));
+    }
+
     let path = Utf8TypedPath::from(path);
     if path.is_absolute() {
         return Ok(path.normalize());
     }
 
-    // Parse the `~` as the home folder
-    if let Some(user_path) = path.strip_prefix("~/").ok().or_else(|| path.strip_prefix("~\\").ok()) {
+    // Parse the `~/` as the home folder
+    if let Ok(user_path) = path.strip_prefix("~/")
+    {
         return Ok(Utf8TypedPathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
                 .to_string_lossy()
                 .as_ref(),
         )
-        .join(user_path);
+        .join(user_path));
     }
 
     let root_dir_str = root_dir
@@ -525,6 +531,10 @@ mod tests {
             absolute_path("../foo", &current_dir).as_ref(),
             Ok(&parent_dir.join("foo"))
         );
+
+        let binding = dirs::home_dir().unwrap();
+        let home_dir = binding.to_str().unwrap();
+        assert_eq!(absolute_path("~/unix_dir", &current_dir).unwrap().as_str(), format!("{home_dir}/unix_dir").as_str());
     }
 
     #[test]
