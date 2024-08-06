@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.1](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.27.0...rattler_conda_types-v0.27.1) - 2024-08-06
+
+### Fixed
+- parse `~=` as version not as path ([#804](https://github.com/baszalmstra/rattler/pull/804))
+
 ## [0.27.0](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.26.3...rattler_conda_types-v0.27.0) - 2024-08-02
 
 ### Fixed
