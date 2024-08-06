@@ -17,8 +17,9 @@ use rattler_conda_types::{
 };
 use resolvo::{
     utils::{Pool, VersionSet},
-    Candidates, Dependencies, DependencyProvider, Interner, KnownDependencies, NameId, SolvableId,
-    Solver as LibSolvRsSolver, SolverCache, StringId, UnsolvableOrCancelled, VersionSetId,
+    Candidates, Dependencies, DependencyProvider, Interner, KnownDependencies, NameId, Problem,
+    Requirement, SolvableId, Solver as LibSolvRsSolver, SolverCache, StringId,
+    UnsolvableOrCancelled, VersionSetId, VersionSetUnionId,
 };
 
 use crate::{
@@ -418,6 +419,28 @@ impl<'a> Interner for CondaDependencyProvider<'a> {
         &self.pool.resolve_solvable(solvable).record
     }
 
+    fn version_sets_in_union(
+        &self,
+        version_set_union: VersionSetUnionId,
+    ) -> impl Iterator<Item = VersionSetId> {
+        self.pool.resolve_version_set_union(version_set_union)
+    }
+
+    fn display_merged_solvables(&self, solvables: &[SolvableId]) -> impl Display + '_ {
+        if solvables.is_empty() {
+            return String::new();
+        }
+
+        let versions = solvables
+            .iter()
+            .map(|&id| self.pool.resolve_solvable(id).record.version())
+            .sorted()
+            .format(" | ");
+
+        let name = self.display_solvable_name(solvables[0]);
+        format!("{name} {versions}")
+    }
+
     fn display_name(&self, name: NameId) -> impl Display + '_ {
         self.pool.resolve_package_name(name)
     }
@@ -436,21 +459,6 @@ impl<'a> Interner for CondaDependencyProvider<'a> {
 
     fn solvable_name(&self, solvable: SolvableId) -> NameId {
         self.pool.resolve_solvable(solvable).name
-    }
-
-    fn display_merged_solvables(&self, solvables: &[SolvableId]) -> impl Display + '_ {
-        if solvables.is_empty() {
-            return String::new();
-        }
-
-        let versions = solvables
-            .iter()
-            .map(|&id| self.pool.resolve_solvable(id).record.version())
-            .sorted()
-            .format(" | ");
-
-        let name = self.display_solvable_name(solvables[0]);
-        format!("{name} {versions}")
     }
 }
 
@@ -505,7 +513,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                         return Dependencies::Unknown(reason);
                     }
                 };
-            dependencies.requirements.push(version_set_id);
+            dependencies.requirements.push(version_set_id.into());
         }
 
         for constrains in rec.package_record.constrains.iter() {
@@ -627,6 +635,7 @@ impl super::SolverImpl for Solver {
 
         let all_requirements = virtual_package_requirements
             .chain(root_requirements)
+            .map(Requirement::from)
             .collect();
 
         let root_constraints = task
@@ -640,22 +649,24 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
+        let problem = Problem {
+            requirements: all_requirements,
+            constraints: root_constraints,
+            ..Problem::default()
+        };
+
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
-        let solvables = solver.solve(all_requirements, root_constraints).map_err(
-            |unsolvable_or_cancelled| {
-                match unsolvable_or_cancelled {
-                    UnsolvableOrCancelled::Unsolvable(problem) => {
-                        SolveError::Unsolvable(vec![problem
-                            .display_user_friendly(&solver)
-                            .to_string()])
-                    }
-                    // We are not doing this as of yet
-                    // put a generic message in here for now
-                    UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
+        let solvables = solver.solve(problem).map_err(|unsolvable_or_cancelled| {
+            match unsolvable_or_cancelled {
+                UnsolvableOrCancelled::Unsolvable(problem) => {
+                    SolveError::Unsolvable(vec![problem.display_user_friendly(&solver).to_string()])
                 }
-            },
-        )?;
+                // We are not doing this as of yet
+                // put a generic message in here for now
+                UnsolvableOrCancelled::Cancelled(_) => SolveError::Cancelled,
+            }
+        })?;
 
         // Get the resulting packages from the solver.
         let required_records = solvables
