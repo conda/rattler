@@ -65,6 +65,7 @@ mod tests {
 
         assert!(is_path("./conda-forge/label/rust_dev"));
         assert!(is_path("~/foo"));
+        assert!(is_path("~\\foo"));
         assert!(is_path("./foo"));
         assert!(is_path("../foo"));
     }
