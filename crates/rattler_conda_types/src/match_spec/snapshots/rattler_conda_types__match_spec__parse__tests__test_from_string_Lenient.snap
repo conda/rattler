@@ -104,12 +104,12 @@ rust ~=1.2.3:
 "~/channel/dir::package":
   name: package
   channel:
-    base_url: "file://<ROOT>/channel/dir/"
+    base_url: "file://<HOME>/channel/dir/"
     name: ~/channel/dir
 "~\\windows_channel::package":
   error: invalid channel
 "./relative/channel::package":
   name: package
   channel:
-    base_url: "file://<ROOT>/dev/rattler/crates/rattler_conda_types/relative/channel/"
+    base_url: "file://<HOME>/dev/rattler/crates/rattler_conda_types/relative/channel/"
     name: "./relative/channel"

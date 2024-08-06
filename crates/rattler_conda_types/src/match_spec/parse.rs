@@ -987,10 +987,13 @@ mod tests {
             })
             .collect();
 
-        // Strip absolute paths from the channels for testing
-        let path = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
+        // Strip absolute paths to this crate from the channels for testing
+        let crate_root = env!("CARGO_MANIFEST_DIR");
+        let crate_path = Url::from_directory_path(std::path::Path::new(crate_root)).unwrap();
+        let home = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
         insta::with_settings!({filters => vec![
-            (path.as_str(), "file://<ROOT>/"),
+            (home.as_str(), "file://<HOME>/"),
+            (crate_path.as_str(), "file://<CRATE>/"),
         ]}, {
             insta::assert_yaml_snapshot!(
             format!("test_from_string_{strictness:?}"),
