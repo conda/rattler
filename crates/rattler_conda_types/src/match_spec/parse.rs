@@ -992,8 +992,8 @@ mod tests {
         let crate_path = Url::from_directory_path(std::path::Path::new(crate_root)).unwrap();
         let home = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
         insta::with_settings!({filters => vec![
-            (home.as_str(), "file://<HOME>/"),
             (crate_path.as_str(), "file://<CRATE>/"),
+            (home.as_str(), "file://<HOME>/"),
         ]}, {
             insta::assert_yaml_snapshot!(
             format!("test_from_string_{strictness:?}"),

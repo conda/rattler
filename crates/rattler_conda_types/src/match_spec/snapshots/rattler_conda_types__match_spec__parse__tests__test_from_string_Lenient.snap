@@ -111,5 +111,5 @@ rust ~=1.2.3:
 "./relative/channel::package":
   name: package
   channel:
-    base_url: "file://<HOME>/dev/rattler/crates/rattler_conda_types/relative/channel/"
+    base_url: "file://<CRATE>/relative/channel/"
     name: "./relative/channel"
