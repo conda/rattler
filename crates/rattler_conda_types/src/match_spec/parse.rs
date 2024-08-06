@@ -1204,40 +1204,33 @@ mod tests {
 
     #[test]
     fn test_parse_channel_subdir() {
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
+        let test_cases = vec![
+            ("conda-forge", Some("conda-forge"), None),
+            (
+                "conda-forge/linux-64",
+                Some("conda-forge"),
+                Some("linux-64"),
+            ),
+            (
+                "conda-forge/label/test",
+                Some("conda-forge/label/test"),
+                None,
+            ),
+            (
+                "conda-forge/linux-64/label/test",
+                Some("conda-forge/linux-64/label/test"),
+                None,
+            ),
+            ("*/linux-64", Some("*"), Some("linux-64")),
+        ];
 
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge/linux-64").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, Some("linux-64".to_string()));
-
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge/label/test").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge/label/test", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
-
-        let (channel, subdir) =
-            parse_channel_and_subdir("conda-forge/linux-64/label/test").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge/linux-64/label/test", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
-
-        let (channel, subdir) = parse_channel_and_subdir("*/linux-64").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("*", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, Some("linux-64".to_string()));
+        for (input, expected_channel, expected_subdir) in test_cases {
+            let (channel, subdir) = parse_channel_and_subdir(input).unwrap();
+            assert_eq!(
+                channel.unwrap(),
+                Channel::from_str(expected_channel.unwrap(), &channel_config()).unwrap()
+            );
+            assert_eq!(subdir, expected_subdir.map(|s| s.to_string()));
+        }
     }
 }
