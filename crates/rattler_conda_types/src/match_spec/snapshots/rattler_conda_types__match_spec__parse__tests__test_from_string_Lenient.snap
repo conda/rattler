@@ -98,3 +98,6 @@ python=*:
     base_url: "https://conda.anaconda.org/conda-forge/"
     name: conda-forge
   subdir: linux-64
+rust ~=1.2.3:
+  name: rust
+  version: ~=1.2.3

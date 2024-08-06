@@ -966,6 +966,7 @@ mod tests {
             // subdir in brackets take precedence
             "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
+            "rust ~=1.2.3"
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1001,6 +1002,28 @@ mod tests {
         let specs = [
             "2.7|>=3.6",
             "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "~=1.2.3",
+            "*.* mkl",
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
+            "=1.0=py27_0",
+            "==1.0=py27_0",
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
+            "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2",
+            "3.8.* *_cpython",
+            "=*=cuda*",
+            ">=1!164.3095,<1!165",
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            "[version=1.0.*]",
+            "[version=1.0.*, build_number=\">6\"]",
+            "==2.7.*.*|>=3.6",
+            "3.9",
+            "*",
+            "[version=3.9]",
+            "[version=3.9]",
+            "[version=3.9, subdir=linux-64]",
+            // subdir in brackets take precedence
+            "[version=3.9, subdir=linux-64]",
+            "==3.9[subdir=linux-64, build_number=\"0\"]",
         ];
 
         let evaluated: IndexMap<_, _> = specs
