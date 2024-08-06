@@ -534,7 +534,7 @@ mod tests {
             .unwrap()
             .into_os_string()
             .into_encoded_bytes();
-        let home_dir = Utf8NativePath::from_bytes_path(&NativePath::new(&home_dir))
+        let home_dir = Utf8NativePath::from_bytes_path(NativePath::new(&home_dir))
             .unwrap()
             .to_typed_path();
         assert_eq!(
