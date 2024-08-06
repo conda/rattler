@@ -106,7 +106,9 @@ impl NamedChannelOrUrl {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
                 if let Ok(mut segments) = base_url.path_segments_mut() {
-                    segments.push(&name);
+                    for segment in name.split(&['/', '\\']) {
+                        segments.push(segment);
+                    }
                 }
                 base_url
             }
@@ -478,6 +480,7 @@ fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, Pa
 mod tests {
     use std::str::FromStr;
 
+    use typed_path::{NativePath, Utf8NativePath};
     use url::Url;
 
     use super::*;
@@ -527,17 +530,20 @@ mod tests {
             Ok(&parent_dir.join("foo"))
         );
 
-        let binding = dirs::home_dir().unwrap();
-        let home_dir = binding.to_str().unwrap();
+        let home_dir = dirs::home_dir()
+            .unwrap()
+            .into_os_string()
+            .into_encoded_bytes();
+        let home_dir = Utf8NativePath::from_bytes_path(&NativePath::new(&home_dir))
+            .unwrap()
+            .to_typed_path();
         assert_eq!(
-            absolute_path("~/unix_dir", &current_dir).unwrap().as_str(),
-            format!("{home_dir}/unix_dir").as_str()
+            absolute_path("~/unix_dir", &current_dir).unwrap(),
+            home_dir.join("unix_dir")
         );
         assert_eq!(
-            absolute_path("~/unix_dir/test/../test2", &current_dir)
-                .unwrap()
-                .as_str(),
-            format!("{home_dir}/unix_dir/test2").as_str()
+            absolute_path("~/unix_dir/test/../test2", &current_dir).unwrap(),
+            home_dir.join("unix_dir").join("test2")
         );
     }
 
@@ -778,5 +784,26 @@ mod tests {
             assert!(channel.base_url().as_str().ends_with('/'));
             assert!(!channel.base_url().as_str().ends_with("//"));
         }
+    }
+
+    #[test]
+    fn test_compare_channel_and_named_channel_or_url() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
+        };
+        let named = NamedChannelOrUrl::Name("conda-forge".to_string());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+        assert_eq!(
+            &channel.base_url,
+            named.into_channel(&channel_config).base_url()
+        );
+
+        let named = NamedChannelOrUrl::Name("nvidia/label/cuda-11.8.0".to_string());
+        let channel = Channel::from_str("nvidia/label/cuda-11.8.0", &channel_config).unwrap();
+        assert_eq!(
+            channel.base_url(),
+            named.into_channel(&channel_config).base_url()
+        );
     }
 }
