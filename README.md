@@ -1,8 +1,8 @@
-<a href="https://github.com/mamba-org/rattler/">
+<a href="https://github.com/conda-incubator/rattler/">
     <picture>
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
-      <img src="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
+      <source srcset="https://github.com/conda-incubator/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
+      <source srcset="https://github.com/conda-incubator/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
+      <img src="https://github.com/conda-incubator/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
     </picture>
 </a>
 
@@ -16,14 +16,14 @@
 [![python docs main][py-docs-main-badge]][py-docs-main]
 
 [license-badge]: https://img.shields.io/badge/license-BSD--3--Clause-blue?style=flat-square
-[build-badge]: https://img.shields.io/github/actions/workflow/status/mamba-org/rattler/rust-compile.yml?style=flat-square&branch=main
-[build]: https://github.com/mamba-org/rattler/actions
+[build-badge]: https://img.shields.io/github/actions/workflow/status/conda-incubator/rattler/rust-compile.yml?style=flat-square&branch=main
+[build]: https://github.com/conda-incubator/rattler/actions
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
 [docs-main-badge]: https://img.shields.io/badge/rust_docs-main-yellow.svg?style=flat-square
-[docs-main]: https://mamba-org.github.io/rattler
+[docs-main]: https://conda-incubator.github.io/rattler
 [py-docs-main-badge]: https://img.shields.io/badge/python_docs-main-yellow.svg?style=flat-square
-[py-docs-main]: https://mamba-org.github.io/rattler/py-rattler
+[py-docs-main]: https://conda-incubator.github.io/rattler/py-rattler
 [pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json
 [pixi-url]: https://pixi.sh
 
@@ -41,7 +41,7 @@ Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler
 This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
-![Installing an environment](https://github.com/mamba-org/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
+![Installing an environment](https://github.com/conda-incubator/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
 
 ## Give it a try!
 
@@ -52,7 +52,7 @@ Before you begin, make sure you have the following prerequisites:
 Follow these steps to clone, compile, and run the rattler project:
 ```shell
 # Clone the rattler repository along with its submodules:
-git clone --recursive https://github.com/mamba-org/rattler.git
+git clone --recursive https://github.com/conda-incubator/rattler.git
 cd rattler
 
 # Compile and execute rattler to create a JupyterLab instance:
@@ -104,7 +104,7 @@ You can find these crates in the `crates` folder.
 
 Additionally, we provide Python bindings for most of the functionalities provided by the above crates.
 A python package `py-rattler` is available on [conda-forge](https://prefix.dev/channels/conda-forge/packages/py-rattler) and [PyPI](https://pypi.org/project/py-rattler/).
-Documatation for the python bindings can be found [here](https://mamba-org.github.io/rattler/py-rattler).
+Documatation for the python bindings can be found [here](https://conda-incubator.github.io/rattler/py-rattler).
 
 ## What is conda & conda-forge?
 

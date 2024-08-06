@@ -6,7 +6,7 @@
 # See documentation for more information on available options.
 
 [remote.github]
-owner = "mamba-org"
+owner = "conda-incubator"
 repo = "rattler"
 
 [changelog]

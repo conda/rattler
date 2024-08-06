@@ -16,28 +16,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 - mark some crates 1.0 ([#789](https://github.com/baszalmstra/rattler/pull/789))
 
-## [0.1.4](https://github.com/mamba-org/rattler/compare/rattler_cache-v0.1.3...rattler_cache-v0.1.4) - 2024-07-23
+## [0.1.4](https://github.com/conda-incubator/rattler/compare/rattler_cache-v0.1.3...rattler_cache-v0.1.4) - 2024-07-23
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.1.3](https://github.com/mamba-org/rattler/compare/rattler_cache-v0.1.2...rattler_cache-v0.1.3) - 2024-07-23
+## [0.1.3](https://github.com/conda-incubator/rattler/compare/rattler_cache-v0.1.2...rattler_cache-v0.1.3) - 2024-07-23
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.1.2](https://github.com/mamba-org/rattler/compare/rattler_cache-v0.1.1...rattler_cache-v0.1.2) - 2024-07-15
+## [0.1.2](https://github.com/conda-incubator/rattler/compare/rattler_cache-v0.1.1...rattler_cache-v0.1.2) - 2024-07-15
 
 ### Other
-- bump dependencies and remove unused ones ([#771](https://github.com/mamba-org/rattler/pull/771))
+- bump dependencies and remove unused ones ([#771](https://github.com/conda-incubator/rattler/pull/771))
 
-## [0.1.1](https://github.com/mamba-org/rattler/compare/rattler_cache-v0.1.0...rattler_cache-v0.1.1) - 2024-07-08
+## [0.1.1](https://github.com/conda-incubator/rattler/compare/rattler_cache-v0.1.0...rattler_cache-v0.1.1) - 2024-07-08
 
 ### Added
-- add direct url repodata building ([#725](https://github.com/mamba-org/rattler/pull/725))
+- add direct url repodata building ([#725](https://github.com/conda-incubator/rattler/pull/725))
 
 ### Fixed
-- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+- run clippy on all targets ([#762](https://github.com/conda-incubator/rattler/pull/762))
 
 ## [0.1.0](https://github.com/baszalmstra/rattler/releases/tag/rattler_cache-v0.1.0) - 2024-06-04
 

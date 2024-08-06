@@ -55,7 +55,7 @@ theme:
 extra_css:
   - stylesheets/extra.css
 
-repo_url: https://github.com/mamba-org/rattler/
+repo_url: https://github.com/conda-incubator/rattler/
 edit_uri: edit/main/py-rattler/docs/
 
 markdown_extensions:

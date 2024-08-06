@@ -671,7 +671,7 @@ mod test {
     }
 
     /// Absolute paths on Windows are not properly parsed.
-    /// See: <https://github.com/mamba-org/rattler/issues/615>
+    /// See: <https://github.com/conda-incubator/rattler/issues/615>
     #[test]
     fn test_issue_615() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))

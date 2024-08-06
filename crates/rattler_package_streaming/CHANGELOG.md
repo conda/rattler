@@ -20,122 +20,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Other
 - mark some crates 1.0 ([#789](https://github.com/baszalmstra/rattler/pull/789))
 
-## [0.21.7](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.6...rattler_package_streaming-v0.21.7) - 2024-07-23
+## [0.21.7](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.6...rattler_package_streaming-v0.21.7) - 2024-07-23
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.21.6](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.5...rattler_package_streaming-v0.21.6) - 2024-07-23
+## [0.21.6](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.5...rattler_package_streaming-v0.21.6) - 2024-07-23
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.21.5](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.4...rattler_package_streaming-v0.21.5) - 2024-07-15
+## [0.21.5](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.4...rattler_package_streaming-v0.21.5) - 2024-07-15
 
 ### Other
-- bump zip to 2.1.3 ([#772](https://github.com/mamba-org/rattler/pull/772))
+- bump zip to 2.1.3 ([#772](https://github.com/conda-incubator/rattler/pull/772))
 
-## [0.21.4](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.3...rattler_package_streaming-v0.21.4) - 2024-07-08
+## [0.21.4](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.3...rattler_package_streaming-v0.21.4) - 2024-07-08
 
 ### Fixed
-- run clippy on all targets ([#762](https://github.com/mamba-org/rattler/pull/762))
+- run clippy on all targets ([#762](https://github.com/conda-incubator/rattler/pull/762))
 
 ## [0.21.3](https://github.com/baszalmstra/rattler/compare/rattler_package_streaming-v0.21.2...rattler_package_streaming-v0.21.3) - 2024-06-04
 
 ### Other
 - remove lfs ([#512](https://github.com/baszalmstra/rattler/pull/512))
 
-## [0.21.2](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.1...rattler_package_streaming-v0.21.2) - 2024-06-03
+## [0.21.2](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.1...rattler_package_streaming-v0.21.2) - 2024-06-03
 
 ### Fixed
-- call on_download_start also for file URLs ([#708](https://github.com/mamba-org/rattler/pull/708))
+- call on_download_start also for file URLs ([#708](https://github.com/conda-incubator/rattler/pull/708))
 
-## [0.21.1](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.21.0...rattler_package_streaming-v0.21.1) - 2024-05-28
+## [0.21.1](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.21.0...rattler_package_streaming-v0.21.1) - 2024-05-28
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.21.0](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.10...rattler_package_streaming-v0.21.0) - 2024-05-27
+## [0.21.0](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.10...rattler_package_streaming-v0.21.0) - 2024-05-27
 
 ### Other
-- introducing the installer ([#664](https://github.com/mamba-org/rattler/pull/664))
+- introducing the installer ([#664](https://github.com/conda-incubator/rattler/pull/664))
 
-## [0.20.10](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.9...rattler_package_streaming-v0.20.10) - 2024-05-14
-
-### Added
-- exclude repodata records based on timestamp ([#654](https://github.com/mamba-org/rattler/pull/654))
-
-## [0.20.9](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.8...rattler_package_streaming-v0.20.9) - 2024-05-13
+## [0.20.10](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.9...rattler_package_streaming-v0.20.10) - 2024-05-14
 
 ### Added
-- high level repodata access ([#560](https://github.com/mamba-org/rattler/pull/560))
+- exclude repodata records based on timestamp ([#654](https://github.com/conda-incubator/rattler/pull/654))
+
+## [0.20.9](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.8...rattler_package_streaming-v0.20.9) - 2024-05-13
+
+### Added
+- high level repodata access ([#560](https://github.com/conda-incubator/rattler/pull/560))
 
 ### Fixed
-- set last modified for zip archive ([#649](https://github.com/mamba-org/rattler/pull/649))
+- set last modified for zip archive ([#649](https://github.com/conda-incubator/rattler/pull/649))
 
 ### Other
 - update README.md
 
-## [0.20.8](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.7...rattler_package_streaming-v0.20.8) - 2024-05-06
+## [0.20.8](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.7...rattler_package_streaming-v0.20.8) - 2024-05-06
 
 ### Other
 - updated the following local packages: rattler_conda_types, rattler_networking
 
-## [0.20.7](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.6...rattler_package_streaming-v0.20.7) - 2024-04-30
+## [0.20.7](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.6...rattler_package_streaming-v0.20.7) - 2024-04-30
 
 ### Other
 - updated the following local packages: rattler_networking
 
-## [0.20.6](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.5...rattler_package_streaming-v0.20.6) - 2024-04-25
+## [0.20.6](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.5...rattler_package_streaming-v0.20.6) - 2024-04-25
 
 ### Other
 - updated the following local packages: rattler_networking
 
-## [0.20.5](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.4...rattler_package_streaming-v0.20.5) - 2024-04-25
+## [0.20.5](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.4...rattler_package_streaming-v0.20.5) - 2024-04-25
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.20.4](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.3...rattler_package_streaming-v0.20.4) - 2024-04-19
+## [0.20.4](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.3...rattler_package_streaming-v0.20.4) - 2024-04-19
 
 ### Other
-- update dependencies incl. reqwest ([#606](https://github.com/mamba-org/rattler/pull/606))
+- update dependencies incl. reqwest ([#606](https://github.com/conda-incubator/rattler/pull/606))
 
 ## [0.20.3](https://github.com/baszalmstra/rattler/compare/rattler_package_streaming-v0.20.2...rattler_package_streaming-v0.20.3) - 2024-04-05
 
 ### Other
 - updated the following local packages: rattler_conda_types, rattler_networking
 
-## [0.20.2](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.1...rattler_package_streaming-v0.20.2) - 2024-03-30
+## [0.20.2](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.1...rattler_package_streaming-v0.20.2) - 2024-03-30
 
 ### Other
 - updated the following local packages: rattler_conda_types
 
-## [0.20.1](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.20.0...rattler_package_streaming-v0.20.1) - 2024-03-21
+## [0.20.1](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.20.0...rattler_package_streaming-v0.20.1) - 2024-03-21
 
 ### Other
 - updated the following local packages: rattler_conda_types, rattler_networking
 
-## [0.20.0](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.19.2...rattler_package_streaming-v0.20.0) - 2024-03-14
+## [0.20.0](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.19.2...rattler_package_streaming-v0.20.0) - 2024-03-14
 
 ### Added
-- add mirror handling and OCI mirror type ([#553](https://github.com/mamba-org/rattler/pull/553))
+- add mirror handling and OCI mirror type ([#553](https://github.com/conda-incubator/rattler/pull/553))
 
 ### Other
-- add pixi badge ([#563](https://github.com/mamba-org/rattler/pull/563))
+- add pixi badge ([#563](https://github.com/conda-incubator/rattler/pull/563))
 
-## [0.19.2](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.19.1...rattler_package_streaming-v0.19.2) - 2024-03-08
+## [0.19.2](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.19.1...rattler_package_streaming-v0.19.2) - 2024-03-08
 
 ### Other
 - update Cargo.toml dependencies
 
-## [0.19.1](https://github.com/mamba-org/rattler/compare/rattler_package_streaming-v0.19.0...rattler_package_streaming-v0.19.1) - 2024-03-06
+## [0.19.1](https://github.com/conda-incubator/rattler/compare/rattler_package_streaming-v0.19.0...rattler_package_streaming-v0.19.1) - 2024-03-06
 
 ### Fixed
-- dont use workspace dependencies for local crates ([#546](https://github.com/mamba-org/rattler/pull/546))
+- dont use workspace dependencies for local crates ([#546](https://github.com/conda-incubator/rattler/pull/546))
 
 ### Other
-- every crate should have its own version ([#557](https://github.com/mamba-org/rattler/pull/557))
+- every crate should have its own version ([#557](https://github.com/conda-incubator/rattler/pull/557))
 
 ## [0.19.0](https://github.com/baszalmstra/rattler/compare/rattler_package_streaming-v0.18.0...rattler_package_streaming-v0.19.0) - 2024-02-26
 

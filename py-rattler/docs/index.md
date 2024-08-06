@@ -1,8 +1,8 @@
-<a href="https://github.com/mamba-org/rattler/">
+<a href="https://github.com/conda-incubator/rattler/">
     <picture>
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
-      <source srcset="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
-      <img src="https://github.com/mamba-org/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
+      <source srcset="https://github.com/conda-incubator/rattler/assets/4995967/8f5a9786-f75c-4b55-8043-69c551b22459" type="image/webp">
+      <source srcset="https://github.com/conda-incubator/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" type="image/png">
+      <img src="https://github.com/conda-incubator/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136" alt="banner">
     </picture>
 </a>
 

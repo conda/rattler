@@ -1,4 +1,4 @@
-# https://github.com/mamba-org/mamba/blob/main/dev/environment-dev-extra.yml
+# https://github.com/conda-incubator/mamba/blob/main/dev/environment-dev-extra.yml
 channels:
   - conda-forge
 dependencies:
