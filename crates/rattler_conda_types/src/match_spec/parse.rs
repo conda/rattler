@@ -966,7 +966,7 @@ mod tests {
             // subdir in brackets take precedence
             "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
-            "rust ~=1.2.3"
+            "rust ~=1.2.3",
         ];
 
         let evaluated: IndexMap<_, _> = specs
