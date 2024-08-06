@@ -449,14 +449,14 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
     }
 
     // Parse the `~` as the home folder
-    if path.starts_with("~/") {
+    if let Some(user_path) = path.strip_prefix("~/").ok().or_else(|| path.strip_prefix("~\\").ok()) {
         return Ok(Utf8TypedPathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
                 .to_string_lossy()
                 .as_ref(),
         )
-        .join(path.strip_prefix("~/").unwrap()));
+        .join(user_path);
     }
 
     let root_dir_str = root_dir
