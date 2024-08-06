@@ -9,7 +9,7 @@ pub(crate) fn is_path(path: &str) -> bool {
     // Check if the path starts with a common path prefix
     if path.starts_with("./")
         || path.starts_with("..")
-        || path.starts_with('~') && !path.starts_with("~=")
+        || path.starts_with("~/")
         || path.starts_with('/')
         || path.starts_with("\\\\")
         || path.starts_with("//")
