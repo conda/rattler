@@ -39,8 +39,6 @@ pub(crate) fn is_path(path: &str) -> bool {
 }
 
 mod tests {
-    use super::*;
-
     #[test]
     fn test_is_absolute_path() {
         assert!(is_absolute_path("/foo"));
