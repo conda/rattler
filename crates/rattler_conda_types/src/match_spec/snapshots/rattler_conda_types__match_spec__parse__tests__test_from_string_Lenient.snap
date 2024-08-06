@@ -101,3 +101,13 @@ python=*:
 rust ~=1.2.3:
   name: rust
   version: ~=1.2.3
+"~/channel/dir::package":
+  name: package
+  channel:
+    base_url: "file://<ROOT>/channel/dir/"
+    name: ~/channel/dir
+"./relative/channel::package":
+  name: package
+  channel:
+    base_url: "file://<ROOT>/dev/rattler/crates/rattler_conda_types/relative/channel/"
+    name: "./relative/channel"

@@ -6,12 +6,11 @@ use std::{
 };
 
 use file_url::directory_path_to_url;
+use rattler_redaction::Redact;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
-
-use rattler_redaction::Redact;
 
 use super::{ParsePlatformError, Platform};
 use crate::utils::{
@@ -449,6 +448,17 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
         return Ok(path.normalize());
     }
 
+    // Parse the `~` as the home folder
+    if path.starts_with("~/") {
+        return Ok(Utf8TypedPathBuf::from(
+            dirs::home_dir()
+                .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
+                .to_string_lossy()
+                .as_ref(),
+        )
+        .join(path.strip_prefix("~/").unwrap()));
+    }
+
     let root_dir_str = root_dir
         .to_str()
         .ok_or_else(|| ParseChannelError::NotUtf8RootDir(root_dir.to_path_buf()))?;
@@ -663,18 +673,6 @@ mod tests {
             Url::from_str("https://conda.anaconda.org/conda-forge/label/rust_dev/").unwrap()
         );
         assert_eq!(channel.name.as_deref(), Some("conda-forge/label/rust_dev"));
-    }
-
-    #[test]
-    fn test_is_path() {
-        assert!(is_path("./foo"));
-        assert!(is_path("/foo"));
-        assert!(is_path("~/foo"));
-        assert!(is_path("../foo"));
-        assert!(is_path("/C:/foo"));
-        assert!(is_path("C:/foo"));
-
-        assert!(!is_path("conda-forge/label/rust_dev"));
     }
 
     #[test]

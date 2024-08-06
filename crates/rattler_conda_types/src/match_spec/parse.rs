@@ -23,7 +23,7 @@ use super::{
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     package::ArchiveIdentifier,
-    utils::{path::is_path, url::parse_scheme},
+    utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
@@ -251,8 +251,8 @@ fn parse_bracket_vec_into_components(
                 let url = if parse_scheme(value).is_some() {
                     Url::parse(value)?
                 }
-                // 2 Is the spec a path, parse it as an url
-                else if is_path(value) {
+                // 2 Is the spec an absolute path, parse it as an url
+                else if is_absolute_path(value) {
                     let path = Utf8TypedPath::from(value);
                     file_url::file_path_to_url(path)
                         .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
@@ -286,7 +286,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
             .map_err(ParseMatchSpecError::from);
     }
     // Is the spec a path, parse it as an url
-    if is_path(input) {
+    if is_absolute_path(input) {
         let path = Utf8TypedPath::from(input);
         return file_url::file_path_to_url(path)
             .map(Some)
@@ -967,6 +967,8 @@ mod tests {
             "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
             "rust ~=1.2.3",
+            "~/channel/dir::package",
+            "./relative/channel::package",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -983,7 +985,17 @@ mod tests {
                 )
             })
             .collect();
-        insta::assert_yaml_snapshot!(format!("test_from_string_{strictness:?}"), evaluated);
+
+        // Strip absolute paths from the channels for testing
+        let path = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
+        insta::with_settings!({filters => vec![
+            (path.as_str(), "file://<ROOT>/"),
+        ]}, {
+            insta::assert_yaml_snapshot!(
+            format!("test_from_string_{strictness:?}"),
+            evaluated
+        );
+        });
     }
 
     #[rstest]
@@ -1168,9 +1180,6 @@ mod tests {
         let err = MatchSpec::from_str("bla/bla", Strict)
             .expect_err("Should try to parse as name not url");
         assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
-
-        let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
-        assert_eq!(err.to_string(), "invalid package path or url");
     }
 
     #[test]

@@ -38,10 +38,11 @@ typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 rattler_redaction = { version = "0.1.0", path = "../rattler_redaction" }
+dirs = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true }
-insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob"] }
+insta = { workspace = true, features = ["yaml", "redactions", "toml", "glob", "filters"] }
 rattler_package_streaming = { path = "../rattler_package_streaming", default-features = false, features = ["rustls-tls"] }
 tempfile = { workspace = true }
 rstest = { workspace = true }
