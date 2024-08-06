@@ -26,6 +26,7 @@ pub(crate) fn is_path(path: &str) -> bool {
     if path.starts_with("./")
         || path.starts_with("..")
         || path.starts_with("~/")
+        || path.starts_with("~\\")
         || path.starts_with('/')
         || path.starts_with("\\\\")
         || path.starts_with("//")
