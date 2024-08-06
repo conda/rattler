@@ -390,11 +390,11 @@ pub enum ParseChannelError {
     InvalidName(String),
 
     /// The root directory is not an absolute path
-    #[error("root directory from channel config is not an absolute path")]
+    #[error("root directory: '{0}' from channel config is not an absolute path")]
     NonAbsoluteRootDir(PathBuf),
 
     /// The root directory is not UTF-8 encoded.
-    #[error("root directory of channel config is not utf8 encoded")]
+    #[error("root directory: '{0}' of channel config is not utf8 encoded")]
     NotUtf8RootDir(PathBuf),
 }
 
@@ -442,13 +442,8 @@ pub(crate) const fn default_platforms() -> &'static [Platform] {
 }
 
 /// Returns the specified path as an absolute path
-fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
-    // Non parsable path
-    if path.starts_with("~\\") {
-        return Err(ParseChannelError::InvalidPath(path.to_owned()));
-    }
-
-    let path = Utf8TypedPath::from(path);
+fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
+    let path = Utf8TypedPath::from(path_str);
     if path.is_absolute() {
         return Ok(path.normalize());
     }
@@ -458,10 +453,11 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
         return Ok(Utf8TypedPathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
-                .to_string_lossy()
-                .as_ref(),
+                .to_str()
+                .ok_or(ParseChannelError::NotUtf8RootDir(PathBuf::from(path_str)))?,
         )
-        .join(user_path));
+        .join(user_path)
+        .normalize());
     }
 
     let root_dir_str = root_dir
@@ -536,6 +532,12 @@ mod tests {
         assert_eq!(
             absolute_path("~/unix_dir", &current_dir).unwrap().as_str(),
             format!("{home_dir}/unix_dir").as_str()
+        );
+        assert_eq!(
+            absolute_path("~/unix_dir/test/../test2", &current_dir)
+                .unwrap()
+                .as_str(),
+            format!("{home_dir}/unix_dir/test2").as_str()
         );
     }
 
