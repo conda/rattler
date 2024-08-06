@@ -23,7 +23,7 @@ use super::{
 use crate::{
     build_spec::{BuildNumberSpec, ParseBuildNumberSpecError},
     package::ArchiveIdentifier,
-    utils::{path::is_path, url::parse_scheme},
+    utils::{path::is_absolute_path, url::parse_scheme},
     version_spec::{
         is_start_of_version_constraint,
         version_tree::{recognize_constraint, recognize_version},
@@ -251,8 +251,8 @@ fn parse_bracket_vec_into_components(
                 let url = if parse_scheme(value).is_some() {
                     Url::parse(value)?
                 }
-                // 2 Is the spec a path, parse it as an url
-                else if is_path(value) {
+                // 2 Is the spec an absolute path, parse it as an url
+                else if is_absolute_path(value) {
                     let path = Utf8TypedPath::from(value);
                     file_url::file_path_to_url(path)
                         .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
@@ -286,7 +286,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
             .map_err(ParseMatchSpecError::from);
     }
     // Is the spec a path, parse it as an url
-    if is_path(input) {
+    if is_absolute_path(input) {
         let path = Utf8TypedPath::from(input);
         return file_url::file_path_to_url(path)
             .map(Some)
@@ -966,6 +966,10 @@ mod tests {
             // subdir in brackets take precedence
             "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
+            "rust ~=1.2.3",
+            "~/channel/dir::package",
+            "~\\windows_channel::package",
+            "./relative/channel::package",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -982,7 +986,20 @@ mod tests {
                 )
             })
             .collect();
-        insta::assert_yaml_snapshot!(format!("test_from_string_{strictness:?}"), evaluated);
+
+        // Strip absolute paths to this crate from the channels for testing
+        let crate_root = env!("CARGO_MANIFEST_DIR");
+        let crate_path = Url::from_directory_path(std::path::Path::new(crate_root)).unwrap();
+        let home = Url::from_directory_path(dirs::home_dir().unwrap()).unwrap();
+        insta::with_settings!({filters => vec![
+            (crate_path.as_str(), "file://<CRATE>/"),
+            (home.as_str(), "file://<HOME>/"),
+        ]}, {
+            insta::assert_yaml_snapshot!(
+            format!("test_from_string_{strictness:?}"),
+            evaluated
+        );
+        });
     }
 
     #[rstest]
@@ -1001,6 +1018,28 @@ mod tests {
         let specs = [
             "2.7|>=3.6",
             "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "~=1.2.3",
+            "*.* mkl",
+            "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2",
+            "=1.0=py27_0",
+            "==1.0=py27_0",
+            "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda",
+            "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2",
+            "3.8.* *_cpython",
+            "=*=cuda*",
+            ">=1!164.3095,<1!165",
+            "/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2",
+            "[version=1.0.*]",
+            "[version=1.0.*, build_number=\">6\"]",
+            "==2.7.*.*|>=3.6",
+            "3.9",
+            "*",
+            "[version=3.9]",
+            "[version=3.9]",
+            "[version=3.9, subdir=linux-64]",
+            // subdir in brackets take precedence
+            "[version=3.9, subdir=linux-64]",
+            "==3.9[subdir=linux-64, build_number=\"0\"]",
         ];
 
         let evaluated: IndexMap<_, _> = specs
@@ -1145,9 +1184,6 @@ mod tests {
         let err = MatchSpec::from_str("bla/bla", Strict)
             .expect_err("Should try to parse as name not url");
         assert_eq!(err.to_string(), "'bla/bla' is not a valid package name. Package names can only contain 0-9, a-z, A-Z, -, _, or .");
-
-        let err = MatchSpec::from_str("./test/file", Strict).expect_err("Invalid url");
-        assert_eq!(err.to_string(), "invalid package path or url");
     }
 
     #[test]
@@ -1172,40 +1208,33 @@ mod tests {
 
     #[test]
     fn test_parse_channel_subdir() {
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
+        let test_cases = vec![
+            ("conda-forge", Some("conda-forge"), None),
+            (
+                "conda-forge/linux-64",
+                Some("conda-forge"),
+                Some("linux-64"),
+            ),
+            (
+                "conda-forge/label/test",
+                Some("conda-forge/label/test"),
+                None,
+            ),
+            (
+                "conda-forge/linux-64/label/test",
+                Some("conda-forge/linux-64/label/test"),
+                None,
+            ),
+            ("*/linux-64", Some("*"), Some("linux-64")),
+        ];
 
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge/linux-64").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, Some("linux-64".to_string()));
-
-        let (channel, subdir) = parse_channel_and_subdir("conda-forge/label/test").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge/label/test", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
-
-        let (channel, subdir) =
-            parse_channel_and_subdir("conda-forge/linux-64/label/test").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("conda-forge/linux-64/label/test", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, None);
-
-        let (channel, subdir) = parse_channel_and_subdir("*/linux-64").unwrap();
-        assert_eq!(
-            channel.unwrap(),
-            Channel::from_str("*", &channel_config()).unwrap()
-        );
-        assert_eq!(subdir, Some("linux-64".to_string()));
+        for (input, expected_channel, expected_subdir) in test_cases {
+            let (channel, subdir) = parse_channel_and_subdir(input).unwrap();
+            assert_eq!(
+                channel.unwrap(),
+                Channel::from_str(expected_channel.unwrap(), &channel_config()).unwrap()
+            );
+            assert_eq!(subdir, expected_subdir.map(|s| s.to_string()));
+        }
     }
 }

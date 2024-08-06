@@ -6,3 +6,51 @@ expression: evaluated
   version: "==2.7|>=3.6"
 "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2":
   url: "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2"
+~=1.2.3:
+  version: ~=1.2.3
+"*.* mkl":
+  version: "*"
+  build: mkl
+"C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
+  url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"=1.0=py27_0":
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
+"==1.0=py27_0":
+  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
+"https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
+  url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
+"https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
+  url: "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2"
+3.8.* *_cpython:
+  version: 3.8.*
+  build: "*_cpython"
+"=*=cuda*":
+  error: "The build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
+">=1!164.3095,<1!165":
+  version: ">=1!164.3095,<1!165"
+/home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
+  url: "file:///home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
+"[version=1.0.*]":
+  version: 1.0.*
+"[version=1.0.*, build_number=\">6\"]":
+  version: 1.0.*
+  build_number:
+    op: Gt
+    rhs: 6
+"==2.7.*.*|>=3.6":
+  error: "invalid version constraint: regex constraints are not supported"
+"3.9":
+  version: "==3.9"
+"*":
+  version: "*"
+"[version=3.9]":
+  version: "==3.9"
+"[version=3.9, subdir=linux-64]":
+  version: "==3.9"
+  subdir: linux-64
+"==3.9[subdir=linux-64, build_number=\"0\"]":
+  version: "==3.9"
+  build_number:
+    op: Eq
+    rhs: 0
+  subdir: linux-64

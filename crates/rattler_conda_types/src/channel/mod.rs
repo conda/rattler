@@ -6,12 +6,11 @@ use std::{
 };
 
 use file_url::directory_path_to_url;
+use rattler_redaction::Redact;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
-
-use rattler_redaction::Redact;
 
 use super::{ParsePlatformError, Platform};
 use crate::utils::{
@@ -107,7 +106,9 @@ impl NamedChannelOrUrl {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
                 if let Ok(mut segments) = base_url.path_segments_mut() {
-                    segments.push(&name);
+                    for segment in name.split(&['/', '\\']) {
+                        segments.push(segment);
+                    }
                 }
                 base_url
             }
@@ -391,11 +392,11 @@ pub enum ParseChannelError {
     InvalidName(String),
 
     /// The root directory is not an absolute path
-    #[error("root directory from channel config is not an absolute path")]
+    #[error("root directory: '{0}' from channel config is not an absolute path")]
     NonAbsoluteRootDir(PathBuf),
 
     /// The root directory is not UTF-8 encoded.
-    #[error("root directory of channel config is not utf8 encoded")]
+    #[error("root directory: '{0}' of channel config is not utf8 encoded")]
     NotUtf8RootDir(PathBuf),
 }
 
@@ -443,10 +444,22 @@ pub(crate) const fn default_platforms() -> &'static [Platform] {
 }
 
 /// Returns the specified path as an absolute path
-fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
-    let path = Utf8TypedPath::from(path);
+fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
+    let path = Utf8TypedPath::from(path_str);
     if path.is_absolute() {
         return Ok(path.normalize());
+    }
+
+    // Parse the `~/` as the home folder
+    if let Ok(user_path) = path.strip_prefix("~/") {
+        return Ok(Utf8TypedPathBuf::from(
+            dirs::home_dir()
+                .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
+                .to_str()
+                .ok_or(ParseChannelError::NotUtf8RootDir(PathBuf::from(path_str)))?,
+        )
+        .join(user_path)
+        .normalize());
     }
 
     let root_dir_str = root_dir
@@ -467,6 +480,7 @@ fn absolute_path(path: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseC
 mod tests {
     use std::str::FromStr;
 
+    use typed_path::{NativePath, Utf8NativePath};
     use url::Url;
 
     use super::*;
@@ -514,6 +528,22 @@ mod tests {
         assert_eq!(
             absolute_path("../foo", &current_dir).as_ref(),
             Ok(&parent_dir.join("foo"))
+        );
+
+        let home_dir = dirs::home_dir()
+            .unwrap()
+            .into_os_string()
+            .into_encoded_bytes();
+        let home_dir = Utf8NativePath::from_bytes_path(NativePath::new(&home_dir))
+            .unwrap()
+            .to_typed_path();
+        assert_eq!(
+            absolute_path("~/unix_dir", &current_dir).unwrap(),
+            home_dir.join("unix_dir")
+        );
+        assert_eq!(
+            absolute_path("~/unix_dir/test/../test2", &current_dir).unwrap(),
+            home_dir.join("unix_dir").join("test2")
         );
     }
 
@@ -666,18 +696,6 @@ mod tests {
     }
 
     #[test]
-    fn test_is_path() {
-        assert!(is_path("./foo"));
-        assert!(is_path("/foo"));
-        assert!(is_path("~/foo"));
-        assert!(is_path("../foo"));
-        assert!(is_path("/C:/foo"));
-        assert!(is_path("C:/foo"));
-
-        assert!(!is_path("conda-forge/label/rust_dev"));
-    }
-
-    #[test]
     fn channel_canonical_name() {
         let config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
         let channel = Channel::from_str("http://localhost:1234", &config).unwrap();
@@ -766,5 +784,26 @@ mod tests {
             assert!(channel.base_url().as_str().ends_with('/'));
             assert!(!channel.base_url().as_str().ends_with("//"));
         }
+    }
+
+    #[test]
+    fn test_compare_channel_and_named_channel_or_url() {
+        let channel_config = ChannelConfig {
+            channel_alias: Url::from_str("https://conda.anaconda.org").unwrap(),
+            root_dir: std::env::current_dir().expect("No current dir set"),
+        };
+        let named = NamedChannelOrUrl::Name("conda-forge".to_string());
+        let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
+        assert_eq!(
+            &channel.base_url,
+            named.into_channel(&channel_config).base_url()
+        );
+
+        let named = NamedChannelOrUrl::Name("nvidia/label/cuda-11.8.0".to_string());
+        let channel = Channel::from_str("nvidia/label/cuda-11.8.0", &channel_config).unwrap();
+        assert_eq!(
+            channel.base_url(),
+            named.into_channel(&channel_config).base_url()
+        );
     }
 }
