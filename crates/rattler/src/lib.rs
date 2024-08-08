@@ -1,4 +1,6 @@
-//! Rattler is an experimental library and executable to work with [Conda](http://conda.io)
+//! [![Rattler banner](https://github.com/conda-incubator/rattler/assets/4995967/7bb44c97-e77a-452f-9a00-431b7c89e136)](https://github.com/conda-incubator/rattler)
+//!
+//! Rattler is a library and executable to work with [Conda](http://conda.io)
 //! environments. Conda is a cross-platform open-source package management
 //! system and environment management system.
 //!
@@ -16,8 +18,7 @@ use std::path::PathBuf;
 #[cfg(feature = "cli-tools")]
 pub mod cli;
 pub mod install;
-pub use rattler_cache::package_cache;
-pub use rattler_cache::validation;
+pub use rattler_cache::{package_cache, validation};
 
 /// A helper function that returns a [`Channel`] instance that points to an
 /// empty channel on disk that is bundled with this repository.
