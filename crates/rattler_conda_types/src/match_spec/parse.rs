@@ -263,6 +263,11 @@ fn parse_bracket_vec_into_components(
                 match_spec.url = Some(url);
             }
             "subdir" => match_spec.subdir = Some(value.to_string()),
+            "channel" => {
+                let (channel, subdir) = parse_channel_and_subdir(value)?;
+                match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
+                match_spec.subdir = match_spec.subdir.or(subdir);
+            }
             // TODO: Still need to add `track_features`, `features`, `license` and `license_family`
             // to the match spec.
             _ => Err(ParseMatchSpecError::InvalidBracketKey(key.to_owned()))?,
@@ -453,6 +458,26 @@ impl NamelessMatchSpec {
 
         let mut match_spec =
             parse_bracket_vec_into_components(brackets, NamelessMatchSpec::default(), strictness)?;
+
+        // 5. Strip of ':' to find channel and namespace
+        // This assumes the [*] portions is stripped off, and then strip reverse to
+        // ignore the first colon As that might be in the channel url.
+        let mut input_split = input.rsplitn(3, ':').fuse();
+        let input = input_split.next().unwrap_or("");
+        let namespace = input_split.next();
+        let channel_str = input_split.next();
+
+        match_spec.namespace = namespace
+            .map(str::trim)
+            .filter(|namespace| !namespace.is_empty())
+            .map(ToOwned::to_owned)
+            .or(match_spec.namespace);
+
+        if let Some(channel_str) = channel_str {
+            let (channel, subdir) = parse_channel_and_subdir(channel_str)?;
+            match_spec.channel = match_spec.channel.or(channel.map(Arc::new));
+            match_spec.subdir = match_spec.subdir.or(subdir);
+        }
 
         // Get the version and optional build string
         if !input.is_empty() {
@@ -744,6 +769,9 @@ mod tests {
             NamelessMatchSpec::from_str("3.8.* *_cpython", Strict).unwrap(),
             NamelessMatchSpec::from_str("1.0 py27_0[fn=\"bla\"]", Strict).unwrap(),
             NamelessMatchSpec::from_str("=1.0 py27_0", Strict).unwrap(),
+            NamelessMatchSpec::from_str("*cpu*", Strict).unwrap(),
+            NamelessMatchSpec::from_str("conda-forge::foobar", Strict).unwrap(),
+            NamelessMatchSpec::from_str("foobar[channel=conda-forge]", Strict).unwrap(),
         ],
         @r###"
         ---
@@ -754,6 +782,16 @@ mod tests {
           file_name: bla
         - version: 1.0.*
           build: py27_0
+        - version: "*"
+          build: cpu*
+        - version: "==foobar"
+          channel:
+            base_url: "https://conda.anaconda.org/conda-forge/"
+            name: conda-forge
+        - version: "==foobar"
+          channel:
+            base_url: "https://conda.anaconda.org/conda-forge/"
+            name: conda-forge
         "###);
     }
 
@@ -966,10 +1004,13 @@ mod tests {
             // subdir in brackets take precedence
             "conda-forge/linux-32::python[version=3.9, subdir=linux-64]",
             "conda-forge/linux-32::python ==3.9[subdir=linux-64, build_number=\"0\"]",
+            "python ==3.9[channel=conda-forge]",
+            "python ==3.9[channel=conda-forge/linux-64]",
             "rust ~=1.2.3",
             "~/channel/dir::package",
             "~\\windows_channel::package",
             "./relative/channel::package",
+            "python[channel=https://conda.anaconda.org/python/conda,version=3.9]",
         ];
 
         let evaluated: IndexMap<_, _> = specs
