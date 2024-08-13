@@ -8,6 +8,8 @@ description: "Conda is an open source package management system and environment 
 dev_url: "https://github.com/conda/conda"
 doc_url: "https://docs.conda.io/projects/conda/en/stable/"
 extra:
+  copy_test_source_files: true
+  final: true
   recipe-maintainers:
     - isuruf
     - jakirkham
@@ -21,8 +23,6 @@ extra:
     - scopatz
     - mbargull
     - jezdez
-  final: true
-  copy_test_source_files: true
 home: "https://conda.io/"
 license: BSD-3-Clause
 summary: "OS-agnostic, system-level binary package and environment manager."
