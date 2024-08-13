@@ -42,8 +42,8 @@ pub struct AboutJson {
     pub doc_url: Vec<Url>,
 
     /// Extra metadata that was passed during the build
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub extra: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+    pub extra: HashMap<String, String>,
 
     /// URL to the homepage of the package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
