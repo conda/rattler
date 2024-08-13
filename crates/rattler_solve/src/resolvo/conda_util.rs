@@ -1,7 +1,7 @@
 use std::{cmp::Ordering, collections::HashMap};
 
 use futures::future::FutureExt;
-use rattler_conda_types::Version;
+use rattler_conda_types::{PackageName, Version};
 use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
 
 use crate::resolvo::CondaDependencyProvider;
@@ -23,6 +23,7 @@ pub(super) fn compare_candidates(
         Option<(rattler_conda_types::Version, bool)>,
     >,
     strategy: CompareStrategy,
+    cached_versions: HashMap<PackageName, Version>
 ) -> Ordering {
     let pool = &solver.provider().pool;
 
@@ -41,6 +42,24 @@ pub(super) fn compare_candidates(
         Ordering::Greater => return Ordering::Greater,
         Ordering::Equal => {}
     };
+
+    // Check if either version is in the cached versions set
+    let some_cached_version = cached_versions.get(a_record.name());
+    tracing::error!("cached_version: {:?}", cached_versions);
+    if let Some(cc) = some_cached_version{
+        tracing::error!("cached_version: {:?}", cc);
+    }
+    if let Some(cached_version) = some_cached_version{
+        let a_is_cached = cached_version == a_record.version();
+        let b_is_cached = cached_version == b_record.version();
+        match a_is_cached.cmp(&b_is_cached) {
+            Ordering::Greater => return Ordering::Less,
+            Ordering::Less => return Ordering::Greater,
+            Ordering::Equal => {}
+        }
+
+    } 
+    
 
     // Otherwise, select the variant with the highest version
     match (strategy, a_record.version().cmp(b_record.version())) {
