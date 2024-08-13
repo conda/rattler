@@ -1011,6 +1011,7 @@ mod tests {
             "~\\windows_channel::package",
             "./relative/channel::package",
             "python[channel=https://conda.anaconda.org/python/conda,version=3.9]",
+            "channel/win-64::foobar[channel=conda-forge, subdir=linux-64]",
         ];
 
         let evaluated: IndexMap<_, _> = specs
