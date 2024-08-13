@@ -202,6 +202,7 @@ impl<T: Ord, TAs: SerializeAs<T>> SerializeAs<Vec<T>> for Ordered<TAs> {
 /// A helper struct to deserialize types from a string without checking the string.
 pub struct DeserializeFromStrUnchecked;
 
+/// A helper function used to sort map alphabetically when serializing.
 pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
     value: &FxHashMap<String, T>,
     serializer: S,
