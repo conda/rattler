@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use fxhash::FxHashMap;
 use itertools::Itertools;
 use serde::de::Error as _;
 use serde::ser::Error;
@@ -6,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::de::DeserializeAsWrap;
 use serde_with::ser::SerializeAsWrap;
 use serde_with::{DeserializeAs, SerializeAs};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::hash::{BuildHasher, Hash};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -200,3 +201,14 @@ impl<T: Ord, TAs: SerializeAs<T>> SerializeAs<Vec<T>> for Ordered<TAs> {
 
 /// A helper struct to deserialize types from a string without checking the string.
 pub struct DeserializeFromStrUnchecked;
+
+/// A helper function used to sort map alphabetically when serializing.
+pub(crate) fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
+    value: &FxHashMap<String, T>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    value
+        .iter()
+        .collect::<BTreeMap<_, _>>()
+        .serialize(serializer)
+}

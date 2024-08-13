@@ -7,7 +7,22 @@ channels:
 description: "Conda is an open source package management system and environment management system for installing multiple versions of software packages and their dependencies and switching easily between them. It works on Linux, OS X and Windows, and was created for Python programs but can package and distribute any software.\n"
 dev_url: "https://github.com/conda/conda"
 doc_url: "https://docs.conda.io/projects/conda/en/stable/"
+extra:
+  copy_test_source_files: true
+  final: true
+  recipe-maintainers:
+    - isuruf
+    - jakirkham
+    - kalefranz
+    - mingwandroid
+    - msarahan
+    - mwcraig
+    - ocefpaf
+    - patricksnape
+    - pelson
+    - scopatz
+    - mbargull
+    - jezdez
 home: "https://conda.io/"
 license: BSD-3-Clause
 summary: "OS-agnostic, system-level binary package and environment manager."
-

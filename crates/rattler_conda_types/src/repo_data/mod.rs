@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -19,6 +19,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
 
+use crate::utils::serde::sort_map_alphabetically;
 use crate::utils::url::add_trailing_slash;
 use crate::{
     build_spec::BuildNumber,
@@ -421,16 +422,6 @@ impl PackageRecord {
             run_exports: None,
         })
     }
-}
-
-fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &FxHashMap<String, T>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    value
-        .iter()
-        .collect::<BTreeMap<_, _>>()
-        .serialize(serializer)
 }
 
 fn sort_set_alphabetically<S: serde::Serializer>(
