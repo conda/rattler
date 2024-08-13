@@ -98,6 +98,19 @@ python=*:
     base_url: "https://conda.anaconda.org/conda-forge/"
     name: conda-forge
   subdir: linux-64
+"python ==3.9[channel=conda-forge]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+"python ==3.9[channel=conda-forge/linux-64]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
 rust ~=1.2.3:
   name: rust
   version: ~=1.2.3
@@ -113,3 +126,15 @@ rust ~=1.2.3:
   channel:
     base_url: "file://<CRATE>/relative/channel/"
     name: "./relative/channel"
+"python[channel=https://conda.anaconda.org/python/conda,version=3.9]":
+  name: python
+  version: "==3.9"
+  channel:
+    base_url: "https://conda.anaconda.org/python/conda/"
+    name: python/conda
+"channel/win-64::foobar[channel=conda-forge, subdir=linux-64]":
+  name: foobar
+  channel:
+    base_url: "https://conda.anaconda.org/conda-forge/"
+    name: conda-forge
+  subdir: linux-64
