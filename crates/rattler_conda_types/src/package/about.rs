@@ -1,11 +1,11 @@
 use std::collections::BTreeMap;
-use std::{collections::HashMap, io::Error, path::Path};
+use std::{io::Error, path::Path};
 
 use crate::{
     package::PackageFile,
     utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
 };
-use fxhash::FxHashMap;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
@@ -45,10 +45,7 @@ pub struct AboutJson {
     pub doc_url: Vec<Url>,
 
     /// Extra metadata that was passed during the build
-    #[serde(
-        skip_serializing_if = "BTreeMap::is_empty",
-        default,
-    )]
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
     pub extra: BTreeMap<String, Value>,
 
     /// URL to the homepage of the package
@@ -90,7 +87,7 @@ mod test {
 
     use std::collections::BTreeMap;
 
-    use fxhash::FxHashMap;
+    
     use insta::assert_snapshot;
     use serde_json::json;
     use url::Url;
