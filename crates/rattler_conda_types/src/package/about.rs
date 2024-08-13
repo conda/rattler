@@ -146,7 +146,8 @@ mod test {
         let serialized = serde_json::to_string(&about).expect("Serialization failed");
 
         // Deserialize the JSON back to an AboutJson instance
-        let deserialized: AboutJson = serde_json::from_str(&serialized).expect("Deserialization failed");
+        let deserialized: AboutJson =
+            serde_json::from_str(&serialized).expect("Deserialization failed");
 
         // Verify that the deserialized instance matches the original
         assert_snapshot!(serialized);
