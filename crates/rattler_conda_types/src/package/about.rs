@@ -87,7 +87,6 @@ mod test {
 
     use std::collections::BTreeMap;
 
-    
     use insta::assert_snapshot;
     use serde_json::json;
     use url::Url;
