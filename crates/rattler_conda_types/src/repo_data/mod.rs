@@ -6,7 +6,7 @@ pub mod sharded;
 mod topological_sort;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeSet,
     fmt::{Display, Formatter},
     path::Path,
 };
@@ -19,6 +19,7 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
 
+use crate::utils::serde::sort_map_alphabetically;
 use crate::utils::url::add_trailing_slash;
 use crate::{
     build_spec::BuildNumber,
@@ -26,7 +27,6 @@ use crate::{
     utils::serde::DeserializeFromStrUnchecked,
     Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
 };
-use crate::utils::serde::sort_map_alphabetically;
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
 /// of a Conda channel.
@@ -423,7 +423,6 @@ impl PackageRecord {
         })
     }
 }
-
 
 fn sort_set_alphabetically<S: serde::Serializer>(
     value: &FxHashSet<String>,

@@ -1,5 +1,6 @@
 use std::{collections::HashMap, io::Error, path::Path};
 
+use crate::utils::serde::sort_map_alphabetically;
 use crate::{
     package::PackageFile,
     utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
@@ -8,7 +9,6 @@ use fxhash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
-use crate::utils::serde::sort_map_alphabetically;
 
 use url::Url;
 
@@ -45,7 +45,11 @@ pub struct AboutJson {
     pub doc_url: Vec<Url>,
 
     /// Extra metadata that was passed during the build
-    #[serde(skip_serializing_if = "HashMap::is_empty", default,  serialize_with = "sort_map_alphabetically")]
+    #[serde(
+        skip_serializing_if = "HashMap::is_empty",
+        default,
+        serialize_with = "sort_map_alphabetically"
+    )]
     pub extra: FxHashMap<String, Value>,
 
     /// URL to the homepage of the package
@@ -84,7 +88,6 @@ impl PackageFile for AboutJson {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
 
     use fxhash::FxHashMap;
     use insta::assert_snapshot;
@@ -168,7 +171,7 @@ mod test {
             description: Some("A sample package".to_string()),
             dev_url: vec![],
             doc_url: vec![],
-            extra: Default::default(),
+            extra: FxHashMap::default(),
             home: vec![],
             license: Some("MIT".to_string()),
             license_family: Some("MIT".to_string()),
