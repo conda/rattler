@@ -184,6 +184,5 @@ mod test {
 
         // Verify that the deserialized instance matches the original
         assert_snapshot!(serialized);
-        // assert_eq!(about, deserialized);
     }
 }
