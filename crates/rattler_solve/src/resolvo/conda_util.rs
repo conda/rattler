@@ -2,7 +2,7 @@ use std::{cmp::Ordering, collections::HashMap};
 
 use futures::future::FutureExt;
 use rattler_conda_types::Version;
-use resolvo::{Dependencies, SolvableId, SolverCache, VersionSetId};
+use resolvo::{Dependencies, Requirement, SolvableId, SolverCache, VersionSetId};
 
 use crate::resolvo::CondaDependencyProvider;
 
@@ -89,14 +89,20 @@ pub(super) fn compare_candidates(
             let a_match_specs = a_known
                 .requirements
                 .iter()
-                .map(|id| (*id, pool.resolve_version_set(*id)))
+                .filter_map(|req| match req {
+                    Requirement::Single(id) => Some((*id, pool.resolve_version_set(*id))),
+                    Requirement::Union(_) => None,
+                })
                 .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
                 .collect::<HashMap<_, _>>();
 
             let b_match_specs = b_known
                 .requirements
                 .iter()
-                .map(|id| (*id, pool.resolve_version_set(*id)))
+                .filter_map(|req| match req {
+                    Requirement::Single(id) => Some((*id, pool.resolve_version_set(*id))),
+                    Requirement::Union(_) => None,
+                })
                 .map(|(spec_id, _)| (pool.resolve_version_set_package_name(spec_id), spec_id))
                 .collect::<HashMap<_, _>>();
             (a_match_specs, b_match_specs)
