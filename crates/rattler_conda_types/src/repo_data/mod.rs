@@ -26,6 +26,7 @@ use crate::{
     utils::serde::DeserializeFromStrUnchecked,
     Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
 };
+use crate::utils::serde::sort_map_alphabetically;
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
 /// of a Conda channel.
@@ -423,15 +424,6 @@ impl PackageRecord {
     }
 }
 
-fn sort_map_alphabetically<T: Serialize, S: serde::Serializer>(
-    value: &FxHashMap<String, T>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    value
-        .iter()
-        .collect::<BTreeMap<_, _>>()
-        .serialize(serializer)
-}
 
 fn sort_set_alphabetically<S: serde::Serializer>(
     value: &FxHashSet<String>,
