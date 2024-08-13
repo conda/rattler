@@ -1,4 +1,4 @@
-//! [![Rattler banner](https://github.com/user-attachments/assets/bfd64756-061d-49f5-af4e-388743bdb855)](https://github.com/conda-incubator/rattler)
+//! [![Rattler banner](https://github.com/user-attachments/assets/bfd64756-061d-49f5-af4e-388743bdb855)](https://github.com/conda/rattler)
 //!
 //! Rattler is a library and executable to work with [Conda](http://conda.io)
 //! environments. Conda is a cross-platform open-source package management

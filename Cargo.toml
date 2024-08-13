@@ -8,8 +8,8 @@ opt-level = 3
 
 [workspace.package]
 categories = ["development-tools"]
-homepage = "https://github.com/conda-incubator/rattler"
-repository = "https://github.com/conda-incubator/rattler"
+homepage = "https://github.com/conda/rattler"
+repository = "https://github.com/conda/rattler"
 license = "BSD-3-Clause"
 edition = "2021"
 readme = "README.md"
