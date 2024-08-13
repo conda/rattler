@@ -5,6 +5,7 @@ use crate::{
     utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany, Same};
 
 use url::Url;
@@ -43,7 +44,7 @@ pub struct AboutJson {
 
     /// Extra metadata that was passed during the build
     #[serde(skip_serializing_if = "HashMap::is_empty", default)]
-    pub extra: HashMap<String, String>,
+    pub extra: HashMap<String, Value>,
 
     /// URL to the homepage of the package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -84,6 +85,7 @@ mod test {
     use std::collections::HashMap;
 
     use insta::assert_snapshot;
+    use serde_json::json;
     use url::Url;
 
     use super::{AboutJson, PackageFile};
@@ -127,7 +129,8 @@ mod test {
     fn test_extra_field_is_recorded_when_present() {
         // Define a sample AboutJson instance with extra field populated
         let mut extra_metadata = HashMap::new();
-        extra_metadata.insert("flow_id".to_string(), "2024.08.13".to_string());
+        extra_metadata.insert("flow_id".to_string(), json!("2024.08.13".to_string()));
+        extra_metadata.insert("some_values".to_string(), json!({ "an": "object" }));
 
         let about = AboutJson {
             channels: vec!["conda-forge".to_string()],
