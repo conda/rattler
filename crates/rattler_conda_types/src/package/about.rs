@@ -1,4 +1,4 @@
-use std::{io::Error, path::Path};
+use std::{collections::HashMap, io::Error, path::Path};
 
 use crate::{
     package::PackageFile,
@@ -41,6 +41,10 @@ pub struct AboutJson {
     )]
     pub doc_url: Vec<Url>,
 
+    /// Extra metadata that was passed during the build
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub extra: Option<HashMap<String, String>>,
+
     /// URL to the homepage of the package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     #[serde_as(
@@ -77,6 +81,11 @@ impl PackageFile for AboutJson {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
+    use insta::assert_snapshot;
+    use url::Url;
+
     use super::{AboutJson, PackageFile};
 
     #[test]
@@ -112,5 +121,59 @@ mod test {
         println!("{}", package_dir.display());
 
         insta::assert_yaml_snapshot!(AboutJson::from_package_directory(&package_dir).unwrap());
+    }
+
+    #[test]
+    fn test_extra_field_is_recorded_when_present() {
+        // Define a sample AboutJson instance with extra field populated
+        let mut extra_metadata = HashMap::new();
+        extra_metadata.insert("flow_id".to_string(), "2024.08.13".to_string());
+
+        let about = AboutJson {
+            channels: vec!["conda-forge".to_string()],
+            description: Some("A sample package".to_string()),
+            dev_url: vec![],
+            doc_url: vec![],
+            extra: Some(extra_metadata.clone()),
+            home: vec![],
+            license: Some("MIT".to_string()),
+            license_family: Some("MIT".to_string()),
+            source_url: Some(Url::parse("https://github.com/some-user/sample").unwrap()),
+            summary: Some("This is a test package".to_string()),
+        };
+
+        // Serialize the AboutJson instance to JSON
+        let serialized = serde_json::to_string(&about).expect("Serialization failed");
+
+        // Deserialize the JSON back to an AboutJson instance
+        let deserialized: AboutJson = serde_json::from_str(&serialized).expect("Deserialization failed");
+
+        // Verify that the deserialized instance matches the original
+        assert_snapshot!(serialized);
+        assert_eq!(about, deserialized);
+    }
+
+    #[test]
+    fn test_extra_field_is_skipped() {
+        // Define a sample AboutJson instance with extra field populated
+        let about = AboutJson {
+            channels: vec!["conda-forge".to_string()],
+            description: Some("A sample package".to_string()),
+            dev_url: vec![],
+            doc_url: vec![],
+            extra: None,
+            home: vec![],
+            license: Some("MIT".to_string()),
+            license_family: Some("MIT".to_string()),
+            source_url: Some(Url::parse("https://github.com/some-user/sample").unwrap()),
+            summary: Some("This is a test package".to_string()),
+        };
+
+        // Serialize the AboutJson instance to JSON
+        let serialized = serde_json::to_string(&about).expect("Serialization failed");
+
+        // Verify that the deserialized instance matches the original
+        assert_snapshot!(serialized);
+        // assert_eq!(about, deserialized);
     }
 }
