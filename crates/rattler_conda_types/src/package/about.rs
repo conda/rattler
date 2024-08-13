@@ -1,6 +1,6 @@
+use std::collections::BTreeMap;
 use std::{collections::HashMap, io::Error, path::Path};
 
-use crate::utils::serde::sort_map_alphabetically;
 use crate::{
     package::PackageFile,
     utils::serde::{LossyUrl, MultiLineString, VecSkipNone},
@@ -46,11 +46,10 @@ pub struct AboutJson {
 
     /// Extra metadata that was passed during the build
     #[serde(
-        skip_serializing_if = "HashMap::is_empty",
+        skip_serializing_if = "BTreeMap::is_empty",
         default,
-        serialize_with = "sort_map_alphabetically"
     )]
-    pub extra: FxHashMap<String, Value>,
+    pub extra: BTreeMap<String, Value>,
 
     /// URL to the homepage of the package
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -88,6 +87,8 @@ impl PackageFile for AboutJson {
 
 #[cfg(test)]
 mod test {
+
+    use std::collections::BTreeMap;
 
     use fxhash::FxHashMap;
     use insta::assert_snapshot;
@@ -134,7 +135,7 @@ mod test {
     #[test]
     fn test_extra_field_is_recorded_when_present() {
         // Define a sample AboutJson instance with extra field populated
-        let mut extra_metadata = FxHashMap::default();
+        let mut extra_metadata = BTreeMap::default();
         extra_metadata.insert("flow_id".to_string(), json!("2024.08.13".to_string()));
         extra_metadata.insert("some_values".to_string(), json!({ "an": "object" }));
 
@@ -171,7 +172,7 @@ mod test {
             description: Some("A sample package".to_string()),
             dev_url: vec![],
             doc_url: vec![],
-            extra: FxHashMap::default(),
+            extra: BTreeMap::default(),
             home: vec![],
             license: Some("MIT".to_string()),
             license_family: Some("MIT".to_string()),
