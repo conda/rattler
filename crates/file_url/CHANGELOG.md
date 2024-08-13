@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.3](https://github.com/conda-incubator/rattler/compare/file_url-v0.1.2...file_url-v0.1.3) - 2024-07-15
+## [0.1.3](https://github.com/conda/rattler/compare/file_url-v0.1.2...file_url-v0.1.3) - 2024-07-15
 
 ### Other
 - update Cargo.toml dependencies
@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - parse url and path as matchspec ([#704](https://github.com/baszalmstra/rattler/pull/704))
 
-## [0.1.1](https://github.com/conda-incubator/rattler/compare/file_url-v0.1.0...file_url-v0.1.1) - 2024-05-14
+## [0.1.1](https://github.com/conda/rattler/compare/file_url-v0.1.0...file_url-v0.1.1) - 2024-05-14
 
 ### Added
-- exclude repodata records based on timestamp ([#654](https://github.com/conda-incubator/rattler/pull/654))
+- exclude repodata records based on timestamp ([#654](https://github.com/conda/rattler/pull/654))

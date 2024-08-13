@@ -1,4 +1,4 @@
-<a href="https://github.com/conda-incubator/rattler/">
+<a href="https://github.com/conda/rattler/">
     <picture>
       <source srcset="https://github.com/user-attachments/assets/6f3f05bc-6363-4974-9517-fe5c0fcffd1a" type="image/jpeg">
       <source srcset="https://github.com/user-attachments/assets/dc30403d-6392-460a-b923-986c2164ef79" type="image/webp">
@@ -17,8 +17,8 @@
 [![python docs main][py-docs-main-badge]][py-docs-main]
 
 [license-badge]: https://img.shields.io/badge/license-BSD--3--Clause-blue?style=flat-square
-[build-badge]: https://img.shields.io/github/actions/workflow/status/conda-incubator/rattler/rust-compile.yml?style=flat-square&branch=main
-[build]: https://github.com/conda-incubator/rattler/actions
+[build-badge]: https://img.shields.io/github/actions/workflow/status/conda/rattler/rust-compile.yml?style=flat-square&branch=main
+[build]: https://github.com/conda/rattler/actions
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
 [docs-main-badge]: https://img.shields.io/badge/rust_docs-main-yellow.svg?style=flat-square
@@ -42,7 +42,7 @@ Rattler is actively used by [pixi](https://github.com/prefix-dev/pixi), [rattler
 This repository also contains a binary (use `cargo run` to try) that shows some of the capabilities of the library.
 This is an example of installing an environment containing `cowpy` and all its dependencies _from scratch_ (including Python!):
 
-![Installing an environment](https://github.com/conda-incubator/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
+![Installing an environment](https://github.com/conda/rattler/assets/4995967/c7946f6e-28a9-41ef-8836-ef4b4c94d273)
 
 ## Give it a try!
 
@@ -53,7 +53,7 @@ Before you begin, make sure you have the following prerequisites:
 Follow these steps to clone, compile, and run the rattler project:
 ```shell
 # Clone the rattler repository along with its submodules:
-git clone --recursive https://github.com/conda-incubator/rattler.git
+git clone --recursive https://github.com/conda/rattler.git
 cd rattler
 
 # Compile and execute rattler to create a JupyterLab instance:

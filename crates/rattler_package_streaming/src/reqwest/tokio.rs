@@ -19,7 +19,7 @@ use zip::result::ZipError;
 /// to find the compressed data length.
 /// Since we stream the package over a non seekable HTTP connection, this condition will cause an error during
 /// decompression. In this case, we fallback to reading the whole data to a buffer before attempting decompression.
-/// Read more in https://github.com/conda-incubator/rattler/issues/794
+/// Read more in https://github.com/conda/rattler/issues/794
 const DATA_DESCRIPTOR_ERROR_MESSAGE: &str = "The file length is not available in the local header";
 
 fn error_for_status(response: reqwest::Response) -> reqwest_middleware::Result<Response> {
@@ -154,7 +154,7 @@ pub async fn extract_conda(
             }
             Ok(result)
         }
-        // https://github.com/conda-incubator/rattler/issues/794
+        // https://github.com/conda/rattler/issues/794
         Err(ExtractError::ZipError(ZipError::UnsupportedArchive(zip_error)))
             if (zip_error.contains(DATA_DESCRIPTOR_ERROR_MESSAGE)) =>
         {

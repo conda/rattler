@@ -3,10 +3,10 @@
     "https://conda.anaconda.org/conda-forge"
   ],
   "description": "A dummy description.",
-  "dev_url": "https://github.com/conda-incubator/rattler",
+  "dev_url": "https://github.com/conda/rattler",
   "doc_url": "https://conda-incubator.github.io/rattler/py-rattler/",
-  "home": "http://github.com/conda-incubator/rattler",
+  "home": "http://github.com/conda/rattler",
   "license": "BSD-3-Clause",
-  "source_url": "https://github.com/conda-incubator/rattler",
+  "source_url": "https://github.com/conda/rattler",
   "summary": "A dummy summary."
 }

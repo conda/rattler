@@ -137,7 +137,7 @@ class AboutJson:
         ```python
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.dev_url
-        ['https://github.com/conda-incubator/rattler']
+        ['https://github.com/conda/rattler']
         >>>
         ```
         """
@@ -169,7 +169,7 @@ class AboutJson:
         ```python
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.home
-        ['http://github.com/conda-incubator/rattler']
+        ['http://github.com/conda/rattler']
         >>>
         ```
         """
@@ -224,7 +224,7 @@ class AboutJson:
         ```python
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.source_url
-        'https://github.com/conda-incubator/rattler'
+        'https://github.com/conda/rattler'
         >>>
         ```
         """

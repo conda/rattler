@@ -23,10 +23,10 @@ classifiers = [
 license = "BSD-3-Clause"
 
 [project.urls]
-Homepage = "https://github.com/conda-incubator/rattler"
+Homepage = "https://github.com/conda/rattler"
 Documentation = "https://conda-incubator.github.io/rattler/py-rattler/"
-Repository = "https://github.com/conda-incubator/rattler"
-Issues = "https://github.com/conda-incubator/rattler/labels/python-bindings"
+Repository = "https://github.com/conda/rattler"
+Issues = "https://github.com/conda/rattler/labels/python-bindings"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
