@@ -15,6 +15,11 @@ class LockFile:
     _lock_file: PyLockFile
 
     def __init__(self, envs: Dict[str, Environment]) -> None:
+        """
+        Create a new rattler-lock file.
+
+        `envs` maps each environment to its name.
+        """
         self._lock_file = PyLockFile({name: env._env for (name, env) in envs.items()})
 
     @staticmethod

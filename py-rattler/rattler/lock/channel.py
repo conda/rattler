@@ -7,6 +7,9 @@ class LockChannel:
     _channel: PyLockChannel
 
     def __init__(self, url: str) -> None:
+        """
+        Create a new channel.
+        """
         self._channel = PyLockChannel(url)
 
     @classmethod
