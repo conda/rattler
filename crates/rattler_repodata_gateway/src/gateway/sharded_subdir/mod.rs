@@ -198,6 +198,10 @@ impl SubdirClient for ShardedSubdir {
 
         Ok(records.into())
     }
+
+    fn package_names(&self) -> Arc<[String]> {
+        self.sharded_repodata.shards.keys().cloned().collect()
+    }
 }
 
 /// Atomically writes the shard bytes to the cache.

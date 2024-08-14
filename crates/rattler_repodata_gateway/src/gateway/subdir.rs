@@ -135,6 +135,10 @@ impl SubdirData {
 
         Ok(records)
     }
+
+    pub fn package_names(&self) -> Arc<[String]> {
+        self.client.package_names()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -146,4 +150,8 @@ pub trait SubdirClient: Send + Sync {
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
+
+    /// Returns the names of all packages in the subdirectory.
+    fn package_names(&self) -> Arc<[String]>;
+    // ) -> Arc<[String]>;
 }

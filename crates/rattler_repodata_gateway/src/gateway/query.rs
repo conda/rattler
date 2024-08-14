@@ -269,6 +269,98 @@ impl GatewayQuery {
 
         Ok(result)
     }
+
+    /// Execute the query and return the resulting repodata records.
+    pub async fn get_names(self) -> Result<Vec<String>, GatewayError> {
+        // Collect all the channels and platforms together
+        let channels_and_platforms = self
+            .channels
+            .iter()
+            .cartesian_product(self.platforms.into_iter())
+            .collect_vec();
+
+        // Create barrier cells for each subdirectory.
+        // This can be used to wait until the subdir becomes available.
+        let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
+        let mut pending_subdirs = FuturesUnordered::new();
+        for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
+            // Create a barrier so work that need this subdir can await it.
+            let barrier = Arc::new(BarrierCell::new());
+            // Set the subdir to prepend the direct url queries in the result.
+            subdirs.push((subdir_idx, barrier.clone()));
+
+            let inner = self.gateway.clone();
+            let reporter = self.reporter.clone();
+            pending_subdirs.push(async move {
+                match inner
+                    .get_or_create_subdir(channel, platform, reporter)
+                    .await
+                {
+                    Ok(subdir) => {
+                        barrier.set(subdir).expect("subdir was set twice");
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                }
+            });
+        }
+
+        // A list of futures to fetch the records for the pending package names.
+        // The main task awaits these futures.
+        let mut pending_records = FuturesUnordered::new();
+
+        let len = subdirs.len();
+        let mut result = vec![String::default(); len];
+
+        // Loop until all pending package names have been fetched.
+        loop {
+            // Iterate over all subdirs?? and create futures to fetch them from
+            // all subdirs.
+            for (subdir_idx, subdir) in subdirs.iter().cloned() {
+                let reporter = self.reporter.clone();
+                pending_records.push(
+                    async move {
+                        let barrier_cell = subdir.clone();
+                        let subdir = barrier_cell.wait().await;
+                        match subdir.as_ref() {
+                            Subdir::Found(subdir) => subdir.package_names(),
+                            Subdir::NotFound => Arc::from(vec![]),
+                        }
+                    }
+                    .boxed(),
+                );
+            }
+
+            // Wait for the subdir to become available.
+            select_biased! {
+                // Handle any error that was emitted by the pending subdirs.
+                subdir_result = pending_subdirs.select_next_some() => {
+                    subdir_result?;
+                }
+
+                // Handle any records that were fetched
+                names = pending_records.select_next_some() => {
+                    let names = names;
+
+                    // Add the records to the result
+                    if names.len() > 0 {
+                        result.extend(names.iter().cloned());
+
+                    }
+                }
+
+                // All futures have been handled, all subdirectories have been loaded and all
+                // repodata records have been fetched.
+                complete => {
+                    break;
+                }
+            }
+        }
+
+        result.dedup();
+
+        Ok(result)
+    }
 }
 
 impl IntoFuture for GatewayQuery {
