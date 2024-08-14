@@ -22,9 +22,9 @@
 [chat-badge]: https://img.shields.io/discord/1082332781146800168.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2&style=flat-square
 [chat-url]: https://discord.gg/kKV8ZxyzY4
 [docs-main-badge]: https://img.shields.io/badge/rust_docs-main-yellow.svg?style=flat-square
-[docs-main]: https://conda-incubator.github.io/rattler
+[docs-main]: https://conda.github.io/rattler
 [py-docs-main-badge]: https://img.shields.io/badge/python_docs-main-yellow.svg?style=flat-square
-[py-docs-main]: https://conda-incubator.github.io/rattler/py-rattler
+[py-docs-main]: https://conda.github.io/rattler/py-rattler
 [pixi-badge]:https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/prefix-dev/pixi/main/assets/badge/v0.json
 [pixi-url]: https://pixi.sh
 
@@ -105,7 +105,7 @@ You can find these crates in the `crates` folder.
 
 Additionally, we provide Python bindings for most of the functionalities provided by the above crates.
 A python package `py-rattler` is available on [conda-forge](https://prefix.dev/channels/conda-forge/packages/py-rattler) and [PyPI](https://pypi.org/project/py-rattler/).
-Documatation for the python bindings can be found [here](https://conda-incubator.github.io/rattler/py-rattler).
+Documentation for the python bindings can be found [here](https://conda.github.io/rattler/py-rattler).
 
 ## What is conda & conda-forge?
 
