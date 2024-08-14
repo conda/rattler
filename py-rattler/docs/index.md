@@ -21,7 +21,7 @@ Py-rattler is the python bindings for rattler.
 Let's see an example to learn some of the functionality the library has to offer.
 
 ```python
---8<-- "examples\solve_and_install.py"
+--8<-- "examples/solve_and_install.py"
 ```
 
 Py-rattler provides friendly high level functions to download dependencies and create environments.

@@ -7,7 +7,7 @@
 //! that conda compatible applications use to query conda packages. For more information about
 //! how this file format works, please read this CEP proposal:
 //!
-//! - <https://github.com/conda-incubator/ceps/pull/20/files>
+//! - <https://github.com/conda/ceps/pull/20/files>
 //!
 //! ## Example
 //!

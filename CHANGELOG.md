@@ -258,7 +258,7 @@ Lock file support has been moved into its own crate (rattler_lock) and support f
 
 ### ✨ Highlights
 
-The solver has been renamed and moved to its own repository: [resolvo](https://github.com/conda-incubator/resolvo).
+The solver has been renamed and moved to its own repository: [resolvo](https://github.com/mamba-org/resolvo).
 With the latest changes to the python bindings you can now download repodata and solve environments! 
 Still no official release of the bindings though, but getting closer every day.
 
@@ -531,7 +531,7 @@ The biggest highlights are:
 JLAP is a file format to incrementally update a cached `repodata.json` without downloading the entire file.
 This can save a huge amount of bandwidth for large repodatas that change often (like those from conda-forge).
 If you have a previously cached `repodata.json` on your system only small JSON patches are downloaded to bring your cache up to date.
-The format was initially proposed through a [CEP](https://github.com/conda-incubator/ceps/pull/20) and has been available in conda as an experimental feature since `23.3.0`.
+The format was initially proposed through a [CEP](https://github.com/conda/ceps/pull/20) and has been available in conda as an experimental feature since `23.3.0`.
 
 When using rattler you get JLAP support out of the box.
 No changes are needed.

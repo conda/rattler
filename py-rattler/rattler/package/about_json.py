@@ -153,7 +153,7 @@ class AboutJson:
         ```python
         >>> about = AboutJson.from_path("../test-data/dummy-about.json")
         >>> about.doc_url
-        ['https://conda-incubator.github.io/rattler/py-rattler/']
+        ['https://conda.github.io/rattler/py-rattler/']
         >>>
         ```
         """
