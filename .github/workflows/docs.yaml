@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build-and-deploy:
-    if: github.repository == 'conda-incubator/rattler'
+    if: github.repository == 'conda/rattler'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

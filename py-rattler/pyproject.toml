@@ -24,7 +24,7 @@ license = "BSD-3-Clause"
 
 [project.urls]
 Homepage = "https://github.com/conda/rattler"
-Documentation = "https://conda-incubator.github.io/rattler/py-rattler/"
+Documentation = "https://conda.github.io/rattler/py-rattler/"
 Repository = "https://github.com/conda/rattler"
 Issues = "https://github.com/conda/rattler/labels/python-bindings"
 

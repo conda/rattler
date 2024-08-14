@@ -8,7 +8,7 @@ build:
   noarch: generic
 
 about:
-  home: https://github.com/conda-incubator/mamba
+  home: https://github.com/mamba-org/mamba
   license: BSD
   license_family: BSD
   summary: I am just a test package!
