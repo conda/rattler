@@ -1,4 +1,4 @@
-pub(crate) mod barrier_cell;
+mod barrier_cell;
 mod builder;
 mod channel_config;
 mod direct_url_query;
@@ -8,7 +8,7 @@ mod query;
 mod remote_subdir;
 mod repo_data;
 mod sharded_subdir;
-pub(crate) mod subdir;
+mod subdir;
 
 use std::{
     collections::HashSet,

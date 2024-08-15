@@ -306,7 +306,7 @@ pub struct NamesQuery {
 
 impl NamesQuery {
     /// Constructs a new instance. This should not be called directly, use
-    /// [`Gateway::query`] instead.
+    /// [`Gateway::names`] instead.
     pub(super) fn new(
         gateway: Arc<GatewayInner>,
         channels: Vec<Channel>,
@@ -332,7 +332,7 @@ impl NamesQuery {
         }
     }
 
-    /// Execute the query and return the resulting repodata records.
+    /// Execute the query and return the package names.
     pub async fn execute(self) -> Result<Vec<String>, GatewayError> {
         // Collect all the channels and platforms together
         let channels_and_platforms = self
@@ -375,10 +375,8 @@ impl NamesQuery {
         let len = subdirs.len();
         let mut result = vec![String::default(); len];
 
-        // Iterate over all subdirs?? and create futures to fetch them from
-        // all subdirs.
+        // Iterate over all subdirs and create futures to fetch them
         for (_, subdir) in subdirs.iter() {
-            // let reporter = self.reporter.clone();
             pending_records.push(
                 async move {
                     let barrier_cell = subdir.clone();
@@ -395,7 +393,6 @@ impl NamesQuery {
         // Loop until all pending package names have been fetched.
         loop {
             // Wait for the subdir to become available.
-            // eprintln!("before select biased!");
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs.
                 subdir_result = pending_subdirs.select_next_some() => {
