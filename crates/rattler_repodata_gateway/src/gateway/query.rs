@@ -328,7 +328,7 @@ impl NamesQuery {
     }
 
     /// Execute the query and return the package names.
-    pub async fn execute(self) -> Result<Vec<String>, GatewayError> {
+    pub async fn execute(self) -> Result<Vec<PackageName>, GatewayError> {
         // Collect all the channels and platforms together
         let channels_and_platforms = self
             .channels
@@ -362,12 +362,15 @@ impl NamesQuery {
             names.extend(subdir_names);
         }
 
-        Ok(names.into_iter().collect_vec())
+        Ok(names
+            .into_iter()
+            .map(PackageName::try_from)
+            .collect::<Result<Vec<PackageName>, _>>()?)
     }
 }
 
 impl IntoFuture for NamesQuery {
-    type Output = Result<Vec<String>, GatewayError>;
+    type Output = Result<Vec<PackageName>, GatewayError>;
     type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {

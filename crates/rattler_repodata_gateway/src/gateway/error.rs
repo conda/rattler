@@ -1,7 +1,7 @@
 use crate::fetch;
 use crate::fetch::{FetchRepoDataError, RepoDataNotFoundError};
 use crate::gateway::direct_url_query::DirectUrlQueryError;
-use rattler_conda_types::{Channel, MatchSpec};
+use rattler_conda_types::{Channel, InvalidPackageNameError, MatchSpec};
 use rattler_redaction::Redact;
 use reqwest_middleware::Error;
 use simple_spawn_blocking::Cancelled;
@@ -44,6 +44,9 @@ pub enum GatewayError {
 
     #[error("the package from url '{0}', doesn't have the same name as the match spec filename intents '{1}'")]
     UrlRecordNameMismatch(String, String),
+
+    #[error(transparent)]
+    InvalidPackageName(#[from] InvalidPackageNameError),
 }
 
 impl From<Cancelled> for GatewayError {
@@ -66,6 +69,12 @@ impl From<reqwest::Error> for GatewayError {
         GatewayError::ReqwestError(value.redact())
     }
 }
+
+// impl From<InvalidPackageNameError> for GatewayError {
+//     fn from(value: InvalidPackageNameError) -> Self {
+//         GatewayError::InvalidPackageName(value.to_string())
+//     }
+// }
 
 #[derive(Debug, Error)]
 pub enum HttpOrFilesystemError {
