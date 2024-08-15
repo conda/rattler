@@ -34,15 +34,41 @@ pub mod linux;
 pub mod osx;
 
 use archspec::cpu::Microarchitecture;
+use core::fmt;
 use once_cell::sync::OnceCell;
 use rattler_conda_types::{GenericVirtualPackage, PackageName, Platform, Version};
+use std::any::type_name;
+use std::env;
 use std::hash::{Hash, Hasher};
+use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::osx::ParseOsxVersionError;
 use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+pub trait EnvOverride: Sized {
+    // Used to override the mechanisms here
+    fn from_env_var_name(env_var_name: &str) -> Option<Self>;
+
+    fn default_env_name() -> String;
+
+    fn from_default_env_var() -> Option<Self> {
+        Self::from_env_var_name(&Self::default_env_name())
+    }
+}
+
+impl<T: From<Version>> EnvOverride for T {
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        Some(Self::from(Version::from_str(&var).ok()?))
+    }
+
+    fn default_env_name() -> String {
+        format!("CONDA_{}_OVERIDE", type_name::<T>())
+    }
+}
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -188,6 +214,12 @@ impl From<Linux> for VirtualPackage {
     }
 }
 
+impl From<Version> for Linux {
+    fn from(version: Version) -> Self {
+        Linux { version }
+    }
+}
+
 /// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
@@ -229,6 +261,29 @@ impl From<LibC> for VirtualPackage {
     }
 }
 
+impl EnvOverride for LibC {
+    fn default_env_name() -> String {
+        "CONDA_LIBC_OVERIDE".to_string()
+    }
+
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        let pars = var.split(":");
+        let mut version: Option<Version> = None;
+        let mut family: Option<String> = None;
+        for (i, x) in pars.enumerate() {
+            match i {
+                0 => version = Some(Version::from_str(x).ok()?),
+                1 => family = Some(x.to_string()),
+                _ => return None,
+            }  
+        }
+        
+        let libc = Self { family: family?, version: version? };
+        Some(libc)
+    }
+}
+
 /// Cuda virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Cuda {
@@ -240,6 +295,12 @@ impl Cuda {
     /// Returns the maximum Cuda version available on the current platform.
     pub fn current() -> Option<Self> {
         cuda::cuda_version().map(|version| Self { version })
+    }
+}
+
+impl From<Version> for Cuda {
+    fn from(version: Version) -> Self {
+        Self { version }
     }
 }
 

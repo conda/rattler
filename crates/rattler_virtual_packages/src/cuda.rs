@@ -27,14 +27,10 @@ pub fn cuda_version() -> Option<Version> {
         .clone()
 }
 
-const CUDA_OVERRIDE_ENV: &str = "CONDA_OVERRIDE_CUDA";
 /// Attempts to detect the version of CUDA present in the current operating system by employing the
 /// best technique available for the current environment.
 pub fn detect_cuda_version() -> Option<Version> {
-    let cuda_override = env::var(CUDA_OVERRIDE_ENV);
-    if cuda_override.is_ok() {
-        Version::from_str(&cuda_override.unwrap()).ok()
-    } else if cfg!(target_env = "musl") {
+    if cfg!(target_env = "musl") {
         // Dynamically loading a library is not supported on musl so we have to fall-back to using
         // the nvidia-smi command.
         detect_cuda_version_via_nvidia_smi()
@@ -273,16 +269,5 @@ mod test {
     pub fn doesnt_crash_nvidia_smi() {
         let version = detect_cuda_version_via_nvidia_smi();
         println!("Cuda {version:?}");
-    }
-
-    #[test]
-    pub fn cuda_override(){
-        let backup = env::var(CUDA_OVERRIDE_ENV);
-        env::set_var(CUDA_OVERRIDE_ENV, "69.42");
-        let version = detect_cuda_version();
-        assert!(version.unwrap() == Version::from_str("69.42").unwrap());
-        if backup.is_ok() {
-            env::set_var(CUDA_OVERRIDE_ENV, backup.unwrap())
-        }
     }
 }
