@@ -66,7 +66,7 @@ impl<T: From<Version>> EnvOverride for T {
     }
 
     fn default_env_name() -> String {
-        format!("CONDA_{}_OVERIDE", type_name::<T>())
+        format!("CONDA_{}_OVERIDE", type_name::<T>().to_uppercase())
     }
 }
 
