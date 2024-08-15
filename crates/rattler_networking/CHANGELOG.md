@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.1](https://github.com/conda/rattler/compare/rattler_networking-v0.21.0...rattler_networking-v0.21.1) - 2024-08-15
+
+### Fixed
+- move more links to the conda org from conda-incubator ([#816](https://github.com/conda/rattler/pull/816))
+- use conda-incubator
+
+### Other
+- change links from conda-incubator to conda ([#813](https://github.com/conda/rattler/pull/813))
+- update banner ([#808](https://github.com/conda/rattler/pull/808))
+
 ## [0.21.0](https://github.com/baszalmstra/rattler/compare/rattler_networking-v0.20.10...rattler_networking-v0.21.0) - 2024-08-02
 
 ### Fixed

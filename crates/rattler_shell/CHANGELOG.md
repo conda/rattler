@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.6](https://github.com/conda/rattler/compare/rattler_shell-v0.21.5...rattler_shell-v0.21.6) - 2024-08-15
+
+### Fixed
+- move more links to the conda org from conda-incubator ([#816](https://github.com/conda/rattler/pull/816))
+
+### Other
+- change links from conda-incubator to conda ([#813](https://github.com/conda/rattler/pull/813))
+- update banner ([#808](https://github.com/conda/rattler/pull/808))
+
 ## [0.21.5](https://github.com/baszalmstra/rattler/compare/rattler_shell-v0.21.4...rattler_shell-v0.21.5) - 2024-08-06
 
 ### Other

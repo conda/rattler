@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.27.1...rattler_conda_types-v0.27.2) - 2024-08-15
+
+### Added
+- add extra field ([#811](https://github.com/conda/rattler/pull/811))
+- parse `channel` key and consolidate `NamelessMatchSpec` ([#810](https://github.com/conda/rattler/pull/810))
+
+### Fixed
+- move more links to the conda org from conda-incubator ([#816](https://github.com/conda/rattler/pull/816))
+- use conda-incubator
+
+### Other
+- change links from conda-incubator to conda ([#813](https://github.com/conda/rattler/pull/813))
+- update banner ([#808](https://github.com/conda/rattler/pull/808))
+
 ## [0.27.1](https://github.com/baszalmstra/rattler/compare/rattler_conda_types-v0.27.0...rattler_conda_types-v0.27.1) - 2024-08-06
 
 ### Fixed
