@@ -70,12 +70,6 @@ impl From<reqwest::Error> for GatewayError {
     }
 }
 
-// impl From<InvalidPackageNameError> for GatewayError {
-//     fn from(value: InvalidPackageNameError) -> Self {
-//         GatewayError::InvalidPackageName(value.to_string())
-//     }
-// }
-
 #[derive(Debug, Error)]
 pub enum HttpOrFilesystemError {
     #[error(transparent)]
