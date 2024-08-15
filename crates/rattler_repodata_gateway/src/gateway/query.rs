@@ -377,7 +377,7 @@ impl NamesQuery {
 
         // Iterate over all subdirs?? and create futures to fetch them from
         // all subdirs.
-        for (_, subdir) in subdirs.iter().cloned() {
+        for (_, subdir) in subdirs.iter() {
             // let reporter = self.reporter.clone();
             pending_records.push(
                 async move {
