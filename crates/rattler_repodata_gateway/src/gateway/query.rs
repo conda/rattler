@@ -23,7 +23,7 @@ use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
 /// with the same channels will not result in the repodata being fetched
 /// twice.
 #[derive(Clone)]
-pub struct GatewayQuery {
+pub struct RepoDataQuery {
     /// The gateway that manages all resources
     gateway: Arc<GatewayInner>,
 
@@ -43,7 +43,7 @@ pub struct GatewayQuery {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl GatewayQuery {
+impl RepoDataQuery {
     /// Constructs a new instance. This should not be called directly, use
     /// [`Gateway::query`] instead.
     pub(super) fn new(
@@ -269,9 +269,71 @@ impl GatewayQuery {
 
         Ok(result)
     }
+}
+
+impl IntoFuture for RepoDataQuery {
+    type Output = Result<Vec<RepoData>, GatewayError>;
+    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.execute().boxed()
+    }
+}
+
+/// Represents a query for package names to execute with a [`Gateway`].
+///
+/// When executed the query will asynchronously load the package names from all
+/// subdirectories (combination of channels and platforms).
+///
+///
+/// Repodata is cached by the [`Gateway`] so executing the same query twice
+/// with the same channels will not result in the repodata being fetched
+/// twice.
+#[derive(Clone)]
+pub struct NamesQuery {
+    /// The gateway that manages all resources
+    gateway: Arc<GatewayInner>,
+
+    /// The channels to fetch from
+    channels: Vec<Channel>,
+
+    /// The platforms the fetch from
+    platforms: Vec<Platform>,
+
+    /// The reporter to use by the query.
+    reporter: Option<Arc<dyn Reporter>>,
+}
+
+impl NamesQuery {
+    /// Constructs a new instance. This should not be called directly, use
+    /// [`Gateway::query`] instead.
+    pub(super) fn new(
+        gateway: Arc<GatewayInner>,
+        channels: Vec<Channel>,
+        platforms: Vec<Platform>,
+    ) -> Self {
+        Self {
+            gateway,
+            channels,
+            platforms,
+
+            reporter: None,
+        }
+    }
+
+    /// Sets the reporter to use for this query.
+    ///
+    /// The reporter is notified of important evens during the execution of the
+    /// query. This allows reporting progress back to a user.
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Arc::new(reporter)),
+            ..self
+        }
+    }
 
     /// Execute the query and return the resulting repodata records.
-    pub async fn get_names(self) -> Result<Vec<String>, GatewayError> {
+    pub async fn execute(self) -> Result<Vec<String>, GatewayError> {
         // Collect all the channels and platforms together
         let channels_and_platforms = self
             .channels
@@ -297,6 +359,7 @@ impl GatewayQuery {
                     .await
                 {
                     Ok(subdir) => {
+                        eprintln!("subdir set");
                         barrier.set(subdir).expect("subdir was set twice");
                         Ok(())
                     }
@@ -312,40 +375,40 @@ impl GatewayQuery {
         let len = subdirs.len();
         let mut result = vec![String::default(); len];
 
+        // Iterate over all subdirs?? and create futures to fetch them from
+        // all subdirs.
+        for (_, subdir) in subdirs.iter().cloned() {
+            // let reporter = self.reporter.clone();
+            pending_records.push(
+                async move {
+                    let barrier_cell = subdir.clone();
+                    let subdir = barrier_cell.wait().await;
+                    match subdir.as_ref() {
+                        Subdir::Found(subdir) => subdir.package_names(),
+                        Subdir::NotFound => Arc::from(vec![]),
+                    }
+                }
+                .boxed(),
+            );
+        }
+
         // Loop until all pending package names have been fetched.
         loop {
-            // Iterate over all subdirs?? and create futures to fetch them from
-            // all subdirs.
-            for (subdir_idx, subdir) in subdirs.iter().cloned() {
-                let reporter = self.reporter.clone();
-                pending_records.push(
-                    async move {
-                        let barrier_cell = subdir.clone();
-                        let subdir = barrier_cell.wait().await;
-                        match subdir.as_ref() {
-                            Subdir::Found(subdir) => subdir.package_names(),
-                            Subdir::NotFound => Arc::from(vec![]),
-                        }
-                    }
-                    .boxed(),
-                );
-            }
-
             // Wait for the subdir to become available.
+            // eprintln!("before select biased!");
             select_biased! {
                 // Handle any error that was emitted by the pending subdirs.
                 subdir_result = pending_subdirs.select_next_some() => {
                     subdir_result?;
                 }
 
-                // Handle any records that were fetched
+                // // Handle any records that were fetched
                 names = pending_records.select_next_some() => {
                     let names = names;
 
                     // Add the records to the result
                     if names.len() > 0 {
                         result.extend(names.iter().cloned());
-
                     }
                 }
 
@@ -363,8 +426,8 @@ impl GatewayQuery {
     }
 }
 
-impl IntoFuture for GatewayQuery {
-    type Output = Result<Vec<RepoData>, GatewayError>;
+impl IntoFuture for NamesQuery {
+    type Output = Result<Vec<String>, GatewayError>;
     type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {

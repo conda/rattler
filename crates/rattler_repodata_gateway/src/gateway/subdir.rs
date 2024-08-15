@@ -153,5 +153,4 @@ pub trait SubdirClient: Send + Sync {
 
     /// Returns the names of all packages in the subdirectory.
     fn package_names(&self) -> Arc<[String]>;
-    // ) -> Arc<[String]>;
 }
