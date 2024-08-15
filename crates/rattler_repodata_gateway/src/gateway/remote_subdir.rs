@@ -70,7 +70,7 @@ impl SubdirClient for RemoteSubdirClient {
         self.sparse.fetch_package_records(name, reporter).await
     }
 
-    fn package_names(&self) -> Arc<[String]> {
+    fn package_names(&self) -> Vec<String> {
         self.sparse.package_names()
     }
 }

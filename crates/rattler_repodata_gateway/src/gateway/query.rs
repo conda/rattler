@@ -284,11 +284,6 @@ impl IntoFuture for RepoDataQuery {
 ///
 /// When executed the query will asynchronously load the package names from all
 /// subdirectories (combination of channels and platforms).
-///
-///
-/// Repodata is cached by the [`Gateway`] so executing the same query twice
-/// with the same channels will not result in the repodata being fetched
-/// twice.
 #[derive(Clone)]
 pub struct NamesQuery {
     /// The gateway that manages all resources
@@ -343,13 +338,10 @@ impl NamesQuery {
 
         // Create barrier cells for each subdirectory.
         // This can be used to wait until the subdir becomes available.
-        let mut subdirs = Vec::with_capacity(channels_and_platforms.len());
         let mut pending_subdirs = FuturesUnordered::new();
-        for (subdir_idx, (channel, platform)) in channels_and_platforms.into_iter().enumerate() {
+        for (channel, platform) in channels_and_platforms {
             // Create a barrier so work that need this subdir can await it.
-            let barrier = Arc::new(BarrierCell::new());
             // Set the subdir to prepend the direct url queries in the result.
-            subdirs.push((subdir_idx, barrier.clone()));
 
             let inner = self.gateway.clone();
             let reporter = self.reporter.clone();
@@ -358,68 +350,19 @@ impl NamesQuery {
                     .get_or_create_subdir(channel, platform, reporter)
                     .await
                 {
-                    Ok(subdir) => {
-                        eprintln!("subdir set");
-                        barrier.set(subdir).expect("subdir was set twice");
-                        Ok(())
-                    }
+                    Ok(subdir) => Ok(subdir.package_names().unwrap_or_default()),
                     Err(e) => Err(e),
                 }
             });
         }
+        let mut names: HashSet<String> = HashSet::default();
 
-        // A list of futures to fetch the records for the pending package names.
-        // The main task awaits these futures.
-        let mut pending_records = FuturesUnordered::new();
-
-        let len = subdirs.len();
-        let mut result = vec![String::default(); len];
-
-        // Iterate over all subdirs and create futures to fetch them
-        for (_, subdir) in subdirs.iter() {
-            pending_records.push(
-                async move {
-                    let barrier_cell = subdir.clone();
-                    let subdir = barrier_cell.wait().await;
-                    match subdir.as_ref() {
-                        Subdir::Found(subdir) => subdir.package_names(),
-                        Subdir::NotFound => Arc::from(vec![]),
-                    }
-                }
-                .boxed(),
-            );
+        while let Some(result) = pending_subdirs.next().await {
+            let subdir_names = result?;
+            names.extend(subdir_names);
         }
 
-        // Loop until all pending package names have been fetched.
-        loop {
-            // Wait for the subdir to become available.
-            select_biased! {
-                // Handle any error that was emitted by the pending subdirs.
-                subdir_result = pending_subdirs.select_next_some() => {
-                    subdir_result?;
-                }
-
-                // // Handle any records that were fetched
-                names = pending_records.select_next_some() => {
-                    let names = names;
-
-                    // Add the records to the result
-                    if names.len() > 0 {
-                        result.extend(names.iter().cloned());
-                    }
-                }
-
-                // All futures have been handled, all subdirectories have been loaded and all
-                // repodata records have been fetched.
-                complete => {
-                    break;
-                }
-            }
-        }
-
-        result.dedup();
-
-        Ok(result)
+        Ok(names.into_iter().collect_vec())
     }
 }
 

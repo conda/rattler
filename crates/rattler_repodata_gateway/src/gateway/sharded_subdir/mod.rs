@@ -199,7 +199,7 @@ impl SubdirClient for ShardedSubdir {
         Ok(records.into())
     }
 
-    fn package_names(&self) -> Arc<[String]> {
+    fn package_names(&self) -> Vec<String> {
         self.sharded_repodata.shards.keys().cloned().collect()
     }
 }

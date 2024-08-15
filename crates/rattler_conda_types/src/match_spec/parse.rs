@@ -1234,7 +1234,10 @@ mod tests {
                 channel.unwrap(),
                 Channel::from_str(expected_channel.unwrap(), &channel_config()).unwrap()
             );
-            assert_eq!(subdir, expected_subdir.map(std::string::ToString::to_string));
+            assert_eq!(
+                subdir,
+                expected_subdir.map(std::string::ToString::to_string)
+            );
         }
     }
 }
