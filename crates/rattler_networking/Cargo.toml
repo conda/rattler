@@ -12,8 +12,8 @@ readme.workspace = true
 
 [features]
 default = ["native-tls"]
-native-tls = ['reqwest/native-tls', "google-cloud-auth?/default-tls", "keyring/crypto-openssl"]
-rustls-tls = ['reqwest/rustls-tls', "google-cloud-auth?/rustls-tls", "keyring/crypto-rust"]
+native-tls = ['reqwest/native-tls', "google-cloud-auth?/default-tls"]
+rustls-tls = ['reqwest/rustls-tls', "google-cloud-auth?/rustls-tls"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -25,7 +25,7 @@ fslock = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true, features = ["apple-native", "windows-native", "async-secret-service", "async-io"] }
+keyring = { workspace = true, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
 netrc-rs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }
