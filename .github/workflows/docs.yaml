@@ -9,6 +9,7 @@ env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
   RUSTDOCFLAGS: --html-in-header header.html
+  DEFAULT_FEATURES: indicatif,tokio,serde,wasm,reqwest,sparse,gateway,resolvo,libsolv_c,rustls-tls
 
 # Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
@@ -50,7 +51,7 @@ jobs:
           echo "<meta name=\"robots\" content=\"noindex\">" > header.html
 
       - name: Build Rattler Documentation
-        run: cargo doc --workspace --no-deps --all-features --lib
+        run: cargo doc --workspace --no-deps --no-default-features --features ${{ env.DEFAULT_FEATURES }} --lib
 
       - name: Build Py-rattler Documentation
         run: pixi run --manifest-path py-rattler/pixi.toml build-docs

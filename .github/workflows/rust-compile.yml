@@ -22,7 +22,7 @@ env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: "-D warnings"
   CARGO_TERM_COLOR: always
-  DEFAULT_FEATURES: tokio,serde,reqwest,sparse,sysinfo,resolvo,gateway
+  DEFAULT_FEATURES: indicatif,tokio,serde,wasm,reqwest,sparse,gateway,resolvo,libsolv_c
 
 jobs:
   check-rustdoc-links:
@@ -35,7 +35,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: |
           for package in $(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | .name'); do
-            cargo rustdoc -p "$package" --all-features -- -D warnings -W unreachable-pub
+            cargo rustdoc -p "$package" --no-default-features --features ${{ env.DEFAULT_FEATURES }} -- -D warnings -W unreachable-pub
           done
 
   format_and_lint:
