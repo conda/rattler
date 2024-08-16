@@ -23,7 +23,7 @@ use dashmap::{mapref::entry::Entry, DashMap};
 pub use error::GatewayError;
 use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
-pub use query::GatewayQuery;
+pub use query::{NamesQuery, RepoDataQuery};
 use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
@@ -99,7 +99,7 @@ impl Gateway {
         channels: ChannelIter,
         platforms: PlatformIter,
         specs: PackageNameIter,
-    ) -> GatewayQuery
+    ) -> RepoDataQuery
     where
         AsChannel: Into<Channel>,
         ChannelIter: IntoIterator<Item = AsChannel>,
@@ -108,11 +108,30 @@ impl Gateway {
         PackageNameIter: IntoIterator<Item = IntoMatchSpec>,
         IntoMatchSpec: Into<MatchSpec>,
     {
-        GatewayQuery::new(
+        RepoDataQuery::new(
             self.inner.clone(),
             channels.into_iter().map(Into::into).collect(),
             platforms.into_iter().collect(),
             specs.into_iter().map(Into::into).collect(),
+        )
+    }
+
+    /// Return all names from repodata
+    pub fn names<AsChannel, ChannelIter, PlatformIter>(
+        &self,
+        channels: ChannelIter,
+        platforms: PlatformIter,
+    ) -> NamesQuery
+    where
+        AsChannel: Into<Channel>,
+        ChannelIter: IntoIterator<Item = AsChannel>,
+        PlatformIter: IntoIterator<Item = Platform>,
+        <PlatformIter as IntoIterator>::IntoIter: Clone,
+    {
+        NamesQuery::new(
+            self.inner.clone(),
+            channels.into_iter().map(Into::into).collect(),
+            platforms.into_iter().collect(),
         )
     }
 

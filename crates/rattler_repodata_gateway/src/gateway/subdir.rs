@@ -15,6 +15,16 @@ pub enum Subdir {
     Found(SubdirData),
 }
 
+impl Subdir {
+    /// Returns the names of all packages in the subdirectory.
+    pub fn package_names(&self) -> Option<Vec<String>> {
+        match self {
+            Subdir::Found(subdir) => Some(subdir.package_names()),
+            Subdir::NotFound => None,
+        }
+    }
+}
+
 /// Fetches and caches repodata records by package name for a specific subdirectory of a channel.
 pub struct SubdirData {
     /// The client to use to fetch repodata.
@@ -135,6 +145,10 @@ impl SubdirData {
 
         Ok(records)
     }
+
+    pub fn package_names(&self) -> Vec<String> {
+        self.client.package_names()
+    }
 }
 
 /// A client that can be used to fetch repodata for a specific subdirectory.
@@ -146,4 +160,7 @@ pub trait SubdirClient: Send + Sync {
         name: &PackageName,
         reporter: Option<&dyn Reporter>,
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError>;
+
+    /// Returns the names of all packages in the subdirectory.
+    fn package_names(&self) -> Vec<String>;
 }

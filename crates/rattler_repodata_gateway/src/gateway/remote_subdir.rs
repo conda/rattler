@@ -69,4 +69,8 @@ impl SubdirClient for RemoteSubdirClient {
     ) -> Result<Arc<[RepoDataRecord]>, GatewayError> {
         self.sparse.fetch_package_records(name, reporter).await
     }
+
+    fn package_names(&self) -> Vec<String> {
+        self.sparse.package_names()
+    }
 }
