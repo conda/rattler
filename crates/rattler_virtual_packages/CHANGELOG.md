@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.0.3...rattler_virtual_packages-v1.0.4) - 2024-08-16
+
+### Fixed
+- detect solus glibc ([#821](https://github.com/conda/rattler/pull/821))
+
 ## [1.0.3](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.0.2...rattler_virtual_packages-v1.0.3) - 2024-08-15
 
 ### Fixed
