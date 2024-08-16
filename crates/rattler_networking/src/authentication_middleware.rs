@@ -200,7 +200,7 @@ mod tests {
 
         // Make sure the keyring is empty
         if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_password();
+            let _ = entry.delete_credential();
         }
 
         let retrieved = storage.get(host);
@@ -253,7 +253,7 @@ mod tests {
 
         // Make sure the keyring is empty
         if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_password();
+            let _ = entry.delete_credential();
         }
 
         let retrieved = storage.get(host);
@@ -313,7 +313,7 @@ mod tests {
 
         // Make sure the keyring is empty
         if let Ok(entry) = keyring::Entry::new("rattler_test", host) {
-            let _ = entry.delete_password();
+            let _ = entry.delete_credential();
         }
 
         let retrieved = storage.get(host);
