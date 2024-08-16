@@ -34,10 +34,8 @@ pub mod linux;
 pub mod osx;
 
 use archspec::cpu::Microarchitecture;
-use core::fmt;
 use once_cell::sync::OnceCell;
-use rattler_conda_types::{GenericVirtualPackage, PackageName, Platform, Version};
-use std::any::type_name;
+use rattler_conda_types::{GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version};
 use std::env;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -48,16 +46,32 @@ use libc::DetectLibCError;
 use linux::ParseLinuxVersionError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+/// Traits for overridable virtual packages
+/// Use as `Cuda::from_default_env_var.unwrap_or(Cuda::current().into()).unwrap()`
 pub trait EnvOverride: Sized {
-    // Used to override the mechanisms here
-    fn from_env_var_name(env_var_name: &str) -> Option<Self>;
+    /// Parse `env_var_value`
+    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError>;
 
-    fn default_env_name() -> String;
+    /// Read the environment variable and if 
+    fn from_env_var_name(env_var_name: &str) -> Option<Result<Self, Option<ParseVersionError>>> {
+        let var = env::var(env_var_name).ok()?;
+        if var.len() == 0 {
+            Some(Err(None))
+        } else {
+            Some(Self::from_env_var_name_with_var(env_var_name, &var).map_err(Some))
+        }
+    }
 
-    fn from_default_env_var() -> Option<Self> {
-        Self::from_env_var_name(&Self::default_env_name())
+    /// Default name of th environment variable that overrides the virtual package.
+    const DEFAULT_ENV_NAME: &'static str;
+
+    /// 
+    fn from_default_env_var() -> Option<Result<Self, Option<ParseVersionError>>> {
+        Self::from_env_var_name(Self::DEFAULT_ENV_NAME)
     }
 }
+
+
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -209,17 +223,6 @@ impl From<Version> for Linux {
     }
 }
 
-impl EnvOverride for Linux {
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        Some(Self::from(Version::from_str(&var).ok()?))
-    }
-
-    fn default_env_name() -> String {
-        "CONDA_OVERRIDE_LINUX".into()
-    }
-}
-
 /// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
@@ -237,10 +240,6 @@ impl LibC {
     /// `None` if the current platform does not have an available version of `LibC`.
     pub fn current() -> Result<Option<Self>, DetectLibCError> {
         Ok(libc::libc_family_and_version()?.map(|(family, version)| Self { family, version }))
-    }
-
-    pub fn default_familiy() -> String {
-        "GLIBC".into()
     }
 }
 
@@ -266,28 +265,11 @@ impl From<LibC> for VirtualPackage {
 }
 
 impl EnvOverride for LibC {
-    fn default_env_name() -> String {
-        "CONDA_OVERRIDE_GLIBC".into()
-    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_GLIBC";
+    
 
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        let pars = var.split("@");
-        let mut version: Option<Version> = None;
-        let mut family: Option<String> = None;
-        for (i, x) in pars.enumerate() {
-            match i {
-                0 => version = Some(Version::from_str(x).ok()?),
-                1 => family = Some(x.into()),
-                _ => return None,
-            }
-        }
-        family.get_or_insert_with(Self::default_familiy);
-        let libc = Self {
-            family: family?,
-            version: version?,
-        };
-        Some(libc)
+    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self{family: "glibc".into(), version})
     }
 }
 
@@ -312,14 +294,12 @@ impl From<Version> for Cuda {
 }
 
 impl EnvOverride for Cuda {
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        Some(Self::from(Version::from_str(&var).ok()?))
+    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self{version})
+        
     }
 
-    fn default_env_name() -> String {
-        "CONDA_OVERRIDE_CUDA".into()
-    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA";
 }
 
 impl From<Cuda> for GenericVirtualPackage {
@@ -433,17 +413,6 @@ impl Archspec {
     }
 }
 
-impl EnvOverride for Archspec {
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        Self::from_platform(Platform::from_str(&var).ok()?)
-    }
-
-    fn default_env_name() -> String {
-        "CONDA_OVERRIDE_ARCH".into()
-    }
-}
-
 impl From<Archspec> for GenericVirtualPackage {
     fn from(archspec: Archspec) -> Self {
         GenericVirtualPackage {
@@ -500,20 +469,18 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        Some(Self::from(Version::from_str(&var).ok()?))
+    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self{version})
     }
 
-    fn default_env_name() -> String {
-        "CONDA_OVERRIDE_OSX".into()
-    }
+    const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_OSX";
 }
 
 #[cfg(test)]
 mod test {
+    use crate::EnvOverride;
     use crate::VirtualPackage;
-
+    use crate::Cuda;
     #[test]
     fn doesnt_crash() {
         let virtual_packages = VirtualPackage::current().unwrap();
