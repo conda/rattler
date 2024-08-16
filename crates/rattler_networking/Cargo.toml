@@ -1,6 +1,6 @@
 [package]
 name = "rattler_networking"
-version = "0.21.0"
+version = "0.21.1"
 edition.workspace = true
 authors = ["Wolf Vollprecht <w.vollprecht@gmail.com>"]
 description = "Authenticated requests in the conda ecosystem"
@@ -25,7 +25,7 @@ fslock = { workspace = true }
 google-cloud-auth = { workspace = true, optional = true }
 http = { workspace = true }
 itertools = { workspace = true }
-keyring = { workspace = true }
+keyring = { workspace = true, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
 netrc-rs = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 reqwest-middleware = { workspace = true }

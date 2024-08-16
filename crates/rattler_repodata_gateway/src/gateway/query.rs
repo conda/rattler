@@ -23,7 +23,7 @@ use crate::{gateway::direct_url_query::DirectUrlQuery, Reporter};
 /// with the same channels will not result in the repodata being fetched
 /// twice.
 #[derive(Clone)]
-pub struct GatewayQuery {
+pub struct RepoDataQuery {
     /// The gateway that manages all resources
     gateway: Arc<GatewayInner>,
 
@@ -43,7 +43,7 @@ pub struct GatewayQuery {
     reporter: Option<Arc<dyn Reporter>>,
 }
 
-impl GatewayQuery {
+impl RepoDataQuery {
     /// Constructs a new instance. This should not be called directly, use
     /// [`Gateway::query`] instead.
     pub(super) fn new(
@@ -271,8 +271,106 @@ impl GatewayQuery {
     }
 }
 
-impl IntoFuture for GatewayQuery {
+impl IntoFuture for RepoDataQuery {
     type Output = Result<Vec<RepoData>, GatewayError>;
+    type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
+
+    fn into_future(self) -> Self::IntoFuture {
+        self.execute().boxed()
+    }
+}
+
+/// Represents a query for package names to execute with a [`Gateway`].
+///
+/// When executed the query will asynchronously load the package names from all
+/// subdirectories (combination of channels and platforms).
+#[derive(Clone)]
+pub struct NamesQuery {
+    /// The gateway that manages all resources
+    gateway: Arc<GatewayInner>,
+
+    /// The channels to fetch from
+    channels: Vec<Channel>,
+
+    /// The platforms the fetch from
+    platforms: Vec<Platform>,
+
+    /// The reporter to use by the query.
+    reporter: Option<Arc<dyn Reporter>>,
+}
+
+impl NamesQuery {
+    /// Constructs a new instance. This should not be called directly, use
+    /// [`Gateway::names`] instead.
+    pub(super) fn new(
+        gateway: Arc<GatewayInner>,
+        channels: Vec<Channel>,
+        platforms: Vec<Platform>,
+    ) -> Self {
+        Self {
+            gateway,
+            channels,
+            platforms,
+
+            reporter: None,
+        }
+    }
+
+    /// Sets the reporter to use for this query.
+    ///
+    /// The reporter is notified of important evens during the execution of the
+    /// query. This allows reporting progress back to a user.
+    pub fn with_reporter(self, reporter: impl Reporter + 'static) -> Self {
+        Self {
+            reporter: Some(Arc::new(reporter)),
+            ..self
+        }
+    }
+
+    /// Execute the query and return the package names.
+    pub async fn execute(self) -> Result<Vec<PackageName>, GatewayError> {
+        // Collect all the channels and platforms together
+        let channels_and_platforms = self
+            .channels
+            .iter()
+            .cartesian_product(self.platforms.into_iter())
+            .collect_vec();
+
+        // Create barrier cells for each subdirectory.
+        // This can be used to wait until the subdir becomes available.
+        let mut pending_subdirs = FuturesUnordered::new();
+        for (channel, platform) in channels_and_platforms {
+            // Create a barrier so work that need this subdir can await it.
+            // Set the subdir to prepend the direct url queries in the result.
+
+            let inner = self.gateway.clone();
+            let reporter = self.reporter.clone();
+            pending_subdirs.push(async move {
+                match inner
+                    .get_or_create_subdir(channel, platform, reporter)
+                    .await
+                {
+                    Ok(subdir) => Ok(subdir.package_names().unwrap_or_default()),
+                    Err(e) => Err(e),
+                }
+            });
+        }
+        let mut names: HashSet<String> = HashSet::default();
+
+        while let Some(result) = pending_subdirs.next().await {
+            let subdir_names = result?;
+            names.extend(subdir_names);
+        }
+
+        Ok(names
+            .into_iter()
+            .map(PackageName::try_from)
+            .collect::<Result<Vec<PackageName>, _>>()?)
+    }
+}
+
+impl IntoFuture for NamesQuery {
+    type Output = Result<Vec<PackageName>, GatewayError>;
     type IntoFuture = futures::future::BoxFuture<'static, Self::Output>;
 
     fn into_future(self) -> Self::IntoFuture {

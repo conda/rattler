@@ -82,7 +82,7 @@ impl StorageBackend for KeyringAuthenticationStorage {
 
     fn delete(&self, host: &str) -> Result<()> {
         let entry = Entry::new(&self.store_key, host)?;
-        entry.delete_password()?;
+        entry.delete_credential()?;
 
         Ok(())
     }

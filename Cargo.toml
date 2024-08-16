@@ -79,7 +79,7 @@ indicatif = "0.17.8"
 insta = { version = "1.38.0" }
 itertools = "0.13.0"
 json-patch = "2.0.0"
-keyring = "2.3.2"
+keyring = "3.1.0"
 lazy-regex = "3.1.0"
 lazy_static = "1.4.0"
 libc = { version = "0.2" }
