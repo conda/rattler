@@ -59,17 +59,6 @@ pub trait EnvOverride: Sized {
     }
 }
 
-impl<T: From<Version>> EnvOverride for T {
-    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
-        let var = env::var(env_var_name).ok()?;
-        Some(Self::from(Version::from_str(&var).ok()?))
-    }
-
-    fn default_env_name() -> String {
-        format!("CONDA_{}_OVERIDE", type_name::<T>().to_uppercase())
-    }
-}
-
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub enum VirtualPackage {
@@ -220,6 +209,17 @@ impl From<Version> for Linux {
     }
 }
 
+impl EnvOverride for Linux {
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        Some(Self::from(Version::from_str(&var).ok()?))
+    }
+
+    fn default_env_name() -> String {
+        "CONDA_OVERRIDE_LINUX".into()
+    }
+}
+
 /// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
@@ -237,6 +237,10 @@ impl LibC {
     /// `None` if the current platform does not have an available version of `LibC`.
     pub fn current() -> Result<Option<Self>, DetectLibCError> {
         Ok(libc::libc_family_and_version()?.map(|(family, version)| Self { family, version }))
+    }
+
+    pub fn default_familiy() -> String {
+        "GLIBC".into()
     }
 }
 
@@ -263,23 +267,26 @@ impl From<LibC> for VirtualPackage {
 
 impl EnvOverride for LibC {
     fn default_env_name() -> String {
-        "CONDA_LIBC_OVERIDE".to_string()
+        "CONDA_OVERRIDE_GLIBC".into()
     }
 
     fn from_env_var_name(env_var_name: &str) -> Option<Self> {
         let var = env::var(env_var_name).ok()?;
-        let pars = var.split(":");
+        let pars = var.split("@");
         let mut version: Option<Version> = None;
         let mut family: Option<String> = None;
         for (i, x) in pars.enumerate() {
             match i {
                 0 => version = Some(Version::from_str(x).ok()?),
-                1 => family = Some(x.to_string()),
+                1 => family = Some(x.into()),
                 _ => return None,
-            }  
+            }
         }
-        
-        let libc = Self { family: family?, version: version? };
+        family.get_or_insert_with(Self::default_familiy);
+        let libc = Self {
+            family: family?,
+            version: version?,
+        };
         Some(libc)
     }
 }
@@ -301,6 +308,17 @@ impl Cuda {
 impl From<Version> for Cuda {
     fn from(version: Version) -> Self {
         Self { version }
+    }
+}
+
+impl EnvOverride for Cuda {
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        Some(Self::from(Version::from_str(&var).ok()?))
+    }
+
+    fn default_env_name() -> String {
+        "CONDA_OVERRIDE_CUDA".into()
     }
 }
 
@@ -415,12 +433,23 @@ impl Archspec {
     }
 }
 
+impl EnvOverride for Archspec {
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        Self::from_platform(Platform::from_str(&var).ok()?)
+    }
+
+    fn default_env_name() -> String {
+        "CONDA_OVERRIDE_ARCH".into()
+    }
+}
+
 impl From<Archspec> for GenericVirtualPackage {
     fn from(archspec: Archspec) -> Self {
         GenericVirtualPackage {
             name: PackageName::new_unchecked("__archspec"),
             version: Version::major(1),
-            build_string: archspec.spec.name().to_string(),
+            build_string: archspec.spec.name().into(),
         }
     }
 }
@@ -461,6 +490,23 @@ impl From<Osx> for GenericVirtualPackage {
 impl From<Osx> for VirtualPackage {
     fn from(osx: Osx) -> Self {
         VirtualPackage::Osx(osx)
+    }
+}
+
+impl From<Version> for Osx {
+    fn from(version: Version) -> Self {
+        Self { version }
+    }
+}
+
+impl EnvOverride for Osx {
+    fn from_env_var_name(env_var_name: &str) -> Option<Self> {
+        let var = env::var(env_var_name).ok()?;
+        Some(Self::from(Version::from_str(&var).ok()?))
+    }
+
+    fn default_env_name() -> String {
+        "CONDA_OVERRIDE_OSX".into()
     }
 }
 
