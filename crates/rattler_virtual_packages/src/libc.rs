@@ -58,7 +58,7 @@ fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCErro
 #[cfg(any(test, unix))]
 fn parse_glibc_ldd_version(input: &str) -> Result<Option<Version>, DetectLibCError> {
     static GNU_LIBC_RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
-        regex::Regex::new("(?mi)(?:glibc|gentoo|gnu libc).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
+        regex::Regex::new("(?mi)(?:glibc|gentoo|gnu libc|solus).*?([0-9]+(:?.[0-9]+)*)$").unwrap()
     });
 
     if let Some(version_match) = GNU_LIBC_RE
@@ -104,6 +104,10 @@ mod test {
         assert_eq!(
             parse_glibc_ldd_version("ldd (GNU libc) 2.31").unwrap(),
             Some(Version::from_str("2.31").unwrap())
+        );
+        assert_eq!(
+            parse_glibc_ldd_version("ldd (Solus) 2.39").unwrap(),
+            Some(Version::from_str("2.39").unwrap())
         );
     }
 }
