@@ -13,7 +13,6 @@ use once_cell::sync::OnceCell;
 use rattler_conda_types::Version;
 use std::process::Command;
 use std::{
-    env,
     mem::MaybeUninit,
     os::raw::{c_int, c_uint, c_ulong},
     str::FromStr,

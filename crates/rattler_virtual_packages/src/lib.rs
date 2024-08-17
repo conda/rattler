@@ -52,7 +52,11 @@ pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
     fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError>;
 
-    /// Read the environment variable and if 
+    /// Read the environment variable and if it exists, try to parse it with [`EnvOverride::from_env_var_name_with_var`]
+    /// If the output is:
+    /// - `None`, then the environment variable did not exist,
+    /// - `Some(Err(None))`, then the environment variable exist but was set to zero, so the package should be disabled
+    /// - `Some(Ok(pkg))`, then the override was for the package.
     fn from_env_var_name(env_var_name: &str) -> Option<Result<Self, Option<ParseVersionError>>> {
         let var = env::var(env_var_name).ok()?;
         if var.len() == 0 {
@@ -62,10 +66,10 @@ pub trait EnvOverride: Sized {
         }
     }
 
-    /// Default name of th environment variable that overrides the virtual package.
+    /// Default name of the environment variable that overrides the virtual package.
     const DEFAULT_ENV_NAME: &'static str;
 
-    /// 
+    /// Shortcut for `EnvOverride::from_env_var_name(EnvOverride::DEFAULT_ENV_NAME)`.
     fn from_default_env_var() -> Option<Result<Self, Option<ParseVersionError>>> {
         Self::from_env_var_name(Self::DEFAULT_ENV_NAME)
     }
@@ -267,8 +271,7 @@ impl From<LibC> for VirtualPackage {
 impl EnvOverride for LibC {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_GLIBC";
     
-
-    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
+    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self{family: "glibc".into(), version})
     }
 }
@@ -469,7 +472,7 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
+    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self{version})
     }
 
@@ -478,12 +481,47 @@ impl EnvOverride for Osx {
 
 #[cfg(test)]
 mod test {
+    use std::env;
+    use std::str::FromStr;
+
+    use rattler_conda_types::Version;
+
     use crate::EnvOverride;
     use crate::VirtualPackage;
+    use crate::LibC;
     use crate::Cuda;
+    use crate::Osx;
+
     #[test]
     fn doesnt_crash() {
         let virtual_packages = VirtualPackage::current().unwrap();
         println!("{virtual_packages:?}");
+    }
+    #[test]
+    fn parse_libc() {
+        let v = "1.23";
+        let res = LibC{version: Version::from_str(v).unwrap(), family: "glibc".into()};
+        env::set_var(LibC::DEFAULT_ENV_NAME, v);
+        assert_eq!(LibC::from_default_env_var(), Some(Ok(res)));
+        env::set_var(LibC::DEFAULT_ENV_NAME, "");
+        assert_eq!(LibC::from_default_env_var(), Some(Err(None)));
+        env::remove_var(LibC::DEFAULT_ENV_NAME);
+        assert_eq!(LibC::from_default_env_var(), None);
+    }
+
+    #[test]
+    fn parse_cuda() {
+        let v = "1.234";
+        let res = Cuda{version: Version::from_str(v).unwrap()};
+        env::set_var(Cuda::DEFAULT_ENV_NAME, v);
+        assert_eq!(Cuda::from_default_env_var(), Some(Ok(res)));
+    }
+
+    #[test]
+    fn parse_osx() {
+        let v = "2.345";
+        let res = Osx{version: Version::from_str(v).unwrap()};
+        env::set_var(Osx::DEFAULT_ENV_NAME, v);
+        assert_eq!(Osx::from_default_env_var(), Some(Ok(res)));
     }
 }
