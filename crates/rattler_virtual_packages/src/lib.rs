@@ -35,7 +35,9 @@ pub mod osx;
 
 use archspec::cpu::Microarchitecture;
 use once_cell::sync::OnceCell;
-use rattler_conda_types::{GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version};
+use rattler_conda_types::{
+    GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
+};
 use std::env;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
@@ -50,7 +52,10 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 /// Use as `Cuda::from_default_env_var.unwrap_or(Cuda::current().into()).unwrap()`
 pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
-    fn from_env_var_name_with_var(env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError>;
+    fn from_env_var_name_with_var(
+        env_var_name: &str,
+        env_var_value: &str,
+    ) -> Result<Self, ParseVersionError>;
 
     /// Read the environment variable and if it exists, try to parse it with [`EnvOverride::from_env_var_name_with_var`]
     /// If the output is:
@@ -59,7 +64,7 @@ pub trait EnvOverride: Sized {
     /// - `Some(Ok(pkg))`, then the override was for the package.
     fn from_env_var_name(env_var_name: &str) -> Option<Result<Self, Option<ParseVersionError>>> {
         let var = env::var(env_var_name).ok()?;
-        if var.len() == 0 {
+        if var.is_empty() {
             Some(Err(None))
         } else {
             Some(Self::from_env_var_name_with_var(env_var_name, &var).map_err(Some))
@@ -74,8 +79,6 @@ pub trait EnvOverride: Sized {
         Self::from_env_var_name(Self::DEFAULT_ENV_NAME)
     }
 }
-
-
 
 /// An enum that represents all virtual package types provided by this library.
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
@@ -128,8 +131,8 @@ impl VirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
     pub fn current() -> Result<&'static [Self], DetectVirtualPackageError> {
-        static DETECED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
-        DETECED_VIRTUAL_PACKAGES
+        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
+        DETECTED_VIRTUAL_PACKAGES
             .get_or_try_init(try_detect_virtual_packages)
             .map(Vec::as_slice)
     }
@@ -270,9 +273,15 @@ impl From<LibC> for VirtualPackage {
 
 impl EnvOverride for LibC {
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_GLIBC";
-    
-    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self{family: "glibc".into(), version})
+
+    fn from_env_var_name_with_var(
+        _env_var_name: &str,
+        env_var_value: &str,
+    ) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self {
+            family: "glibc".into(),
+            version,
+        })
     }
 }
 
@@ -297,9 +306,11 @@ impl From<Version> for Cuda {
 }
 
 impl EnvOverride for Cuda {
-    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self{version})
-        
+    fn from_env_var_name_with_var(
+        _env_var_name: &str,
+        env_var_value: &str,
+    ) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self { version })
     }
 
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA";
@@ -472,8 +483,11 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn from_env_var_name_with_var(_env_var_name: &str, env_var_value: &str) -> Result<Self, ParseVersionError> {
-        Version::from_str(env_var_value).map(|version| Self{version})
+    fn from_env_var_name_with_var(
+        _env_var_name: &str,
+        env_var_value: &str,
+    ) -> Result<Self, ParseVersionError> {
+        Version::from_str(env_var_value).map(|version| Self { version })
     }
 
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_OSX";
@@ -486,11 +500,11 @@ mod test {
 
     use rattler_conda_types::Version;
 
-    use crate::EnvOverride;
-    use crate::VirtualPackage;
-    use crate::LibC;
     use crate::Cuda;
+    use crate::EnvOverride;
+    use crate::LibC;
     use crate::Osx;
+    use crate::VirtualPackage;
 
     #[test]
     fn doesnt_crash() {
@@ -500,7 +514,10 @@ mod test {
     #[test]
     fn parse_libc() {
         let v = "1.23";
-        let res = LibC{version: Version::from_str(v).unwrap(), family: "glibc".into()};
+        let res = LibC {
+            version: Version::from_str(v).unwrap(),
+            family: "glibc".into(),
+        };
         env::set_var(LibC::DEFAULT_ENV_NAME, v);
         assert_eq!(LibC::from_default_env_var(), Some(Ok(res)));
         env::set_var(LibC::DEFAULT_ENV_NAME, "");
@@ -512,7 +529,9 @@ mod test {
     #[test]
     fn parse_cuda() {
         let v = "1.234";
-        let res = Cuda{version: Version::from_str(v).unwrap()};
+        let res = Cuda {
+            version: Version::from_str(v).unwrap(),
+        };
         env::set_var(Cuda::DEFAULT_ENV_NAME, v);
         assert_eq!(Cuda::from_default_env_var(), Some(Ok(res)));
     }
@@ -520,7 +539,9 @@ mod test {
     #[test]
     fn parse_osx() {
         let v = "2.345";
-        let res = Osx{version: Version::from_str(v).unwrap()};
+        let res = Osx {
+            version: Version::from_str(v).unwrap(),
+        };
         env::set_var(Osx::DEFAULT_ENV_NAME, v);
         assert_eq!(Osx::from_default_env_var(), Some(Ok(res)));
     }
