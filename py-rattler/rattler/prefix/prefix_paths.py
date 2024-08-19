@@ -51,18 +51,18 @@ class PrefixPathType:
         return self._inner.pyc_file
 
     @property
-    def windows_python_entry_point_script(self) -> bool:
+    def windows_python_entrypoint_script(self) -> bool:
         """
         A Windows entry point python script (a <entrypoint>-script.py Python script file)
         """
-        return self._inner.windows_python_entry_point_script
+        return self._inner.windows_python_entrypoint_script
 
     @property
-    def windows_python_entry_point_exe(self) -> bool:
+    def windows_python_entrypoint_exe(self) -> bool:
         """
         A Windows entry point python script (a <entrypoint>.exe executable)
         """
-        return self._inner.windows_python_entry_point_exe
+        return self._inner.windows_python_entrypoint_exe
 
     @property
     def unix_python_entrypoint(self) -> bool:
