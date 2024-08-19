@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.20](https://github.com/conda/rattler/compare/rattler_lock-v0.22.19...rattler_lock-v0.22.20) - 2024-08-16
+
+### Added
+- default construct marker-tree ([#825](https://github.com/conda/rattler/pull/825))
+
 ## [0.22.19](https://github.com/conda/rattler/compare/rattler_lock-v0.22.18...rattler_lock-v0.22.19) - 2024-08-15
 
 ### Fixed
