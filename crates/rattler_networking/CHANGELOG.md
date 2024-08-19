@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.2](https://github.com/conda/rattler/compare/rattler_networking-v0.21.1...rattler_networking-v0.21.2) - 2024-08-16
+
+### Other
+- bump keyring to 3.x to bump syn to 2.x ([#823](https://github.com/conda/rattler/pull/823))
+
 ## [0.21.1](https://github.com/conda/rattler/compare/rattler_networking-v0.21.0...rattler_networking-v0.21.1) - 2024-08-15
 
 ### Fixed
