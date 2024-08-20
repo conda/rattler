@@ -99,7 +99,6 @@ pub enum ChannelPriority {
 }
 
 /// Represents a dependency resolution task, to be solved by one of the backends
-/// (currently only libsolv is supported)
 pub struct SolverTask<TAvailablePackagesIterator> {
     /// An iterator over all available packages
     pub available_packages: TAvailablePackagesIterator,
