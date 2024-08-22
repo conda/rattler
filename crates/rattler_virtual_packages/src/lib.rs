@@ -62,22 +62,50 @@ pub trait EnvOverride: Sized {
     /// - `None`, then the environment variable did not exist,
     /// - `Some(Err(None))`, then the environment variable exist but was set to zero, so the package should be disabled
     /// - `Some(Ok(pkg))`, then the override was for the package.
-    fn from_env_var_name(env_var_name: &str) -> Option<Result<Self, Option<ParseVersionError>>> {
-        let var = env::var(env_var_name).ok()?;
-        if var.is_empty() {
-            Some(Err(None))
-        } else {
-            Some(Self::from_env_var_name_with_var(env_var_name, &var).map_err(Some))
+    fn from_env_var_name_or<F>(
+        env_var_name: &str,
+        f: F,
+    ) -> Result<Option<Self>, DetectVirtualPackageError>
+    where
+        F: FnOnce() -> Result<Option<Self>, DetectVirtualPackageError>,
+    {
+        match env::var(env_var_name) {
+            Ok(var) => Ok(Some(Self::from_env_var_name_with_var(env_var_name, &var)?)),
+            Err(env::VarError::NotPresent) => f(),
+            Err(e) => Err(DetectVirtualPackageError::VarError(e)),
         }
+    }
+
+    /// Helper method for [`EnvOverride::from_env_var_name_or`] that uses [`EnvOverride::current`] as the default.
+    fn from_env_var_name_or_current(
+        env_var_name: &str,
+    ) -> Result<Option<Self>, DetectVirtualPackageError> {
+        Self::from_env_var_name_or(env_var_name, Self::current)
+    }
+
+    /// Helper method for [`EnvOverride::from_env_var_name_or`] that does not have any default.
+    fn from_env_var_name(env_var_name: &str) -> Result<Option<Self>, DetectVirtualPackageError> {
+        Self::from_env_var_name_or(env_var_name, || Ok(None))
     }
 
     /// Default name of the environment variable that overrides the virtual package.
     const DEFAULT_ENV_NAME: &'static str;
 
     /// Shortcut for `EnvOverride::from_env_var_name(EnvOverride::DEFAULT_ENV_NAME)`.
-    fn from_default_env_var() -> Option<Result<Self, Option<ParseVersionError>>> {
-        Self::from_env_var_name(Self::DEFAULT_ENV_NAME)
+    fn from_default_env_var_or<F>(f: F) -> Result<Option<Self>, DetectVirtualPackageError>
+    where
+        F: FnOnce() -> Result<Option<Self>, DetectVirtualPackageError>,
+    {
+        Self::from_env_var_name_or(Self::DEFAULT_ENV_NAME, f)
     }
+
+    /// Shortcut for `EnvOverride::from_env_var_name(EnvOverride::DEFAULT_ENV_NAME)`.
+    fn from_default_env_var() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Self::from_default_env_var_or(|| Ok(None))
+    }
+
+    /// This method is here so that `<Self as EnvOverride>::current` always returns the same error type.
+    fn current() -> Result<Option<Self>, DetectVirtualPackageError>;
 }
 
 /// An enum that represents all virtual package types provided by this library.
@@ -150,10 +178,42 @@ pub enum DetectVirtualPackageError {
 
     #[error(transparent)]
     DetectLibC(#[from] DetectLibCError),
+
+    #[error(transparent)]
+    VarError(#[from] env::VarError),
+
+    #[error(transparent)]
+    VersionParseError(#[from] ParseVersionError),
+}
+
+struct VirtualPackageOverride<'a> {
+    osx: Option<&'a str>,
+    libc: Option<&'a str>,
+    cuda: Option<&'a str>,
+}
+
+impl VirtualPackageOverride<'static> {
+    fn none() -> Self {
+        Self {
+            osx: None,
+            libc: None,
+            cuda: None,
+        }
+    }
+
+    fn default() -> Self {
+        Self {
+            osx: Some(Osx::DEFAULT_ENV_NAME),
+            libc: Some(LibC::DEFAULT_ENV_NAME),
+            cuda: Some(Cuda::DEFAULT_ENV_NAME),
+        }
+    }
 }
 
 // Detect the available virtual packages on the system
-fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
+fn try_detect_virtual_packages_with_overrides(
+    overrides: &VirtualPackageOverride<'_>,
+) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
     let mut result = Vec::new();
     let platform = Platform::current();
 
@@ -169,18 +229,27 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
         if let Some(linux_version) = Linux::current()? {
             result.push(linux_version.into());
         }
-        if let Some(libc) = LibC::current()? {
+        if let Some(libc) = overrides.libc.map_or_else(
+            <LibC as EnvOverride>::current,
+            LibC::from_env_var_name_or_current,
+        )? {
             result.push(libc.into());
         }
     }
 
     if platform.is_osx() {
-        if let Some(osx) = Osx::current()? {
+        if let Some(osx) = overrides.osx.map_or_else(
+            <Osx as EnvOverride>::current,
+            Osx::from_env_var_name_or_current,
+        )? {
             result.push(osx.into());
         }
     }
 
-    if let Some(cuda) = Cuda::current() {
+    if let Some(cuda) = overrides.cuda.map_or_else(
+        <Cuda as EnvOverride>::current,
+        Cuda::from_env_var_name_or_current,
+    )? {
         result.push(cuda.into());
     }
 
@@ -191,6 +260,9 @@ fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPac
     Ok(result)
 }
 
+fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
+    try_detect_virtual_packages_with_overrides(&VirtualPackageOverride::none())
+}
 /// Linux virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Linux {
@@ -283,6 +355,10 @@ impl EnvOverride for LibC {
             version,
         })
     }
+
+    fn current() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current()?)
+    }
 }
 
 /// Cuda virtual package description
@@ -312,7 +388,9 @@ impl EnvOverride for Cuda {
     ) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self { version })
     }
-
+    fn current() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current())
+    }
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_CUDA";
 }
 
@@ -489,7 +567,9 @@ impl EnvOverride for Osx {
     ) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self { version })
     }
-
+    fn current() -> Result<Option<Self>, DetectVirtualPackageError> {
+        Ok(Self::current()?)
+    }
     const DEFAULT_ENV_NAME: &'static str = "CONDA_OVERRIDE_OSX";
 }
 
@@ -519,11 +599,14 @@ mod test {
             family: "glibc".into(),
         };
         env::set_var(LibC::DEFAULT_ENV_NAME, v);
-        assert_eq!(LibC::from_default_env_var(), Some(Ok(res)));
+        assert_eq!(LibC::from_default_env_var().unwrap().unwrap(), res);
         env::set_var(LibC::DEFAULT_ENV_NAME, "");
-        assert_eq!(LibC::from_default_env_var(), Some(Err(None)));
+        assert_eq!(LibC::from_default_env_var().unwrap(), None);
         env::remove_var(LibC::DEFAULT_ENV_NAME);
-        assert_eq!(LibC::from_default_env_var(), None);
+        match LibC::from_default_env_var().unwrap_err() {
+            crate::DetectVirtualPackageError::VarError(env::VarError::NotPresent) => {}
+            e => panic!("Expected VarError::NotPresent, got {e:?}"),
+        };
     }
 
     #[test]
@@ -533,7 +616,7 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         env::set_var(Cuda::DEFAULT_ENV_NAME, v);
-        assert_eq!(Cuda::from_default_env_var(), Some(Ok(res)));
+        assert_eq!(Cuda::from_default_env_var().unwrap().unwrap(), res);
     }
 
     #[test]
@@ -543,6 +626,6 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         env::set_var(Osx::DEFAULT_ENV_NAME, v);
-        assert_eq!(Osx::from_default_env_var(), Some(Ok(res)));
+        assert_eq!(Osx::from_default_env_var().unwrap().unwrap(), res);
     }
 }
