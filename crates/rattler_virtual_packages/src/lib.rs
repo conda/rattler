@@ -164,6 +164,24 @@ impl VirtualPackage {
             .get_or_try_init(try_detect_virtual_packages)
             .map(Vec::as_slice)
     }
+
+    /// disable overrides
+    pub fn current_no_overrides() -> Result<&'static [Self], DetectVirtualPackageError> {
+        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
+        DETECTED_VIRTUAL_PACKAGES
+            .get_or_try_init(try_detect_virtual_packages_no_overrides)
+            .map(Vec::as_slice)
+    }
+
+    /// use custom overrides
+    pub fn current_with_overrides(
+        overrides: &VirtualPackageOverride<'_>,
+    ) -> Result<&'static [Self], DetectVirtualPackageError> {
+        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
+        DETECTED_VIRTUAL_PACKAGES
+            .get_or_try_init(|| try_detect_virtual_packages_with_overrides(overrides))
+            .map(Vec::as_slice)
+    }
 }
 
 /// An error that might be returned by [`VirtualPackage::current`].
@@ -186,14 +204,17 @@ pub enum DetectVirtualPackageError {
     VersionParseError(#[from] ParseVersionError),
 }
 
-struct VirtualPackageOverride<'a> {
+/// Configure the overrides used in in this crate.
+
+pub struct VirtualPackageOverride<'a> {
     osx: Option<&'a str>,
     libc: Option<&'a str>,
     cuda: Option<&'a str>,
 }
 
 impl VirtualPackageOverride<'static> {
-    fn none() -> Self {
+    /// Disable all overrides
+    pub fn none() -> Self {
         Self {
             osx: None,
             libc: None,
@@ -201,6 +222,7 @@ impl VirtualPackageOverride<'static> {
         }
     }
 
+    /// Use the default overrides of Conda.
     fn default() -> Self {
         Self {
             osx: Some(Osx::DEFAULT_ENV_NAME),
@@ -261,8 +283,14 @@ fn try_detect_virtual_packages_with_overrides(
 }
 
 fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
+    try_detect_virtual_packages_with_overrides(&VirtualPackageOverride::default())
+}
+
+fn try_detect_virtual_packages_no_overrides(
+) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
     try_detect_virtual_packages_with_overrides(&VirtualPackageOverride::none())
 }
+
 /// Linux virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct Linux {
