@@ -637,10 +637,12 @@ mod test {
         env::set_var(LibC::DEFAULT_ENV_NAME, "");
         assert_eq!(LibC::from_default_env_var().unwrap(), None);
         env::remove_var(LibC::DEFAULT_ENV_NAME);
-        match LibC::from_default_env_var().unwrap_err() {
-            crate::DetectVirtualPackageError::VarError(env::VarError::NotPresent) => {}
-            e => panic!("Expected VarError::NotPresent, got {e:?}"),
-        };
+        assert_eq!(
+            LibC::from_default_env_var_or(|| Ok(Some(res.clone())))
+                .unwrap()
+                .unwrap(),
+            res
+        );
     }
 
     #[test]
