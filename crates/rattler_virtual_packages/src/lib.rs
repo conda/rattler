@@ -70,7 +70,13 @@ pub trait EnvOverride: Sized {
         F: FnOnce() -> Result<Option<Self>, DetectVirtualPackageError>,
     {
         match env::var(env_var_name) {
-            Ok(var) => Ok(Some(Self::from_env_var_name_with_var(env_var_name, &var)?)),
+            Ok(var) => {
+                if var.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(Self::from_env_var_name_with_var(env_var_name, &var)?))
+                }
+            }
             Err(env::VarError::NotPresent) => f(),
             Err(e) => Err(DetectVirtualPackageError::VarError(e)),
         }
