@@ -283,7 +283,7 @@ pub fn looks_like_infinite_starts_with(input: &str) -> bool {
     let mut input = input.strip_suffix('.').unwrap_or(input);
     while !input.is_empty() {
         match input.strip_suffix(".*") {
-            Some(rest) if rest.is_empty() => {
+            Some("") => {
                 // If we were able to continuously strip the `.*` pattern,
                 // then we found a match.
                 return true;

@@ -95,7 +95,7 @@ pub async fn execute_operation(
                 default_retry_policy(),
                 None,
             )
-            .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
+            .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))
             .map_err(anyhow::Error::from)
             .await
             .unwrap()
@@ -104,10 +104,10 @@ pub async fn execute_operation(
     };
 
     // If there is a package to install, do that now.
-    if let Some((record, package_dir)) = install_package {
+    if let Some((record, package_cache_lock)) = install_package {
         install_package_to_environment(
             target_prefix,
-            package_dir,
+            package_cache_lock.path().to_path_buf(),
             record.clone(),
             install_driver,
             install_options,

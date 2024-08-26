@@ -1,8 +1,13 @@
 //! Middleware to handle `oci://` URLs to pull artifacts from an OCI registry
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    fmt::{Display, Formatter},
+};
 
-use http::header::{ACCEPT, AUTHORIZATION};
-use http::Extensions;
+use http::{
+    header::{ACCEPT, AUTHORIZATION},
+    Extensions,
+};
 use reqwest::{Request, Response};
 use reqwest_middleware::{Middleware, Next};
 use serde::Deserialize;
@@ -41,15 +46,16 @@ struct OCIToken {
     token: String,
 }
 
-impl ToString for OciAction {
-    fn to_string(&self) -> String {
+impl Display for OciAction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            OciAction::Pull => "pull".to_string(),
-            OciAction::Push => "push".to_string(),
-            OciAction::PushPull => "push,pull".to_string(),
+            OciAction::Pull => write!(f, "pull"),
+            OciAction::Push => write!(f, "push"),
+            OciAction::PushPull => write!(f, "push,pull"),
         }
     }
 }
+
 // [oci://ghcr.io/channel-mirrors/conda-forge]/[osx-arm64/xtensor]
 async fn get_token(url: &OCIUrl, action: OciAction) -> Result<String, OciMiddlewareError> {
     let token_url = url.token_url(action)?;
@@ -74,8 +80,8 @@ struct OCIUrl {
     media_type: String,
 }
 
-/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to replace them
-/// with something else (reverse of `version_build_tag`)
+/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to
+/// replace them with something else (reverse of `version_build_tag`)
 #[allow(dead_code)]
 fn reverse_version_build_tag(tag: &str) -> String {
     tag.replace("__p__", "+")
@@ -83,8 +89,8 @@ fn reverse_version_build_tag(tag: &str) -> String {
         .replace("__eq__", "=")
 }
 
-/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to replace them
-/// with something else
+/// OCI registry tags are not allowed to contain `+`, `!`, or `=`, so we need to
+/// replace them with something else
 fn version_build_tag(tag: &str) -> String {
     tag.replace('+', "__p__")
         .replace('!', "__e__")
@@ -103,9 +109,7 @@ impl OCIUrl {
     pub fn token_url(&self, action: OciAction) -> Result<Url, ParseError> {
         format!(
             "https://{}/token?scope=repository:{}:{}",
-            self.host,
-            self.path,
-            action.to_string()
+            self.host, self.path, action
         )
         .parse()
     }
@@ -276,8 +280,9 @@ impl Middleware for OciMiddleware {
 
 #[cfg(test)]
 mod tests {
-    use crate::OciMiddleware;
     use sha2::{Digest, Sha256};
+
+    use crate::OciMiddleware;
 
     // test pulling an image from OCI registry
     #[cfg(any(feature = "rustls-tls", feature = "native-tls"))]

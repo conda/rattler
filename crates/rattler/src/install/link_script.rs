@@ -2,6 +2,7 @@
 use std::{
     borrow::Borrow,
     collections::{HashMap, HashSet},
+    fmt::{Display, Formatter},
     path::Path,
 };
 
@@ -57,11 +58,11 @@ impl LinkScriptType {
     }
 }
 
-impl ToString for LinkScriptType {
-    fn to_string(&self) -> String {
+impl Display for LinkScriptType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            LinkScriptType::PreUnlink => "pre-unlink".to_string(),
-            LinkScriptType::PostLink => "post-link".to_string(),
+            LinkScriptType::PreUnlink => write!(f, "pre-unlink"),
+            LinkScriptType::PostLink => write!(f, "post-link"),
         }
     }
 }
@@ -103,7 +104,7 @@ pub fn run_link_scripts<'a>(
     let mut messages = HashMap::<PackageName, String>::new();
     for record in prefix_records {
         let prec = &record.repodata_record.package_record;
-        let link_file = target_prefix.join(&link_script_type.get_path(prec, platform));
+        let link_file = target_prefix.join(link_script_type.get_path(prec, platform));
 
         if link_file.exists() {
             env.insert(

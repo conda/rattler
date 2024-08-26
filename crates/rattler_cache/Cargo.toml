@@ -11,7 +11,9 @@ readme.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+dashmap.workspace = true
 dirs.workspace = true
+futures.workspace = true
 fxhash.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
@@ -26,6 +28,7 @@ url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
+async-fd-lock.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true

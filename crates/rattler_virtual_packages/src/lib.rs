@@ -95,7 +95,7 @@ pub enum VirtualPackage {
     /// Available when running on OSX
     Osx(Osx),
 
-    /// Available LibC family and version
+    /// Available `LibC` family and version
     LibC(LibC),
 
     /// Available Cuda version
@@ -233,7 +233,7 @@ impl From<Version> for Linux {
 /// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
-    /// The family of LibC. This could be glibc for instance.
+    /// The family of `LibC`. This could be glibc for instance.
     pub family: String,
 
     /// The version of the libc distribution.

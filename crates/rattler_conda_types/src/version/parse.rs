@@ -451,7 +451,6 @@ mod test {
     use crate::version::SegmentFormatter;
     use serde::Serialize;
     use std::collections::BTreeMap;
-    use std::fmt::{Display, Formatter};
     use std::path::Path;
     use std::str::FromStr;
 
@@ -510,17 +509,6 @@ mod test {
         }
 
         insta::assert_debug_snapshot!(index_map);
-    }
-
-    struct DisplayAsDebug<T>(T);
-
-    impl<T> Display for DisplayAsDebug<T>
-    where
-        for<'i> &'i T: std::fmt::Debug,
-    {
-        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", &self.0)
-        }
     }
 
     /// Parse a large number of versions and see if parsing succeeded.

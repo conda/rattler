@@ -271,7 +271,7 @@ fn write_zst_archive<W: Write>(
 /// * `paths` - a list of paths to include in the package
 /// * `compression_level` - the compression level to use for the inner zstd encoded files
 /// * `compression_num_threads` - the number of threads to use for zstd compression (defaults to
-/// the number of CPU cores if `None`)
+///    the number of CPU cores if `None`)
 /// * `timestamp` - optional a timestamp to use for all archive files (useful for reproducible builds)
 ///
 /// # Errors

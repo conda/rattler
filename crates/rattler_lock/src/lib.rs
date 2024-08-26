@@ -214,9 +214,7 @@ impl LockFile {
     }
 
     /// Returns an iterator over all environments defined in the lock-file.
-    pub fn environments(
-        &self,
-    ) -> impl Iterator<Item = (&str, Environment)> + ExactSizeIterator + '_ {
+    pub fn environments(&self) -> impl ExactSizeIterator<Item = (&str, Environment)> + '_ {
         self.inner
             .environment_lookup
             .iter()
@@ -251,7 +249,7 @@ impl Environment {
     }
 
     /// Returns all the platforms for which we have a locked-down environment.
-    pub fn platforms(&self) -> impl Iterator<Item = Platform> + ExactSizeIterator + '_ {
+    pub fn platforms(&self) -> impl ExactSizeIterator<Item = Platform> + '_ {
         self.data().packages.keys().copied()
     }
 
@@ -276,7 +274,7 @@ impl Environment {
     pub fn packages(
         &self,
         platform: Platform,
-    ) -> Option<impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_> {
+    ) -> Option<impl DoubleEndedIterator<Item = Package> + ExactSizeIterator + '_> {
         let packages = self.data().packages.get(&platform)?;
         Some(
             packages
@@ -289,13 +287,12 @@ impl Environment {
     /// environment
     pub fn packages_by_platform(
         &self,
-    ) -> impl Iterator<
+    ) -> impl ExactSizeIterator<
         Item = (
             Platform,
-            impl Iterator<Item = Package> + ExactSizeIterator + DoubleEndedIterator + '_,
+            impl DoubleEndedIterator<Item = Package> + ExactSizeIterator + '_,
         ),
-    > + ExactSizeIterator
-           + '_ {
+    > + '_ {
         let env_data = self.data();
         env_data.packages.iter().map(move |(platform, packages)| {
             (
@@ -386,9 +383,7 @@ impl Environment {
         &self,
         platform: Platform,
     ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
-        let Some(packages) = self.data().packages.get(&platform) else {
-            return None;
-        };
+        let packages = self.data().packages.get(&platform)?;
 
         Some(
             packages
