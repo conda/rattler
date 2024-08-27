@@ -248,7 +248,7 @@ fn try_detect_virtual_packages_with_overrides(
         if let Some(linux_version) = Linux::current()? {
             result.push(linux_version.into());
         }
-        if let Some(libc) = overrides.libc.as_ref().map(String::as_str).map_or_else(
+        if let Some(libc) = overrides.libc.as_deref().map_or_else(
             <LibC as EnvOverride>::current,
             LibC::from_env_var_name_or_current,
         )? {
@@ -257,7 +257,7 @@ fn try_detect_virtual_packages_with_overrides(
     }
 
     if platform.is_osx() {
-        if let Some(osx) = overrides.osx.as_ref().map(String::as_str).map_or_else(
+        if let Some(osx) = overrides.osx.as_deref().map_or_else(
             <Osx as EnvOverride>::current,
             Osx::from_env_var_name_or_current,
         )? {
@@ -265,7 +265,7 @@ fn try_detect_virtual_packages_with_overrides(
         }
     }
 
-    if let Some(cuda) = overrides.cuda.as_ref().map(String::as_str).map_or_else(
+    if let Some(cuda) = overrides.cuda.as_deref().map_or_else(
         <Cuda as EnvOverride>::current,
         Cuda::from_env_var_name_or_current,
     )? {
