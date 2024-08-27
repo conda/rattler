@@ -34,7 +34,6 @@ pub mod linux;
 pub mod osx;
 
 use archspec::cpu::Microarchitecture;
-use once_cell::sync::OnceCell;
 use rattler_conda_types::{
     GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
 };
