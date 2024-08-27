@@ -164,29 +164,20 @@ impl From<VirtualPackage> for GenericVirtualPackage {
 impl VirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
-    pub fn current() -> Result<&'static [Self], DetectVirtualPackageError> {
-        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
-        DETECTED_VIRTUAL_PACKAGES
-            .get_or_try_init(try_detect_virtual_packages)
-            .map(Vec::as_slice)
+    pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
+        try_detect_virtual_packages()
     }
 
     /// disable overrides
-    pub fn current_no_overrides() -> Result<&'static [Self], DetectVirtualPackageError> {
-        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
-        DETECTED_VIRTUAL_PACKAGES
-            .get_or_try_init(try_detect_virtual_packages_no_overrides)
-            .map(Vec::as_slice)
+    pub fn current_no_overrides() -> Result<Vec<Self>, DetectVirtualPackageError> {
+        try_detect_virtual_packages_no_overrides()
     }
 
     /// use custom overrides
     pub fn current_with_overrides(
-        overrides: &VirtualPackageOverride<'_>,
-    ) -> Result<&'static [Self], DetectVirtualPackageError> {
-        static DETECTED_VIRTUAL_PACKAGES: OnceCell<Vec<VirtualPackage>> = OnceCell::new();
-        DETECTED_VIRTUAL_PACKAGES
-            .get_or_try_init(|| try_detect_virtual_packages_with_overrides(overrides))
-            .map(Vec::as_slice)
+        overrides: &VirtualPackageOverride,
+    ) -> Result<Vec<Self>, DetectVirtualPackageError> {
+        try_detect_virtual_packages_with_overrides(overrides)
     }
 }
 
@@ -212,13 +203,13 @@ pub enum DetectVirtualPackageError {
 
 /// Configure the overrides used in in this crate.
 
-pub struct VirtualPackageOverride<'a> {
-    osx: Option<&'a str>,
-    libc: Option<&'a str>,
-    cuda: Option<&'a str>,
+pub struct VirtualPackageOverride {
+    osx: Option<String>,
+    libc: Option<String>,
+    cuda: Option<String>,
 }
 
-impl VirtualPackageOverride<'static> {
+impl VirtualPackageOverride {
     /// Disable all overrides
     pub fn none() -> Self {
         Self {
@@ -227,20 +218,21 @@ impl VirtualPackageOverride<'static> {
             cuda: None,
         }
     }
+}
 
-    /// Use the default overrides of Conda.
+impl Default for VirtualPackageOverride {
     fn default() -> Self {
         Self {
-            osx: Some(Osx::DEFAULT_ENV_NAME),
-            libc: Some(LibC::DEFAULT_ENV_NAME),
-            cuda: Some(Cuda::DEFAULT_ENV_NAME),
+            osx: Some(Osx::DEFAULT_ENV_NAME.to_string()),
+            libc: Some(LibC::DEFAULT_ENV_NAME.to_string()),
+            cuda: Some(Cuda::DEFAULT_ENV_NAME.to_string()),
         }
     }
 }
 
 // Detect the available virtual packages on the system
 fn try_detect_virtual_packages_with_overrides(
-    overrides: &VirtualPackageOverride<'_>,
+    overrides: &VirtualPackageOverride,
 ) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
     let mut result = Vec::new();
     let platform = Platform::current();
@@ -257,7 +249,7 @@ fn try_detect_virtual_packages_with_overrides(
         if let Some(linux_version) = Linux::current()? {
             result.push(linux_version.into());
         }
-        if let Some(libc) = overrides.libc.map_or_else(
+        if let Some(libc) = overrides.libc.as_ref().map(String::as_str).map_or_else(
             <LibC as EnvOverride>::current,
             LibC::from_env_var_name_or_current,
         )? {
@@ -266,7 +258,7 @@ fn try_detect_virtual_packages_with_overrides(
     }
 
     if platform.is_osx() {
-        if let Some(osx) = overrides.osx.map_or_else(
+        if let Some(osx) = overrides.osx.as_ref().map(String::as_str).map_or_else(
             <Osx as EnvOverride>::current,
             Osx::from_env_var_name_or_current,
         )? {
@@ -274,7 +266,7 @@ fn try_detect_virtual_packages_with_overrides(
         }
     }
 
-    if let Some(cuda) = overrides.cuda.map_or_else(
+    if let Some(cuda) = overrides.cuda.as_ref().map(String::as_str).map_or_else(
         <Cuda as EnvOverride>::current,
         Cuda::from_env_var_name_or_current,
     )? {
