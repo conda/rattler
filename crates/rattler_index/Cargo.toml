@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.19.24"
+version = "0.19.25"
 edition.workspace = true
 authors = []
 description = "A crate that indexes directories containing conda packages to create local conda channels"
@@ -14,7 +14,7 @@ readme.workspace = true
 fs-err = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.27.2", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "1.0.1", default-features = false }
-rattler_package_streaming = { path="../rattler_package_streaming", version = "0.22.3", default-features = false }
+rattler_package_streaming = { path="../rattler_package_streaming", version = "0.22.4", default-features = false }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 walkdir = { workspace = true }
