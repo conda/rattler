@@ -71,7 +71,6 @@ pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
     fn parse_version(value: &str) -> Result<Self, ParseVersionError>;
 
-
     /// Helper to convert the output of `parse_version` and handling empty strings.
     fn parse_version_(value: &str) -> Result<Option<Self>, DetectVirtualPackageError> {
         if value.is_empty() {
@@ -229,7 +228,6 @@ impl VirtualPackageOverride {
         }
     }
 }
-
 
 // Detect the available virtual packages on the system
 fn try_detect_virtual_packages_with_overrides(
@@ -397,9 +395,7 @@ impl From<Version> for Cuda {
 }
 
 impl EnvOverride for Cuda {
-    fn parse_version(
-        env_var_value: &str,
-    ) -> Result<Self, ParseVersionError> {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self { version })
     }
     fn current() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -575,9 +571,7 @@ impl From<Version> for Osx {
 }
 
 impl EnvOverride for Osx {
-    fn parse_version(
-        env_var_value: &str,
-    ) -> Result<Self, ParseVersionError> {
+    fn parse_version(env_var_value: &str) -> Result<Self, ParseVersionError> {
         Version::from_str(env_var_value).map(|version| Self { version })
     }
     fn current() -> Result<Option<Self>, DetectVirtualPackageError> {
@@ -597,8 +591,8 @@ mod test {
     use crate::EnvOverride;
     use crate::LibC;
     use crate::Osx;
-    use crate::VirtualPackage;
     use crate::Override;
+    use crate::VirtualPackage;
 
     #[test]
     fn doesnt_crash() {
@@ -613,9 +607,17 @@ mod test {
             family: "glibc".into(),
         };
         env::set_var(LibC::DEFAULT_ENV_NAME, v);
-        assert_eq!(LibC::apply_override(&Override::DefaultEnvVar).unwrap().unwrap(), res);
+        assert_eq!(
+            LibC::apply_override(&Override::DefaultEnvVar)
+                .unwrap()
+                .unwrap(),
+            res
+        );
         env::set_var(LibC::DEFAULT_ENV_NAME, "");
-        assert_eq!(LibC::apply_override(&Override::DefaultEnvVar).unwrap(), None);
+        assert_eq!(
+            LibC::apply_override(&Override::DefaultEnvVar).unwrap(),
+            None
+        );
         env::remove_var(LibC::DEFAULT_ENV_NAME);
         assert_eq!(
             LibC::apply_override_or(&Override::DefaultEnvVar, || Ok(Some(res.clone())))
@@ -629,7 +631,7 @@ mod test {
                 .unwrap(),
             res
         );
-    }   
+    }
 
     #[test]
     fn parse_cuda() {
@@ -638,7 +640,12 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         env::set_var(Cuda::DEFAULT_ENV_NAME, v);
-        assert_eq!(Cuda::apply_override(&Override::DefaultEnvVar).unwrap().unwrap(), res);
+        assert_eq!(
+            Cuda::apply_override(&Override::DefaultEnvVar)
+                .unwrap()
+                .unwrap(),
+            res
+        );
     }
 
     #[test]
@@ -648,6 +655,11 @@ mod test {
             version: Version::from_str(v).unwrap(),
         };
         env::set_var(Osx::DEFAULT_ENV_NAME, v);
-        assert_eq!(Osx::apply_override(&Override::DefaultEnvVar).unwrap().unwrap(), res);
+        assert_eq!(
+            Osx::apply_override(&Override::DefaultEnvVar)
+                .unwrap()
+                .unwrap(),
+            res
+        );
     }
 }
