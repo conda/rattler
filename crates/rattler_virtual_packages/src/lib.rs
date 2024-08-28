@@ -48,6 +48,7 @@ use linux::ParseLinuxVersionError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Configure the overrides used in in this crate.
+#[derive(Clone, Debug)]
 pub enum Override {
     /// Use the default override env var name
     DefaultEnvVar,
@@ -175,17 +176,12 @@ impl VirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
-        try_detect_virtual_packages()
-    }
-
-    /// disable overrides
-    pub fn current_no_overrides() -> Result<Vec<Self>, DetectVirtualPackageError> {
-        try_detect_virtual_packages_no_overrides()
+        try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::default())
     }
 
     /// use custom overrides
     pub fn current_with_overrides(
-        overrides: &VirtualPackageOverride,
+        overrides: &VirtualPackageOverrides,
     ) -> Result<Vec<Self>, DetectVirtualPackageError> {
         try_detect_virtual_packages_with_overrides(overrides)
     }
@@ -211,14 +207,14 @@ pub enum DetectVirtualPackageError {
     VersionParseError(#[from] ParseVersionError),
 }
 /// Configure the overrides used in in this crate.
-#[derive(Default)]
-pub struct VirtualPackageOverride {
+#[derive(Default, Clone, Debug)]
+pub struct VirtualPackageOverrides {
     osx: Override,
     libc: Override,
     cuda: Override,
 }
 
-impl VirtualPackageOverride {
+impl VirtualPackageOverrides {
     /// Disable all overrides
     pub fn none() -> Self {
         Self {
@@ -231,7 +227,7 @@ impl VirtualPackageOverride {
 
 // Detect the available virtual packages on the system
 fn try_detect_virtual_packages_with_overrides(
-    overrides: &VirtualPackageOverride,
+    overrides: &VirtualPackageOverrides,
 ) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
     let mut result = Vec::new();
     let platform = Platform::current();
@@ -268,15 +264,6 @@ fn try_detect_virtual_packages_with_overrides(
     }
 
     Ok(result)
-}
-
-fn try_detect_virtual_packages() -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
-    try_detect_virtual_packages_with_overrides(&VirtualPackageOverride::default())
-}
-
-fn try_detect_virtual_packages_no_overrides(
-) -> Result<Vec<VirtualPackage>, DetectVirtualPackageError> {
-    try_detect_virtual_packages_with_overrides(&VirtualPackageOverride::none())
 }
 
 /// Linux virtual package description
