@@ -17,28 +17,28 @@ class Override:
         return override
 
     @classmethod
-    def _from_default_env_var(cls) -> Override:
+    def default_envvar(cls) -> Override:
         """
         Returns the default environment variable override.
         """
         return cls._from_py_override(PyOverride.default_env_var())
 
     @classmethod
-    def _from_env_var(cls, env_var: str) -> Override:
+    def env_var(cls, env_var: str) -> Override:
         """
         Returns the environment variable override for the given environment variable.
         """
         return cls._from_py_override(PyOverride.env_var(env_var))
 
     @classmethod
-    def _from_string(cls, override: str) -> Override:
+    def string(cls, override: str) -> Override:
         """
         Returns the override for the given string.
         """
         return cls._from_py_override(PyOverride.from_str(override))
 
     @classmethod
-    def _from_none(cls) -> Override:
+    def none(cls) -> Override:
         """
         Returns the override for None.
         """
@@ -70,14 +70,14 @@ class VirtualPackageOverrides:
         return virtual_package_overrides
 
     @classmethod
-    def _from_default(cls) -> VirtualPackageOverrides:
+    def default(cls) -> VirtualPackageOverrides:
         """
         Returns the default virtual package overrides.
         """
         return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.default())
 
     @classmethod
-    def _from_none(cls) -> VirtualPackageOverrides:
+    def none(cls) -> VirtualPackageOverrides:
         """
         Returns the virtual package overrides for None.
         """
