@@ -124,8 +124,6 @@ impl PyVirtualPackageOverrides {
     pub fn set_libc(&mut self, value: PyOverride) {
         self.inner.libc = value.into();
     }
-    
-    
 }
 
 #[pyclass]
