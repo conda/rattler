@@ -5,7 +5,7 @@ use crate::{error::PyRattlerError, generic_virtual_package::PyGenericVirtualPack
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq)]
 pub struct PyOverride {
     pub(crate) inner: Override,
 }
@@ -31,14 +31,39 @@ impl PyOverride {
         }
     }
 
+    #[staticmethod]
+    pub fn default_env_var() -> Self {
+        Self {
+            inner: Override::DefaultEnvVar,
+        }
+    }
+
+    #[staticmethod]
+    pub fn env_var(name: &str) -> Self {
+        Self {
+            inner: Override::EnvVar(name.to_string()),
+        }
+    }
+
+    #[staticmethod]
+    pub fn string(value: &str) -> Self {
+        Self {
+            inner: Override::String(value.to_string()),
+        }
+    }
+
     pub fn as_str(&self) -> String {
         format!("{:?}", self.inner)
+    }
+
+    pub fn __eq__(&self, other: &Self) -> bool {
+        self.inner == other.inner
     }
 }
 
 #[pyclass]
 #[repr(transparent)]
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PyVirtualPackageOverrides {
     pub(crate) inner: VirtualPackageOverrides,
 }
@@ -58,6 +83,13 @@ impl From<PyVirtualPackageOverrides> for VirtualPackageOverrides {
 #[pymethods]
 impl PyVirtualPackageOverrides {
     #[staticmethod]
+    pub fn default() -> Self {
+        Self {
+            inner: VirtualPackageOverrides::default(),
+        }
+    }
+
+    #[staticmethod]
     pub fn none() -> Self {
         Self {
             inner: VirtualPackageOverrides::none(),
@@ -67,6 +99,33 @@ impl PyVirtualPackageOverrides {
     pub fn as_str(&self) -> String {
         format!("{:?}", self.inner)
     }
+
+    #[getter]
+    pub fn get_osx(&self) -> PyOverride {
+        self.inner.osx.clone().into()
+    }
+    #[setter]
+    pub fn set_osx(&mut self, value: PyOverride) {
+        self.inner.osx = value.into();
+    }
+    #[getter]
+    pub fn get_cuda(&self) -> PyOverride {
+        self.inner.cuda.clone().into()
+    }
+    #[setter]
+    pub fn set_cuda(&mut self, value: PyOverride) {
+        self.inner.cuda = value.into();
+    }
+    #[getter]
+    pub fn get_libc(&self) -> PyOverride {
+        self.inner.libc.clone().into()
+    }
+    #[setter]
+    pub fn set_libc(&mut self, value: PyOverride) {
+        self.inner.libc = value.into();
+    }
+    
+    
 }
 
 #[pyclass]

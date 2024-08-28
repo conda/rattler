@@ -17,7 +17,7 @@ class Override:
         return override
 
     @classmethod
-    def default_envvar(cls) -> Override:
+    def default_env_var(cls) -> Override:
         """
         Returns the default environment variable override.
         """
@@ -35,7 +35,7 @@ class Override:
         """
         Returns the override for the given string.
         """
-        return cls._from_py_override(PyOverride.from_str(override))
+        return cls._from_py_override(PyOverride.string(override))
 
     @classmethod
     def none(cls) -> Override:
@@ -55,6 +55,14 @@ class Override:
         Returns a representation of the Override.
         """
         return f"Override({self._override.as_str()})"
+
+    def __eq__(self, other: object) -> bool:
+        """
+        Returns True if the Overrides are equal, False otherwise.
+        """
+        if not isinstance(other, Override):
+            return NotImplemented
+        return self._override == other._override
 
 
 class VirtualPackageOverrides:

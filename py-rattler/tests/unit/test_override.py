@@ -1,26 +1,28 @@
-from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version
+from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, PackageName
 
 def test_stuff():
     overrides = VirtualPackageOverrides.none()
+    print(overrides.osx, Override.none())
     assert overrides.osx == Override.none()
     assert overrides.libc == Override.none()
     assert overrides.cuda == Override.none()
     overrides = VirtualPackageOverrides.default()
-    assert overrides.osx == Override.default()
-    assert overrides.libc == Override.default()
-    assert overrides.cuda == Override.default()
+    assert overrides.osx == Override.default_env_var()
+    assert overrides.libc == Override.default_env_var()
+    assert overrides.cuda == Override.default_env_var()
     
     overrides.osx = Override.string("123.45")
     overrides.libc = Override.string("123.457")
     overrides.cuda = Override.string("123.4578")
 
-    r = VirtualPackage.current_with_overrides(overrides)
-    def find(name, ver):
+    r = [i.into_generic() for i in VirtualPackage.current_with_overrides(overrides)]
+    def find(name, ver, must_find=True):
         for i in r:
-            if i.name == name:
+            if i.name.source == name:
                 assert i.version == Version(ver)
-        assert False
+                return
+        assert not must_find
     
     find("__cuda", "123.4578")
-    find("__libc", "123.457")
-    find("__osx", "123.45")
+    find("__libc", "123.4578", False)
+    find("__osx", "123.45", False)

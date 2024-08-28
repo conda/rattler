@@ -48,7 +48,7 @@ use linux::ParseLinuxVersionError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Configure the overrides used in in this crate.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Override {
     /// Use the default override env var name
     DefaultEnvVar,
@@ -209,9 +209,12 @@ pub enum DetectVirtualPackageError {
 /// Configure the overrides used in in this crate.
 #[derive(Default, Clone, Debug)]
 pub struct VirtualPackageOverrides {
-    osx: Override,
-    libc: Override,
-    cuda: Override,
+    /// The override for the osx virtual package
+    pub osx: Override,
+    /// The override for the libc virtual package
+    pub libc: Override,
+    /// The override for the cuda virtual package
+    pub cuda: Override,
 }
 
 impl VirtualPackageOverrides {
