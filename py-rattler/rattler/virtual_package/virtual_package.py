@@ -1,9 +1,144 @@
 from __future__ import annotations
 
-from rattler.rattler import PyVirtualPackage
+from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverrides
 from typing import List
 
 from rattler.virtual_package.generic import GenericVirtualPackage
+
+
+class Override:
+    _override: PyOverride
+
+    @classmethod
+    def _from_py_override(cls, py_override: PyOverride) -> Override:
+        """Construct Rattler Override from FFI PyOverride object."""
+        override = cls.__new__(cls)
+        override._override = py_override
+        return override
+
+    @classmethod
+    def _from_default_env_var(cls) -> Override:
+        """
+        Returns the default environment variable override.
+        """
+        return cls._from_py_override(PyOverride.default_env_var())
+
+    @classmethod
+    def _from_env_var(cls, env_var: str) -> Override:
+        """
+        Returns the environment variable override for the given environment variable.
+        """
+        return cls._from_py_override(PyOverride.env_var(env_var))
+
+    @classmethod
+    def _from_string(cls, override: str) -> Override:
+        """
+        Returns the override for the given string.
+        """
+        return cls._from_py_override(PyOverride.from_str(override))
+
+    @classmethod
+    def _from_none(cls) -> Override:
+        """
+        Returns the override for None.
+        """
+        return cls._from_py_override(PyOverride.none())
+
+    def __str__(self) -> str:
+        """
+        Returns string representation of the Override.
+        """
+        return self._override.as_str()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the Override.
+        """
+        return f"Override({self._override.as_str()})"
+
+
+class VirtualPackageOverrides:
+    _overrides: PyVirtualPackageOverrides
+
+    @classmethod
+    def _from_py_virtual_package_overrides(
+        cls, py_virtual_package_overrides: PyVirtualPackageOverrides
+    ) -> VirtualPackageOverrides:
+        """Construct Rattler VirtualPackageOverrides from FFI PyVirtualPackageOverrides object."""
+        virtual_package_overrides = cls.__new__(cls)
+        virtual_package_overrides._overrides = py_virtual_package_overrides
+        return virtual_package_overrides
+
+    @classmethod
+    def _from_default(cls) -> VirtualPackageOverrides:
+        """
+        Returns the default virtual package overrides.
+        """
+        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.default())
+
+    @classmethod
+    def _from_none(cls) -> VirtualPackageOverrides:
+        """
+        Returns the virtual package overrides for None.
+        """
+        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.none())
+
+    @property
+    def osx(self) -> Override:
+        """
+        Returns the OSX override.
+        """
+        return Override._from_py_override(self._overrides.osx)
+
+    @osx.setter
+    def osx(self, override: Override) -> VirtualPackageOverrides:
+        """
+        Sets the OSX override.
+        """
+        self._overrides.osx = override._override
+        return self._overrides.osx
+
+    @property
+    def libc(self) -> Override:
+        """
+        Returns the libc override.
+        """
+        return Override._from_py_override(self._overrides.libc)
+
+    @libc.setter
+    def libc(self, override: Override) -> VirtualPackageOverrides:
+        """
+        Sets the libc override.
+        """
+        self._overrides.libc = override._override
+        return self._overrides.libc
+
+    @property
+    def cuda(self) -> Override:
+        """
+        Returns the CUDA override.
+        """
+        return Override._from_py_override(self._overrides.cuda)
+
+    @cuda.setter
+    def cuda(self, override: Override) -> VirtualPackageOverrides:
+        """
+        Sets the CUDA override.
+        """
+        self._overrides.cuda = override._override
+        return self._overrides.cuda
+
+    def __str__(self) -> str:
+        """
+        Returns string representation of the VirtualPackageOverrides.
+        """
+        return self._overrides.as_str()
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the VirtualPackageOverrides.
+        """
+        return f"VirtualPackageOverrides({self._overrides.as_str()})"
 
 
 class VirtualPackage:
@@ -23,6 +158,16 @@ class VirtualPackage:
         if the versions could not be properly detected.
         """
         return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.current()]
+
+    @staticmethod
+    def current_with_overrides(overrides: VirtualPackageOverrides) -> List[VirtualPackage]:
+        """
+        Returns virtual packages detected for the current system with the given overrides.
+        """
+        return [
+            VirtualPackage._from_py_virtual_package(vp)
+            for vp in PyVirtualPackage.current_with_overrides(overrides._overrides)
+        ]
 
     def into_generic(self) -> GenericVirtualPackage:
         """
