@@ -131,19 +131,19 @@ pub enum VirtualPackage {
     /// Available on windows
     Win,
 
-    /// Available on unix based platforms
+    /// Available on `Unix` based platforms
     Unix,
 
-    /// Available when running on Linux
+    /// Available when running on `Linux``
     Linux(Linux),
 
-    /// Available when running on OSX
+    /// Available when running on `OSX`
     Osx(Osx),
 
-    /// Available LibC family and version
+    /// Available `LibC` family and version
     LibC(LibC),
 
-    /// Available Cuda version
+    /// Available `Cuda` version
     Cuda(Cuda),
 
     /// The CPU architecture
@@ -308,7 +308,7 @@ impl From<Version> for Linux {
 /// `LibC` virtual package description
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize)]
 pub struct LibC {
-    /// The family of LibC. This could be glibc for instance.
+    /// The family of `LibC`. This could be glibc for instance.
     pub family: String,
 
     /// The version of the libc distribution.
@@ -593,19 +593,20 @@ mod test {
             version: Version::from_str(v).unwrap(),
             family: "glibc".into(),
         };
-        env::set_var(LibC::DEFAULT_ENV_NAME, v);
+        let env_var_name = format!("{}_{}", LibC::DEFAULT_ENV_NAME, "12345511231");
+        env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            LibC::apply_override(&Override::DefaultEnvVar)
+            LibC::apply_override(&Override::EnvVar(env_var_name.clone()))
                 .unwrap()
                 .unwrap(),
             res
         );
-        env::set_var(LibC::DEFAULT_ENV_NAME, "");
+        env::set_var(env_var_name.clone(), "");
         assert_eq!(
-            LibC::apply_override(&Override::DefaultEnvVar).unwrap(),
+            LibC::apply_override(&Override::EnvVar(env_var_name.clone())).unwrap(),
             None
         );
-        env::remove_var(LibC::DEFAULT_ENV_NAME);
+        env::remove_var(env_var_name.clone());
         assert_eq!(
             LibC::apply_override_or(&Override::DefaultEnvVar, || Ok(Some(res.clone())))
                 .unwrap()
@@ -626,9 +627,21 @@ mod test {
         let res = Cuda {
             version: Version::from_str(v).unwrap(),
         };
-        env::set_var(Cuda::DEFAULT_ENV_NAME, v);
+        let env_var_name = format!("{}_{}", Cuda::DEFAULT_ENV_NAME, "12345511231");
+        env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Cuda::apply_override(&Override::DefaultEnvVar)
+            Cuda::apply_override(&Override::EnvVar(env_var_name.clone()))
+                .unwrap()
+                .unwrap(),
+            res
+        );
+        assert_eq!(
+            Cuda::apply_override(&Override::None).map_err(|_x| 1),
+            <Cuda as EnvOverride>::current().map_err(|_x| 1)
+        );
+        env::remove_var(env_var_name.clone());
+        assert_eq!(
+            Cuda::apply_override(&Override::String(v.to_string()))
                 .unwrap()
                 .unwrap(),
             res
@@ -641,9 +654,10 @@ mod test {
         let res = Osx {
             version: Version::from_str(v).unwrap(),
         };
-        env::set_var(Osx::DEFAULT_ENV_NAME, v);
+        let env_var_name = format!("{}_{}", Osx::DEFAULT_ENV_NAME, "12345511231");
+        env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Osx::apply_override(&Override::DefaultEnvVar)
+            Osx::apply_override(&Override::EnvVar(env_var_name.clone()))
                 .unwrap()
                 .unwrap(),
             res
