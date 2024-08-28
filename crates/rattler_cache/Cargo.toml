@@ -22,7 +22,7 @@ rattler_digest = { version = "1.0.1", path = "../rattler_digest", default-featur
 rattler_networking = { version = "0.21.2", path = "../rattler_networking", default-features = false }
 rattler_package_streaming = { version = "0.22.3", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 reqwest.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros"] }
 tracing.workspace = true
 url.workspace = true
 thiserror.workspace = true
