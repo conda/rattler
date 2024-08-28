@@ -731,7 +731,7 @@ mod test {
             .get_or_fetch(
                 ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
                 move |destination| {
-                    let tar_archive_path = tar_archive_path.to_path_buf();
+                    let tar_archive_path = tar_archive_path.clone();
                     async move {
                         rattler_package_streaming::tokio::fs::extract(
                             &tar_archive_path,
@@ -747,7 +747,7 @@ mod test {
             .unwrap();
 
         // Validate the contents of the package
-        let (_, current_paths) = validate_package_directory(&cache_lock.path()).unwrap();
+        let (_, current_paths) = validate_package_directory(cache_lock.path()).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.

@@ -45,7 +45,7 @@ pub async fn install_package_to_environment(
 
     // Create the conda-meta directory if it doesnt exist yet.
     let target_prefix = target_prefix.to_path_buf();
-    match tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
 
@@ -53,8 +53,8 @@ pub async fn install_package_to_environment(
         let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
         prefix_record.write_to_path(pkg_meta_path, true)
     })
-    .await
-    {
+    .await;
+    match result {
         Ok(result) => Ok(result?),
         Err(err) => {
             if let Ok(panic) = err.try_into_panic() {
