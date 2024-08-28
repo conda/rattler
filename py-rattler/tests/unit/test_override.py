@@ -1,6 +1,6 @@
 from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, PackageName
 
-def test_stuff():
+def test_stuff() -> None:
     overrides = VirtualPackageOverrides.none()
     print(overrides.osx, Override.none())
     assert overrides.osx == Override.none()
@@ -16,7 +16,7 @@ def test_stuff():
     overrides.cuda = Override.string("123.4578")
 
     r = [i.into_generic() for i in VirtualPackage.current_with_overrides(overrides)]
-    def find(name, ver, must_find=True):
+    def find(name, ver, must_find=True) -> None:
         for i in r:
             if i.name.source == name:
                 assert i.version == Version(ver)
