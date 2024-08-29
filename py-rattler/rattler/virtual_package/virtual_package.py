@@ -87,7 +87,7 @@ class VirtualPackageOverrides:
         return virtual_package_overrides
 
     
-    def __init__(self) -> VirtualPackageOverrides:
+    def __init__(self) -> None:
         """
         Returns the default virtual package overrides.
         """
