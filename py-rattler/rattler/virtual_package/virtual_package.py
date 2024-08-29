@@ -6,9 +6,10 @@ from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverri
 
 from rattler.virtual_package.generic import GenericVirtualPackage
 
+
 class Override:
     """
-    Represents an override for a virtual package. 
+    Represents an override for a virtual package.
     An override can be build using
     - `Override.default_env_var()` for overriding the detection with the default environment variable,
     - `Override.env_var(str)` for overriding the detection with a custom environment variable,
@@ -86,7 +87,6 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    
     def __init__(self) -> None:
         """
         Returns the default virtual package overrides.
