@@ -151,14 +151,21 @@ impl PyVirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
     #[staticmethod]
+    #[deprecated(note = "Use `Self::detect` instead.")]
     pub fn current() -> PyResult<Vec<Self>> {
-        Self::current_with_overrides(&PyVirtualPackageOverrides::default())
+        Self::detect_with_overrides(&PyVirtualPackageOverrides::none())
     }
 
     #[staticmethod]
-    pub fn current_with_overrides(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
+    pub fn detect() -> PyResult<Vec<Self>> {
+        Self::detect_with_overrides(&PyVirtualPackageOverrides::default())
+    }
+
+
+    #[staticmethod]
+    pub fn detect_with_overrides(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
         Ok(
-            VirtualPackage::current_with_overrides(&overrides.clone().into())
+            VirtualPackage::detect_with_overrides(&overrides.clone().into())
                 .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
                 .map_err(PyRattlerError::from)?,
         )

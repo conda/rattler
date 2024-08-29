@@ -6,7 +6,7 @@ def test_stuff() -> None:
     assert overrides.osx == Override.none()
     assert overrides.libc == Override.none()
     assert overrides.cuda == Override.none()
-    overrides = VirtualPackageOverrides.default()
+    overrides = VirtualPackageOverrides()
     assert overrides.osx == Override.default_env_var()
     assert overrides.libc == Override.default_env_var()
     assert overrides.cuda == Override.default_env_var()
@@ -15,7 +15,7 @@ def test_stuff() -> None:
     overrides.libc = Override.string("123.457")
     overrides.cuda = Override.string("123.4578")
 
-    r = [i.into_generic() for i in VirtualPackage.current_with_overrides(overrides)]
+    r = [i.into_generic() for i in VirtualPackage.detect_with_overrides(overrides)]
     def find(name, ver, must_find=True) -> None:
         for i in r:
             if i.name.source == name:

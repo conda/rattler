@@ -1,12 +1,21 @@
 from __future__ import annotations
+from typing import List
+import warnings
 
 from rattler.rattler import PyVirtualPackage, PyOverride, PyVirtualPackageOverrides
-from typing import List
 
 from rattler.virtual_package.generic import GenericVirtualPackage
 
-
 class Override:
+    """
+    Represents an override for a virtual package. 
+    An override can be build using
+    - `Override.default_env_var()` for overriding the detection with the default environment variable,
+    - `Override.env_var(str)` for overriding the detection with a custom environment variable,
+    - `Override.string(str)` for passing the version directly, or
+    - `Override.none()` for disabling the override process all together.
+    """
+
     _override: PyOverride
 
     @classmethod
@@ -77,12 +86,12 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    @classmethod
-    def default(cls) -> VirtualPackageOverrides:
+    
+    def __init__(self) -> VirtualPackageOverrides:
         """
         Returns the default virtual package overrides.
         """
-        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.default())
+        self._overrides = PyVirtualPackageOverrides.default()
 
     @classmethod
     def none(cls) -> VirtualPackageOverrides:
@@ -165,16 +174,25 @@ class VirtualPackage:
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
         """
+        warnings.warn("Use `detect` instead")
         return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.current()]
 
     @staticmethod
-    def current_with_overrides(overrides: VirtualPackageOverrides) -> List[VirtualPackage]:
+    def detect() -> List[VirtualPackage]:
+        """
+        Returns virtual packages detected for the current system or an error
+        if the versions could not be properly detected.
+        """
+        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.current()]
+
+    @staticmethod
+    def detect_with_overrides(overrides: VirtualPackageOverrides) -> List[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
         """
         return [
             VirtualPackage._from_py_virtual_package(vp)
-            for vp in PyVirtualPackage.current_with_overrides(overrides._overrides)
+            for vp in PyVirtualPackage.detect_with_overrides(overrides._overrides)
         ]
 
     def into_generic(self) -> GenericVirtualPackage:
