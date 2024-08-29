@@ -1,6 +1,6 @@
 from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, PackageName
 
-def test_stuff() -> None:
+def test_overrides() -> None:
     overrides = VirtualPackageOverrides.none()
     print(overrides.osx, Override.none())
     assert overrides.osx == Override.none()

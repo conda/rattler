@@ -193,14 +193,16 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::detect()
-                .map(|vpkgs| {
-                    vpkgs
-                        .iter()
-                        .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
-                        .collect::<Vec<_>>()
-                })
-                .map_err(anyhow::Error::from)
+            rattler_virtual_packages::VirtualPackage::detect_with_overrides(
+                &rattler_virtual_packages::VirtualPackageOverrides::default(),
+            )
+            .map(|vpkgs| {
+                vpkgs
+                    .iter()
+                    .map(|vpkg| GenericVirtualPackage::from(vpkg.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .map_err(anyhow::Error::from)
         }
     })?;
 

@@ -181,11 +181,6 @@ impl VirtualPackage {
         try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::none())
     }
 
-    /// Detect the virtual packages of the current system with the default overrides.
-    pub fn detect() -> Result<Vec<Self>, DetectVirtualPackageError> {
-        try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::default())
-    }
-
     /// Detect the virtual packages of the current system with the given overrides.
     pub fn detect_with_overrides(
         overrides: &VirtualPackageOverrides,

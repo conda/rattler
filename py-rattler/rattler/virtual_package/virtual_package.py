@@ -87,11 +87,18 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    def __init__(self) -> None:
+    def __init__(self, osx=None, libc=None, cuda=None) -> None:
         """
         Returns the default virtual package overrides.
         """
         self._overrides = PyVirtualPackageOverrides.default()
+        if osx is not None:
+            self.osx = osx
+        if libc is not None:
+            self.libc = libc
+        if cuda is not None:
+            self.cuda = cuda
+
 
     @classmethod
     def none(cls) -> VirtualPackageOverrides:
@@ -175,24 +182,17 @@ class VirtualPackage:
         if the versions could not be properly detected.
         """
         warnings.warn("Use `detect` instead")
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.current()]
+        return VirtualPackage.detect_with_overrides(VirtualPackageOverrides.none())
 
     @staticmethod
-    def detect() -> List[VirtualPackage]:
-        """
-        Returns virtual packages detected for the current system or an error
-        if the versions could not be properly detected.
-        """
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect()]
-
-    @staticmethod
-    def detect_with_overrides(overrides: VirtualPackageOverrides) -> List[VirtualPackage]:
+    def detect_with_overrides(overrides: VirtualPackageOverrides | None = None) -> List[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
         """
+        _overrides: VirtualPackageOverrides = overrides or VirtualPackageOverrides()
         return [
             VirtualPackage._from_py_virtual_package(vp)
-            for vp in PyVirtualPackage.detect_with_overrides(overrides._overrides)
+            for vp in PyVirtualPackage.detect_with_overrides(_overrides._overrides)
         ]
 
     def into_generic(self) -> GenericVirtualPackage:
