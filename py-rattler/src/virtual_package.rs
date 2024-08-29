@@ -160,7 +160,6 @@ impl PyVirtualPackage {
         Self::detect_with_overrides(&PyVirtualPackageOverrides::default())
     }
 
-
     #[staticmethod]
     pub fn detect_with_overrides(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
         Ok(
