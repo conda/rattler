@@ -28,7 +28,7 @@ class Override:
     @classmethod
     def default_env_var(cls) -> Override:
         """
-        Returns the default environment variable override.
+        Returns a new instance to indicate that the default environment variable should overwrite the detected information from the host if specified.
         """
         return cls._from_py_override(PyOverride.default_env_var())
 

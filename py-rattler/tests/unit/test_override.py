@@ -15,10 +15,10 @@ def test_stuff() -> None:
     overrides.libc = Override.string("123.457")
     overrides.cuda = Override.string("123.4578")
 
-    r = [i.into_generic() for i in VirtualPackage.detect_with_overrides(overrides)]
-    def find(name, ver, must_find=True) -> None:
+    r = [i.into_generic() for i in VirtualPackage.detect_with_overrides(overrides)]    
+    def find(name: str, ver: str, must_find: bool=True) -> None:
         for i in r:
-            if i.name.source == name:
+            if i.name == PackageName(name):
                 assert i.version == Version(ver)
                 return
         assert not must_find
