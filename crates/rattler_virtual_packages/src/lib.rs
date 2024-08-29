@@ -48,9 +48,10 @@ use linux::ParseLinuxVersionError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Configure the overrides used in in this crate.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub enum Override {
     /// Use the default override env var name
+    #[default]
     DefaultEnvVar,
     /// Use custom env var name
     EnvVar(String),
@@ -58,12 +59,6 @@ pub enum Override {
     String(String),
     /// Disable overrides
     None,
-}
-
-impl Default for Override {
-    fn default() -> Self {
-        Self::DefaultEnvVar
-    }
 }
 
 /// Traits for overridable virtual packages
