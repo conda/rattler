@@ -3,50 +3,38 @@
 
 use std::{
     error::Error,
-    fmt::{Debug, Display, Formatter},
+    fmt::Debug,
     future::Future,
     path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
-use async_fd_lock::{LockRead, LockWrite, RwLockReadGuard, RwLockWriteGuard};
+pub use cache_key::CacheKey;
+pub use cache_lock::CacheLock;
+use cache_lock::CacheRwLock;
 use dashmap::DashMap;
 use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
-use rattler_digest::Sha256Hash;
+use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
+pub use reporter::CacheReporter;
 use reqwest::StatusCode;
-use tokio::{
-    fs::File,
-    io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
-};
+use simple_spawn_blocking::Cancelled;
 use url::Url;
 
 use crate::validation::validate_package_directory;
 
-/// A trait that can be implemented to report progress of the download and
-/// validation process.
-pub trait CacheReporter: Send + Sync {
-    /// Called when validation starts
-    fn on_validate_start(&self) -> usize;
-    /// Called when validation completex
-    fn on_validate_complete(&self, index: usize);
-    /// Called when a download starts
-    fn on_download_start(&self) -> usize;
-    /// Called with regular updates on the download progress
-    fn on_download_progress(&self, index: usize, progress: u64, total: Option<u64>);
-    /// Called when a download completes
-    fn on_download_completed(&self, index: usize);
-}
+mod cache_key;
+mod cache_lock;
+mod reporter;
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
 ///
 /// The store does not provide an implementation to get the data into the store.
-/// Instead this is left up to the user when the package is requested. If the
+/// Instead, this is left up to the user when the package is requested. If the
 /// package is found in the cache it is returned immediately. However, if the
 /// cache is stale a user defined function is called to populate the cache. This
 /// separates the corners between caching and fetching of the content.
@@ -55,70 +43,10 @@ pub struct PackageCache {
     inner: Arc<PackageCacheInner>,
 }
 
-/// Provides a unique identifier for packages in the cache.
-/// TODO: This could not be unique over multiple subdir. How to handle?
-/// TODO: Wouldn't it be better to cache based on hashes?
-#[derive(Debug, Hash, Clone, Eq, PartialEq)]
-pub struct CacheKey {
-    name: String,
-    version: String,
-    build_string: String,
-    sha256: Option<Sha256Hash>,
-}
-
-impl CacheKey {
-    /// Adds a sha256 hash of the archive.
-    pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
-        self.sha256 = Some(sha256);
-        self
-    }
-
-    /// Potentially adds a sha256 hash of the archive.
-    pub fn with_opt_sha256(mut self, sha256: Option<Sha256Hash>) -> Self {
-        self.sha256 = sha256;
-        self
-    }
-}
-
-impl CacheKey {
-    /// Return the sha256 hash of the package if it is known.
-    pub fn sha256(&self) -> Option<Sha256Hash> {
-        self.sha256
-    }
-}
-
-impl From<ArchiveIdentifier> for CacheKey {
-    fn from(pkg: ArchiveIdentifier) -> Self {
-        CacheKey {
-            name: pkg.name,
-            version: pkg.version,
-            build_string: pkg.build_string,
-            sha256: None,
-        }
-    }
-}
-
-impl From<&PackageRecord> for CacheKey {
-    fn from(record: &PackageRecord) -> Self {
-        Self {
-            name: record.name.as_normalized().to_string(),
-            version: record.version.to_string(),
-            build_string: record.build.clone(),
-            sha256: record.sha256,
-        }
-    }
-}
-
-impl Display for CacheKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
-    }
-}
-
 #[derive(Default)]
 struct PackageCacheInner {
     path: PathBuf,
-    packages: DashMap<CacheKey, tokio::sync::Mutex<Entry>>,
+    packages: DashMap<CacheKey, Arc<tokio::sync::Mutex<Entry>>>,
 }
 
 #[derive(Default)]
@@ -137,6 +65,16 @@ pub enum PackageCacheError {
     /// A locking error occured
     #[error("{0}")]
     LockError(String, #[source] std::io::Error),
+
+    /// The operation was cancelled
+    #[error("operation was cancelled")]
+    Cancelled,
+}
+
+impl From<Cancelled> for PackageCacheError {
+    fn from(_value: Cancelled) -> Self {
+        Self::Cancelled
+    }
 }
 
 impl PackageCache {
@@ -173,7 +111,7 @@ impl PackageCache {
     {
         let cache_key = pkg.into();
         let cache_path = self.inner.path.join(cache_key.to_string());
-        let cache_entry = self.inner.packages.entry(cache_key).or_default();
+        let cache_entry = self.inner.packages.entry(cache_key).or_default().clone();
 
         // Acquire the entry. From this point on we can be sure that only one task is
         // accessing the cache entry.
@@ -301,207 +239,18 @@ impl PackageCache {
                     // Wait for a second to let the remote service restore itself. This increases the
                     // chance of success.
                     tracing::warn!(
-                    "failed to download and extract {} to {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
-                    &url,
-                    destination.display(),
-                    err,
-                    current_try,
-                    duration
-                );
+                        "failed to download and extract {} to {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
+                        &url,
+                        destination.display(),
+                        err,
+                        current_try,
+                        duration
+                    );
                     tokio::time::sleep(duration).await;
                 }
             }
         }, reporter)
             .await
-    }
-}
-
-/// A lock on the cache entry. As long as this lock is held, no other process is
-/// allowed to modify the cache entry. This however, does not guarantee that the
-/// contents of the cache is not corrupted by external processes, but it does
-/// guarantee that when concurrent processes access the package cache they do
-/// not interfere with each other.
-pub struct CacheLock {
-    _lock: CacheRwLock<RwLockReadGuard<File>>,
-    revision: u64,
-    path: PathBuf,
-}
-
-impl Debug for CacheLock {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CacheLock")
-            .field("path", &self.path)
-            .field("revision", &self.revision)
-            .finish()
-    }
-}
-
-impl CacheLock {
-    /// Returns the path to the cache entry on disk.
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Returns the revision of the cache entry. This revision indicates the
-    /// number of times the cache entry has been updated.
-    pub fn revision(&self) -> u64 {
-        self.revision
-    }
-}
-
-struct CacheRwLock<L> {
-    lock: L,
-}
-
-impl CacheRwLock<RwLockReadGuard<File>> {
-    pub async fn acquire_read(path: &Path) -> Result<Self, PackageCacheError> {
-        let lock_file_path = path.to_path_buf();
-        let file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&path)
-            .await
-            .map_err(|e| {
-                PackageCacheError::LockError(
-                    format!(
-                        "failed to open cache lock for reading: '{}",
-                        lock_file_path.display()
-                    ),
-                    e,
-                )
-            })?;
-
-        let lock_file_path = path.to_path_buf();
-        let acquire_lock_fut = file.lock_read().map_err(move |e| {
-            PackageCacheError::LockError(
-                format!(
-                    "failed to acquire read lock on cache lock file: '{}'",
-                    lock_file_path.display()
-                ),
-                e.error,
-            )
-        });
-
-        tokio::select!(
-            lock = acquire_lock_fut => Ok(CacheRwLock { lock: lock? }),
-            _ = warn_timeout_future(format!(
-                "Blocking waiting for file lock on package cache for {}",
-                path.file_name()
-                    .expect("lock file must have a name")
-                    .to_string_lossy()
-            )) => unreachable!("warn_timeout_future should never finish")
-        )
-    }
-}
-
-impl CacheRwLock<RwLockWriteGuard<File>> {
-    pub async fn acquire_write(path: &Path) -> Result<Self, PackageCacheError> {
-        let lock_file_path = path.to_path_buf();
-        let file = tokio::fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .read(true)
-            .open(&path)
-            .await
-            .map_err(|e| {
-                PackageCacheError::LockError(
-                    format!(
-                        "failed to open cache lock for writing: '{}",
-                        lock_file_path.display()
-                    ),
-                    e,
-                )
-            })?;
-
-        let lock_file_path = path.to_path_buf();
-        let acquire_lock_fut = file.lock_write().map_err(move |e| {
-            PackageCacheError::LockError(
-                format!(
-                    "failed to acquire write lock on cache lock file: '{}'",
-                    lock_file_path.display()
-                ),
-                e.error,
-            )
-        });
-
-        tokio::select!(
-            lock = acquire_lock_fut => Ok(CacheRwLock { lock: lock? }),
-            _ = warn_timeout_future(format!(
-                "Blocking waiting for file lock on package cache for {}",
-                path.file_name()
-                    .expect("lock file must have a name")
-                    .to_string_lossy()
-            )) => unreachable!("warn_timeout_future should never finish")
-        )
-    }
-}
-
-impl CacheRwLock<RwLockWriteGuard<File>> {
-    async fn write_revision(&mut self, revision: u64) -> Result<(), PackageCacheError> {
-        // Ensure we write from the start of the file
-        self.lock.inner_mut().rewind().await.map_err(|e| {
-            PackageCacheError::LockError(
-                "failed to rewind cache lock for reading revision".to_string(),
-                e,
-            )
-        })?;
-
-        // Write the bytes of the revision
-        let revision_bytes = revision.to_be_bytes();
-        self.lock.write_all(&revision_bytes).await.map_err(|e| {
-            PackageCacheError::LockError("failed to write revision from cache lock".to_string(), e)
-        })?;
-
-        // Ensure all bytes are written to disk
-        self.lock.flush().await.map_err(|e| {
-            PackageCacheError::LockError(
-                "failed to flush cache lock after writing revision".to_string(),
-                e,
-            )
-        })?;
-
-        // Update the length of the file
-        self.lock
-            .inner_mut()
-            .set_len(revision_bytes.len() as u64)
-            .await
-            .map_err(|e| {
-                PackageCacheError::LockError(
-                    "failed to truncate cache lock after writing revision".to_string(),
-                    e,
-                )
-            })?;
-
-        Ok(())
-    }
-}
-
-impl<R: AsyncRead + Unpin> CacheRwLock<R> {
-    async fn read_revision(&mut self) -> Result<u64, PackageCacheError> {
-        let mut buf = [0; 8];
-        match self.lock.read_exact(&mut buf).await {
-            Ok(_) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Ok(0);
-            }
-            Err(e) => {
-                return Err(PackageCacheError::LockError(
-                    "failed to read revision from cache lock".to_string(),
-                    e,
-                ));
-            }
-        }
-        Ok(u64::from_be_bytes(buf))
-    }
-}
-
-async fn warn_timeout_future(message: String) {
-    loop {
-        tokio::time::sleep(Duration::from_secs(30)).await;
-        tracing::warn!("{}", &message);
     }
 }
 
@@ -520,8 +269,9 @@ where
 {
     // Acquire a read lock on the cache entry. This ensures that no other process is
     // currently writing to the cache.
-    let lock_file_path = path.join(".lock");
+    let lock_file_path = path.with_extension("lock");
 
+    // Ensure the directory containing the lock-file exists.
     if let Some(root_dir) = lock_file_path.parent() {
         tokio::fs::create_dir_all(root_dir)
             .map_err(|e| {
@@ -538,7 +288,7 @@ where
 
     loop {
         let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
-        let cache_revision = read_lock.read_revision().await?;
+        let cache_revision = read_lock.read_revision()?;
 
         if path.is_dir() {
             let path_inner = path.clone();
@@ -619,8 +369,10 @@ where
         drop(read_lock);
 
         let mut write_lock = CacheRwLock::acquire_write(&lock_file_path).await?;
-        let read_revision = write_lock.read_revision().await?;
+
+        let read_revision = write_lock.read_revision()?;
         if read_revision != cache_revision {
+            tracing::warn!("cache revisions dont match '{}", lock_file_path.display());
             // The cache has been modified since we last checked. We need to re-validate.
             continue;
         }
@@ -633,6 +385,8 @@ where
         fetch(path.clone())
             .await
             .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))?;
+
+        tracing::warn!("fetched '{}", lock_file_path.display());
 
         validated_revision = Some(new_revision);
     }

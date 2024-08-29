@@ -14,7 +14,7 @@ use crate::install::link_script::LinkScriptError;
 use crate::{
     default_cache_dir,
     install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::{CacheReporter, PackageCache},
+    package_cache::PackageCache,
 };
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
@@ -24,6 +24,7 @@ pub use indicatif::{
     ProgressFormatter,
 };
 use rattler_cache::package_cache::CacheLock;
+use rattler_cache::package_cache::CacheReporter;
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,

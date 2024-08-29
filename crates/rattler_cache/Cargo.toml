@@ -28,7 +28,8 @@ url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
-async-fd-lock.workspace = true
+fs4 = { workspace = true, features = ["fs-err-tokio"] }
+simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking"}
 
 [dev-dependencies]
 assert_matches.workspace = true
