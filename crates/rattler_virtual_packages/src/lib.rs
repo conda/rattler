@@ -591,7 +591,7 @@ mod test {
 
     #[test]
     fn doesnt_crash() {
-        let virtual_packages = VirtualPackage::detect().unwrap();
+        let virtual_packages = VirtualPackage::detect(&Default::default()).unwrap();
         println!("{virtual_packages:?}");
     }
     #[test]
