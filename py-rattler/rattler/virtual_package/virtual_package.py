@@ -189,10 +189,7 @@ class VirtualPackage:
         Returns virtual packages detected for the current system with the given overrides.
         """
         _overrides: VirtualPackageOverrides = overrides or VirtualPackageOverrides()
-        return [
-            VirtualPackage._from_py_virtual_package(vp)
-            for vp in PyVirtualPackage.detect(_overrides._overrides)
-        ]
+        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(_overrides._overrides)]
 
     def into_generic(self) -> GenericVirtualPackage:
         """
