@@ -178,7 +178,7 @@ impl VirtualPackage {
     /// not be properly detected.
     #[deprecated(
         since = "1.0.4",
-        note = "Use `Self::detect(&Default::none)` instead."
+        note = "Use `Self::detect(&VirtualPackageOverrides::none())` instead."
     )]
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
         try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::none())
