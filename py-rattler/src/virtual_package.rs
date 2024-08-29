@@ -148,8 +148,9 @@ impl From<PyVirtualPackage> for VirtualPackage {
 impl PyVirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
+    // marking this as depreacted causes a warning when building the code,
+    // we just warn directly from python.
     #[staticmethod]
-    #[deprecated(note = "Use `Self::detect()` instead.")]
     pub fn current() -> PyResult<Vec<Self>> {
         Self::detect_with_overrides(&PyVirtualPackageOverrides::none())
     }
