@@ -62,7 +62,7 @@ pub enum Override {
 }
 
 /// Traits for overridable virtual packages
-/// Use as `Cuda::detect_with_overrides(override)`
+/// Use as `Cuda::detect(override)`
 pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
     fn parse_version(value: &str) -> Result<Self, ParseVersionError>;
@@ -121,7 +121,7 @@ pub trait EnvOverride: Sized {
     }
 
     /// Shortcut for `Self::detect_with_fallback` with `Self::detect_from_host` as fallback
-    fn detect_with_overrides(ov: &Override) -> Result<Option<Self>, DetectVirtualPackageError> {
+    fn detect(ov: &Override) -> Result<Option<Self>, DetectVirtualPackageError> {
         Self::detect_with_fallback(ov, Self::detect_from_host)
     }
 }
@@ -176,13 +176,16 @@ impl From<VirtualPackage> for GenericVirtualPackage {
 impl VirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
-    #[deprecated(since = "1.0.4", note = "Use `Self::detect` instead")]
+    #[deprecated(
+        since = "1.0.4",
+        note = "Use `Self::detect(&Default::default)` instead"
+    )]
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
         try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::none())
     }
 
     /// Detect the virtual packages of the current system with the given overrides.
-    pub fn detect_with_overrides(
+    pub fn detect(
         overrides: &VirtualPackageOverrides,
     ) -> Result<Vec<Self>, DetectVirtualPackageError> {
         try_detect_virtual_packages_with_overrides(overrides)
@@ -249,18 +252,18 @@ fn try_detect_virtual_packages_with_overrides(
         if let Some(linux_version) = Linux::current()? {
             result.push(linux_version.into());
         }
-        if let Some(libc) = LibC::detect_with_overrides(&overrides.libc)? {
+        if let Some(libc) = LibC::detect(&overrides.libc)? {
             result.push(libc.into());
         }
     }
 
     if platform.is_osx() {
-        if let Some(osx) = Osx::detect_with_overrides(&overrides.osx)? {
+        if let Some(osx) = Osx::detect(&overrides.osx)? {
             result.push(osx.into());
         }
     }
 
-    if let Some(cuda) = Cuda::detect_with_overrides(&overrides.cuda)? {
+    if let Some(cuda) = Cuda::detect(&overrides.cuda)? {
         result.push(cuda.into());
     }
 
@@ -601,14 +604,14 @@ mod test {
         let env_var_name = format!("{}_{}", LibC::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            LibC::detect_with_overrides(&Override::EnvVar(env_var_name.clone()))
+            LibC::detect(&Override::EnvVar(env_var_name.clone()))
                 .unwrap()
                 .unwrap(),
             res
         );
         env::set_var(env_var_name.clone(), "");
         assert_eq!(
-            LibC::detect_with_overrides(&Override::EnvVar(env_var_name.clone())).unwrap(),
+            LibC::detect(&Override::EnvVar(env_var_name.clone())).unwrap(),
             None
         );
         env::remove_var(env_var_name.clone());
@@ -635,18 +638,18 @@ mod test {
         let env_var_name = format!("{}_{}", Cuda::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Cuda::detect_with_overrides(&Override::EnvVar(env_var_name.clone()))
+            Cuda::detect(&Override::EnvVar(env_var_name.clone()))
                 .unwrap()
                 .unwrap(),
             res
         );
         assert_eq!(
-            Cuda::detect_with_overrides(&Override::None).map_err(|_x| 1),
+            Cuda::detect(&Override::None).map_err(|_x| 1),
             <Cuda as EnvOverride>::detect_from_host().map_err(|_x| 1)
         );
         env::remove_var(env_var_name.clone());
         assert_eq!(
-            Cuda::detect_with_overrides(&Override::String(v.to_string()))
+            Cuda::detect(&Override::String(v.to_string()))
                 .unwrap()
                 .unwrap(),
             res
@@ -662,7 +665,7 @@ mod test {
         let env_var_name = format!("{}_{}", Osx::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Osx::detect_with_overrides(&Override::EnvVar(env_var_name.clone()))
+            Osx::detect(&Override::EnvVar(env_var_name.clone()))
                 .unwrap()
                 .unwrap(),
             res

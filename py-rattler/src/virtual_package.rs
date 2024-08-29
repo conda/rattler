@@ -152,21 +152,14 @@ impl PyVirtualPackage {
     // we just warn directly from python.
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {
-        Self::detect_with_overrides(&PyVirtualPackageOverrides::none())
+        Self::detect(&PyVirtualPackageOverrides::none())
     }
 
     #[staticmethod]
-    pub fn detect() -> PyResult<Vec<Self>> {
-        Self::detect_with_overrides(&PyVirtualPackageOverrides::default())
-    }
-
-    #[staticmethod]
-    pub fn detect_with_overrides(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
-        Ok(
-            VirtualPackage::detect_with_overrides(&overrides.clone().into())
-                .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
-                .map_err(PyRattlerError::from)?,
-        )
+    pub fn detect(overrides: &PyVirtualPackageOverrides) -> PyResult<Vec<Self>> {
+        Ok(VirtualPackage::detect(&overrides.clone().into())
+            .map(|vp| vp.iter().map(|v| v.clone().into()).collect::<Vec<_>>())
+            .map_err(PyRattlerError::from)?)
     }
 
     pub fn as_generic(&self) -> PyGenericVirtualPackage {

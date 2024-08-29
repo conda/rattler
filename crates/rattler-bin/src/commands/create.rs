@@ -193,7 +193,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::detect_with_overrides(
+            rattler_virtual_packages::VirtualPackage::detect(
                 &rattler_virtual_packages::VirtualPackageOverrides::default(),
             )
             .map(|vpkgs| {

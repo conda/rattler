@@ -87,7 +87,7 @@ class VirtualPackageOverrides:
         virtual_package_overrides._overrides = py_virtual_package_overrides
         return virtual_package_overrides
 
-    def __init__(self, osx=None, libc=None, cuda=None) -> None:
+    def __init__(self, osx: Override | None = None, libc: Override | None = None, cuda: Override | None = None) -> None:
         """
         Returns the default virtual package overrides.
         """
@@ -98,7 +98,6 @@ class VirtualPackageOverrides:
             self.libc = libc
         if cuda is not None:
             self.cuda = cuda
-
 
     @classmethod
     def none(cls) -> VirtualPackageOverrides:
@@ -182,17 +181,17 @@ class VirtualPackage:
         if the versions could not be properly detected.
         """
         warnings.warn("Use `detect` instead")
-        return VirtualPackage.detect_with_overrides(VirtualPackageOverrides.none())
+        return VirtualPackage.detect(VirtualPackageOverrides.none())
 
     @staticmethod
-    def detect_with_overrides(overrides: VirtualPackageOverrides | None = None) -> List[VirtualPackage]:
+    def detect(overrides: VirtualPackageOverrides | None = None) -> List[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
         """
         _overrides: VirtualPackageOverrides = overrides or VirtualPackageOverrides()
         return [
             VirtualPackage._from_py_virtual_package(vp)
-            for vp in PyVirtualPackage.detect_with_overrides(_overrides._overrides)
+            for vp in PyVirtualPackage.detect(_overrides._overrides)
         ]
 
     def into_generic(self) -> GenericVirtualPackage:
