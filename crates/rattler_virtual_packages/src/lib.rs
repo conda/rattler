@@ -213,7 +213,7 @@ pub enum DetectVirtualPackageError {
     #[error(transparent)]
     VersionParseError(#[from] ParseVersionError),
 }
-/// Configure the overrides used in in this crate.
+/// Configure the overrides used in this crate.
 #[derive(Default, Clone, Debug)]
 pub struct VirtualPackageOverrides {
     /// The override for the osx virtual package
