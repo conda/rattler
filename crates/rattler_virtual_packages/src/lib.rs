@@ -105,7 +105,10 @@ pub trait EnvOverride: Sized {
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError>;
 
     /// Apply the override to the current virtual package. If the override is `None` then use the fallback
-    fn detect_with_fallback<F>(ov: &Override, fallback: F) -> Result<Option<Self>, DetectVirtualPackageError>
+    fn detect_with_fallback<F>(
+        ov: &Override,
+        fallback: F,
+    ) -> Result<Option<Self>, DetectVirtualPackageError>
     where
         F: FnOnce() -> Result<Option<Self>, DetectVirtualPackageError>,
     {
@@ -173,10 +176,7 @@ impl From<VirtualPackage> for GenericVirtualPackage {
 impl VirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
-    #[deprecated(
-        since = "1.0.4",
-        note = "Use `Self::detect` instead"
-    )]
+    #[deprecated(since = "1.0.4", note = "Use `Self::detect` instead")]
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
         try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::none())
     }

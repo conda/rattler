@@ -193,7 +193,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
                 })
                 .collect::<anyhow::Result<Vec<_>>>()?)
         } else {
-            rattler_virtual_packages::VirtualPackage::current()
+            rattler_virtual_packages::VirtualPackage::detect()
                 .map(|vpkgs| {
                     vpkgs
                         .iter()

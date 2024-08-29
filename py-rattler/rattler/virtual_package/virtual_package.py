@@ -183,7 +183,7 @@ class VirtualPackage:
         Returns virtual packages detected for the current system or an error
         if the versions could not be properly detected.
         """
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.current()]
+        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect()]
 
     @staticmethod
     def detect_with_overrides(overrides: VirtualPackageOverrides) -> List[VirtualPackage]:
