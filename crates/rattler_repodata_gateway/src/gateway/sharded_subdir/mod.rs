@@ -239,14 +239,17 @@ async fn write_shard_to_cache(
         })?;
         match temp_file.persist(&shard_cache_path) {
             Ok(_) => Ok(()),
-            Err(e) if e.error.kind() == std::io::ErrorKind::AlreadyExists => {
-                // The file already exists, we don't need to write it again.
-                Ok(())
+            Err(e) => {
+                if shard_cache_path.is_file() {
+                    // The file already exists, we can ignore the error.
+                    Ok(())
+                } else {
+                    Err(GatewayError::IoError(
+                        format!("failed to persist shard to {}", shard_cache_path.display()),
+                        e.error,
+                    ))
+                }
             }
-            Err(e) => Err(GatewayError::IoError(
-                format!("failed to persist shard to {}", shard_cache_path.display()),
-                e.error,
-            )),
         }
     })
     .await

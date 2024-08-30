@@ -12,6 +12,7 @@ readme.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+async-fd-lock = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
 async-trait = { workspace = true, optional = true }
 blake2 = { workspace = true }
