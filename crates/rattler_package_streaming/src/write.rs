@@ -310,7 +310,8 @@ pub fn write_conda_package<W: Write + Seek>(
 
     let options = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Stored)
-        .last_modified_time(last_modified_time);
+        .last_modified_time(last_modified_time)
+        .large_file(true);
 
     // write the metadata as first file in the zip archive
     let package_metadata = PackageMetadata::default();
@@ -321,6 +322,7 @@ pub fn write_conda_package<W: Write + Seek>(
     let (info_paths, other_paths) = sort_paths(paths, base_path);
 
     let archive_path = format!("pkg-{out_name}.tar.zst");
+
     outer_archive.start_file(archive_path, options)?;
     write_zst_archive(
         &mut outer_archive,
