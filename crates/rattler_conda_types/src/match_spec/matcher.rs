@@ -135,13 +135,33 @@ mod tests {
     }
 
     #[test]
-    fn test_string_matcher_matches() {
+    fn test_string_matcher_matches_basic() {
         assert!(StringMatcher::from_str("foo").unwrap().matches("foo"));
         assert!(!StringMatcher::from_str("foo").unwrap().matches("bar"));
+    }
+
+    #[test]
+    fn test_string_matcher_matches_glob() {
         assert!(StringMatcher::from_str("foo*").unwrap().matches("foobar"));
         assert!(StringMatcher::from_str("*oo").unwrap().matches("foo"));
         assert!(!StringMatcher::from_str("*oo").unwrap().matches("foobar"));
         assert!(StringMatcher::from_str("*oo*").unwrap().matches("foobar"));
+
+        // Conda's glob doesn't care about escaping
+        assert!(StringMatcher::from_str("foo\\*bar")
+            .unwrap()
+            .matches("foo\\bazbar"));
+        assert!(!StringMatcher::from_str("foo\\*bar")
+            .unwrap()
+            .matches("foobazbar"));
+
+        // Or any keywords other than '*'
+        assert!(!StringMatcher::from_str("foo[a-z]").unwrap().matches("fooa"));
+        assert!(!StringMatcher::from_str("foo[abc]").unwrap().matches("fooa"));
+    }
+
+    #[test]
+    fn test_string_matcher_matches_regex() {
         assert!(StringMatcher::from_str("^foo.*$")
             .unwrap()
             .matches("foobar"));
@@ -149,6 +169,12 @@ mod tests {
             .unwrap()
             .matches("foobar"));
         assert!(!StringMatcher::from_str("^[not].*$")
+            .unwrap()
+            .matches("foobar"));
+        assert!(StringMatcher::from_str("^foo\\[bar\\].*$")
+            .unwrap()
+            .matches("foo[bar]"));
+        assert!(!StringMatcher::from_str("^foo\\[bar\\].*$")
             .unwrap()
             .matches("foobar"));
     }
@@ -183,5 +209,15 @@ mod tests {
                 glob: _invalid_glob,
             })
         );
+    }
+
+    #[test]
+    fn test_empty_strings() {
+        assert!(StringMatcher::from_str("").unwrap().matches(""));
+        assert!(!StringMatcher::from_str("").unwrap().matches("foo"));
+
+        assert!(!StringMatcher::from_str("foo").unwrap().matches(""));
+        assert!(StringMatcher::from_str("^$").unwrap().matches(""));
+        assert!(StringMatcher::from_str("*").unwrap().matches(""));
     }
 }
