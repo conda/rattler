@@ -11,7 +11,7 @@ from rattler.repo_data import (
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
 from rattler.networking import AuthenticatedClient, fetch_repo_data
-from rattler.virtual_package import GenericVirtualPackage, VirtualPackage
+from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
     PackageName,
     AboutJson,
@@ -58,6 +58,8 @@ __all__ = [
     "fetch_repo_data",
     "GenericVirtualPackage",
     "VirtualPackage",
+    "VirtualPackageOverrides",
+    "Override",
     "PackageName",
     "PrefixRecord",
     "PrefixPaths",

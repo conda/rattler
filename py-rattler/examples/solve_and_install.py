@@ -16,7 +16,7 @@ async def main() -> None:
         # The specs to solve for
         specs=["python ~=3.12.0", "pip", "requests 2.31.0"],
         # Virtual packages define the specifications of the environment
-        virtual_packages=VirtualPackage.current(),
+        virtual_packages=VirtualPackage.detect(),
     )
     print("solved required dependencies")
 

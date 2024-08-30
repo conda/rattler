@@ -65,7 +65,7 @@ use run_exports_json::PyRunExportsJson;
 use shell::{PyActivationResult, PyActivationVariables, PyActivator, PyShellEnum};
 use solver::{py_solve, py_solve_with_sparse_repodata};
 use version::PyVersion;
-use virtual_package::PyVirtualPackage;
+use virtual_package::{PyOverride, PyVirtualPackage, PyVirtualPackageOverrides};
 
 use crate::error::GatewayException;
 
@@ -115,6 +115,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_fetch_repo_data, m).unwrap())
         .unwrap();
     m.add_class::<PyGenericVirtualPackage>().unwrap();
+    m.add_class::<PyOverride>().unwrap();
+    m.add_class::<PyVirtualPackageOverrides>().unwrap();
     m.add_class::<PyVirtualPackage>().unwrap();
     m.add_class::<PyPrefixPathsEntry>().unwrap();
     m.add_class::<PyPrefixPathType>().unwrap();

@@ -37,7 +37,7 @@ pub enum DetectLibCError {
 #[cfg(unix)]
 fn try_detect_libc_version() -> Result<Option<(String, Version)>, DetectLibCError> {
     // Run `ldd --version` to detect the libc version and family on the system.
-    // `ldd` is shipped with libc so if an error occured during its execution we
+    // `ldd` is shipped with libc so if an error occurred during its execution we
     // can assume no libc is available on the system.
     let output = match std::process::Command::new("ldd").arg("--version").output() {
         Err(e) => {
