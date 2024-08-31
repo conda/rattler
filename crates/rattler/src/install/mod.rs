@@ -318,7 +318,7 @@ pub async fn link_package(
 
     for (_, computed_path) in final_paths.iter_mut() {
         if let Some(clobber_rename) = clobber_paths.get(computed_path) {
-            *computed_path = clobber_rename.clone();
+            (*computed_path).clone_from(clobber_rename);
         }
     }
 

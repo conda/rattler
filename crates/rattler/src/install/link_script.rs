@@ -57,11 +57,11 @@ impl LinkScriptType {
     }
 }
 
-impl ToString for LinkScriptType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for LinkScriptType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LinkScriptType::PreUnlink => "pre-unlink".to_string(),
-            LinkScriptType::PostLink => "post-link".to_string(),
+            LinkScriptType::PreUnlink => write!(f, "pre-unlink"),
+            LinkScriptType::PostLink => write!(f, "post-link"),
         }
     }
 }

@@ -64,10 +64,10 @@ impl BuildNumberSpec {
 #[derive(Debug, Clone, Error, Eq, PartialEq)]
 pub enum ParseOrdOperatorError {
     /// Indicates that operator symbols were captured,
-    /// but not interpretable as an OrdOperator
+    /// but not interpretable as an `OrdOperator`
     #[error("invalid operator '{0}'")]
     InvalidOperator(String),
-    /// Indicates no symbol sequence found for OrdOperators,
+    /// Indicates no symbol sequence found for `OrdOperators`,
     /// callers should expect explicit operators
     #[error("expected version operator")]
     ExpectedOperator,

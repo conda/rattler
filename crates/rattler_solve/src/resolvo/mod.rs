@@ -343,8 +343,7 @@ impl<'a> CondaDependencyProvider<'a> {
                 // This function makes the assumption that the records are given in order of the
                 // channels.
                 if let (Some(first_channel), ChannelPriority::Strict) = (
-                    package_name_found_in_channel
-                        .get(&record.package_record.name.as_normalized().to_string()),
+                    package_name_found_in_channel.get(record.package_record.name.as_normalized()),
                     channel_priority,
                 ) {
                     // Add the record to the excluded list when it is from a different channel.

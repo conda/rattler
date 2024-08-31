@@ -71,7 +71,7 @@ pub struct ChannelInfo {
     /// The channel's subdirectory
     pub subdir: String,
 
-    /// The base_url for all package urls. Can be an absolute or relative url.
+    /// The `base_url` for all package urls. Can be an absolute or relative url.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub base_url: Option<String>,
 }

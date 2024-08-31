@@ -126,22 +126,22 @@ impl PackageRecord {
     /// Apply a patch to a single package record
     pub fn apply_patch(&mut self, patch: &PackageRecordPatch) {
         if let Some(depends) = &patch.depends {
-            self.depends = depends.clone();
+            self.depends.clone_from(depends);
         }
         if let Some(constrains) = &patch.constrains {
-            self.constrains = constrains.clone();
+            self.constrains.clone_from(constrains);
         }
         if let Some(track_features) = &patch.track_features {
-            self.track_features = track_features.clone();
+            self.track_features.clone_from(track_features);
         }
         if let Some(features) = &patch.features {
-            self.features = features.clone();
+            self.features.clone_from(features);
         }
         if let Some(license) = &patch.license {
-            self.license = license.clone();
+            self.license.clone_from(license);
         }
         if let Some(license_family) = &patch.license_family {
-            self.license_family = license_family.clone();
+            self.license_family.clone_from(license_family);
         }
         if let Some(package_urls) = &patch.purls {
             self.purls = Some(package_urls.clone());

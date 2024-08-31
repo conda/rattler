@@ -302,7 +302,7 @@ fn parse_records<'i>(
         let mut package_record: PackageRecord = serde_json::from_str(raw_json.get())?;
         // Overwrite subdir if its empty
         if package_record.subdir.is_empty() {
-            package_record.subdir = subdir.to_owned();
+            subdir.clone_into(&mut package_record.subdir);
         }
         result.push(RepoDataRecord {
             url: compute_package_url(

@@ -64,7 +64,7 @@ impl MatchSpecOrSubSection {
 
 impl EnvironmentYaml {
     /// Returns all the matchspecs in the `dependencies` section of the file.
-    pub fn match_specs(&self) -> impl Iterator<Item = &'_ MatchSpec> + DoubleEndedIterator + '_ {
+    pub fn match_specs(&self) -> impl DoubleEndedIterator<Item = &'_ MatchSpec> + '_ {
         self.dependencies
             .iter()
             .filter_map(MatchSpecOrSubSection::as_match_spec)

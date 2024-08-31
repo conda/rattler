@@ -24,9 +24,9 @@ pub enum PathModificationBehavior {
     /// Replaces the complete path variable with specified paths.
     #[default]
     Replace,
-    /// Appends the new path variables to the path. E.g. '$PATH:/new/path'
+    /// Appends the new path variables to the path. E.g. `$PATH:/new/path`
     Append,
-    /// Prepends the new path variables to the path. E.g. '/new/path:$PATH'
+    /// Prepends the new path variables to the path. E.g. `/new/path:$PATH`
     Prepend,
 }
 

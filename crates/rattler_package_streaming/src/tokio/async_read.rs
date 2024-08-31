@@ -68,12 +68,12 @@ async fn extract_conda_internal(
 
     // Spawn a block task to perform the extraction
     let destination = destination.to_owned();
-    match tokio::task::spawn_blocking(move || {
+    let res = tokio::task::spawn_blocking(move || {
         let reader: Box<dyn Read> = Box::new(reader);
         extract_fn(reader, &destination)
     })
-    .await
-    {
+    .await;
+    match res {
         Ok(result) => result,
         Err(err) => {
             if let Ok(reason) = err.try_into_panic() {

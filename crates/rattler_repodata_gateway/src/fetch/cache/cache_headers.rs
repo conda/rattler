@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Extracted HTTP response headers that enable caching the repodata.json files.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CacheHeaders {
-    /// The ETag HTTP cache header
+    /// The `ETag` HTTP cache header
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub etag: Option<String>,
 

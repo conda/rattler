@@ -41,12 +41,12 @@ struct OCIToken {
     token: String,
 }
 
-impl ToString for OciAction {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for OciAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OciAction::Pull => "pull".to_string(),
-            OciAction::Push => "push".to_string(),
-            OciAction::PushPull => "push,pull".to_string(),
+            OciAction::Pull => write!(f, "pull"),
+            OciAction::Push => write!(f, "push"),
+            OciAction::PushPull => write!(f, "push,pull"),
         }
     }
 }
@@ -103,9 +103,7 @@ impl OCIUrl {
     pub fn token_url(&self, action: OciAction) -> Result<Url, ParseError> {
         format!(
             "https://{}/token?scope=repository:{}:{}",
-            self.host,
-            self.path,
-            action.to_string()
+            self.host, self.path, action
         )
         .parse()
     }
