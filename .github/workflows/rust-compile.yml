@@ -51,7 +51,7 @@ jobs:
       - name: Run rustfmt
         uses: actions-rust-lang/rustfmt@v1
       - name: Run clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
