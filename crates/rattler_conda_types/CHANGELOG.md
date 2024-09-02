@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.3](https://github.com/conda/rattler/compare/rattler_conda_types-v0.27.2...rattler_conda_types-v0.27.3) - 2024-09-02
+
+### Added
+- add edge case tests for `StringMatcher` ([#839](https://github.com/conda/rattler/pull/839))
+
 ## [0.27.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.27.1...rattler_conda_types-v0.27.2) - 2024-08-15
 
 ### Added
