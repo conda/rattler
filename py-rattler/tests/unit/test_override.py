@@ -3,9 +3,9 @@ from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, 
 
 def test_overrides() -> None:
     overrides = VirtualPackageOverrides()
-    assert overrides.osx == None
-    assert overrides.libc == None
-    assert overrides.cuda == None
+    assert overrides.osx is None
+    assert overrides.libc is None
+    assert overrides.cuda is None
 
     overrides = VirtualPackageOverrides.from_env()
     assert overrides.osx == Override.default_env_var()
