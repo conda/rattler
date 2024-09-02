@@ -119,7 +119,7 @@ class VirtualPackageOverrides:
         return Override._from_py_override(override) if override else None
 
     @libc.setter
-    def libc(self, override: Override | None)-> None:
+    def libc(self, override: Override | None) -> None:
         """
         Sets the libc override.
         """
@@ -134,7 +134,7 @@ class VirtualPackageOverrides:
         return Override._from_py_override(override) if override else None
 
     @cuda.setter
-    def cuda(self, override: Override|None)-> None:
+    def cuda(self, override: Override | None) -> None:
         """
         Sets the CUDA override.
         """
