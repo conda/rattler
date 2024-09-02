@@ -2,50 +2,57 @@
 
 //! A library to detect Conda virtual packages present on a system.
 //!
-//! A virtual package represents a package that is injected into the solver to provide system
-//! information to packages. This allows packages to add dependencies on specific system features,
-//! like the platform version, the machines architecture, or the availability of a Cuda driver
-//! with a specific version.
+//! A virtual package represents a package that is injected into the solver to
+//! provide system information to packages. This allows packages to add
+//! dependencies on specific system features, like the platform version, the
+//! machines architecture, or the availability of a Cuda driver with a specific
+//! version.
 //!
-//! This library provides both a low- and high level API to detect versions of virtual packages for
-//! the host system.
+//! This library provides both a low- and high level API to detect versions of
+//! virtual packages for the host system.
 //!
-//! To detect all virtual packages for the host system use the [`VirtualPackage::current`] method
-//! which will return a memoized slice of all detected virtual packages. The `VirtualPackage` enum
-//! represents all available virtual package types. Using it provides some flexibility to the
-//! user to not care about which exact virtual packages exist but still allows users to override
-//! specific virtual package behavior. Say for instance you just want to detect the capabilities of
-//! the host system but you still want to restrict the targeted linux version. You can convert an
-//! instance of `VirtualPackage` to `GenericVirtualPackage` which erases any typing for specific
-//! virtual packages.
+//! To detect all virtual packages for the host system use the
+//! [`VirtualPackage::detect`] method which will return a memoized slice of all
+//! detected virtual packages. The `VirtualPackage` enum represents all
+//! available virtual package types. Using it provides some flexibility to the
+//! user to not care about which exact virtual packages exist but still allows
+//! users to override specific virtual package behavior. Say for instance you
+//! just want to detect the capabilities of the host system but you still want
+//! to restrict the targeted linux version. You can convert an instance of
+//! `VirtualPackage` to `GenericVirtualPackage` which erases any typing for
+//! specific virtual packages.
 //!
-//! Each virtual package is also represented by a struct which can be used to detect the specifics
-//! of one virtual package. For instance the [`Linux::current`] method returns an instance of
-//! `Linux` which contains the current Linux version. It also provides conversions to the higher
-//! level API.
+//! Each virtual package is also represented by a struct which can be used to
+//! detect the specifics of one virtual package. For instance the
+//! [`Linux::current`] method returns an instance of `Linux` which contains the
+//! current Linux version. It also provides conversions to the higher level API.
 //!
-//! Finally at the core of the library are detection functions to perform specific capability
-//! detections that are not tied to anything related to virtual packages. See
-//! [`cuda::detect_cuda_version_via_libcuda`] as an example.
+//! Finally at the core of the library are detection functions to perform
+//! specific capability detections that are not tied to anything related to
+//! virtual packages. See [`cuda::detect_cuda_version_via_libcuda`] as an
+//! example.
 
 pub mod cuda;
 pub mod libc;
 pub mod linux;
 pub mod osx;
 
+use std::{
+    env,
+    hash::{Hash, Hasher},
+    str::FromStr,
+    sync::Arc,
+};
+
 use archspec::cpu::Microarchitecture;
+use libc::DetectLibCError;
+use linux::ParseLinuxVersionError;
 use rattler_conda_types::{
     GenericVirtualPackage, PackageName, ParseVersionError, Platform, Version,
 };
-use std::env;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-use std::sync::Arc;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::osx::ParseOsxVersionError;
-use libc::DetectLibCError;
-use linux::ParseLinuxVersionError;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Configure the overrides used in in this crate.
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -57,8 +64,6 @@ pub enum Override {
     EnvVar(String),
     /// Use a custom override directly
     String(String),
-    /// Disable overrides
-    None,
 }
 
 /// Traits for overridable virtual packages
@@ -67,7 +72,8 @@ pub trait EnvOverride: Sized {
     /// Parse `env_var_value`
     fn parse_version(value: &str) -> Result<Self, ParseVersionError>;
 
-    /// Helper to convert the output of `parse_version` and handling empty strings.
+    /// Helper to convert the output of `parse_version` and handling empty
+    /// strings.
     fn parse_version_opt(value: &str) -> Result<Option<Self>, DetectVirtualPackageError> {
         if value.is_empty() {
             Ok(None)
@@ -76,10 +82,11 @@ pub trait EnvOverride: Sized {
         }
     }
 
-    /// Read the environment variable and if it exists, try to parse it with [`EnvOverride::parse_version`]
-    /// If the output is:
+    /// Read the environment variable and if it exists, try to parse it with
+    /// [`EnvOverride::parse_version`] If the output is:
     /// - `None`, then the environment variable did not exist,
-    /// - `Some(Err(None))`, then the environment variable exist but was set to zero, so the package should be disabled
+    /// - `Some(Err(None))`, then the environment variable exist but was set to
+    ///   zero, so the package should be disabled
     /// - `Some(Ok(pkg))`, then the override was for the package.
     fn from_env_var_name_or<F>(
         env_var_name: &str,
@@ -95,16 +102,19 @@ pub trait EnvOverride: Sized {
         }
     }
 
-    /// Default name of the environment variable that overrides the virtual package.
+    /// Default name of the environment variable that overrides the virtual
+    /// package.
     const DEFAULT_ENV_NAME: &'static str;
 
     /// Detect the virutal package for the current system.
-    /// This method is here so that `<Self as EnvOverride>::current` always returns the same error type.
-    /// `current` may return different types of errors depending on the virtual package. This one always returns
+    /// This method is here so that `<Self as EnvOverride>::current` always
+    /// returns the same error type. `current` may return different types of
+    /// errors depending on the virtual package. This one always returns
     /// `DetectVirtualPackageError`.
     fn detect_from_host() -> Result<Option<Self>, DetectVirtualPackageError>;
 
-    /// Apply the override to the current virtual package. If the override is `None` then use the fallback
+    /// Apply the override to the current virtual package. If the override is
+    /// `None` then use the fallback
     fn detect_with_fallback<F>(
         ov: &Override,
         fallback: F,
@@ -113,16 +123,18 @@ pub trait EnvOverride: Sized {
         F: FnOnce() -> Result<Option<Self>, DetectVirtualPackageError>,
     {
         match ov {
-            Override::None => fallback(),
             Override::String(str) => Self::parse_version_opt(str),
             Override::DefaultEnvVar => Self::from_env_var_name_or(Self::DEFAULT_ENV_NAME, fallback),
             Override::EnvVar(name) => Self::from_env_var_name_or(name, fallback),
         }
     }
 
-    /// Shortcut for `Self::detect_with_fallback` with `Self::detect_from_host` as fallback
-    fn detect(ov: &Override) -> Result<Option<Self>, DetectVirtualPackageError> {
-        Self::detect_with_fallback(ov, Self::detect_from_host)
+    /// Shortcut for `Self::detect_with_fallback` with `Self::detect_from_host`
+    /// as fallback
+    fn detect(ov: Option<&Override>) -> Result<Option<Self>, DetectVirtualPackageError> {
+        ov.map_or_else(Self::detect_from_host, |ov| {
+            Self::detect_with_fallback(ov, Self::detect_from_host)
+        })
     }
 }
 
@@ -174,17 +186,18 @@ impl From<VirtualPackage> for GenericVirtualPackage {
 }
 
 impl VirtualPackage {
-    /// Returns virtual packages detected for the current system or an error if the versions could
-    /// not be properly detected.
+    /// Returns virtual packages detected for the current system or an error if
+    /// the versions could not be properly detected.
     #[deprecated(
-        since = "1.0.4",
-        note = "Use `Self::detect(&VirtualPackageOverrides::none())` instead."
+        since = "1.1.0",
+        note = "Use `VirtualPackage::detect(&VirtualPackageOverrides::default())` instead."
     )]
     pub fn current() -> Result<Vec<Self>, DetectVirtualPackageError> {
-        try_detect_virtual_packages_with_overrides(&VirtualPackageOverrides::none())
+        Self::detect(&VirtualPackageOverrides::default())
     }
 
-    /// Detect the virtual packages of the current system with the given overrides.
+    /// Detect the virtual packages of the current system with the given
+    /// overrides.
     pub fn detect(
         overrides: &VirtualPackageOverrides,
     ) -> Result<Vec<Self>, DetectVirtualPackageError> {
@@ -212,24 +225,37 @@ pub enum DetectVirtualPackageError {
     VersionParseError(#[from] ParseVersionError),
 }
 /// Configure the overrides used in this crate.
+///
+/// The default value is `None` for all overrides which means that by default
+/// none of the virtual packages are overriden.
+///
+/// Use `VirtualPackageOverrides::from_env()` to create an instance of this
+/// struct with all overrides set to the default environment variables.
 #[derive(Default, Clone, Debug)]
 pub struct VirtualPackageOverrides {
     /// The override for the osx virtual package
-    pub osx: Override,
+    pub osx: Option<Override>,
     /// The override for the libc virtual package
-    pub libc: Override,
+    pub libc: Option<Override>,
     /// The override for the cuda virtual package
-    pub cuda: Override,
+    pub cuda: Option<Override>,
 }
 
 impl VirtualPackageOverrides {
-    /// Disable all overrides
-    pub fn none() -> Self {
+    /// Returns an instance of `VirtualPackageOverrides` with all overrides set
+    /// to a given value.
+    pub fn all(ov: Override) -> Self {
         Self {
-            osx: Override::None,
-            libc: Override::None,
-            cuda: Override::None,
+            osx: Some(ov.clone()),
+            libc: Some(ov.clone()),
+            cuda: Some(ov),
         }
+    }
+
+    /// Returns an instance of `VirtualPackageOverrides` where all overrides are
+    /// taken from default environment variables.
+    pub fn from_env() -> Self {
+        Self::all(Override::DefaultEnvVar)
     }
 }
 
@@ -252,18 +278,18 @@ fn try_detect_virtual_packages_with_overrides(
         if let Some(linux_version) = Linux::current()? {
             result.push(linux_version.into());
         }
-        if let Some(libc) = LibC::detect(&overrides.libc)? {
+        if let Some(libc) = LibC::detect(overrides.libc.as_ref())? {
             result.push(libc.into());
         }
     }
 
     if platform.is_osx() {
-        if let Some(osx) = Osx::detect(&overrides.osx)? {
+        if let Some(osx) = Osx::detect(overrides.osx.as_ref())? {
             result.push(osx.into());
         }
     }
 
-    if let Some(cuda) = Cuda::detect(&overrides.cuda)? {
+    if let Some(cuda) = Cuda::detect(overrides.cuda.as_ref())? {
         result.push(cuda.into());
     }
 
@@ -284,8 +310,9 @@ pub struct Linux {
 impl Linux {
     /// Returns the Linux version of the current platform.
     ///
-    /// Returns an error if determining the Linux version resulted in an error. Returns `None` if
-    /// the current platform is not a Linux based platform.
+    /// Returns an error if determining the Linux version resulted in an error.
+    /// Returns `None` if the current platform is not a Linux based
+    /// platform.
     pub fn current() -> Result<Option<Self>, ParseLinuxVersionError> {
         Ok(linux::linux_version()?.map(|version| Self { version }))
     }
@@ -326,8 +353,9 @@ pub struct LibC {
 impl LibC {
     /// Returns the `LibC` family and version of the current platform.
     ///
-    /// Returns an error if determining the `LibC` family and version resulted in an error. Returns
-    /// `None` if the current platform does not have an available version of `LibC`.
+    /// Returns an error if determining the `LibC` family and version resulted
+    /// in an error. Returns `None` if the current platform does not have an
+    /// available version of `LibC`.
     pub fn current() -> Result<Option<Self>, DetectLibCError> {
         Ok(libc::libc_family_and_version()?.map(|(family, version)| Self { family, version }))
     }
@@ -536,8 +564,8 @@ pub struct Osx {
 impl Osx {
     /// Returns the OSX version of the current platform.
     ///
-    /// Returns an error if determining the OSX version resulted in an error. Returns `None` if
-    /// the current platform is not an OSX based platform.
+    /// Returns an error if determining the OSX version resulted in an error.
+    /// Returns `None` if the current platform is not an OSX based platform.
     pub fn current() -> Result<Option<Self>, ParseOsxVersionError> {
         Ok(osx::osx_version()?.map(|version| Self { version }))
     }
@@ -577,17 +605,11 @@ impl EnvOverride for Osx {
 
 #[cfg(test)]
 mod test {
-    use std::env;
-    use std::str::FromStr;
+    use std::{env, str::FromStr};
 
     use rattler_conda_types::Version;
 
-    use crate::Cuda;
-    use crate::EnvOverride;
-    use crate::LibC;
-    use crate::Osx;
-    use crate::Override;
-    use crate::VirtualPackage;
+    use crate::{Cuda, EnvOverride, LibC, Osx, Override, VirtualPackage};
 
     #[test]
     fn doesnt_crash() {
@@ -604,14 +626,14 @@ mod test {
         let env_var_name = format!("{}_{}", LibC::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            LibC::detect(&Override::EnvVar(env_var_name.clone()))
+            LibC::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
                 .unwrap(),
             res
         );
         env::set_var(env_var_name.clone(), "");
         assert_eq!(
-            LibC::detect(&Override::EnvVar(env_var_name.clone())).unwrap(),
+            LibC::detect(Some(&Override::EnvVar(env_var_name.clone()))).unwrap(),
             None
         );
         env::remove_var(env_var_name.clone());
@@ -638,18 +660,18 @@ mod test {
         let env_var_name = format!("{}_{}", Cuda::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Cuda::detect(&Override::EnvVar(env_var_name.clone()))
+            Cuda::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
                 .unwrap(),
             res
         );
         assert_eq!(
-            Cuda::detect(&Override::None).map_err(|_x| 1),
+            Cuda::detect(None).map_err(|_x| 1),
             <Cuda as EnvOverride>::detect_from_host().map_err(|_x| 1)
         );
         env::remove_var(env_var_name.clone());
         assert_eq!(
-            Cuda::detect(&Override::String(v.to_string()))
+            Cuda::detect(Some(&Override::String(v.to_string())))
                 .unwrap()
                 .unwrap(),
             res
@@ -665,7 +687,7 @@ mod test {
         let env_var_name = format!("{}_{}", Osx::DEFAULT_ENV_NAME, "12345511231");
         env::set_var(env_var_name.clone(), v);
         assert_eq!(
-            Osx::detect(&Override::EnvVar(env_var_name.clone()))
+            Osx::detect(Some(&Override::EnvVar(env_var_name.clone())))
                 .unwrap()
                 .unwrap(),
             res

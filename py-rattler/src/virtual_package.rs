@@ -25,13 +25,6 @@ impl From<PyOverride> for Override {
 #[pymethods]
 impl PyOverride {
     #[staticmethod]
-    pub fn none() -> Self {
-        Self {
-            inner: Override::None,
-        }
-    }
-
-    #[staticmethod]
     pub fn default_env_var() -> Self {
         Self {
             inner: Override::DefaultEnvVar,
@@ -83,16 +76,16 @@ impl From<PyVirtualPackageOverrides> for VirtualPackageOverrides {
 #[pymethods]
 impl PyVirtualPackageOverrides {
     #[staticmethod]
-    pub fn default() -> Self {
+    pub fn from_env() -> Self {
         Self {
-            inner: VirtualPackageOverrides::default(),
+            inner: VirtualPackageOverrides::from_env(),
         }
     }
 
     #[staticmethod]
     pub fn none() -> Self {
         Self {
-            inner: VirtualPackageOverrides::none(),
+            inner: VirtualPackageOverrides::default(),
         }
     }
 
@@ -101,28 +94,28 @@ impl PyVirtualPackageOverrides {
     }
 
     #[getter]
-    pub fn get_osx(&self) -> PyOverride {
-        self.inner.osx.clone().into()
+    pub fn get_osx(&self) -> Option<PyOverride> {
+        self.inner.osx.clone().map(Into::into)
     }
     #[setter]
-    pub fn set_osx(&mut self, value: PyOverride) {
-        self.inner.osx = value.into();
+    pub fn set_osx(&mut self, value: Option<PyOverride>) {
+        self.inner.osx = value.map(Into::into);
     }
     #[getter]
-    pub fn get_cuda(&self) -> PyOverride {
-        self.inner.cuda.clone().into()
+    pub fn get_cuda(&self) -> Option<PyOverride> {
+        self.inner.cuda.clone().map(Into::into)
     }
     #[setter]
-    pub fn set_cuda(&mut self, value: PyOverride) {
-        self.inner.cuda = value.into();
+    pub fn set_cuda(&mut self, value: Option<PyOverride>) {
+        self.inner.cuda = value.map(Into::into);
     }
     #[getter]
-    pub fn get_libc(&self) -> PyOverride {
-        self.inner.libc.clone().into()
+    pub fn get_libc(&self) -> Option<PyOverride> {
+        self.inner.libc.clone().map(Into::into)
     }
     #[setter]
-    pub fn set_libc(&mut self, value: PyOverride) {
-        self.inner.libc = value.into();
+    pub fn set_libc(&mut self, value: Option<PyOverride>) {
+        self.inner.libc = value.map(Into::into);
     }
 }
 

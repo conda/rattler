@@ -2,12 +2,12 @@ from rattler import VirtualPackage, VirtualPackageOverrides, Override, Version, 
 
 
 def test_overrides() -> None:
-    overrides = VirtualPackageOverrides.none()
-    print(overrides.osx, Override.none())
-    assert overrides.osx == Override.none()
-    assert overrides.libc == Override.none()
-    assert overrides.cuda == Override.none()
     overrides = VirtualPackageOverrides()
+    assert overrides.osx == None
+    assert overrides.libc == None
+    assert overrides.cuda == None
+
+    overrides = VirtualPackageOverrides.from_env()
     assert overrides.osx == Override.default_env_var()
     assert overrides.libc == Override.default_env_var()
     assert overrides.cuda == Override.default_env_var()

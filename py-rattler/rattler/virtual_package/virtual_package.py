@@ -14,7 +14,6 @@ class Override:
     - `Override.default_env_var()` for overriding the detection with the default environment variable,
     - `Override.env_var(str)` for overriding the detection with a custom environment variable,
     - `Override.string(str)` for passing the version directly, or
-    - `Override.none()` for disabling the override process all together.
     """
 
     _override: PyOverride
@@ -46,13 +45,6 @@ class Override:
         Returns the override for the given string.
         """
         return cls._from_py_override(PyOverride.string(override))
-
-    @classmethod
-    def none(cls) -> Override:
-        """
-        Returns the override for None.
-        """
-        return cls._from_py_override(PyOverride.none())
 
     def __str__(self) -> str:
         """
@@ -89,67 +81,64 @@ class VirtualPackageOverrides:
 
     def __init__(self, osx: Override | None = None, libc: Override | None = None, cuda: Override | None = None) -> None:
         """
-        Returns the default virtual package overrides.
+        Returns the default virtual package overrides. By default, none of the overrides are set.
         """
-        self._overrides = PyVirtualPackageOverrides.default()
-        if osx is not None:
-            self.osx = osx
-        if libc is not None:
-            self.libc = libc
-        if cuda is not None:
-            self.cuda = cuda
+        self._overrides = PyVirtualPackageOverrides.none()
+        self.osx = osx
+        self.libc = libc
+        self.cuda = cuda
 
     @classmethod
-    def none(cls) -> VirtualPackageOverrides:
+    def from_env(cls) -> VirtualPackageOverrides:
         """
         Returns the virtual package overrides for None.
         """
-        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.none())
+        return cls._from_py_virtual_package_overrides(PyVirtualPackageOverrides.from_env())
 
     @property
-    def osx(self) -> Override:
+    def osx(self) -> Override | None:
         """
         Returns the OSX override.
         """
-        return Override._from_py_override(self._overrides.osx)
+        override = self._overrides.osx
+        return Override._from_py_override(override) if override else None
 
     @osx.setter
-    def osx(self, override: Override) -> VirtualPackageOverrides:
+    def osx(self, override: Override | None) -> None:
         """
         Sets the OSX override.
         """
-        self._overrides.osx = override._override
-        return self._overrides.osx
+        self._overrides.osx = override._override if override else None
 
     @property
-    def libc(self) -> Override:
+    def libc(self) -> Override | None:
         """
         Returns the libc override.
         """
-        return Override._from_py_override(self._overrides.libc)
+        override = self._overrides.libc
+        return Override._from_py_override(override) if override else None
 
     @libc.setter
-    def libc(self, override: Override) -> VirtualPackageOverrides:
+    def libc(self, override: Override | None)-> None:
         """
         Sets the libc override.
         """
-        self._overrides.libc = override._override
-        return self._overrides.libc
+        self._overrides.libc = override._override if override else None
 
     @property
-    def cuda(self) -> Override:
+    def cuda(self) -> Override | None:
         """
         Returns the CUDA override.
         """
-        return Override._from_py_override(self._overrides.cuda)
+        override = self._overrides.cuda
+        return Override._from_py_override(override) if override else None
 
     @cuda.setter
-    def cuda(self, override: Override) -> VirtualPackageOverrides:
+    def cuda(self, override: Override|None)-> None:
         """
         Sets the CUDA override.
         """
-        self._overrides.cuda = override._override
-        return self._overrides.cuda
+        self._overrides.cuda = override._override if override else None
 
     def __str__(self) -> str:
         """
@@ -181,15 +170,14 @@ class VirtualPackage:
         if the versions could not be properly detected.
         """
         warnings.warn("Use `detect` instead")
-        return VirtualPackage.detect(VirtualPackageOverrides.none())
+        return VirtualPackage.detect()
 
     @staticmethod
-    def detect(overrides: VirtualPackageOverrides | None = None) -> List[VirtualPackage]:
+    def detect(overrides: VirtualPackageOverrides = VirtualPackageOverrides()) -> List[VirtualPackage]:
         """
         Returns virtual packages detected for the current system with the given overrides.
         """
-        _overrides: VirtualPackageOverrides = overrides or VirtualPackageOverrides()
-        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(_overrides._overrides)]
+        return [VirtualPackage._from_py_virtual_package(vp) for vp in PyVirtualPackage.detect(overrides._overrides)]
 
     def into_generic(self) -> GenericVirtualPackage:
         """
