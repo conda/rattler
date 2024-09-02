@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4](https://github.com/conda/rattler/compare/rattler_solve-v1.0.3...rattler_solve-v1.0.4) - 2024-09-02
+
+### Fixed
+- Redact spec channel before comparing it with repodata channel  ([#831](https://github.com/conda/rattler/pull/831))
+
+### Other
+- Remove note that only libsolv is supported ([#832](https://github.com/conda/rattler/pull/832))
+
 ## [1.0.3](https://github.com/conda/rattler/compare/rattler_solve-v1.0.2...rattler_solve-v1.0.3) - 2024-08-15
 
 ### Fixed
