@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.0.4...rattler_virtual_packages-v1.1.0) - 2024-09-02
+
+### Added
+- start adding interface to override ([#834](https://github.com/conda/rattler/pull/834))
+- Add support for `CONDA_OVERRIDE_CUDA` ([#818](https://github.com/conda/rattler/pull/818))
+
+### Other
+- make virtual package overrides none by default consistently ([#842](https://github.com/conda/rattler/pull/842))
+
 ## [1.0.4](https://github.com/conda/rattler/compare/rattler_virtual_packages-v1.0.3...rattler_virtual_packages-v1.0.4) - 2024-08-16
 
 ### Fixed
