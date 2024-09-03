@@ -1,7 +1,7 @@
 use crate::gateway::GatewayInner;
 use crate::{ChannelConfig, Gateway};
 use dashmap::DashMap;
-use rattler_cache::package_cache::SingletonPackageCache;
+use rattler_cache::package_cache::PackageCache;
 use reqwest::Client;
 use reqwest_middleware::ClientWithMiddleware;
 use std::path::PathBuf;
@@ -13,7 +13,7 @@ pub struct GatewayBuilder {
     channel_config: ChannelConfig,
     client: Option<ClientWithMiddleware>,
     cache: Option<PathBuf>,
-    package_cache: Option<SingletonPackageCache>,
+    package_cache: Option<PackageCache>,
     max_concurrent_requests: Option<usize>,
 }
 
@@ -57,7 +57,7 @@ impl GatewayBuilder {
     }
 
     /// Add package cache to the builder to store packages.
-    pub fn with_package_cache(mut self, package_cache: SingletonPackageCache) -> Self {
+    pub fn with_package_cache(mut self, package_cache: PackageCache) -> Self {
         self.set_package_cache(package_cache);
         self
     }
@@ -69,7 +69,7 @@ impl GatewayBuilder {
     }
 
     /// Set the directory to use for caching packages.
-    pub fn set_package_cache(&mut self, package_cache: SingletonPackageCache) -> &mut Self {
+    pub fn set_package_cache(&mut self, package_cache: PackageCache) -> &mut Self {
         self.package_cache = Some(package_cache);
         self
     }
@@ -99,7 +99,7 @@ impl GatewayBuilder {
                 .join("rattler/cache")
         });
 
-        let package_cache = self.package_cache.unwrap_or(SingletonPackageCache::new(
+        let package_cache = self.package_cache.unwrap_or(PackageCache::new_singleton(
             cache.join(rattler_cache::PACKAGE_CACHE_DIR),
         ));
 

@@ -239,7 +239,7 @@ mod tests {
             test_utils::execute_transaction, transaction, InstallDriver, InstallOptions,
             TransactionOperation,
         },
-        package_cache::SingletonPackageCache,
+        package_cache::PackageCache,
     };
 
     fn test_operations() -> Vec<TransactionOperation<PrefixRecord, RepoDataRecord>> {
@@ -264,7 +264,7 @@ mod tests {
         };
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = SingletonPackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
         let driver = InstallDriver::builder().execute_link_scripts(true).finish();
 
         execute_transaction(

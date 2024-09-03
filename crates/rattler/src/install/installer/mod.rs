@@ -31,14 +31,14 @@ use crate::install::link_script::LinkScriptError;
 use crate::{
     default_cache_dir,
     install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::{CacheReporter, SingletonPackageCache},
+    package_cache::{CacheReporter, PackageCache},
 };
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
 pub struct Installer {
     installed: Option<Vec<PrefixRecord>>,
-    package_cache: Option<SingletonPackageCache>,
+    package_cache: Option<PackageCache>,
     downloader: Option<reqwest_middleware::ClientWithMiddleware>,
     execute_link_scripts: bool,
     io_semaphore: Option<Arc<Semaphore>>,
@@ -142,7 +142,7 @@ impl Installer {
 
     /// Sets the package cache to use.
     #[must_use]
-    pub fn with_package_cache(self, package_cache: SingletonPackageCache) -> Self {
+    pub fn with_package_cache(self, package_cache: PackageCache) -> Self {
         Self {
             package_cache: Some(package_cache),
             ..self
@@ -153,7 +153,7 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_package_cache`],but modifies an
     /// existing instance.
-    pub fn set_package_cache(&mut self, package_cache: SingletonPackageCache) -> &mut Self {
+    pub fn set_package_cache(&mut self, package_cache: PackageCache) -> &mut Self {
         self.package_cache = Some(package_cache);
         self
     }
@@ -274,7 +274,7 @@ impl Installer {
             .downloader
             .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
         let package_cache = self.package_cache.unwrap_or_else(|| {
-            SingletonPackageCache::new(
+            PackageCache::new_singleton(
                 default_cache_dir()
                     .expect("failed to determine default cache directory")
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
@@ -517,7 +517,7 @@ async fn link_package(
 async fn populate_cache(
     record: &RepoDataRecord,
     downloader: reqwest_middleware::ClientWithMiddleware,
-    cache: &SingletonPackageCache,
+    cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
 ) -> Result<PathBuf, InstallerError> {
     struct CacheReporterBridge {

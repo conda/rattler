@@ -1,7 +1,7 @@
 use std::{future::IntoFuture, sync::Arc};
 
 use futures::FutureExt;
-use rattler_cache::package_cache::{CacheKey, PackageCacheError};
+use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
@@ -17,7 +17,7 @@ pub(crate) struct DirectUrlQuery {
     /// The client to use for fetching the package
     client: reqwest_middleware::ClientWithMiddleware,
     /// The cache to use for storing the package
-    package_cache: SingletonPackageCache,
+    package_cache: PackageCache,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -35,7 +35,7 @@ pub enum DirectUrlQueryError {
 impl DirectUrlQuery {
     pub(crate) fn new(
         url: Url,
-        package_cache: SingletonPackageCache,
+        package_cache: PackageCache,
         client: reqwest_middleware::ClientWithMiddleware,
         sha256: Option<Sha256Hash>,
     ) -> Self {
@@ -110,7 +110,7 @@ impl IntoFuture for DirectUrlQuery {
 mod test {
     use std::{env::temp_dir, path::PathBuf};
 
-    use rattler_cache::package_cache::SingletonPackageCache;
+    use rattler_cache::package_cache::PackageCache;
     use url::Url;
 
     use super::*;
@@ -121,7 +121,7 @@ mod test {
             "https://conda.anaconda.org/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
         )
         .unwrap();
-        let package_cache = SingletonPackageCache::new(PathBuf::from("/tmp"));
+        let package_cache = PackageCache::new_singleton(PathBuf::from("/tmp"));
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 
@@ -163,7 +163,7 @@ mod test {
         .unwrap();
 
         let url = Url::from_file_path(package_path).unwrap();
-        let package_cache = SingletonPackageCache::new(temp_dir());
+        let package_cache = PackageCache::new_singleton(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 

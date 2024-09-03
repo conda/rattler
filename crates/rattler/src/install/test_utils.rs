@@ -7,7 +7,7 @@ use transaction::{Transaction, TransactionOperation};
 
 use crate::{
     install::{transaction, unlink_package, InstallDriver, InstallOptions},
-    package_cache::SingletonPackageCache,
+    package_cache::PackageCache,
 };
 
 /// Install a package into the environment and write a `conda-meta` file that
@@ -69,7 +69,7 @@ pub async fn install_package_to_environment(
 pub async fn execute_operation(
     target_prefix: &Path,
     download_client: &reqwest_middleware::ClientWithMiddleware,
-    package_cache: &SingletonPackageCache,
+    package_cache: &PackageCache,
     install_driver: &InstallDriver,
     op: TransactionOperation<PrefixRecord, RepoDataRecord>,
     install_options: &InstallOptions,
@@ -121,7 +121,7 @@ pub async fn execute_transaction(
     transaction: Transaction<PrefixRecord, RepoDataRecord>,
     target_prefix: &Path,
     download_client: &reqwest_middleware::ClientWithMiddleware,
-    package_cache: &SingletonPackageCache,
+    package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
 ) {

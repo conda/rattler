@@ -24,7 +24,7 @@ pub use error::GatewayError;
 use file_url::url_to_path;
 use local_subdir::LocalSubdirClient;
 pub use query::{NamesQuery, RepoDataQuery};
-use rattler_cache::package_cache::SingletonPackageCache;
+use rattler_cache::package_cache::PackageCache;
 use rattler_conda_types::{Channel, MatchSpec, Platform};
 pub use repo_data::RepoData;
 use reqwest_middleware::ClientWithMiddleware;
@@ -161,7 +161,7 @@ struct GatewayInner {
     cache: PathBuf,
 
     /// The package cache, stored to reuse memory cache
-    package_cache: SingletonPackageCache,
+    package_cache: PackageCache,
 
     /// A semaphore to limit the number of concurrent requests.
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
@@ -362,7 +362,7 @@ mod test {
 
     use dashmap::DashSet;
     use rattler_cache::default_cache_dir;
-    use rattler_cache::package_cache::SingletonPackageCache;
+    use rattler_cache::package_cache::PackageCache;
     use rattler_conda_types::{
         Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Lenient,
         ParseStrictness::Strict, Platform, RepoDataRecord,
@@ -433,7 +433,7 @@ mod test {
     #[tokio::test]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
-            .with_package_cache(SingletonPackageCache::new(
+            .with_package_cache(PackageCache::new_singleton(
                 default_cache_dir()
                     .unwrap()
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
@@ -494,7 +494,7 @@ mod test {
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
         let gateway = Gateway::builder()
-            .with_package_cache(SingletonPackageCache::new(
+            .with_package_cache(PackageCache::new_singleton(
                 default_cache_dir()
                     .unwrap()
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
