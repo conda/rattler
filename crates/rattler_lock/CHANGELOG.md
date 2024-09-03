@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.22](https://github.com/conda/rattler/compare/rattler_lock-v0.22.21...rattler_lock-v0.22.22) - 2024-09-03
+
+### Other
+- make PackageCache multi-process safe ([#837](https://github.com/conda/rattler/pull/837))
+
 ## [0.22.21](https://github.com/conda/rattler/compare/rattler_lock-v0.22.20...rattler_lock-v0.22.21) - 2024-09-02
 
 ### Added
