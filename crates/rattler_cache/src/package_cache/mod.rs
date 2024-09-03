@@ -372,7 +372,10 @@ where
 
         let read_revision = write_lock.read_revision()?;
         if read_revision != cache_revision {
-            tracing::warn!("cache revisions dont match '{}", lock_file_path.display());
+            tracing::debug!(
+                "cache revisions dont match '{}', retrying to acquire lock file.",
+                lock_file_path.display()
+            );
             // The cache has been modified since we last checked. We need to re-validate.
             continue;
         }
@@ -385,8 +388,6 @@ where
         fetch(path.clone())
             .await
             .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))?;
-
-        tracing::warn!("fetched '{}", lock_file_path.display());
 
         validated_revision = Some(new_revision);
     }

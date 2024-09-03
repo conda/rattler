@@ -147,7 +147,7 @@ pub enum VirtualPackage {
     /// Available on `Unix` based platforms
     Unix,
 
-    /// Available when running on `Linux``
+    /// Available when running on `Linux`
     Linux(Linux),
 
     /// Available when running on `OSX`

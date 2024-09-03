@@ -31,6 +31,7 @@ use reqwest_middleware::ClientWithMiddleware;
 use subdir::{Subdir, SubdirData};
 use tokio::sync::broadcast;
 use tracing::instrument;
+use url::Url;
 
 use crate::{fetch::FetchRepoDataError, gateway::error::SubdirNotFoundError, Reporter};
 
@@ -285,32 +286,32 @@ impl GatewayInner {
                     "unsupported file based url".to_string(),
                 ));
             }
-        } else if url.scheme() == "http" || url.scheme() == "https" {
-            if url.host_str() == Some("fast.prefiks.dev")
-                || url.host_str() == Some("fast.prefix.dev")
-            {
-                sharded_subdir::ShardedSubdir::new(
-                    channel.clone(),
-                    platform.to_string(),
-                    self.client.clone(),
-                    self.cache.clone(),
-                    self.concurrent_requests_semaphore.clone(),
-                    reporter.as_deref(),
-                )
-                .await
-                .map(SubdirData::from_client)
-            } else {
-                remote_subdir::RemoteSubdirClient::new(
-                    channel.clone(),
-                    platform,
-                    self.client.clone(),
-                    self.cache.clone(),
-                    self.channel_config.get(channel).clone(),
-                    reporter,
-                )
-                .await
-                .map(SubdirData::from_client)
-            }
+        } else if supports_sharded_repodata(&url) {
+            sharded_subdir::ShardedSubdir::new(
+                channel.clone(),
+                platform.to_string(),
+                self.client.clone(),
+                self.cache.clone(),
+                self.concurrent_requests_semaphore.clone(),
+                reporter.as_deref(),
+            )
+            .await
+            .map(SubdirData::from_client)
+        } else if url.scheme() == "http"
+            || url.scheme() == "https"
+            || url.scheme() == "gcs"
+            || url.scheme() == "oci"
+        {
+            remote_subdir::RemoteSubdirClient::new(
+                channel.clone(),
+                platform,
+                self.client.clone(),
+                self.cache.clone(),
+                self.channel_config.get(channel).clone(),
+                reporter,
+            )
+            .await
+            .map(SubdirData::from_client)
         } else {
             return Err(GatewayError::UnsupportedUrl(format!(
                 "'{}' is not a supported scheme",
@@ -350,9 +351,13 @@ enum PendingOrFetched<T> {
     Fetched(T),
 }
 
+fn supports_sharded_repodata(url: &Url) -> bool {
+    (url.scheme() == "http" || url.scheme() == "https")
+        && (url.host_str() == Some("fast.prefiks.dev") || url.host_str() == Some("fast.prefix.dev"))
+}
+
 #[cfg(test)]
 mod test {
-    use assert_matches::assert_matches;
     use std::{
         path::{Path, PathBuf},
         str::FromStr,
@@ -360,12 +365,13 @@ mod test {
         time::Instant,
     };
 
+    use assert_matches::assert_matches;
     use dashmap::DashSet;
-    use rattler_cache::default_cache_dir;
-    use rattler_cache::package_cache::PackageCache;
+    use rattler_cache::{default_cache_dir, package_cache::PackageCache};
     use rattler_conda_types::{
-        Channel, ChannelConfig, MatchSpec, PackageName, ParseStrictness::Lenient,
-        ParseStrictness::Strict, Platform, RepoDataRecord,
+        Channel, ChannelConfig, MatchSpec, PackageName,
+        ParseStrictness::{Lenient, Strict},
+        Platform, RepoDataRecord,
     };
     use rstest::rstest;
     use url::Url;
@@ -490,7 +496,8 @@ mod test {
         assert_eq!(non_openssl_total_records, non_openssl_direct_records);
     }
 
-    // Make sure that the direct url version of openssl is used instead of the one from the normal channel.
+    // Make sure that the direct url version of openssl is used instead of the one
+    // from the normal channel.
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
         let gateway = Gateway::builder()
