@@ -144,7 +144,7 @@ impl PackageCache {
         }
     }
 
-    pub fn get_inner(&self) -> Arc<Mutex<PackageCacheInner>> {
+    fn get_inner(&self) -> Arc<Mutex<PackageCacheInner>> {
         match self {
             Self::SingletonPackageCache { inner } => inner.clone(),
         }
