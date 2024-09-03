@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.21.10"
+version = "0.21.11"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -53,7 +53,7 @@ tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
-rattler_cache = { version = "0.2.0", path = "../rattler_cache" }
+rattler_cache = { version = "0.2.1", path = "../rattler_cache" }
 rattler_redaction = { version = "0.1.1", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
 
 [target.'cfg(unix)'.dependencies]
