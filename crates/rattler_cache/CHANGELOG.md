@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/conda/rattler/compare/rattler_cache-v0.2.0...rattler_cache-v0.2.1) - 2024-09-03
+
+### Fixed
+- allow `gcs://` and `oci://` in gateway ([#845](https://github.com/conda/rattler/pull/845))
+
 ## [0.2.0](https://github.com/conda/rattler/compare/rattler_cache-v0.1.9...rattler_cache-v0.2.0) - 2024-09-03
 
 ### Other
