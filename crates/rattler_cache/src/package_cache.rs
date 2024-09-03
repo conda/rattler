@@ -48,6 +48,7 @@ pub trait CacheReporter: Send + Sync {
 /// separates the corners between caching and fetching of the content.
 #[derive(Clone)]
 pub enum PackageCache {
+    /// A package cache which reads/writes from only one directory.
     SingletonPackageCache {
         inner: Arc<Mutex<PackageCacheInner>>,
     },
