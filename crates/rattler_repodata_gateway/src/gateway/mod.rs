@@ -433,7 +433,7 @@ mod test {
     #[tokio::test]
     async fn test_direct_url_spec_from_gateway() {
         let gateway = Gateway::builder()
-            .with_package_cache(PackageCache::new(
+            .with_package_cache(PackageCache::new_singleton(
                 default_cache_dir()
                     .unwrap()
                     .join(rattler_cache::PACKAGE_CACHE_DIR),
@@ -494,7 +494,7 @@ mod test {
     #[tokio::test]
     async fn test_select_forced_url_instead_of_deps() {
         let gateway = Gateway::builder()
-            .with_package_cache(PackageCache::new(
+            .with_package_cache(PackageCache::new_singleton(
                 default_cache_dir()
                     .unwrap()
                     .join(rattler_cache::PACKAGE_CACHE_DIR),

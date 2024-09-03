@@ -99,7 +99,7 @@ impl GatewayBuilder {
                 .join("rattler/cache")
         });
 
-        let package_cache = self.package_cache.unwrap_or(PackageCache::new(
+        let package_cache = self.package_cache.unwrap_or(PackageCache::new_singleton(
             cache.join(rattler_cache::PACKAGE_CACHE_DIR),
         ));
 

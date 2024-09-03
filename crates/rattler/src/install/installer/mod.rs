@@ -274,7 +274,7 @@ impl Installer {
             .downloader
             .unwrap_or_else(|| reqwest_middleware::ClientWithMiddleware::from(Client::default()));
         let package_cache = self.package_cache.unwrap_or_else(|| {
-            PackageCache::new(
+            PackageCache::new_singleton(
                 default_cache_dir()
                     .expect("failed to determine default cache directory")
                     .join(rattler_cache::PACKAGE_CACHE_DIR),

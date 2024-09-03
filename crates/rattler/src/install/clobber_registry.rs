@@ -476,7 +476,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         execute_transaction(
             transaction,
@@ -597,7 +597,7 @@ mod tests {
             let target_prefix = tempfile::tempdir().unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
-            let cache = PackageCache::new(packages_dir.path());
+            let cache = PackageCache::new_singleton(packages_dir.path());
 
             execute_transaction(
                 transaction,
@@ -679,7 +679,7 @@ mod tests {
             let target_prefix = tempfile::tempdir().unwrap();
 
             let packages_dir = tempfile::tempdir().unwrap();
-            let cache = PackageCache::new(packages_dir.path());
+            let cache = PackageCache::new_singleton(packages_dir.path());
 
             execute_transaction(
                 transaction,
@@ -782,7 +782,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         execute_transaction(
             transaction,
@@ -883,7 +883,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         execute_transaction(
             transaction,
@@ -1013,7 +1013,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         let install_options = InstallOptions {
             python_info: Some(python_info.clone()),
@@ -1062,7 +1062,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         execute_transaction(
             transaction,
@@ -1129,7 +1129,7 @@ mod tests {
         let target_prefix = tempfile::tempdir().unwrap();
 
         let packages_dir = tempfile::tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         execute_transaction(
             transaction,

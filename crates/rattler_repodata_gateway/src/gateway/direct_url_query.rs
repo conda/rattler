@@ -121,7 +121,7 @@ mod test {
             "https://conda.anaconda.org/conda-forge/noarch/boltons-24.0.0-pyhd8ed1ab_0.conda",
         )
         .unwrap();
-        let package_cache = PackageCache::new(PathBuf::from("/tmp"));
+        let package_cache = PackageCache::new_singleton(PathBuf::from("/tmp"));
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 
@@ -163,7 +163,7 @@ mod test {
         .unwrap();
 
         let url = Url::from_file_path(package_path).unwrap();
-        let package_cache = PackageCache::new(temp_dir());
+        let package_cache = PackageCache::new_singleton(temp_dir());
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         let query = DirectUrlQuery::new(url.clone(), package_cache, client, None);
 

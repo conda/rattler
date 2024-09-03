@@ -59,7 +59,7 @@ pub fn py_install<'a>(
         }
 
         if let Some(cache_dir) = cache_dir {
-            installer.set_package_cache(PackageCache::new(cache_dir));
+            installer.set_package_cache(PackageCache::new_singleton(cache_dir));
         }
 
         if let Some(installed_packages) = installed_packages {
