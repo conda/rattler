@@ -4,7 +4,7 @@ use clap::ValueEnum;
 use indicatif::{ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use rattler::install::{IndicatifReporter, Installer};
-use rattler::package_cache::PackageCache;
+use rattler::package_cache::SingletonPackageCache;
 use rattler::{
     default_cache_dir,
     install::{Transaction, TransactionOperation},
@@ -145,7 +145,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     // Get the package names from the matchspecs so we can only load the package records that we need.
     let gateway = Gateway::builder()
         .with_cache_dir(cache_dir.join(rattler_cache::REPODATA_CACHE_DIR))
-        .with_package_cache(PackageCache::new(
+        .with_package_cache(SingletonPackageCache::new(
             cache_dir.join(rattler_cache::PACKAGE_CACHE_DIR),
         ))
         .with_client(download_client.clone())

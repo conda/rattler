@@ -47,8 +47,10 @@ pub trait CacheReporter: Send + Sync {
 /// cache is stale a user defined function is called to populate the cache. This
 /// separates the corners between caching and fetching of the content.
 #[derive(Clone)]
-pub struct PackageCache {
-    inner: Arc<Mutex<PackageCacheInner>>,
+pub enum PackageCache {
+    SingletonPackageCache {
+        inner: Arc<Mutex<PackageCacheInner>>,
+    },
 }
 
 /// Provides a unique identifier for packages in the cache.
@@ -133,13 +135,18 @@ pub enum PackageCacheError {
 }
 
 impl PackageCache {
-    /// Constructs a new [`PackageCache`] located at the specified path.
-    pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self {
+    pub fn new_singleton(path: impl Into<PathBuf>) -> Self {
+        Self::SingletonPackageCache {
             inner: Arc::new(Mutex::new(PackageCacheInner {
                 path: path.into(),
                 packages: FxHashMap::default(),
             })),
+        }
+    }
+
+    pub fn get_inner(&self) -> Arc<Mutex<PackageCacheInner>> {
+        match self {
+            Self::SingletonPackageCache { inner } => inner.clone(),
         }
     }
 
@@ -168,7 +175,8 @@ impl PackageCache {
 
         // Get the package entry
         let (package, pkg_cache_dir) = {
-            let mut inner = self.inner.lock();
+            let _inner = self.get_inner();
+            let mut inner = _inner.lock();
             let destination = inner.path.join(cache_key.to_string());
             let package = inner.packages.entry(cache_key).or_default().clone();
             (package, destination)
@@ -455,7 +463,7 @@ mod test {
         };
 
         let packages_dir = tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         // Get the package to the cache
         let package_dir = cache
@@ -590,7 +598,7 @@ mod test {
         tokio::spawn(axum::serve(listener, service).into_future());
 
         let packages_dir = tempdir().unwrap();
-        let cache = PackageCache::new(packages_dir.path());
+        let cache = PackageCache::new_singleton(packages_dir.path());
 
         let server_url = Url::parse(&format!("http://localhost:{}", addr.port())).unwrap();
 

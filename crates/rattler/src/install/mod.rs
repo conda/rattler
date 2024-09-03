@@ -723,7 +723,7 @@ mod test {
     use crate::{
         get_test_data_dir,
         install::{link_package, InstallDriver, InstallOptions, PythonInfo},
-        package_cache::PackageCache,
+        package_cache::SingletonPackageCache,
     };
 
     #[tracing_test::traced_test]
@@ -777,7 +777,7 @@ mod test {
         // Open a package cache in the systems temporary directory with a specific name.
         // This allows us to reuse a package cache across multiple invocations
         // of this test. Useful if you're debugging.
-        let package_cache = PackageCache::new(temp_dir().join("rattler").join(cache_name));
+        let package_cache = SingletonPackageCache::new(temp_dir().join("rattler").join(cache_name));
 
         // Create an HTTP client we can use to download packages
         let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
