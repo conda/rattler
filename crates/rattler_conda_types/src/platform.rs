@@ -93,10 +93,10 @@ impl Platform {
                 return Platform::LinuxArmV6l;
             }
 
-            #[cfg(target_arch = "powerpc64le")]
+            #[cfg(all(target_arch = "powerpc64", target_endian = "little"))]
             return Platform::LinuxPpc64le;
 
-            #[cfg(target_arch = "powerpc64")]
+            #[cfg(all(target_arch = "powerpc64", target_endian = "big"))]
             return Platform::LinuxPpc64;
 
             #[cfg(target_arch = "s390x")]
@@ -115,7 +115,6 @@ impl Platform {
                 target_arch = "riscv64",
                 target_arch = "aarch64",
                 target_arch = "arm",
-                target_arch = "powerpc64le",
                 target_arch = "powerpc64",
                 target_arch = "s390x"
             )))]

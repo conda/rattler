@@ -11,7 +11,9 @@ readme.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+dashmap.workspace = true
 dirs.workspace = true
+futures.workspace = true
 fxhash.workspace = true
 itertools.workspace = true
 parking_lot.workspace = true
@@ -20,12 +22,14 @@ rattler_digest = { version = "1.0.1", path = "../rattler_digest", default-featur
 rattler_networking = { version = "0.21.2", path = "../rattler_networking", default-features = false }
 rattler_package_streaming = { version = "0.22.4", path = "../rattler_package_streaming", default-features = false, features = ["reqwest"] }
 reqwest.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["macros"] }
 tracing.workspace = true
 url.workspace = true
 thiserror.workspace = true
 reqwest-middleware.workspace = true
 digest.workspace = true
+fs4 = { workspace = true, features = ["fs-err-tokio"] }
+simple_spawn_blocking = { version = "1.0.0", path = "../simple_spawn_blocking"}
 
 [dev-dependencies]
 assert_matches.workspace = true

@@ -1,7 +1,8 @@
 use std::{future::IntoFuture, sync::Arc};
 
 use futures::FutureExt;
-use rattler_cache::package_cache::{CacheKey, PackageCache, PackageCacheError};
+use rattler_cache::package_cache::CacheKey;
+use rattler_cache::package_cache::{PackageCache, PackageCacheError};
 use rattler_conda_types::{
     package::{ArchiveIdentifier, IndexJson, PackageFile},
     ConvertSubdirError, PackageRecord, RepoDataRecord,
@@ -63,7 +64,7 @@ impl DirectUrlQuery {
 
         // TODO: Optimize this by only parsing the index json from stream.
         // Get package on system
-        let package_dir = self
+        let cache_lock = self
             .package_cache
             .get_or_fetch_from_url(
                 cache_key,
@@ -75,7 +76,7 @@ impl DirectUrlQuery {
             .await?;
 
         // Extract package record from index json
-        let index_json = IndexJson::from_package_directory(package_dir)?;
+        let index_json = IndexJson::from_package_directory(cache_lock.path())?;
         let package_record = PackageRecord::from_index_json(
             index_json,
             None,        // Size

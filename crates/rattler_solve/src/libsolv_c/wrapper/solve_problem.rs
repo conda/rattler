@@ -36,8 +36,8 @@ pub enum SolveProblem {
         source: SolvableId,
         target: SolvableId,
     },
-    /// A constraint (run_constrained) on source is conflicting with target.
-    /// SOLVER_RULE_PKG_CONSTRAINS has a dep, but it can resolve to nothing.
+    /// A constraint (`run_constrained`) on source is conflicting with target.
+    /// `SOLVER_RULE_PKG_CONSTRAINS` has a dep, but it can resolve to nothing.
     /// The constraint conflict is actually expressed between the target and
     /// a constrains node child of the source.
     PkgConstrains {

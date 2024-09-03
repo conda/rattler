@@ -9,6 +9,13 @@ use std::{
     sync::Arc,
 };
 
+use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use crate::install::link_script::LinkScriptError;
+use crate::{
+    default_cache_dir,
+    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
+    package_cache::PackageCache,
+};
 pub use error::InstallerError;
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 #[cfg(feature = "indicatif")]
@@ -16,6 +23,8 @@ pub use indicatif::{
     DefaultProgressFormatter, IndicatifReporter, IndicatifReporterBuilder, Placement,
     ProgressFormatter,
 };
+use rattler_cache::package_cache::CacheLock;
+use rattler_cache::package_cache::CacheReporter;
 use rattler_conda_types::{
     prefix_record::{Link, LinkType},
     Platform, PrefixRecord, RepoDataRecord,
@@ -25,14 +34,6 @@ pub use reporter::Reporter;
 use reqwest::Client;
 use simple_spawn_blocking::tokio::run_blocking_task;
 use tokio::{sync::Semaphore, task::JoinError};
-
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
-use crate::install::link_script::LinkScriptError;
-use crate::{
-    default_cache_dir,
-    install::{clobber_registry::ClobberedPath, link_script::PrePostLinkResult},
-    package_cache::{CacheReporter, PackageCache},
-};
 
 /// An installer that can install packages into a prefix.
 #[derive(Default)]
@@ -366,7 +367,7 @@ impl Installer {
                             let cache_index = r.on_populate_cache_start(idx, &record);
                             (r, cache_index)
                         });
-                        let cache_path = populate_cache(
+                        let cache_lock = populate_cache(
                             &record,
                             downloader,
                             &package_cache,
@@ -376,7 +377,7 @@ impl Installer {
                         if let Some((reporter, index)) = populate_cache_report {
                             reporter.on_populate_cache_complete(index);
                         }
-                        Ok((cache_path, record))
+                        Ok((cache_lock, record))
                     })
                     .map_err(JoinError::try_into_panic)
                     .map(|res| match res {
@@ -405,14 +406,14 @@ impl Installer {
                 }
 
                 // Install the package if it was fetched.
-                if let Some((cached_path, record)) = package_to_install.await? {
+                if let Some((cache_lock, record)) = package_to_install.await? {
                     let reporter = reporter
                         .as_deref()
                         .map(|r| (r, r.on_link_start(idx, &record)));
                     link_package(
                         &record,
                         prefix.as_ref(),
-                        &cached_path,
+                        cache_lock.path(),
                         base_install_options.clone(),
                         driver,
                     )
@@ -519,7 +520,7 @@ async fn populate_cache(
     downloader: reqwest_middleware::ClientWithMiddleware,
     cache: &PackageCache,
     reporter: Option<(Arc<dyn Reporter>, usize)>,
-) -> Result<PathBuf, InstallerError> {
+) -> Result<CacheLock, InstallerError> {
     struct CacheReporterBridge {
         reporter: Arc<dyn Reporter>,
         cache_index: usize,

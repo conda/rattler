@@ -799,7 +799,7 @@ mod test {
                 async move {
                     // Populate the cache
                     let package_info = ArchiveIdentifier::try_from_url(&package_url).unwrap();
-                    let package_dir = package_cache
+                    let package_cache_lock = package_cache
                         .get_or_fetch_from_url(
                             package_info,
                             package_url.clone(),
@@ -811,7 +811,7 @@ mod test {
 
                     // Install the package to the prefix
                     link_package(
-                        &package_dir,
+                        package_cache_lock.path(),
                         prefix_path,
                         install_driver,
                         InstallOptions {

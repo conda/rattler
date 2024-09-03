@@ -24,9 +24,9 @@ pub enum PathModificationBehavior {
     /// Replaces the complete path variable with specified paths.
     #[default]
     Replace,
-    /// Appends the new path variables to the path. E.g. '$PATH:/new/path'
+    /// Appends the new path variables to the path. E.g. <PATH:/new/path>
     Append,
-    /// Prepends the new path variables to the path. E.g. '/new/path:$PATH'
+    /// Prepends the new path variables to the path. E.g. "/new/path:$PATH"
     Prepend,
 }
 
@@ -603,13 +603,10 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn get_script<T: Shell + 'static>(
+    fn get_script<T: Clone + Shell + 'static>(
         shell_type: T,
         path_modification_behavior: PathModificationBehavior,
-    ) -> String
-    where
-        T: Clone,
-    {
+    ) -> String {
         let tdir = create_temp_dir();
 
         let activator = Activator::from_path(tdir.path(), shell_type, Platform::Osx64).unwrap();

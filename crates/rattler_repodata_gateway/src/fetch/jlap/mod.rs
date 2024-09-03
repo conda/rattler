@@ -388,7 +388,7 @@ impl<'a> JLAPResponse<'a> {
 
 /// Calculates the bytes offset. We default to zero if we receive a shorter than
 /// expected vector.
-fn get_bytes_offset(lines: &Vec<&str>) -> u64 {
+fn get_bytes_offset(lines: &[&str]) -> u64 {
     if lines.len() >= JLAP_FOOTER_OFFSET {
         lines[0..lines.len() - JLAP_FOOTER_OFFSET]
             .iter()

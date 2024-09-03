@@ -231,7 +231,7 @@ impl Version {
     /// Returns the individual segments of the version.
     pub fn segments(
         &self,
-    ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
+    ) -> impl DoubleEndedIterator<Item = SegmentIter<'_>> + ExactSizeIterator + '_ {
         let mut idx = usize::from(self.has_epoch());
         let version_segments = if let Some(local_index) = self.local_segment_index() {
             &self.segments[..local_index]
@@ -259,7 +259,7 @@ impl Version {
     /// ```
     pub fn local_segments(
         &self,
-    ) -> impl Iterator<Item = SegmentIter<'_>> + DoubleEndedIterator + ExactSizeIterator + '_ {
+    ) -> impl DoubleEndedIterator<Item = SegmentIter<'_>> + ExactSizeIterator + '_ {
         if let Some(start) = self.local_segment_index() {
             let mut idx = usize::from(self.has_epoch());
             idx += self.segments[..start]
@@ -962,7 +962,7 @@ impl<'v> SegmentIter<'v> {
     }
 
     /// Returns an iterator over the components of this segment.
-    pub fn components(&self) -> impl Iterator<Item = &'v Component> + DoubleEndedIterator {
+    pub fn components(&self) -> impl DoubleEndedIterator<Item = &'v Component> {
         static IMPLICIT_DEFAULT: Component = Component::Numeral(0);
 
         let version = self.version;

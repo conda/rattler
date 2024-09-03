@@ -45,7 +45,7 @@ pub async fn install_package_to_environment(
 
     // Create the conda-meta directory if it doesnt exist yet.
     let target_prefix = target_prefix.to_path_buf();
-    match tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         let conda_meta_path = target_prefix.join("conda-meta");
         std::fs::create_dir_all(&conda_meta_path)?;
 
@@ -53,8 +53,8 @@ pub async fn install_package_to_environment(
         let pkg_meta_path = conda_meta_path.join(prefix_record.file_name());
         prefix_record.write_to_path(pkg_meta_path, true)
     })
-    .await
-    {
+    .await;
+    match result {
         Ok(result) => Ok(result?),
         Err(err) => {
             if let Ok(panic) = err.try_into_panic() {
@@ -95,7 +95,7 @@ pub async fn execute_operation(
                 default_retry_policy(),
                 None,
             )
-            .map_ok(|cache_dir| Some((install_record.clone(), cache_dir)))
+            .map_ok(|cache_lock| Some((install_record.clone(), cache_lock)))
             .map_err(anyhow::Error::from)
             .await
             .unwrap()
@@ -104,10 +104,10 @@ pub async fn execute_operation(
     };
 
     // If there is a package to install, do that now.
-    if let Some((record, package_dir)) = install_package {
+    if let Some((record, package_cache_lock)) = install_package {
         install_package_to_environment(
             target_prefix,
-            package_dir,
+            package_cache_lock.path().to_path_buf(),
             record.clone(),
             install_driver,
             install_options,

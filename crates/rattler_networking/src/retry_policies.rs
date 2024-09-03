@@ -8,6 +8,7 @@ pub use retry_policies::{policies::*, Jitter, RetryDecision, RetryPolicy};
 use std::time::SystemTime;
 
 /// A simple [`RetryPolicy`] that just never retries.
+#[derive(Clone, Copy)]
 pub struct DoNotRetryPolicy;
 impl RetryPolicy for DoNotRetryPolicy {
     fn should_retry(&self, _: SystemTime, _: u32) -> RetryDecision {

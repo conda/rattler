@@ -1,11 +1,12 @@
-//! Functions that enable extracting or streaming a Conda package for objects that implement the
-//! [`tokio::io::AsyncRead`] trait.
+//! Functions that enable extracting or streaming a Conda package for objects
+//! that implement the [`tokio::io::AsyncRead`] trait.
 
-use crate::{ExtractError, ExtractResult};
-use std::io::Read;
-use std::path::Path;
+use std::{io::Read, path::Path};
+
 use tokio::io::AsyncRead;
 use tokio_util::io::SyncIoBridge;
+
+use crate::{ExtractError, ExtractResult};
 
 /// Extracts the contents a `.tar.bz2` package archive.
 pub async fn extract_tar_bz2(
@@ -44,7 +45,8 @@ pub async fn extract_conda(
     .await
 }
 
-/// Extracts the contents of a .conda package archive by fully reading the stream and then decompressing
+/// Extracts the contents of a .conda package archive by fully reading the
+/// stream and then decompressing
 pub async fn extract_conda_via_buffering(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
@@ -57,7 +59,8 @@ pub async fn extract_conda_via_buffering(
     .await
 }
 
-/// Extracts the contents of a `.conda` package archive using the provided extraction function
+/// Extracts the contents of a `.conda` package archive using the provided
+/// extraction function
 async fn extract_conda_internal(
     reader: impl AsyncRead + Send + 'static,
     destination: &Path,
@@ -68,18 +71,15 @@ async fn extract_conda_internal(
 
     // Spawn a block task to perform the extraction
     let destination = destination.to_owned();
-    match tokio::task::spawn_blocking(move || {
+    tokio::task::spawn_blocking(move || {
         let reader: Box<dyn Read> = Box::new(reader);
         extract_fn(reader, &destination)
     })
     .await
-    {
-        Ok(result) => result,
-        Err(err) => {
-            if let Ok(reason) = err.try_into_panic() {
-                std::panic::resume_unwind(reason);
-            }
-            Err(ExtractError::Cancelled)
+    .unwrap_or_else(|err| {
+        if let Ok(reason) = err.try_into_panic() {
+            std::panic::resume_unwind(reason);
         }
-    }
+        Err(ExtractError::Cancelled)
+    })
 }

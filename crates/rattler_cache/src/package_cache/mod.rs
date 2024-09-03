@@ -3,143 +3,88 @@
 
 use std::{
     error::Error,
-    fmt::{Display, Formatter},
+    fmt::Debug,
     future::Future,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
-use fxhash::FxHashMap;
+pub use cache_key::CacheKey;
+pub use cache_lock::CacheLock;
+use cache_lock::CacheRwLock;
+use dashmap::DashMap;
+use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
-use rattler_conda_types::{package::ArchiveIdentifier, PackageRecord};
-use rattler_digest::Sha256Hash;
+use rattler_conda_types::package::ArchiveIdentifier;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
+pub use reporter::CacheReporter;
 use reqwest::StatusCode;
-use tokio::sync::broadcast;
-use tracing::Instrument;
+use simple_spawn_blocking::Cancelled;
 use url::Url;
 
 use crate::validation::validate_package_directory;
 
-/// A trait that can be implemented to report progress of the download and
-/// validation process.
-pub trait CacheReporter: Send + Sync {
-    /// Called when validation starts
-    fn on_validate_start(&self) -> usize;
-    /// Called when validation completex
-    fn on_validate_complete(&self, index: usize);
-    /// Called when a download starts
-    fn on_download_start(&self) -> usize;
-    /// Called with regular updates on the download progress
-    fn on_download_progress(&self, index: usize, progress: u64, total: Option<u64>);
-    /// Called when a download completes
-    fn on_download_completed(&self, index: usize);
-}
+mod cache_key;
+mod cache_lock;
+mod reporter;
 
 /// A [`PackageCache`] manages a cache of extracted Conda packages on disk.
 ///
 /// The store does not provide an implementation to get the data into the store.
-/// Instead this is left up to the user when the package is requested. If the
+/// Instead, this is left up to the user when the package is requested. If the
 /// package is found in the cache it is returned immediately. However, if the
 /// cache is stale a user defined function is called to populate the cache. This
 /// separates the corners between caching and fetching of the content.
 #[derive(Clone)]
 pub struct PackageCache {
-    inner: Arc<Mutex<PackageCacheInner>>,
-}
-
-/// Provides a unique identifier for packages in the cache.
-/// TODO: This could not be unique over multiple subdir. How to handle?
-/// TODO: Wouldn't it be better to cache based on hashes?
-#[derive(Debug, Hash, Clone, Eq, PartialEq)]
-pub struct CacheKey {
-    name: String,
-    version: String,
-    build_string: String,
-    sha256: Option<Sha256Hash>,
-}
-
-impl CacheKey {
-    /// Adds a sha256 hash of the archive.
-    pub fn with_sha256(mut self, sha256: Sha256Hash) -> Self {
-        self.sha256 = Some(sha256);
-        self
-    }
-
-    /// Potentially adds a sha256 hash of the archive.
-    pub fn with_opt_sha256(mut self, sha256: Option<Sha256Hash>) -> Self {
-        self.sha256 = sha256;
-        self
-    }
-}
-
-impl CacheKey {
-    /// Return the sha256 hash of the package if it is known.
-    pub fn sha256(&self) -> Option<Sha256Hash> {
-        self.sha256
-    }
-}
-
-impl From<ArchiveIdentifier> for CacheKey {
-    fn from(pkg: ArchiveIdentifier) -> Self {
-        CacheKey {
-            name: pkg.name,
-            version: pkg.version,
-            build_string: pkg.build_string,
-            sha256: None,
-        }
-    }
-}
-
-impl From<&PackageRecord> for CacheKey {
-    fn from(record: &PackageRecord) -> Self {
-        Self {
-            name: record.name.as_normalized().to_string(),
-            version: record.version.to_string(),
-            build_string: record.build.clone(),
-            sha256: record.sha256,
-        }
-    }
-}
-
-impl Display for CacheKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}-{}-{}", &self.name, &self.version, &self.build_string)
-    }
+    inner: Arc<PackageCacheInner>,
 }
 
 #[derive(Default)]
 struct PackageCacheInner {
     path: PathBuf,
-    packages: FxHashMap<CacheKey, Arc<Mutex<Package>>>,
+    packages: DashMap<CacheKey, Arc<tokio::sync::Mutex<Entry>>>,
 }
 
 #[derive(Default)]
-struct Package {
-    path: Option<PathBuf>,
-    inflight: Option<broadcast::Sender<Result<PathBuf, PackageCacheError>>>,
+struct Entry {
+    last_revision: Option<u64>,
 }
 
 /// An error that might be returned from one of the caching function of the
 /// [`PackageCache`].
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum PackageCacheError {
     /// An error occurred while fetching the package.
     #[error(transparent)]
     FetchError(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
+
+    /// A locking error occured
+    #[error("{0}")]
+    LockError(String, #[source] std::io::Error),
+
+    /// The operation was cancelled
+    #[error("operation was cancelled")]
+    Cancelled,
+}
+
+impl From<Cancelled> for PackageCacheError {
+    fn from(_value: Cancelled) -> Self {
+        Self::Cancelled
+    }
 }
 
 impl PackageCache {
     /// Constructs a new [`PackageCache`] located at the specified path.
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self {
-            inner: Arc::new(Mutex::new(PackageCacheInner {
+            inner: Arc::new(PackageCacheInner {
                 path: path.into(),
-                packages: FxHashMap::default(),
-            })),
+                packages: DashMap::default(),
+            }),
         }
     }
 
@@ -158,69 +103,31 @@ impl PackageCache {
         pkg: impl Into<CacheKey>,
         fetch: F,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, PackageCacheError>
+    ) -> Result<CacheLock, PackageCacheError>
     where
-        F: (FnOnce(PathBuf) -> Fut) + Send + 'static,
+        F: (Fn(PathBuf) -> Fut) + Send + 'static,
         Fut: Future<Output = Result<(), E>> + Send + 'static,
         E: std::error::Error + Send + Sync + 'static,
     {
         let cache_key = pkg.into();
+        let cache_path = self.inner.path.join(cache_key.to_string());
+        let cache_entry = self.inner.packages.entry(cache_key).or_default().clone();
 
-        // Get the package entry
-        let (package, pkg_cache_dir) = {
-            let mut inner = self.inner.lock();
-            let destination = inner.path.join(cache_key.to_string());
-            let package = inner.packages.entry(cache_key).or_default().clone();
-            (package, destination)
-        };
+        // Acquire the entry. From this point on we can be sure that only one task is
+        // accessing the cache entry.
+        let mut cache_entry = cache_entry.lock().await;
 
-        let mut rx = {
-            // Only sync code in this block
-            let mut inner = package.lock();
+        // Validate the cache entry or fetch the package if it is not valid.
+        let cache_lock =
+            validate_or_fetch_to_cache(cache_path, fetch, cache_entry.last_revision, reporter)
+                .await?;
 
-            // If there exists an existing value in our cache, we can return that.
-            if let Some(path) = inner.path.as_ref() {
-                return Ok(path.clone());
-            }
+        // Store the current revision stored in the cache. If any other task tries to
+        // read the cache and the revision stayed the same, we can assume that the cache
+        // is still valid.
+        cache_entry.last_revision = Some(cache_lock.revision);
 
-            // Is there an in-flight requests for the package?
-            if let Some(inflight) = inner.inflight.as_ref() {
-                inflight.subscribe()
-            } else {
-                // There is no in-flight requests so we start one!
-                let (tx, rx) = broadcast::channel(1);
-                inner.inflight = Some(tx.clone());
-
-                let package = package.clone();
-                tokio::spawn(async move {
-                    let result = validate_or_fetch_to_cache(pkg_cache_dir.clone(), fetch, reporter)
-                        .instrument(
-                            tracing::debug_span!("validating", path = %pkg_cache_dir.display()),
-                        )
-                        .await;
-
-                    {
-                        // only sync code in this block
-                        let mut package = package.lock();
-                        package.inflight = None;
-
-                        match result {
-                            Ok(_) => {
-                                package.path.replace(pkg_cache_dir.clone());
-                                let _ = tx.send(Ok(pkg_cache_dir));
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(e));
-                            }
-                        }
-                    }
-                });
-
-                rx
-            }
-        };
-
-        rx.recv().await.expect("in-flight request has died")
+        Ok(cache_lock)
     }
 
     /// Returns the directory that contains the specified package.
@@ -234,9 +141,35 @@ impl PackageCache {
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, PackageCacheError> {
+    ) -> Result<CacheLock, PackageCacheError> {
         self.get_or_fetch_from_url_with_retry(pkg, url, client, DoNotRetryPolicy, reporter)
             .await
+    }
+
+    /// Returns the directory that contains the specified package.
+    ///
+    /// This is a convenience wrapper around `get_or_fetch` which fetches the
+    /// package from the given path if the package could not be found in the
+    /// cache.
+    pub async fn get_or_fetch_from_path(
+        &self,
+        path: &Path,
+        reporter: Option<Arc<dyn CacheReporter>>,
+    ) -> Result<CacheLock, PackageCacheError> {
+        let path = path.to_path_buf();
+        self.get_or_fetch(
+            ArchiveIdentifier::try_from_path(&path).unwrap(),
+            move |destination| {
+                let path = path.clone();
+                async move {
+                    rattler_package_streaming::tokio::fs::extract(&path, &destination)
+                        .await
+                        .map(|_| ())
+                }
+            },
+            reporter,
+        )
+        .await
     }
 
     /// Returns the directory that contains the specified package.
@@ -249,36 +182,41 @@ impl PackageCache {
         pkg: impl Into<CacheKey>,
         url: Url,
         client: reqwest_middleware::ClientWithMiddleware,
-        retry_policy: impl RetryPolicy + Send + 'static,
+        retry_policy: impl RetryPolicy + Send + 'static + Clone,
         reporter: Option<Arc<dyn CacheReporter>>,
-    ) -> Result<PathBuf, PackageCacheError> {
+    ) -> Result<CacheLock, PackageCacheError> {
         let request_start = SystemTime::now();
         let cache_key = pkg.into();
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
-        self.get_or_fetch(cache_key, move |destination| async move {
-            let mut current_try = 0;
-            loop {
-                current_try += 1;
-                tracing::debug!("downloading {} to {}", &url, destination.display());
+        self.get_or_fetch(cache_key, move |destination| {
+            let url = url.clone();
+            let client = client.clone();
+            let retry_policy = retry_policy.clone();
+            let download_reporter = download_reporter.clone();
+            async move {
+                let mut current_try = 0;
+                loop {
+                    current_try += 1;
+                    tracing::debug!("downloading {} to {}", &url, destination.display());
 
-                let result = rattler_package_streaming::reqwest::tokio::extract(
-                    client.clone(),
-                    url.clone(),
-                    &destination,
-                    sha256,
-                    download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
-                        reporter,
-                        index: Mutex::new(None),
-                    }) as Arc::<dyn DownloadReporter>)
-                )
-                .await;
+                    let result = rattler_package_streaming::reqwest::tokio::extract(
+                        client.clone(),
+                        url.clone(),
+                        &destination,
+                        sha256,
+                        download_reporter.clone().map(|reporter| Arc::new(PassthroughReporter {
+                            reporter,
+                            index: Mutex::new(None),
+                        }) as Arc::<dyn DownloadReporter>),
+                    )
+                        .await;
 
-                // Extract any potential error
-                let Err(err) = result else { return Ok(()); };
+                    // Extract any potential error
+                    let Err(err) = result else { return Ok(()); };
 
-                // Only retry on certain errors.
-                if !matches!(
+                    // Only retry on certain errors.
+                    if !matches!(
                     &err,
                     ExtractError::IoError(_) | ExtractError::CouldNotCreateDestination(_)
                 ) && !matches!(&err, ExtractError::ReqwestError(err) if
@@ -288,30 +226,31 @@ impl PackageCache {
                         .status()
                         .map_or(false, |status| status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS || status == StatusCode::REQUEST_TIMEOUT)
                 ) {
-                    return Err(err);
+                        return Err(err);
+                    }
+
+                    // Determine whether to retry based on the retry policy
+                    let execute_after = match retry_policy.should_retry(request_start, current_try) {
+                        RetryDecision::Retry { execute_after } => execute_after,
+                        RetryDecision::DoNotRetry => return Err(err),
+                    };
+                    let duration = execute_after.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO);
+
+                    // Wait for a second to let the remote service restore itself. This increases the
+                    // chance of success.
+                    tracing::warn!(
+                        "failed to download and extract {} to {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
+                        &url,
+                        destination.display(),
+                        err,
+                        current_try,
+                        duration
+                    );
+                    tokio::time::sleep(duration).await;
                 }
-
-                // Determine whether to retry based on the retry policy
-                let execute_after = match retry_policy.should_retry(request_start, current_try) {
-                    RetryDecision::Retry { execute_after } => execute_after,
-                    RetryDecision::DoNotRetry => return Err(err),
-                };
-                let duration = execute_after.duration_since(SystemTime::now()).unwrap_or(Duration::ZERO);
-
-                // Wait for a second to let the remote service restore itself. This increases the
-                // chance of success.
-                tracing::warn!(
-                    "failed to download and extract {} to {}: {}. Retry #{}, Sleeping {:?} until the next attempt...",
-                    &url,
-                    destination.display(),
-                    err,
-                    current_try,
-                    duration
-                );
-                tokio::time::sleep(duration).await;
             }
         }, reporter)
-        .await
+            .await
     }
 }
 
@@ -320,53 +259,137 @@ impl PackageCache {
 async fn validate_or_fetch_to_cache<F, Fut, E>(
     path: PathBuf,
     fetch: F,
+    known_valid_revision: Option<u64>,
     reporter: Option<Arc<dyn CacheReporter>>,
-) -> Result<(), PackageCacheError>
+) -> Result<CacheLock, PackageCacheError>
 where
-    F: FnOnce(PathBuf) -> Fut + Send,
+    F: Fn(PathBuf) -> Fut + Send,
     Fut: Future<Output = Result<(), E>> + 'static,
-    E: std::error::Error + Send + Sync + 'static,
+    E: Error + Send + Sync + 'static,
 {
-    // If the directory already exists validate the contents of the package
-    if path.is_dir() {
-        let path_inner = path.clone();
+    // Acquire a read lock on the cache entry. This ensures that no other process is
+    // currently writing to the cache.
+    let lock_file_path = path.with_extension("lock");
 
-        let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
-
-        let validation_result =
-            tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
-
-        if let Some((reporter, index)) = reporter {
-            reporter.on_validate_complete(index);
-        }
-
-        match validation_result {
-            Ok(Ok(_)) => {
-                tracing::debug!("validation succeeded");
-                return Ok(());
-            }
-            Ok(Err(e)) => {
-                tracing::warn!("validation for {path:?} failed: {e}");
-                if let Some(cause) = e.source() {
-                    tracing::debug!(
-                        "  Caused by: {}",
-                        std::iter::successors(Some(cause), |e| (*e).source())
-                            .format("\n  Caused by: ")
-                    );
-                }
-            }
-            Err(e) => {
-                if let Ok(panic) = e.try_into_panic() {
-                    std::panic::resume_unwind(panic)
-                }
-            }
-        }
+    // Ensure the directory containing the lock-file exists.
+    if let Some(root_dir) = lock_file_path.parent() {
+        tokio::fs::create_dir_all(root_dir)
+            .map_err(|e| {
+                PackageCacheError::LockError(
+                    format!("failed to create cache directory: '{}", root_dir.display()),
+                    e,
+                )
+            })
+            .await?;
     }
 
-    // Otherwise, defer to populate method to fill our cache.
-    fetch(path)
-        .await
-        .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))
+    // The revision of the cache entry that we already know is valid.
+    let mut validated_revision = known_valid_revision;
+
+    loop {
+        let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
+        let cache_revision = read_lock.read_revision()?;
+
+        if path.is_dir() {
+            let path_inner = path.clone();
+
+            let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
+
+            match validated_revision {
+                Some(revision) if revision == cache_revision => {
+                    // We previously already determined that the revision is valid. We can skip
+                    // actually validating.
+                    if let Some((reporter, index)) = reporter {
+                        reporter.on_validate_complete(index);
+                    }
+                    return Ok(CacheLock {
+                        _lock: read_lock,
+                        revision: cache_revision,
+                        path: path_inner,
+                    });
+                }
+                Some(_) => {
+                    // The cache has been modified since the last validation. We need to
+                    // re-validate.
+                    tracing::debug!(
+                        "cache became stale while acquiring a read-lock from {}. Revalidating.",
+                        lock_file_path.display()
+                    );
+                }
+                None => {
+                    // We have no information about the cache revision. We need
+                    // to validate.
+                }
+            }
+
+            let validation_result =
+                tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
+
+            if let Some((reporter, index)) = reporter {
+                reporter.on_validate_complete(index);
+            }
+
+            match validation_result {
+                Ok(Ok(_)) => {
+                    tracing::debug!("validation succeeded");
+                    return Ok(CacheLock {
+                        _lock: read_lock,
+                        revision: cache_revision,
+                        path,
+                    });
+                }
+                Ok(Err(e)) => {
+                    tracing::warn!("validation for {path:?} failed: {e}");
+                    if let Some(cause) = e.source() {
+                        tracing::debug!(
+                            "  Caused by: {}",
+                            std::iter::successors(Some(cause), |e| (*e).source())
+                                .format("\n  Caused by: ")
+                        );
+                    }
+                }
+                Err(e) => {
+                    if let Ok(panic) = e.try_into_panic() {
+                        std::panic::resume_unwind(panic)
+                    }
+                }
+            }
+        }
+
+        // If the cache is stale, we need to fetch the package again. We have to acquire
+        // a write lock on the cache entry. However, we can't do that while we have a
+        // read lock on the cache lock file. So we release the read lock and acquire a
+        // write lock on the cache lock file. In the meantime, another process might
+        // have already fetched the package. To guard against this we read a revision
+        // from the lock-file while we have the read lock, then we acquire the write
+        // lock and check if the revision has changed. If it has, we assume that
+        // another process has already fetched the package and we restart the
+        // validation process.
+
+        drop(read_lock);
+
+        let mut write_lock = CacheRwLock::acquire_write(&lock_file_path).await?;
+
+        let read_revision = write_lock.read_revision()?;
+        if read_revision != cache_revision {
+            tracing::warn!("cache revisions dont match '{}", lock_file_path.display());
+            // The cache has been modified since we last checked. We need to re-validate.
+            continue;
+        }
+
+        // Write the new revision
+        let new_revision = cache_revision + 1;
+        write_lock.write_revision(new_revision).await?;
+
+        // Otherwise, defer to populate method to fill our cache.
+        fetch(path.clone())
+            .await
+            .map_err(|e| PackageCacheError::FetchError(Arc::new(e)))?;
+
+        tracing::warn!("fetched '{}", lock_file_path.display());
+
+        validated_revision = Some(new_revision);
+    }
 }
 
 struct PassthroughReporter {
@@ -440,7 +463,7 @@ mod test {
     #[tokio::test]
     pub async fn test_package_cache() {
         let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(),
-                                             "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
+                                                                    "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
 
         // Read the paths.json file straight from the tar file.
         let paths = {
@@ -458,13 +481,19 @@ mod test {
         let cache = PackageCache::new(packages_dir.path());
 
         // Get the package to the cache
-        let package_dir = cache
+        let cache_lock = cache
             .get_or_fetch(
                 ArchiveIdentifier::try_from_path(&tar_archive_path).unwrap(),
-                move |destination| async move {
-                    rattler_package_streaming::tokio::fs::extract(&tar_archive_path, &destination)
+                move |destination| {
+                    let tar_archive_path = tar_archive_path.clone();
+                    async move {
+                        rattler_package_streaming::tokio::fs::extract(
+                            &tar_archive_path,
+                            &destination,
+                        )
                         .await
                         .map(|_| ())
+                    }
                 },
                 None,
             )
@@ -472,7 +501,7 @@ mod test {
             .unwrap();
 
         // Validate the contents of the package
-        let (_, current_paths) = validate_package_directory(&package_dir).unwrap();
+        let (_, current_paths) = validate_package_directory(cache_lock.path()).unwrap();
 
         // Make sure that the paths are the same as what we would expect from the
         // original tar archive.
@@ -641,5 +670,47 @@ mod test {
         test_flaky_package_cache(tar_bz2, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(1000)).await;
         test_flaky_package_cache(conda, Middleware::FailAfterBytes(50)).await;
+    }
+
+    #[tokio::test]
+    async fn test_multi_process() {
+        let packages_dir = tempdir().unwrap();
+        let cache_a = PackageCache::new(packages_dir.path());
+        let cache_b = PackageCache::new(packages_dir.path());
+        let cache_c = PackageCache::new(packages_dir.path());
+
+        let package_path = get_test_data_dir().join("clobber/clobber-python-0.1.0-cpython.conda");
+
+        // Get the file to the cache
+        let cache_a_lock = cache_a
+            .get_or_fetch_from_path(&package_path, None)
+            .await
+            .unwrap();
+
+        assert_eq!(cache_a_lock.revision(), 1);
+
+        // Get the file to the cache
+        let cache_b_lock = cache_b
+            .get_or_fetch_from_path(&package_path, None)
+            .await
+            .unwrap();
+
+        assert_eq!(cache_b_lock.revision(), 1);
+
+        // Now delete the index.json from the cache entry, effectively
+        // corrupting the cache.
+        std::fs::remove_file(cache_a_lock.path().join("info/index.json")).unwrap();
+
+        // Drop previous locks to ensure the package is not locked.
+        drop(cache_a_lock);
+        drop(cache_b_lock);
+
+        // Get the file to the cache
+        let cache_c_lock = cache_c
+            .get_or_fetch_from_path(&package_path, None)
+            .await
+            .unwrap();
+
+        assert_eq!(cache_c_lock.revision(), 2);
     }
 }

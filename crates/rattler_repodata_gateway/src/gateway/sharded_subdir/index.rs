@@ -1,20 +1,22 @@
-use super::{token::TokenClient, ShardedRepodata};
-use crate::reporter::ResponseReporterExt;
-use crate::{utils::url_to_cache_filename, GatewayError, Reporter};
+use std::{path::Path, str::FromStr, sync::Arc, time::SystemTime};
+
+use async_fd_lock::{LockWrite, RwLockWriteGuard};
 use bytes::Bytes;
-use futures::{FutureExt, TryFutureExt};
+use futures::TryFutureExt;
 use http::{HeaderMap, Method, Uri};
 use http_cache_semantics::{AfterResponse, BeforeRequest, CachePolicy, RequestLike};
 use reqwest::Response;
 use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use simple_spawn_blocking::tokio::run_blocking_task;
-use std::sync::Arc;
-use std::{io::Write, path::Path, str::FromStr, time::SystemTime};
-use tempfile::NamedTempFile;
-use tokio::fs::File;
-use tokio::io::{AsyncReadExt, BufReader};
+use tokio::{
+    fs::File,
+    io::{AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, BufReader, BufWriter},
+};
 use url::Url;
+
+use super::{token::TokenClient, ShardedRepodata};
+use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 /// Magic number that identifies the cache file format.
 const MAGIC_NUMBER: &[u8] = b"SHARD-CACHE-V1";
@@ -31,6 +33,7 @@ pub async fn fetch_index(
     reporter: Option<&dyn Reporter>,
 ) -> Result<ShardedRepodata, GatewayError> {
     async fn from_response(
+        mut cache_file: RwLockWriteGuard<File>,
         cache_path: &Path,
         policy: CachePolicy,
         response: Response,
@@ -48,8 +51,8 @@ pub async fn fetch_index(
         let decoded_bytes = Bytes::from(super::decode_zst_bytes_async(bytes).await?);
 
         // Write the cache to disk if the policy allows it.
-        let cache_fut = if policy.is_storable() {
-            write_shard_index_cache(cache_path, policy, decoded_bytes.clone())
+        let cache_fut =
+            write_shard_index_cache(cache_file.inner_mut(), policy, decoded_bytes.clone())
                 .map_ok(Some)
                 .map_err(|e| {
                     GatewayError::IoError(
@@ -59,29 +62,7 @@ pub async fn fetch_index(
                         ),
                         e,
                     )
-                })
-                .left_future()
-        } else {
-            // Otherwise delete the file
-            tokio::fs::remove_file(cache_path)
-                .map_ok_or_else(
-                    |e| {
-                        if e.kind() == std::io::ErrorKind::NotFound {
-                            Ok(None)
-                        } else {
-                            Err(GatewayError::IoError(
-                                format!(
-                                    "failed to remove cached shard index at {}",
-                                    cache_path.display()
-                                ),
-                                e,
-                            ))
-                        }
-                    },
-                    |_| Ok(None),
-                )
-                .right_future()
-        };
+                });
 
         // Parse the bytes
         let parse_fut = run_blocking_task(move || {
@@ -96,17 +77,7 @@ pub async fn fetch_index(
         });
 
         // Parse and write the file to disk concurrently
-        let (temp_file, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
-
-        // Persist the cache if successfully updated the cache.
-        if let Some(temp_file) = temp_file {
-            temp_file.persist(cache_path).map_err(|e| {
-                GatewayError::IoError(
-                    format!("failed to persist shard index to {}", cache_path.display()),
-                    e.into(),
-                )
-            })?;
-        }
+        let (_, sharded_index) = tokio::try_join!(cache_fut, parse_fut)?;
 
         Ok(sharded_index)
     }
@@ -122,16 +93,44 @@ pub async fn fetch_index(
     );
     let cache_path = cache_dir.join(cache_file_name);
 
+    // Make sure the cache directory exists
+    if let Some(parent) = cache_path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|err| {
+            GatewayError::IoError(format!("failed to create '{}'", parent.display()), err)
+        })?;
+    }
+
+    // Open and lock the cache file
+    let cache_file = tokio::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .truncate(false)
+        .create(true)
+        .open(&cache_path)
+        .await
+        .map_err(|err| {
+            GatewayError::IoError(format!("failed to open '{}'", cache_path.display()), err)
+        })?;
+
+    // Acquire a lock on the file.
+    let cache_lock = cache_file.lock_write().await.map_err(|err| {
+        GatewayError::IoError(
+            format!("failed to lock '{}'", cache_path.display()),
+            err.error,
+        )
+    })?;
+    let mut cache_reader = BufReader::new(cache_lock);
+
     let canonical_request = SimpleRequest::get(&canonical_shards_url);
 
     // Try reading the cached file
-    if let Ok((cache_header, file)) = read_cached_index(&cache_path).await {
+    if let Ok(cache_header) = read_cached_index(&mut cache_reader).await {
         match cache_header
             .policy
             .before_request(&canonical_request, SystemTime::now())
         {
             BeforeRequest::Fresh(_) => {
-                if let Ok(shard_index) = read_shard_index_from_reader(file).await {
+                if let Ok(shard_index) = read_shard_index_from_reader(&mut cache_reader).await {
                     tracing::debug!("shard index cache hit");
                     return Ok(shard_index);
                 }
@@ -173,10 +172,11 @@ pub async fn fetch_index(
                 ) {
                     AfterResponse::NotModified(_policy, _) => {
                         // The cached file is still valid
-                        match read_shard_index_from_reader(file).await {
+                        match read_shard_index_from_reader(&mut cache_reader).await {
                             Ok(shard_index) => {
                                 tracing::debug!("shard index cache was not modified");
-                                // If reading the file failed for some reason we'll just fetch it again.
+                                // If reading the file failed for some reason we'll just fetch it
+                                // again.
                                 return Ok(shard_index);
                             }
                             Err(e) => {
@@ -189,11 +189,15 @@ pub async fn fetch_index(
                     }
                     AfterResponse::Modified(policy, _) => {
                         // Close the old file so we can create a new one.
-                        drop(file);
-
                         tracing::debug!("shard index cache has become stale");
-                        return from_response(&cache_path, policy, response, download_reporter)
-                            .await;
+                        return from_response(
+                            cache_reader.into_inner(),
+                            &cache_path,
+                            policy,
+                            response,
+                            download_reporter,
+                        )
+                        .await;
                     }
                 }
             }
@@ -234,44 +238,49 @@ pub async fn fetch_index(
         .await?;
 
     let policy = CachePolicy::new(&canonical_request, &response);
-    from_response(&cache_path, policy, response, reporter).await
+    from_response(
+        cache_reader.into_inner(),
+        &cache_path,
+        policy,
+        response,
+        reporter,
+    )
+    .await
 }
 
 /// Writes the shard index cache to disk.
 async fn write_shard_index_cache(
-    cache_path: &Path,
+    cache_file: &mut File,
     policy: CachePolicy,
     decoded_bytes: Bytes,
-) -> std::io::Result<NamedTempFile> {
-    let cache_path = cache_path.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        // Write the header
-        let cache_header = rmp_serde::encode::to_vec(&CacheHeader { policy })
-            .expect("failed to encode cache header");
-        let cache_dir = cache_path
-            .parent()
-            .expect("the cache path must have a parent");
-        std::fs::create_dir_all(cache_dir)?;
-        let mut temp_file = tempfile::Builder::new()
-            .tempfile_in(cache_dir)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        temp_file.write_all(MAGIC_NUMBER)?;
-        temp_file.write_all(&(cache_header.len() as u32).to_le_bytes())?;
-        temp_file.write_all(&cache_header)?;
-        temp_file.write_all(decoded_bytes.as_ref())?;
+) -> std::io::Result<()> {
+    let cache_header =
+        rmp_serde::encode::to_vec(&CacheHeader { policy }).expect("failed to encode cache header");
 
-        Ok(temp_file)
-    })
-    .map_err(|e| match e.try_into_panic() {
-        Ok(payload) => std::panic::resume_unwind(payload),
-        Err(e) => std::io::Error::new(std::io::ErrorKind::Other, e),
-    })
-    .await?
+    // Move to the start of the file
+    cache_file.rewind().await?;
+
+    // Write the cache to disk
+    let mut writer = BufWriter::new(cache_file);
+    writer.write_all(MAGIC_NUMBER).await?;
+    writer
+        .write_all(&(cache_header.len() as u32).to_le_bytes())
+        .await?;
+    writer.write_all(&cache_header).await?;
+    writer.write_all(decoded_bytes.as_ref()).await?;
+    writer.flush().await?;
+
+    // Truncate the file to the correct size
+    let cache_file = writer.into_inner();
+    let len = cache_file.stream_position().await?;
+    cache_file.set_len(len).await?;
+
+    Ok(())
 }
 
 /// Read the shard index from a reader and deserialize it.
-async fn read_shard_index_from_reader(
-    mut reader: BufReader<File>,
+async fn read_shard_index_from_reader<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
 ) -> Result<ShardedRepodata, GatewayError> {
     // Read the file to memory
     let mut bytes = Vec::new();
@@ -296,11 +305,9 @@ struct CacheHeader {
 }
 
 /// Try reading the cache file from disk.
-async fn read_cached_index(cache_path: &Path) -> std::io::Result<(CacheHeader, BufReader<File>)> {
-    // Open the file for reading
-    let file = File::open(cache_path).await?;
-    let mut reader = BufReader::new(file);
-
+async fn read_cached_index<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+) -> std::io::Result<CacheHeader> {
     // Read the magic from the file
     let mut magic_number = [0; MAGIC_NUMBER.len()];
     reader.read_exact(&mut magic_number).await?;
@@ -322,10 +329,11 @@ async fn read_cached_index(cache_path: &Path) -> std::io::Result<(CacheHeader, B
     let cache_header = rmp_serde::from_slice::<CacheHeader>(&header_bytes)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
 
-    Ok((cache_header, reader))
+    Ok(cache_header)
 }
 
-/// A helper struct to make it easier to construct something that implements [`RequestLike`].
+/// A helper struct to make it easier to construct something that implements
+/// [`RequestLike`].
 struct SimpleRequest {
     uri: Uri,
     method: Method,

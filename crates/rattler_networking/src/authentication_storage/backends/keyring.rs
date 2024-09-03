@@ -9,7 +9,7 @@ use crate::{authentication_storage::StorageBackend, Authentication};
 #[derive(Clone, Debug)]
 /// A storage backend that stores credentials in the operating system's keyring
 pub struct KeyringAuthenticationStorage {
-    /// The store_key needs to be unique per program as it is stored
+    /// The `store_key` needs to be unique per program as it is stored
     /// in a global dictionary in the operating system
     pub store_key: String,
 }
