@@ -114,7 +114,7 @@ impl Display for CacheKey {
 }
 
 #[derive(Default)]
-struct PackageCacheInner {
+pub struct PackageCacheInner {
     path: PathBuf,
     packages: FxHashMap<CacheKey, Arc<Mutex<Package>>>,
 }
