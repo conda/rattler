@@ -297,7 +297,11 @@ impl GatewayInner {
             )
             .await
             .map(SubdirData::from_client)
-        } else if url.scheme() == "http" || url.scheme() == "https" || url.scheme() == "gcs" {
+        } else if url.scheme() == "http"
+            || url.scheme() == "https"
+            || url.scheme() == "gcs"
+            || url.scheme() == "oci"
+        {
             remote_subdir::RemoteSubdirClient::new(
                 channel.clone(),
                 platform,

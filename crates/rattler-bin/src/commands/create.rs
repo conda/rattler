@@ -140,6 +140,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
         .with_arc(Arc::new(AuthenticationMiddleware::new(
             authentication_storage,
         )))
+        .with(rattler_networking::OciMiddleware::default())
         .build();
 
     // Get the package names from the matchspecs so we can only load the package records that we need.
