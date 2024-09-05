@@ -142,9 +142,9 @@ impl Gateway {
     ///
     /// This method does not clear any on-disk cache.
     pub fn clear_repodata_cache(&self, channel: &Channel, subdirs: SubdirSelection) {
-        self.inner
-            .subdirs
-            .retain(|key, _| key.0 != *channel || !subdirs.contains(key.1.as_str()));
+        self.inner.subdirs.retain(|key, _| {
+            key.0.base_url() != channel.base_url() || !subdirs.contains(key.1.as_str())
+        });
     }
 }
 
