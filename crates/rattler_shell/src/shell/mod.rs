@@ -91,7 +91,7 @@ pub trait Shell {
             PathModificationBehavior::Prepend => paths_vec.push(self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator(platform));
+        let paths_string = paths_vec.join(self.path_separator(platform));
 
         self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
@@ -106,8 +106,8 @@ pub trait Shell {
     /// shell.
     fn create_run_script_command(&self, path: &Path) -> Command;
 
-    /// Path seperator
-    fn path_seperator(&self, platform: &Platform) -> &str {
+    /// Path separator
+    fn path_separator(&self, platform: &Platform) -> &str {
         if platform.is_unix() {
             ":"
         } else {
@@ -249,7 +249,7 @@ impl Shell for Bash {
             PathModificationBehavior::Append => paths_vec.insert(0, self.format_env_var(path_var)),
         }
         // Create the shell specific list of paths.
-        let paths_string = paths_vec.join(self.path_seperator(platform));
+        let paths_string = paths_vec.join(self.path_separator(platform));
 
         self.set_env_var(f, self.path_var(platform), paths_string.as_str())
     }
@@ -918,7 +918,7 @@ mod tests {
     }
 
     #[test]
-    fn test_path_seperator() {
+    fn test_path_separator() {
         let mut script = ShellScript::new(Bash, Platform::Linux64);
         script
             .set_path(

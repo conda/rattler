@@ -305,10 +305,10 @@ impl TryFrom<PyRecord> for PrefixRecord {
         match value.inner {
             RecordInner::Prefix(r) => Ok(r),
             RecordInner::RepoData(_) => Err(PyTypeError::new_err(
-                "connot use object of type 'RepoDataRecord' as 'PrefixRecord'",
+                "cannot use object of type 'RepoDataRecord' as 'PrefixRecord'",
             )),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
-                "connot use object of type 'PackageRecord' as 'PrefixRecord'",
+                "cannot use object of type 'PackageRecord' as 'PrefixRecord'",
             )),
         }
     }
@@ -346,7 +346,7 @@ impl TryFrom<PyRecord> for RepoDataRecord {
             RecordInner::Prefix(r) => Ok(r.repodata_record),
             RecordInner::RepoData(r) => Ok(r),
             RecordInner::Package(_) => Err(PyTypeError::new_err(
-                "connot use object of type 'PackageRecord' as 'RepoDataRecord'",
+                "cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
             )),
         }
     }

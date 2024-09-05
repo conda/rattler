@@ -30,7 +30,7 @@ pub fn extract_tar_bz2(
 ) -> Result<ExtractResult, ExtractError> {
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Wrap the reading in aditional readers that will compute the hashes of the file while its
+    // Wrap the reading in additional readers that will compute the hashes of the file while its
     // being read.
     let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
     let mut md5_reader =
@@ -54,7 +54,7 @@ pub fn extract_conda_via_streaming(
     // Construct the destination path if it doesnt exist yet
     std::fs::create_dir_all(destination).map_err(ExtractError::CouldNotCreateDestination)?;
 
-    // Wrap the reading in aditional readers that will compute the hashes of the file while its
+    // Wrap the reading in additional readers that will compute the hashes of the file while its
     // being read.
     let sha256_reader = rattler_digest::HashingReader::<_, rattler_digest::Sha256>::new(reader);
     let mut md5_reader =

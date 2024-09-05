@@ -216,7 +216,7 @@ pub fn parse_v3_or_lower(
             version,
             conda_packages: conda_packages.into_iter().collect(),
             pypi_packages: pypi_packages.into_iter().collect(),
-            pypi_environment_package_datas: pypi_runtime_configs
+            pypi_environment_package_data: pypi_runtime_configs
                 .into_iter()
                 .map(Into::into)
                 .collect(),

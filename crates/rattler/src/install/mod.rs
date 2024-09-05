@@ -178,7 +178,7 @@ pub struct InstallOptions {
 
     /// Whether or not to use symbolic links where possible. If this is set to
     /// `Some(false)` symlinks are disabled, if set to `Some(true)` symbolic
-    /// links are alwas used when specified in the [`info/paths.json`] file
+    /// links are always used when specified in the [`info/paths.json`] file
     /// even if this is not supported. If the value is set to `None`
     /// symbolic links are only used if they are supported.
     ///

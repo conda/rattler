@@ -62,7 +62,7 @@ pub enum PackageCacheError {
     #[error(transparent)]
     FetchError(#[from] Arc<dyn std::error::Error + Send + Sync + 'static>),
 
-    /// A locking error occured
+    /// A locking error occurred
     #[error("{0}")]
     LockError(String, #[source] std::io::Error),
 

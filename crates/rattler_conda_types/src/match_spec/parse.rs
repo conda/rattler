@@ -359,7 +359,7 @@ fn split_version_and_build(
         ))(input)
     }
 
-    fn parse_version_and_build_seperator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
+    fn parse_version_and_build_separator<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
         strictness: ParseStrictness,
     ) -> impl FnMut(&'a str) -> IResult<&'a str, &'a str, E> {
         move |input: &'a str| {
@@ -374,7 +374,7 @@ fn split_version_and_build(
         }
     }
 
-    match parse_version_and_build_seperator(strictness)(input).finish() {
+    match parse_version_and_build_separator(strictness)(input).finish() {
         Ok((rest, version)) => {
             let build_string = rest.trim();
 

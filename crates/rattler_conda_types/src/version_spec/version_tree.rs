@@ -194,7 +194,7 @@ impl<'a> TryFrom<&'a str> for VersionTree<'a> {
             }
         }
 
-        /// Parses a group of version constraints seperated by ,s
+        /// Parses a group of version constraints separated by ,s
         fn parse_and_group<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
             input: &'a str,
         ) -> Result<(&'a str, VersionTree<'_>), nom::Err<E>> {

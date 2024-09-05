@@ -30,7 +30,7 @@ pub enum SolveProblem {
     Pkg { dep: String },
     /// Looking for a valid solution to the installation satisfiability expand to
     /// two solvables of same package that cannot be installed together. This is
-    /// a partial exaplanation of why one of the solvables (could be any of the
+    /// a partial explanation of why one of the solvables (could be any of the
     /// parent) cannot be installed.
     PkgConflicts {
         source: SolvableId,
@@ -47,7 +47,7 @@ pub enum SolveProblem {
     },
     /// A package dependency does not exist.
     /// Could be a wrong name or missing channel.
-    /// This is a partial exaplanation of why a specific solvable (could be any
+    /// This is a partial explanation of why a specific solvable (could be any
     /// of the parent) cannot be installed.
     PkgNothingProvidesDep { source: SolvableId, dep: String },
     /// Express a dependency on source that is involved in explaining the
@@ -61,7 +61,7 @@ pub enum SolveProblem {
         source: SolvableId,
         target: SolvableId,
     },
-    /// Encounterd in the problems list from libsolv but unknown.
+    /// Encountered in the problems list from libsolv but unknown.
     /// Explicitly ignored until we do something with it.
     Update,
 }

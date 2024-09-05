@@ -13,7 +13,7 @@ class AuthenticatedClient:
     @classmethod
     def _from_ffi_object(cls, client: PyAuthenticatedClient) -> AuthenticatedClient:
         """
-        Construct py-rattler AuthenticatedClient from PyAutheticatedClient FFI object.
+        Construct py-rattler AuthenticatedClient from PyAuthenticatedClient FFI object.
         """
         authenticated_client = cls.__new__(cls)
         authenticated_client._client = client

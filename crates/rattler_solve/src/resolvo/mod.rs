@@ -219,7 +219,7 @@ impl<'a> CondaDependencyProvider<'a> {
         let mut package_name_found_in_channel = HashMap::<String, &String>::new();
 
         // Add additional records
-        for repo_datas in repodata {
+        for repo_data in repodata {
             // Iterate over all records and dedup records that refer to the same package
             // data but with different archive types. This can happen if you
             // have two variants of the same package but with different
@@ -229,13 +229,13 @@ impl<'a> CondaDependencyProvider<'a> {
             // presented to this function to ensure that each solve is
             // deterministic. Iterating over HashMaps is not deterministic at
             // runtime so instead we store the values in a Vec as we iterate over the
-            // records. This guarentees that the order of records remains the same over
+            // records. This guarantees that the order of records remains the same over
             // runs.
-            let mut ordered_repodata = Vec::with_capacity(repo_datas.records.len());
+            let mut ordered_repodata = Vec::with_capacity(repo_data.records.len());
             let mut package_to_type: HashMap<&str, (ArchiveType, usize, bool)> =
-                HashMap::with_capacity(repo_datas.records.len());
+                HashMap::with_capacity(repo_data.records.len());
 
-            for record in repo_datas.records {
+            for record in repo_data.records {
                 // Determine if this record will be excluded.
                 let excluded = matches!((&exclude_newer, &record.package_record.timestamp),
                     (Some(exclude_newer), Some(record_timestamp))

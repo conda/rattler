@@ -72,7 +72,7 @@ impl CacheHeaders {
         if let Some(last_modified) = self
             .last_modified
             .as_deref()
-            .and_then(|last_modifed| HeaderValue::from_str(last_modifed).ok())
+            .and_then(|last_modified| HeaderValue::from_str(last_modified).ok())
         {
             headers.insert(header::IF_MODIFIED_SINCE, last_modified);
         }

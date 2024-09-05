@@ -95,7 +95,7 @@ pub enum VersionOperators {
     Exact(EqualityOperator),
 }
 
-/// Logical operator used two compare groups of version comparisions. E.g.
+/// Logical operator used two compare groups of version comparisons. E.g.
 /// `>=3.4,<4.0` or `>=3.4|<4.0`,
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub enum LogicalOperator {

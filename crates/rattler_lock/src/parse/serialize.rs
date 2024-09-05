@@ -247,7 +247,7 @@ impl Serialize for LockFile {
                                             ) => {
                                                 let pypi_package = &inner.pypi_packages[pypi_index];
                                                 let pypi_runtime = &inner
-                                                    .pypi_environment_package_datas
+                                                    .pypi_environment_package_data
                                                     [pypi_runtime_index];
                                                 SerializablePackageSelector::Pypi {
                                                     pypi: &pypi_package.url_or_path,

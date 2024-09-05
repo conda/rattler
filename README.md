@@ -89,7 +89,7 @@ You can [join our discord server via this link][chat-url].
 
 Rattler consists of several crates that provide different functionalities. 
 
-* **rattler_conda_types**: foundational types for all datastructures used withing the conda eco-system.
+* **rattler_conda_types**: foundational types for all datastructures used within the conda eco-system.
 * **rattler_package_streaming**: provides functionality to download, extract and create conda package archives.  
 * **rattler_repodata_gateway**: downloads, reads and processes information about existing conda packages from an index.
 * **rattler_shell**: code to activate an existing environment and run programs in it.

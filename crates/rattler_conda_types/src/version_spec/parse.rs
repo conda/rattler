@@ -165,7 +165,7 @@ fn logical_constraint_parser(
         // sense (e.g. ``>=*``) but they do exist in the wild. This code here
         // tries to map it to something that at least makes some sort of sense.
         // But this is not the case for everything, for instance what
-        // what is ment with `!=*` or `<*`?
+        // what is meant with `!=*` or `<*`?
         // See: https://github.com/AnacondaRecipes/repodata-hotfixes/issues/220
         if version_str == "*" {
             let op = op.expect(
