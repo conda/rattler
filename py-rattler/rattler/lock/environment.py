@@ -17,6 +17,9 @@ class Environment:
     _env: PyEnvironment
 
     def __init__(self, name: str, requirements: Dict[Platform, List[RepoDataRecord]]) -> None:
+        """
+        Create a new environment.
+        """
         self._env = PyEnvironment(
             name,
             # TODO: move this logic to rust

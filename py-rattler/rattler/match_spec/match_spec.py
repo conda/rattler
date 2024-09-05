@@ -81,6 +81,19 @@ class MatchSpec:
     """
 
     def __init__(self, spec: str, strict: bool = False) -> None:
+        """
+        Create a new version spec.
+
+        When `strict` is `True`, some ambiguous version specs are rejected.
+
+        ```python
+        >>> MatchSpec("pip >=24.0")
+        MatchSpec("pip >=24.0")
+        >>> MatchSpec("pip 24")
+        MatchSpec("pip ==24")
+        >>>
+        ```
+        """
         if isinstance(spec, str):
             self._match_spec = PyMatchSpec(spec, strict)
         else:
