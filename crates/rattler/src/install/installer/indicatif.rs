@@ -61,7 +61,7 @@ pub enum ProgressTrack {
     Linking,
 }
 
-/// Defines the currect status of a progress bar.
+/// Defines the correct status of a progress bar.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum ProgressStatus {
     /// The progress bar is visible but has not started yet.
