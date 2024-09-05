@@ -582,7 +582,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_flter_with_specs() {
+    async fn test_filter_with_specs() {
         let gateway = Gateway::new();
 
         let index = local_conda_forge().await;

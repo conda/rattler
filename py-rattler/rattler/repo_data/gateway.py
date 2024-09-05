@@ -70,8 +70,8 @@ class Gateway:
 
     The gateway can also easily be used concurrently, as it is designed to be
     thread-safe. When two threads are querying the same channel at the same time,
-    their requests are coallesced into a single request. This is done to reduce the
-    number of requests made to the remote server and reduce the overal memory usage.
+    their requests are coalesced into a single request. This is done to reduce the
+    number of requests made to the remote server and reduce the overall memory usage.
 
     The gateway caches the repodata internally, so if the same channel is queried
     multiple times the records will only be fetched once. However, the conversion

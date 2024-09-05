@@ -50,7 +50,7 @@ pub struct Args {
 /// Authentication errors that can be returned by the `AuthenticationCLIError`
 #[derive(thiserror::Error, Debug)]
 pub enum AuthenticationCLIError {
-    /// An error occured when the input repository URL is parsed
+    /// An error occurred when the input repository URL is parsed
     #[error("Failed to parse the URL")]
     ParseUrlError(#[from] url::ParseError),
 

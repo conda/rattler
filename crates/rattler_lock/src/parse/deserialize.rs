@@ -156,7 +156,7 @@ pub fn parse_from_document(
             environment_lookup,
             conda_packages,
             pypi_packages,
-            pypi_environment_package_datas: pypi_runtime_lookup
+            pypi_environment_package_data: pypi_runtime_lookup
                 .into_iter()
                 .map(Into::into)
                 .collect(),

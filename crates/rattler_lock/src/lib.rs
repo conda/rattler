@@ -137,7 +137,7 @@ struct LockFileInner {
     environments: Vec<EnvironmentData>,
     conda_packages: Vec<CondaPackageData>,
     pypi_packages: Vec<PypiPackageData>,
-    pypi_environment_package_datas: Vec<PypiPackageEnvironmentData>,
+    pypi_environment_package_data: Vec<PypiPackageEnvironmentData>,
 
     environment_lookup: FxHashMap<String, usize>,
 }
@@ -319,7 +319,7 @@ impl Environment {
                         EnvironmentPackageData::Conda(_) => None,
                         EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
                             self.inner.pypi_packages[*pkg_data_idx].clone(),
-                            self.inner.pypi_environment_package_datas[*env_data_idx].clone(),
+                            self.inner.pypi_environment_package_data[*env_data_idx].clone(),
                         )),
                     })
                     .collect();
@@ -392,7 +392,7 @@ impl Environment {
                     EnvironmentPackageData::Conda(_) => None,
                     EnvironmentPackageData::Pypi(package_idx, env_idx) => Some((
                         self.inner.pypi_packages[*package_idx].clone(),
-                        self.inner.pypi_environment_package_datas[*env_idx].clone(),
+                        self.inner.pypi_environment_package_data[*env_idx].clone(),
                     )),
                 })
                 .collect(),
@@ -597,7 +597,7 @@ impl PypiPackage {
 
     /// Returns the runtime data from the internal data structure.
     fn environment_data(&self) -> &PypiPackageEnvironmentData {
-        &self.inner.pypi_environment_package_datas[self.runtime_index]
+        &self.inner.pypi_environment_package_data[self.runtime_index]
     }
 
     /// Returns the package data from the internal data structure.

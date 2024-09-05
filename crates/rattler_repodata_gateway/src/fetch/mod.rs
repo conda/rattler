@@ -889,7 +889,7 @@ fn validate_cached_state(
             return ValidatedCacheState::InvalidOrMissing;
         }
         Err(e) => {
-            // An error occured while reading the cached state.
+            // An error occurred while reading the cached state.
             tracing::warn!(
                 "invalid repodata cache state '{}': {e}. Ignoring cached files...",
                 cache_state_path.display()

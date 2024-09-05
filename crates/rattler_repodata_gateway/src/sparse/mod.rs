@@ -487,7 +487,7 @@ mod test {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
     }
 
-    async fn default_repo_datas() -> Vec<(Channel, &'static str, PathBuf)> {
+    async fn default_repo_data() -> Vec<(Channel, &'static str, PathBuf)> {
         tokio::try_join!(fetch_repo_data("linux-64"), fetch_repo_data("noarch")).unwrap();
 
         let channel_config = ChannelConfig::default_with_root_dir(std::env::current_dir().unwrap());
@@ -506,7 +506,7 @@ mod test {
     }
 
     async fn default_repo_data_bytes() -> Vec<(Channel, &'static str, Bytes)> {
-        default_repo_datas()
+        default_repo_data()
             .await
             .into_iter()
             .map(|(channel, subdir, path)| {
@@ -517,10 +517,10 @@ mod test {
     }
 
     fn load_sparse_from_bytes(
-        repo_datas: &[(Channel, &'static str, Bytes)],
+        repo_data: &[(Channel, &'static str, Bytes)],
         package_names: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Vec<Vec<RepoDataRecord>> {
-        let sparse: Vec<_> = repo_datas
+        let sparse: Vec<_> = repo_data
             .iter()
             .map(|(channel, subdir, bytes)| {
                 SparseRepoData::from_bytes(channel.clone(), *subdir, bytes.clone(), None).unwrap()
@@ -542,7 +542,7 @@ mod test {
         //"noarch-sha=05e0c4ce7be29f36949c33cce782f21aecfbdd41f9e3423839670fb38fc5d691"
 
         load_repo_data_recursively(
-            default_repo_datas().await,
+            default_repo_data().await,
             package_names
                 .into_iter()
                 .map(|name| PackageName::try_from(name.as_ref()).unwrap()),
@@ -641,8 +641,8 @@ mod test {
         assert_eq!(total_records, 16065);
 
         // Bytes
-        let repo_datas = default_repo_data_bytes().await;
-        let sparse_empty_data = load_sparse_from_bytes(&repo_datas, package_names);
+        let repo_data = default_repo_data_bytes().await;
+        let sparse_empty_data = load_sparse_from_bytes(&repo_data, package_names);
 
         let total_records = sparse_empty_data.iter().map(Vec::len).sum::<usize>();
 

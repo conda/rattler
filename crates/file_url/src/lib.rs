@@ -51,7 +51,7 @@ pub fn url_to_path(url: &Url) -> Option<PathBuf> {
         Some(host) => Some(host),
     };
 
-    let (mut path, seperator) = if let Some(host) = host {
+    let (mut path, separator) = if let Some(host) = host {
         // A host is only present for Windows UNC paths
         (format!("\\\\{host}\\"), "\\")
     } else {
@@ -69,7 +69,7 @@ pub fn url_to_path(url: &Url) -> Option<PathBuf> {
 
     for (idx, segment) in segments.enumerate() {
         if idx > 0 {
-            path.push_str(seperator);
+            path.push_str(separator);
         }
         match String::from_utf8(percent_decode(segment.as_bytes()).collect()) {
             Ok(s) => path.push_str(&s),

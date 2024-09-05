@@ -239,7 +239,7 @@ impl LockFileBuilder {
                 version: FileFormatVersion::LATEST,
                 conda_packages: self.conda_packages.into_iter().collect(),
                 pypi_packages: self.pypi_packages.into_iter().collect(),
-                pypi_environment_package_datas: self
+                pypi_environment_package_data: self
                     .pypi_runtime_configurations
                     .into_iter()
                     .map(Into::into)

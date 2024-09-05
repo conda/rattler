@@ -106,7 +106,7 @@ pub trait EnvOverride: Sized {
     /// package.
     const DEFAULT_ENV_NAME: &'static str;
 
-    /// Detect the virutal package for the current system.
+    /// Detect the virtual package for the current system.
     /// This method is here so that `<Self as EnvOverride>::current` always
     /// returns the same error type. `current` may return different types of
     /// errors depending on the virtual package. This one always returns
@@ -227,7 +227,7 @@ pub enum DetectVirtualPackageError {
 /// Configure the overrides used in this crate.
 ///
 /// The default value is `None` for all overrides which means that by default
-/// none of the virtual packages are overriden.
+/// none of the virtual packages are overridden.
 ///
 /// Use `VirtualPackageOverrides::from_env()` to create an instance of this
 /// struct with all overrides set to the default environment variables.
