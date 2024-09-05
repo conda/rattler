@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.27](https://github.com/conda/rattler/compare/rattler_index-v0.19.26...rattler_index-v0.19.27) - 2024-09-05
+
+### Fixed
+- typos ([#849](https://github.com/conda/rattler/pull/849))
+
 ## [0.19.26](https://github.com/conda/rattler/compare/rattler_index-v0.19.25...rattler_index-v0.19.26) - 2024-09-03
 
 ### Other

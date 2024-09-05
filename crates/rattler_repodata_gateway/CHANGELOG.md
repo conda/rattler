@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.12](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.11...rattler_repodata_gateway-v0.21.12) - 2024-09-05
+
+### Fixed
+- *(gateway)* clear subdir cache based on `base_url` ([#852](https://github.com/conda/rattler/pull/852))
+- typos ([#849](https://github.com/conda/rattler/pull/849))
+
 ## [0.21.11](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.10...rattler_repodata_gateway-v0.21.11) - 2024-09-03
 
 ### Fixed
