@@ -1,6 +1,6 @@
 [package]
 name = "rattler_conda_types"
-version = "0.27.4"
+version = "0.27.5"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "Rust data types for common types used within the Conda ecosystem"
@@ -12,7 +12,7 @@ readme.workspace = true
 
 [dependencies]
 chrono = { workspace = true }
-file_url = { path = "../file_url", version = "0.1.4" }
+file_url = { path = "../file_url", version = "0.1.5" }
 fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
@@ -20,8 +20,8 @@ itertools = { workspace = true }
 lazy-regex = { workspace = true }
 nom = { workspace = true }
 purl = { workspace = true, features = ["serde"] }
-rattler_digest = { path = "../rattler_digest", version = "1.0.1", default-features = false, features = ["serde"] }
-rattler_macros = { path = "../rattler_macros", version = "1.0.1", default-features = false }
+rattler_digest = { path = "../rattler_digest", version = "1.0.2", default-features = false, features = ["serde"] }
+rattler_macros = { path = "../rattler_macros", version = "1.0.2", default-features = false }
 regex = { workspace = true }
 simd-json = { workspace = true , features = ["serde_impl"]}
 serde = { workspace = true, features = ["derive", "rc"] }
@@ -37,7 +37,7 @@ tracing = { workspace = true }
 typed-path = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
-rattler_redaction = { version = "0.1.1", path = "../rattler_redaction" }
+rattler_redaction = { version = "0.1.2", path = "../rattler_redaction" }
 dirs = { workspace = true }
 
 [dev-dependencies]
