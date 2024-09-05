@@ -228,7 +228,7 @@ pub struct InstallOptions {
 
     /// For binaries on macOS ARM64 (Apple Silicon), binaries need to be signed
     /// with an ad-hoc certificate to properly work. This field controls
-    /// wether or not to do that. Code signing is only executed when the
+    /// whether or not to do that. Code signing is only executed when the
     /// target platform is macOS ARM64. By default, codesigning will fail
     /// the installation if it fails. This behavior can be changed by setting
     /// this field to `AppleCodeSignBehavior::Ignore` or

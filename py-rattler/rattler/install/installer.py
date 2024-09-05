@@ -64,7 +64,7 @@ async def install(
                 packages.
         platform: Target platform to create and link the
                 environment. Defaults to current platform.
-        execute_link_scripts: Wether to execute the post-link and pre-unlink scripts
+        execute_link_scripts: whether to execute the post-link and pre-unlink scripts
                 that may be part of a package. Defaults to False.
         show_progress: If set to `True` a progress bar will be shown on the CLI.
         client: An authenticated client to use for downloading packages. If not specified a default

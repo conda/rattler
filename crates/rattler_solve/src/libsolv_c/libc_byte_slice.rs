@@ -9,10 +9,10 @@ pub struct LibcByteSlice {
     len: usize,
 }
 
-// We can safely implemenet `Send` because LibcByteSlice is immutable
+// We can safely implement `Send` because LibcByteSlice is immutable
 unsafe impl Send for LibcByteSlice {}
 
-// We can safely implemenet `Send` because LibcByteSlice is immutable
+// We can safely implement `Send` because LibcByteSlice is immutable
 unsafe impl Sync for LibcByteSlice {}
 
 impl LibcByteSlice {
