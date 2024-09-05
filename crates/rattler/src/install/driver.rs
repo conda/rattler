@@ -169,7 +169,7 @@ impl InstallDriver {
         Ok(None)
     }
 
-    /// Runs a blocking task that will execute on a seperate thread. The task is
+    /// Runs a blocking task that will execute on a separate thread. The task is
     /// not started until an IO permit is acquired. This is used to make
     /// sure that the system doesn't try to acquire more IO resources than
     /// the system has available.

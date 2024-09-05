@@ -49,14 +49,14 @@ fn bench_solve_environment(c: &mut Criterion, specs: Vec<&str>) {
     let json_file = conda_json_path();
     let json_file_noarch = conda_json_path_noarch();
 
-    let sparse_repo_datas = vec![
+    let sparse_repo_data = vec![
         read_sparse_repodata(&json_file),
         read_sparse_repodata(&json_file_noarch),
     ];
 
     let names = specs.iter().map(|s| s.name.clone().unwrap());
     let available_packages =
-        SparseRepoData::load_records_recursive(&sparse_repo_datas, names, None).unwrap();
+        SparseRepoData::load_records_recursive(&sparse_repo_data, names, None).unwrap();
 
     #[cfg(feature = "libsolv_c")]
     group.bench_function("libsolv_c", |b| {

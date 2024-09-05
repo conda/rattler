@@ -83,7 +83,7 @@ pub fn download_and_cache_file(url: Url, expected_sha256: &str) -> Result<PathBu
     std::fs::create_dir_all(&final_parent_dir)
         .map_err(|e| Error::FailedToCreateCacheDir(final_parent_dir.display().to_string(), e))?;
 
-    // Aquire the lock on the cache directory
+    // Acquire the lock on the cache directory
     let mut lock = fslock::LockFile::open(&cache_dir.join(".lock"))
         .map_err(Error::FailedToAcquireCacheLock)?;
     lock.lock_with_pid()

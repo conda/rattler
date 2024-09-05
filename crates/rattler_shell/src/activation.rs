@@ -16,7 +16,7 @@ use rattler_conda_types::Platform;
 
 use crate::shell::{Shell, ShellScript};
 
-const ENV_START_SEPERATOR: &str = "____RATTLER_ENV_START____";
+const ENV_START_SEPARATOR: &str = "____RATTLER_ENV_START____";
 
 /// Type of modification done to the `PATH` variable
 #[derive(Default, Clone)]
@@ -135,7 +135,7 @@ pub enum ActivationError {
     #[error("Invalid json for environment vars: {0} in file {1:?}")]
     InvalidEnvVarFileJson(serde_json::Error, PathBuf),
 
-    /// An error that can occur wiht malformed JSON when parsing files in the
+    /// An error that can occur with malformed JSON when parsing files in the
     /// `env_vars.d` directory
     #[error("Malformed JSON: not a plain JSON object in file {file:?}")]
     InvalidEnvVarFileJsonNoObject {
@@ -419,10 +419,10 @@ impl<T: Shell + Clone> Activator<T> {
             ShellScript::new(self.shell_type.clone(), self.platform);
         activation_detection_script
             .print_env()?
-            .echo(ENV_START_SEPERATOR)?;
+            .echo(ENV_START_SEPARATOR)?;
         activation_detection_script.append_script(&activation_script);
         activation_detection_script
-            .echo(ENV_START_SEPERATOR)?
+            .echo(ENV_START_SEPARATOR)?
             .print_env()?;
 
         // Create a temporary file that we can execute with our shell.
@@ -460,9 +460,9 @@ impl<T: Shell + Clone> Activator<T> {
 
         let stdout = String::from_utf8_lossy(&activation_result.stdout);
         let (before_env, rest) = stdout
-            .split_once(ENV_START_SEPERATOR)
+            .split_once(ENV_START_SEPARATOR)
             .unwrap_or(("", stdout.as_ref()));
-        let (_, after_env) = rest.rsplit_once(ENV_START_SEPERATOR).unwrap_or(("", ""));
+        let (_, after_env) = rest.rsplit_once(ENV_START_SEPARATOR).unwrap_or(("", ""));
 
         // Parse both environments and find the difference
         let before_env = self.shell_type.parse_env(before_env);

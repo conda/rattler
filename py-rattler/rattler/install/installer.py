@@ -28,7 +28,7 @@ async def install(
 
         When `execute_link_scripts` is set to `True` the post-link and pre-unlink scripts of
         packages will be executed. These scripts are not sandboxed and can be used to execute
-        arbitraty code. It is therefor discouraged to enable executing link scripts.
+        arbitrary code. It is therefor discouraged to enable executing link scripts.
 
     Example
     -------

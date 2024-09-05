@@ -141,7 +141,7 @@ impl From<PyVirtualPackage> for VirtualPackage {
 impl PyVirtualPackage {
     /// Returns virtual packages detected for the current system or an error if the versions could
     /// not be properly detected.
-    // marking this as depreacted causes a warning when building the code,
+    // marking this as deprecated causes a warning when building the code,
     // we just warn directly from python.
     #[staticmethod]
     pub fn current() -> PyResult<Vec<Self>> {

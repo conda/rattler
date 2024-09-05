@@ -77,11 +77,11 @@ pub enum ParseVersionErrorKind {
     /// Expected a version component
     #[error("expected a version component e.g. `2` or `rc`")]
     ExpectedComponent,
-    /// Expected a segment seperator
+    /// Expected a segment separator
     #[error("expected a '.', '-', or '_'")]
     ExpectedSegmentSeparator,
     /// Cannot mix and match dashes and underscores
-    #[error("cannot use both underscores and dashes as version segment seperators")]
+    #[error("cannot use both underscores and dashes as version segment separators")]
     CannotMixAndMatchDashesAndUnderscores,
     /// Expected the end of the string
     #[error("encountered more characters but expected none")]

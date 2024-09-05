@@ -176,7 +176,7 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     );
 
     // Determine virtual packages of the system. These packages define the capabilities of the
-    // system. Some packages depend on these virtual packages to indiciate compability with the
+    // system. Some packages depend on these virtual packages to indicate compatibility with the
     // hardware of the system.
     let virtual_packages = wrap_in_progress("determining virtual packages", move || {
         if let Some(virtual_packages) = opt.virtual_package {

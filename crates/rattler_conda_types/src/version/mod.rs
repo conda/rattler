@@ -423,7 +423,7 @@ impl Version {
     }
 
     /// Returns the number of segments in the version. Segments are the part of the version
-    /// seperated by dots or dashes.
+    /// separated by dots or dashes.
     pub fn segment_count(&self) -> usize {
         if let Some(local_index) = self.local_segment_index() {
             local_index

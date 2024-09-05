@@ -31,7 +31,7 @@ pub enum InstallerError {
     #[error("failed to unlink {0}")]
     UnlinkError(String, #[source] UnlinkError),
 
-    /// A generic IO error occured
+    /// A generic IO error occurred
     #[error("{0}")]
     IoError(String, #[source] std::io::Error),
 
@@ -43,7 +43,7 @@ pub enum InstallerError {
     #[error("post-processing failed")]
     PostProcessingFailed(#[source] PrePostLinkError),
 
-    /// A clobbering error occured
+    /// A clobbering error occurred
     #[error("failed to unclobber clobbered files")]
     ClobberError(#[from] ClobberError),
 
