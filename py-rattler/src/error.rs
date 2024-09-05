@@ -49,7 +49,7 @@ pub enum PyRattlerError {
     #[error("{0}")]
     LinkError(String),
     #[error(transparent)]
-    ConverSubdirError(#[from] ConvertSubdirError),
+    ConvertSubdirError(#[from] ConvertSubdirError),
     #[error(transparent)]
     VersionBumpError(#[from] VersionBumpError),
     #[error(transparent)]
@@ -123,7 +123,7 @@ impl From<PyRattlerError> for PyErr {
                 TransactionException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::LinkError(err) => LinkException::new_err(err),
-            PyRattlerError::ConverSubdirError(err) => {
+            PyRattlerError::ConvertSubdirError(err) => {
                 ConvertSubdirException::new_err(pretty_print_error(&err))
             }
             PyRattlerError::VersionBumpError(err) => {
