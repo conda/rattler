@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2](https://github.com/conda/rattler/compare/rattler_macros-v1.0.1...rattler_macros-v1.0.2) - 2024-09-05
+
+### Fixed
+- typos ([#849](https://github.com/conda/rattler/pull/849))
+
 ## [1.0.1](https://github.com/conda/rattler/compare/rattler_macros-v1.0.0...rattler_macros-v1.0.1) - 2024-08-15
 
 ### Fixed
