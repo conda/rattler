@@ -40,7 +40,9 @@ pub struct EnvironmentYaml {
 /// `environment.yaml` file.
 #[derive(Debug, Clone, PartialEq)]
 pub enum MatchSpecOrSubSection {
+    /// A Conda package match spec
     MatchSpec(MatchSpec),
+    /// A list of specs for another package manager (pip)
     SubSection(String, Vec<String>),
 }
 
