@@ -648,11 +648,9 @@ impl super::SolverImpl for Solver {
             })
             .collect();
 
-        let problem = Problem {
-            requirements: all_requirements,
-            constraints: root_constraints,
-            ..Problem::default()
-        };
+        let problem = Problem::new()
+            .requirements(all_requirements)
+            .constraints(root_constraints);
 
         // Construct a solver and solve the problems in the queue
         let mut solver = LibSolvRsSolver::new(provider);
