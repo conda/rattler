@@ -110,7 +110,7 @@ regex = "1.10.4"
 reqwest = { version = "0.12.3", default-features = false }
 reqwest-middleware = "0.3.0"
 reqwest-retry = "0.6.0"
-resolvo = { version = "0.7.0" }
+resolvo = { version = "0.8.0" }
 retry-policies = { version = "0.4.0", default-features = false }
 rmp-serde = { version = "1.2.0" }
 rstest = { version = "0.21.0" }
