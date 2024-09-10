@@ -160,6 +160,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-fd-lock"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7569377d7062165f6f7834d9cb3051974a2d141433cc201c2f94c149e993cccf"
+dependencies = [
+ "async-trait",
+ "cfg-if",
+ "pin-project",
+ "rustix",
+ "thiserror",
+ "tokio",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
 name = "async-fs"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -832,7 +847,7 @@ checksum = "9fc0510504f03c51ada170672ac806f1f105a88aa97a5281117e1ddc3368e51a"
 
 [[package]]
 name = "file_url"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "itertools 0.13.0",
  "percent-encoding",
@@ -924,6 +939,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88a41f105fe1d5b6b34b2055e3dc59bb79b46b48b2040b9e6c7b4b5de097aa41"
 dependencies = [
  "autocfg",
+ "tokio",
+]
+
+[[package]]
+name = "fs4"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8c6b3bd49c37d2aa3f3f2220233b29a7cd23f79d1fe70e5337d25fb390793de"
+dependencies = [
+ "fs-err",
+ "rustix",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1799,7 +1826,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c2a198fb6b0eada2a8df47933734e6d35d350665a33a3593d7164fa52c75c19"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -2619,7 +2646,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.27.6"
+version = "0.27.11"
 dependencies = [
  "anyhow",
  "console",
@@ -2657,11 +2684,14 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.1.8"
+version = "0.2.3"
 dependencies = [
  "anyhow",
+ "dashmap",
  "digest",
  "dirs",
+ "fs4",
+ "futures",
  "fxhash",
  "itertools 0.13.0",
  "parking_lot",
@@ -2671,6 +2701,7 @@ dependencies = [
  "rattler_package_streaming",
  "reqwest 0.12.4",
  "reqwest-middleware",
+ "simple_spawn_blocking",
  "thiserror",
  "tokio",
  "tracing",
@@ -2679,7 +2710,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.27.2"
+version = "0.27.6"
 dependencies = [
  "chrono",
  "dirs",
@@ -2713,7 +2744,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_digest"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "blake2",
  "digest",
@@ -2728,7 +2759,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.24"
+version = "0.19.28"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2741,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.20"
+version = "0.22.24"
 dependencies = [
  "chrono",
  "file_url",
@@ -2757,12 +2788,13 @@ dependencies = [
  "serde_with",
  "serde_yaml",
  "thiserror",
+ "typed-path",
  "url",
 ]
 
 [[package]]
 name = "rattler_macros"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "quote",
  "syn 2.0.66",
@@ -2770,7 +2802,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_networking"
-version = "0.21.2"
+version = "0.21.4"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2796,7 +2828,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.3"
+version = "0.22.7"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2822,7 +2854,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_redaction"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "reqwest 0.12.4",
  "reqwest-middleware",
@@ -2831,10 +2863,11 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.8"
+version = "0.21.13"
 dependencies = [
  "anyhow",
  "async-compression",
+ "async-fd-lock",
  "async-trait",
  "blake2",
  "bytes",
@@ -2882,7 +2915,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.21.6"
+version = "0.22.1"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.2.6",
@@ -2897,7 +2930,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.0.3"
+version = "1.0.7"
 dependencies = [
  "chrono",
  "futures",
@@ -2913,7 +2946,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "1.0.4"
+version = "1.1.4"
 dependencies = [
  "archspec",
  "libloading",
@@ -3125,9 +3158,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "014783b06e2d02bee01fe3c3247454fb34d0fc35765334e825034cdadec422fa"
+checksum = "1a472ebbac5a18c9e235e874df3aa0c8fb0b55611155dd5e5515a55a16520d76"
 dependencies = [
  "ahash",
  "bitvec",

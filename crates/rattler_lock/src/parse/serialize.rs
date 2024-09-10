@@ -128,7 +128,7 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
                 (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
                 (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
                 (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
-                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.cmp(b),
+                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.as_str().cmp(b.as_str()),
             },
         }
     }

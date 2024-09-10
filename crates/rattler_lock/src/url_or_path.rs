@@ -1,22 +1,23 @@
-use file_url::url_to_path;
-use itertools::Itertools;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::hash::Hash;
-use std::path::Path;
 use std::{
+    borrow::Cow,
+    cmp::Ordering,
     fmt::{Display, Formatter},
-    path::PathBuf,
+    hash::Hash,
     str::FromStr,
 };
+
+use file_url::url_to_typed_path;
+use itertools::Itertools;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use thiserror::Error;
+use typed_path::{Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 /// Represents either a URL or a path.
 ///
-/// URLs have stricter requirements on their format, they must be absolute and they with the
-/// [`url`] we can only create urls for absolute file paths for the current os.
+/// URLs have stricter requirements on their format, they must be absolute and
+/// they with the [`url`] we can only create urls for absolute file paths for
+/// the current os.
 ///
 /// This also looks better when looking at the lockfile.
 #[derive(Debug, Clone, Eq, SerializeDisplay, DeserializeFromStr)]
@@ -25,7 +26,7 @@ pub enum UrlOrPath {
     Url(Url),
 
     /// A local (or networked) path.
-    Path(PathBuf),
+    Path(Utf8TypedPathBuf),
 }
 
 impl PartialOrd<Self> for UrlOrPath {
@@ -38,7 +39,9 @@ impl Ord for UrlOrPath {
     fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
             (UrlOrPath::Url(self_url), UrlOrPath::Url(other_url)) => self_url.cmp(other_url),
-            (UrlOrPath::Path(self_path), UrlOrPath::Path(other_path)) => self_path.cmp(other_path),
+            (UrlOrPath::Path(self_path), UrlOrPath::Path(other_path)) => {
+                self_path.as_str().cmp(other_path.as_str())
+            }
             (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Greater,
             (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Less,
         }
@@ -47,7 +50,7 @@ impl Ord for UrlOrPath {
 
 impl PartialEq for UrlOrPath {
     fn eq(&self, other: &Self) -> bool {
-        match (self.canonicalize().as_ref(), other.canonicalize().as_ref()) {
+        match (self.normalize().as_ref(), other.normalize().as_ref()) {
             (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a == b,
             (UrlOrPath::Url(a), UrlOrPath::Url(b)) => a == b,
             _ => false,
@@ -57,21 +60,21 @@ impl PartialEq for UrlOrPath {
 
 impl Hash for UrlOrPath {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self.canonicalize().as_ref() {
+        match self.normalize().as_ref() {
             UrlOrPath::Url(url) => url.hash(state),
-            UrlOrPath::Path(path) => path.hash(state),
+            UrlOrPath::Path(path) => path.as_str().hash(state),
         }
     }
 }
 
-impl From<PathBuf> for UrlOrPath {
-    fn from(value: PathBuf) -> Self {
+impl From<Utf8TypedPathBuf> for UrlOrPath {
+    fn from(value: Utf8TypedPathBuf) -> Self {
         UrlOrPath::Path(value)
     }
 }
 
-impl From<&Path> for UrlOrPath {
-    fn from(value: &Path) -> Self {
+impl<'a> From<Utf8TypedPath<'a>> for UrlOrPath {
+    fn from(value: Utf8TypedPath<'a>) -> Self {
         UrlOrPath::Path(value.to_path_buf())
     }
 }
@@ -79,7 +82,7 @@ impl From<&Path> for UrlOrPath {
 impl From<Url> for UrlOrPath {
     fn from(value: Url) -> Self {
         // Try to normalize the URL to a path if possible.
-        if let Some(path) = url_to_path(&value) {
+        if let Some(path) = url_to_typed_path(&value) {
             UrlOrPath::Path(path)
         } else {
             UrlOrPath::Url(value)
@@ -90,7 +93,7 @@ impl From<Url> for UrlOrPath {
 impl Display for UrlOrPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UrlOrPath::Path(path) => write!(f, "{}", path.display()),
+            UrlOrPath::Path(path) => write!(f, "{path}"),
             UrlOrPath::Url(url) => write!(f, "{url}"),
         }
     }
@@ -106,22 +109,37 @@ impl UrlOrPath {
     }
 
     /// Returns the path if this is a path.
-    pub fn as_path(&self) -> Option<&Path> {
+    pub fn as_path(&self) -> Option<Utf8TypedPath<'_>> {
         match self {
-            UrlOrPath::Path(path) => Some(path),
+            UrlOrPath::Path(path) => Some(path.to_path()),
             UrlOrPath::Url(_) => None,
         }
     }
 
-    /// Canonicalizes the instance to be a path if possible.
+    /// Normalizes the instance to be a path if possible and resolving `..` and
+    /// `.` segments.
     ///
     /// If this instance is a URL with a `file://` scheme, this will try to convert it to a path.
-    pub fn canonicalize(&self) -> Cow<'_, Self> {
-        if let Some(path) = self.as_url().and_then(url_to_path) {
-            return Cow::Owned(UrlOrPath::Path(path));
+    pub fn normalize(&self) -> Cow<'_, Self> {
+        match self {
+            UrlOrPath::Url(url) => {
+                if let Some(path) = url_to_typed_path(url) {
+                    return Cow::Owned(UrlOrPath::Path(path.normalize()));
+                }
+                Cow::Borrowed(self)
+            }
+            UrlOrPath::Path(path) => Cow::Owned(UrlOrPath::Path(path.normalize())),
         }
+    }
 
-        Cow::Borrowed(self)
+    /// Returns the file name of the path or url. If the path or url ends in a
+    /// directory seperator `None` is returned.
+    pub fn file_name(&self) -> Option<&str> {
+        match self {
+            UrlOrPath::Path(path) if !path.as_str().ends_with(['/', '\\']) => path.file_name(),
+            UrlOrPath::Url(url) if !url.as_str().ends_with('/') => url.path_segments()?.last(),
+            _ => None,
+        }
     }
 }
 
@@ -143,22 +161,45 @@ impl FromStr for UrlOrPath {
         }
 
         // First try to parse the string as a path.
-        return match Url::from_str(s) {
+        match Url::from_str(s) {
             Ok(url) => Ok(if scheme_is_drive_letter(url.scheme()) {
-                UrlOrPath::Path(PathBuf::from(s))
+                UrlOrPath::Path(s.into())
             } else {
-                UrlOrPath::Url(url).canonicalize().into_owned()
+                UrlOrPath::Url(url).normalize().into_owned()
             }),
-            Err(url::ParseError::RelativeUrlWithoutBase) => Ok(UrlOrPath::Path(PathBuf::from(s))),
+            Err(url::ParseError::RelativeUrlWithoutBase) => Ok(UrlOrPath::Path(s.into())),
             Err(e) => Err(PathOrUrlError::InvalidUrl(e)),
-        };
+        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use std::str::FromStr;
+
+    use rstest::*;
+
+    use super::*;
+
+    #[rstest]
+    #[case(
+        "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+        Some("_libgcc_mutex-0.1-conda_forge.tar.bz2")
+    )]
+    #[case(
+        "C:\\packages\\_libgcc_mutex-0.1-conda_forge.tar.bz2",
+        Some("_libgcc_mutex-0.1-conda_forge.tar.bz2")
+    )]
+    #[case(
+        "/packages/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+        Some("_libgcc_mutex-0.1-conda_forge.tar.bz2")
+    )]
+    #[case("https://conda.anaconda.org/conda-forge/linux-64/", None)]
+    #[case("C:\\packages\\", None)]
+    #[case("/packages/", None)]
+    fn test_file_name(#[case] case: UrlOrPath, #[case] expected_filename: Option<&str>) {
+        assert_eq!(case.file_name(), expected_filename);
+    }
 
     #[test]
     fn test_equality() {
@@ -169,7 +210,7 @@ mod test {
 
             // Absolute paths as file and direct path
             (UrlOrPath::Url("file:///home/bob/test-file.txt".parse().unwrap()),
-             UrlOrPath::Path("/home/bob/test-file.txt".parse().unwrap())),
+             UrlOrPath::Path("/home/bob/test-file.txt".into())),
         ];
 
         for (a, b) in &tests {
@@ -228,11 +269,34 @@ mod test {
             "\\\\127.0.0.1\\c$\\temp\\test-file.txt",
         ];
 
-        for path in &paths {
+        for path in paths {
             assert_eq!(
                 UrlOrPath::from_str(path).unwrap(),
-                UrlOrPath::Path(path.parse().unwrap())
+                UrlOrPath::Path(path.into())
             );
         }
+    }
+
+    #[test]
+    fn test_order() {
+        let entries = [
+            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "https://conda.anaconda.org/conda-forge/linux-64/_libgcc_mutex-0.1-conda_forge.conda",
+            "file:///packages/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "file:///packages/_libgcc_mutex-0.1-conda_forge.conda",
+            "C:\\packages\\_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "/packages/_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "../_libgcc_mutex-0.1-conda_forge.tar.bz2",
+            "..\\_libgcc_mutex-0.1-conda_forge.tar.bz2",
+        ];
+
+        let sorted_entries = entries
+            .iter()
+            .map(|p| UrlOrPath::from_str(p).unwrap())
+            .sorted()
+            .map(|p| p.to_string())
+            .format("\n")
+            .to_string();
+        insta::assert_snapshot!(sorted_entries);
     }
 }

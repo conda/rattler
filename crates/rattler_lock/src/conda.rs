@@ -1,12 +1,13 @@
+use std::cmp::Ordering;
+
 use rattler_conda_types::{PackageRecord, RepoDataRecord};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none};
-use std::cmp::Ordering;
 use url::Url;
 
-/// A locked conda dependency is just a [`PackageRecord`] with some additional information on where
-/// it came from. It is very similar to a [`RepoDataRecord`], but it does not explicitly contain the
-/// channel name.
+/// A locked conda dependency is just a [`PackageRecord`] with some additional
+/// information on where it came from. It is very similar to a
+/// [`RepoDataRecord`], but it does not explicitly contain the channel name.
 #[serde_as]
 #[skip_serializing_none]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
@@ -18,7 +19,8 @@ pub struct CondaPackageData {
     /// The location of the package.
     pub url: Url,
 
-    /// The filename of the package if the last segment of the url does not refer to the filename.
+    /// The filename of the package if the last segment of the url does not
+    /// refer to the filename.
     pub(crate) file_name: Option<String>,
 
     /// The channel of the package if this cannot be derived from the url.
@@ -137,8 +139,8 @@ fn file_name_from_url(url: &Url) -> Option<&str> {
 fn channel_from_url(url: &Url) -> Option<Url> {
     let mut result = url.clone();
 
-    // Strip the last two path segments. We assume the first one contains the file_name, and the
-    // other the subdirectory.
+    // Strip the last two path segments. We assume the first one contains the
+    // file_name, and the other the subdirectory.
     result.path_segments_mut().ok()?.pop().pop();
 
     Some(result)
