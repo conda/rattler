@@ -13,7 +13,6 @@ use serde::Deserialize;
 use serde_yaml::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
-use url::Url;
 
 #[derive(Deserialize)]
 struct DeserializableLockFile<'d> {
@@ -40,7 +39,7 @@ enum DeserializablePackageData<'d> {
 #[serde(untagged, rename_all = "snake_case")]
 enum DeserializablePackageSelector {
     Conda {
-        conda: Url,
+        conda: UrlOrPath,
     },
     Pypi {
         pypi: UrlOrPath,
@@ -82,12 +81,12 @@ pub fn parse_from_document(
     let conda_url_lookup = conda_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.url, idx))
+        .map(|(idx, p)| (&p.location, idx))
         .collect::<FxHashMap<_, _>>();
     let pypi_url_lookup = pypi_packages
         .iter()
         .enumerate()
-        .map(|(idx, p)| (&p.url_or_path, idx))
+        .map(|(idx, p)| (&p.location, idx))
         .collect::<FxHashMap<_, _>>();
     let mut pypi_runtime_lookup = IndexSet::new();
 
@@ -114,7 +113,7 @@ pub fn parse_from_document(
                                                     ParseCondaLockError::MissingPackage(
                                                         name.clone(),
                                                         platform,
-                                                        UrlOrPath::Url(conda),
+                                                        conda
                                                     )
                                                 })?,
                                             )

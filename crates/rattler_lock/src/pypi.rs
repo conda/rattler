@@ -20,9 +20,9 @@ pub struct PypiPackageData {
     /// The version of the package.
     pub version: pep440_rs::Version,
 
-    /// The URL that points to where the artifact can be downloaded from.
+    /// The location of the package. This can be a URL or a path.
     #[serde(with = "crate::utils::serde::url_or_path", flatten)]
-    pub url_or_path: UrlOrPath,
+    pub location: UrlOrPath,
 
     /// Hashes of the file pointed to by `url`.
     #[serde(flatten)]
@@ -59,7 +59,7 @@ impl Ord for PypiPackageData {
         self.name
             .cmp(&other.name)
             .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.url_or_path.cmp(&other.url_or_path))
+            .then_with(|| self.location.cmp(&other.location))
             .then_with(|| self.hash.cmp(&other.hash))
     }
 }

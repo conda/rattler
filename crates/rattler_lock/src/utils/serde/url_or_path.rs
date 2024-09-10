@@ -9,7 +9,7 @@
 
 use crate::UrlOrPath;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{borrow::Cow, path::PathBuf};
+use std::borrow::Cow;
 use url::Url;
 
 #[derive(Serialize, Deserialize)]
@@ -17,7 +17,7 @@ struct RawUrlOrPath<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     url: Option<Cow<'a, Url>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<Cow<'a, PathBuf>>,
+    path: Option<Cow<'a, str>>,
 }
 
 pub fn serialize<S>(value: &UrlOrPath, serializer: S) -> Result<S::Ok, S::Error>
@@ -31,7 +31,7 @@ where
         },
         UrlOrPath::Path(path) => RawUrlOrPath {
             url: None,
-            path: Some(Cow::Borrowed(path)),
+            path: Some(Cow::Borrowed(path.as_str())),
         },
     };
 
@@ -45,7 +45,7 @@ where
     let raw = RawUrlOrPath::<'de>::deserialize(deserializer)?;
     match (raw.url, raw.path) {
         (Some(url), None) => Ok(UrlOrPath::Url(url.into_owned())),
-        (None, Some(path)) => Ok(UrlOrPath::Path(path.into_owned())),
+        (None, Some(path)) => Ok(UrlOrPath::Path(path.into_owned().into())),
         _ => Err(serde::de::Error::custom("expected either a url or a path")),
     }
 }

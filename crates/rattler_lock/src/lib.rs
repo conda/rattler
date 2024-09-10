@@ -506,10 +506,10 @@ impl Package {
     }
 
     /// Returns the URL or relative path to the package
-    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
+    pub fn location(&self) -> &UrlOrPath {
         match self {
-            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
-            Self::Pypi(value) => Cow::Borrowed(value.url()),
+            Self::Conda(value) => value.location(),
+            Self::Pypi(value) => value.location(),
         }
     }
 }
@@ -531,9 +531,10 @@ impl CondaPackage {
         &self.package_data().package_record
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
-        &self.package_data().url
+    /// Returns the location of the package, this is the place where the package
+    /// can be downloaded from.
+    pub fn location(&self) -> &UrlOrPath {
+        &self.package_data().location
     }
 
     /// Returns the filename of the package.
@@ -555,7 +556,11 @@ impl CondaPackage {
 
         // Check the the channel
         if let Some(channel) = &spec.channel {
-            if !self.url().as_str().starts_with(channel.base_url.as_str()) {
+            if !self
+                .location()
+                .as_str()
+                .starts_with(channel.base_url.as_str())
+            {
                 return false;
             }
         }
@@ -605,9 +610,10 @@ impl PypiPackage {
         &self.inner.pypi_packages[self.package_index]
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &UrlOrPath {
-        &self.package_data().url_or_path
+    /// Returns the location of the package, this is the place where the package
+    /// can be downloaded from.
+    pub fn location(&self) -> &UrlOrPath {
+        &self.package_data().location
     }
 
     /// Returns the extras enabled for this package
@@ -689,7 +695,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -697,7 +703,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
     }
 }

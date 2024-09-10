@@ -74,7 +74,7 @@ impl Serialize for PypiPackage {
 #[serde(untagged, rename_all = "snake_case")]
 enum SerializablePackageSelector<'a> {
     Conda {
-        conda: &'a Url,
+        conda: &'a UrlOrPath,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -86,9 +86,7 @@ enum SerializablePackageSelector<'a> {
 impl<'a> SerializablePackageSelector<'a> {
     fn url(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            SerializablePackageSelector::Conda { conda } => {
-                Cow::Owned(UrlOrPath::Url((*conda).clone()))
-            }
+            SerializablePackageSelector::Conda { conda } => Cow::Borrowed(conda),
             SerializablePackageSelector::Pypi { pypi, .. } => Cow::Borrowed(pypi),
         }
     }
@@ -120,15 +118,15 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
             (
                 SerializablePackageSelector::Conda { conda: a },
                 SerializablePackageSelector::Conda { conda: b },
-            ) => compare_url_by_filename(a, b),
-            (
+            )
+            | (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
             ) => match (a, b) {
                 (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
                 (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
                 (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
-                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.cmp(b),
+                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.as_str().cmp(b.as_str()),
             },
         }
     }
@@ -164,12 +162,10 @@ impl<'a> SerializablePackageData<'a> {
         }
     }
 
-    fn url(&self) -> Cow<'_, UrlOrPath> {
+    fn location(&self) -> Cow<'_, UrlOrPath> {
         match self {
-            SerializablePackageData::Conda(p) => {
-                Cow::Owned(UrlOrPath::Url(p.url.clone().into_owned()))
-            }
-            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.url_or_path),
+            SerializablePackageData::Conda(p) => Cow::Borrowed(&p.url_or_path),
+            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.location),
         }
     }
 }
@@ -238,7 +234,8 @@ impl Serialize for LockFile {
                                         .map(|package_data| match *package_data {
                                             EnvironmentPackageData::Conda(conda_index) => {
                                                 SerializablePackageSelector::Conda {
-                                                    conda: &inner.conda_packages[conda_index].url,
+                                                    conda: &inner.conda_packages[conda_index]
+                                                        .location,
                                                 }
                                             }
                                             EnvironmentPackageData::Pypi(
@@ -250,7 +247,7 @@ impl Serialize for LockFile {
                                                     .pypi_environment_package_data
                                                     [pypi_runtime_index];
                                                 SerializablePackageSelector::Pypi {
-                                                    pypi: &pypi_package.url_or_path,
+                                                    pypi: &pypi_package.location,
                                                     extras: &pypi_runtime.extras,
                                                 }
                                             }
@@ -276,7 +273,7 @@ impl Serialize for LockFile {
             .collect::<HashSet<_>>();
 
         // Only retain the packages that are used in the environments.
-        packages.retain(|p| used_urls_in_envs.contains(&p.url()));
+        packages.retain(|p| used_urls_in_envs.contains(&p.location()));
 
         // Sort the packages in a deterministic order. See [`SerializablePackageData`]
         // for more information.
