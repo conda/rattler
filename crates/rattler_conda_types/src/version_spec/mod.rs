@@ -251,7 +251,7 @@ impl Display for LogicalOperator {
 
 impl Display for VersionSpec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        fn write(spec: &VersionSpec, f: &mut Formatter<'_>, part_of_or: bool) -> std::fmt::Result {
+        fn write(spec: &VersionSpec, f: &mut Formatter<'_>, parent_op: Option<LogicalOperator>) -> std::fmt::Result {
             match spec {
                 VersionSpec::Any => write!(f, "*"),
                 VersionSpec::StrictRange(op, version) => match op {
@@ -266,7 +266,10 @@ impl Display for VersionSpec {
                     write!(f, "{op}{version}")
                 }
                 VersionSpec::Group(op, group) => {
-                    let requires_parenthesis = *op == LogicalOperator::And && part_of_or;
+                    let requires_parenthesis = match (op, parent_op) {
+                        (LogicalOperator::Or, Some(LogicalOperator::And)) => true,
+                        _ => false,
+                    };
                     if requires_parenthesis {
                         write!(f, "(")?;
                     }
@@ -274,7 +277,7 @@ impl Display for VersionSpec {
                         if i > 0 {
                             write!(f, "{op}")?;
                         }
-                        write(spec, f, *op == LogicalOperator::Or)?;
+                        write(spec, f, Some(*op))?;
                     }
                     if requires_parenthesis {
                         write!(f, ")")?;
@@ -285,7 +288,7 @@ impl Display for VersionSpec {
             }
         }
 
-        write(self, f, false)
+        write(self, f, None)
     }
 }
 
@@ -487,6 +490,24 @@ mod tests {
         );
 
         assert!(VersionSpec::from_str("0.2.18.*.", ParseStrictness::Strict).is_err());
+    }
+
+    #[test]
+    fn issue_bracket_printing() {
+        let v = VersionSpec::from_str("(>=1,<2)|>3", ParseStrictness::Lenient).unwrap();
+        assert_eq!(format!("{}", v), ">=1,<2|>3");
+
+        let v = VersionSpec::from_str("(>=1|<2),>3", ParseStrictness::Lenient).unwrap();
+        assert_eq!(format!("{}", v), "(>=1|<2),>3");
+
+        let v = VersionSpec::from_str("(>=1|<2)|>3", ParseStrictness::Lenient).unwrap();
+        assert_eq!(format!("{}", v), ">=1|<2|>3");
+
+        let v = VersionSpec::from_str("(>=1,<2),>3", ParseStrictness::Lenient).unwrap();
+        assert_eq!(format!("{}", v), ">=1,<2,>3");
+
+        let v = VersionSpec::from_str("((>=1|>2),(>3|>4))|(>5,<6)", ParseStrictness::Lenient).unwrap();
+        assert_eq!(format!("{}", v), "(>=1|>2),(>3|>4)|>5,<6");
     }
 
     #[test]
