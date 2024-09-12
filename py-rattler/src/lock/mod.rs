@@ -337,8 +337,8 @@ impl PyLockedPackage {
     }
 
     #[getter]
-    pub fn url_or_path(&self) -> String {
-        self.inner.url_or_path().to_string()
+    pub fn location(&self) -> String {
+        self.inner.location().to_string()
     }
 
     pub fn as_conda(&self) -> Option<PyRecord> {
@@ -347,7 +347,7 @@ impl PyLockedPackage {
                 package_record: pkg.package_record().clone(),
                 file_name: pkg.file_name().unwrap_or("").into(),
                 channel: pkg.channel().map_or("".to_string(), |c| c.to_string()),
-                url: pkg.url().clone(),
+                url: pkg.location().as_url()?.clone(),
             }));
         }
         None
@@ -418,8 +418,8 @@ impl PyPypiPackageData {
 
     /// The URL that points to where the artifact can be downloaded from.
     #[getter]
-    pub fn url_or_path(&self) -> String {
-        self.inner.url_or_path.to_string()
+    pub fn location(&self) -> String {
+        self.inner.location.to_string()
     }
 
     /// Whether the package is installed in editable mode or not.
