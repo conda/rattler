@@ -198,6 +198,12 @@ impl LockFile {
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
     }
 
+    /// Writes the conda lock to a string
+    pub fn render_to_string(&self) -> Result<String, std::io::Error> {
+        serde_yaml::to_string(self)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+    }
+
     /// Returns the environment with the given name.
     pub fn environment(&self, name: &str) -> Option<Environment> {
         let index = *self.inner.environment_lookup.get(name)?;
@@ -539,12 +545,12 @@ impl CondaPackage {
 
     /// Returns the filename of the package.
     pub fn file_name(&self) -> Option<&str> {
-        self.package_data().file_name()
+        self.package_data().file_name.as_deref()
     }
 
     /// Returns the channel of the package.
     pub fn channel(&self) -> Option<Url> {
-        self.package_data().channel()
+        self.package_data().channel.clone()
     }
 
     /// Returns true if this package satisfies the given `spec`.
@@ -645,24 +651,26 @@ pub struct PypiPackageDataRef<'p> {
 
 #[cfg(test)]
 mod test {
-    use std::path::Path;
-
     use rattler_conda_types::Platform;
     use rstest::*;
+    use std::path::{Path, PathBuf};
+    use std::str::FromStr;
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
     #[rstest]
-    #[case("v0/numpy-conda-lock.yml")]
-    #[case("v0/python-conda-lock.yml")]
-    #[case("v0/pypi-matplotlib-conda-lock.yml")]
-    #[case("v3/robostack-turtlesim-conda-lock.yml")]
-    #[case("v4/numpy-lock.yml")]
-    #[case("v4/python-lock.yml")]
-    #[case("v4/pypi-matplotlib-lock.yml")]
-    #[case("v4/turtlesim-lock.yml")]
-    #[case("v4/path-based-lock.yml")]
-    #[case("v5/flat-index-lock.yml")]
+    #[case::v0_numpy("v0/numpy-conda-lock.yml")]
+    #[case::v0_python("v0/python-conda-lock.yml")]
+    #[case::v0_pypi_matplotlib("v0/pypi-matplotlib-conda-lock.yml")]
+    #[case::v3_robostack("v3/robostack-turtlesim-conda-lock.yml")]
+    #[case::v3_numpy("v4/numpy-lock.yml")]
+    #[case::v4_python("v4/python-lock.yml")]
+    #[case::v4_pypi_matplotlib("v4/pypi-matplotlib-lock.yml")]
+    #[case::v4_turtlesim("v4/turtlesim-lock.yml")]
+    #[case::v4_pypi_path("v4/path-based-lock.yml")]
+    #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
+    #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
+    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -671,12 +679,33 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    #[rstest]
+    fn test_roundtrip(
+        #[files("../../test-data/conda-lock/**/*.yml")]
+        #[exclude("forward-compatible-lock")]
+        path: PathBuf,
+    ) {
+        // Load the lock-file
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        // Serialize the lock-file
+        let rendered_lock_file = conda_lock.render_to_string().unwrap();
+
+        // Parse the rendered lock-file again
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+
+        // And re-render again
+        let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
+
+        similar_asserts::assert_eq!(rendered_lock_file, rerendered_lock_file);
+    }
+
     /// Absolute paths on Windows are not properly parsed.
     /// See: <https://github.com/conda/rattler/issues/615>
     #[test]
     fn test_issue_615() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/absolute-path-lock.yml");
+            .join("../../test-data/conda-lock/v4/absolute-path-lock.yml");
         let conda_lock = LockFile::from_path(&path);
         assert!(conda_lock.is_ok());
     }

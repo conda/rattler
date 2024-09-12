@@ -1,6 +1,6 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
-use std::{collections::BTreeSet, ops::Not, sync::Arc};
+use std::{collections::BTreeSet, ops::Not, str::FromStr, sync::Arc};
 
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
@@ -15,9 +15,14 @@ use url::Url;
 
 use super::ParseCondaLockError;
 use crate::{
-    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
-    EnvironmentPackageData, LockFile, LockFileInner, PackageHashes, PypiPackageData,
-    PypiPackageEnvironmentData, UrlOrPath, DEFAULT_ENVIRONMENT_NAME,
+    file_format_version::FileFormatVersion,
+    utils::derived_fields::{
+        derive_arch_and_platform, derive_build_number_from_build, derive_noarch_type,
+        LocationDerivedFields,
+    },
+    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
+    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
+    DEFAULT_ENVIRONMENT_NAME,
 };
 
 #[derive(Deserialize)]
@@ -96,9 +101,10 @@ pub struct CondaLockedPackageV3 {
     pub url: Url,
     pub hash: PackageHashes,
     pub source: Option<Url>,
-    #[serde(default)]
-    pub build: String,
+    pub build: Option<String>,
     pub arch: Option<String>,
+    // Platform is used to indicate the actual platform to which this package belongs.
+    // pub platform: Option<String>,
     pub subdir: Option<String>,
     pub build_number: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -109,12 +115,11 @@ pub struct CondaLockedPackageV3 {
     pub track_features: Vec<String>,
     pub license: Option<String>,
     pub license_family: Option<String>,
-    #[serde(skip_serializing_if = "NoArchType::is_none")]
-    pub noarch: NoArchType,
+    pub noarch: Option<NoArchType>,
     pub size: Option<u64>,
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub purls: BTreeSet<PackageUrl>,
 }
 
@@ -148,12 +153,43 @@ pub fn parse_v3_or_lower(
                     PackageHashes::Md5(_) => None,
                 };
 
+                // Guess the subdir from the url.
+                let subdir = value
+                    .subdir
+                    .as_deref()
+                    .or_else(|| {
+                        value
+                            .url
+                            .path_segments()
+                            .and_then(|split| split.rev().nth(1))
+                    })
+                    .and_then(|subdir_str| Platform::from_str(subdir_str).ok())
+                    .unwrap_or(platform);
+
+                let location = UrlOrPath::Url(value.url).normalize().into_owned();
+                let derived = LocationDerivedFields::new(&location);
+
+                let build = value
+                    .build
+                    .or_else(|| derived.build.clone())
+                    .unwrap_or_default();
+                let build_number = value
+                    .build_number
+                    .or_else(|| derive_build_number_from_build(&build))
+                    .unwrap_or(0);
+                let derived_noarch = derive_noarch_type(
+                    derived.subdir.as_deref().unwrap_or(subdir.as_str()),
+                    derived.build.as_deref().unwrap_or(&build),
+                );
+                let (derived_arch, derived_platform) =
+                    derive_arch_and_platform(derived.subdir.as_deref().unwrap_or(subdir.as_str()));
+
                 let deduplicated_idx = conda_packages
                     .insert_full(CondaPackageData {
                         package_record: PackageRecord {
-                            arch: value.arch,
-                            build: value.build,
-                            build_number: value.build_number.unwrap_or(0),
+                            arch: value.arch.or(derived_arch),
+                            build,
+                            build_number,
                             constrains: value.constrains,
                             depends: value.dependencies,
                             features: value.features,
@@ -163,20 +199,20 @@ pub fn parse_v3_or_lower(
                             license_family: value.license_family,
                             md5,
                             name: PackageName::new_unchecked(value.name),
-                            noarch: value.noarch,
-                            platform: platform.only_platform().map(ToString::to_string),
+                            noarch: value.noarch.unwrap_or(derived_noarch),
+                            platform: derived_platform,
                             sha256,
                             size: value.size,
-                            subdir: value.subdir.unwrap_or(platform.to_string()),
+                            subdir: subdir.to_string(),
                             timestamp: value.timestamp,
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
                             run_exports: None,
                         },
-                        location: UrlOrPath::Url(value.url).normalize().into_owned(),
-                        file_name: None,
-                        channel: None,
+                        channel: derived.channel,
+                        file_name: derived.file_name,
+                        location,
                     })
                     .0;
 

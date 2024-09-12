@@ -1,4 +1,4 @@
-use std::{borrow::Cow, cmp::Ordering, collections::BTreeSet};
+use std::{borrow::Cow, collections::BTreeSet};
 
 use rattler_conda_types::{
     BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
@@ -8,35 +8,18 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use url::Url;
 
-use crate::{CondaPackageData, UrlOrPath};
+use crate::utils::derived_fields::derive_arch_and_platform;
+use crate::{utils::derived_fields::derive_channel_from_location, CondaPackageData, UrlOrPath};
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
     value == &T::default()
 }
 
-/// A helper struct that wraps all fields of a [`CondaPackageData`] and allows
-/// for easy conversion between the two.
-///
-/// This type provides full control over the order of the fields when
-/// serializing. This is important because one of the design goals is that it
-/// should be easy to read the lock file. A [`PackageRecord`] is serialized in
-/// alphabetic order which might not be the most readable. This type instead
-/// puts the "most important" fields at the top followed by more detailed ones.
-///
-/// So note that for reproducibility the order of these fields should not change
-/// or should be reflected in a version change.
-//
-/// This type also adds more default values (e.g. for `build_number` and
-/// `build_string`).
-///
-/// The complexity with `Cow<_>` types is introduced to allow both efficient
-/// deserialization and serialization without requiring all data to be cloned
-/// when serializing. We want to be able to use the same type of both
-/// serialization and deserialization to ensure that when any of the
-/// types involved change we are forced to update this struct as well.
+/// This struct is similar to [`crate::parse::models::v6::CondaPackageData`] but
+/// used for the V5 version of the lock file format.
 #[serde_as]
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
-pub(crate) struct RawCondaPackageData<'a> {
+pub(crate) struct CondaPackageDataModel<'a> {
     // Unique identifiers go to the top
     pub name: Cow<'a, PackageName>,
     pub version: Cow<'a, VersionWithSource>,
@@ -50,8 +33,7 @@ pub(crate) struct RawCondaPackageData<'a> {
     pub noarch: Cow<'a, NoArchType>,
 
     // Followed by the URL of the package
-    #[serde(with = "crate::utils::serde::url_or_path", flatten)]
-    pub url_or_path: UrlOrPath,
+    pub url: Cow<'a, Url>,
 
     // Then the hashes
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -104,11 +86,14 @@ pub(crate) struct RawCondaPackageData<'a> {
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
-    fn from(value: RawCondaPackageData<'a>) -> Self {
+impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
+    fn from(value: CondaPackageDataModel<'a>) -> Self {
+        let location = UrlOrPath::Url(value.url.into_owned());
+        let subdir = value.subdir.into_owned();
+        let (derived_arch, derived_platform) = derive_arch_and_platform(&subdir);
+
         Self {
             package_record: PackageRecord {
-                arch: value.arch.into_owned(),
                 build: value.build.into_owned(),
                 build_number: value.build_number,
                 constrains: value.constrains.into_owned(),
@@ -121,66 +106,28 @@ impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
                 md5: value.md5,
                 name: value.name.into_owned(),
                 noarch: value.noarch.into_owned(),
-                platform: value.platform.into_owned(),
                 purls: value.purls.into_owned(),
                 sha256: value.sha256,
                 size: value.size.into_owned(),
-                subdir: value.subdir.into_owned(),
+                subdir,
                 timestamp: value.timestamp,
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
                 run_exports: None,
+
+                // Polyfill the arch and platform fields if they are not present in the lock-file.
+                arch: value.arch.into_owned().or(derived_arch),
+                platform: value.platform.into_owned().or(derived_platform),
             },
-            location: value.url_or_path,
-            file_name: value.file_name.into_owned(),
-            channel: value.channel.into_owned(),
+            file_name: value
+                .file_name
+                .into_owned()
+                .or_else(|| location.file_name().map(ToString::to_string)),
+            channel: value
+                .channel
+                .into_owned()
+                .or_else(|| derive_channel_from_location(&location)),
+            location,
         }
-    }
-}
-
-impl<'a> From<&'a CondaPackageData> for RawCondaPackageData<'a> {
-    fn from(value: &'a CondaPackageData) -> Self {
-        Self {
-            name: Cow::Borrowed(&value.package_record.name),
-            version: Cow::Borrowed(&value.package_record.version),
-            build: Cow::Borrowed(&value.package_record.build),
-            build_number: value.package_record.build_number,
-            subdir: Cow::Borrowed(&value.package_record.subdir),
-            noarch: Cow::Borrowed(&value.package_record.noarch),
-            url_or_path: value.location.clone(),
-            channel: Cow::Borrowed(&value.channel),
-            file_name: Cow::Borrowed(&value.file_name),
-            purls: Cow::Borrowed(&value.package_record.purls),
-            depends: Cow::Borrowed(&value.package_record.depends),
-            constrains: Cow::Borrowed(&value.package_record.constrains),
-            platform: Cow::Borrowed(&value.package_record.platform),
-            arch: Cow::Borrowed(&value.package_record.arch),
-            md5: value.package_record.md5,
-            legacy_bz2_md5: value.package_record.legacy_bz2_md5,
-            sha256: value.package_record.sha256,
-            size: Cow::Borrowed(&value.package_record.size),
-            legacy_bz2_size: Cow::Borrowed(&value.package_record.legacy_bz2_size),
-            timestamp: value.package_record.timestamp,
-            features: Cow::Borrowed(&value.package_record.features),
-            track_features: Cow::Borrowed(&value.package_record.track_features),
-            license: Cow::Borrowed(&value.package_record.license),
-            license_family: Cow::Borrowed(&value.package_record.license_family),
-        }
-    }
-}
-
-impl<'a> PartialOrd<Self> for RawCondaPackageData<'a> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<'a> Ord for RawCondaPackageData<'a> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name
-            .cmp(&other.name)
-            .then_with(|| self.version.cmp(&other.version))
-            .then_with(|| self.build.cmp(&other.build))
-            .then_with(|| self.subdir.cmp(&other.subdir))
     }
 }

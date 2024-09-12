@@ -1,0 +1,18 @@
+---
+source: crates/rattler_lock/src/lib.rs
+expression: conda_lock
+---
+version: 6
+environments:
+  default:
+    channels:
+      - url: "https://conda.anaconda.org/conda-forge/"
+    packages:
+      linux-64:
+        - pypi: "E:\\Developer\\prefix\\pixi\\examples\\pypi-source-deps/minimal-project"
+      win-64:
+        - pypi: "E:\\Developer\\prefix\\pixi\\examples\\pypi-source-deps/minimal-project"
+packages:
+  - pypi: "E:\\Developer\\prefix\\pixi\\examples\\pypi-source-deps/minimal-project"
+    name: minimal-project
+    version: "0.1"

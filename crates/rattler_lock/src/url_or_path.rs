@@ -108,7 +108,6 @@ impl UrlOrPath {
         }
     }
 
-
     /// Returns the URL if this is a URL.
     pub fn as_url(&self) -> Option<&Url> {
         match self {
