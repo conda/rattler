@@ -5,11 +5,11 @@ use std::{
     str::FromStr,
 };
 
+use camino::{Utf8Path, Utf8PathBuf};
 use file_url::directory_path_to_url;
 use rattler_redaction::Redact;
 use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
-use typed_path::{Utf8NativePathBuf, Utf8TypedPath, Utf8TypedPathBuf};
 use url::Url;
 
 use super::{ParsePlatformError, Platform};
@@ -205,7 +205,7 @@ impl Channel {
             #[cfg(not(target_arch = "wasm32"))]
             {
                 let absolute_path = absolute_path(channel, &config.root_dir)?;
-                let url = directory_path_to_url(absolute_path.to_path())
+                let url = directory_path_to_url(&absolute_path)
                     .map_err(|_err| ParseChannelError::InvalidPath(channel.to_owned()))?;
                 Self {
                     platforms,
@@ -398,6 +398,10 @@ pub enum ParseChannelError {
     /// The root directory is not UTF-8 encoded.
     #[error("root directory: '{0}' of channel config is not utf8 encoded")]
     NotUtf8RootDir(PathBuf),
+
+    /// An I/O error occurred.
+    #[error("I/O error: {0}")]
+    IoError(String),
 }
 
 impl From<ParsePlatformError> for ParseChannelError {
@@ -409,6 +413,12 @@ impl From<ParsePlatformError> for ParseChannelError {
 impl From<url::ParseError> for ParseChannelError {
     fn from(err: url::ParseError) -> Self {
         ParseChannelError::ParseUrlError(err)
+    }
+}
+
+impl From<std::io::Error> for ParseChannelError {
+    fn from(err: std::io::Error) -> Self {
+        ParseChannelError::IoError(err.to_string())
     }
 }
 
@@ -444,28 +454,29 @@ pub(crate) const fn default_platforms() -> &'static [Platform] {
 }
 
 /// Returns the specified path as an absolute path
-fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, ParseChannelError> {
-    let path = Utf8TypedPath::from(path_str);
+fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8PathBuf, ParseChannelError> {
+    let path = Utf8Path::new(path_str);
     if path.is_absolute() {
-        return Ok(path.normalize());
+        return path.canonicalize_utf8().map_err(From::from);
     }
 
     // Parse the `~/` as the home folder
     if let Ok(user_path) = path.strip_prefix("~/") {
-        return Ok(Utf8TypedPathBuf::from(
+        return Utf8PathBuf::from(
             dirs::home_dir()
                 .ok_or(ParseChannelError::InvalidPath(path.to_string()))?
                 .to_str()
                 .ok_or(ParseChannelError::NotUtf8RootDir(PathBuf::from(path_str)))?,
         )
         .join(user_path)
-        .normalize());
+        .canonicalize_utf8()
+        .map_err(From::from);
     }
 
     let root_dir_str = root_dir
         .to_str()
         .ok_or_else(|| ParseChannelError::NotUtf8RootDir(root_dir.to_path_buf()))?;
-    let native_root_dir = Utf8NativePathBuf::from(root_dir_str);
+    let native_root_dir = Utf8Path::new(root_dir_str);
 
     if !native_root_dir.is_absolute() {
         return Err(ParseChannelError::NonAbsoluteRootDir(
@@ -473,14 +484,16 @@ fn absolute_path(path_str: &str, root_dir: &Path) -> Result<Utf8TypedPathBuf, Pa
         ));
     }
 
-    Ok(native_root_dir.to_typed_path().join(path).normalize())
+    native_root_dir
+        .join(path)
+        .canonicalize_utf8()
+        .map_err(From::from)
 }
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
-    use typed_path::{NativePath, Utf8NativePath};
     use url::Url;
 
     use super::*;
@@ -509,9 +522,9 @@ mod tests {
     #[test]
     fn test_absolute_path() {
         let current_dir = std::env::current_dir().expect("no current dir?");
-        let native_current_dir = typed_path::utils::utf8_current_dir()
-            .expect("")
-            .to_typed_path_buf();
+        let native_current_dir =
+            Utf8PathBuf::from_path_buf(current_dir.clone()).expect("invalid UTF-8 in current dir");
+
         assert_eq!(
             absolute_path(".", &current_dir).as_ref(),
             Ok(&native_current_dir)
@@ -530,13 +543,9 @@ mod tests {
             Ok(&parent_dir.join("foo"))
         );
 
-        let home_dir = dirs::home_dir()
-            .unwrap()
-            .into_os_string()
-            .into_encoded_bytes();
-        let home_dir = Utf8NativePath::from_bytes_path(NativePath::new(&home_dir))
-            .unwrap()
-            .to_typed_path();
+        let home_dir = dirs::home_dir().expect("no home dir?");
+        let home_dir = Utf8PathBuf::from_path_buf(home_dir).expect("invalid UTF-8 in home dir");
+
         assert_eq!(
             absolute_path("~/unix_dir", &current_dir).unwrap(),
             home_dir.join("unix_dir")
@@ -625,9 +634,7 @@ mod tests {
         let expected = absolute_path("./dir/does/not_exist", &current_dir).unwrap();
         assert_eq!(
             channel.name(),
-            file_url::directory_path_to_url(expected.to_path())
-                .unwrap()
-                .as_str()
+            file_url::directory_path_to_url(&expected).unwrap().as_str()
         );
         assert_eq!(channel.platforms, None);
         assert_eq!(

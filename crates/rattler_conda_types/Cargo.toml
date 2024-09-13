@@ -34,7 +34,7 @@ smallvec = { workspace = true, features = ["serde", "const_new", "const_generics
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-typed-path = { workspace = true }
+camino = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 indexmap = { workspace = true }
 rattler_redaction = { version = "0.1.2", path = "../rattler_redaction" }

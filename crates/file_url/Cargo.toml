@@ -12,7 +12,7 @@ license.workspace = true
 url = { workspace = true }
 percent-encoding = { workspace = true }
 itertools = { workspace = true }
-typed-path = { workspace = true }
+camino = { workspace = true }
 thiserror = "1.0.61"
 
 [dev-dependencies]

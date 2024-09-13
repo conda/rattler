@@ -2,15 +2,13 @@
 //! This crates provides functionality that tries to parse a `file://` URL as a path on all operating
 //! systems. This is useful when you want to convert a `file://` URL to a path and vice versa.
 
+use camino::Utf8Path;
 use itertools::Itertools;
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
 use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
-use typed_path::{
-    Utf8TypedComponent, Utf8TypedPath, Utf8UnixComponent, Utf8WindowsComponent, Utf8WindowsPrefix,
-};
 use url::{Host, Url};
 
 /// Returns true if the specified segment is considered to be a Windows drive letter segment.
@@ -98,42 +96,35 @@ fn starts_with_windows_drive_letter(s: &str) -> bool {
         && (s.len() == 2 || matches!(s.as_bytes()[2], b'/' | b'\\' | b'?' | b'#'))
 }
 
-fn path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<String, FileURLParseError> {
-    let path = path.into();
-    let mut components = path.components();
+fn path_to_url(path: impl AsRef<Utf8Path>) -> Result<String, FileURLParseError> {
+    let mut components = path.as_ref().components();
 
     let mut result = String::from("file://");
     let host_start = result.len() + 1;
 
     let root = components.next();
     match root {
-        Some(Utf8TypedComponent::Windows(Utf8WindowsComponent::Prefix(ref p))) => match p.kind() {
-            Utf8WindowsPrefix::Disk(letter) | Utf8WindowsPrefix::VerbatimDisk(letter) => {
+        Some(camino::Utf8Component::Prefix(prefix)) => match prefix.kind() {
+            camino::Utf8Prefix::Disk(letter) | camino::Utf8Prefix::VerbatimDisk(letter) => {
                 result.push('/');
-                result.push(letter);
+                result.push(letter as char);
                 result.push(':');
             }
-            Utf8WindowsPrefix::UNC(server, share)
-            | Utf8WindowsPrefix::VerbatimUNC(server, share) => {
-                let host =
-                    Host::parse(server).map_err(|_err| FileURLParseError::NotAnAbsolutePath)?;
-                write!(result, "{host}").unwrap();
+            camino::Utf8Prefix::UNC(server, share)
+            | camino::Utf8Prefix::VerbatimUNC(server, share) => {
+                write!(result, "{server}").unwrap();
                 result.push('/');
                 result.extend(percent_encode(share.as_bytes(), PATH_SEGMENT));
             }
             _ => return Err(FileURLParseError::NotAnAbsolutePath),
         },
-        Some(Utf8TypedComponent::Unix(Utf8UnixComponent::RootDir)) => {}
+        Some(camino::Utf8Component::RootDir) => {}
         _ => return Err(FileURLParseError::NotAnAbsolutePath),
     }
 
     let mut path_only_has_prefix = true;
     for component in components {
-        if matches!(
-            component,
-            Utf8TypedComponent::Windows(Utf8WindowsComponent::RootDir)
-                | Utf8TypedComponent::Unix(Utf8UnixComponent::RootDir)
-        ) {
+        if matches!(component, camino::Utf8Component::RootDir) {
             continue;
         }
 
@@ -163,14 +154,13 @@ pub enum FileURLParseError {
     #[error("The URL string is invalid")]
     InvalidUrl(#[from] url::ParseError),
 }
-pub fn file_path_to_url<'a>(path: impl Into<Utf8TypedPath<'a>>) -> Result<Url, FileURLParseError> {
+
+pub fn file_path_to_url(path: impl AsRef<Utf8Path>) -> Result<Url, FileURLParseError> {
     let url = path_to_url(path)?;
     Url::from_str(&url).map_err(FileURLParseError::InvalidUrl)
 }
 
-pub fn directory_path_to_url<'a>(
-    path: impl Into<Utf8TypedPath<'a>>,
-) -> Result<Url, FileURLParseError> {
+pub fn directory_path_to_url(path: impl AsRef<Utf8Path>) -> Result<Url, FileURLParseError> {
     let mut url = path_to_url(path)?;
     if !url.ends_with('/') {
         url.push('/');

@@ -13,7 +13,6 @@ use nom::{
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use smallvec::SmallVec;
 use thiserror::Error;
-use typed_path::Utf8TypedPath;
 use url::Url;
 
 use super::{
@@ -253,8 +252,7 @@ fn parse_bracket_vec_into_components(
                 }
                 // 2 Is the spec an absolute path, parse it as an url
                 else if is_absolute_path(value) {
-                    let path = Utf8TypedPath::from(value);
-                    file_url::file_path_to_url(path)
+                    file_url::file_path_to_url(value)
                         .map_err(|_error| ParseMatchSpecError::InvalidPackagePathOrUrl)?
                 } else {
                     return Err(ParseMatchSpecError::InvalidPackagePathOrUrl);
@@ -292,8 +290,7 @@ pub fn parse_url_like(input: &str) -> Result<Option<Url>, ParseMatchSpecError> {
     }
     // Is the spec a path, parse it as an url
     if is_absolute_path(input) {
-        let path = Utf8TypedPath::from(input);
-        return file_url::file_path_to_url(path)
+        return file_url::file_path_to_url(input)
             .map(Some)
             .map_err(|_err| ParseMatchSpecError::InvalidPackagePathOrUrl);
     }
