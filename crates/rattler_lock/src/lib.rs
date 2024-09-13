@@ -336,24 +336,24 @@ impl Environment {
 
     /// Returns all conda packages for all platforms and converts them to
     /// [`RepoDataRecord`].
-    pub fn conda_repodata_records(
-        &self,
-    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
+    pub fn conda_repodata_records(&self) -> HashMap<Platform, Vec<CondaPackageData>> {
         let env_data = self.data();
         env_data
             .packages
             .iter()
             .map(|(platform, packages)| {
-                packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(idx) => {
-                            Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                        }
-                        EnvironmentPackageData::Pypi(_, _) => None,
-                    })
-                    .collect::<Result<_, _>>()
-                    .map(|records| (*platform, records))
+                (
+                    *platform,
+                    packages
+                        .iter()
+                        .filter_map(|package| match package {
+                            EnvironmentPackageData::Conda(idx) => {
+                                Some(self.inner.conda_packages[*idx].clone())
+                            }
+                            EnvironmentPackageData::Pypi(_, _) => None,
+                        })
+                        .collect::<Vec<_>>(),
+                )
             })
             .collect()
     }
@@ -365,21 +365,22 @@ impl Environment {
     pub fn conda_repodata_records_for_platform(
         &self,
         platform: Platform,
-    ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
+    ) -> Option<Vec<CondaPackageData>> {
         let Some(packages) = self.data().packages.get(&platform) else {
-            return Ok(None);
+            return None;
         };
 
-        packages
-            .iter()
-            .filter_map(|package| match package {
-                EnvironmentPackageData::Conda(idx) => {
-                    Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                }
-                EnvironmentPackageData::Pypi(_, _) => None,
-            })
-            .collect::<Result<_, _>>()
-            .map(Some)
+        Some(
+            packages
+                .iter()
+                .filter_map(|package| match package {
+                    EnvironmentPackageData::Conda(idx) => {
+                        Some(self.inner.conda_packages[*idx].clone())
+                    }
+                    EnvironmentPackageData::Pypi(_, _) => None,
+                })
+                .collect(),
+        )
     }
 
     /// Returns all the pypi packages and their associated environment data for
@@ -651,10 +652,13 @@ pub struct PypiPackageDataRef<'p> {
 
 #[cfg(test)]
 mod test {
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+    };
+
     use rattler_conda_types::Platform;
     use rstest::*;
-    use std::path::{Path, PathBuf};
-    use std::str::FromStr;
 
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
