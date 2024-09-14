@@ -76,14 +76,7 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-    io::Read,
-    path::Path,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{borrow::Cow, collections::BTreeSet, io::Read, path::Path, str::FromStr, sync::Arc};
 
 use fxhash::FxHashMap;
 use pep508_rs::{ExtraName, Requirement};
@@ -281,9 +274,10 @@ impl Environment {
         &self,
         platform: Platform,
     ) -> Option<impl DoubleEndedIterator<Item = Package> + ExactSizeIterator + '_> {
-        let packages = self.data().packages.get(&platform)?;
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
                 .map(move |package| Package::from_env_package(*package, self.inner.clone())),
         )
@@ -313,73 +307,55 @@ impl Environment {
     /// Returns all pypi packages for all platforms
     pub fn pypi_packages(
         &self,
-    ) -> HashMap<Platform, Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
+    ) -> impl ExactSizeIterator<
+        Item = (
+            Platform,
+            impl DoubleEndedIterator<Item = (&PypiPackageData, &PypiPackageEnvironmentData)>,
+        ),
+    > + '_ {
         let env_data = self.data();
-        env_data
-            .packages
-            .iter()
-            .map(|(platform, packages)| {
-                let records = packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(_) => None,
-                        EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
-                            self.inner.pypi_packages[*pkg_data_idx].clone(),
-                            self.inner.pypi_environment_package_data[*env_data_idx].clone(),
-                        )),
-                    })
-                    .collect();
-                (*platform, records)
-            })
-            .collect()
+        env_data.packages.iter().map(|(platform, packages)| {
+            let records = packages.iter().filter_map(|package| match package {
+                EnvironmentPackageData::Conda(_) => None,
+                EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
+                    &self.inner.pypi_packages[*pkg_data_idx],
+                    &self.inner.pypi_environment_package_data[*env_data_idx],
+                )),
+            });
+            (*platform, records)
+        })
     }
 
-    /// Returns all conda packages for all platforms and converts them to
-    /// [`RepoDataRecord`].
-    pub fn conda_repodata_records(&self) -> HashMap<Platform, Vec<CondaPackageData>> {
-        let env_data = self.data();
-        env_data
-            .packages
-            .iter()
-            .map(|(platform, packages)| {
-                (
-                    *platform,
-                    packages
-                        .iter()
-                        .filter_map(|package| match package {
-                            EnvironmentPackageData::Conda(idx) => {
-                                Some(self.inner.conda_packages[*idx].clone())
-                            }
-                            EnvironmentPackageData::Pypi(_, _) => None,
-                        })
-                        .collect::<Vec<_>>(),
-                )
-            })
-            .collect()
+    /// Returns all conda packages for all platforms.
+    pub fn conda_packages(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (Platform, impl DoubleEndedIterator<Item = &CondaPackageData>)> + '_
+    {
+        self.data().packages.iter().map(|(platform, packages)| {
+            (
+                *platform,
+                packages.iter().filter_map(|package| match package {
+                    EnvironmentPackageData::Conda(idx) => Some(&self.inner.conda_packages[*idx]),
+                    EnvironmentPackageData::Pypi(_, _) => None,
+                }),
+            )
+        })
     }
 
-    /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
-    /// returns them or returns an error if the conversion failed. Returns
-    /// `None` if the specified platform is not defined for this
-    /// environment.
-    pub fn conda_repodata_records_for_platform(
+    /// Returns all conda packages for a specific platform.
+    pub fn conda_packages_for_platform(
         &self,
         platform: Platform,
-    ) -> Option<Vec<CondaPackageData>> {
-        let Some(packages) = self.data().packages.get(&platform) else {
-            return None;
-        };
-
+    ) -> Option<impl DoubleEndedIterator<Item = &CondaPackageData> + '_> {
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
                 .filter_map(|package| match package {
-                    EnvironmentPackageData::Conda(idx) => {
-                        Some(self.inner.conda_packages[*idx].clone())
-                    }
+                    EnvironmentPackageData::Conda(idx) => Some(&self.inner.conda_packages[*idx]),
                     EnvironmentPackageData::Pypi(_, _) => None,
-                })
-                .collect(),
+                }),
         )
     }
 
@@ -389,20 +365,20 @@ impl Environment {
     pub fn pypi_packages_for_platform(
         &self,
         platform: Platform,
-    ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
-        let packages = self.data().packages.get(&platform)?;
-
+    ) -> Option<impl DoubleEndedIterator<Item = (&PypiPackageData, &PypiPackageEnvironmentData)> + '_>
+    {
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
                 .filter_map(|package| match package {
                     EnvironmentPackageData::Conda(_) => None,
                     EnvironmentPackageData::Pypi(package_idx, env_idx) => Some((
-                        self.inner.pypi_packages[*package_idx].clone(),
-                        self.inner.pypi_environment_package_data[*env_idx].clone(),
+                        &self.inner.pypi_packages[*package_idx],
+                        &self.inner.pypi_environment_package_data[*env_idx],
                     )),
-                })
-                .collect(),
+                }),
         )
     }
 
@@ -529,7 +505,8 @@ pub struct CondaPackage {
 }
 
 impl CondaPackage {
-    fn package_data(&self) -> &CondaPackageData {
+    /// Returns the package data
+    pub fn package_data(&self) -> &CondaPackageData {
         &self.inner.conda_packages[self.index]
     }
 
@@ -542,11 +519,6 @@ impl CondaPackage {
     /// can be downloaded from.
     pub fn location(&self) -> &UrlOrPath {
         &self.package_data().location
-    }
-
-    /// Returns the filename of the package.
-    pub fn file_name(&self) -> Option<&str> {
-        self.package_data().file_name.as_deref()
     }
 
     /// Returns the channel of the package.
@@ -599,21 +571,13 @@ pub struct PypiPackage {
 }
 
 impl PypiPackage {
-    /// Returns references to the internal data structures.
-    pub fn data(&self) -> PypiPackageDataRef<'_> {
-        PypiPackageDataRef {
-            package: self.package_data(),
-            environment: self.environment_data(),
-        }
-    }
-
     /// Returns the runtime data from the internal data structure.
-    fn environment_data(&self) -> &PypiPackageEnvironmentData {
+    pub fn environment_data(&self) -> &PypiPackageEnvironmentData {
         &self.inner.pypi_environment_package_data[self.runtime_index]
     }
 
     /// Returns the package data from the internal data structure.
-    fn package_data(&self) -> &PypiPackageData {
+    pub fn package_data(&self) -> &PypiPackageData {
         &self.inner.pypi_packages[self.package_index]
     }
 
@@ -637,17 +601,6 @@ impl PypiPackage {
     pub fn is_editable(&self) -> bool {
         self.package_data().editable
     }
-}
-
-/// A helper struct to group package and environment data together.
-#[derive(Copy, Clone)]
-pub struct PypiPackageDataRef<'p> {
-    /// The package data. This information is deduplicated between environments.
-    pub package: &'p PypiPackageData,
-
-    /// Environment specific data for the package. This information is specific
-    /// to the environment.
-    pub environment: &'p PypiPackageEnvironmentData,
 }
 
 #[cfg(test)]
