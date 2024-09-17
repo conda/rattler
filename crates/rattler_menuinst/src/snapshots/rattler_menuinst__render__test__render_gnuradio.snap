@@ -1,0 +1,55 @@
+---
+source: crates/rattler_menuinst/src/render.rs
+expression: schema
+---
+MenuInstSchema {
+    id: "https://schemas.conda.io/menuinst-1.schema.json",
+    schema: "https://json-schema.org/draft-07/schema",
+    menu_name: "home",
+    menu_items: [
+        MenuItem {
+            name: "GNU Radio Companion",
+            description: "Flowgraph builder for GNU Radio",
+            command: [
+                "/home/prefix/bin/gnuradio-companion",
+            ],
+            icon: Some(
+                "/home/prefix/menu/grc.png",
+            ),
+            precommand: None,
+            precreate: None,
+            working_dir: None,
+            activate: None,
+            terminal: None,
+            platforms: Platforms {
+                linux: None,
+                osx: None,
+                win: Some(
+                    Windows {
+                        base: BasePlatformSpecific {
+                            name: None,
+                            description: None,
+                            icon: None,
+                            command: None,
+                            working_dir: None,
+                            precommand: None,
+                            precreate: None,
+                            activate: None,
+                            terminal: None,
+                        },
+                        desktop: Some(
+                            false,
+                        ),
+                        quicklaunch: Some(
+                            false,
+                        ),
+                        terminal_profile: None,
+                        url_protocols: None,
+                        file_extensions: None,
+                        app_user_model_id: None,
+                    },
+                ),
+            },
+        },
+    ],
+}
