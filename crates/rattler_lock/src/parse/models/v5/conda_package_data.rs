@@ -93,6 +93,7 @@ impl<'a> From<CondaPackageDataModel<'a>> for CondaPackageData {
         let (derived_arch, derived_platform) = derive_arch_and_platform(&subdir);
 
         Self {
+            input: None,
             package_record: PackageRecord {
                 build: value.build.into_owned(),
                 build_number: value.build_number,
