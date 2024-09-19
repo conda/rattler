@@ -186,6 +186,7 @@ pub fn parse_v3_or_lower(
 
                 let deduplicated_idx = conda_packages
                     .insert_full(CondaPackageData {
+                        input: None,
                         package_record: PackageRecord {
                             arch: value.arch.or(derived_arch),
                             build,

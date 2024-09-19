@@ -9,6 +9,7 @@ use serde_with::serde_as;
 use url::Url;
 
 use crate::{
+    conda,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
 };
@@ -103,6 +104,17 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputHash<'a>>,
+}
+
+#[serde_as]
+#[derive(Serialize, Deserialize, Eq, PartialEq)]
+pub(crate) struct InputHash<'a> {
+    #[serde_as(as = "SerializableHash::<rattler_digest::Sha256>")]
+    pub hash: Sha256Hash,
+    pub globs: Cow<'a, Vec<String>>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
@@ -136,6 +148,10 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
         Ok(Self {
+            input: value.input.map(|input| conda::InputHash {
+                hash: input.hash,
+                globs: input.globs.into_owned(),
+            }),
             package_record: PackageRecord {
                 build,
                 build_number,
@@ -234,6 +250,10 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             track_features: Cow::Borrowed(&value.package_record.track_features),
             license: Cow::Borrowed(&value.package_record.license),
             license_family: Cow::Borrowed(&value.package_record.license_family),
+            input: value.input.as_ref().map(|input| InputHash {
+                hash: input.hash,
+                globs: Cow::Borrowed(&input.globs),
+            }),
         }
     }
 }
