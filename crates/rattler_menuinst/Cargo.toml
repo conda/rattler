@@ -22,6 +22,7 @@ rattler_conda_types = { path="../rattler_conda_types", version = "0.27.2", defau
 thiserror = { workspace = true }
 unicode-normalization = "0.1.24"
 regex.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
 insta = { workspace = true }
