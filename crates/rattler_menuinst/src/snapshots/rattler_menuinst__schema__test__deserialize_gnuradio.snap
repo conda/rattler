@@ -27,10 +27,10 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: None,
+                            command: [],
                             working_dir: None,
                             precommand: None,
                             precreate: None,

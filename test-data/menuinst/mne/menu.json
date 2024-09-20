@@ -5,7 +5,7 @@
     "menu_items": [{
       "name": "Spyder (MNE)",
       "description": "The Spyder development environment",
-      "icon": "{{ MENU_DIR }}/mne_spyder.{{ ICON_EXT }}",
+      "icon": "{{ MENU_DIR }}/spyder.{{ ICON_EXT }}",
       "command": ["will be overridden in platforms section"],
       "activate": true,
       "terminal": false,
@@ -34,7 +34,7 @@
     {
       "name": "System Info (MNE)",
       "description": "Information on the MNE-Python runtime environment",
-      "icon": "{{ MENU_DIR }}/mne_info.{{ ICON_EXT }}",
+      "icon": "{{ MENU_DIR }}/info.{{ ICON_EXT }}",
       "command": [
         "{{ PYTHON }}",
         "{{ MENU_DIR }}/mne_sys_info.py"
@@ -60,7 +60,7 @@
     {
       "name": "Prompt (MNE)",
       "description": "MNE-Python console prompt",
-      "icon": "{{ MENU_DIR }}/mne_console.{{ ICON_EXT }}",
+      "icon": "{{ MENU_DIR }}/console.{{ ICON_EXT }}",
       "activate": true,
       "terminal": true,
       "command": ["will be overridden in platforms section"],
@@ -98,7 +98,7 @@
     {
       "name": "Tutorials (MNE)",
       "description": "MNE-Python online tutorials",
-      "icon": "{{ MENU_DIR }}/mne_web.{{ ICON_EXT }}",
+      "icon": "{{ MENU_DIR }}/web.{{ ICON_EXT }}",
       "activate": false,
       "terminal": false,
       "command": ["will be overridden in platforms section"],
@@ -133,7 +133,7 @@
     {
       "name": "User Forum (MNE)",
       "description": "MNE-Python forum for discussions, problem solving, and information exchange",
-      "icon": "{{ MENU_DIR }}/mne_forum.{{ ICON_EXT }}",
+      "icon": "{{ MENU_DIR }}/forum.{{ ICON_EXT }}",
       "activate": false,
       "terminal": false,
       "command": ["will be overridden in platforms section"],

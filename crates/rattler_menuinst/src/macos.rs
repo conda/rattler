@@ -1,8 +1,9 @@
 use crate::{schema::MacOS, slugify, utils, MenuInstError, MenuMode};
+use fs_err as fs;
+use fs_err::File;
 use plist::Value;
 use sha1::{Digest, Sha1};
 use std::{
-    fs::{self, File},
     io::{BufWriter, Write},
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
@@ -87,12 +88,16 @@ impl MacOSMenu {
             let icon = PathBuf::from(icon);
             let icon_name = icon.file_name().expect("Failed to get icon name");
             let dest = self.directories.resources().join(icon_name);
-            fs::copy(&icon, dest)?;
+            fs::copy(&icon, &dest)?;
+
+            println!("Installed icon to {}", dest.display());
 
             if self.needs_appkit_launcher() {
                 let dest = self.directories.nested_resources().join(icon_name);
                 fs::copy(&icon, dest)?;
             }
+        } else {
+            println!("No icon to install");
         }
 
         Ok(())
@@ -100,7 +105,9 @@ impl MacOSMenu {
 
     fn write_pkg_info(&self) -> Result<(), MenuInstError> {
         let create_pkg_info = |path: &PathBuf, short_name: &str| -> Result<(), MenuInstError> {
-            let mut f = fs::File::create(path.join("Contents/PkgInfo"))?;
+            let path = path.join("Contents/PkgInfo");
+            tracing::debug!("Writing pkg info to {}", path.display());
+            let mut f = fs::File::create(&path)?;
             f.write_all(format!("APPL{short_name}").as_bytes())?;
             Ok(())
         };
@@ -151,6 +158,7 @@ impl MacOSMenu {
         }
 
         if self.needs_appkit_launcher() {
+            println!("Writing plist to {}", self.directories.nested_location.join("Contents/Info.plist").display());
             plist::to_file_xml(
                 self.directories.nested_location.join("Contents/Info.plist"),
                 &pl,
@@ -253,6 +261,7 @@ impl MacOSMenu {
                 // pl.insert("UTImportedTypeDeclarations".into(), Value::Array(type_array));
             });
 
+        println!("Writing plist to {}", self.directories.location.join("Contents/Info.plist").display());
         plist::to_file_xml(self.directories.location.join("Contents/Info.plist"), &pl)?;
 
         Ok(())
@@ -334,20 +343,32 @@ impl MacOSMenu {
         lines.join("\n")
     }
 
-    fn write_appkit_launcher(
-        &self,
-        launcher_path: Option<PathBuf>,
-    ) -> Result<PathBuf, MenuInstError> {
-        let launcher_path = launcher_path.unwrap_or_else(|| self.default_appkit_launcher_path());
-        fs::copy(self.find_appkit_launcher()?, &launcher_path)?;
-        fs::set_permissions(&launcher_path, fs::Permissions::from_mode(0o755))?;
+    fn write_appkit_launcher(&self) -> Result<PathBuf, MenuInstError> {
+        // let launcher_path = launcher_path.unwrap_or_else(|| self.default_appkit_launcher_path());
+        #[cfg(target_arch = "aarch64")]
+        let launcher_bytes = include_bytes!("../data/appkit_launcher_arm64");
+        #[cfg(target_arch = "x86_64")]
+        let launcher_bytes = include_bytes!("../data/appkit_launcher_x86_64");
+
+        let launcher_path = self.default_appkit_launcher_path();
+        let mut file = File::create(&launcher_path)?;
+        file.write_all(launcher_bytes)?;
+        fs::set_permissions(&launcher_path, std::fs::Permissions::from_mode(0o755))?;
+
         Ok(launcher_path)
     }
 
-    fn write_launcher(&self, launcher_path: Option<PathBuf>) -> Result<PathBuf, MenuInstError> {
-        let launcher_path = launcher_path.unwrap_or_else(|| self.default_launcher_path());
-        fs::copy(self.find_launcher()?, &launcher_path)?;
-        fs::set_permissions(&launcher_path, fs::Permissions::from_mode(0o755))?;
+    fn write_launcher(&self) -> Result<PathBuf, MenuInstError> {
+        #[cfg(target_arch = "aarch64")]
+        let launcher_bytes = include_bytes!("../data/osx_launcher_arm64");
+        #[cfg(target_arch = "x86_64")]
+        let launcher_bytes = include_bytes!("../data/osx_launcher_x86_64");
+
+        let launcher_path = self.default_launcher_path();
+        let mut file = File::create(&launcher_path)?;
+        file.write_all(launcher_bytes)?;
+        fs::set_permissions(&launcher_path, std::fs::Permissions::from_mode(0o755))?;
+
         Ok(launcher_path)
     }
 
@@ -356,7 +377,7 @@ impl MacOSMenu {
             script_path.unwrap_or_else(|| self.default_launcher_path().with_extension("script"));
         let mut file = File::create(&script_path)?;
         file.write_all(self.command().as_bytes())?;
-        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
+        fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
         Ok(script_path)
     }
 
@@ -381,7 +402,7 @@ impl MacOSMenu {
 
         let mut file = File::create(&script_path)?;
         file.write_all(format!("#!/bin/bash\n{event_handler_logic}\n").as_bytes())?;
-        fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))?;
+        fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
         Ok(Some(script_path))
     }
 
@@ -476,8 +497,8 @@ impl MacOSMenu {
         self.install_icon()?;
         self.write_pkg_info()?;
         self.write_plist_info()?;
-        self.write_appkit_launcher(None)?;
-        self.write_launcher(None)?;
+        self.write_appkit_launcher()?;
+        self.write_launcher()?;
         self.write_script(None)?;
         self.write_event_handler(None)?;
         self.maybe_register_with_launchservices(true)?;
@@ -502,7 +523,17 @@ pub(crate) fn install_menu_item(
 ) -> Result<(), MenuInstError> {
     let bundle_name = macos_item.cf_bundle_name.as_ref().unwrap();
     let directories = Directories::new(menu_mode, bundle_name);
-
+    println!("Installing menu item for {}", bundle_name);
     let menu = MacOSMenu::new(prefix, macos_item, directories);
     menu.install()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_slugify() {
+        assert_eq!(slugify("Hello, World!"), "hello-world");
+    }
 }

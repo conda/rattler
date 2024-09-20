@@ -29,14 +29,12 @@ MenuInstSchema {
                 linux: Some(
                     Linux {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "spyder",
-                                ],
-                            ),
+                            command: [
+                                "spyder",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -67,14 +65,12 @@ MenuInstSchema {
                 osx: Some(
                     MacOS {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "spyder",
-                                ],
-                            ),
+                            command: [
+                                "spyder",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -111,15 +107,13 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "{{ PYTHONW }}",
-                                    "{{ SCRIPTS_DIR }}\\spyder-script.py",
-                                ],
-                            ),
+                            command: [
+                                "{{ PYTHONW }}",
+                                "{{ SCRIPTS_DIR }}\\spyder-script.py",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -161,10 +155,10 @@ MenuInstSchema {
                 linux: Some(
                     Linux {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: None,
+                            command: [],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -195,10 +189,10 @@ MenuInstSchema {
                 osx: Some(
                     MacOS {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: None,
+                            command: [],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -235,10 +229,10 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: None,
+                            command: [],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -279,17 +273,15 @@ MenuInstSchema {
                 linux: Some(
                     Linux {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "exec",
-                                    "bash",
-                                    "--init-file",
-                                    "{{ MENU_DIR }}/mne_open_prompt.sh",
-                                ],
-                            ),
+                            command: [
+                                "exec",
+                                "bash",
+                                "--init-file",
+                                "{{ MENU_DIR }}/mne_open_prompt.sh",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -320,15 +312,13 @@ MenuInstSchema {
                 osx: Some(
                     MacOS {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "osascript",
-                                    "{{ MENU_DIR }}/mne_open_prompt.applescript",
-                                ],
-                            ),
+                            command: [
+                                "osascript",
+                                "{{ MENU_DIR }}/mne_open_prompt.applescript",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -365,16 +355,14 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "%SystemRoot%\\system32\\cmd.exe",
-                                    "/K",
-                                    "{{ MENU_DIR }}\\mne_open_prompt.bat",
-                                ],
-                            ),
+                            command: [
+                                "%SystemRoot%\\system32\\cmd.exe",
+                                "/K",
+                                "{{ MENU_DIR }}\\mne_open_prompt.bat",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -415,15 +403,13 @@ MenuInstSchema {
                 linux: Some(
                     Linux {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "xdg-open",
-                                    "https://mne.tools/stable/auto_tutorials/",
-                                ],
-                            ),
+                            command: [
+                                "xdg-open",
+                                "https://mne.tools/stable/auto_tutorials/",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -454,15 +440,13 @@ MenuInstSchema {
                 osx: Some(
                     MacOS {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "open",
-                                    "https://mne.tools/stable/auto_tutorials/",
-                                ],
-                            ),
+                            command: [
+                                "open",
+                                "https://mne.tools/stable/auto_tutorials/",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -499,15 +483,13 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                                    "\"start https://mne.tools/stable/auto_tutorials -WindowStyle hidden\"",
-                                ],
-                            ),
+                            command: [
+                                "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                                "\"start https://mne.tools/stable/auto_tutorials -WindowStyle hidden\"",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -548,15 +530,13 @@ MenuInstSchema {
                 linux: Some(
                     Linux {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "xdg-open",
-                                    "https://mne.discourse.group",
-                                ],
-                            ),
+                            command: [
+                                "xdg-open",
+                                "https://mne.discourse.group",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -587,15 +567,13 @@ MenuInstSchema {
                 osx: Some(
                     MacOS {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "open",
-                                    "https://mne.discourse.group",
-                                ],
-                            ),
+                            command: [
+                                "open",
+                                "https://mne.discourse.group",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
@@ -632,15 +610,13 @@ MenuInstSchema {
                 win: Some(
                     Windows {
                         base: BasePlatformSpecific {
-                            name: None,
-                            description: None,
+                            name: "",
+                            description: "",
                             icon: None,
-                            command: Some(
-                                [
-                                    "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
-                                    "\"start https://mne.discourse.group -WindowStyle hidden\"",
-                                ],
-                            ),
+                            command: [
+                                "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+                                "\"start https://mne.discourse.group -WindowStyle hidden\"",
+                            ],
                             working_dir: None,
                             precommand: None,
                             precreate: None,
