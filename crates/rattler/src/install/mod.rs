@@ -762,7 +762,7 @@ mod test {
         };
 
         test_install_python(
-            packages.filter_map(|p| Some(p.as_conda()?.url().clone())),
+            packages.filter_map(|p| p.as_conda()?.location().as_url().cloned()),
             "conda-lock",
             current_platform,
         )

@@ -72,7 +72,7 @@ class PypiPackageData:
         return self._data.version
 
     @property
-    def url_or_path(self) -> str:
+    def location(self) -> str:
         """
         The URL that points to where the artifact can be downloaded from.
 
@@ -84,12 +84,12 @@ class PypiPackageData:
         >>> env = lock_file.default_environment()
         >>> pypi_packages = env.pypi_packages()
         >>> data = pypi_packages[Platform("osx-arm64")][0][0]
-        >>> data.url_or_path
+        >>> data.location
         'https://files.pythonhosted.org/...'
         >>>
         ```
         """
-        return self._data.url_or_path
+        return self._data.location
 
     @property
     def hash(self) -> Optional[PackageHashes]:
