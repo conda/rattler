@@ -9,21 +9,58 @@ pub struct MenuItemNameDict {
     target_environment_is_not_base: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct BasePlatformSpecific {
-    name: Option<String>,
-    description: Option<String>,
-    icon: Option<String>,
-    command: Option<Vec<String>>,
-    working_dir: Option<String>,
-    precommand: Option<String>,
-    precreate: Option<String>,
-    activate: Option<bool>,
-    terminal: Option<bool>,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub command: Vec<String>,
+    pub working_dir: Option<String>,
+    pub precommand: Option<String>,
+    pub precreate: Option<String>,
+    pub activate: Option<bool>,
+    pub terminal: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl BasePlatformSpecific {
+    pub fn merge_parent(self, parent: &MenuItem) -> Self {
+        let name = if self.name.is_empty() {
+            parent.name.clone()
+        } else {
+            self.name
+        };
+
+        let description = if self.description.is_empty() {
+            parent.description.clone()
+        } else {
+            self.description
+        };
+
+        let command = if self.command.is_empty() {
+            parent.command.clone()
+        } else {
+            self.command
+        };
+
+        BasePlatformSpecific {
+            name,
+            description,
+            icon: self.icon.or(parent.icon.clone()),
+            command,
+            working_dir: self.working_dir.or(parent.working_dir.clone()),
+            precommand: self.precommand.or(parent.precommand.clone()),
+            precreate: self.precreate.or(parent.precreate.clone()),
+            activate: self.activate.or(parent.activate),
+            terminal: self.terminal.or(parent.terminal),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Windows {
     #[serde(flatten)]
@@ -36,43 +73,43 @@ pub struct Windows {
     app_user_model_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Linux {
     #[serde(flatten)]
-    base: BasePlatformSpecific,
+    pub base: BasePlatformSpecific,
     #[serde(rename = "Categories")]
-    categories: Option<Vec<String>>,
+    pub categories: Option<Vec<String>>,
     #[serde(rename = "DBusActivatable")]
-    dbus_activatable: Option<bool>,
+    pub dbus_activatable: Option<bool>,
     #[serde(rename = "GenericName")]
-    generic_name: Option<String>,
+    pub generic_name: Option<String>,
     #[serde(rename = "Hidden")]
-    hidden: Option<bool>,
+    pub hidden: Option<bool>,
     #[serde(rename = "Implements")]
-    implements: Option<Vec<String>>,
+    pub implements: Option<Vec<String>>,
     #[serde(rename = "Keywords")]
-    keywords: Option<Vec<String>>,
+    pub keywords: Option<Vec<String>>,
     #[serde(rename = "MimeType")]
-    mime_type: Option<Vec<String>>,
+    pub mime_type: Option<Vec<String>>,
     #[serde(rename = "NoDisplay")]
-    no_display: Option<bool>,
+    pub no_display: Option<bool>,
     #[serde(rename = "NotShowIn")]
-    not_show_in: Option<Vec<String>>,
+    pub not_show_in: Option<Vec<String>>,
     #[serde(rename = "OnlyShowIn")]
-    only_show_in: Option<Vec<String>>,
+    pub only_show_in: Option<Vec<String>>,
     #[serde(rename = "PrefersNonDefaultGPU")]
-    prefers_non_default_gpu: Option<bool>,
+    pub prefers_non_default_gpu: Option<bool>,
     #[serde(rename = "StartupNotify")]
-    startup_notify: Option<bool>,
+    pub startup_notify: Option<bool>,
     #[serde(rename = "StartupWMClass")]
-    startup_wm_class: Option<String>,
+    pub startup_wm_class: Option<String>,
     #[serde(rename = "TryExec")]
-    try_exec: Option<String>,
-    glob_patterns: Option<HashMap<String, String>>,
+    pub try_exec: Option<String>,
+    pub glob_patterns: Option<HashMap<String, String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct CFBundleURLTypesModel {
     #[serde(rename = "CFBundleTypeRole")]
@@ -85,7 +122,7 @@ pub struct CFBundleURLTypesModel {
     cf_bundle_url_icon_file: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct CFBundleDocumentTypesModel {
     #[serde(rename = "CFBundleTypeIconFile")]
@@ -100,7 +137,7 @@ pub struct CFBundleDocumentTypesModel {
     ls_handler_rank: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct UTTypeDeclarationModel {
     #[serde(rename = "UTTypeConformsTo")]
@@ -117,80 +154,80 @@ pub struct UTTypeDeclarationModel {
     ut_type_tag_specification: HashMap<String, Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MacOS {
     #[serde(flatten)]
-    base: BasePlatformSpecific,
+    pub base: BasePlatformSpecific,
     #[serde(rename = "CFBundleDisplayName")]
-    cf_bundle_display_name: Option<String>,
+    pub cf_bundle_display_name: Option<String>,
     #[serde(rename = "CFBundleIdentifier")]
-    cf_bundle_identifier: Option<String>,
+    pub cf_bundle_identifier: Option<String>,
     #[serde(rename = "CFBundleName")]
-    cf_bundle_name: Option<String>,
+    pub cf_bundle_name: Option<String>,
     #[serde(rename = "CFBundleSpokenName")]
-    cf_bundle_spoken_name: Option<String>,
+    pub cf_bundle_spoken_name: Option<String>,
     #[serde(rename = "CFBundleVersion")]
-    cf_bundle_version: Option<String>,
+    pub cf_bundle_version: Option<String>,
     #[serde(rename = "CFBundleURLTypes")]
-    cf_bundle_url_types: Option<Vec<CFBundleURLTypesModel>>,
+    pub cf_bundle_url_types: Option<Vec<CFBundleURLTypesModel>>,
     #[serde(rename = "CFBundleDocumentTypes")]
-    cf_bundle_document_types: Option<Vec<CFBundleDocumentTypesModel>>,
+    pub cf_bundle_document_types: Option<Vec<CFBundleDocumentTypesModel>>,
     #[serde(rename = "LSApplicationCategoryType")]
-    ls_application_category_type: Option<String>,
+    pub ls_application_category_type: Option<String>,
     #[serde(rename = "LSBackgroundOnly")]
-    ls_background_only: Option<bool>,
+    pub ls_background_only: Option<bool>,
     #[serde(rename = "LSEnvironment")]
-    ls_environment: Option<HashMap<String, String>>,
+    pub ls_environment: Option<HashMap<String, String>>,
     #[serde(rename = "LSMinimumSystemVersion")]
-    ls_minimum_system_version: Option<String>,
+    pub ls_minimum_system_version: Option<String>,
     #[serde(rename = "LSMultipleInstancesProhibited")]
-    ls_multiple_instances_prohibited: Option<bool>,
+    pub ls_multiple_instances_prohibited: Option<bool>,
     #[serde(rename = "LSRequiresNativeExecution")]
-    ls_requires_native_execution: Option<bool>,
+    pub ls_requires_native_execution: Option<bool>,
     #[serde(rename = "NSSupportsAutomaticGraphicsSwitching")]
-    ns_supports_automatic_graphics_switching: Option<bool>,
+    pub ns_supports_automatic_graphics_switching: Option<bool>,
     #[serde(rename = "UTExportedTypeDeclarations")]
-    ut_exported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
+    pub ut_exported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
     #[serde(rename = "UTImportedTypeDeclarations")]
-    ut_imported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
-    entitlements: Option<Vec<String>>,
-    link_in_bundle: Option<HashMap<String, String>>,
-    event_handler: Option<String>,
+    pub ut_imported_type_declarations: Option<Vec<UTTypeDeclarationModel>>,
+    pub entitlements: Option<Vec<String>>,
+    pub link_in_bundle: Option<HashMap<String, String>>,
+    pub event_handler: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Platforms {
-    linux: Option<Linux>,
-    osx: Option<MacOS>,
-    win: Option<Windows>,
+    pub linux: Option<Linux>,
+    pub osx: Option<MacOS>,
+    pub win: Option<Windows>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct MenuItem {
-    name: String,
-    description: String,
-    command: Vec<String>,
-    icon: Option<String>,
-    precommand: Option<String>,
-    precreate: Option<String>,
-    working_dir: Option<String>,
-    activate: Option<bool>,
-    terminal: Option<bool>,
-    platforms: Platforms,
+    pub name: String,
+    pub description: String,
+    pub command: Vec<String>,
+    pub icon: Option<String>,
+    pub precommand: Option<String>,
+    pub precreate: Option<String>,
+    pub working_dir: Option<String>,
+    pub activate: Option<bool>,
+    pub terminal: Option<bool>,
+    pub platforms: Platforms,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct MenuInstSchema {
     #[serde(rename = "$id")]
-    id: String,
+    pub id: String,
     #[serde(rename = "$schema")]
-    schema: String,
-    menu_name: String,
-    menu_items: Vec<MenuItem>,
+    pub schema: String,
+    pub menu_name: String,
+    pub menu_items: Vec<MenuItem>,
 }
 
 #[cfg(test)]
