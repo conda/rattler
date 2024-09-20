@@ -1,24 +1,26 @@
-//! This should take a serde_json file, render it with all variables and then load it as a MenuInst struct
+//! This should take a `serde_json` file, render it with all variables and then load it as a `MenuInst` struct
 
 use rattler_conda_types::Platform;
 use std::{collections::HashMap, path::Path};
 
 use crate::schema::MenuInstSchema;
 
+/// Replace placeholders in a string with values from a hashmap
+/// This only replaces placeholders in the form of {{ key }} (note: while this looks like a Jinja template, it is not).
 fn replace_placeholders(mut text: String, replacements: &HashMap<String, String>) -> String {
     for (key, value) in replacements {
-        let placeholder = format!("{{{{ {} }}}}", key);
+        let placeholder = format!("{{{{ {key} }}}}");
         text = text.replace(&placeholder, value);
     }
     text
 }
 
-//
+/// Return all placeholders that can be used in the menuinst schema
 pub fn placeholders(
     base_prefix: &Path,
     prefix: &Path,
     platform: &Platform,
-    menu_item_location: &Path,
+    // menu_item_location: &Path,
 ) -> HashMap<String, String> {
     let dist_name = |p: &Path| {
         p.parent()
@@ -38,12 +40,7 @@ pub fn placeholders(
         ("PYTHON", python),
         ("BASE_PYTHON", base_python),
         ("MENU_DIR", prefix.join("menu")),
-        (
-            "HOME",
-            dirs::home_dir()
-                .map(|p| p.to_path_buf())
-                .unwrap_or_default(),
-        ),
+        ("HOME", dirs::home_dir().unwrap_or_default()),
     ]);
 
     if platform.is_windows() {
@@ -59,7 +56,7 @@ pub fn placeholders(
         vars.insert("PYTHONAPP", prefix.join("python.app/Contents/MacOS/python"));
     }
 
-    vars.insert("MENU_ITEM_LOCATION", menu_item_location.to_path_buf());
+    // vars.insert("MENU_ITEM_LOCATION", menu_item_location.to_path_buf());
 
     let mut vars: HashMap<String, String> = vars
         .into_iter()
@@ -83,7 +80,8 @@ pub fn placeholders(
     vars
 }
 
-//
+/// Render a given menuinst schema file with the given variables and return the `MenuInstSchema`
+/// See also: `placeholders`
 pub fn render(
     file: &Path,
     variables: &HashMap<String, String>,
@@ -111,7 +109,6 @@ mod test {
             Path::new("/home/base_prefix"),
             Path::new("/home/prefix"),
             &rattler_conda_types::Platform::Linux64,
-            Path::new("/menu_item_location"),
         );
 
         let schema = render(&schema_path, &placeholders).unwrap();
