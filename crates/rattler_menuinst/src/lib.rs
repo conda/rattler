@@ -68,7 +68,26 @@ pub fn install_menuitems(
 pub mod test {
     use std::path::{Path, PathBuf};
 
+    use rattler_conda_types::Platform;
+
+    use crate::install_menuitems;
+
     pub(crate) fn test_data() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data/menuinst")
+    }
+
+    #[test]
+    fn test_install_menu_item() {
+        println!("Running test_install_menu_item");
+        let test_data = crate::test::test_data();
+        let schema_path = test_data.join("mne_menu/menu/menu.json");
+
+        let prefix = schema_path.parent().unwrap().parent().unwrap();
+        let prefix = std::fs::canonicalize(prefix).unwrap();
+        println!("prefix: {:?}", prefix);
+        let base_prefix = PathBuf::from("/Users/jaidevd/miniconda3");
+        let platform = Platform::OsxArm64;
+
+        install_menuitems(&schema_path, &prefix, &base_prefix, &platform).unwrap();
     }
 }
