@@ -9,7 +9,10 @@ use std::{
     sync::Arc,
 };
 
-use super::{unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction};
+use super::{
+    unlink_package, AppleCodeSignBehavior, InstallDriver, InstallOptions, Transaction,
+    TransactionError,
+};
 use crate::install::link_script::LinkScriptError;
 use crate::{
     default_cache_dir,
@@ -47,10 +50,56 @@ pub struct Installer {
     target_platform: Option<Platform>,
     apple_code_sign_behavior: AppleCodeSignBehavior,
     alternative_target_prefix: Option<PathBuf>,
+    generate_transaction: Option<Box<dyn GenerateTransaction>>,
     // TODO: Determine upfront if these are possible.
     // allow_symbolic_links: Option<bool>,
     // allow_hard_links: Option<bool>,
     // allow_ref_links: Option<bool>,
+}
+
+/// Trait for generating a transaction from a set of records.
+pub trait GenerateTransaction {
+    fn generate_transaction(
+        &mut self,
+        prefix_records: Vec<PrefixRecord>,
+        repo_data_records: Vec<RepoDataRecord>,
+        platform: Platform,
+    ) -> Result<Transaction<PrefixRecord, RepoDataRecord>, TransactionError>;
+}
+
+/// The result of a transaction generation.
+type TransactionResult = Result<Transaction<PrefixRecord, RepoDataRecord>, TransactionError>;
+// A poor mans trait alias for a function that generates a transaction.
+pub trait GenerateTransactionFn:
+    FnOnce(Vec<PrefixRecord>, Vec<RepoDataRecord>, Platform) -> TransactionResult
+{
+}
+
+/// Default implementation of `GenerateTransaction`.
+struct DefaultTransactionGenerator;
+impl GenerateTransaction for DefaultTransactionGenerator {
+    fn generate_transaction(
+        &mut self,
+        prefix_records: Vec<PrefixRecord>,
+        repo_data_records: Vec<RepoDataRecord>,
+        platform: Platform,
+    ) -> TransactionResult {
+        Transaction::from_current_and_desired(prefix_records, repo_data_records, platform)
+    }
+}
+
+/// Generic holder of a function that generates a transaction.
+struct GenerateTransactionFnHolder<F: GenerateTransactionFn>(Option<F>);
+
+impl<F: GenerateTransactionFn> GenerateTransaction for GenerateTransactionFnHolder<F> {
+    fn generate_transaction(
+        &mut self,
+        prefix_records: Vec<PrefixRecord>,
+        repo_data_records: Vec<RepoDataRecord>,
+        platform: Platform,
+    ) -> TransactionResult {
+        (self.0.take().unwrap())(prefix_records, repo_data_records, platform)
+    }
 }
 
 #[derive(Debug)]
@@ -95,6 +144,16 @@ impl Installer {
     /// but modifies an existing instance.
     pub fn set_io_concurrentcy_limit(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
+        self
+    }
+
+    /// Set the transaction generator to use.
+    #[must_use]
+    pub fn with_transaction_generator<F: GenerateTransactionFn + 'static>(
+        &mut self,
+        generator_fn: F,
+    ) -> &mut Self {
+        self.generate_transaction = Some(Box::new(GenerateTransactionFnHolder(Some(generator_fn))));
         self
     }
 
@@ -308,7 +367,13 @@ impl Installer {
 
         // Construct a transaction from the current and desired situation.
         let target_platform = self.target_platform.unwrap_or_else(Platform::current);
-        let transaction = Transaction::from_current_and_desired(
+        let mut transaction_generator = if let Some(generator) = self.generate_transaction {
+            generator
+        } else {
+            Box::new(DefaultTransactionGenerator)
+        };
+
+        let transaction = transaction_generator.generate_transaction(
             installed,
             records.into_iter().collect::<Vec<_>>(),
             target_platform,
