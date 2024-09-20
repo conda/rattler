@@ -62,7 +62,6 @@ impl<'de> Deserialize<'de> for GenericVirtualPackage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
 
     #[test]
     fn test_serde() {
