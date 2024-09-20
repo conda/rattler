@@ -30,6 +30,8 @@ pub enum MenuInstError {
 
     #[error("Failed to create plist: {0}")]
     PlistError(#[from] plist::Error),
+    #[error("Failed to sign plist: {0}")]
+    SigningFailed(String),
 }
 
 // Install menu items from a given schema file
@@ -53,7 +55,7 @@ pub fn install_menuitems(
             let mut macos_item = item.platforms.osx.clone().unwrap();
             let base_item = macos_item.base.merge_parent(&item);
             macos_item.base = base_item;
-            macos::install_menu_item(macos_item, MenuMode::System)?;
+            macos::install_menu_item(prefix, macos_item, MenuMode::System)?;
         } else if item.platforms.win.is_some() && platform.is_windows() {
             // windows::install_menu_item(&item)?;
         }

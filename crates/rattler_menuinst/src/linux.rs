@@ -145,7 +145,7 @@ impl LinuxMenu {
 
     fn create_desktop_entry(&self) -> Result<(), MenuInstError> {
         let file = self.location();
-        let writer = File::create(&file)?;
+        let writer = File::create(file)?;
         let mut writer = std::io::BufWriter::new(writer);
 
         writeln!(writer, "[Desktop Entry]")?;
