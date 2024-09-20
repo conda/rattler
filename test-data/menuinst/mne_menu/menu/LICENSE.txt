@@ -1,0 +1,6 @@
+The Spyder icons were taken from the Spyder project
+(https://github.com/spyder-ide/spyder) and are therefore placed
+under an MIT license.
+
+The other icons were taken from https://github.com/paomedia/small-n-flat and
+are placed in the public domain.
