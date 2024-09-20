@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, hash::Hash};
 
 use rattler_conda_types::{PackageRecord, RepoDataRecord};
+use rattler_digest::Sha256Hash;
 use url::Url;
 
 use crate::UrlOrPath;
@@ -21,6 +22,20 @@ pub struct CondaPackageData {
 
     /// The channel of the package if this cannot be derived from the url.
     pub channel: Option<Url>,
+
+    /// The input hash of the package (only valid for source packages)
+    pub input: Option<InputHash>,
+}
+
+/// A record of input files that were used to define the metadata of the
+/// package.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct InputHash {
+    /// The hash of all input files combined.
+    pub hash: Sha256Hash,
+
+    /// The globs that were used to define the input files.
+    pub globs: Vec<String>,
 }
 
 impl AsRef<PackageRecord> for CondaPackageData {
@@ -58,6 +73,7 @@ impl From<RepoDataRecord> for CondaPackageData {
             file_name: Some(value.file_name),
             channel: Url::parse(&value.channel).ok(),
             location,
+            input: None,
         }
     }
 }

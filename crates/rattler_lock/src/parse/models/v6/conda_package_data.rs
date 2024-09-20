@@ -9,6 +9,7 @@ use serde_with::serde_as;
 use url::Url;
 
 use crate::{
+    conda::InputHash,
     utils::{derived_fields, derived_fields::LocationDerivedFields},
     CondaPackageData, ConversionError, UrlOrPath,
 };
@@ -62,6 +63,9 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub md5: Option<Md5Hash>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<SerializableHash::<rattler_digest::Sha256>>")]
+    pub hash: Option<Sha256Hash>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<SerializableHash::<rattler_digest::Md5>>")]
     pub legacy_bz2_md5: Option<Md5Hash>,
 
@@ -103,6 +107,9 @@ pub(crate) struct CondaPackageDataModel<'a> {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<Cow<'a, Vec<String>>>,
 }
 
 impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
@@ -135,7 +142,17 @@ impl<'a> TryFrom<CondaPackageDataModel<'a>> for CondaPackageData {
         );
         let (derived_arch, derived_platform) = derived_fields::derive_arch_and_platform(&subdir);
 
+        let input_hash = if value.hash.is_some() || value.input.is_some() {
+            Some(InputHash {
+                hash: value.hash.unwrap_or_default(),
+                globs: value.input.map_or_else(Vec::new, Cow::into_owned),
+            })
+        } else {
+            None
+        };
+
         Ok(Self {
+            input: input_hash,
             package_record: PackageRecord {
                 build,
                 build_number,
@@ -234,6 +251,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
             track_features: Cow::Borrowed(&value.package_record.track_features),
             license: Cow::Borrowed(&value.package_record.license),
             license_family: Cow::Borrowed(&value.package_record.license_family),
+            hash: value.input.as_ref().map(|r| r.hash),
+            input: value.input.as_ref().map(|r| Cow::Borrowed(&r.globs)),
         }
     }
 }
