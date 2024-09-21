@@ -215,6 +215,12 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
         let arch = value.package_record.arch.clone().or(derived_arch);
         let platform = value.package_record.platform.clone().or(derived_platform);
 
+        let normalized_channel = value
+            .channel
+            .as_ref()
+            .map(strip_trailing_slash)
+            .map(Cow::into_owned);
+
         Self {
             location: value.location.clone(),
             name: (Some(package_record.name.as_source())
@@ -232,7 +238,8 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 .then_some(Cow::Borrowed(&package_record.subdir)),
             noarch: (package_record.noarch != derived_noarch)
                 .then_some(Cow::Borrowed(&package_record.noarch)),
-            channel: (value.channel != derived.channel).then_some(Cow::Borrowed(&value.channel)),
+            channel: (normalized_channel != derived.channel)
+                .then_some(Cow::Owned(normalized_channel)),
             file_name: (value.file_name.as_deref() != derived.file_name.as_deref())
                 .then_some(Cow::Borrowed(&value.file_name)),
             purls: Cow::Borrowed(&value.package_record.purls),
@@ -255,5 +262,16 @@ impl<'a> From<&'a CondaPackageData> for CondaPackageDataModel<'a> {
                 globs: Cow::Borrowed(&input.globs),
             }),
         }
+    }
+}
+
+fn strip_trailing_slash(url: &Url) -> Cow<'_, Url> {
+    let path = url.path();
+    if !path.ends_with("/") {
+        Cow::Borrowed(url)
+    } else {
+        let mut updated_url = url.clone();
+        updated_url.set_path(path.trim_end_matches('/'));
+        Cow::Owned(updated_url)
     }
 }
