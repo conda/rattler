@@ -20,7 +20,8 @@ use crate::{
 
 /// Represents a lock-file for both Conda packages and Pypi packages.
 ///
-/// Lock-files can store information for multiple platforms and for multiple environments.
+/// Lock-files can store information for multiple platforms and for multiple
+/// environments.
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
@@ -59,7 +60,7 @@ impl PyLockFile {
 
             for (platform, records) in env.inner.pypi_packages() {
                 for (pkg_data, pkg_env_data) in records {
-                    lock.add_pypi_package(&name, platform, pkg_data, pkg_env_data);
+                    lock.add_pypi_package(&name, platform, pkg_data.clone(), pkg_env_data.clone());
                 }
             }
         }
@@ -85,7 +86,8 @@ impl PyLockFile {
         self.inner.environment(name).map(Into::into)
     }
 
-    /// Returns the environment with the default name as defined by [`DEFAULT_ENVIRONMENT_NAME`].
+    /// Returns the environment with the default name as defined by
+    /// [`DEFAULT_ENVIRONMENT_NAME`].
     pub fn default_environment(&self) -> Option<PyEnvironment> {
         self.inner.default_environment().map(Into::into)
     }
@@ -161,8 +163,8 @@ impl PyEnvironment {
 
     /// Returns the channels that are used by this environment.
     ///
-    /// Note that the order of the channels is significant. The first channel is the highest
-    /// priority channel.
+    /// Note that the order of the channels is significant. The first channel is
+    /// the highest priority channel.
     pub fn channels(&self) -> Vec<PyLockChannel> {
         self.inner
             .channels()
@@ -179,7 +181,8 @@ impl PyEnvironment {
         None
     }
 
-    /// Returns a list of all packages and platforms defined for this environment
+    /// Returns a list of all packages and platforms defined for this
+    /// environment
     pub fn packages_by_platform(&self) -> Vec<(PyPlatform, Vec<PyLockedPackage>)> {
         self.inner
             .packages_by_platform()
@@ -193,18 +196,19 @@ impl PyEnvironment {
     ) -> HashMap<PyPlatform, Vec<(PyPypiPackageData, PyPypiPackageEnvironmentData)>> {
         self.inner
             .pypi_packages()
-            .into_iter()
             .map(|(platform, data_vec)| {
                 let data = data_vec
-                    .into_iter()
-                    .map(|(pkg_data, pkg_env_data)| (pkg_data.into(), pkg_env_data.into()))
-                    .collect::<Vec<(PyPypiPackageData, PyPypiPackageEnvironmentData)>>();
+                    .map(|(pkg_data, pkg_env_data)| {
+                        (pkg_data.clone().into(), pkg_env_data.clone().into())
+                    })
+                    .collect::<Vec<_>>();
                 (platform.into(), data)
             })
             .collect()
     }
 
-    /// Returns all conda packages for all platforms and converts them to [`PyRecord`].
+    /// Returns all conda packages for all platforms and converts them to
+    /// [`PyRecord`].
     pub fn conda_repodata_records(&self) -> PyResult<HashMap<PyPlatform, Vec<PyRecord>>> {
         Ok(self
             .inner
@@ -220,9 +224,9 @@ impl PyEnvironment {
             .collect())
     }
 
-    /// Takes all the conda packages, converts them to [`PyRecord`] and returns them or
-    /// returns an error if the conversion failed. Returns `None` if the specified platform is not
-    /// defined for this environment.
+    /// Takes all the conda packages, converts them to [`PyRecord`] and returns
+    /// them or returns an error if the conversion failed. Returns `None` if
+    /// the specified platform is not defined for this environment.
     pub fn conda_repodata_records_for_platform(
         &self,
         platform: PyPlatform,
@@ -237,16 +241,16 @@ impl PyEnvironment {
         Ok(None)
     }
 
-    /// Returns all the pypi packages and their associated environment data for the specified
-    /// platform. Returns `None` if the platform is not defined for this environment.
+    /// Returns all the pypi packages and their associated environment data for
+    /// the specified platform. Returns `None` if the platform is not
+    /// defined for this environment.
     pub fn pypi_packages_for_platform(
         &self,
         platform: PyPlatform,
     ) -> Option<Vec<(PyPypiPackageData, PyPypiPackageEnvironmentData)>> {
         if let Some(data) = self.inner.pypi_packages_for_platform(platform.inner) {
             return Some(
-                data.into_iter()
-                    .map(|(pkg_data, env_data)| (pkg_data.into(), env_data.into()))
+                data.map(|(pkg_data, env_data)| (pkg_data.clone().into(), env_data.clone().into()))
                     .collect(),
             );
         }
@@ -345,7 +349,7 @@ impl PyLockedPackage {
         if let Some(pkg) = self.inner.as_conda() {
             return Some(Into::into(RepoDataRecord {
                 package_record: pkg.package_record().clone(),
-                file_name: pkg.file_name().unwrap_or("").into(),
+                file_name: pkg.location().file_name().unwrap_or("").into(),
                 channel: pkg.channel().map_or("".to_string(), |c| c.to_string()),
                 url: pkg.location().as_url()?.clone(),
             }));
@@ -355,8 +359,10 @@ impl PyLockedPackage {
 
     pub fn as_pypi(&self) -> Option<(PyPypiPackageData, PyPypiPackageEnvironmentData)> {
         if let Some(pkg) = self.inner.as_pypi() {
-            let pkg = pkg.data();
-            return Some((pkg.package.clone().into(), pkg.environment.clone().into()));
+            return Some((
+                pkg.package_data().clone().into(),
+                pkg.environment_data().clone().into(),
+            ));
         }
         None
     }
@@ -514,11 +520,12 @@ impl PyPackageHashes {
     // #[new]
     // pub fn new(md5: &str, sha256: &str) -> Self {
     //     let md5_digest = parse_digest_from_hex::<rattler_digest::Md5>(md5);
-    //     let sha256_digest = parse_digest_from_hex::<rattler_digest::Sha256>(sha256);
+    //     let sha256_digest =
+    // parse_digest_from_hex::<rattler_digest::Sha256>(sha256);
 
     //     PackageHashes::from_hashes(md5_digest, sha256_digest)
-    //         .expect("this should never happen since both the hashes were provided")
-    //         .into()
+    //         .expect("this should never happen since both the hashes were
+    // provided")         .into()
     // }
 
     #[getter]
