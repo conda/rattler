@@ -395,11 +395,7 @@ impl Environment {
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
         self.conda_packages_for_platform(platform)
-            .map(|packages| {
-                packages
-                    .map(RepoDataRecord::try_from)
-                    .collect()
-            })
+            .map(|packages| packages.map(RepoDataRecord::try_from).collect())
             .transpose()
     }
 
