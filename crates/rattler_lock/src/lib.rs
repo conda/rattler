@@ -76,7 +76,14 @@
 //! for different platforms and with different channels in a single lock-file.
 //! This allows storing production- and test environments in a single file.
 
-use std::{borrow::Cow, collections::BTreeSet, io::Read, path::Path, str::FromStr, sync::Arc};
+use std::{
+    borrow::Cow,
+    collections::{BTreeSet, HashMap},
+    io::Read,
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+};
 
 use fxhash::FxHashMap;
 use pep508_rs::{ExtraName, Requirement};
@@ -342,6 +349,23 @@ impl Environment {
         })
     }
 
+    /// Returns all conda packages for all platforms and converts them to
+    /// [`RepoDataRecord`].
+    pub fn conda_repodata_records(
+        &self,
+    ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
+        self.conda_packages()
+            .map(|(platform, packages)| {
+                Ok((
+                    platform,
+                    packages
+                        .map(RepoDataRecord::try_from)
+                        .collect::<Result<Vec<_>, ConversionError>>()?,
+                ))
+            })
+            .collect()
+    }
+
     /// Returns all conda packages for a specific platform.
     pub fn conda_packages_for_platform(
         &self,
@@ -357,6 +381,22 @@ impl Environment {
                     EnvironmentPackageData::Pypi(_, _) => None,
                 }),
         )
+    }
+
+    /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
+    /// returns them or returns an error if the conversion failed. Returns
+    /// `None` if the specified platform is not defined for this
+    /// environment.
+    ///
+    /// This method ignores any conda packages that do not refer to repodata
+    /// records.
+    pub fn conda_repodata_records_for_platform(
+        &self,
+        platform: Platform,
+    ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
+        self.conda_packages_for_platform(platform)
+            .map(|packages| packages.map(RepoDataRecord::try_from).collect())
+            .transpose()
     }
 
     /// Returns all the pypi packages and their associated environment data for
