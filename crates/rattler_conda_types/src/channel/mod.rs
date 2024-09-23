@@ -789,7 +789,10 @@ mod tests {
             assert!(!channel.base_url().as_str().ends_with("//"));
 
             let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
-            let base_url = named_channel.clone().into_base_url(&channel_config).unwrap();
+            let base_url = named_channel
+                .clone()
+                .into_base_url(&channel_config)
+                .unwrap();
             let base_url_str = base_url.as_str();
             assert!(base_url_str.ends_with('/'));
             assert!(!base_url_str.ends_with("//"));
