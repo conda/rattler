@@ -115,7 +115,7 @@ retry-policies = { version = "0.4.0", default-features = false }
 rmp-serde = { version = "1.2.0" }
 rstest = { version = "0.21.0" }
 rstest_reuse = "0.7.0"
-simd-json = { version = "0.13.10", features = ["serde_impl"] }
+simd-json = { version = "0.14.0", features = ["serde_impl"] }
 serde = { version = "1.0.198" }
 serde_json = { version = "1.0.116" }
 serde_repr = "0.1"
