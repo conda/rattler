@@ -435,9 +435,7 @@ pub async fn fetch_repo_data(
                     cache_state
                         .to_path(&cache_state_path)
                         .map(|_| cache_state)
-                        .map_err(|e| {
-                            FetchRepoDataError::FailedToWriteCacheState(e)
-                        })
+                        .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(e))
                 })
                 .await??;
 
