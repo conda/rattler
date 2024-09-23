@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+fs-err = { workspace = true}
 anyhow = { workspace = true }
 async-fd-lock = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
