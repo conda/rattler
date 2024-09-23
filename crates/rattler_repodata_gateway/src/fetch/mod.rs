@@ -60,17 +60,17 @@ pub enum FetchRepoDataError {
     #[error("repodata not found")]
     NotFound(#[from] RepoDataNotFoundError),
 
-    #[error("failed to create temporary file for repodata.json at: '{0}'")]
-    FailedToCreateTemporaryFile(PathBuf, #[source] std::io::Error),
+    #[error("failed to create temporary file for repodata.json")]
+    FailedToCreateTemporaryFile(#[source] std::io::Error),
 
     #[error("failed to persist temporary repodata.json file")]
     FailedToPersistTemporaryFile(#[from] tempfile::PersistError),
 
-    #[error("failed to get metadata from repodata.json file at: '{0}'")]
-    FailedToGetMetadata(PathBuf, #[source] std::io::Error),
+    #[error("failed to get metadata from repodata.json file")]
+    FailedToGetMetadata(#[source] std::io::Error),
 
-    #[error("failed to write cache state to: '{0}'")]
-    FailedToWriteCacheState(PathBuf, #[source] std::io::Error),
+    #[error("failed to write cache state")]
+    FailedToWriteCacheState(#[source] std::io::Error),
 
     #[error("there is no cache available")]
     NoCacheAvailable,
@@ -270,7 +270,7 @@ async fn repodata_from_file(
         new_cache_state
             .to_path(&cache_state_path)
             .map(|_| new_cache_state)
-            .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e))
+            .map_err(FetchRepoDataError::FailedToWriteCacheState)
     })
     .await??;
 
@@ -435,9 +435,7 @@ pub async fn fetch_repo_data(
                     cache_state
                         .to_path(&cache_state_path)
                         .map(|_| cache_state)
-                        .map_err(|e| {
-                            FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e)
-                        })
+                        .map_err(FetchRepoDataError::FailedToWriteCacheState)
                 })
                 .await??;
 
@@ -527,7 +525,7 @@ pub async fn fetch_repo_data(
             cache_state
                 .to_path(&cache_state_path)
                 .map(|_| cache_state)
-                .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e))
+                .map_err(FetchRepoDataError::FailedToWriteCacheState)
         })
         .await??;
 
@@ -567,14 +565,13 @@ pub async fn fetch_repo_data(
     let repo_data_destination_path = repo_data_json_path.clone();
     let repo_data_json_metadata = tokio::task::spawn_blocking(move || {
         let file = temp_file
-            .persist(repo_data_destination_path.clone())
+            .persist(repo_data_destination_path)
             .map_err(FetchRepoDataError::FailedToPersistTemporaryFile)?;
 
         // Determine the last modified date and size of the repodata.json file. We store these values in
         // the cache to link the cache to the corresponding repodata.json file.
-        file.metadata().map_err(|e| {
-            FetchRepoDataError::FailedToGetMetadata(repo_data_destination_path.clone(), e)
-        })
+        file.metadata()
+            .map_err(FetchRepoDataError::FailedToGetMetadata)
     })
     .await??;
 
@@ -585,7 +582,7 @@ pub async fn fetch_repo_data(
         cache_headers,
         cache_last_modified: repo_data_json_metadata
             .modified()
-            .map_err(|e| FetchRepoDataError::FailedToGetMetadata(repo_data_json_path.clone(), e))?,
+            .map_err(FetchRepoDataError::FailedToGetMetadata)?,
         cache_size: repo_data_json_metadata.len(),
         blake2_hash: Some(blake2_hash),
         blake2_hash_nominal: Some(blake2_hash),
@@ -599,7 +596,7 @@ pub async fn fetch_repo_data(
         new_cache_state
             .to_path(&cache_state_path)
             .map(|_| new_cache_state)
-            .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e))
+            .map_err(FetchRepoDataError::FailedToWriteCacheState)
     })
     .await??;
 
@@ -654,7 +651,7 @@ async fn stream_and_decode_to_file(
 
     // Construct a temporary file
     let temp_file = NamedTempFile::new_in(temp_dir)
-        .map_err(|e| FetchRepoDataError::FailedToCreateTemporaryFile(temp_dir.to_path_buf(), e))?;
+        .map_err(FetchRepoDataError::FailedToCreateTemporaryFile)?;
 
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
