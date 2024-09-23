@@ -668,6 +668,7 @@ mod test {
     #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
     #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
     #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
+    #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
