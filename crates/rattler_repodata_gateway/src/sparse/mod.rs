@@ -103,7 +103,7 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = fs::File::open(path)?;
+        let file = fs::File::open(path.as_ref().to_owned())?;
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInner::Memmapped(
