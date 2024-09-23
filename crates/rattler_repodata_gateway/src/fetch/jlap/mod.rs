@@ -81,6 +81,7 @@
 
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
+use fs_err as fs;
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
@@ -101,8 +102,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use url::Url;
-use fs_err as fs;
-use fs_err::tokio as tokio_fs;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
 use crate::reporter::ResponseReporterExt;
@@ -539,8 +538,7 @@ fn apply_jlap_patches(
     }
 
     // Read the contents of the current repodata to a string
-    let repo_data_contents =
-        fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
+    let repo_data_contents = fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
 
     // Parse the JSON so we can manipulate it
     tracing::info!("parsing cached repodata.json as JSON");

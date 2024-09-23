@@ -435,7 +435,9 @@ pub async fn fetch_repo_data(
                     cache_state
                         .to_path(&cache_state_path)
                         .map(|_| cache_state)
-                        .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e))
+                        .map_err(|e| {
+                            FetchRepoDataError::FailedToWriteCacheState(e)
+                        })
                 })
                 .await??;
 
@@ -655,7 +657,10 @@ async fn stream_and_decode_to_file(
 
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
-    let file = tokio_fs::File::from_std(fs_err::File::from_parts(temp_file.as_file().try_clone().unwrap(), temp_file.path()));
+    let file = tokio_fs::File::from_std(fs_err::File::from_parts(
+        temp_file.as_file().try_clone().unwrap(),
+        temp_file.path(),
+    ));
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.

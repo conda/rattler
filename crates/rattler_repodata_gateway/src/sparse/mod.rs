@@ -11,6 +11,7 @@ use std::{
 };
 
 use bytes::Bytes;
+use fs_err as fs;
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
 use rattler_conda_types::{
@@ -23,7 +24,6 @@ use serde::{
 use serde_json::value::RawValue;
 use superslice::Ext;
 use thiserror::Error;
-use fs_err as fs;
 
 /// A struct to enable loading records from a `repodata.json` file on demand.
 /// Since most of the time you don't need all the records from the

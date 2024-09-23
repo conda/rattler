@@ -1,11 +1,11 @@
 mod cache_headers;
 
 pub use cache_headers::CacheHeaders;
+use fs_err as fs;
 use rattler_digest::{serde::SerializableHash, Blake2b256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
 use std::{path::Path, str::FromStr, time::SystemTime};
-use fs_err as fs;
 use url::Url;
 
 /// Representation of the `.info.json` file alongside a `repodata.json` file.
