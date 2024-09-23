@@ -61,7 +61,7 @@ digest = "0.10.7"
 dirs = "5.0.1"
 dunce = "1.0.4"
 enum_dispatch = "0.3.13"
-fs-err = "2.11.0"
+fs-err = {  version = "2.11.0", features = ["tokio"] }
 fslock = "0.2.1"
 futures = "0.3.30"
 futures-util = "0.3.30"

@@ -101,6 +101,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tempfile::NamedTempFile;
 use url::Url;
+use fs_err as fs;
+use fs_err::tokio as tokio_fs;
 
 pub use crate::fetch::cache::{JLAPFooter, JLAPState, RepoDataState};
 use crate::reporter::ResponseReporterExt;
@@ -538,7 +540,7 @@ fn apply_jlap_patches(
 
     // Read the contents of the current repodata to a string
     let repo_data_contents =
-        std::fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
+        fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
 
     // Parse the JSON so we can manipulate it
     tracing::info!("parsing cached repodata.json as JSON");
@@ -636,6 +638,8 @@ mod test {
     use rstest::rstest;
     use tempfile::TempDir;
     use url::Url;
+
+    use fs_err::tokio as tokio_fs;
 
     const FAKE_STATE_DATA_INITIAL: &str = r#"{
   "url": "https://repo.example.com/pkgs/main/osx-64/repodata.json.zst",
@@ -851,14 +855,14 @@ mod test {
 
         if let Some(content) = server_jlap {
             // Add files we need to request to the server
-            tokio::fs::write(subdir_path.path().join("repodata.jlap"), content)
+            tokio_fs::write(subdir_path.path().join("repodata.jlap"), content)
                 .await
                 .unwrap();
         }
 
         if let Some(content) = server_repo_data {
             // Add files we need to request to the server
-            tokio::fs::write(subdir_path.path().join("repodata.json"), content)
+            tokio_fs::write(subdir_path.path().join("repodata.json"), content)
                 .await
                 .unwrap();
         }

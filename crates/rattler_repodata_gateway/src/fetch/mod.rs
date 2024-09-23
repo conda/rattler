@@ -24,6 +24,9 @@ use tokio_util::io::StreamReader;
 use tracing::instrument;
 use url::Url;
 
+// use fs-err for better error reporting
+use fs_err::tokio as tokio_fs;
+
 mod cache;
 pub mod jlap;
 
@@ -231,7 +234,7 @@ async fn repodata_from_file(
     lock_file: LockedFile,
 ) -> Result<CachedRepoData, FetchRepoDataError> {
     // copy file from subdir_url to out_path
-    if let Err(e) = tokio::fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await {
+    if let Err(e) = tokio_fs::copy(&subdir_url.to_file_path().unwrap(), &out_path).await {
         return if e.kind() == ErrorKind::NotFound {
             Err(FetchRepoDataError::NotFound(
                 RepoDataNotFoundError::FileSystemError(e),
@@ -244,7 +247,7 @@ async fn repodata_from_file(
     // create a dummy cache state
     let new_cache_state = RepoDataState {
         url: subdir_url.clone(),
-        cache_size: tokio::fs::metadata(&out_path)
+        cache_size: tokio_fs::metadata(&out_path)
             .await
             .map_err(FetchRepoDataError::IoError)?
             .len(),
@@ -655,7 +658,7 @@ async fn stream_and_decode_to_file(
 
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
-    let file = tokio::fs::File::from_std(temp_file.as_file().try_clone().unwrap());
+    let file = tokio_fs::File::from_std(fs_err::File::from_parts(temp_file.as_file().try_clone().unwrap(), temp_file.path()));
     let mut hashing_file_writer = HashingWriter::<_, Blake2b256>::new(file);
 
     // Decode, hash and write the data to the file.

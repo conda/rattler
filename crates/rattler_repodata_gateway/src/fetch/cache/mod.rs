@@ -4,7 +4,8 @@ pub use cache_headers::CacheHeaders;
 use rattler_digest::{serde::SerializableHash, Blake2b256};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::serde_as;
-use std::{fs, fs::File, path::Path, str::FromStr, time::SystemTime};
+use std::{path::Path, str::FromStr, time::SystemTime};
+use fs_err as fs;
 use url::Url;
 
 /// Representation of the `.info.json` file alongside a `repodata.json` file.
@@ -72,7 +73,7 @@ impl RepoDataState {
 
     /// Save the cache state to the specified file.
     pub fn to_path(&self, path: &Path) -> Result<(), std::io::Error> {
-        let file = File::create(path)?;
+        let file = fs::File::create(path)?;
         Ok(serde_json::to_writer_pretty(file, self)?)
     }
 }
