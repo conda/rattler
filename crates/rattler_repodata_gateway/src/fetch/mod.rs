@@ -432,7 +432,9 @@ pub async fn fetch_repo_data(
                     cache_state
                         .to_path(&cache_state_path)
                         .map(|_| cache_state)
-                        .map_err(|e| FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e))
+                        .map_err(|e| {
+                            FetchRepoDataError::FailedToWriteCacheState(cache_state_path, e)
+                        })
                 })
                 .await??;
 
@@ -648,8 +650,8 @@ async fn stream_and_decode_to_file(
     );
 
     // Construct a temporary file
-    let temp_file =
-        NamedTempFile::new_in(temp_dir).map_err(|e| FetchRepoDataError::FailedToCreateTemporaryFile(temp_dir.to_path_buf(), e))?;
+    let temp_file = NamedTempFile::new_in(temp_dir)
+        .map_err(|e| FetchRepoDataError::FailedToCreateTemporaryFile(temp_dir.to_path_buf(), e))?;
 
     // Clone the file handle and create a hashing writer so we can compute a hash while the content
     // is being written to disk.
