@@ -210,6 +210,11 @@ fn is_python_record(record: &PackageRecord) -> bool {
 
 /// Returns true if the `from` and `to` describe the same package content
 fn describe_same_content(from: &PackageRecord, to: &PackageRecord) -> bool {
+    // If one hash is set and the other is not, the packages are different
+    if from.sha256.is_some() != to.sha256.is_some() || from.md5.is_some() != to.md5.is_some() {
+        return false;
+    }
+
     // If the hashes of the packages match we consider them to be equal
     if let (Some(a), Some(b)) = (from.sha256.as_ref(), to.sha256.as_ref()) {
         return a == b;

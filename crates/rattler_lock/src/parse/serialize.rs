@@ -1,26 +1,34 @@
 use std::{
-    borrow::Cow,
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet},
+    marker::PhantomData,
 };
 
 use itertools::Itertools;
 use pep508_rs::ExtraName;
-use rattler_conda_types::Platform;
+use rattler_conda_types::{PackageName, Platform, VersionWithSource};
 use serde::{Serialize, Serializer};
+use serde_with::{serde_as, SerializeAs};
 use url::Url;
 
 use crate::{
-    file_format_version::FileFormatVersion, utils::serde::RawCondaPackageData, Channel,
-    CondaPackage, EnvironmentPackageData, LockFile, Package, PypiIndexes, PypiPackage,
-    PypiPackageData, UrlOrPath,
+    file_format_version::FileFormatVersion,
+    parse::{models::v6, V6},
+    Channel, CondaPackage, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile,
+    LockFileInner, Package, PypiIndexes, PypiPackage, PypiPackageData, PypiPackageEnvironmentData,
+    UrlOrPath,
 };
 
+#[serde_as]
 #[derive(Serialize)]
-struct SerializableLockFile<'a> {
+#[serde(bound(serialize = "V: SerializeAs<PackageData<'a>>"))]
+struct SerializableLockFile<'a, V> {
     version: FileFormatVersion,
     environments: BTreeMap<&'a String, SerializableEnvironment<'a>>,
-    packages: Vec<SerializablePackageData<'a>>,
+    #[serde_as(as = "Vec<V>")]
+    packages: Vec<PackageData<'a>>,
+    #[serde(skip)]
+    _version: PhantomData<V>,
 }
 
 #[derive(Serialize)]
@@ -31,12 +39,56 @@ struct SerializableEnvironment<'a> {
     packages: BTreeMap<Platform, Vec<SerializablePackageSelector<'a>>>,
 }
 
+impl<'a> SerializableEnvironment<'a> {
+    fn from_environment(
+        inner: &'a LockFileInner,
+        env_data: &'a EnvironmentData,
+        used_conda_packages: &HashSet<usize>,
+        used_pypi_packages: &HashSet<usize>,
+    ) -> Self {
+        SerializableEnvironment {
+            channels: &env_data.channels,
+            indexes: env_data.indexes.as_ref(),
+            packages: env_data
+                .packages
+                .iter()
+                .map(|(platform, packages)| {
+                    (
+                        *platform,
+                        packages
+                            .iter()
+                            .map(|&package_data| {
+                                SerializablePackageSelector::from_lock_file(
+                                    inner,
+                                    package_data,
+                                    used_conda_packages,
+                                    used_pypi_packages,
+                                )
+                            })
+                            .sorted()
+                            .collect(),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Eq, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum SerializablePackageData<'a> {
-    Conda(RawCondaPackageData<'a>),
-    Pypi(&'a PypiPackageData),
+#[serde(untagged)]
+enum SerializablePackageDataV6<'a> {
+    Conda(v6::CondaPackageDataModel<'a>),
+    Pypi(v6::PypiPackageDataModel<'a>),
+}
+
+impl<'a> From<PackageData<'a>> for SerializablePackageDataV6<'a> {
+    fn from(package: PackageData<'a>) -> Self {
+        match package {
+            PackageData::Conda(p) => Self::Conda(p.into()),
+            PackageData::Pypi(p) => Self::Pypi(p.into()),
+        }
+    }
 }
 
 impl Serialize for Package {
@@ -56,8 +108,7 @@ impl Serialize for CondaPackage {
     where
         S: Serializer,
     {
-        SerializablePackageData::Conda(RawCondaPackageData::from(self.package_data()))
-            .serialize(serializer)
+        SerializablePackageDataV6::Conda(self.package_data().into()).serialize(serializer)
     }
 }
 
@@ -66,7 +117,7 @@ impl Serialize for PypiPackage {
     where
         S: Serializer,
     {
-        SerializablePackageData::Pypi(self.package_data()).serialize(serializer)
+        SerializablePackageDataV6::Pypi(self.package_data().into()).serialize(serializer)
     }
 }
 
@@ -74,7 +125,15 @@ impl Serialize for PypiPackage {
 #[serde(untagged, rename_all = "snake_case")]
 enum SerializablePackageSelector<'a> {
     Conda {
-        conda: &'a Url,
+        conda: &'a UrlOrPath,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<&'a PackageName>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        version: Option<&'a VersionWithSource>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        build: Option<&'a str>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        subdir: Option<&'a str>,
     },
     Pypi {
         pypi: &'a UrlOrPath,
@@ -83,13 +142,120 @@ enum SerializablePackageSelector<'a> {
     },
 }
 
-impl<'a> SerializablePackageSelector<'a> {
-    fn url(&self) -> Cow<'_, UrlOrPath> {
+#[derive(Copy, Clone)]
+enum CondaDisambiguityFilter {
+    Name,
+    Version,
+    Build,
+    Subdir,
+}
+
+impl CondaDisambiguityFilter {
+    fn all() -> [CondaDisambiguityFilter; 4] {
+        [Self::Name, Self::Version, Self::Build, Self::Subdir]
+    }
+
+    fn filter(&self, package: &CondaPackageData, other: &CondaPackageData) -> bool {
         match self {
-            SerializablePackageSelector::Conda { conda } => {
-                Cow::Owned(UrlOrPath::Url((*conda).clone()))
+            Self::Name => package.package_record.name == other.package_record.name,
+            Self::Version => package.package_record.version == other.package_record.version,
+            Self::Build => package.package_record.build == other.package_record.build,
+            Self::Subdir => package.package_record.subdir == other.package_record.subdir,
+        }
+    }
+}
+
+impl<'a> SerializablePackageSelector<'a> {
+    fn from_lock_file(
+        inner: &'a LockFileInner,
+        package: EnvironmentPackageData,
+        used_conda_packages: &HashSet<usize>,
+        used_pypi_packages: &HashSet<usize>,
+    ) -> Self {
+        match package {
+            EnvironmentPackageData::Conda(idx) => {
+                Self::from_conda(inner, &inner.conda_packages[idx], used_conda_packages)
             }
-            SerializablePackageSelector::Pypi { pypi, .. } => Cow::Borrowed(pypi),
+            EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Self::from_pypi(
+                inner,
+                &inner.pypi_packages[pkg_data_idx],
+                &inner.pypi_environment_package_data[env_data_idx],
+                used_pypi_packages,
+            ),
+        }
+    }
+
+    fn from_conda(
+        inner: &'a LockFileInner,
+        package: &'a CondaPackageData,
+        used_conda_packages: &HashSet<usize>,
+    ) -> Self {
+        // Find all packages that share the same location
+        let mut similar_packages = inner
+            .conda_packages
+            .iter()
+            .enumerate()
+            .filter_map(|(idx, p)| used_conda_packages.contains(&idx).then_some(p))
+            .filter(|p| p.location == package.location)
+            .collect::<Vec<_>>();
+
+        // Iterate over other distinguising factors and reduce the set of possible
+        // packages to a minimum with the least number of keys added.
+        let mut name = None;
+        let mut version = None;
+        let mut build = None;
+        let mut subdir = None;
+        while similar_packages.len() > 1 {
+            let (filter, similar) = CondaDisambiguityFilter::all()
+                .into_iter()
+                .map(|filter| {
+                    (
+                        filter,
+                        similar_packages
+                            .iter()
+                            .copied()
+                            .filter(|p| filter.filter(package, p))
+                            .collect_vec(),
+                    )
+                })
+                .min_by_key(|(_filter, set)| set.len())
+                .expect("cannot be empty because the set should always contain `package`");
+
+            similar_packages = similar;
+            match filter {
+                CondaDisambiguityFilter::Name => {
+                    name = Some(&package.package_record.name);
+                }
+                CondaDisambiguityFilter::Version => {
+                    version = Some(&package.package_record.version);
+                }
+                CondaDisambiguityFilter::Build => {
+                    build = Some(package.package_record.build.as_str());
+                }
+                CondaDisambiguityFilter::Subdir => {
+                    subdir = Some(package.package_record.subdir.as_str());
+                }
+            }
+        }
+
+        Self::Conda {
+            conda: &package.location,
+            name,
+            version,
+            build,
+            subdir,
+        }
+    }
+
+    fn from_pypi(
+        _inner: &'a LockFileInner,
+        package: &'a PypiPackageData,
+        env: &'a PypiPackageEnvironmentData,
+        _used_pypi_packages: &HashSet<usize>,
+    ) -> Self {
+        Self::Pypi {
+            pypi: &package.location,
+            extras: &env.extras,
         }
     }
 }
@@ -118,18 +284,29 @@ impl<'a> Ord for SerializablePackageSelector<'a> {
                 Ordering::Greater
             }
             (
-                SerializablePackageSelector::Conda { conda: a },
-                SerializablePackageSelector::Conda { conda: b },
-            ) => compare_url_by_filename(a, b),
+                SerializablePackageSelector::Conda {
+                    conda: a,
+                    name: name_a,
+                    build: build_a,
+                    version: version_a,
+                    subdir: subdir_a,
+                },
+                SerializablePackageSelector::Conda {
+                    conda: b,
+                    name: name_b,
+                    build: build_b,
+                    version: version_b,
+                    subdir: subdir_b,
+                },
+            ) => compare_url_by_location(a, b)
+                .then_with(|| name_a.cmp(name_b))
+                .then_with(|| version_a.cmp(version_b))
+                .then_with(|| build_a.cmp(build_b))
+                .then_with(|| subdir_a.cmp(subdir_b)),
             (
                 SerializablePackageSelector::Pypi { pypi: a, .. },
                 SerializablePackageSelector::Pypi { pypi: b, .. },
-            ) => match (a, b) {
-                (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
-                (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
-                (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
-                (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.cmp(b),
-            },
+            ) => compare_url_by_location(a, b),
         }
     }
 }
@@ -156,42 +333,21 @@ fn compare_url_by_filename(a: &Url, b: &Url) -> Ordering {
     a.cmp(b)
 }
 
-impl<'a> SerializablePackageData<'a> {
-    fn source_name(&self) -> &str {
-        match self {
-            SerializablePackageData::Conda(p) => p.name.as_source(),
-            SerializablePackageData::Pypi(p) => p.name.as_ref(),
-        }
-    }
-
-    fn url(&self) -> Cow<'_, UrlOrPath> {
-        match self {
-            SerializablePackageData::Conda(p) => {
-                Cow::Owned(UrlOrPath::Url(p.url.clone().into_owned()))
-            }
-            SerializablePackageData::Pypi(p) => Cow::Borrowed(&p.url_or_path),
-        }
+fn compare_url_by_location(a: &UrlOrPath, b: &UrlOrPath) -> Ordering {
+    match (a, b) {
+        (UrlOrPath::Url(a), UrlOrPath::Url(b)) => compare_url_by_filename(a, b),
+        (UrlOrPath::Url(_), UrlOrPath::Path(_)) => Ordering::Less,
+        (UrlOrPath::Path(_), UrlOrPath::Url(_)) => Ordering::Greater,
+        (UrlOrPath::Path(a), UrlOrPath::Path(b)) => a.as_str().cmp(b.as_str()),
     }
 }
 
-impl PartialOrd for SerializablePackageData<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for SerializablePackageData<'_> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use SerializablePackageData::{Conda, Pypi};
-        // First sort by name, then by package type specific attributes
-        self.source_name()
-            .cmp(other.source_name())
-            .then_with(|| match (self, other) {
-                (Conda(a), Conda(b)) => a.cmp(b),
-                (Pypi(a), Pypi(b)) => a.cmp(b),
-                (Pypi(_), _) => Ordering::Less,
-                (_, Pypi(_)) => Ordering::Greater,
-            })
+impl<'a> SerializeAs<PackageData<'a>> for V6 {
+    fn serialize_as<S>(source: &PackageData<'a>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        SerializablePackageDataV6::from(*source).serialize(serializer)
     }
 }
 
@@ -202,92 +358,102 @@ impl Serialize for LockFile {
     {
         let inner = self.inner.as_ref();
 
-        // Get all packages.
-        let mut packages = inner
-            .conda_packages
-            .iter()
-            .map(RawCondaPackageData::from)
-            .map(SerializablePackageData::Conda)
-            .chain(
-                inner
-                    .pypi_packages
-                    .iter()
-                    .map(SerializablePackageData::Pypi),
-            )
-            .collect::<Vec<_>>();
+        // Determine the package indexes that are used in the lock-file.
+        let mut used_conda_packages = HashSet::new();
+        let mut used_pypi_packages = HashSet::new();
+        for env in inner.environments.iter() {
+            for packages in env.packages.values() {
+                for package in packages {
+                    match package {
+                        EnvironmentPackageData::Conda(idx) => {
+                            used_conda_packages.insert(*idx);
+                        }
+                        EnvironmentPackageData::Pypi(pkg_idx, _env_idx) => {
+                            used_pypi_packages.insert(*pkg_idx);
+                        }
+                    }
+                }
+            }
+        }
 
-        // Get all environments
+        // Collect all environments
         let environments = inner
             .environment_lookup
             .iter()
             .map(|(name, env_idx)| {
-                let env_data = &inner.environments[*env_idx];
                 (
                     name,
-                    SerializableEnvironment {
-                        channels: &env_data.channels,
-                        indexes: env_data.indexes.as_ref(),
-                        packages: env_data
-                            .packages
-                            .iter()
-                            .map(|(platform, packages)| {
-                                (
-                                    *platform,
-                                    packages
-                                        .iter()
-                                        .map(|package_data| match *package_data {
-                                            EnvironmentPackageData::Conda(conda_index) => {
-                                                SerializablePackageSelector::Conda {
-                                                    conda: &inner.conda_packages[conda_index].url,
-                                                }
-                                            }
-                                            EnvironmentPackageData::Pypi(
-                                                pypi_index,
-                                                pypi_runtime_index,
-                                            ) => {
-                                                let pypi_package = &inner.pypi_packages[pypi_index];
-                                                let pypi_runtime = &inner
-                                                    .pypi_environment_package_data
-                                                    [pypi_runtime_index];
-                                                SerializablePackageSelector::Pypi {
-                                                    pypi: &pypi_package.url_or_path,
-                                                    extras: &pypi_runtime.extras,
-                                                }
-                                            }
-                                        })
-                                        .sorted()
-                                        .collect(),
-                                )
-                            })
-                            .collect(),
-                    },
+                    SerializableEnvironment::from_environment(
+                        inner,
+                        &inner.environments[*env_idx],
+                        &used_conda_packages,
+                        &used_pypi_packages,
+                    ),
                 )
             })
             .collect::<BTreeMap<_, _>>();
 
-        // Determine the URLs that are used in the environments.
-        let used_urls_in_envs = environments
-            .values()
-            .flat_map(|env| {
-                env.packages
-                    .values()
-                    .flat_map(|packages| packages.iter().map(SerializablePackageSelector::url))
-            })
-            .collect::<HashSet<_>>();
+        // Get all packages.
+        let conda_packages = inner
+            .conda_packages
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| used_conda_packages.contains(idx))
+            .map(|(_, p)| PackageData::Conda(p));
 
-        // Only retain the packages that are used in the environments.
-        packages.retain(|p| used_urls_in_envs.contains(&p.url()));
+        let pypi_packages = inner
+            .pypi_packages
+            .iter()
+            .enumerate()
+            .filter(|(idx, _)| used_pypi_packages.contains(idx))
+            .map(|(_, p)| PackageData::Pypi(p));
 
         // Sort the packages in a deterministic order. See [`SerializablePackageData`]
         // for more information.
-        packages.sort();
+        let packages = itertools::chain!(conda_packages, pypi_packages).sorted();
 
         let raw = SerializableLockFile {
             version: FileFormatVersion::LATEST,
             environments,
-            packages,
+            packages: packages.collect(),
+            _version: PhantomData::<V6>,
         };
 
         raw.serialize(serializer)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+pub enum PackageData<'a> {
+    Conda(&'a CondaPackageData),
+    Pypi(&'a PypiPackageData),
+}
+
+impl<'a> PackageData<'a> {
+    fn source_name(&self) -> &str {
+        match self {
+            PackageData::Conda(p) => p.package_record.name.as_source(),
+            PackageData::Pypi(p) => p.name.as_ref(),
+        }
+    }
+}
+
+impl<'a> PartialOrd<Self> for PackageData<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<'a> Ord for PackageData<'a> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        use PackageData::{Conda, Pypi};
+        self.source_name()
+            .cmp(other.source_name())
+            .then_with(|| match (self, other) {
+                (Conda(a), Conda(b)) => a.cmp(b),
+                (Pypi(a), Pypi(b)) => a.cmp(b),
+                (Pypi(_), _) => Ordering::Less,
+                (_, Pypi(_)) => Ordering::Greater,
+            })
     }
 }

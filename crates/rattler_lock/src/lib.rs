@@ -103,7 +103,7 @@ mod utils;
 
 pub use builder::LockFileBuilder;
 pub use channel::Channel;
-pub use conda::{CondaPackageData, ConversionError};
+pub use conda::{CondaPackageData, ConversionError, InputHash};
 pub use file_format_version::FileFormatVersion;
 pub use hash::PackageHashes;
 pub use parse::ParseCondaLockError;
@@ -198,6 +198,12 @@ impl LockFile {
             .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
     }
 
+    /// Writes the conda lock to a string
+    pub fn render_to_string(&self) -> Result<String, std::io::Error> {
+        serde_yaml::to_string(self)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))
+    }
+
     /// Returns the environment with the given name.
     pub fn environment(&self, name: &str) -> Option<Environment> {
         let index = *self.inner.environment_lookup.get(name)?;
@@ -275,9 +281,10 @@ impl Environment {
         &self,
         platform: Platform,
     ) -> Option<impl DoubleEndedIterator<Item = Package> + ExactSizeIterator + '_> {
-        let packages = self.data().packages.get(&platform)?;
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
                 .map(move |package| Package::from_env_package(*package, self.inner.clone())),
         )
@@ -307,25 +314,39 @@ impl Environment {
     /// Returns all pypi packages for all platforms
     pub fn pypi_packages(
         &self,
-    ) -> HashMap<Platform, Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
+    ) -> impl ExactSizeIterator<
+        Item = (
+            Platform,
+            impl DoubleEndedIterator<Item = (&PypiPackageData, &PypiPackageEnvironmentData)>,
+        ),
+    > + '_ {
         let env_data = self.data();
-        env_data
-            .packages
-            .iter()
-            .map(|(platform, packages)| {
-                let records = packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(_) => None,
-                        EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
-                            self.inner.pypi_packages[*pkg_data_idx].clone(),
-                            self.inner.pypi_environment_package_data[*env_data_idx].clone(),
-                        )),
-                    })
-                    .collect();
-                (*platform, records)
-            })
-            .collect()
+        env_data.packages.iter().map(|(platform, packages)| {
+            let records = packages.iter().filter_map(|package| match package {
+                EnvironmentPackageData::Conda(_) => None,
+                EnvironmentPackageData::Pypi(pkg_data_idx, env_data_idx) => Some((
+                    &self.inner.pypi_packages[*pkg_data_idx],
+                    &self.inner.pypi_environment_package_data[*env_data_idx],
+                )),
+            });
+            (*platform, records)
+        })
+    }
+
+    /// Returns all conda packages for all platforms.
+    pub fn conda_packages(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (Platform, impl DoubleEndedIterator<Item = &CondaPackageData>)> + '_
+    {
+        self.data().packages.iter().map(|(platform, packages)| {
+            (
+                *platform,
+                packages.iter().filter_map(|package| match package {
+                    EnvironmentPackageData::Conda(idx) => Some(&self.inner.conda_packages[*idx]),
+                    EnvironmentPackageData::Pypi(_, _) => None,
+                }),
+            )
+        })
     }
 
     /// Returns all conda packages for all platforms and converts them to
@@ -333,47 +354,49 @@ impl Environment {
     pub fn conda_repodata_records(
         &self,
     ) -> Result<HashMap<Platform, Vec<RepoDataRecord>>, ConversionError> {
-        let env_data = self.data();
-        env_data
-            .packages
-            .iter()
+        self.conda_packages()
             .map(|(platform, packages)| {
-                packages
-                    .iter()
-                    .filter_map(|package| match package {
-                        EnvironmentPackageData::Conda(idx) => {
-                            Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                        }
-                        EnvironmentPackageData::Pypi(_, _) => None,
-                    })
-                    .collect::<Result<_, _>>()
-                    .map(|records| (*platform, records))
+                Ok((
+                    platform,
+                    packages
+                        .map(RepoDataRecord::try_from)
+                        .collect::<Result<Vec<_>, ConversionError>>()?,
+                ))
             })
             .collect()
+    }
+
+    /// Returns all conda packages for a specific platform.
+    pub fn conda_packages_for_platform(
+        &self,
+        platform: Platform,
+    ) -> Option<impl DoubleEndedIterator<Item = &CondaPackageData> + '_> {
+        Some(
+            self.data()
+                .packages
+                .get(&platform)?
+                .iter()
+                .filter_map(|package| match package {
+                    EnvironmentPackageData::Conda(idx) => Some(&self.inner.conda_packages[*idx]),
+                    EnvironmentPackageData::Pypi(_, _) => None,
+                }),
+        )
     }
 
     /// Takes all the conda packages, converts them to [`RepoDataRecord`] and
     /// returns them or returns an error if the conversion failed. Returns
     /// `None` if the specified platform is not defined for this
     /// environment.
+    ///
+    /// This method ignores any conda packages that do not refer to repodata
+    /// records.
     pub fn conda_repodata_records_for_platform(
         &self,
         platform: Platform,
     ) -> Result<Option<Vec<RepoDataRecord>>, ConversionError> {
-        let Some(packages) = self.data().packages.get(&platform) else {
-            return Ok(None);
-        };
-
-        packages
-            .iter()
-            .filter_map(|package| match package {
-                EnvironmentPackageData::Conda(idx) => {
-                    Some(RepoDataRecord::try_from(&self.inner.conda_packages[*idx]))
-                }
-                EnvironmentPackageData::Pypi(_, _) => None,
-            })
-            .collect::<Result<_, _>>()
-            .map(Some)
+        self.conda_packages_for_platform(platform)
+            .map(|packages| packages.map(RepoDataRecord::try_from).collect())
+            .transpose()
     }
 
     /// Returns all the pypi packages and their associated environment data for
@@ -382,20 +405,20 @@ impl Environment {
     pub fn pypi_packages_for_platform(
         &self,
         platform: Platform,
-    ) -> Option<Vec<(PypiPackageData, PypiPackageEnvironmentData)>> {
-        let packages = self.data().packages.get(&platform)?;
-
+    ) -> Option<impl DoubleEndedIterator<Item = (&PypiPackageData, &PypiPackageEnvironmentData)> + '_>
+    {
         Some(
-            packages
+            self.data()
+                .packages
+                .get(&platform)?
                 .iter()
                 .filter_map(|package| match package {
                     EnvironmentPackageData::Conda(_) => None,
                     EnvironmentPackageData::Pypi(package_idx, env_idx) => Some((
-                        self.inner.pypi_packages[*package_idx].clone(),
-                        self.inner.pypi_environment_package_data[*env_idx].clone(),
+                        &self.inner.pypi_packages[*package_idx],
+                        &self.inner.pypi_environment_package_data[*env_idx],
                     )),
-                })
-                .collect(),
+                }),
         )
     }
 
@@ -506,10 +529,10 @@ impl Package {
     }
 
     /// Returns the URL or relative path to the package
-    pub fn url_or_path(&self) -> Cow<'_, UrlOrPath> {
+    pub fn location(&self) -> &UrlOrPath {
         match self {
-            Self::Conda(value) => Cow::Owned(UrlOrPath::Url(value.url().clone())),
-            Self::Pypi(value) => Cow::Borrowed(value.url()),
+            Self::Conda(value) => value.location(),
+            Self::Pypi(value) => value.location(),
         }
     }
 }
@@ -522,7 +545,8 @@ pub struct CondaPackage {
 }
 
 impl CondaPackage {
-    fn package_data(&self) -> &CondaPackageData {
+    /// Returns the package data
+    pub fn package_data(&self) -> &CondaPackageData {
         &self.inner.conda_packages[self.index]
     }
 
@@ -531,19 +555,15 @@ impl CondaPackage {
         &self.package_data().package_record
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &Url {
-        &self.package_data().url
-    }
-
-    /// Returns the filename of the package.
-    pub fn file_name(&self) -> Option<&str> {
-        self.package_data().file_name()
+    /// Returns the location of the package, this is the place where the package
+    /// can be downloaded from.
+    pub fn location(&self) -> &UrlOrPath {
+        &self.package_data().location
     }
 
     /// Returns the channel of the package.
     pub fn channel(&self) -> Option<Url> {
-        self.package_data().channel()
+        self.package_data().channel.clone()
     }
 
     /// Returns true if this package satisfies the given `spec`.
@@ -555,7 +575,11 @@ impl CondaPackage {
 
         // Check the the channel
         if let Some(channel) = &spec.channel {
-            if !self.url().as_str().starts_with(channel.base_url.as_str()) {
+            if !self
+                .location()
+                .as_str()
+                .starts_with(channel.base_url.as_str())
+            {
                 return false;
             }
         }
@@ -587,27 +611,20 @@ pub struct PypiPackage {
 }
 
 impl PypiPackage {
-    /// Returns references to the internal data structures.
-    pub fn data(&self) -> PypiPackageDataRef<'_> {
-        PypiPackageDataRef {
-            package: self.package_data(),
-            environment: self.environment_data(),
-        }
-    }
-
     /// Returns the runtime data from the internal data structure.
-    fn environment_data(&self) -> &PypiPackageEnvironmentData {
+    pub fn environment_data(&self) -> &PypiPackageEnvironmentData {
         &self.inner.pypi_environment_package_data[self.runtime_index]
     }
 
     /// Returns the package data from the internal data structure.
-    fn package_data(&self) -> &PypiPackageData {
+    pub fn package_data(&self) -> &PypiPackageData {
         &self.inner.pypi_packages[self.package_index]
     }
 
-    /// Returns the URL of the package
-    pub fn url(&self) -> &UrlOrPath {
-        &self.package_data().url_or_path
+    /// Returns the location of the package, this is the place where the package
+    /// can be downloaded from.
+    pub fn location(&self) -> &UrlOrPath {
+        &self.package_data().location
     }
 
     /// Returns the extras enabled for this package
@@ -626,20 +643,12 @@ impl PypiPackage {
     }
 }
 
-/// A helper struct to group package and environment data together.
-#[derive(Copy, Clone)]
-pub struct PypiPackageDataRef<'p> {
-    /// The package data. This information is deduplicated between environments.
-    pub package: &'p PypiPackageData,
-
-    /// Environment specific data for the package. This information is specific
-    /// to the environment.
-    pub environment: &'p PypiPackageEnvironmentData,
-}
-
 #[cfg(test)]
 mod test {
-    use std::path::Path;
+    use std::{
+        path::{Path, PathBuf},
+        str::FromStr,
+    };
 
     use rattler_conda_types::Platform;
     use rstest::*;
@@ -647,16 +656,19 @@ mod test {
     use super::{LockFile, DEFAULT_ENVIRONMENT_NAME};
 
     #[rstest]
-    #[case("v0/numpy-conda-lock.yml")]
-    #[case("v0/python-conda-lock.yml")]
-    #[case("v0/pypi-matplotlib-conda-lock.yml")]
-    #[case("v3/robostack-turtlesim-conda-lock.yml")]
-    #[case("v4/numpy-lock.yml")]
-    #[case("v4/python-lock.yml")]
-    #[case("v4/pypi-matplotlib-lock.yml")]
-    #[case("v4/turtlesim-lock.yml")]
-    #[case("v4/path-based-lock.yml")]
-    #[case("v5/flat-index-lock.yml")]
+    #[case::v0_numpy("v0/numpy-conda-lock.yml")]
+    #[case::v0_python("v0/python-conda-lock.yml")]
+    #[case::v0_pypi_matplotlib("v0/pypi-matplotlib-conda-lock.yml")]
+    #[case::v3_robostack("v3/robostack-turtlesim-conda-lock.yml")]
+    #[case::v3_numpy("v4/numpy-lock.yml")]
+    #[case::v4_python("v4/python-lock.yml")]
+    #[case::v4_pypi_matplotlib("v4/pypi-matplotlib-lock.yml")]
+    #[case::v4_turtlesim("v4/turtlesim-lock.yml")]
+    #[case::v4_pypi_path("v4/path-based-lock.yml")]
+    #[case::v4_pypi_absolute_path("v4/absolute-path-lock.yml")]
+    #[case::v5_pypi_flat_index("v5/flat-index-lock.yml")]
+    #[case::v6_conda_source_path("v6/conda-path-lock.yml")]
+    #[case::v6_derived_channel("v6/derived-channel-lock.yml")]
     fn test_parse(#[case] file_name: &str) {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../test-data/conda-lock")
@@ -665,12 +677,33 @@ mod test {
         insta::assert_yaml_snapshot!(file_name, conda_lock);
     }
 
+    #[rstest]
+    fn test_roundtrip(
+        #[files("../../test-data/conda-lock/**/*.yml")]
+        #[exclude("forward-compatible-lock")]
+        path: PathBuf,
+    ) {
+        // Load the lock-file
+        let conda_lock = LockFile::from_path(&path).unwrap();
+
+        // Serialize the lock-file
+        let rendered_lock_file = conda_lock.render_to_string().unwrap();
+
+        // Parse the rendered lock-file again
+        let parsed_lock_file = LockFile::from_str(&rendered_lock_file).unwrap();
+
+        // And re-render again
+        let rerendered_lock_file = parsed_lock_file.render_to_string().unwrap();
+
+        similar_asserts::assert_eq!(rendered_lock_file, rerendered_lock_file);
+    }
+
     /// Absolute paths on Windows are not properly parsed.
     /// See: <https://github.com/conda/rattler/issues/615>
     #[test]
     fn test_issue_615() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../test-data/conda-lock/absolute-path-lock.yml");
+            .join("../../test-data/conda-lock/v4/absolute-path-lock.yml");
         let conda_lock = LockFile::from_path(&path);
         assert!(conda_lock.is_ok());
     }
@@ -689,7 +722,7 @@ mod test {
             .unwrap()
             .packages(Platform::Linux64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
 
         insta::assert_yaml_snapshot!(conda_lock
@@ -697,7 +730,7 @@ mod test {
             .unwrap()
             .packages(Platform::Osx64)
             .unwrap()
-            .map(|p| p.url_or_path().into_owned())
+            .map(|p| p.location().to_string())
             .collect::<Vec<_>>());
     }
 }

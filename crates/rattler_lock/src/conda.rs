@@ -1,28 +1,41 @@
+use std::{cmp::Ordering, hash::Hash};
+
 use rattler_conda_types::{PackageRecord, RepoDataRecord};
-use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, skip_serializing_none};
-use std::cmp::Ordering;
+use rattler_digest::Sha256Hash;
 use url::Url;
 
-/// A locked conda dependency is just a [`PackageRecord`] with some additional information on where
-/// it came from. It is very similar to a [`RepoDataRecord`], but it does not explicitly contain the
-/// channel name.
-#[serde_as]
-#[skip_serializing_none]
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Debug, Hash)]
+use crate::UrlOrPath;
+
+/// A locked conda dependency is just a [`PackageRecord`] with some additional
+/// information on where it came from. It is very similar to a
+/// [`RepoDataRecord`], but it does not explicitly contain the channel name.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CondaPackageData {
     /// The package record.
-    #[serde(flatten)]
     pub package_record: PackageRecord,
 
-    /// The location of the package.
-    pub url: Url,
+    /// The location of the package. This can be a URL or a local path.
+    pub location: UrlOrPath,
 
-    /// The filename of the package if the last segment of the url does not refer to the filename.
-    pub(crate) file_name: Option<String>,
+    /// The filename of the package.
+    pub file_name: Option<String>,
 
     /// The channel of the package if this cannot be derived from the url.
-    pub(crate) channel: Option<Url>,
+    pub channel: Option<Url>,
+
+    /// The input hash of the package (only valid for source packages)
+    pub input: Option<InputHash>,
+}
+
+/// A record of input files that were used to define the metadata of the
+/// package.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct InputHash {
+    /// The hash of all input files combined.
+    pub hash: Sha256Hash,
+
+    /// The globs that were used to define the input files.
+    pub globs: Vec<String>,
 }
 
 impl AsRef<PackageRecord> for CondaPackageData {
@@ -39,9 +52,9 @@ impl PartialOrd<Self> for CondaPackageData {
 
 impl Ord for CondaPackageData {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.package_record
-            .name
-            .cmp(&other.package_record.name)
+        self.location
+            .cmp(&other.location)
+            .then_with(|| self.package_record.name.cmp(&other.package_record.name))
             .then_with(|| {
                 self.package_record
                     .version
@@ -52,36 +65,15 @@ impl Ord for CondaPackageData {
     }
 }
 
-impl CondaPackageData {
-    /// Returns the filename of the package.
-    pub fn file_name(&self) -> Option<&str> {
-        self.file_name
-            .as_deref()
-            .or_else(|| file_name_from_url(&self.url))
-    }
-
-    /// Returns the channel of the package.
-    pub fn channel(&self) -> Option<Url> {
-        self.channel.clone().or_else(|| channel_from_url(&self.url))
-    }
-}
-
 impl From<RepoDataRecord> for CondaPackageData {
     fn from(value: RepoDataRecord) -> Self {
-        let derived_file_name = file_name_from_url(&value.url);
-        let file_name = if derived_file_name == Some(value.file_name.as_str()) {
-            None
-        } else {
-            Some(value.file_name)
-        };
-
+        let location = UrlOrPath::from(value.url).normalize().into_owned();
         Self {
             package_record: value.package_record,
-            url: value.url,
-            file_name,
-            // TODO: This is not entirely correct. It should be derived from the `channel` field in
-            //  the repodata record.
-            channel: None,
+            file_name: Some(value.file_name),
+            channel: Url::parse(&value.channel).ok(),
+            location,
+            input: None,
         }
     }
 }
@@ -100,18 +92,17 @@ impl TryFrom<CondaPackageData> for RepoDataRecord {
     fn try_from(value: CondaPackageData) -> Result<Self, Self::Error> {
         // Determine the channel and file name based on the url stored in the record.
         let channel = value
-            .channel()
+            .channel
             .map_or_else(String::default, |url| url.to_string());
 
         let file_name = value
-            .file_name()
-            .ok_or_else(|| ConversionError::Missing("file name".to_string()))?
-            .to_string();
+            .file_name
+            .ok_or_else(|| ConversionError::Missing("file name".to_string()))?;
 
         Ok(Self {
             package_record: value.package_record,
             file_name,
-            url: value.url,
+            url: value.location.try_into_url()?,
             channel,
         })
     }
@@ -123,56 +114,8 @@ pub enum ConversionError {
     /// This field was found missing during the conversion
     #[error("missing field/fields '{0}'")]
     Missing(String),
-}
 
-/// Package filename from the url
-fn file_name_from_url(url: &Url) -> Option<&str> {
-    let path = url.path_segments()?;
-    path.last()
-}
-
-/// Channel from url, this is everything before the filename and the subdir
-/// So for example: <https://conda.anaconda.org/conda-forge/> is a channel name
-/// that we parse from something like: <https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda>
-fn channel_from_url(url: &Url) -> Option<Url> {
-    let mut result = url.clone();
-
-    // Strip the last two path segments. We assume the first one contains the file_name, and the
-    // other the subdirectory.
-    result.path_segments_mut().ok()?.pop().pop();
-
-    Some(result)
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_channel_from_url() {
-        assert_eq!(channel_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some(Url::parse("https://conda.anaconda.org/conda-forge").unwrap()));
-        assert_eq!(
-            channel_from_url(
-                &Url::parse(
-                    "file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b/noarch/foo-1-0.conda"
-                )
-                .unwrap()
-            ),
-            Some(Url::parse("file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b").unwrap())
-        );
-    }
-
-    #[test]
-    fn test_file_name_from_url() {
-        assert_eq!(file_name_from_url(&Url::parse("https://conda.anaconda.org/conda-forge/osx-64/python-3.11.0-h4150a38_1_cpython.conda").unwrap()), Some("python-3.11.0-h4150a38_1_cpython.conda"));
-        assert_eq!(
-            file_name_from_url(
-                &Url::parse(
-                    "file:///C:/Users/someone/AppData/Local/Temp/.tmpsasJ7b/noarch/foo-1-0.conda"
-                )
-                .unwrap()
-            ),
-            Some("foo-1-0.conda")
-        );
-    }
+    /// The location of the conda package cannot be converted to a URL
+    #[error(transparent)]
+    LocationToUrlConversionError(#[from] file_url::FileURLParseError),
 }
