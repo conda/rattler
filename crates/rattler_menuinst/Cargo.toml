@@ -17,13 +17,17 @@ serde = { workspace = true, features = ["derive"] }
 shlex = { workspace = true }
 serde_json = { workspace = true }
 sha1 = "0.10.6"
-tracing = { workspace = true }
+tracing.workspace = true
 rattler_conda_types = { path="../rattler_conda_types", version = "0.27.2", default-features = false }
 thiserror = { workspace = true }
 unicode-normalization = "0.1.24"
 regex.workspace = true
 tempfile.workspace = true
 fs-err = "2.11.0"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = "0.3.9"
+winreg = "0.52.0"
 
 [dev-dependencies]
 insta = { workspace = true }
