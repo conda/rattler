@@ -4,17 +4,17 @@ use rattler_conda_types::Platform;
 
 mod linux;
 mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
 mod render;
 mod schema;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub mod slugify;
 pub use slugify::slugify;
 
 pub mod utils;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum MenuMode {
     System,
     User,
@@ -34,6 +34,9 @@ pub enum MenuInstError {
     PlistError(#[from] plist::Error),
     #[error("Failed to sign plist: {0}")]
     SigningFailed(String),
+
+    #[error("XML Error: {0}")]
+    XmlError(#[from] xmltree::Error),
 }
 
 // Install menu items from a given schema file
@@ -52,7 +55,7 @@ pub fn install_menuitems(
             let mut linux_item = item.platforms.linux.clone().unwrap();
             let base_item = linux_item.base.merge_parent(&item);
             linux_item.base = base_item;
-            linux::install_menu_item(linux_item, MenuMode::System)?;
+            linux::install_menu_item(linux_item, MenuMode::User)?;
         } else if item.platforms.osx.is_some() && platform.is_osx() {
             let mut macos_item = item.platforms.osx.clone().unwrap();
             let base_item = macos_item.base.merge_parent(&item);
@@ -88,7 +91,7 @@ pub mod test {
         let prefix = std::fs::canonicalize(prefix).unwrap();
         println!("prefix: {:?}", prefix);
         let base_prefix = PathBuf::from("/Users/jaidevd/miniconda3");
-        let platform = Platform::OsxArm64;
+        let platform = Platform::Linux64;
 
         install_menuitems(&schema_path, &prefix, &base_prefix, &platform).unwrap();
     }

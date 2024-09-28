@@ -158,7 +158,13 @@ impl MacOSMenu {
         }
 
         if self.needs_appkit_launcher() {
-            println!("Writing plist to {}", self.directories.nested_location.join("Contents/Info.plist").display());
+            println!(
+                "Writing plist to {}",
+                self.directories
+                    .nested_location
+                    .join("Contents/Info.plist")
+                    .display()
+            );
             plist::to_file_xml(
                 self.directories.nested_location.join("Contents/Info.plist"),
                 &pl,
@@ -261,7 +267,13 @@ impl MacOSMenu {
                 // pl.insert("UTImportedTypeDeclarations".into(), Value::Array(type_array));
             });
 
-        println!("Writing plist to {}", self.directories.location.join("Contents/Info.plist").display());
+        println!(
+            "Writing plist to {}",
+            self.directories
+                .location
+                .join("Contents/Info.plist")
+                .display()
+        );
         plist::to_file_xml(self.directories.location.join("Contents/Info.plist"), &pl)?;
 
         Ok(())
@@ -442,7 +454,7 @@ impl MacOSMenu {
 
     fn default_appkit_launcher_path(&self) -> PathBuf {
         let name = slugify(&self.item.base.name);
-        self.directories.location.join("Contents/MacOS").join(&name)
+        self.directories.location.join("Contents/MacOS").join(name)
     }
 
     fn default_launcher_path(&self) -> PathBuf {
@@ -523,7 +535,7 @@ pub(crate) fn install_menu_item(
 ) -> Result<(), MenuInstError> {
     let bundle_name = macos_item.cf_bundle_name.as_ref().unwrap();
     let directories = Directories::new(menu_mode, bundle_name);
-    println!("Installing menu item for {}", bundle_name);
+    println!("Installing menu item for {bundle_name}");
     let menu = MacOSMenu::new(prefix, macos_item, directories);
     menu.install()
 }

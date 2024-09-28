@@ -77,26 +77,26 @@ pub struct Windows {
 pub struct Linux {
     #[serde(flatten)]
     pub base: BasePlatformSpecific,
-    #[serde(rename = "Categories")]
-    pub categories: Option<Vec<String>>,
+    #[serde(rename = "Categories", default, skip_serializing_if = "Vec::is_empty")]
+    pub categories: Vec<String>,
     #[serde(rename = "DBusActivatable")]
     pub dbus_activatable: Option<bool>,
     #[serde(rename = "GenericName")]
     pub generic_name: Option<String>,
     #[serde(rename = "Hidden")]
     pub hidden: Option<bool>,
-    #[serde(rename = "Implements")]
-    pub implements: Option<Vec<String>>,
-    #[serde(rename = "Keywords")]
-    pub keywords: Option<Vec<String>>,
-    #[serde(rename = "MimeType")]
-    pub mime_type: Option<Vec<String>>,
+    #[serde(rename = "Implements", default, skip_serializing_if = "Vec::is_empty")]
+    pub implements: Vec<String>,
+    #[serde(rename = "Keywords", default, skip_serializing_if = "Vec::is_empty")]
+    pub keywords: Vec<String>,
+    #[serde(rename = "MimeType", default, skip_serializing_if = "Vec::is_empty")]
+    pub mime_type: Vec<String>,
     #[serde(rename = "NoDisplay")]
     pub no_display: Option<bool>,
-    #[serde(rename = "NotShowIn")]
-    pub not_show_in: Option<Vec<String>>,
-    #[serde(rename = "OnlyShowIn")]
-    pub only_show_in: Option<Vec<String>>,
+    #[serde(rename = "NotShowIn", default, skip_serializing_if = "Vec::is_empty")]
+    pub not_show_in: Vec<String>,
+    #[serde(rename = "OnlyShowIn", default, skip_serializing_if = "Vec::is_empty")]
+    pub only_show_in: Vec<String>,
     #[serde(rename = "PrefersNonDefaultGPU")]
     pub prefers_non_default_gpu: Option<bool>,
     #[serde(rename = "StartupNotify")]
