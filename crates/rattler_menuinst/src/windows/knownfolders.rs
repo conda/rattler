@@ -13,7 +13,7 @@ pub struct Folders {
     user_folders: HashMap<String, KnownFolder>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum UserHandle {
     Current,
     Common,
@@ -59,7 +59,7 @@ impl Folders {
         };
 
         if let Some(folder) = preferred_folders.get(key) {
-            if let Some(path) = get_known_folder_path(folder) {
+            if let Some(path) = get_known_folder_path(*folder) {
                 return Ok(path);
             }
         }
@@ -67,7 +67,7 @@ impl Folders {
         // Implement fallback for user documents
         if preferred_mode == UserHandle::Current && key == "documents" {
             if let Some(profile_folder) = preferred_folders.get("profile") {
-                if let Some(profile_path) = get_known_folder_path(profile_folder) {
+                if let Some(profile_path) = get_known_folder_path(*profile_folder) {
                     let documents_path = profile_path.join("Documents");
                     if documents_path.is_dir() {
                         return Ok(documents_path);
@@ -78,7 +78,7 @@ impl Folders {
 
         if check_other_mode {
             if let Some(folder) = other_folders.get(key) {
-                if let Some(path) = get_known_folder_path(folder) {
+                if let Some(path) = get_known_folder_path(*folder) {
                     return Ok(path);
                 }
             }
@@ -87,36 +87,12 @@ impl Folders {
         Err(FolderError::PathNotFound)
     }
 
-    pub fn verify_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf, FolderError> {
+    pub fn verify_path<P: AsRef<Path>>(path: P) -> Result<PathBuf, FolderError> {
         let path = path.as_ref();
         if path.exists() && path.is_dir() {
             Ok(path.to_path_buf())
         } else {
             Err(FolderError::PathNotVerifiable)
-        }
-    }
-}
-
-fn main() {
-    let folders = Folders::new();
-
-    let test_folders = vec![
-        ("desktop", UserHandle::Current),
-        ("documents", UserHandle::Current),
-        ("start", UserHandle::Common),
-        ("profile", UserHandle::Common),
-    ];
-
-    for (folder, handle) in test_folders {
-        match folders.get_folder_path(folder, handle) {
-            Ok(path) => {
-                tracing::info!("{} path for {:?}: {:?}", folder, handle, path);
-                match folders.verify_path(&path) {
-                    Ok(_) => println!("  Path verified successfully"),
-                    Err(e) => println!("  Path verification failed: {:?}", e),
-                }
-            }
-            Err(e) => tracing::error!("Error getting {} path for {:?}: {:?}", folder, handle, e),
         }
     }
 }

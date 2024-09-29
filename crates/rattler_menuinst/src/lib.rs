@@ -2,7 +2,9 @@ use std::path::Path;
 
 use rattler_conda_types::Platform;
 
+#[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
 mod macos;
 mod render;
 mod schema;
@@ -55,11 +57,13 @@ pub fn install_menuitems(
             let mut linux_item = item.platforms.linux.clone().unwrap();
             let base_item = linux_item.base.merge_parent(&item);
             linux_item.base = base_item;
+            #[cfg(target_os = "linux")]
             linux::install_menu_item(linux_item, MenuMode::User)?;
         } else if item.platforms.osx.is_some() && platform.is_osx() {
             let mut macos_item = item.platforms.osx.clone().unwrap();
             let base_item = macos_item.base.merge_parent(&item);
             macos_item.base = base_item;
+            #[cfg(target_os = "macos")]
             macos::install_menu_item(prefix, macos_item, MenuMode::System)?;
         } else if item.platforms.win.is_some() && platform.is_windows() {
             // windows::install_menu_item(&item)?;
@@ -89,7 +93,7 @@ pub mod test {
 
         let prefix = schema_path.parent().unwrap().parent().unwrap();
         let prefix = std::fs::canonicalize(prefix).unwrap();
-        println!("prefix: {:?}", prefix);
+        println!("prefix: {prefix:?}");
         let base_prefix = PathBuf::from("/Users/jaidevd/miniconda3");
         let platform = Platform::Linux64;
 

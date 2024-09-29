@@ -1,5 +1,4 @@
-use anyhow::{Context, Result};
-use winreg::enums::*;
+use winreg::enums::{HKEY_CLASSES_ROOT, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_ALL_ACCESS};
 use winreg::RegKey;
 
 pub fn register_file_extension(
@@ -8,7 +7,7 @@ pub fn register_file_extension(
     command: &str,
     icon: Option<&str>,
     mode: &str,
-) -> Result<()> {
+) -> Result<(), std::io::Error> {
     let hkey = if mode == "system" {
         HKEY_LOCAL_MACHINE
     } else {
@@ -19,34 +18,38 @@ pub fn register_file_extension(
         RegKey::predef(hkey).open_subkey_with_flags("Software\\Classes", KEY_ALL_ACCESS)?;
 
     // Associate extension with handler
-    let ext_key = classes.create_subkey(&format!("{}\\OpenWithProgids", extension))?;
+    let ext_key = classes.create_subkey(format!("{extension}\\OpenWithProgids"))?;
     ext_key.0.set_value(identifier, &"")?;
     tracing::debug!("Created registry entry for extension '{}'", extension);
 
     // Register the handler
-    let handler_desc = format!("{} {} handler", extension, identifier);
+    let handler_desc = format!("{extension} {identifier} handler");
     classes
         .create_subkey(identifier)?
         .0
         .set_value("", &handler_desc)?;
-    tracing::debug!("Created registry entry for handler '{}'", identifier);
+    tracing::debug!("Created registry entry for handler '{identifier}'");
 
     // Set the 'open' command
-    let command_key = classes.create_subkey(&format!("{}\\shell\\open\\command", identifier))?;
+    let command_key = classes.create_subkey(format!("{identifier}\\shell\\open\\command"))?;
     command_key.0.set_value("", &command)?;
-    debug!("Created registry entry for command '{}'", command);
+    tracing::debug!("Created registry entry for command '{command}'");
 
     // Set icon if provided
     if let Some(icon_path) = icon {
         let icon_key = classes.create_subkey(identifier)?;
         icon_key.0.set_value("DefaultIcon", &icon_path)?;
-        tracing::debug!("Created registry entry for icon '{}'", icon_path);
+        tracing::debug!("Created registry entry for icon '{icon_path}'");
     }
 
     Ok(())
 }
 
-pub fn unregister_file_extension(extension: &str, identifier: &str, mode: &str) -> Result<()> {
+pub fn unregister_file_extension(
+    extension: &str,
+    identifier: &str,
+    mode: &str,
+) -> Result<(), std::io::Error> {
     let hkey = if mode == "system" {
         HKEY_LOCAL_MACHINE
     } else {
@@ -61,14 +64,15 @@ pub fn unregister_file_extension(extension: &str, identifier: &str, mode: &str) 
 
     // Remove the association in OpenWithProgids
     let ext_key =
-        classes.open_subkey_with_flags(&format!("{}\\OpenWithProgids", extension), KEY_ALL_ACCESS);
+        classes.open_subkey_with_flags(format!("{extension}\\OpenWithProgids"), KEY_ALL_ACCESS);
 
     match ext_key {
         Ok(key) => {
             if key.get_value::<String, _>(identifier).is_err() {
-                debug!(
+                tracing::debug!(
                     "Handler '{}' is not associated with extension '{}'",
-                    identifier, extension
+                    identifier,
+                    extension
                 );
             } else {
                 key.delete_value(identifier)?;
@@ -76,7 +80,7 @@ pub fn unregister_file_extension(extension: &str, identifier: &str, mode: &str) 
         }
         Err(e) => {
             tracing::error!("Could not check key '{}' for deletion: {}", extension, e);
-            return Err(e.into());
+            return Err(e);
         }
     }
 
@@ -89,12 +93,11 @@ pub fn register_url_protocol(
     identifier: Option<&str>,
     icon: Option<&str>,
     mode: &str,
-) -> Result<()> {
+) -> Result<(), std::io::Error> {
     let key = if mode == "system" {
         RegKey::predef(HKEY_CLASSES_ROOT).create_subkey(protocol)?
     } else {
-        RegKey::predef(HKEY_CURRENT_USER)
-            .create_subkey(&format!("Software\\Classes\\{}", protocol))?
+        RegKey::predef(HKEY_CURRENT_USER).create_subkey(format!("Software\\Classes\\{protocol}"))?
     };
 
     key.0
@@ -102,7 +105,7 @@ pub fn register_url_protocol(
     key.0.set_value("URL Protocol", &"")?;
 
     let command_key = key.0.create_subkey(r"shell\open\command")?;
-    command_key.set_value("", &command)?;
+    command_key.0.set_value("", &command)?;
 
     if let Some(icon_path) = icon {
         key.0.set_value("DefaultIcon", &icon_path)?;
@@ -115,7 +118,11 @@ pub fn register_url_protocol(
     Ok(())
 }
 
-pub fn unregister_url_protocol(protocol: &str, identifier: Option<&str>, mode: &str) -> Result<()> {
+pub fn unregister_url_protocol(
+    protocol: &str,
+    identifier: Option<&str>,
+    mode: &str,
+) -> Result<(), std::io::Error> {
     let key = if mode == "system" {
         RegKey::predef(HKEY_CLASSES_ROOT)
     } else {
