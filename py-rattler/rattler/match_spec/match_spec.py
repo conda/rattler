@@ -1,6 +1,8 @@
 from __future__ import annotations
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from rattler.channel.channel import Channel
+from urllib.parse import urlparse, urlunparse
+from rattler.channel.channel import Channel, ChannelConfig
 
 from rattler.rattler import PyMatchSpec
 
@@ -142,7 +144,14 @@ class MatchSpec:
         The channel of the package.
         """
         if (channel := self._match_spec.channel) is not None:
-            return Channel(channel.name)
+            parsed = urlparse(channel.base_url)
+            channel_alias = (
+                urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
+                if not parsed.scheme == "file"
+                else Path(parsed.path).as_uri()
+            )
+            channel_configuration = ChannelConfig(channel_alias=channel_alias)
+            return Channel(channel.name, channel_configuration=channel_configuration)
         return None
 
     @property

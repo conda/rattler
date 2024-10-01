@@ -19,14 +19,14 @@ def test_parse_channel_from_url_filesystem() -> None:
     m = MatchSpec("file:///Users/rattler/channel0::python[version=3.9]")
     assert m.channel is not None
     assert m.channel.name == "channel0"
-    assert m.channel.base_url == "file:///Users/rattler/channel0"
+    assert m.channel.base_url == "file:///Users/rattler/channel0/"
 
 
 def test_parse_channel_from_url_localhost() -> None:
     m = MatchSpec("http://localhost:8000/channel0::python[version=3.9]")
     assert m.channel is not None
     assert m.channel.name == "channel0"
-    assert m.channel.base_url == "http://localhost:8000/get/channel0"
+    assert m.channel.base_url == "http://localhost:8000/channel0/"
 
 
 def test_parse_no_channel() -> None:
