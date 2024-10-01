@@ -25,4 +25,5 @@ jobs:
       - name: actually check
         run: |
           pixi info
+          SYSTEM_VERSION_COMPAT=1 pixi info
     
