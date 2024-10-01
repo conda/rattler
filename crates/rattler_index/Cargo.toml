@@ -1,6 +1,6 @@
 [package]
 name = "rattler_index"
-version = "0.19.29"
+version = "0.19.30"
 edition.workspace = true
 authors = []
 description = "A crate that indexes directories containing conda packages to create local conda channels"
