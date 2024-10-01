@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.15](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.14...rattler_repodata_gateway-v0.21.15) - 2024-10-01
+
+### Other
+
+- start using fs-err in repodata_gateway ([#877](https://github.com/conda/rattler/pull/877))
+
 ## [0.21.14](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.13...rattler_repodata_gateway-v0.21.14) - 2024-09-23
 
 ### Other

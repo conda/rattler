@@ -27,11 +27,11 @@ clap = { workspace = true, features = ["derive"] }
 console = { workspace = true, features = ["windows-console-colors"] }
 indicatif = { workspace = true }
 once_cell = { workspace = true }
-rattler = { path="../rattler", version = "0.27.12", default-features = false, features = ["indicatif"] }
+rattler = { path="../rattler", version = "0.27.13", default-features = false, features = ["indicatif"] }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.28.0", default-features = false }
 rattler_networking = { path="../rattler_networking", version = "0.21.4", default-features = false, features = ["google-cloud-auth"] }
-rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.21.14", default-features = false, features = ["gateway"] }
-rattler_solve = { path="../rattler_solve", version = "1.0.8", default-features = false, features = ["resolvo", "libsolv_c"] }
+rattler_repodata_gateway = { path="../rattler_repodata_gateway", version = "0.21.15", default-features = false, features = ["gateway"] }
+rattler_solve = { path="../rattler_solve", version = "1.0.9", default-features = false, features = ["resolvo", "libsolv_c"] }
 rattler_virtual_packages = { path="../rattler_virtual_packages", version = "1.1.5", default-features = false }
 rattler_cache = { path="../rattler_cache", version = "0.2.4", default-features = false }
 reqwest = { workspace = true }
