@@ -1,0 +1,28 @@
+on:
+    pull_request:
+
+name: Check macOS plist
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+            - { name: "macos-old", target: x86_64-apple-darwin, os: macos-12, skip-tests: false }
+    steps:
+      - name: Check plist files
+        if: matrix.os == 'macos-12'
+        run: |
+          cat /System/Library/CoreServices/SystemVersion.plist
+      - name: check pixi info
+        uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+            pixi-version: v0.30.0
+            run-install: false
+      - name: actually check
+        run: |
+          pixi info
+    
