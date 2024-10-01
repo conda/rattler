@@ -32,5 +32,6 @@ def test_parse_channel_from_url_localhost() -> None:
 def test_parse_no_channel() -> None:
     m = MatchSpec("python[version=3.9]")
     assert m.channel is None
+    assert m.name is not None
     assert m.name.normalized == "python"
     assert m.version == "==3.9"
