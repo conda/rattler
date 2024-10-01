@@ -309,19 +309,19 @@ mod tests {
         assert_eq!(name, expected_name);
     }
 
-    // #[rstest]
-    // #[case(get_resolved_packages_for_python(), &["python"])]
-    // #[case(get_resolved_packages_for_python_pip(), &["pip"])]
-    // #[case(get_resolved_packages_for_numpy(), &["numpy"])]
-    // #[case(get_resolved_packages_for_two_roots(), &["4ti2", "micromamba"])]
-    // fn test_get_graph_roots(
-    //     #[case] packages: Vec<RepoDataRecord>,
-    //     #[case] expected_roots: &[&str],
-    // ) {
-    //     let mut roots = get_graph_roots(&packages, None);
-    //     roots.sort();
-    //     assert_eq!(roots.as_slice(), expected_roots);
-    // }
+    #[rstest]
+    #[case(get_resolved_packages_for_python(), &["python"])]
+    #[case(get_resolved_packages_for_python_pip(), &["pip"])]
+    #[case(get_resolved_packages_for_numpy(), &["numpy"])]
+    #[case(get_resolved_packages_for_two_roots(), &["4ti2", "micromamba"])]
+    fn test_get_graph_roots(
+        #[case] packages: Vec<RepoDataRecord>,
+        #[case] expected_roots: &[&str],
+    ) {
+        let mut roots = get_graph_roots(&packages, &FxHashSet::default());
+        roots.sort();
+        assert_eq!(roots.as_slice(), expected_roots);
+    }
 
     #[rstest]
     #[case(get_resolved_packages_for_python(), "python", &[("libzlib", "libgcc-ng")])]
