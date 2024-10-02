@@ -521,16 +521,24 @@ pub fn copy_and_replace_placeholders(
 }
 
 static SHEBANG_REGEX: Lazy<Regex> = Lazy::new(|| {
-    // ^(#!      // pretty much the whole match string
-    // (?:[ ]*)  // allow spaces between #! and beginning of
-    //           // the executable path
-    // (/(?:\\ |[^ \n\r\t])*)  // the executable is the next
-    //                         // text block without an
-    //                         // escaped space or non-space
-    //                         // whitespace character
-    // (.*))$    // the rest of the line can contain option
-    //           // flags and end whole_shebang group
+    // ^(#!      pretty much the whole match string
+    // (?:[ ]*)  allow spaces between #! and beginning of
+    //           the executable path
+    // (/(?:\\ |[^ \n\r\t])*)  the executable is the next
+    //                         text block without an
+    //                         escaped space or non-space
+    //                         whitespace character
+    // (.*))$    the rest of the line can contain option
+    //           flags and end whole_shebang group
     Regex::new(r"^(#!(?:[ ]*)(/(?:\\ |[^ \n\r\t])*)(.*))$").unwrap()
+});
+
+static PYTHON_REGEX: Lazy<Regex> = Lazy::new(|| {
+    // Match string starting with `python`, and optional version number
+    // followed by optional flags.
+    // python matches the string `python`
+    // (?:\d+(?:\.\d+)*)? matches an optional version number
+    Regex::new(r"^python(?:\d+(?:\.\d+)?)?$").unwrap()
 });
 
 /// Finds if the shebang line length is valid.
@@ -547,24 +555,57 @@ fn is_valid_shebang_length(shebang: &str, platform: &Platform) -> bool {
     }
 }
 
-/// Long shebangs are invalid (longer than 127 on Linux / 512 on macOS characters).
+/// Convert a shebang to use `/usr/bin/env` to find the executable.
+/// This is useful for long shebangs or shebangs with spaces.
+fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
+    if let Some(captures) = SHEBANG_REGEX.captures(&shebang) {
+        let path = &captures[2];
+        let exe_name = path.rsplit_once('/').map_or(path, |(_, f)| f);
+        if PYTHON_REGEX.is_match(exe_name) {
+            Cow::Owned(format!(
+                "#!/bin/sh\n'''exec' \"{}\" {} \"$0\" \"$@\" #'''",
+                path, &captures[3]
+            ))
+        } else {
+            Cow::Owned(format!("#!/usr/bin/env {}{}", exe_name, &captures[3]))
+        }
+    } else {
+        shebang
+    }
+}
+
+/// Long shebangs and shebangs with spaces are invalid.
+/// Long shebangs are longer than 127 on Linux or 512 on macOS characters.
+/// Shebangs with spaces are replaced with a shebang that uses `/usr/bin/env` to find the executable.
 /// This function replaces long shebangs with a shebang that uses `/usr/bin/env` to find the
 /// executable.
-fn replace_long_shebang(shebang: &str, platform: &Platform) -> String {
-    if is_valid_shebang_length(shebang, platform) {
-        shebang.to_string()
+fn replace_shebang<'a>(
+    shebang: Cow<'a, str>,
+    old_new: (&str, &str),
+    platform: &Platform,
+) -> Cow<'a, str> {
+    // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
+    assert!(
+        shebang.starts_with("#!"),
+        "Shebang does not start with #! ({})",
+        shebang
+    );
+
+    if old_new.1.contains(' ') {
+        return convert_shebang_to_env(shebang);
+    }
+
+    let shebang: Cow<'_, str> = shebang.replace(old_new.0, old_new.1).into();
+
+    if !shebang.starts_with("#!") {
+        tracing::warn!("Shebang does not start with #! ({})", shebang);
+        return shebang;
+    }
+
+    if !is_valid_shebang_length(&shebang, platform) {
+        convert_shebang_to_env(shebang)
     } else {
-        assert!(shebang.starts_with("#!"));
-        if let Some(captures) = SHEBANG_REGEX.captures(shebang) {
-            let shebang_path = &captures[2];
-            let filename = shebang_path
-                .rsplit_once('/')
-                .map_or(shebang_path, |(_, f)| f);
-            format!("#!/usr/bin/env {}{}", filename, &captures[3])
-        } else {
-            tracing::warn!("Could not replace shebang ({})", shebang);
-            shebang.to_string()
-        }
+        shebang
     }
 }
 
@@ -593,8 +634,13 @@ pub fn copy_and_replace_textual_placeholder(
         let (first, rest) =
             source_bytes.split_at(source_bytes.iter().position(|&c| c == b'\n').unwrap_or(0));
         let first_line = String::from_utf8_lossy(first);
-        let replaced = first_line.replace(prefix_placeholder, target_prefix);
-        destination.write_all(replace_long_shebang(&replaced, target_platform).as_bytes())?;
+        let new_shebang = replace_shebang(
+            first_line,
+            (prefix_placeholder, target_prefix),
+            target_platform,
+        );
+        // let replaced = first_line.replace(prefix_placeholder, target_prefix);
+        destination.write_all(new_shebang.as_bytes())?;
         source_bytes = rest;
     }
 
@@ -702,6 +748,8 @@ mod test {
     use rstest::rstest;
     use std::io::Cursor;
 
+    use super::PYTHON_REGEX;
+
     #[rstest]
     #[case("Hello, cruel world!", "cruel", "fabulous", "Hello, fabulous world!")]
     #[case(
@@ -775,25 +823,37 @@ mod test {
     }
 
     #[test]
+    fn test_replace_shebang() {
+        let shebang_with_spaces = "#!/path/placeholder/executable -o test -x".into();
+        let replaced = super::replace_shebang(
+            shebang_with_spaces,
+            ("placeholder", "with space"),
+            &Platform::Linux64,
+        );
+        assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
+    }
+
+    #[test]
     fn test_replace_long_shebang() {
-        let short_shebang = "#!/path/to/python -x 123";
-        let replaced = super::replace_long_shebang(short_shebang, &Platform::Linux64);
-        assert_eq!(replaced, "#!/path/to/python -x 123");
+        let short_shebang = "#!/path/to/executable -x 123".into();
+        let replaced = super::replace_shebang(short_shebang, ("", ""), &Platform::Linux64);
+        assert_eq!(replaced, "#!/path/to/executable -x 123");
 
-        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/python -o test -x";
-        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env python -o test -x");
+        let shebang = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong/executable -o test -x";
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env executable -o test -x");
 
-        let replaced = super::replace_long_shebang(shebang, &Platform::Osx64);
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Osx64);
         assert_eq!(replaced, shebang);
 
-        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/pyt\\ hon -o test -x";
-        let replaced = super::replace_long_shebang(shebang_with_escapes, &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o test -x");
+        let shebang_with_escapes = "#!/this/is/loooooooooooooooooooooooooooooooooooooooooooooooooooo\\ oooooo\\ oooooo\\ oooooooooooooooooooooooooooooooooooong/exe\\ cutable -o test -x";
+        let replaced =
+            super::replace_shebang(shebang_with_escapes.into(), ("", ""), &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o test -x");
 
-        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/pyt\\ hon -o \"te  st\" -x";
-        let replaced = super::replace_long_shebang(shebang, &Platform::Linux64);
-        assert_eq!(replaced, "#!/usr/bin/env pyt\\ hon -o \"te  st\" -x");
+        let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
+        let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
     }
 
     #[test]
@@ -820,5 +880,27 @@ mod test {
         let output = output.into_inner();
         let replaced = String::from_utf8_lossy(&output);
         insta::assert_snapshot!(replaced);
+    }
+
+    #[test]
+    fn test_python_regex() {
+        // Test the regex
+        let test_strings = vec!["python", "python3", "python3.12", "python2.7"];
+
+        for s in test_strings {
+            assert!(PYTHON_REGEX.is_match(s));
+        }
+
+        let no_match_strings = vec![
+            "python3.12.1",
+            "python3.12.1.1",
+            "foo",
+            "foo3.2",
+            "pythondoc",
+        ];
+
+        for s in no_match_strings {
+            assert!(!PYTHON_REGEX.is_match(s));
+        }
     }
 }
