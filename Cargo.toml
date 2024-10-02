@@ -66,7 +66,7 @@ fslock = "0.2.1"
 futures = "0.3.30"
 futures-util = "0.3.30"
 fxhash = "0.2.1"
-generic-array = { version = "1.1.0", features = ["serde"] }
+generic-array = { version = "0.14.7" }
 getrandom = { version = "0.2.15", default-features = false }
 glob = "0.3.1"
 google-cloud-auth = { version = "0.17.1", default-features = false }
