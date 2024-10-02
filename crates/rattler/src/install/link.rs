@@ -862,11 +862,19 @@ mod test {
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
 
         let shebang = "#!/usr/bin/env perl";
-        let replaced = super::replace_shebang(shebang.into(), ("/placeholder", "/with space"), &Platform::Linux64);
+        let replaced = super::replace_shebang(
+            shebang.into(),
+            ("/placeholder", "/with space"),
+            &Platform::Linux64,
+        );
         assert_eq!(replaced, shebang);
 
         let shebang = "#!/placeholder/perl";
-        let replaced = super::replace_shebang(shebang.into(), ("/placeholder", "/with space"), &Platform::Linux64);
+        let replaced = super::replace_shebang(
+            shebang.into(),
+            ("/placeholder", "/with space"),
+            &Platform::Linux64,
+        );
         assert_eq!(replaced, "#!/usr/bin/env perl");
     }
 
