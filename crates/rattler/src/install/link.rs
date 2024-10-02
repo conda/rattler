@@ -563,7 +563,7 @@ fn convert_shebang_to_env(shebang: Cow<'_, str>) -> Cow<'_, str> {
         let exe_name = path.rsplit_once('/').map_or(path, |(_, f)| f);
         if PYTHON_REGEX.is_match(exe_name) {
             Cow::Owned(format!(
-                "#!/bin/sh\n'''exec' \"{}\" {} \"$0\" \"$@\" #'''",
+                "#!/bin/sh\n'''exec' \"{}\"{} \"$0\" \"$@\" #'''",
                 path, &captures[3]
             ))
         } else {
@@ -587,10 +587,8 @@ fn replace_shebang<'a>(
     // If the new shebang would contain a space, return a `#!/usr/bin/env` shebang
     assert!(
         shebang.starts_with("#!"),
-        "Shebang does not start with #! ({})",
-        shebang
+        "Shebang does not start with #! ({shebang})",
     );
-
 
     if old_new.1.contains(' ') {
         // we convert the shebang without spaces to a new shebang, and only then replace
@@ -606,10 +604,10 @@ fn replace_shebang<'a>(
         return shebang;
     }
 
-    if !is_valid_shebang_length(&shebang, platform) {
-        convert_shebang_to_env(shebang)
-    } else {
+    if is_valid_shebang_length(&shebang, platform) {
         shebang
+    } else {
+        convert_shebang_to_env(shebang)
     }
 }
 
@@ -858,6 +856,25 @@ mod test {
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
         let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
+    }
+
+    #[test]
+    fn replace_python_shebang() {
+        let short_shebang = "#!/path/to/python3.12".into();
+        let replaced = super::replace_shebang(
+            short_shebang,
+            ("/path/to", "/new/prefix/with spaces/bin"),
+            &Platform::Linux64,
+        );
+        insta::assert_snapshot!(replaced);
+
+        let short_shebang = "#!/path/to/python3.12 -x 123".into();
+        let replaced = super::replace_shebang(
+            short_shebang,
+            ("/path/to", "/new/prefix/with spaces/bin"),
+            &Platform::Linux64,
+        );
+        insta::assert_snapshot!(replaced);
     }
 
     #[test]
