@@ -91,6 +91,9 @@ pub async fn create(opt: Opt) -> anyhow::Result<()> {
     let target_prefix = opt
         .target_prefix
         .unwrap_or_else(|| current_dir.join(".prefix"));
+
+    // Make the target prefix absolute
+    let target_prefix = std::path::absolute(target_prefix)?;
     println!("Target prefix: {}", target_prefix.display());
 
     // Determine the platform we're going to install for

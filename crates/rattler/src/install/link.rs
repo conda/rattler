@@ -591,8 +591,12 @@ fn replace_shebang<'a>(
         shebang
     );
 
+
     if old_new.1.contains(' ') {
-        return convert_shebang_to_env(shebang);
+        // we convert the shebang without spaces to a new shebang, and only then replace
+        // which is relevant for the Python case
+        let new_shebang = convert_shebang_to_env(shebang).replace(old_new.0, old_new.1);
+        return new_shebang.into();
     }
 
     let shebang: Cow<'_, str> = shebang.replace(old_new.0, old_new.1).into();
