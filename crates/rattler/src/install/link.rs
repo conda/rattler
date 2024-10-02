@@ -591,6 +591,10 @@ fn replace_shebang<'a>(
     );
 
     if old_new.1.contains(' ') {
+        // Doesn't matter if we don't replace anything
+        if !shebang.contains(old_new.0) {
+            return shebang;
+        }
         // we convert the shebang without spaces to a new shebang, and only then replace
         // which is relevant for the Python case
         let new_shebang = convert_shebang_to_env(shebang).replace(old_new.0, old_new.1);
@@ -856,6 +860,14 @@ mod test {
         let shebang = "#!    /this/is/looooooooooooooooooooooooooooooooooooooooooooo\\ \\ ooooooo\\ oooooo\\ oooooo\\ ooooooooooooooooo\\ ooooooooooooooooooong/exe\\ cutable -o \"te  st\" -x";
         let replaced = super::replace_shebang(shebang.into(), ("", ""), &Platform::Linux64);
         assert_eq!(replaced, "#!/usr/bin/env exe\\ cutable -o \"te  st\" -x");
+
+        let shebang = "#!/usr/bin/env perl";
+        let replaced = super::replace_shebang(shebang.into(), ("/placeholder", "/with space"), &Platform::Linux64);
+        assert_eq!(replaced, shebang);
+
+        let shebang = "#!/placeholder/perl";
+        let replaced = super::replace_shebang(shebang.into(), ("/placeholder", "/with space"), &Platform::Linux64);
+        assert_eq!(replaced, "#!/usr/bin/env perl");
     }
 
     #[test]
