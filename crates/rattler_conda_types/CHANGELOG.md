@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.0...rattler_conda_types-v0.28.1) - 2024-10-03
+
+### Fixed
+
+- topological sort when cycles appear in leaf nodes ([#879](https://github.com/conda/rattler/pull/879))
+
 ## [0.28.0](https://github.com/conda/rattler/compare/rattler_conda_types-v0.27.6...rattler_conda_types-v0.28.0) - 2024-09-23
 
 ### Added
