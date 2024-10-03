@@ -24,13 +24,13 @@ pub mod write;
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_docs)]
 pub enum ExtractError {
-    #[error("an io error occurred")]
+    #[error("an io error occurred: {0}")]
     IoError(#[from] std::io::Error),
 
-    #[error("could not create the destination path")]
+    #[error("could not create the destination path: {0}")]
     CouldNotCreateDestination(#[source] std::io::Error),
 
-    #[error("invalid zip archive")]
+    #[error("invalid zip archive: {0}")]
     ZipError(#[source] zip::result::ZipError),
 
     #[error("a component is missing from the Conda archive")]
