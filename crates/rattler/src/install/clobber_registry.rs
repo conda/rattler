@@ -148,11 +148,12 @@ impl ClobberRegistry {
 
         for (_, path) in computed_paths {
             // if we find an entry, we have a clobbering path!
-            if let Some(&primary_package_idx) = self.paths_registry.get(path) {
+            // let entry = self.paths_registry.get(path);
+            if let Some(&Some(primary_package_idx)) = self.paths_registry.get(path) {
                 let new_path = clobber_name(path, &self.package_names[name_idx.0]);
                 self.clobbers
                     .entry(path.clone())
-                    .or_insert_with(|| primary_package_idx.map(|v| vec![v]).unwrap_or_default())
+                    .or_insert_with(|| vec![primary_package_idx])
                     .push(name_idx);
 
                 // We insert the non-renamed path here
@@ -282,7 +283,7 @@ impl ClobberRegistry {
 
             // Rename the winner
             let winner_path = clobber_name(path, &winner.1);
-            tracing::trace!("renaming {} to {}", winner_path.display(), path.display());
+            tracing::debug!("renaming {} to {}", winner_path.display(), path.display());
             fs::rename(target_prefix.join(&winner_path), target_prefix.join(path)).map_err(
                 |e| {
                     ClobberError::IoError(
