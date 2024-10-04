@@ -1,6 +1,6 @@
 [package]
 name = "rattler_solve"
-version = "1.0.9"
+version = "1.0.10"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to solve conda environments"
@@ -11,7 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
-rattler_conda_types = { path="../rattler_conda_types", version = "0.28.0", default-features = false }
+rattler_conda_types = { path="../rattler_conda_types", version = "0.28.1", default-features = false }
 rattler_digest = { path="../rattler_digest", version = "1.0.2", default-features = false }
 libc = { workspace = true, optional = true }
 chrono = { workspace = true }

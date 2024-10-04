@@ -1,0 +1,6 @@
+---
+source: crates/rattler/src/install/link.rs
+expression: replaced
+---
+#!/bin/sh
+'''exec' "/new/prefix/with spaces/bin/python3.12" -x 123 "$0" "$@" #'''
