@@ -2634,7 +2634,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.27.12"
+version = "0.27.13"
 dependencies = [
  "anyhow",
  "console",
@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.29"
+version = "0.19.30"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2850,7 +2850,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.14"
+version = "0.21.15"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.0.8"
+version = "1.0.9"
 dependencies = [
  "chrono",
  "futures",
