@@ -1,9 +1,6 @@
 from __future__ import annotations
-from pathlib import Path
 from typing import TYPE_CHECKING, Optional
-from urllib.parse import urlparse, urlunparse
 from rattler.channel.channel import Channel
-from rattler.channel.channel_config import ChannelConfig
 
 from rattler.rattler import PyMatchSpec
 
