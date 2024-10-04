@@ -485,11 +485,11 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
             }
         };
 
+        // Custom sorter that sorts by name, version, and build
+        // and then by dependencies
         let sorter = conda_util::SolvableSorter::new(solver, strategy);
-        // First initial sort
         sorter.sort_by_name_version_build(solvables);
-        // Sort by highest version
-        sorter.sort_by_highest_version(solvables, &mut highest_version_spec);
+        sorter.sort_by_dependencies(solvables, &mut highest_version_spec);
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
