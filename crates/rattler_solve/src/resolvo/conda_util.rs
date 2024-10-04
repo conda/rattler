@@ -371,9 +371,9 @@ impl DependencyScores {
 
 /// Get the unique package names from a list of vectors of package names.
 fn unique_name_ids<'a>(vectors: impl IntoIterator<Item = HashSet<NameId>>) -> HashSet<NameId> {
-   iter
-   	.into_iter()
- 	.reduce(|mut acc, hs| {
+    vectors
+        .into_iter()
+        .reduce(|mut acc, hs| {
             acc.retain(|name| hs.contains(name));
             acc
         })
