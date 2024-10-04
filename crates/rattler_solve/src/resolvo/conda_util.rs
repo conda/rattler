@@ -329,15 +329,13 @@ impl DependencyScores {
 
 /// Get the unique package names from a list of vectors of package names.
 fn unique_name_ids<'a>(vectors: impl IntoIterator<Item = HashSet<NameId>>) -> HashSet<NameId> {
-    let mut iter = vectors.into_iter();
-    if let Some(first_set) = iter.next() {
-        iter.fold(first_set.clone(), |mut acc: HashSet<NameId>, set| {
-            acc.retain(|item| set.contains(item));
+   iter
+   	.into_iter()
+ 	.reduce(|mut acc, hs| {
+            acc.retain(|name| hs.contains(name));
             acc
         })
-    } else {
-        HashSet::new() // Return empty set if input is empty
-    }
+        .unwrap_or_default()
 }
 /// Returns the order of two candidates based on the order used by conda.
 #[allow(clippy::too_many_arguments)]
