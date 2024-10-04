@@ -484,9 +484,12 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                 }
             }
         };
-        solvables.sort_by(|&p1, &p2| {
-            conda_util::compare_candidates(p1, p2, solver, &mut highest_version_spec, strategy)
-        });
+
+        let sorter = conda_util::SolvableSorter::new(solver, strategy);
+        // First initial sort
+        sorter.sort_by_name_version_build(solvables);
+        // Sort by highest version
+        sorter.sort_by_highest_version(solvables, &mut highest_version_spec);
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {

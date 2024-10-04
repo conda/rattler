@@ -78,7 +78,7 @@ impl ChannelConfig {
 
 /// Represents a channel description as either a name (e.g. `conda-forge`) or a
 /// base url.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum NamedChannelOrUrl {
     /// A named channel
     Name(String),
@@ -88,6 +88,16 @@ pub enum NamedChannelOrUrl {
 
     /// A path. Can either be absolute or relative.
     Path(Utf8TypedPathBuf),
+}
+
+impl std::hash::Hash for NamedChannelOrUrl {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            NamedChannelOrUrl::Name(name) => name.hash(state),
+            NamedChannelOrUrl::Url(url) => url.as_str().hash(state),
+            NamedChannelOrUrl::Path(path) => path.as_str().hash(state),
+        }
+    }
 }
 
 impl NamedChannelOrUrl {

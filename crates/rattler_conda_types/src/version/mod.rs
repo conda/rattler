@@ -1037,7 +1037,7 @@ mod test {
 
     use crate::version::StrictVersion;
 
-    use super::Version;
+    use super::{Component, Version};
 
     // Tests are inspired by: https://github.com/conda/conda/blob/33a142c16530fcdada6c377486f1c1a385738a96/tests/models/test_version.py
 
@@ -1049,7 +1049,7 @@ mod test {
             Restart,
         }
 
-        let versions = [
+        let versions_str = [
             "   0.4",
             "== 0.4.0",
             " < 0.4.1.rc",
@@ -1079,18 +1079,21 @@ mod test {
             " < 2!0.4.1", // epoch increased again
         ];
 
-        let ops = versions.iter().map(|&v| {
-            let (op, version) = if let Some((op, version)) = v.trim().split_once(' ') {
+        let mut versions = Vec::new();
+
+        let ops = versions_str.iter().map(|&v| {
+            let (op, version_str) = if let Some((op, version)) = v.trim().split_once(' ') {
                 (op, version.trim())
             } else {
                 ("", v.trim())
             };
-            let version: Version = version.parse().unwrap();
+            let version: Version = version_str.parse().unwrap();
             let op = match op {
                 "<" => CmpOp::Less,
                 "==" => CmpOp::Equal,
                 _ => CmpOp::Restart,
             };
+            versions.push(version.clone());
             (op, version)
         });
 
@@ -1127,6 +1130,10 @@ mod test {
             }
             previous = Some(version);
         }
+
+        // Try to see if the sort works
+        let mut cloned_versions = versions.clone();
+        cloned_versions.sort();
     }
 
     #[test]
@@ -1396,5 +1403,88 @@ mod test {
                 .to_string(),
             expected
         );
+    }
+
+    #[test]
+    fn test_component_total_order() {
+        // Create instances of each variant
+        let components = vec![
+            Component::Dev,
+            Component::UnderscoreOrDash { is_dash: false },
+            Component::Iden(Box::from("alpha")),
+            Component::Iden(Box::from("beta")),
+            Component::Numeral(1),
+            Component::Numeral(2),
+            Component::Post,
+        ];
+
+        // Check that each component equals itself
+        for a in &components {
+            assert_eq!(a.cmp(a), Ordering::Equal);
+        }
+
+        for (i, a) in components.iter().enumerate() {
+            for b in components[i + 1..].iter() {
+                let ord = a.cmp(b);
+                assert_eq!(
+                    ord,
+                    Ordering::Less,
+                    "Expected {:?} < {:?}, but found {:?}",
+                    a,
+                    b,
+                    ord
+                );
+            }
+            // Check the reverse ordering as well
+            // I think this should automatically check transitivity
+            // If a <= b and b <= c, then a <= c
+            for b in components[..i].iter() {
+                let ord = a.cmp(b);
+                assert_eq!(
+                    ord,
+                    Ordering::Greater,
+                    "Expected {:?} > {:?}, but found {:?}",
+                    a,
+                    b,
+                    ord
+                );
+            }
+        }
+
+        // Check antisymmetry: If a <= b and b <= a, then a == b
+        // for a in &components {
+        //     for b in &components {
+        //         let ord_ab = a.cmp(b);
+        //         let ord_ba = b.cmp(a);
+        //         if ord_ab != Ordering::Greater && ord_ba != Ordering::Greater {
+        //             assert_eq!(
+        //                 ord_ab,
+        //                 ord_ba.reverse(),
+        //                 "Antisymmetry violated between {:?} and {:?}",
+        //                 a,
+        //                 b
+        //             );
+        //         }
+        //     }
+        // }
+
+        // for a in &components {
+        //     for b in &components {
+        //         for c in &components {
+        //             let ord_ab = a.cmp(b);
+        //             let ord_bc = b.cmp(c);
+        //             let ord_ac = a.cmp(c);
+        //             if ord_ab != Ordering::Greater && ord_bc != Ordering::Greater {
+        //                 assert!(
+        //                     ord_ac != Ordering::Greater,
+        //                     "Transitivity violated between {:?}, {:?}, and {:?}",
+        //                     a,
+        //                     b,
+        //                     c
+        //                 );
+        //             }
+        //         }
+        //     }
+        // }
     }
 }
