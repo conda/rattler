@@ -6,11 +6,13 @@ use std::{
 use futures::future::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::Version;
-use resolvo::{Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId};
+use resolvo::{
+    utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+};
 
 use crate::resolvo::CondaDependencyProvider;
 
-use super::SolverPackageRecord;
+use super::{SolverMatchSpec, SolverPackageRecord};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -18,8 +20,10 @@ pub(super) enum CompareStrategy {
     LowestVersion,
 }
 
-/// Sorts the candidates based on the strategy.
-/// and some different rules
+/// Sort the candidates based on the dependencies.
+/// This sorts in two steps:
+/// 1. Sort by tracked features, version, and build number
+/// 2. Sort by trying to sort the solvable that selects the highest versions of the shared set of dependencies
 pub struct SolvableSorter<'a, 'repo> {
     solver: &'a SolverCache<CondaDependencyProvider<'repo>>,
     strategy: CompareStrategy,
@@ -33,15 +37,34 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         Self { solver, strategy }
     }
 
+    /// Get a reference to the solvable record.
     fn solvable_record(&self, id: SolvableId) -> &SolverPackageRecord<'repo> {
-        let pool = &self.solver.provider().pool;
+        let pool = self.pool();
         let solvable = pool.resolve_solvable(id);
 
         &solvable.record
     }
 
+    /// Referece to the pool
+    fn pool(&self) -> &Pool<SolverMatchSpec<'repo>> {
+        &self.solver.provider().pool
+    }
+
+    /// Sort the candidates based on the dependencies.
+    /// This sorts in two steps:
+    /// 1. Sort by tracked features, version, and build number
+    /// 2. Sort by trying to find the candidate that selects the highest versions of the shared set of dependencies
+    pub fn sort(
+        self,
+        solvables: &mut [SolvableId],
+        version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
+    ) {
+        self.sort_by_tracked_version_build(solvables);
+        self.sort_by_dependencies(solvables, version_cache);
+    }
+
     /// This function can be used for the initial sorting of the candidates.
-    pub fn sort_by_name_version_build(&self, solvables: &mut [SolvableId]) {
+    fn sort_by_tracked_version_build(&self, solvables: &mut [SolvableId]) {
         solvables.sort_by(|a, b| self.simple_compare(*a, *b));
     }
 
@@ -80,11 +103,14 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         };
     }
 
-    pub fn sort_by_dependencies(
+    fn sort_by_dependencies(
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
     ) {
+        // Because the list can contain multiple versions, tracked features, and builds of the same package
+        // we need to create sub list of solvables that have the same version, build, and tracked features
+        // and sort these sub lists by the highest version of the dependencies shared by the solvables.
         let mut start = 0usize;
         let entire_len = solvables.len();
         while start < entire_len {
@@ -101,7 +127,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let sub = &mut solvables[start..end];
             if sub.len() > 1 {
                 // Sort the sub list of solvables by the highest version of the dependencies
-                self.sort_by_highest_version(sub, version_cache);
+                self.sort_by_highest_dependency_versions(sub, version_cache);
             }
 
             start = end;
@@ -114,10 +140,9 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     /// 2. Get the dependencies for each solvable
     /// 3. Get the known dependencies for each solvable, filter out the unknown dependencies
     /// 4. Retain the dependencies that are shared by all the solvables
-    /// 5. Create a max vector which is the maximum version of each of the shared dependencies, per dependency name
-    /// 6. Calculate a total score  by counting the position of the solvable in the list with sorted dependencies
-    /// 7. Sort by the total score and use timestamp of the record as a tie breaker
-    fn sort_by_highest_version(
+    /// 6. Calculate a total score by counting the position of the solvable in the list with sorted dependencies
+    /// 7. Sort by the score per solvable and use timestamp of the record as a tie breaker
+    fn sort_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
@@ -152,13 +177,11 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // Map all known dependencies to the package names
                 let dep_ids = known.requirements.iter().filter_map(|req| match req {
                     Requirement::Single(version_set_id) => Some((
-                        self.solver
-                            .provider()
-                            .pool
+                        self.pool()
                             .resolve_version_set_package_name(*version_set_id),
                         *version_set_id,
                     )),
-                    // Ignore union requirements
+                    // Ignore union requirements, these do not occur in the conda ecosystem currently
                     Requirement::Union(_) => {
                         todo!("Union requirements, are not implemented in the ordering")
                     }
@@ -188,6 +211,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             })
             .collect_vec();
 
+        // Calculate the score per solvable by looking at each dependency individually, more docs are at the struct location
         let scores =
             DependencyScores::from_dependencies(shared_dependencies, self.solver, version_cache)
                 .score_solvables();
@@ -226,6 +250,7 @@ impl MaxSolvable {
     }
 }
 
+/// Couples the version with the tracked features, for easier ordering
 #[derive(PartialEq, Eq, Clone, Debug)]
 struct TrackedFeatureVersion {
     version: Version,
@@ -244,6 +269,8 @@ impl TrackedFeatureVersion {
 impl Ord for TrackedFeatureVersion {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.version.cmp(&other.version) {
+            // If the versions are equal, sort by tracked features
+            // Downweight TrackedFeatureVersion that have tracked features
             Ordering::Equal => match (self.tracked_features, other.tracked_features) {
                 (true, false) => Ordering::Less,
                 (false, true) => Ordering::Greater,
@@ -260,7 +287,22 @@ impl PartialOrd for TrackedFeatureVersion {
     }
 }
 
-/// A struct that calculates the score for each solvable based on the dependencies
+/// A struct that calculates the score for each solvable based on the highest dependencies
+/// The way that it works is that it ranks each dependency (identified by name) by the highest version and couples it with the solvable
+/// and then calculates the score for each solvable by counting of the solvables dependency in that ranking
+///
+/// # Example:
+/// Solvable X has dependencies [A1, B2]
+/// Solvable Y has dependencies [A1, B1]
+///
+/// The dependency ranking would be:
+/// A = [(1, X), (1, Y)]
+/// B = [(1, Y), (2, X)]
+///
+/// Y would have a score of 1, because it has the highest version of A
+/// X would have a score of 2, because it has the highest version of B and A
+///
+/// If no version is available for that solvable, it is ignored
 struct DependencyScores {
     max_map: HashMap<NameId, Vec<MaxSolvable>>,
 }

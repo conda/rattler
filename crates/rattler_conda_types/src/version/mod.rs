@@ -1130,10 +1130,6 @@ mod test {
             }
             previous = Some(version);
         }
-
-        // Try to see if the sort works
-        let mut cloned_versions = versions.clone();
-        cloned_versions.sort();
     }
 
     #[test]
@@ -1450,41 +1446,5 @@ mod test {
                 );
             }
         }
-
-        // Check antisymmetry: If a <= b and b <= a, then a == b
-        // for a in &components {
-        //     for b in &components {
-        //         let ord_ab = a.cmp(b);
-        //         let ord_ba = b.cmp(a);
-        //         if ord_ab != Ordering::Greater && ord_ba != Ordering::Greater {
-        //             assert_eq!(
-        //                 ord_ab,
-        //                 ord_ba.reverse(),
-        //                 "Antisymmetry violated between {:?} and {:?}",
-        //                 a,
-        //                 b
-        //             );
-        //         }
-        //     }
-        // }
-
-        // for a in &components {
-        //     for b in &components {
-        //         for c in &components {
-        //             let ord_ab = a.cmp(b);
-        //             let ord_bc = b.cmp(c);
-        //             let ord_ac = a.cmp(c);
-        //             if ord_ab != Ordering::Greater && ord_bc != Ordering::Greater {
-        //                 assert!(
-        //                     ord_ac != Ordering::Greater,
-        //                     "Transitivity violated between {:?}, {:?}, and {:?}",
-        //                     a,
-        //                     b,
-        //                     c
-        //                 );
-        //             }
-        //         }
-        //     }
-        // }
     }
 }

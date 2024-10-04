@@ -10,6 +10,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+use conda_util::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
     package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
@@ -486,10 +487,9 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         };
 
         // Custom sorter that sorts by name, version, and build
-        // and then by dependencies
-        let sorter = conda_util::SolvableSorter::new(solver, strategy);
-        sorter.sort_by_name_version_build(solvables);
-        sorter.sort_by_dependencies(solvables, &mut highest_version_spec);
+        // and then by the maximalization of dependency versions
+        // more information can be found at the struct location
+        SolvableSorter::new(solver, strategy).sort(solvables, &mut highest_version_spec);
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
