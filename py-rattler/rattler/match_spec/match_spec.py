@@ -144,16 +144,8 @@ class MatchSpec:
         """
         The channel of the package.
         """
-        if (channel := self._match_spec.channel) is not None:
-            parsed = urlparse(channel.base_url)
-            channel_alias = (
-                urlunparse((parsed.scheme, parsed.netloc, "/", "", "", ""))
-                if not parsed.scheme == "file"
-                else Path(parsed.path).as_uri()
-            )
-            channel_configuration = ChannelConfig(channel_alias=channel_alias)
-            return Channel(channel.name, channel_configuration=channel_configuration)
-        return None
+        channel = self._match_spec.channel
+        return channel and Channel._from_py_channel(channel)
 
     @property
     def subdir(self) -> Optional[str]:
