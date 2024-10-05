@@ -56,6 +56,7 @@ url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
 rattler_cache = { version = "0.2.5", path = "../rattler_cache" }
 rattler_redaction = { version = "0.1.2", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
+memmap = "0.7.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
