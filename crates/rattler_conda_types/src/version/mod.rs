@@ -1079,8 +1079,6 @@ mod test {
             " < 2!0.4.1", // epoch increased again
         ];
 
-        let mut versions = Vec::new();
-
         let ops = versions_str.iter().map(|&v| {
             let (op, version_str) = if let Some((op, version)) = v.trim().split_once(' ') {
                 (op, version.trim())
@@ -1093,7 +1091,6 @@ mod test {
                 "==" => CmpOp::Equal,
                 _ => CmpOp::Restart,
             };
-            versions.push(version.clone());
             (op, version)
         });
 
