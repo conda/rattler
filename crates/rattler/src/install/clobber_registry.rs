@@ -103,12 +103,22 @@ impl ClobberRegistry {
     /// Register that all the paths of a package are being removed.
     pub fn unregister_paths(&mut self, prefix_paths: &PrefixRecord) {
         // Find the name in the registry
-        let name_idx = PackageNameIdx(
-            self.package_names
-                .iter()
-                .position(|n| n == &prefix_paths.repodata_record.package_record.name)
-                .expect("Package name not found in registry"),
-        );
+        let Some(name_idx) = self
+            .package_names
+            .iter()
+            .position(|n| n == &prefix_paths.repodata_record.package_record.name)
+            .map(PackageNameIdx)
+        else {
+            tracing::warn!(
+                "Tried to unregister paths for a package ({}) that is not in the registry",
+                prefix_paths
+                    .repodata_record
+                    .package_record
+                    .name
+                    .as_normalized()
+            );
+            return;
+        };
 
         // Remove this package from any clobbering consideration.
         for p in &prefix_paths.paths_data.paths {
@@ -117,7 +127,11 @@ impl ClobberRegistry {
                 clobber.retain(|&idx| idx != name_idx);
             }
 
-            let paths_entry = self.paths_registry.get_mut(path).expect("entry must exist");
+            let Some(paths_entry) = self.paths_registry.get_mut(path) else {
+                tracing::warn!("The path {} is not in the registry", path.display());
+                continue;
+            };
+
             if *paths_entry == Some(name_idx) {
                 *paths_entry = None;
             }
@@ -198,6 +212,7 @@ impl ClobberRegistry {
         let mut prefix_records_to_rewrite = HashSet::new();
         let mut result = HashMap::new();
 
+        tracing::info!("Unclobbering {} files", self.clobbers.len());
         for (path, clobbered_by) in self.clobbers.iter() {
             let clobbered_by_names = clobbered_by
                 .iter()
@@ -212,11 +227,15 @@ impl ClobberRegistry {
                 .filter(|(_, n)| clobbered_by_names.contains(n))
                 .collect::<Vec<_>>();
 
-            let current_winner = self
-                .paths_registry
-                .get(path)
-                .expect("if a file is clobbered it must also be in the registry")
-                .map(|idx| &self.package_names[idx.0]);
+            let Some(current_winner_entry) = self.paths_registry.get(path) else {
+                tracing::warn!(
+                    "The path {} is clobbered but not in the registry",
+                    path.display()
+                );
+                continue;
+            };
+
+            let current_winner = current_winner_entry.map(|idx| &self.package_names[idx.0]);
 
             // Determine which package should write to the file
             let winner = match sorted_clobbered_by.last() {
@@ -277,19 +296,19 @@ impl ClobberRegistry {
                         },
                     )?;
 
-                    let loser_idx = sorted_clobbered_by
+                    if let Some(loser_idx) = sorted_clobbered_by
                         .iter()
                         .find(|(_, n)| n == loser_name)
-                        .expect("loser not found")
-                        .0;
-
-                    rename_path_in_prefix_record(
-                        &mut prefix_records[loser_idx],
-                        path,
-                        &loser_path,
-                        true,
-                    );
-                    prefix_records_to_rewrite.insert(loser_idx);
+                        .map(|(idx, _)| *idx)
+                    {
+                        rename_path_in_prefix_record(
+                            &mut prefix_records[loser_idx],
+                            path,
+                            &loser_path,
+                            true,
+                        );
+                        prefix_records_to_rewrite.insert(loser_idx);
+                    }
                 }
             }
 
