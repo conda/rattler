@@ -60,7 +60,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
     ) {
         self.sort_by_tracked_version_build(solvables);
-        self.sort_by_dependencies(solvables, version_cache);
+        self.sort_by_highest_dependency_versions(solvables, version_cache);
     }
 
     /// This function can be used for the initial sorting of the candidates.
@@ -103,7 +103,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         }
     }
 
-    fn sort_by_dependencies(
+    fn sort_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
@@ -127,7 +127,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             let sub = &mut solvables[start..end];
             if sub.len() > 1 {
                 // Sort the sub list of solvables by the highest version of the dependencies
-                self.sort_by_highest_dependency_versions(sub, version_cache);
+                self._sort_by_highest_dependency_versions(sub, version_cache);
             }
 
             start = end;
@@ -142,7 +142,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     /// 4. Retain the dependencies that are shared by all the solvables
     /// 6. Calculate a total score by counting the position of the solvable in the list with sorted dependencies
     /// 7. Sort by the score per solvable and use timestamp of the record as a tie breaker
-    fn sort_by_highest_dependency_versions(
+    fn _sort_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
