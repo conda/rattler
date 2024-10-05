@@ -1,3 +1,4 @@
+use bit_set::BitSet;
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
@@ -186,7 +187,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                         unimplemented!("Union requirements, are not implemented in the ordering")
                     }
                 });
-                (*i, dep_ids.collect::<HashSet<_>>())
+                (*i, dep_ids.collect::<Vec<_>>())
             })
             .collect_vec();
 
@@ -194,7 +195,7 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         let unique_names: HashSet<_> = unique_name_ids(
             id_and_deps
                 .iter()
-                .map(|(_, names)| names.iter().map(|(name, _)| *name).collect()),
+                .map(|(_, names)| names.iter().map(|(name, _)| *name)),
         );
 
         // Only retain the dependencies for each solvable that are shared by all solvables
@@ -369,14 +370,19 @@ impl DependencyScores {
 }
 
 /// Get the unique package names from a list of vectors of package names.
-fn unique_name_ids(vectors: impl IntoIterator<Item = HashSet<NameId>>) -> HashSet<NameId> {
-    vectors
-        .into_iter()
-        .reduce(|mut acc, hs| {
-            acc.retain(|name| hs.contains(name));
-            acc
-        })
-        .unwrap_or_default()
+fn unique_name_ids<V: IntoIterator<Item = NameId>>(
+    vectors: impl IntoIterator<Item = V>,
+) -> HashSet<NameId> {
+    let mut iter = vectors.into_iter();
+    let mut intial = match iter.next() {
+        Some(first) => first.into_iter().collect(),
+        None => HashSet::new(),
+    };
+    for vec in iter {
+        let set: HashSet<NameId> = vec.into_iter().collect();
+        intial.retain(|name| set.contains(name));
+    }
+    intial
 }
 
 pub(super) fn find_highest_version(
