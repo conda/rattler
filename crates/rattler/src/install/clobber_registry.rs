@@ -147,17 +147,29 @@ impl ClobberRegistry {
         };
 
         for (_, path) in computed_paths {
-            // if we find an entry, we have a clobbering path!
-            // let entry = self.paths_registry.get(path);
-            if let Some(&Some(primary_package_idx)) = self.paths_registry.get(path) {
-                let new_path = clobber_name(path, &self.package_names[name_idx.0]);
-                self.clobbers
-                    .entry(path.clone())
-                    .or_insert_with(|| vec![primary_package_idx])
-                    .push(name_idx);
+            if let Some(&entry) = self.paths_registry.get(path) {
+                if let Some(primary_package_idx) = entry {
+                    // if we find an entry, we have a clobbering path!
+                    // Then we rename the current path to a clobbered path
+                    let new_path = clobber_name(path, &self.package_names[name_idx.0]);
+                    self.clobbers
+                        .entry(path.clone())
+                        .or_insert_with(|| vec![primary_package_idx])
+                        .push(name_idx);
 
-                // We insert the non-renamed path here
-                clobber_paths.insert(path.clone(), new_path);
+                    // We insert the non-renamed path here
+                    clobber_paths.insert(path.clone(), new_path);
+                } else {
+                    // In this case, the path we are looking at was previously removed so we need to
+                    // add it back to the registry and to the clobbers (the idx in the registry is None)
+                    self.paths_registry.insert(path.clone(), Some(name_idx));
+
+                    // If we previously had clobbers with this path, we need to
+                    // add the re-installed package back to the clobbers
+                    if let Some(entry) = self.clobbers.get_mut(path) {
+                        entry.push(name_idx);
+                    }
+                }
             } else {
                 self.paths_registry.insert(path.clone(), Some(name_idx));
             }
