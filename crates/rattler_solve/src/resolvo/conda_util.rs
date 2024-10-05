@@ -97,10 +97,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
 
         // Otherwise, select the variant with the highest build number
         match a_record.build_number().cmp(&b_record.build_number()) {
-            Ordering::Less => return Ordering::Greater,
-            Ordering::Greater => return Ordering::Less,
-            Ordering::Equal => return Ordering::Equal,
-        };
+            Ordering::Less => Ordering::Greater,
+            Ordering::Greater => Ordering::Less,
+            Ordering::Equal => Ordering::Equal,
+        }
     }
 
     fn sort_by_dependencies(
@@ -175,15 +175,15 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             })
             .map(|(i, known)| {
                 // Map all known dependencies to the package names
-                let dep_ids = known.requirements.iter().filter_map(|req| match req {
-                    Requirement::Single(version_set_id) => Some((
+                let dep_ids = known.requirements.iter().map(|req| match req {
+                    Requirement::Single(version_set_id) => (
                         self.pool()
                             .resolve_version_set_package_name(*version_set_id),
                         *version_set_id,
-                    )),
+                    ),
                     // Ignore union requirements, these do not occur in the conda ecosystem currently
                     Requirement::Union(_) => {
-                        todo!("Union requirements, are not implemented in the ordering")
+                        unimplemented!("Union requirements, are not implemented in the ordering")
                     }
                 });
                 (*i, dep_ids.collect::<HashSet<_>>())
@@ -314,7 +314,7 @@ impl DependencyScores {
         highest_version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
     ) -> Self {
         // Map with the maximum version per name
-        let mut max_map = HashMap::new();
+        let mut max_map = HashMap::with_capacity(shared_dependencies.len());
         for (solvable, dependencies) in shared_dependencies {
             for (name, version_set_id) in dependencies {
                 let version = find_highest_version(version_set_id, solver, highest_version_cache)
@@ -341,7 +341,7 @@ impl DependencyScores {
 
     /// Per dependency, score the solvables based on the highest version of the dependency
     fn score_solvables(&self) -> HashMap<SolvableId, u32> {
-        let mut scores = HashMap::new();
+        let mut scores = HashMap::with_capacity(self.max_map.len());
         // Create a score per dependency name, how high it is ranked in the list
         for (_, solvables) in self.max_map.iter() {
             let mut score = 0;
@@ -370,7 +370,7 @@ impl DependencyScores {
 }
 
 /// Get the unique package names from a list of vectors of package names.
-fn unique_name_ids<'a>(vectors: impl IntoIterator<Item = HashSet<NameId>>) -> HashSet<NameId> {
+fn unique_name_ids(vectors: impl IntoIterator<Item = HashSet<NameId>>) -> HashSet<NameId> {
     vectors
         .into_iter()
         .reduce(|mut acc, hs| {
