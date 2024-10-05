@@ -10,7 +10,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use conda_util::SolvableSorter;
+use conda_sorting::SolvableSorter;
 use itertools::Itertools;
 use rattler_conda_types::{
     package::ArchiveType, GenericVirtualPackage, MatchSpec, Matches, NamelessMatchSpec,
@@ -24,11 +24,11 @@ use resolvo::{
 };
 
 use crate::{
-    resolvo::conda_util::CompareStrategy, ChannelPriority, IntoRepoData, SolveError, SolveStrategy,
-    SolverRepoData, SolverTask,
+    resolvo::conda_sorting::CompareStrategy, ChannelPriority, IntoRepoData, SolveError,
+    SolveStrategy, SolverRepoData, SolverTask,
 };
 
-mod conda_util;
+mod conda_sorting;
 
 /// Represents the information required to load available packages into libsolv
 /// for a single channel and platform combination
