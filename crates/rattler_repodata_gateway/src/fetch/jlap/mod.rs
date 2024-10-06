@@ -82,7 +82,6 @@
 use blake2::digest::Output;
 use blake2::digest::{FixedOutput, Update};
 use fs_err as fs;
-use memmap;
 use rattler_digest::{
     parse_digest_from_hex, serde::SerializableHash, Blake2b256, Blake2b256Hash, Blake2bMac256,
 };
@@ -537,17 +536,14 @@ fn apply_jlap_patches(
         reporter.on_jlap_decode_start(index);
     }
 
-    let mut repo_data: Value = {
-        tracing::info!("parsing cached repodata.json as JSON");
-        // Read the contents of the current repodata to a string
-        let repo_data_file = fs::File::open(repo_data_path).map_err(JLAPError::FileSystem)?;
-        let mmap = unsafe {
-            memmap::MmapOptions::new()
-                .map(repo_data_file.file())
-                .map_err(JLAPError::FileSystem)?
-        };
-        serde_json::from_slice(mmap.as_ref()).map_err(JLAPError::JSONParse)
-    }?;
+    // Read the contents of the current repodata to a string
+    let repo_data_contents = fs::read_to_string(repo_data_path).map_err(JLAPError::FileSystem)?;
+
+    // Parse the JSON so we can manipulate it
+    tracing::info!("parsing cached repodata.json as JSON");
+    let mut repo_data =
+        serde_json::from_str::<Value>(&repo_data_contents).map_err(JLAPError::JSONParse)?;
+    std::mem::drop(repo_data_contents);
 
     if let Some((reporter, index)) = report {
         reporter.on_jlap_decode_completed(index);
