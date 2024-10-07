@@ -1,11 +1,11 @@
 use std::path::Path;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
 use futures::FutureExt;
-use rattler_conda_types::{Channel, ChannelConfig, MatchSpec, PackageName, RepoDataRecord};
+use rattler_conda_types::{Channel, MatchSpec};
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::resolvo::CondaDependencyProvider;
-use rattler_solve::{ChannelPriority, SolverImpl, SolverTask};
+use rattler_solve::ChannelPriority;
 use resolvo::SolverCache;
 
 fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) {
@@ -17,40 +17,44 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
         SparseRepoData::load_records_recursive([sparse_repo_data], [package_name.clone()], None)
             .expect("failed to load records");
 
-    // Construct dependency provider
-    let dependency_provider = CondaDependencyProvider::new(
-        repodata.iter().map(|r| r.iter().collect()),
-        &[],
-        &[],
-        &[],
-        &[match_spec.clone()],
-        None,
-        ChannelPriority::default(),
-        None,
-        rattler_solve::SolveStrategy::Highest,
-    )
-    .expect("failed to create dependency provider");
-
-    let name = dependency_provider
-        .pool
-        .intern_package_name(package_name.as_normalized());
-    let version_set = dependency_provider
-        .pool
-        .intern_version_set(name, match_spec.into_nameless().1.into());
-
     // Construct a cache
-    let cache = SolverCache::new(dependency_provider);
-
     c.bench_function(&format!("sort {}", spec), |b| {
         // Get the candidates for the package
-        b.iter(|| {
-            let deps = cache
-                .get_or_cache_sorted_candidates(version_set.into())
-                .now_or_never()
-                .expect("failed to get candidates")
-                .expect("solver requested cancellation");
-            black_box(deps);
-        });
+        b.iter_batched(
+            || (package_name.clone(), match_spec.clone()),
+            |(package_name, match_spec)| {
+                // Construct dependency provider
+                let dependency_provider = CondaDependencyProvider::new(
+                    repodata.iter().map(|r| r.iter().collect()),
+                    &[],
+                    &[],
+                    &[],
+                    &[match_spec.clone()],
+                    None,
+                    ChannelPriority::default(),
+                    None,
+                    rattler_solve::SolveStrategy::Highest,
+                )
+                .expect("failed to create dependency provider");
+
+                let name = dependency_provider
+                    .pool
+                    .intern_package_name(package_name.as_normalized());
+                let version_set = dependency_provider
+                    .pool
+                    .intern_version_set(name, match_spec.into_nameless().1.into());
+
+                let cache = SolverCache::new(dependency_provider);
+
+                let deps = cache
+                    .get_or_cache_sorted_candidates(version_set.into())
+                    .now_or_never()
+                    .expect("failed to get candidates")
+                    .expect("solver requested cancellation");
+                black_box(deps);
+            },
+            BatchSize::SmallInput,
+        );
     });
 }
 
