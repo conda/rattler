@@ -10,6 +10,8 @@ use crate::{
     package_cache::PackageCache,
 };
 
+use super::driver::PostProcessResult;
+
 /// Install a package into the environment and write a `conda-meta` file that
 /// contains information about how the file was linked.
 pub async fn install_package_to_environment(
@@ -124,7 +126,7 @@ pub async fn execute_transaction(
     package_cache: &PackageCache,
     install_driver: &InstallDriver,
     install_options: &InstallOptions,
-) {
+) -> PostProcessResult {
     install_driver
         .pre_process(&transaction, target_prefix)
         .unwrap();
@@ -143,7 +145,7 @@ pub async fn execute_transaction(
 
     install_driver
         .post_process(&transaction, target_prefix)
-        .unwrap();
+        .unwrap()
 }
 
 pub fn find_prefix_record<'a>(
