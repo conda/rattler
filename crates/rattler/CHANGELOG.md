@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.15](https://github.com/conda/rattler/compare/rattler-v0.27.14...rattler-v0.27.15) - 2024-10-07
+
+### Fixed
+
+- self-clobber when updating/downgrading packages ([#893](https://github.com/conda/rattler/pull/893))
+
 ## [0.27.14](https://github.com/conda/rattler/compare/rattler-v0.27.13...rattler-v0.27.14) - 2024-10-03
 
 ### Fixed

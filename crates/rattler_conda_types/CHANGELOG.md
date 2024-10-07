@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.2](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.1...rattler_conda_types-v0.28.2) - 2024-10-07
+
+### Other
+
+- add snapshot tests to verify solver sorting order ([#895](https://github.com/conda/rattler/pull/895))
+
 ## [0.28.1](https://github.com/conda/rattler/compare/rattler_conda_types-v0.28.0...rattler_conda_types-v0.28.1) - 2024-10-03
 
 ### Fixed
