@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/conda/rattler/compare/rattler_solve-v1.0.10...rattler_solve-v1.1.0) - 2024-10-07
+
+### Added
+
+- add sorting bench and makes test same as feature test ([#897](https://github.com/conda/rattler/pull/897))
+
+### Fixed
+
+- sorting test should also load dependencies ([#896](https://github.com/conda/rattler/pull/896))
+
+### Other
+
+- add snapshot tests to verify solver sorting order ([#895](https://github.com/conda/rattler/pull/895))
+
 ## [1.0.10](https://github.com/conda/rattler/compare/rattler_solve-v1.0.9...rattler_solve-v1.0.10) - 2024-10-03
 
 ### Other
