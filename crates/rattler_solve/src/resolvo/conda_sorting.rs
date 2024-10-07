@@ -1,13 +1,13 @@
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
 };
 
 use futures::future::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::Version;
 use resolvo::{
-    utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+    utils::Pool, Dependencies, Interner, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
 };
 
 use crate::resolvo::CondaDependencyProvider;
@@ -206,29 +206,80 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                     names
                         .into_iter()
                         .filter(|(name, _)| unique_names.contains(name))
-                        .collect::<HashMap<_, VersionSetId>>(),
+                        .map(|(name_id, match_spec_id)| {
+                            let with_tracked =
+                                find_highest_version(match_spec_id, self.solver, version_cache)
+                                    .map(|v| TrackedFeatureVersion::new(v.0, v.1));
+                            (name_id, with_tracked)
+                        })
+                        .collect::<BTreeMap<_, _>>(),
                 )
             })
-            .collect_vec();
+            .collect::<HashMap<_, _>>();
 
-        // Calculate the score per solvable by looking at each dependency individually, more docs are at the struct location
-        let scores =
-            DependencyScores::from_dependencies(shared_dependencies, self.solver, version_cache)
-                .score_solvables();
-
-        // Sort by the total score and use timestamp of the record as a tie breaker
         solvables.sort_by(|a, b| {
-            // Sort by the calculated score
-            let a_score = scores.get(a).unwrap_or(&0);
-            let b_score = scores.get(b).unwrap_or(&0);
+            let empty = BTreeMap::new();
+            let a_deps = shared_dependencies.get(a).unwrap_or(&empty);
+            let b_deps = shared_dependencies.get(b).unwrap_or(&empty);
 
-            // Reverse the order, so that the highest score is first
-            b_score.cmp(a_score).then_with(|| {
+            // Zip together the dependencies and give a score if the highest dependency wins
+            let mut score_a = 0;
+            let mut score_b = 0;
+            let mut winners_a = Vec::new();
+            let mut winners_b = Vec::new();
+            let s_a_name = self.solver.provider().display_solvable(*a);
+            let s_b_name = self.solver.provider().display_solvable(*b);
+            for (version_a, version_b) in a_deps.iter().zip(b_deps.iter()) {
+                // Print name and version for debugging
+                let name_a = self.pool().resolve_package_name(*version_a.0);
+
+                // println!("{} {} {:?}", s_a_name, name_a, version_a.1);
+                // println!("{} {} {:?}", s_b_name, name_b, version_b.1);
+
+                let a = version_a.1.as_ref().map(|v| &v.version);
+                let b = version_b.1.as_ref().map(|v| &v.version);
+                let comparison = a.cmp(&b);
+                match comparison {
+                    Ordering::Less => {
+                        winners_b.push(name_a);
+                        score_b += 1
+                    }
+                    Ordering::Greater => {
+                        winners_a.push(name_a);
+                        score_a += 1
+                    }
+                    _ => {}
+                }
+            }
+            println!(
+                "{} {:?} vs {} {:?}",
+                s_a_name, winners_a, s_b_name, winners_b
+            );
+            score_b.cmp(&score_a).then_with(|| {
                 let a_record = self.solvable_record(*a);
                 let b_record = self.solvable_record(*b);
-                b_record.timestamp().cmp(&a_record.timestamp())
+                a_record.timestamp().cmp(&b_record.timestamp())
             })
         });
+
+        // Calculate the score per solvable by looking at each dependency individually, more docs are at the struct location
+        // let scores =
+        //     DependencyScores::from_dependencies(shared_dependencies, self.solver, version_cache)
+        //         .score_solvables();
+
+        // // Sort by the total score and use timestamp of the record as a tie breaker
+        // solvables.sort_by(|a, b| {
+        //     // Sort by the calculated score
+        //     let a_score = scores.get(a).unwrap_or(&0);
+        //     let b_score = scores.get(b).unwrap_or(&0);
+
+        //     // Reverse the order, so that the highest score is first
+        //     b_score.cmp(a_score).then_with(|| {
+        //         let a_record = self.solvable_record(*a);
+        //         let b_record = self.solvable_record(*b);
+        //         b_record.timestamp().cmp(&a_record.timestamp())
+        //     })
+        // });
     }
 }
 
