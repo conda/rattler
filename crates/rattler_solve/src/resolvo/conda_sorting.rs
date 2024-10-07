@@ -277,10 +277,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 }
             }
 
-            // Otherwise sort by timestamp
+            // Otherwise sort by timestamp (in reverse, we want the highest timestamp first)
             let a_record = self.solvable_record(*a);
             let b_record = self.solvable_record(*b);
-            a_record.timestamp().cmp(&b_record.timestamp())
+            b_record.timestamp().cmp(&a_record.timestamp())
         });
     }
 }
