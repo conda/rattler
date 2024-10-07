@@ -934,10 +934,7 @@ mod tests {
         // check that the files are there
         assert_check_files(
             target_prefix.path(),
-            &[
-                "clobber.txt",
-                "another-clobber.txt",
-            ],
+            &["clobber.txt", "another-clobber.txt"],
         );
 
         let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
@@ -960,12 +957,13 @@ mod tests {
             platform: Platform::current(),
         };
 
-    
         let install_driver = InstallDriver::builder()
             .with_prefix_records(&prefix_records)
             .finish();
-    
-        install_driver.pre_process(&transaction, target_prefix.path()).unwrap();
+
+        install_driver
+            .pre_process(&transaction, target_prefix.path())
+            .unwrap();
         let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
         for op in &transaction.operations {
             execute_operation(
@@ -983,10 +981,7 @@ mod tests {
         // But also, this is a reinstall so the files should just be overwritten.
         assert_check_files(
             target_prefix.path(),
-            &[
-                "clobber.txt",
-                "another-clobber.txt",
-            ],
+            &["clobber.txt", "another-clobber.txt"],
         );
     }
 
