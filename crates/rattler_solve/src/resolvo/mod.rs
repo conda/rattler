@@ -50,7 +50,7 @@ impl<'a> SolverRepoData<'a> for RepoData<'a> {}
 /// Wrapper around `MatchSpec` so that we can use it in the `resolvo` pool
 #[repr(transparent)]
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-struct SolverMatchSpec<'a> {
+pub struct SolverMatchSpec<'a> {
     inner: NamelessMatchSpec,
     _marker: PhantomData<&'a PackageRecord>,
 }
@@ -84,8 +84,11 @@ impl<'a> VersionSet for SolverMatchSpec<'a> {
 
 /// Wrapper around [`PackageRecord`] so that we can use it in resolvo pool
 #[derive(Eq, PartialEq)]
-enum SolverPackageRecord<'a> {
+pub enum SolverPackageRecord<'a> {
+    /// Represents a record from the repodata
     Record(&'a RepoDataRecord),
+
+    /// Represents a virtual package.
     VirtualPackage(&'a GenericVirtualPackage),
 }
 
@@ -161,7 +164,8 @@ impl<'a> Display for SolverPackageRecord<'a> {
 /// packages.
 #[derive(Default)]
 pub struct CondaDependencyProvider<'a> {
-    pool: Pool<SolverMatchSpec<'a>, String>,
+    /// The pool that deduplicates data used by the provider.
+    pub pool: Pool<SolverMatchSpec<'a>, String>,
 
     records: HashMap<NameId, Candidates>,
 
@@ -512,6 +516,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
                         return Dependencies::Unknown(reason);
                     }
                 };
+
             dependencies.requirements.push(version_set_id.into());
         }
 
