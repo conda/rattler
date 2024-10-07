@@ -48,5 +48,9 @@ resolvo = ["dep:resolvo", "dep:futures"]
 name = "bench"
 harness = false
 
+[[bench]]
+name = "sorting_bench"
+harness = false
+
 [package.metadata.docs.rs]
 all-features = true
