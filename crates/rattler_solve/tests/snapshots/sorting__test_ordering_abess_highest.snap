@@ -1,0 +1,17 @@
+---
+source: crates/rattler_solve/tests/sorting.rs
+expression: "create_sorting_snapshot(spec, solve_strategy)"
+---
+abess=0.4.5=py310hc4a4660_1
+abess=0.4.5=py39hac2352c_1
+abess=0.4.5=py38h514daf8_1
+abess=0.4.5=py37h48bf904_1
+abess=0.4.5=py39hac2352c_0
+abess=0.4.5=py38h514daf8_0
+abess=0.4.5=py37h48bf904_0
+abess=0.4.4=py39hac2352c_1
+abess=0.4.4=py38h514daf8_1
+abess=0.4.4=py37h48bf904_1
+abess=0.4.4=py39hac2352c_0
+abess=0.4.4=py38h514daf8_0
+abess=0.4.4=py37h48bf904_0

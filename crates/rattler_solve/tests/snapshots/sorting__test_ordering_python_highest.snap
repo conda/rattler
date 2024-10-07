@@ -1,0 +1,30 @@
+---
+source: crates/rattler_solve/tests/sorting.rs
+expression: "create_sorting_snapshot(spec, solve_strategy)"
+---
+python=3.10.5=ha86cf86_0_cpython
+python=3.10.5=h582c2e5_0_cpython
+python=3.10.4=h2660328_0_cpython
+python=3.10.4=h9a8a25e_0_cpython
+python=3.10.2=hc74c709_4_cpython
+python=3.10.2=h85951f9_4_cpython
+python=3.10.2=hc74c709_3_cpython
+python=3.10.2=h85951f9_3_cpython
+python=3.10.2=hc74c709_2_cpython
+python=3.10.2=h85951f9_2_cpython
+python=3.10.2=hc74c709_1_cpython
+python=3.10.2=h85951f9_1_cpython
+python=3.10.2=h543edf9_0_cpython
+python=3.10.2=h62f1059_0_cpython
+python=3.10.1=h543edf9_2_cpython
+python=3.10.1=h62f1059_2_cpython
+python=3.10.1=h543edf9_1_cpython
+python=3.10.1=h62f1059_1_cpython
+python=3.10.1=h543edf9_0_cpython
+python=3.10.1=h62f1059_0_cpython
+python=3.10.0=h543edf9_3_cpython
+python=3.10.0=h62f1059_3_cpython
+python=3.10.0=h543edf9_2_cpython
+python=3.10.0=h62f1059_2_cpython
+python=3.10.0=h543edf9_1_cpython
+python=3.10.0=h62f1059_1_cpython
