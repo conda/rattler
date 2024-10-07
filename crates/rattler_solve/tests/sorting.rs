@@ -78,8 +78,8 @@ fn create_sorting_snapshot(package_name: &str) -> String {
 #[case::python("python ~=3.10.*")]
 #[case::libuuid("libuuid")]
 #[case::abess("abess")]
-// #[case::libgcc("libgcc-ng")]
-// #[case::certifi("certifi >=2016.9.26")]
+#[case::libgcc("libgcc-ng")]
+#[case::certifi("certifi >=2016.9.26")]
 fn test_ordering(#[case] spec: &str) {
     insta::assert_snapshot!(
         format!(

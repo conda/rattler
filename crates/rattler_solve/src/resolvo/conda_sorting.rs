@@ -1,18 +1,17 @@
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
 };
 
 use futures::future::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::Version;
 use resolvo::{
-    utils::Pool, Dependencies, Interner, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
+    utils::Pool, Dependencies, NameId, Requirement, SolvableId, SolverCache, VersionSetId,
 };
 
-use crate::resolvo::CondaDependencyProvider;
-
 use super::{SolverMatchSpec, SolverPackageRecord};
+use crate::resolvo::CondaDependencyProvider;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub(super) enum CompareStrategy {
@@ -23,7 +22,8 @@ pub(super) enum CompareStrategy {
 /// Sort the candidates based on the dependencies.
 /// This sorts in two steps:
 /// 1. Sort by tracked features, version, and build number
-/// 2. Sort by trying to sort the solvable that selects the highest versions of the shared set of dependencies
+/// 2. Sort by trying to sort the solvable that selects the highest versions of
+///    the shared set of dependencies
 pub struct SolvableSorter<'a, 'repo> {
     solver: &'a SolverCache<CondaDependencyProvider<'repo>>,
     strategy: CompareStrategy,
@@ -53,7 +53,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     /// Sort the candidates based on the dependencies.
     /// This sorts in two steps:
     /// 1. Sort by tracked features, version, and build number
-    /// 2. Sort by trying to find the candidate that selects the highest versions of the shared set of dependencies
+    /// 2. Sort by trying to find the candidate that selects the highest
+    ///    versions of the shared set of dependencies
     pub fn sort(
         self,
         solvables: &mut [SolvableId],
@@ -108,9 +109,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         solvables: &mut [SolvableId],
         version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
     ) {
-        // Because the list can contain multiple versions, tracked features, and builds of the same package
-        // we need to create sub list of solvables that have the same version, build, and tracked features
-        // and sort these sub lists by the highest version of the dependencies shared by the solvables.
+        // Because the list can contain multiple versions, tracked features, and builds
+        // of the same package we need to create sub list of solvables that have
+        // the same version, build, and tracked features and sort these sub
+        // lists by the highest version of the dependencies shared by the solvables.
         let mut start = 0usize;
         let entire_len = solvables.len();
         while start < entire_len {
@@ -134,14 +136,17 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         }
     }
 
-    /// Sorts the solvables by the highest version of the dependencies shared by the solvables.
-    /// what this function does is:
+    /// Sorts the solvables by the highest version of the dependencies shared by
+    /// the solvables. what this function does is:
     /// 1. Find the first unsorted solvable in the list
     /// 2. Get the dependencies for each solvable
-    /// 3. Get the known dependencies for each solvable, filter out the unknown dependencies
+    /// 3. Get the known dependencies for each solvable, filter out the unknown
+    ///    dependencies
     /// 4. Retain the dependencies that are shared by all the solvables
-    /// 6. Calculate a total score by counting the position of the solvable in the list with sorted dependencies
-    /// 7. Sort by the score per solvable and use timestamp of the record as a tie breaker
+    /// 6. Calculate a total score by counting the position of the solvable in
+    ///    the list with sorted dependencies
+    /// 7. Sort by the score per solvable and use timestamp of the record as a
+    ///    tie breaker
     fn sort_subset_by_highest_dependency_versions(
         &self,
         solvables: &mut [SolvableId],
@@ -165,7 +170,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             Err(_) => return,
         };
 
-        // Get the known dependencies for each solvable, filter out the unknown dependencies
+        // Get the known dependencies for each solvable, filter out the unknown
+        // dependencies
         let id_and_deps = dependencies
             .into_iter()
             // Only consider known dependencies
@@ -174,130 +180,108 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 Dependencies::Unknown(_) => None,
             })
             .map(|(i, known)| {
-                // Map all known dependencies to the package names
-                let dep_ids = known.requirements.iter().map(|req| match req {
-                    Requirement::Single(version_set_id) => (
-                        self.pool()
-                            .resolve_version_set_package_name(*version_set_id),
-                        *version_set_id,
-                    ),
-                    // Ignore union requirements, these do not occur in the conda ecosystem currently
-                    Requirement::Union(_) => {
-                        unimplemented!("Union requirements, are not implemented in the ordering")
-                    }
-                });
-                (*i, dep_ids.collect::<Vec<_>>())
-            })
-            .collect_vec();
+                let mut dependencies: HashMap<NameId, Vec<VersionSetId>> =
+                    HashMap::with_capacity(known.requirements.len());
+                for requirement in &known.requirements {
+                    let version_set_id = match requirement {
+                        // Ignore union requirements, these do not occur in the conda ecosystem
+                        // currently
+                        Requirement::Union(_) => {
+                            unreachable!("Union requirements, are not implemented in the ordering")
+                        }
+                        Requirement::Single(version_set_id) => version_set_id,
+                    };
 
-        // Unique names that all entries have in common
-        let unique_names: HashSet<_> = unique_name_ids(
-            id_and_deps
-                .iter()
-                .map(|(_, names)| names.iter().map(|(name, _)| *name)),
-        );
+                    // Get the name of the dependency and add the version set id to the list of
+                    // version sets for a particular package. A single solvable can depend on a
+                    // single package multiple times.
+                    let dependency_name = self
+                        .pool()
+                        .resolve_version_set_package_name(*version_set_id);
+                    dependencies
+                        .entry(dependency_name)
+                        .or_default()
+                        .push(*version_set_id);
+                }
 
-        // Only retain the dependencies for each solvable that are shared by all solvables
-        let shared_dependencies = id_and_deps
-            .into_iter()
-            .map(|(i, names)| {
-                (
-                    i,
-                    names
-                        .into_iter()
-                        .filter(|(name, _)| unique_names.contains(name))
-                        .map(|(name_id, match_spec_id)| {
-                            let with_tracked =
-                                find_highest_version(match_spec_id, self.solver, version_cache)
-                                    .map(|v| TrackedFeatureVersion::new(v.0, v.1));
-                            (name_id, with_tracked)
-                        })
-                        .collect::<BTreeMap<_, _>>(),
-                )
+                (*i, dependencies)
             })
             .collect::<HashMap<_, _>>();
 
+        // Unique names that all entries have in common
+        let unique_names: HashSet<_> =
+            unique_name_ids(id_and_deps.values().map(|names| names.keys().copied()));
+
+        // Sort all the dependencies that the solvables have in common by their name.
+        let sorted_unique_names = unique_names
+            .into_iter()
+            .sorted_by_key(|name| self.pool().resolve_package_name(*name))
+            .collect_vec();
+
+        // A closure that locates the highest version of a dependency for a solvable.
+        let mut find_highest_version_for_set = |version_set_ids: &Vec<VersionSetId>| {
+            version_set_ids
+                .iter()
+                .filter_map(|id| find_highest_version(*id, self.solver, version_cache))
+                .map(|v| TrackedFeatureVersion::new(v.0, v.1))
+                .fold(None, |init, version| {
+                    if let Some(init) = init {
+                        Some(if version < init { version } else { init })
+                    } else {
+                        Some(version)
+                    }
+                })
+        };
+
+        // Sort the solvables by comparing the highest version of the shared
+        // dependencies in alphabetic order.
         solvables.sort_by(|a, b| {
-            let empty = BTreeMap::new();
-            let a_deps = shared_dependencies.get(a).unwrap_or(&empty);
-            let b_deps = shared_dependencies.get(b).unwrap_or(&empty);
+            let a_dependencies = id_and_deps.get(a).expect("dependencies are missing?");
+            let b_dependencies = id_and_deps.get(b).expect("dependencies are missing?");
 
-            // Zip together the dependencies and give a score if the highest dependency wins
-            let mut score_a = 0;
-            let mut score_b = 0;
-            let mut winners_a = Vec::new();
-            let mut winners_b = Vec::new();
-            let s_a_name = self.solver.provider().display_solvable(*a);
-            let s_b_name = self.solver.provider().display_solvable(*b);
-            for (version_a, version_b) in a_deps.iter().zip(b_deps.iter()) {
-                // Print name and version for debugging
-                let name_a = self.pool().resolve_package_name(*version_a.0);
+            for name in sorted_unique_names.iter() {
+                let a_version_sets = a_dependencies
+                    .get(name)
+                    .and_then(&mut find_highest_version_for_set);
+                let b_version_sets = b_dependencies
+                    .get(name)
+                    .and_then(&mut find_highest_version_for_set);
 
-                // println!("{} {} {:?}", s_a_name, name_a, version_a.1);
-                // println!("{} {} {:?}", s_b_name, name_b, version_b.1);
+                // Deal with the case where resolving the version set doesn't actually select a
+                // version
+                let (a_version, b_version) = match (a_version_sets, b_version_sets) {
+                    // If we have a version for either solvable, but not the other, the one with the
+                    // version is better.
+                    (Some(_), None) => return Ordering::Less,
+                    (None, Some(_)) => return Ordering::Greater,
 
-                let a = version_a.1.as_ref().map(|v| &v.version);
-                let b = version_b.1.as_ref().map(|v| &v.version);
-                let comparison = a.cmp(&b);
-                match comparison {
+                    // If for neither solvable the version set doesn't select a version for the
+                    // dependency we skip it.
+                    (None, None) => continue,
+
+                    (Some(a), Some(b)) => (a, b),
+                };
+
+                // Compare the versions
+                match a_version.cmp(&b_version) {
                     Ordering::Less => {
-                        winners_b.push(name_a);
-                        score_b += 1
+                        return Ordering::Greater;
                     }
                     Ordering::Greater => {
-                        winners_a.push(name_a);
-                        score_a += 1
+                        return Ordering::Less;
                     }
-                    _ => {}
+                    Ordering::Equal => {
+                        // If this version is equal, we continue with the next dependency
+                        continue;
+                    }
                 }
             }
-            println!(
-                "{} {:?} vs {} {:?}",
-                s_a_name, winners_a, s_b_name, winners_b
-            );
-            score_b.cmp(&score_a).then_with(|| {
-                let a_record = self.solvable_record(*a);
-                let b_record = self.solvable_record(*b);
-                a_record.timestamp().cmp(&b_record.timestamp())
-            })
+
+            // Otherwise sort by timestamp
+            let a_record = self.solvable_record(*a);
+            let b_record = self.solvable_record(*b);
+            a_record.timestamp().cmp(&b_record.timestamp())
         });
-
-        // Calculate the score per solvable by looking at each dependency individually, more docs are at the struct location
-        // let scores =
-        //     DependencyScores::from_dependencies(shared_dependencies, self.solver, version_cache)
-        //         .score_solvables();
-
-        // // Sort by the total score and use timestamp of the record as a tie breaker
-        // solvables.sort_by(|a, b| {
-        //     // Sort by the calculated score
-        //     let a_score = scores.get(a).unwrap_or(&0);
-        //     let b_score = scores.get(b).unwrap_or(&0);
-
-        //     // Reverse the order, so that the highest score is first
-        //     b_score.cmp(a_score).then_with(|| {
-        //         let a_record = self.solvable_record(*a);
-        //         let b_record = self.solvable_record(*b);
-        //         b_record.timestamp().cmp(&a_record.timestamp())
-        //     })
-        // });
-    }
-}
-
-/// Maximum version of a dependency that is shared by all solvables
-#[derive(Debug, Clone)]
-struct MaxSolvable {
-    // The version of the dependency
-    // Only sort by version
-    version: Option<TrackedFeatureVersion>,
-    solvable_id: SolvableId,
-}
-
-impl MaxSolvable {
-    fn new(version: Option<TrackedFeatureVersion>, solvable_id: SolvableId) -> Self {
-        Self {
-            version,
-            solvable_id,
-        }
     }
 }
 
@@ -319,15 +303,12 @@ impl TrackedFeatureVersion {
 
 impl Ord for TrackedFeatureVersion {
     fn cmp(&self, other: &Self) -> Ordering {
-        match self.version.cmp(&other.version) {
-            // If the versions are equal, sort by tracked features
-            // Downweight TrackedFeatureVersion that have tracked features
-            Ordering::Equal => match (self.tracked_features, other.tracked_features) {
-                (true, false) => Ordering::Less,
-                (false, true) => Ordering::Greater,
-                _ => Ordering::Equal,
-            },
-            other => other,
+        // First compare by "tracked_features". If one of the packages has a tracked
+        // feature it is sorted below the one that doesn't have the tracked feature.
+        match (self.tracked_features, other.tracked_features) {
+            (true, false) => Ordering::Greater,
+            (false, true) => Ordering::Less,
+            _ => self.version.cmp(&other.version),
         }
     }
 }
@@ -335,87 +316,6 @@ impl Ord for TrackedFeatureVersion {
 impl PartialOrd for TrackedFeatureVersion {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
-    }
-}
-
-/// A struct that calculates the score for each solvable based on the highest dependencies
-/// The way that it works is that it ranks each dependency (identified by name) by the highest version and couples it with the solvable
-/// and then calculates the score for each solvable by counting of the solvables dependency in that ranking
-///
-/// # Example:
-/// Solvable X has dependencies [A1, B2]
-/// Solvable Y has dependencies [A1, B1]
-///
-/// The dependency ranking would be:
-/// A = [(1, X), (1, Y)]
-/// B = [(1, Y), (2, X)]
-///
-/// Y would have a score of 1, because it has the highest version of A
-/// X would have a score of 2, because it has the highest version of B and A
-///
-/// If no version is available for that solvable, it is ignored
-struct DependencyScores {
-    max_map: HashMap<NameId, Vec<MaxSolvable>>,
-}
-
-impl DependencyScores {
-    fn from_dependencies(
-        shared_dependencies: Vec<(SolvableId, HashMap<NameId, VersionSetId>)>,
-        solver: &SolverCache<CondaDependencyProvider<'_>>,
-        highest_version_cache: &mut HashMap<VersionSetId, Option<(Version, bool)>>,
-    ) -> Self {
-        // Map with the maximum version per name
-        let mut max_map = HashMap::with_capacity(shared_dependencies.len());
-        for (solvable, dependencies) in shared_dependencies {
-            for (name, version_set_id) in dependencies {
-                let version = find_highest_version(version_set_id, solver, highest_version_cache)
-                    .map(|v| TrackedFeatureVersion::new(v.0, v.1));
-                // Update the max version for the name
-                let max_solvable = MaxSolvable::new(version, solvable);
-                max_map
-                    .entry(name)
-                    .and_modify(|v: &mut Vec<MaxSolvable>| {
-                        v.push(max_solvable.clone());
-                    })
-                    .or_insert_with(|| vec![max_solvable]);
-            }
-        }
-
-        // Sort all vectors of dependencies by version
-        for max_solvables in max_map.values_mut() {
-            max_solvables.sort_by(|a, b| a.version.cmp(&b.version));
-        }
-
-        Self { max_map }
-    }
-
-    /// Per dependency, score the solvables based on the highest version of the dependency
-    fn score_solvables(&self) -> HashMap<SolvableId, u32> {
-        let mut scores = HashMap::with_capacity(self.max_map.len());
-        // Create a score per dependency name, how high it is ranked in the list
-        for (_, solvables) in self.max_map.iter() {
-            let mut score = 0;
-            let mut last_version = None;
-            for solvable in solvables {
-                // No score if there is no version
-                // These should be at the beginning of the list
-                if solvable.version.is_none() {
-                    continue;
-                }
-                // Increase the score if the version is different from the previous one
-                if last_version != solvable.version.as_ref() {
-                    score += 1;
-                }
-                // Add the score to the solvable
-                scores
-                    .entry(solvable.solvable_id)
-                    .and_modify(|v| *v += score)
-                    .or_insert(score);
-                last_version = solvable.version.as_ref();
-            }
-        }
-
-        scores
     }
 }
 
