@@ -94,7 +94,6 @@ use reqwest_middleware::ClientWithMiddleware;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
-use std::io::Write;
 use std::iter::Iterator;
 use std::path::Path;
 use std::str;
@@ -544,6 +543,7 @@ fn apply_jlap_patches(
     tracing::info!("parsing cached repodata.json as JSON");
     let mut repo_data =
         serde_json::from_str::<Value>(&repo_data_contents).map_err(JLAPError::JSONParse)?;
+    std::mem::drop(repo_data_contents);
 
     if let Some((reporter, index)) = report {
         reporter.on_jlap_decode_completed(index);
@@ -569,9 +569,6 @@ fn apply_jlap_patches(
         reporter.on_jlap_encode_start(index);
     }
 
-    // Convert the json to bytes, but we don't really care about formatting.
-    let updated_json = serde_json::to_string(&repo_data).map_err(JLAPError::JSONParse)?;
-
     // Write the content to disk and immediately compute the hash of the file contents.
     tracing::info!("writing patched repodata to disk");
     let mut hashing_writer = NamedTempFile::new_in(
@@ -581,9 +578,9 @@ fn apply_jlap_patches(
     )
     .map_err(JLAPError::FileSystem)
     .map(rattler_digest::HashingWriter::<_, Blake2b256>::new)?;
-    hashing_writer
-        .write_all(&updated_json.into_bytes())
-        .map_err(JLAPError::FileSystem)?;
+    serde_json::to_writer(std::io::BufWriter::new(&mut hashing_writer), &repo_data)
+        .map_err(JLAPError::JSONParse)?;
+
     let (file, hash) = hashing_writer.finalize();
     file.persist(repo_data_path)
         .map_err(|e| JLAPError::FileSystem(e.error))?;
