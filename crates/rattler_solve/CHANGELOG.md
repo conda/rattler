@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+<<<<<<< Updated upstream
+=======
+- total ordering for the dependency provider ([#892](https://github.com/conda/rattler/pull/892))
+>>>>>>> Stashed changes
 - add sorting bench and makes test same as feature test ([#897](https://github.com/conda/rattler/pull/897))
 
 ### Fixed

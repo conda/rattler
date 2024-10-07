@@ -12,7 +12,7 @@ readme.workspace = true
 
 [dependencies]
 chrono = { workspace = true }
-file_url = { path = "../file_url", version = "0.1.5" }
+file_url = { path = "../file_url", version = "0.1.6" }
 fxhash = { workspace = true }
 glob = { workspace = true }
 hex = { workspace = true }
