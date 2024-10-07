@@ -81,10 +81,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         // feature it is sorted below the one that doesn't have the tracked feature.
         let a_has_tracked_features = !a_record.track_features().is_empty();
         let b_has_tracked_features = !b_record.track_features().is_empty();
-        match a_has_tracked_features.cmp(&b_has_tracked_features) {
-            Ordering::Less => return Ordering::Less,
-            Ordering::Greater => return Ordering::Greater,
-            Ordering::Equal => {}
+        match (a_has_tracked_features, b_has_tracked_features) {
+            (true, false) => return Ordering::Greater,
+            (false, true) => return Ordering::Less,
+            _ => {}
         };
 
         // Otherwise, select the variant with the highest version
@@ -96,12 +96,8 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
             (_, Ordering::Equal) => {}
         };
 
-        // Otherwise, select the variant with the highest build number
-        match a_record.build_number().cmp(&b_record.build_number()) {
-            Ordering::Less => Ordering::Greater,
-            Ordering::Greater => Ordering::Less,
-            Ordering::Equal => Ordering::Equal,
-        }
+        // Otherwise, select the variant with the highest build number first
+        b_record.build_number().cmp(&a_record.build_number())
     }
 
     fn sort_by_highest_dependency_versions(
@@ -175,9 +171,11 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         let id_and_deps = dependencies
             .into_iter()
             // Only consider known dependencies
-            .filter_map(|(i, deps)| match deps {
-                Dependencies::Known(known_dependencies) => Some((i, known_dependencies)),
-                Dependencies::Unknown(_) => None,
+            .map(|(i, deps)| match deps {
+                Dependencies::Known(known_dependencies) => (i, known_dependencies),
+                Dependencies::Unknown(_) => {
+                    unreachable!("Unknown dependencies should never happen in the conda ecosystem")
+                }
             })
             .map(|(i, known)| {
                 let mut dependencies: HashMap<NameId, Vec<VersionSetId>> =
@@ -265,10 +263,10 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 // Compare the versions
                 match a_version.cmp(&b_version) {
                     Ordering::Less => {
-                        return Ordering::Greater;
+                        return Ordering::Less;
                     }
                     Ordering::Greater => {
-                        return Ordering::Less;
+                        return Ordering::Greater;
                     }
                     Ordering::Equal => {
                         // If this version is equal, we continue with the next dependency
@@ -308,7 +306,7 @@ impl Ord for TrackedFeatureVersion {
         match (self.tracked_features, other.tracked_features) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
-            _ => self.version.cmp(&other.version),
+            _ => other.version.cmp(&self.version),
         }
     }
 }
@@ -369,10 +367,14 @@ pub(super) fn find_highest_version(
                             )
                         },
                         |(version, has_tracked_features)| {
-                            (
-                                version.max(record.version().clone()),
-                                has_tracked_features && !record.track_features().is_empty(),
-                            )
+                            if &version < record.version() {
+                                (
+                                    record.version().clone(),
+                                    !record.track_features().is_empty(),
+                                )
+                            } else {
+                                (version, has_tracked_features)
+                            }
                         },
                     ))
                 })
