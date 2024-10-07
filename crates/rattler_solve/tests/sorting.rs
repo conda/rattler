@@ -5,14 +5,14 @@ use std::path::Path;
 use futures::FutureExt;
 use itertools::Itertools;
 use rattler_conda_types::{
-    Channel, MatchSpec, Matches, PackageName, ParseStrictness::Lenient, RepoDataRecord,
+    Channel, MatchSpec, PackageName, ParseStrictness::Lenient, RepoDataRecord,
 };
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::CondaDependencyProvider, ChannelPriority, SolveStrategy};
 use resolvo::{Interner, SolverCache};
 use rstest::*;
 
-fn load_repodata(package_name: &PackageName) -> Vec<RepoDataRecord> {
+fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
     let channel_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .join("test-data")
@@ -23,8 +23,8 @@ fn load_repodata(package_name: &PackageName) -> Vec<RepoDataRecord> {
 
     let sparse_repo_data = SparseRepoData::new(channel, "linux-64", repodata_json_path, None)
         .expect("failed to load sparse repodata");
-    sparse_repo_data
-        .load_records(package_name)
+
+    SparseRepoData::load_records_recursive(&[sparse_repo_data], [package_name.clone()], None)
         .expect("failed to load records")
 }
 
@@ -33,12 +33,11 @@ fn create_sorting_snapshot(package_name: &str) -> String {
     let package_name = match_spec.name.clone().unwrap();
 
     // Load repodata
-    let mut repodata = load_repodata(&package_name);
-    repodata.retain(|record| match_spec.matches(record));
+    let repodata = load_repodata(&package_name);
 
     // Construct dependency provider
     let dependency_provider = CondaDependencyProvider::new(
-        [repodata.iter().collect()],
+        repodata.iter().map(|r| r.iter().collect()),
         &[],
         &[],
         &[],
