@@ -28,7 +28,7 @@ fn load_repodata(package_name: &PackageName) -> Vec<Vec<RepoDataRecord>> {
         .expect("failed to load records")
 }
 
-fn create_sorting_snapshot(package_name: &str) -> String {
+fn create_sorting_snapshot(package_name: &str, strategy: SolveStrategy) -> String {
     let match_spec = MatchSpec::from_str(package_name, Lenient).unwrap();
     let package_name = match_spec.name.clone().unwrap();
 
@@ -41,11 +41,11 @@ fn create_sorting_snapshot(package_name: &str) -> String {
         &[],
         &[],
         &[],
-        &[],
+        &[match_spec.clone()],
         None,
         ChannelPriority::default(),
         None,
-        SolveStrategy::default(),
+        strategy,
     )
     .expect("failed to create dependency provider");
 
@@ -74,18 +74,25 @@ fn create_sorting_snapshot(package_name: &str) -> String {
 }
 
 #[rstest]
-#[case::pytorch("pytorch >=1.12.0")]
-#[case::python("python ~=3.10.*")]
-#[case::libuuid("libuuid")]
-#[case::abess("abess")]
-#[case::libgcc("libgcc-ng")]
-#[case::certifi("certifi >=2016.9.26")]
-fn test_ordering(#[case] spec: &str) {
+#[case::pytorch("pytorch >=1.12.0", SolveStrategy::Highest)]
+#[case::pytorch("pytorch >=1.12.0", SolveStrategy::LowestVersion)]
+#[case::pytorch("pytorch >=1.12.0", SolveStrategy::LowestVersionDirect)]
+#[case::python("python ~=3.10.*", SolveStrategy::Highest)]
+#[case::libuuid("libuuid", SolveStrategy::Highest)]
+#[case::abess("abess", SolveStrategy::Highest)]
+#[case::libgcc("libgcc-ng", SolveStrategy::Highest)]
+#[case::certifi("certifi >=2016.9.26", SolveStrategy::Highest)]
+fn test_ordering(#[case] spec: &str, #[case] solve_strategy: SolveStrategy) {
     insta::assert_snapshot!(
         format!(
-            "test_ordering_{}",
-            spec.split_whitespace().next().unwrap_or(spec)
+            "test_ordering_{}_{}",
+            spec.split_whitespace().next().unwrap_or(spec),
+            match solve_strategy {
+                SolveStrategy::Highest => "highest",
+                SolveStrategy::LowestVersion => "lowest",
+                SolveStrategy::LowestVersionDirect => "lowest_direct",
+            }
         ),
-        create_sorting_snapshot(spec)
+        create_sorting_snapshot(spec, solve_strategy)
     );
 }

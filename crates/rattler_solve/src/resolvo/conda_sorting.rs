@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
 };
 
 use futures::future::FutureExt;
@@ -27,14 +27,20 @@ pub(super) enum CompareStrategy {
 pub struct SolvableSorter<'a, 'repo> {
     solver: &'a SolverCache<CondaDependencyProvider<'repo>>,
     strategy: CompareStrategy,
+    dependency_strategy: CompareStrategy,
 }
 
 impl<'a, 'repo> SolvableSorter<'a, 'repo> {
     pub fn new(
         solver: &'a SolverCache<CondaDependencyProvider<'repo>>,
         strategy: CompareStrategy,
+        dependency_strategy: CompareStrategy,
     ) -> Self {
-        Self { solver, strategy }
+        Self {
+            solver,
+            strategy,
+            dependency_strategy,
+        }
     }
 
     /// Get a reference to the solvable record.
@@ -168,51 +174,56 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
 
         // Get the known dependencies for each solvable, filter out the unknown
         // dependencies
-        let id_and_deps = dependencies
-            .into_iter()
-            // Only consider known dependencies
-            .map(|(i, deps)| match deps {
-                Dependencies::Known(known_dependencies) => (i, known_dependencies),
+        let mut id_and_deps: HashMap<_, Vec<_>> = HashMap::with_capacity(dependencies.len());
+        let mut name_count: HashMap<NameId, usize> = HashMap::new();
+        for (solvable_id, deps) in dependencies {
+            let known = match deps {
+                Dependencies::Known(known_dependencies) => known_dependencies,
                 Dependencies::Unknown(_) => {
                     unreachable!("Unknown dependencies should never happen in the conda ecosystem")
                 }
-            })
-            .map(|(i, known)| {
-                let mut dependencies: HashMap<NameId, Vec<VersionSetId>> =
-                    HashMap::with_capacity(known.requirements.len());
-                for requirement in &known.requirements {
-                    let version_set_id = match requirement {
-                        // Ignore union requirements, these do not occur in the conda ecosystem
-                        // currently
-                        Requirement::Union(_) => {
-                            unreachable!("Union requirements, are not implemented in the ordering")
-                        }
-                        Requirement::Single(version_set_id) => version_set_id,
-                    };
+            };
 
-                    // Get the name of the dependency and add the version set id to the list of
-                    // version sets for a particular package. A single solvable can depend on a
-                    // single package multiple times.
-                    let dependency_name = self
-                        .pool()
-                        .resolve_version_set_package_name(*version_set_id);
-                    dependencies
-                        .entry(dependency_name)
-                        .or_default()
-                        .push(*version_set_id);
+            for requirement in &known.requirements {
+                let version_set_id = match requirement {
+                    // Ignore union requirements, these do not occur in the conda ecosystem
+                    // currently
+                    Requirement::Union(_) => {
+                        unreachable!("Union requirements, are not implemented in the ordering")
+                    }
+                    Requirement::Single(version_set_id) => version_set_id,
+                };
+
+                // Get the name of the dependency and add the version set id to the list of
+                // version sets for a particular package. A single solvable can depend on a
+                // single package multiple times.
+                let dependency_name = self
+                    .pool()
+                    .resolve_version_set_package_name(*version_set_id);
+                match id_and_deps.entry((*solvable_id, dependency_name)) {
+                    Entry::Occupied(mut entry) => entry.get_mut().push(*version_set_id),
+                    Entry::Vacant(entry) => {
+                        entry.insert(vec![*version_set_id]);
+
+                        // Increment the number of times we have seen this dependency for this
+                        // solvable.
+                        let name_count = name_count.entry(dependency_name).or_default();
+                        *name_count += 1;
+                    }
                 }
-
-                (*i, dependencies)
-            })
-            .collect::<HashMap<_, _>>();
-
-        // Unique names that all entries have in common
-        let unique_names: HashSet<_> =
-            unique_name_ids(id_and_deps.values().map(|names| names.keys().copied()));
+            }
+        }
 
         // Sort all the dependencies that the solvables have in common by their name.
-        let sorted_unique_names = unique_names
+        let sorted_unique_names = name_count
             .into_iter()
+            .filter_map(|(name, count)| {
+                if count == solvables.len() {
+                    Some(name)
+                } else {
+                    None
+                }
+            })
             .sorted_by_key(|name| self.pool().resolve_package_name(*name))
             .collect_vec();
 
@@ -224,7 +235,15 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 .map(|v| TrackedFeatureVersion::new(v.0, v.1))
                 .fold(None, |init, version| {
                     if let Some(init) = init {
-                        Some(if version < init { version } else { init })
+                        Some(
+                            if version.compare_with_strategy(&init, CompareStrategy::Default)
+                                == Ordering::Less
+                            {
+                                version
+                            } else {
+                                init
+                            },
+                        )
                     } else {
                         Some(version)
                     }
@@ -234,20 +253,17 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         // Sort the solvables by comparing the highest version of the shared
         // dependencies in alphabetic order.
         solvables.sort_by(|a, b| {
-            let a_dependencies = id_and_deps.get(a).expect("dependencies are missing?");
-            let b_dependencies = id_and_deps.get(b).expect("dependencies are missing?");
-
-            for name in sorted_unique_names.iter() {
-                let a_version_sets = a_dependencies
-                    .get(name)
+            for &name in sorted_unique_names.iter() {
+                let a_version = id_and_deps
+                    .get(&(*a, name))
                     .and_then(&mut find_highest_version_for_set);
-                let b_version_sets = b_dependencies
-                    .get(name)
+                let b_version = id_and_deps
+                    .get(&(*b, name))
                     .and_then(&mut find_highest_version_for_set);
 
                 // Deal with the case where resolving the version set doesn't actually select a
                 // version
-                let (a_version, b_version) = match (a_version_sets, b_version_sets) {
+                let (a_version, b_version) = match (a_version, b_version) {
                     // If we have a version for either solvable, but not the other, the one with the
                     // version is better.
                     (Some(_), None) => return Ordering::Less,
@@ -261,17 +277,12 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 };
 
                 // Compare the versions
-                match a_version.cmp(&b_version) {
-                    Ordering::Less => {
-                        return Ordering::Less;
-                    }
-                    Ordering::Greater => {
-                        return Ordering::Greater;
-                    }
+                match a_version.compare_with_strategy(&b_version, self.dependency_strategy) {
                     Ordering::Equal => {
                         // If this version is equal, we continue with the next dependency
                         continue;
                     }
+                    ordering => return ordering,
                 }
             }
 
@@ -297,40 +308,17 @@ impl TrackedFeatureVersion {
             tracked_features,
         }
     }
-}
 
-impl Ord for TrackedFeatureVersion {
-    fn cmp(&self, other: &Self) -> Ordering {
+    fn compare_with_strategy(&self, other: &Self, compare_strategy: CompareStrategy) -> Ordering {
         // First compare by "tracked_features". If one of the packages has a tracked
         // feature it is sorted below the one that doesn't have the tracked feature.
         match (self.tracked_features, other.tracked_features) {
             (true, false) => Ordering::Greater,
             (false, true) => Ordering::Less,
-            _ => other.version.cmp(&self.version),
+            _ if compare_strategy == CompareStrategy::Default => other.version.cmp(&self.version),
+            _ => self.version.cmp(&other.version),
         }
     }
-}
-
-impl PartialOrd for TrackedFeatureVersion {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// Get the unique package names from a list of vectors of package names.
-fn unique_name_ids<V: IntoIterator<Item = NameId>>(
-    vectors: impl IntoIterator<Item = V>,
-) -> HashSet<NameId> {
-    let mut iter = vectors.into_iter();
-    let mut intial = match iter.next() {
-        Some(first) => first.into_iter().collect(),
-        None => HashSet::new(),
-    };
-    for vec in iter {
-        let set: HashSet<NameId> = vec.into_iter().collect();
-        intial.retain(|name| set.contains(name));
-    }
-    intial
 }
 
 pub(super) fn find_highest_version(

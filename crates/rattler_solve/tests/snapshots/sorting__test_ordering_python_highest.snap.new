@@ -1,6 +1,7 @@
 ---
 source: crates/rattler_solve/tests/sorting.rs
-expression: create_sorting_snapshot(spec)
+assertion_line: 86
+expression: "create_sorting_snapshot(spec, solve_strategy)"
 ---
 python=3.10.5=ha86cf86_0_cpython
 python=3.10.5=h582c2e5_0_cpython

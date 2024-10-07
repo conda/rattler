@@ -475,17 +475,20 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
 
         let mut highest_version_spec = self.matchspec_to_highest_version.borrow_mut();
 
-        let strategy = match self.strategy {
-            SolveStrategy::Highest => CompareStrategy::Default,
-            SolveStrategy::LowestVersion => CompareStrategy::LowestVersion,
+        let (strategy, dependency_strategy) = match self.strategy {
+            SolveStrategy::Highest => (CompareStrategy::Default, CompareStrategy::Default),
+            SolveStrategy::LowestVersion => (
+                CompareStrategy::LowestVersion,
+                CompareStrategy::LowestVersion,
+            ),
             SolveStrategy::LowestVersionDirect => {
                 if self
                     .direct_dependencies
                     .contains(&self.pool.resolve_solvable(solvables[0]).name)
                 {
-                    CompareStrategy::LowestVersion
+                    (CompareStrategy::LowestVersion, CompareStrategy::Default)
                 } else {
-                    CompareStrategy::Default
+                    (CompareStrategy::Default, CompareStrategy::Default)
                 }
             }
         };
@@ -493,7 +496,7 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         // Custom sorter that sorts by name, version, and build
         // and then by the maximalization of dependency versions
         // more information can be found at the struct location
-        SolvableSorter::new(solver, strategy).sort(solvables, &mut highest_version_spec);
+        SolvableSorter::new(solver, strategy, dependency_strategy).sort(solvables, &mut highest_version_spec);
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {
