@@ -174,8 +174,8 @@ impl ClobberRegistry {
                     // We insert the non-renamed path here
                     clobber_paths.insert(path.clone(), new_path);
                 } else {
-                    // In this case, the path we are looking at was previously removed so we need to
-                    // add it back to the registry and to the clobbers (the idx in the registry is None)
+                    // In this case, the path we are looking at was previously
+                    // removed so we need to add it back to the registry
                     self.paths_registry.insert(path.clone(), Some(name_idx));
 
                     // If we previously had clobbers with this path, we need to
