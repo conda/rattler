@@ -867,7 +867,7 @@ mod tests {
             .with_prefix_records(&prefix_records)
             .finish();
 
-        execute_transaction(
+        let result = execute_transaction(
             transaction,
             target_prefix.path(),
             &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
@@ -876,6 +876,8 @@ mod tests {
             &InstallOptions::default(),
         )
         .await;
+
+        println!("== RESULT: {:?}", result.clobbered_paths);
 
         assert_check_files(
             target_prefix.path(),
@@ -896,6 +898,95 @@ mod tests {
         assert_eq!(
             fs::read_to_string(target_prefix.path().join("another-clobber.txt")).unwrap(),
             "clobber-2\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_self_clobber_update() {
+        // Create a transaction
+        let repodata_record_1 = get_repodata_record(
+            get_test_data_dir().join("clobber/clobber-1-0.1.0-h4616a5c_0.tar.bz2"),
+        );
+
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Install(repodata_record_1.clone())],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+        // execute transaction
+        let target_prefix = tempfile::tempdir().unwrap();
+
+        let packages_dir = tempfile::tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        execute_transaction(
+            transaction,
+            target_prefix.path(),
+            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
+            &cache,
+            &InstallDriver::default(),
+            &InstallOptions::default(),
+        )
+        .await;
+
+        // check that the files are there
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "another-clobber.txt",
+            ],
+        );
+
+        let mut prefix_records = PrefixRecord::collect_from_prefix(target_prefix.path()).unwrap();
+        prefix_records.sort_by(|a, b| {
+            a.repodata_record
+                .package_record
+                .name
+                .as_normalized()
+                .cmp(b.repodata_record.package_record.name.as_normalized())
+        });
+
+        // Reinstall the same package
+        let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
+            operations: vec![TransactionOperation::Change {
+                old: prefix_records[0].clone(),
+                new: repodata_record_1,
+            }],
+            python_info: None,
+            current_python_info: None,
+            platform: Platform::current(),
+        };
+
+    
+        let install_driver = InstallDriver::builder()
+            .with_prefix_records(&prefix_records)
+            .finish();
+    
+        install_driver.pre_process(&transaction, target_prefix.path()).unwrap();
+        let dl_client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        for op in &transaction.operations {
+            execute_operation(
+                target_prefix.path(),
+                &dl_client,
+                &cache,
+                &install_driver,
+                op.clone(),
+                &InstallOptions::default(),
+            )
+            .await;
+        }
+
+        // Check what files are in the prefix now (note that unclobbering wasn't run yet)
+        // But also, this is a reinstall so the files should just be overwritten.
+        assert_check_files(
+            target_prefix.path(),
+            &[
+                "clobber.txt",
+                "another-clobber.txt",
+            ],
         );
     }
 
