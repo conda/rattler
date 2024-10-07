@@ -500,20 +500,20 @@ mod tests {
     #[test]
     fn issue_bracket_printing() {
         let v = VersionSpec::from_str("(>=1,<2)|>3", ParseStrictness::Lenient).unwrap();
-        assert_eq!(format!("{}", v), ">=1,<2|>3");
+        assert_eq!(format!("{v}"), ">=1,<2|>3");
 
         let v = VersionSpec::from_str("(>=1|<2),>3", ParseStrictness::Lenient).unwrap();
-        assert_eq!(format!("{}", v), "(>=1|<2),>3");
+        assert_eq!(format!("{v}"), "(>=1|<2),>3");
 
         let v = VersionSpec::from_str("(>=1|<2)|>3", ParseStrictness::Lenient).unwrap();
-        assert_eq!(format!("{}", v), ">=1|<2|>3");
+        assert_eq!(format!("{v}"), ">=1|<2|>3");
 
         let v = VersionSpec::from_str("(>=1,<2),>3", ParseStrictness::Lenient).unwrap();
-        assert_eq!(format!("{}", v), ">=1,<2,>3");
+        assert_eq!(format!("{v}"), ">=1,<2,>3");
 
         let v =
             VersionSpec::from_str("((>=1|>2),(>3|>4))|(>5,<6)", ParseStrictness::Lenient).unwrap();
-        assert_eq!(format!("{}", v), "(>=1|>2),(>3|>4)|>5,<6");
+        assert_eq!(format!("{v}"), "(>=1|>2),(>3|>4)|>5,<6");
     }
 
     #[test]

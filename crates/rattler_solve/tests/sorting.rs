@@ -38,7 +38,7 @@ fn create_sorting_snapshot(package_name: &str) -> String {
 
     // Construct dependency provider
     let dependency_provider = CondaDependencyProvider::new(
-        vec![rattler_solve::resolvo::RepoData::from_iter(repodata.iter())].into_iter(),
+        [repodata.iter().collect()],
         &[],
         &[],
         &[],
@@ -68,7 +68,7 @@ fn create_sorting_snapshot(package_name: &str) -> String {
         .expect("solver requested cancellation");
 
     sorted_candidates
-        .into_iter()
+        .iter()
         .map(|&candidate| cache.provider().display_solvable(candidate))
         .format("\n")
         .to_string()
