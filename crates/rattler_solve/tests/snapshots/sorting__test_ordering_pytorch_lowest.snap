@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/sorting.rs
-assertion_line: 86
 expression: "create_sorting_snapshot(spec, solve_strategy)"
 ---
 pytorch=1.12.0=cuda102py39hbbcd3cb_202

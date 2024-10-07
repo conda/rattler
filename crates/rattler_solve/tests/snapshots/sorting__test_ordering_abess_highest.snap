@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/sorting.rs
-assertion_line: 86
 expression: "create_sorting_snapshot(spec, solve_strategy)"
 ---
 abess=0.4.5=py310hc4a4660_1

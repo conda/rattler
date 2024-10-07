@@ -176,12 +176,19 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
         // dependencies
         let mut id_and_deps: HashMap<_, Vec<_>> = HashMap::with_capacity(dependencies.len());
         let mut name_count: HashMap<NameId, usize> = HashMap::new();
-        for (solvable_id, deps) in dependencies {
-            let known = match deps {
-                Dependencies::Known(known_dependencies) => known_dependencies,
-                Dependencies::Unknown(_) => {
+        for (solvable_idx, &solvable_id) in solvables.iter().enumerate() {
+            let dependencies = self
+                .solver
+                .get_or_cache_dependencies(solvable_id)
+                .now_or_never()
+                .expect("get_or_cache_dependencies failed");
+            let known = match dependencies {
+                Ok(Dependencies::Known(known_dependencies)) => known_dependencies,
+                Ok(Dependencies::Unknown(_)) => {
                     unreachable!("Unknown dependencies should never happen in the conda ecosystem")
                 }
+                // Solver cancelation, lets just return
+                Err(_) => return,
             };
 
             for requirement in &known.requirements {
@@ -200,14 +207,23 @@ impl<'a, 'repo> SolvableSorter<'a, 'repo> {
                 let dependency_name = self
                     .pool()
                     .resolve_version_set_package_name(*version_set_id);
-                match id_and_deps.entry((*solvable_id, dependency_name)) {
+
+                // Check how often we have seen this dependency name
+                let name_count = match name_count.entry(dependency_name) {
+                    Entry::Occupied(entry) if entry.get() + 1 >= solvable_idx => entry.into_mut(),
+                    Entry::Vacant(entry) if solvable_idx == 0 => entry.insert(0),
+                    _ => {
+                        // We have already not seen this dependency name for all solvables so there
+                        // is no need to allocate additional memory to track
+                        // it.
+                        continue;
+                    }
+                };
+
+                match id_and_deps.entry((solvable_id, dependency_name)) {
                     Entry::Occupied(mut entry) => entry.get_mut().push(*version_set_id),
                     Entry::Vacant(entry) => {
                         entry.insert(vec![*version_set_id]);
-
-                        // Increment the number of times we have seen this dependency for this
-                        // solvable.
-                        let name_count = name_count.entry(dependency_name).or_default();
                         *name_count += 1;
                     }
                 }

@@ -496,7 +496,8 @@ impl<'a> DependencyProvider for CondaDependencyProvider<'a> {
         // Custom sorter that sorts by name, version, and build
         // and then by the maximalization of dependency versions
         // more information can be found at the struct location
-        SolvableSorter::new(solver, strategy, dependency_strategy).sort(solvables, &mut highest_version_spec);
+        SolvableSorter::new(solver, strategy, dependency_strategy)
+            .sort(solvables, &mut highest_version_spec);
     }
 
     async fn get_candidates(&self, name: NameId) -> Option<Candidates> {

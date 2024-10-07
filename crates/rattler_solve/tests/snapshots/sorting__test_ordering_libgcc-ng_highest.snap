@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/sorting.rs
-assertion_line: 86
 expression: "create_sorting_snapshot(spec, solve_strategy)"
 ---
 libgcc-ng=12.1.0=h8d9b700_16
