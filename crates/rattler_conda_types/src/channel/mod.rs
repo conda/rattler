@@ -85,6 +85,9 @@ pub enum NamedChannelOrUrl {
 
     /// A url
     Url(Url),
+
+    /// A path. Can either be absolute or relative.
+    Path(Utf8TypedPathBuf),
 }
 
 impl NamedChannelOrUrl {
@@ -96,12 +99,13 @@ impl NamedChannelOrUrl {
         match self {
             NamedChannelOrUrl::Name(name) => name,
             NamedChannelOrUrl::Url(url) => url.as_str().trim_end_matches('/'),
+            NamedChannelOrUrl::Path(path) => path.as_str(),
         }
     }
 
     /// Converts the channel to a base url using the given configuration.
     /// This method ensures that the base url always ends with a `/`.
-    pub fn into_base_url(self, config: &ChannelConfig) -> Url {
+    pub fn into_base_url(self, config: &ChannelConfig) -> Result<Url, ParseChannelError> {
         let url = match self {
             NamedChannelOrUrl::Name(name) => {
                 let mut base_url = config.channel_alias.clone();
@@ -113,21 +117,27 @@ impl NamedChannelOrUrl {
                 base_url
             }
             NamedChannelOrUrl::Url(url) => url,
+            NamedChannelOrUrl::Path(path) => {
+                let absolute_path = absolute_path(path.as_str(), &config.root_dir)?;
+                directory_path_to_url(absolute_path.to_path())
+                    .map_err(|_err| ParseChannelError::InvalidPath(path.to_string()))?
+            }
         };
-        add_trailing_slash(&url).into_owned()
+        Ok(add_trailing_slash(&url).into_owned())
     }
 
     /// Converts this instance into a channel.
-    pub fn into_channel(self, config: &ChannelConfig) -> Channel {
+    pub fn into_channel(self, config: &ChannelConfig) -> Result<Channel, ParseChannelError> {
         let name = match &self {
             NamedChannelOrUrl::Name(name) => Some(name.clone()),
             NamedChannelOrUrl::Url(base_url) => config.strip_channel_alias(base_url),
+            NamedChannelOrUrl::Path(_) => None,
         };
-        let base_url = self.into_base_url(config);
-        Channel {
+        let base_url = self.into_base_url(config)?;
+        Ok(Channel {
             name,
             ..Channel::from_url(base_url)
-        }
+        })
     }
 }
 
@@ -143,6 +153,8 @@ impl FromStr for NamedChannelOrUrl {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if parse_scheme(s).is_some() {
             Ok(NamedChannelOrUrl::Url(Url::from_str(s)?))
+        } else if is_path(s) {
+            Ok(NamedChannelOrUrl::Path(s.into()))
         } else {
             Ok(NamedChannelOrUrl::Name(s.to_string()))
         }
@@ -767,6 +779,8 @@ mod tests {
             "conda-forge/",
             "https://conda.anaconda.org/conda-forge",
             "https://conda.anaconda.org/conda-forge/",
+            "../conda-forge/",
+            "../conda-forge",
         ];
 
         for channel_str in test_channels {
@@ -775,12 +789,15 @@ mod tests {
             assert!(!channel.base_url().as_str().ends_with("//"));
 
             let named_channel = NamedChannelOrUrl::from_str(channel_str).unwrap();
-            let base_url = named_channel.clone().into_base_url(&channel_config);
+            let base_url = named_channel
+                .clone()
+                .into_base_url(&channel_config)
+                .unwrap();
             let base_url_str = base_url.as_str();
             assert!(base_url_str.ends_with('/'));
             assert!(!base_url_str.ends_with("//"));
 
-            let channel = named_channel.into_channel(&channel_config);
+            let channel = named_channel.into_channel(&channel_config).unwrap();
             assert!(channel.base_url().as_str().ends_with('/'));
             assert!(!channel.base_url().as_str().ends_with("//"));
         }
@@ -796,14 +813,14 @@ mod tests {
         let channel = Channel::from_str("conda-forge", &channel_config).unwrap();
         assert_eq!(
             &channel.base_url,
-            named.into_channel(&channel_config).base_url()
+            named.into_channel(&channel_config).unwrap().base_url()
         );
 
         let named = NamedChannelOrUrl::Name("nvidia/label/cuda-11.8.0".to_string());
         let channel = Channel::from_str("nvidia/label/cuda-11.8.0", &channel_config).unwrap();
         assert_eq!(
             channel.base_url(),
-            named.into_channel(&channel_config).base_url()
+            named.into_channel(&channel_config).unwrap().base_url()
         );
     }
 }

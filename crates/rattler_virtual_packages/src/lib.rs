@@ -609,11 +609,11 @@ mod test {
 
     use rattler_conda_types::Version;
 
-    use crate::{Cuda, EnvOverride, LibC, Osx, Override, VirtualPackage};
+    use crate::{Cuda, EnvOverride, LibC, Osx, Override, VirtualPackage, VirtualPackageOverrides};
 
     #[test]
     fn doesnt_crash() {
-        let virtual_packages = VirtualPackage::detect(&Default::default()).unwrap();
+        let virtual_packages = VirtualPackage::detect(&VirtualPackageOverrides::default()).unwrap();
         println!("{virtual_packages:?}");
     }
     #[test]

@@ -1,6 +1,6 @@
 [package]
 name = "rattler_repodata_gateway"
-version = "0.21.13"
+version = "0.21.17"
 edition.workspace = true
 authors = ["Bas Zalmstra <zalmstra.bas@gmail.com>"]
 description = "A crate to interact with Conda repodata"
@@ -11,6 +11,7 @@ license.workspace = true
 readme.workspace = true
 
 [dependencies]
+fs-err = { workspace = true}
 anyhow = { workspace = true }
 async-fd-lock = { workspace = true }
 async-compression = { workspace = true, features = ["gzip", "tokio", "bzip2", "zstd"] }
@@ -35,7 +36,7 @@ memmap2 = { workspace = true, optional = true }
 ouroboros = { workspace = true, optional = true }
 parking_lot = { workspace = true, optional = true }
 pin-project-lite = { workspace = true }
-rattler_conda_types = { path = "../rattler_conda_types", version = "0.27.6", default-features = false, optional = true }
+rattler_conda_types = { path = "../rattler_conda_types", version = "0.28.2", default-features = false, optional = true }
 rattler_digest = { path = "../rattler_digest", version = "1.0.2", default-features = false, features = ["tokio", "serde"] }
 rattler_networking = { path = "../rattler_networking", version = "0.21.4", default-features = false }
 reqwest = { workspace = true, features = ["stream", "http2"] }
@@ -53,7 +54,7 @@ tokio-util = { workspace = true, features = ["codec", "io"] }
 tracing = { workspace = true }
 url = { workspace = true, features = ["serde"] }
 zstd = { workspace = true }
-rattler_cache = { version = "0.2.3", path = "../rattler_cache" }
+rattler_cache = { version = "0.2.6", path = "../rattler_cache" }
 rattler_redaction = { version = "0.1.2", path = "../rattler_redaction", features = ["reqwest", "reqwest-middleware"] }
 
 [target.'cfg(unix)'.dependencies]

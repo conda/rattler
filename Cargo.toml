@@ -61,7 +61,7 @@ digest = "0.10.7"
 dirs = "5.0.1"
 dunce = "1.0.4"
 enum_dispatch = "0.3.13"
-fs-err = "2.11.0"
+fs-err = { version = "2.11.0", features = ["tokio"] }
 fslock = "0.2.1"
 futures = "0.3.30"
 futures-util = "0.3.30"
@@ -110,12 +110,12 @@ regex = "1.10.4"
 reqwest = { version = "0.12.3", default-features = false }
 reqwest-middleware = "0.3.0"
 reqwest-retry = "0.6.0"
-resolvo = { version = "0.8.0" }
+resolvo = { version = "0.8.2" }
 retry-policies = { version = "0.4.0", default-features = false }
 rmp-serde = { version = "1.2.0" }
 rstest = { version = "0.21.0" }
 rstest_reuse = "0.7.0"
-simd-json = { version = "0.13.10", features = ["serde_impl"] }
+simd-json = { version = "0.14.0", features = ["serde_impl"] }
 serde = { version = "1.0.198" }
 serde_json = { version = "1.0.116" }
 serde_repr = "0.1"
@@ -151,7 +151,7 @@ tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", default-features = false }
 tracing-test = { version = "0.2.4" }
 trybuild = { version = "1.0.91" }
-typed-path = { version = "0.9.0" }
+typed-path = { version = "0.9.2" }
 url = { version = "2.5.0" }
 uuid = { version = "1.8.0", default-features = false }
 walkdir = "2.5.0"

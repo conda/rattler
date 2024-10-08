@@ -141,9 +141,8 @@ class MatchSpec:
         """
         The channel of the package.
         """
-        if (channel := self._match_spec.channel) is not None:
-            return Channel(channel.name)
-        return None
+        channel = self._match_spec.channel
+        return channel and Channel._from_py_channel(channel)
 
     @property
     def subdir(self) -> Optional[str]:

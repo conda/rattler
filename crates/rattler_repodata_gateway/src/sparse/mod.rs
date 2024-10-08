@@ -11,6 +11,7 @@ use std::{
 };
 
 use bytes::Bytes;
+use fs_err as fs;
 use futures::{stream, StreamExt, TryFutureExt, TryStreamExt};
 use itertools::Itertools;
 use rattler_conda_types::{
@@ -102,7 +103,7 @@ impl SparseRepoData {
         path: impl AsRef<Path>,
         patch_function: Option<fn(&mut PackageRecord)>,
     ) -> Result<Self, io::Error> {
-        let file = std::fs::File::open(path)?;
+        let file = fs::File::open(path.as_ref().to_owned())?;
         let memory_map = unsafe { memmap2::Mmap::map(&file) }?;
         Ok(SparseRepoData {
             inner: SparseRepoDataInner::Memmapped(
@@ -482,6 +483,7 @@ mod test {
 
     use super::{load_repo_data_recursively, PackageFilename, SparseRepoData};
     use crate::utils::test::fetch_repo_data;
+    use fs_err as fs;
 
     fn test_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -510,7 +512,7 @@ mod test {
             .await
             .into_iter()
             .map(|(channel, subdir, path)| {
-                let bytes = std::fs::read(path).unwrap();
+                let bytes = fs::read(path).unwrap();
                 (channel, subdir, bytes.into())
             })
             .collect()
@@ -658,7 +660,7 @@ mod test {
             test_dir().join("channels/conda-forge/noarch/repodata.json"),
             test_dir().join("channels/conda-forge/linux-64/repodata.json"),
         ] {
-            let str = std::fs::read_to_string(&path).unwrap();
+            let str = fs::read_to_string(&path).unwrap();
             let repo_data: RepoData = serde_json::from_str(&str).unwrap();
             records.push(repo_data);
         }
