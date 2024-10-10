@@ -221,6 +221,11 @@ impl<'a> SerializablePackageSelector<'a> {
                 .min_by_key(|(_filter, set)| set.len())
                 .expect("cannot be empty because the set should always contain `package`");
 
+            if similar.len() == similar_packages.len() {
+                // No further disambiguation possible. Assume that the package is a duplicate.
+                break;
+            }
+
             similar_packages = similar;
             match filter {
                 CondaDisambiguityFilter::Name => {
