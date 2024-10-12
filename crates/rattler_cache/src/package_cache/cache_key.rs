@@ -8,10 +8,10 @@ use std::fmt::{Display, Formatter};
 /// TODO: Wouldn't it be better to cache based on hashes?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct CacheKey {
-    name: String,
-    version: String,
-    build_string: String,
-    sha256: Option<Sha256Hash>,
+    pub(crate) name: String,
+    pub(crate) version: String,
+    pub(crate) build_string: String,
+    pub(crate) sha256: Option<Sha256Hash>,
 }
 
 impl CacheKey {
