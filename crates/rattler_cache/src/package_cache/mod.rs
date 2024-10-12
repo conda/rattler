@@ -381,7 +381,7 @@ where
                     );
                     false
                 }
-                // This is an invalid state. We should never have a revision without a sha256 hash.
+                // This is an invalid state. We should never have a sha256 hash without a revision.
                 // Just revalidate
                 (None, Some(_)) => {
                     tracing::debug!(
