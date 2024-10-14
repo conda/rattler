@@ -18,6 +18,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rattler_conda_types::package::ArchiveIdentifier;
+use rattler_digest::Sha256Hash;
 use rattler_networking::retry_policies::{DoNotRetryPolicy, RetryDecision, RetryPolicy};
 use rattler_package_streaming::{DownloadReporter, ExtractError};
 pub use reporter::CacheReporter;
@@ -46,12 +47,31 @@ pub struct PackageCache {
 #[derive(Default)]
 struct PackageCacheInner {
     path: PathBuf,
-    packages: DashMap<CacheKey, Arc<tokio::sync::Mutex<Entry>>>,
+    packages: DashMap<BucketKey, Arc<tokio::sync::Mutex<Entry>>>,
+}
+
+/// A key that defines the actual location of the package in the cache.
+#[derive(Debug, Hash, Clone, Eq, PartialEq)]
+pub struct BucketKey {
+    name: String,
+    version: String,
+    build_string: String,
+}
+
+impl From<CacheKey> for BucketKey {
+    fn from(key: CacheKey) -> Self {
+        Self {
+            name: key.name,
+            version: key.version,
+            build_string: key.build_string,
+        }
+    }
 }
 
 #[derive(Default)]
 struct Entry {
     last_revision: Option<u64>,
+    last_sha256: Option<Sha256Hash>,
 }
 
 /// An error that might be returned from one of the caching function of the
@@ -111,21 +131,32 @@ impl PackageCache {
     {
         let cache_key = pkg.into();
         let cache_path = self.inner.path.join(cache_key.to_string());
-        let cache_entry = self.inner.packages.entry(cache_key).or_default().clone();
+        let cache_entry = self
+            .inner
+            .packages
+            .entry(cache_key.clone().into())
+            .or_default()
+            .clone();
 
         // Acquire the entry. From this point on we can be sure that only one task is
         // accessing the cache entry.
         let mut cache_entry = cache_entry.lock().await;
 
         // Validate the cache entry or fetch the package if it is not valid.
-        let cache_lock =
-            validate_or_fetch_to_cache(cache_path, fetch, cache_entry.last_revision, reporter)
-                .await?;
+        let cache_lock = validate_or_fetch_to_cache(
+            cache_path,
+            fetch,
+            cache_entry.last_revision,
+            cache_key.sha256.as_ref(),
+            reporter,
+        )
+        .await?;
 
         // Store the current revision stored in the cache. If any other task tries to
         // read the cache and the revision stayed the same, we can assume that the cache
         // is still valid.
         cache_entry.last_revision = Some(cache_lock.revision);
+        cache_entry.last_sha256 = cache_lock.sha256;
 
         Ok(cache_lock)
     }
@@ -186,9 +217,12 @@ impl PackageCache {
         reporter: Option<Arc<dyn CacheReporter>>,
     ) -> Result<CacheLock, PackageCacheError> {
         let request_start = SystemTime::now();
+        // Convert into cache key
         let cache_key = pkg.into();
+        // Sha256 of the expected package
         let sha256 = cache_key.sha256();
         let download_reporter = reporter.clone();
+        // Get or fetch the package, using the specified fetch function
         self.get_or_fetch(cache_key, move |destination| {
             let url = url.clone();
             let client = client.clone();
@@ -196,10 +230,11 @@ impl PackageCache {
             let download_reporter = download_reporter.clone();
             async move {
                 let mut current_try = 0;
+                // Retry until the retry policy says to stop
                 loop {
                     current_try += 1;
                     tracing::debug!("downloading {} to {}", &url, destination.display());
-
+                    // Extract the package
                     let result = rattler_package_streaming::reqwest::tokio::extract(
                         client.clone(),
                         url.clone(),
@@ -260,6 +295,7 @@ async fn validate_or_fetch_to_cache<F, Fut, E>(
     path: PathBuf,
     fetch: F,
     known_valid_revision: Option<u64>,
+    given_sha: Option<&Sha256Hash>,
     reporter: Option<Arc<dyn CacheReporter>>,
 ) -> Result<CacheLock, PackageCacheError>
 where
@@ -289,39 +325,82 @@ where
     loop {
         let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
         let cache_revision = read_lock.read_revision()?;
-
+        let locked_sha256 = read_lock.read_sha256()?;
         if path.is_dir() {
             let path_inner = path.clone();
 
             let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
-            match validated_revision {
-                Some(revision) if revision == cache_revision => {
-                    // We previously already determined that the revision is valid. We can skip
-                    // actually validating.
+            // Compare both the revision and the sha256 hash to determine whether the cache is still valid.
+            // If the revision is the same and the sha256 hash is the same, we can assume that the cache is still valid.
+            // If there is no sha256 hash, we assume that the cache is still valid. This is because we used to not store the sha256 hash.
+            let sha_match = match (validated_revision, given_sha) {
+                // Revision and sha both match
+                (Some(revision), Some(given_sha))
+                    if revision == cache_revision
+                        && locked_sha256.as_ref().map_or(true, |sha| sha == given_sha) =>
+                {
                     if let Some((reporter, index)) = reporter {
                         reporter.on_validate_complete(index);
                     }
                     return Ok(CacheLock {
                         _lock: read_lock,
                         revision: cache_revision,
+                        sha256: locked_sha256,
                         path: path_inner,
                     });
                 }
-                Some(_) => {
-                    // The cache has been modified since the last validation. We need to
-                    // re-validate.
+                // For older cache entries, we don't have a sha256 hash.
+                // Don't revalidate if the revision is the same.
+                (Some(revision), None) if revision == cache_revision => {
+                    if let Some((reporter, index)) = reporter {
+                        reporter.on_validate_complete(index);
+                    }
+                    return Ok(CacheLock {
+                        _lock: read_lock,
+                        revision: cache_revision,
+                        sha256: locked_sha256,
+                        path: path_inner,
+                    });
+                }
+                // Either the revision or the sha256 hash is different. We need to revalidate.
+                (Some(_), Some(_)) => {
+                    tracing::debug!(
+                        "cache is out-of-date while acquiring a read-lock from {}. Revalidating.",
+                        lock_file_path.display()
+                    );
+                    false
+                }
+
+                // Revision is different after all. We need to revalidate.
+                (Some(_), None) => {
+                    // The cache is invalid. We need to revalidate.
                     tracing::debug!(
                         "cache became stale while acquiring a read-lock from {}. Revalidating.",
                         lock_file_path.display()
                     );
+                    false
                 }
-                None => {
-                    // We have no information about the cache revision. We need
-                    // to validate.
+                // This is an invalid state. We should never have a sha256 hash without a revision.
+                // Just revalidate
+                (None, Some(_)) => {
+                    tracing::debug!(
+                        "found cache but no staleness information {}. Revalidating.",
+                        lock_file_path.display()
+                    );
+                    false
                 }
-            }
+                // No cache data yet
+                (None, None) => {
+                    tracing::debug!(
+                        "no cache data found while acquiring a read-lock from {}. Revalidating.",
+                        lock_file_path.display()
+                    );
+                    given_sha.is_none()
+                }
+            };
 
+            // Validate the package directory.
             let validation_result =
                 tokio::task::spawn_blocking(move || validate_package_directory(&path_inner)).await;
 
@@ -331,12 +410,15 @@ where
 
             match validation_result {
                 Ok(Ok(_)) => {
-                    tracing::debug!("validation succeeded");
-                    return Ok(CacheLock {
-                        _lock: read_lock,
-                        revision: cache_revision,
-                        path,
-                    });
+                    if sha_match {
+                        tracing::debug!("validation succeeded");
+                        return Ok(CacheLock {
+                            _lock: read_lock,
+                            revision: cache_revision,
+                            sha256: locked_sha256,
+                            path,
+                        });
+                    }
                 }
                 Ok(Err(e)) => {
                     tracing::warn!("validation for {path:?} failed: {e}");
@@ -365,7 +447,6 @@ where
         // lock and check if the revision has changed. If it has, we assume that
         // another process has already fetched the package and we restart the
         // validation process.
-
         drop(read_lock);
 
         let mut write_lock = CacheRwLock::acquire_write(&lock_file_path).await?;
@@ -382,7 +463,9 @@ where
 
         // Write the new revision
         let new_revision = cache_revision + 1;
-        write_lock.write_revision(new_revision).await?;
+        write_lock
+            .write_revision_and_sha(new_revision, given_sha)
+            .await?;
 
         // Otherwise, defer to populate method to fill our cache.
         fetch(path.clone())
@@ -431,7 +514,7 @@ mod test {
         future::IntoFuture,
         net::SocketAddr,
         path::{Path, PathBuf},
-        sync::Arc,
+        sync::{atomic::AtomicBool, Arc},
     };
 
     use assert_matches::assert_matches;
@@ -448,6 +531,7 @@ mod test {
     use bytes::Bytes;
     use futures::stream;
     use rattler_conda_types::package::{ArchiveIdentifier, PackageFile, PathsJson};
+    use rattler_digest::{parse_digest_from_hex, Sha256};
     use rattler_networking::retry_policies::{DoNotRetryPolicy, ExponentialBackoffBuilder};
     use tempfile::tempdir;
     use tokio::sync::Mutex;
@@ -455,7 +539,7 @@ mod test {
     use url::Url;
 
     use super::PackageCache;
-    use crate::validation::validate_package_directory;
+    use crate::{package_cache::CacheKey, validation::validate_package_directory};
 
     fn get_test_data_dir() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data")
@@ -713,5 +797,89 @@ mod test {
             .unwrap();
 
         assert_eq!(cache_c_lock.revision(), 2);
+    }
+
+    #[tokio::test]
+    // Test if packages with different sha's are replaced even though they share the same
+    // BucketKey.
+    pub async fn test_package_cache_key_with_sha() {
+        let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(), "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
+
+        // Create a temporary directory to store the packages
+        let packages_dir = tempdir().unwrap();
+        let cache = PackageCache::new(packages_dir.path());
+
+        // Set the sha256 of the package
+        let key: CacheKey = ArchiveIdentifier::try_from_path(&tar_archive_path)
+            .unwrap()
+            .into();
+        let key = key.with_sha256(
+            parse_digest_from_hex::<Sha256>(
+                "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8",
+            )
+            .unwrap(),
+        );
+
+        // Get the package to the cache
+        let cloned_archive_path = tar_archive_path.clone();
+        let cache_lock = cache
+            .get_or_fetch(
+                key.clone(),
+                move |destination| {
+                    let cloned_archive_path = cloned_archive_path.clone();
+                    async move {
+                        rattler_package_streaming::tokio::fs::extract(
+                            &cloned_archive_path,
+                            &destination,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                },
+                None,
+            )
+            .await
+            .unwrap();
+
+        let sha_1 = cache_lock.sha256.expect("expected sha256 to be set");
+        drop(cache_lock);
+
+        let new_sha = parse_digest_from_hex::<Sha256>(
+            "5dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc9",
+        )
+        .unwrap();
+        let key = key.with_sha256(new_sha);
+        // Change the sha256 of the package
+        // And expect the package to be replaced
+        let should_run = Arc::new(AtomicBool::new(false));
+        let cloned = should_run.clone();
+        let cache_lock = cache
+            .get_or_fetch(
+                key.clone(),
+                move |destination| {
+                    let tar_archive_path = tar_archive_path.clone();
+                    cloned.store(true, std::sync::atomic::Ordering::Relaxed);
+                    async move {
+                        rattler_package_streaming::tokio::fs::extract(
+                            &tar_archive_path,
+                            &destination,
+                        )
+                        .await
+                        .map(|_| ())
+                    }
+                },
+                None,
+            )
+            .await
+            .unwrap();
+        assert!(
+            should_run.load(std::sync::atomic::Ordering::Relaxed),
+            "fetch function should run again"
+        );
+        assert_ne!(
+            sha_1,
+            cache_lock.sha256.expect("expected sha256 to be set"),
+            "expected sha256 to be different"
+        );
     }
 }
