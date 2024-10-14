@@ -5,7 +5,6 @@ use std::fmt::{Display, Formatter};
 
 /// Provides a unique identifier for packages in the cache.
 /// TODO: This could not be unique over multiple subdir. How to handle?
-/// TODO: Wouldn't it be better to cache based on hashes?
 #[derive(Debug, Hash, Clone, Eq, PartialEq)]
 pub struct CacheKey {
     pub(crate) name: String,
