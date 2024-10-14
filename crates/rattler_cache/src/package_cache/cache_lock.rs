@@ -223,14 +223,15 @@ impl CacheRwLock {
 impl CacheRwLock {
     /// Reads the revision from the cache lock file.
     pub fn read_revision(&mut self) -> Result<u64, PackageCacheError> {
-        self.file.lock().rewind().map_err(|e| {
+        let mut file = self.file.lock();
+        file.rewind().map_err(|e| {
             PackageCacheError::LockError(
                 "failed to rewind cache lock for reading revision".to_string(),
                 e,
             )
         })?;
         let mut buf = [0; 8];
-        match self.file.lock().read_exact(&mut buf) {
+        match file.read_exact(&mut buf) {
             Ok(_) => {}
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                 return Ok(0);
@@ -247,6 +248,8 @@ impl CacheRwLock {
 
     /// Reads the sha256 hash from the cache lock file.
     pub fn read_sha256(&mut self) -> Result<Option<Sha256Hash>, PackageCacheError> {
+        const SHA256_LEN: usize = 32;
+        const REVISION_LEN: u64 = 8;
         let mut file = self.file.lock();
         file.rewind().map_err(|e| {
             PackageCacheError::LockError(
@@ -254,8 +257,8 @@ impl CacheRwLock {
                 e,
             )
         })?;
-        let mut buf = [0; 32];
-        let _ = file.seek(SeekFrom::Start(8)).map_err(|e| {
+        let mut buf = [0; SHA256_LEN];
+        let _ = file.seek(SeekFrom::Start(REVISION_LEN)).map_err(|e| {
             PackageCacheError::LockError("failed to seek to sha256 in cache lock".to_string(), e)
         })?;
         match file.read_exact(&mut buf) {
