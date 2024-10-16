@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "py-rattler"
-version = "0.7.1"
+version = "0.7.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2634,7 +2634,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.27.13"
+version = "0.27.15"
 dependencies = [
  "anyhow",
  "console",
@@ -2672,7 +2672,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.2.4"
+version = "0.2.6"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2698,7 +2698,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.28.0"
+version = "0.28.2"
 dependencies = [
  "chrono",
  "dirs",
@@ -2747,7 +2747,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.30"
+version = "0.19.32"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2760,7 +2760,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.25"
+version = "0.22.27"
 dependencies = [
  "chrono",
  "file_url",
@@ -2815,7 +2815,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_package_streaming"
-version = "0.22.8"
+version = "0.22.10"
 dependencies = [
  "bzip2",
  "chrono",
@@ -2850,7 +2850,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.15"
+version = "0.21.17"
 dependencies = [
  "anyhow",
  "async-compression",
@@ -2903,7 +2903,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_shell"
-version = "0.22.2"
+version = "0.22.4"
 dependencies = [
  "enum_dispatch",
  "indexmap 2.5.0",
@@ -2918,7 +2918,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_solve"
-version = "1.0.9"
+version = "1.1.0"
 dependencies = [
  "chrono",
  "futures",
@@ -2934,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_virtual_packages"
-version = "1.1.5"
+version = "1.1.7"
 dependencies = [
  "archspec",
  "libloading",
@@ -3138,9 +3138,9 @@ dependencies = [
 
 [[package]]
 name = "resolvo"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d68c0ae687bbcd99ab33236c7cbccd2ba1c526a7f7a59743cb991074414c5293"
+checksum = "1621ce52e3ff36c8f55f0017f1e4909f59514af8f852ee943997760bf12c7c15"
 dependencies = [
  "ahash",
  "bitvec",
