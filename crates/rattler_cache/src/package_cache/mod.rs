@@ -326,79 +326,31 @@ where
         let mut read_lock = CacheRwLock::acquire_read(&lock_file_path).await?;
         let cache_revision = read_lock.read_revision()?;
         let locked_sha256 = read_lock.read_sha256()?;
-        if path.is_dir() {
+
+        let hash_mismatch = match (given_sha, &locked_sha256) {
+            (Some(given_hash), Some(locked_sha256)) => given_hash != locked_sha256,
+            _ => false,
+        };
+
+        if path.is_dir() && !hash_mismatch {
             let path_inner = path.clone();
 
             let reporter = reporter.as_deref().map(|r| (r, r.on_validate_start()));
 
-            // Compare both the revision and the sha256 hash to determine whether the cache is still valid.
-            // If the revision is the same and the sha256 hash is the same, we can assume that the cache is still valid.
-            // If there is no sha256 hash, we assume that the cache is still valid. This is because we used to not store the sha256 hash.
-            let sha_match = match (validated_revision, given_sha) {
-                // Revision and sha both match
-                (Some(revision), Some(given_sha))
-                    if revision == cache_revision
-                        && locked_sha256.as_ref().map_or(true, |sha| sha == given_sha) =>
-                {
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_validate_complete(index);
-                    }
-                    return Ok(CacheLock {
-                        _lock: read_lock,
-                        revision: cache_revision,
-                        sha256: locked_sha256,
-                        path: path_inner,
-                    });
+            // If we know the revision is already valid we can return immediately.
+            if validated_revision.map_or(false, |validated_revision| {
+                validated_revision == cache_revision
+            }) {
+                if let Some((reporter, index)) = reporter {
+                    reporter.on_validate_complete(index);
                 }
-                // For older cache entries, we don't have a sha256 hash.
-                // Don't revalidate if the revision is the same.
-                (Some(revision), None) if revision == cache_revision => {
-                    if let Some((reporter, index)) = reporter {
-                        reporter.on_validate_complete(index);
-                    }
-                    return Ok(CacheLock {
-                        _lock: read_lock,
-                        revision: cache_revision,
-                        sha256: locked_sha256,
-                        path: path_inner,
-                    });
-                }
-                // Either the revision or the sha256 hash is different. We need to revalidate.
-                (Some(_), Some(_)) => {
-                    tracing::debug!(
-                        "cache is out-of-date while acquiring a read-lock from {}. Revalidating.",
-                        lock_file_path.display()
-                    );
-                    false
-                }
-
-                // Revision is different after all. We need to revalidate.
-                (Some(_), None) => {
-                    // The cache is invalid. We need to revalidate.
-                    tracing::debug!(
-                        "cache became stale while acquiring a read-lock from {}. Revalidating.",
-                        lock_file_path.display()
-                    );
-                    false
-                }
-                // This is an invalid state. We should never have a sha256 hash without a revision.
-                // Just revalidate
-                (None, Some(_)) => {
-                    tracing::debug!(
-                        "found cache but no staleness information {}. Revalidating.",
-                        lock_file_path.display()
-                    );
-                    false
-                }
-                // No cache data yet
-                (None, None) => {
-                    tracing::debug!(
-                        "no cache data found while acquiring a read-lock from {}. Revalidating.",
-                        lock_file_path.display()
-                    );
-                    given_sha.is_none()
-                }
-            };
+                return Ok(CacheLock {
+                    _lock: read_lock,
+                    revision: cache_revision,
+                    sha256: locked_sha256,
+                    path: path_inner,
+                });
+            }
 
             // Validate the package directory.
             let validation_result =
@@ -410,15 +362,13 @@ where
 
             match validation_result {
                 Ok(Ok(_)) => {
-                    if sha_match {
-                        tracing::debug!("validation succeeded");
-                        return Ok(CacheLock {
-                            _lock: read_lock,
-                            revision: cache_revision,
-                            sha256: locked_sha256,
-                            path,
-                        });
-                    }
+                    tracing::debug!("validation succeeded");
+                    return Ok(CacheLock {
+                        _lock: read_lock,
+                        revision: cache_revision,
+                        sha256: locked_sha256,
+                        path,
+                    });
                 }
                 Ok(Err(e)) => {
                     tracing::warn!("validation for {path:?} failed: {e}");
@@ -800,8 +750,8 @@ mod test {
     }
 
     #[tokio::test]
-    // Test if packages with different sha's are replaced even though they share the same
-    // BucketKey.
+    // Test if packages with different sha's are replaced even though they share the
+    // same BucketKey.
     pub async fn test_package_cache_key_with_sha() {
         let tar_archive_path = tools::download_and_cache_file_async("https://conda.anaconda.org/robostack/linux-64/ros-noetic-rosbridge-suite-0.11.14-py39h6fdeb60_14.tar.bz2".parse().unwrap(), "4dd9893f1eee45e1579d1a4f5533ef67a84b5e4b7515de7ed0db1dd47adc6bc8").await.unwrap();
 
