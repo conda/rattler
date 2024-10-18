@@ -206,7 +206,9 @@ impl ClobberRegistry {
                             let new_path = clobber_name(path, &self.package_names[name_idx.0]);
                             self.clobbers
                                 .entry(path.clone())
-                                .or_insert_with(|| vec![idx])
+                                // We insert an empty vector here because there is no other file that should stick around
+                                // (idx is already removed)
+                                .or_default()
                                 .push(name_idx);
 
                             // We insert the non-renamed path here
@@ -317,7 +319,7 @@ impl ClobberRegistry {
                     let loser_path = clobber_name(path, loser_name);
 
                     // Rename the original file to a clobbered path.
-                    tracing::trace!("renaming {} to {}", path.display(), loser_path.display());
+                    tracing::debug!("renaming {} to {}", path.display(), loser_path.display());
                     fs::rename(target_prefix.join(path), target_prefix.join(&loser_path)).map_err(
                         |e| {
                             ClobberError::IoError(
