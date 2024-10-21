@@ -15,7 +15,7 @@ use tokio::{
 };
 use url::Url;
 
-use super::{token::TokenClient, ShardedRepodata};
+use super::{ShardedRepodata};
 use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 /// Magic number that identifies the cache file format.
@@ -27,7 +27,6 @@ const REPODATA_SHARDS_FILENAME: &str = "repodata_shards.msgpack.zst";
 pub async fn fetch_index(
     client: ClientWithMiddleware,
     channel_base_url: &Url,
-    token_client: &TokenClient,
     cache_dir: &Path,
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
     reporter: Option<&dyn Reporter>,
@@ -39,6 +38,8 @@ pub async fn fetch_index(
         response: Response,
         reporter: Option<(&dyn Reporter, usize)>,
     ) -> Result<ShardedRepodata, GatewayError> {
+        let response = response.error_for_status()?;
+
         // Read the bytes of the response
         let response_url = response.url().clone();
         let bytes = response.bytes_with_progress(reporter).await?;
@@ -139,24 +140,17 @@ pub async fn fetch_index(
                 request: state_request,
                 ..
             } => {
-                // Get the token from the token client
-                let token = token_client.get_token(reporter).await?;
-
                 // Determine the actual URL to use for the request
-                let shards_url = token
-                    .shard_base_url
-                    .as_ref()
-                    .unwrap_or(channel_base_url)
+                let shards_url = channel_base_url
                     .join(REPODATA_SHARDS_FILENAME)
                     .expect("invalid shard base url");
 
                 // Construct the actual request that we will send
-                let mut request = client
+                let request = client
                     .get(shards_url.clone())
                     .headers(state_request.headers().clone())
                     .build()
                     .expect("failed to build request for shard index");
-                token.add_to_headers(request.headers_mut());
 
                 // Acquire a permit to do a request
                 let _request_permit = concurrent_requests_semaphore.acquire().await;
@@ -206,23 +200,16 @@ pub async fn fetch_index(
 
     tracing::debug!("fetching fresh shard index");
 
-    // Get the token from the token client
-    let token = token_client.get_token(reporter).await?;
-
     // Determine the actual URL to use for the request
-    let shards_url = token
-        .shard_base_url
-        .as_ref()
-        .unwrap_or(channel_base_url)
+    let shards_url = channel_base_url
         .join(REPODATA_SHARDS_FILENAME)
         .expect("invalid shard base url");
 
     // Construct the actual request that we will send
-    let mut request = client
+    let request = client
         .get(shards_url.clone())
         .build()
         .expect("failed to build request for shard index");
-    token.add_to_headers(request.headers_mut());
 
     // Acquire a permit to do a request
     let _request_permit = concurrent_requests_semaphore.acquire().await;

@@ -4,7 +4,6 @@ use http::{header::CACHE_CONTROL, HeaderValue, StatusCode};
 use rattler_conda_types::{Channel, PackageName, RepoDataRecord, Shard, ShardedRepodata};
 use reqwest_middleware::ClientWithMiddleware;
 use simple_spawn_blocking::tokio::run_blocking_task;
-use token::TokenClient;
 use url::Url;
 
 use crate::{
@@ -15,14 +14,12 @@ use crate::{
 };
 
 mod index;
-mod token;
 
 pub struct ShardedSubdir {
     channel: Channel,
     client: ClientWithMiddleware,
     shards_base_url: Url,
     package_base_url: Url,
-    token_client: TokenClient,
     sharded_repodata: ShardedRepodata,
     cache_dir: PathBuf,
     concurrent_requests_semaphore: Arc<tokio::sync::Semaphore>,
@@ -42,18 +39,10 @@ impl ShardedSubdir {
             .join(&format!("{subdir}/"))
             .expect("invalid subdir url");
 
-        // Construct a token client to fetch the token when we need it.
-        let token_client = TokenClient::new(
-            client.clone(),
-            index_base_url.clone(),
-            concurrent_requests_semaphore.clone(),
-        );
-
         // Fetch the shard index
         let sharded_repodata = index::fetch_index(
             client.clone(),
             &index_base_url,
-            &token_client,
             &cache_dir,
             concurrent_requests_semaphore.clone(),
             reporter,
@@ -101,7 +90,6 @@ impl ShardedSubdir {
             client,
             shards_base_url: add_trailing_slash(&shards_base_url).into_owned(),
             package_base_url: add_trailing_slash(&package_base_url).into_owned(),
-            token_client,
             sharded_repodata,
             cache_dir,
             concurrent_requests_semaphore,
@@ -142,22 +130,20 @@ impl SubdirClient for ShardedSubdir {
             Err(err) => return Err(FetchRepoDataError::IoError(err).into()),
         }
 
-        // Get the token
-        let token = self.token_client.get_token(reporter).await?;
-
         // Download the shard
         let shard_url = self
             .shards_base_url
             .join(&format!("{shard:x}.msgpack.zst"))
             .expect("invalid shard url");
 
-        let mut shard_request = self
+        tracing::warn!("{:?}", &shard_url);
+
+        let shard_request = self
             .client
             .get(shard_url.clone())
             .header(CACHE_CONTROL, HeaderValue::from_static("no-store"))
             .build()
             .expect("failed to build shard request");
-        token.add_to_headers(shard_request.headers_mut());
 
         let shard_bytes = {
             let _permit = self.concurrent_requests_semaphore.acquire();
