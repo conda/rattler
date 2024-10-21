@@ -199,7 +199,7 @@ fn find_python_info(
     records
         .into_iter()
         .find(|r| is_python_record(r.as_ref()))
-        .map(|record| PythonInfo::from_version(&record.as_ref().version, platform))
+        .map(|record| PythonInfo::from_version(&record.as_ref().version, &record.as_ref().python_site_packages_path, platform))
         .map_or(Ok(None), |info| info.map(Some))
 }
 

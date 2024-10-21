@@ -31,7 +31,7 @@ pub enum PythonInfoError {
 impl PythonInfo {
     /// Build an instance based on the version of the python package and the platform it is
     /// installed for.
-    pub fn from_version(version: &Version, platform: Platform) -> Result<Self, PythonInfoError> {
+    pub fn from_version(version: &Version, sp_path: &Option<String>, platform: Platform) -> Result<Self, PythonInfoError> {
         // Determine the major, and minor versions of the version
         let (major, minor) = version
             .as_major_minor()
@@ -45,10 +45,13 @@ impl PythonInfo {
         };
 
         // Find the location of the site packages
-        let site_packages_path = if platform.is_windows() {
-            PathBuf::from("Lib/site-packages")
-        } else {
-            PathBuf::from(format!("lib/python{major}.{minor}/site-packages"))
+        let site_packages_path = match sp_path {
+            Some(sp_path) => PathBuf::from(sp_path),
+            None => if platform.is_windows() {
+                        PathBuf::from("Lib/site-packages")
+                    } else {
+                    PathBuf::from(format!("lib/python{major}.{minor}/site-packages"))
+            },
         };
 
         // Binary directory
