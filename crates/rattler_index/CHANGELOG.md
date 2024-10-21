@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.33](https://github.com/conda/rattler/compare/rattler_index-v0.19.32...rattler_index-v0.19.33) - 2024-10-21
+
+### Fixed
+
+- always index noarch even if folder already exists ([#907](https://github.com/conda/rattler/pull/907))
+
 ## [0.19.32](https://github.com/conda/rattler/compare/rattler_index-v0.19.31...rattler_index-v0.19.32) - 2024-10-07
 
 ### Other
