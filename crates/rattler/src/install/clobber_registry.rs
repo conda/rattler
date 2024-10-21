@@ -1316,15 +1316,32 @@ mod tests {
             .with_prefix_records(&prefix_records)
             .finish();
 
-        execute_transaction(
-            transaction,
-            target_prefix.path(),
-            &reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new()),
-            &cache,
-            &install_driver,
-            &InstallOptions::default(),
-        )
-        .await;
+        install_driver
+            .pre_process(&transaction, target_prefix.path())
+            .unwrap();
+
+        let client = reqwest_middleware::ClientWithMiddleware::from(reqwest::Client::new());
+        for op in &transaction.operations {
+            execute_operation(
+                target_prefix.path(),
+                &client,
+                &cache,
+                &install_driver,
+                op.clone(),
+                &InstallOptions::default(),
+            )
+            .await;
+        }
+
+        // check that `bin/python` was installed as a single clobber file
+        assert_check_files(
+            &target_prefix.path().join("bin"),
+            &["python__clobber-from-clobber-pypy"],
+        );
+
+        install_driver
+            .post_process(&transaction, target_prefix.path())
+            .unwrap();
 
         assert_check_files(&target_prefix.path().join("bin"), &["python"]);
     }
