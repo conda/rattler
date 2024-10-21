@@ -129,6 +129,10 @@ pub fn index(
     // Always create noarch subdir
     if !output_folder.join("noarch").exists() {
         std::fs::create_dir(output_folder.join("noarch"))?;
+    }
+
+    // Make sure that we index noarch if it is not already indexed
+    if !output_folder.join("noarch/repodata.json").exists() {
         platforms.insert("noarch".to_string());
     }
 
