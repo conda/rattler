@@ -55,6 +55,9 @@ pub struct IndexJson {
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
 
+    /// Optionally a path within the environment of the site-packages directory
+    pub python_site_packages_path: Option<String>,
+
     /// The subdirectory that contains this package
     pub subdir: Option<String>,
 

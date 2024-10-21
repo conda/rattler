@@ -151,6 +151,9 @@ pub struct PackageRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<BTreeSet<PackageUrl>>,
 
+    /// Optionally a path within the environment of the site-packages directory
+    pub python_site_packages_path: Option<String>,
+
     /// Run exports that are specified in the package.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run_exports: Option<RunExportsJson>,
@@ -294,6 +297,7 @@ impl PackageRecord {
             name,
             noarch: NoArchType::default(),
             platform: None,
+            python_site_packages_path: None,
             sha256: None,
             size: None,
             subdir: Platform::current().to_string(),
@@ -412,6 +416,7 @@ impl PackageRecord {
             name: index.name,
             noarch: index.noarch,
             platform: index.platform,
+            python_site_packages_path: index.python_site_packages_path,
             sha256,
             size,
             subdir,
