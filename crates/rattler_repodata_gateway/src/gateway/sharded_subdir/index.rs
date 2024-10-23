@@ -15,7 +15,7 @@ use tokio::{
 };
 use url::Url;
 
-use super::{ShardedRepodata};
+use super::ShardedRepodata;
 use crate::{reporter::ResponseReporterExt, utils::url_to_cache_filename, GatewayError, Reporter};
 
 /// Magic number that identifies the cache file format.
