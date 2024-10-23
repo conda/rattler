@@ -177,7 +177,7 @@ impl GatewayInner {
     /// coalesced, and they will all receive the same subdir. If an error
     /// occurs while creating the subdir all waiting tasks will also return an
     /// error.
-    #[instrument(skip(self, reporter), err)]
+    #[instrument(skip(self, reporter, channel), fields(channel = %channel.base_url), err)]
     async fn get_or_create_subdir(
         &self,
         channel: &Channel,
@@ -353,7 +353,10 @@ enum PendingOrFetched<T> {
 
 fn supports_sharded_repodata(url: &Url) -> bool {
     (url.scheme() == "http" || url.scheme() == "https")
-        && (url.host_str() == Some("fast.prefiks.dev") || url.host_str() == Some("fast.prefix.dev"))
+        && (url.host_str() == Some("fast.prefiks.dev")
+            || url
+                .host_str()
+                .map_or(false, |host| host.ends_with("prefix.dev")))
 }
 
 #[cfg(test)]
