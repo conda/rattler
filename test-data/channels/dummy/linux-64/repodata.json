@@ -64,7 +64,7 @@
     },
     "foo-3.0.2-py36h1af98f8_3.conda": {
       "build": "py36h1af98f8_3",
-      "build_number": 2,
+      "build_number": 3,
       "depends": [],
       "constrains": ["bors <2.0"],
       "license": "MIT",
