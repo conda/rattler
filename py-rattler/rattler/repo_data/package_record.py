@@ -118,7 +118,7 @@ class PackageRecord:
                 graph.add_edge(record, names_to_records[PackageName(name)])
 
         return graph
-    
+
     @staticmethod
     def validate_package_records(records: List[PackageRecord]) -> None:
         """
