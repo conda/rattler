@@ -279,7 +279,7 @@ pub fn compute_package_url(
 
 impl AsRef<PackageRecord> for PackageRecord {
     fn as_ref(&self) -> &PackageRecord {
-        &self
+        self
     }
 }
 
@@ -392,6 +392,7 @@ pub enum ValidatePackageRecordsError {
         /// The corresponding package that violates the constraint.
         violating_package: PackageRecord,
     },
+    /// Failed to parse a matchspec.
     #[error(transparent)]
     ParseMatchSpecError(#[from] ParseMatchSpecError),
 }
