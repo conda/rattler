@@ -632,7 +632,7 @@ mod test {
     }
 
     #[test]
-    fn test_validate_package_records() {
+    fn test_validate() {
         // load test data
         let test_data_path = dunce::canonicalize(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"),
@@ -653,29 +653,20 @@ mod test {
         let package_bors_1 = repodata.packages.get("bors-1.2.1-bla_1.tar.bz2").unwrap();
         let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
 
-        assert!(PackageRecord::validate_package_records(vec![
-            package_depends_only_virtual_package
-        ])
-        .is_ok());
+        assert!(PackageRecord::validate(vec![package_depends_only_virtual_package]).is_ok());
         for packages in vec![vec![package_depends], vec![package_depends, package_bors_2]] {
-            let result = PackageRecord::validate_package_records(packages);
+            let result = PackageRecord::validate(packages);
             assert!(result.is_err());
             assert!(result.err().unwrap().to_string().contains(
                 "package 'foobar' has dependency 'bors <2.0', which is not in the environment"
             ));
         }
 
-        assert!(
-            PackageRecord::validate_package_records(vec![package_depends, package_bors_1]).is_ok()
-        );
-        assert!(PackageRecord::validate_package_records(vec![package_constrains]).is_ok());
-        assert!(
-            PackageRecord::validate_package_records(vec![package_constrains, package_bors_1])
-                .is_ok()
-        );
+        assert!(PackageRecord::validate(vec![package_depends, package_bors_1]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains, package_bors_1]).is_ok());
 
-        let result =
-            PackageRecord::validate_package_records(vec![package_constrains, package_bors_2]);
+        let result = PackageRecord::validate(vec![package_constrains, package_bors_2]);
         assert!(result.is_err());
         assert!(result.err().unwrap().to_string().contains(
             "package 'foo' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
