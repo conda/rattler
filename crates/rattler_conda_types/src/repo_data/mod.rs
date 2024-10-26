@@ -649,7 +649,10 @@ mod test {
             .get("baz-1.0-unix_py36h1af98f8_2.tar.bz2")
             .unwrap();
         let package_depends = repodata.packages.get("foobar-2.0-bla_1.tar.bz2").unwrap();
-        let package_constrains = repodata.packages.get("foo-3.0.2-py36h1af98f8_3.conda").unwrap();
+        let package_constrains = repodata
+            .packages
+            .get("foo-3.0.2-py36h1af98f8_3.conda")
+            .unwrap();
         let package_bors_1 = repodata.packages.get("bors-1.2.1-bla_1.tar.bz2").unwrap();
         let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
 
@@ -664,12 +667,18 @@ mod test {
                 "package 'foobar' has dependency 'bors <2.0', which is not in the environment"
             ));
         }
-        
-        assert!(PackageRecord::validate_package_records(vec![package_depends, package_bors_1]).is_ok());
-        assert!(PackageRecord::validate_package_records(vec![package_constrains]).is_ok());
-        assert!(PackageRecord::validate_package_records(vec![package_constrains, package_bors_1]).is_ok());
 
-        let result = PackageRecord::validate_package_records(vec![package_constrains, package_bors_2]);
+        assert!(
+            PackageRecord::validate_package_records(vec![package_depends, package_bors_1]).is_ok()
+        );
+        assert!(PackageRecord::validate_package_records(vec![package_constrains]).is_ok());
+        assert!(
+            PackageRecord::validate_package_records(vec![package_constrains, package_bors_1])
+                .is_ok()
+        );
+
+        let result =
+            PackageRecord::validate_package_records(vec![package_constrains, package_bors_2]);
         assert!(result.is_err());
         assert!(result.err().unwrap().to_string().contains(
             "package 'foo' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
