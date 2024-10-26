@@ -133,9 +133,9 @@ class PackageRecord:
         ```python
         >>> from os import listdir
         >>> from os.path import isfile, join
-        >>> from rattler import PackageRecord
+        >>> from rattler import PrefixRecord
         >>> records = [
-        ...     PackageRecord.from_path(join("../test-data/conda-meta/", f))
+        ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in listdir("../test-data/conda-meta")
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
