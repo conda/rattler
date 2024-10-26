@@ -654,7 +654,7 @@ mod test {
         let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
 
         assert!(PackageRecord::validate(vec![package_depends_only_virtual_package]).is_ok());
-        for packages in vec![vec![package_depends], vec![package_depends, package_bors_2]] {
+        for packages in [vec![package_depends], vec![package_depends, package_bors_2]] {
             let result = PackageRecord::validate(packages);
             assert!(result.is_err());
             assert!(result.err().unwrap().to_string().contains(
