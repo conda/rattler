@@ -133,13 +133,13 @@ class PackageRecord:
         ```python
         >>> from os import listdir
         >>> from os.path import isfile, join
-        >>> from rattler import PrefixRecord, validate_package_records
+        >>> from rattler import PrefixRecord
         >>> records = [
         ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in listdir("../test-data/conda-meta")
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
-        >>> validate_package_records(records)
+        >>> PrefixRecord.validate_package_records(records)
         ```
         """
         return PyRecord.validate_package_records(records)
