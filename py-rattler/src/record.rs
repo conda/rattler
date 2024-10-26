@@ -429,7 +429,7 @@ impl PyRecord {
     /// of each package are satisfied by the other packages in the list.
     /// If there is a dependency that is not satisfied, this function will raise an exception.
     #[staticmethod]
-    fn validate_package_records<T: AsRef<PackageRecord>>(records: Vec<&PyAny>) -> PyResult<()> {
+    fn validate_package_records(records: Vec<&PyAny>) -> PyResult<()> {
         let records = records
             .into_iter()
             .map(PyRecord::try_from)
