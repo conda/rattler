@@ -134,12 +134,18 @@ class PackageRecord:
         >>> from os import listdir
         >>> from os.path import isfile, join
         >>> from rattler import PrefixRecord
+        >>> from rattler.exceptions import ValidatePackageRecordsException
         >>> records = [
         ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in listdir("../test-data/conda-meta")
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
-        >>> PackageRecord.validate(records)
+        >>> try:
+        ...     PackageRecord.validate(records)
+        ... except ValidatePackageRecordsException as e:
+        ...     print(e)
+        package 'requests=2.28.2=pyhd8ed1ab_0' has dependency 'certifi >=2017.4.17', which is not in the environment
+        >>>
         ```
         """
         return PyRecord.validate(records)

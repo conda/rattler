@@ -342,7 +342,7 @@ impl PackageRecord {
                 let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
                     return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
-                        package: package.name.as_normalized().to_string(),
+                        package: package.to_owned(),
                         dependency: dep.to_string(),
                     });
                 }
@@ -356,7 +356,7 @@ impl PackageRecord {
                     .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
                     return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
-                        package: package.name.as_normalized().to_string(),
+                        package: package.to_owned(),
                         constraint: constraint.to_owned(),
                         violating_package: matching_package.unwrap().as_ref().to_owned(),
                     });
@@ -367,14 +367,14 @@ impl PackageRecord {
     }
 }
 
-/// An error that can occur when parsing a platform from a string.
+/// An error when validating package records.
 #[derive(Debug, Error)]
 pub enum ValidatePackageRecordsError {
     /// A package is not present in the environment.
     #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]
     DependencyNotInEnvironment {
         /// The package containing the unmet dependency.
-        package: String,
+        package: PackageRecord,
         /// The dependency that is not in the environment.
         dependency: String,
     },
@@ -382,7 +382,7 @@ pub enum ValidatePackageRecordsError {
     #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
     PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
-        package: String,
+        package: PackageRecord,
         /// The constraint that is violated.
         constraint: String,
         /// The corresponding package that violates the constraint.
