@@ -342,7 +342,7 @@ impl PackageRecord {
                 let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
                     return Err(
-                        ValidatePackageRecordsError::DependencyNotInEnvironmentError {
+                        ValidatePackageRecordsError::DependencyNotInEnvironment {
                             package: package.name.as_normalized().to_string(),
                             dependency: dep.to_string(),
                         },
@@ -358,7 +358,7 @@ impl PackageRecord {
                     .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
                     return Err(
-                        ValidatePackageRecordsError::PackageConstraintNotSatisfiedError {
+                        ValidatePackageRecordsError::PackageConstraintNotSatisfied {
                             package: package.name.as_normalized().to_string(),
                             constraint: constraint.to_owned(),
                             violating_package: matching_package.unwrap().as_ref().to_owned(),
@@ -376,7 +376,7 @@ impl PackageRecord {
 pub enum ValidatePackageRecordsError {
     /// A package is not present in the environment.
     #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]
-    DependencyNotInEnvironmentError {
+    DependencyNotInEnvironment {
         /// The package containing the unmet dependency.
         package: String,
         /// The dependency that is not in the environment.
@@ -384,7 +384,7 @@ pub enum ValidatePackageRecordsError {
     },
     /// A package constraint is not met in the environment.
     #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
-    PackageConstraintNotSatisfiedError {
+    PackageConstraintNotSatisfied {
         /// The package containing the unmet constraint.
         package: String,
         /// The constraint that is violated.
@@ -394,7 +394,7 @@ pub enum ValidatePackageRecordsError {
     },
     /// Failed to parse a matchspec.
     #[error(transparent)]
-    ParseMatchSpecError(#[from] ParseMatchSpecError),
+    ParseMatchSpec(#[from] ParseMatchSpecError),
 }
 
 /// An error that can occur when parsing a platform from a string.
