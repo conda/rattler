@@ -137,14 +137,14 @@ class PackageRecord:
         >>> from rattler.exceptions import ValidatePackageRecordsException
         >>> records = [
         ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
-        ...     for f in listdir("../test-data/conda-meta")
+        ...     for f in sorted(listdir("../test-data/conda-meta"))
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
         >>> try:
         ...     PackageRecord.validate(records)
         ... except ValidatePackageRecordsException as e:
         ...     print(e)
-        package 'requests=2.28.2=pyhd8ed1ab_0' has dependency 'certifi >=2017.4.17', which is not in the environment
+        package 'libsqlite=3.40.0=hcfcfb64_0' has dependency 'ucrt >=10.0.20348.0', which is not in the environment
         >>>
         ```
         """
