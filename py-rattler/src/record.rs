@@ -434,7 +434,7 @@ impl PyRecord {
             .into_iter()
             .map(PyRecord::try_from)
             .collect::<PyResult<Vec<_>>>()?;
-        PackageRecord::validate_package_records(records)
+        Ok(PackageRecord::validate(records).map_err(PyRattlerError::from)?)
     }
 
     /// Sorts the records topologically.

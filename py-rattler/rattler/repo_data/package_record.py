@@ -120,7 +120,7 @@ class PackageRecord:
         return graph
     
     @staticmethod
-    def validate_package_records(records: List[PackageRecord]):
+    def validate_package_records(records: List[PackageRecord]) -> None:
         """
         Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
 
@@ -142,7 +142,7 @@ class PackageRecord:
         >>> validate_package_records(records)
         ```
         """
-        return [PackageRecord._from_py_record(p) for p in PyRecord.validate_package_records(records)]
+        return PyRecord.validate_package_records(records)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:

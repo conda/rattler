@@ -328,7 +328,7 @@ impl PackageRecord {
     /// This function will return Ok(()) if all records form a valid environment, i.e., all dependencies
     /// of each package are satisfied by the other packages in the list.
     /// If there is a dependency that is not satisfied, this function will return an error.
-    pub fn validate_package_records<T: AsRef<PackageRecord>>(
+    pub fn validate<T: AsRef<PackageRecord>>(
         records: Vec<T>,
     ) -> Result<(), ValidatePackageRecordsError> {
         for package in records.iter() {
@@ -341,12 +341,10 @@ impl PackageRecord {
                 }
                 let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
                 if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
-                    return Err(
-                        ValidatePackageRecordsError::DependencyNotInEnvironment {
-                            package: package.name.as_normalized().to_string(),
-                            dependency: dep.to_string(),
-                        },
-                    );
+                    return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
+                        package: package.name.as_normalized().to_string(),
+                        dependency: dep.to_string(),
+                    });
                 }
             }
 
@@ -357,13 +355,11 @@ impl PackageRecord {
                     .iter()
                     .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
                 if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
-                    return Err(
-                        ValidatePackageRecordsError::PackageConstraintNotSatisfied {
-                            package: package.name.as_normalized().to_string(),
-                            constraint: constraint.to_owned(),
-                            violating_package: matching_package.unwrap().as_ref().to_owned(),
-                        },
-                    );
+                    return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
+                        package: package.name.as_normalized().to_string(),
+                        constraint: constraint.to_owned(),
+                        violating_package: matching_package.unwrap().as_ref().to_owned(),
+                    });
                 }
             }
         }
