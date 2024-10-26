@@ -658,7 +658,7 @@ mod test {
             let result = PackageRecord::validate(packages);
             assert!(result.is_err());
             assert!(result.err().unwrap().to_string().contains(
-                "package 'foobar' has dependency 'bors <2.0', which is not in the environment"
+                "package 'foobar=2.0=bla_1' has dependency 'bors <2.0', which is not in the environment"
             ));
         }
 
@@ -669,7 +669,7 @@ mod test {
         let result = PackageRecord::validate(vec![package_constrains, package_bors_2]);
         assert!(result.is_err());
         assert!(result.err().unwrap().to_string().contains(
-            "package 'foo' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
+            "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
         ));
     }
 }
