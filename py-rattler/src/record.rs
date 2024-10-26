@@ -434,7 +434,7 @@ impl PyRecord {
             .into_iter()
             .map(PyRecord::try_from)
             .collect::<PyResult<Vec<_>>>()?;
-        Ok(PackageRecord::validate_package_records(records))
+        PackageRecord::validate_package_records(records)
     }
 
     /// Sorts the records topologically.
@@ -449,6 +449,6 @@ impl PyRecord {
             .into_iter()
             .map(PyRecord::try_from)
             .collect::<PyResult<Vec<_>>>()?;
-        PackageRecord::sort_topologically(records)
+        Ok(PackageRecord::sort_topologically(records))
     }
 }
