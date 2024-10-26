@@ -34,7 +34,7 @@ use error::{
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
     InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    VersionBumpException, ValidatePackageRecordsException,
+    ValidatePackageRecordsException, VersionBumpException,
 };
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::py_index;
@@ -223,8 +223,11 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add("GatewayError", py.get_type::<GatewayException>())
         .unwrap();
 
-    m.add("ValidatePackageRecordsException", py.get_type::<ValidatePackageRecordsException>())
-        .unwrap();
+    m.add(
+        "ValidatePackageRecordsException",
+        py.get_type::<ValidatePackageRecordsException>(),
+    )
+    .unwrap();
 
     Ok(())
 }
