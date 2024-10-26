@@ -120,7 +120,7 @@ class PackageRecord:
         return graph
 
     @staticmethod
-    def validate_package_records(records: List[PackageRecord]) -> None:
+    def validate(records: List[PackageRecord]) -> None:
         """
         Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
 
@@ -133,16 +133,16 @@ class PackageRecord:
         ```python
         >>> from os import listdir
         >>> from os.path import isfile, join
-        >>> from rattler import PrefixRecord
+        >>> from rattler import PackageRecord
         >>> records = [
-        ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
+        ...     PackageRecord.from_path(join("../test-data/conda-meta/", f))
         ...     for f in listdir("../test-data/conda-meta")
         ...     if isfile(join("../test-data/conda-meta", f))
         ... ]
-        >>> PrefixRecord.validate_package_records(records)
+        >>> PackageRecord.validate(records)
         ```
         """
-        return PyRecord.validate_package_records(records)
+        return PyRecord.validate(records)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
