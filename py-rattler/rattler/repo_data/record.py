@@ -5,7 +5,6 @@ from rattler.repo_data import PackageRecord
 
 
 class RepoDataRecord(PackageRecord):
-    @property
     def url(self) -> str:
         """
         The canonical URL from where to get this package.

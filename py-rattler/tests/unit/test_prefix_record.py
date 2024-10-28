@@ -41,3 +41,17 @@ def test_load_prefix_record() -> None:
         isinstance(entry, os.PathLike)
 
     assert paths_with_placeholder == 3
+
+
+def test_create_prefix_record() -> None:
+    r = PrefixRecord.create_from_record(
+        name="foo",
+        version="1.0",
+        build_string="1",
+        build_number=1,
+        channel="https://conda.anaconda.org/conda-forge/win-64",
+        subdir="win-64",
+        noarch=None,
+    )
+
+    print(r)

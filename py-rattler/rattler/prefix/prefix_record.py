@@ -18,6 +18,106 @@ class PrefixRecord(RepoDataRecord):
         record._record = py_record
         return record
 
+    @classmethod
+    def create_from_record(
+        cls,
+        name: str,
+        version: str,
+        build_number: int,
+        build_string: str,
+        channel: str,
+        subdir: str,
+        md5: Optional[str] = None,
+        sha256: Optional[str] = None,
+        size: Optional[int] = None,
+        depends: Optional[List[str]] = None,
+        constrains: Optional[List[str]] = None,
+        track_features: Optional[List[str]] = None,
+        features: Optional[List[str]] = None,
+        noarch: Optional[str] = None,
+        platform: Optional[str] = None,
+        arch: Optional[str] = None,
+        timestamp: Optional[int] = None,
+    ) -> PrefixRecord:
+        """Creates a new PrefixRecord with the specified attributes.
+
+        Parameters
+        ----------
+        name : str
+            The name of the package
+        version : str
+            The version of the package
+        build_number : int
+            The build number of the package
+        build_string : str
+            The build string of the package
+        channel : str
+            The channel the package is from
+        subdir : str
+            The subdirectory of the channel
+        md5 : Optional[str]
+            The MD5 hash of the package
+        sha256 : Optional[str]
+            The SHA256 hash of the package
+        size : Optional[int]
+            The size of the package in bytes
+        depends : Optional[List[str]]
+            Package dependencies
+        constrains : Optional[List[str]]
+            Package constraints
+        track_features : Optional[List[str]]
+            Features to track
+        features : Optional[List[str]]
+            Package features
+        noarch : Optional[str]
+            Noarch specification
+        platform : Optional[str]
+            Platform specification
+        arch : Optional[str]
+            Architecture specification
+        timestamp : Optional[int]
+            Package timestamp
+
+        Returns
+        -------
+        PrefixRecord
+            A new PrefixRecord instance
+        """
+        record = PyRecord.create(
+            name,
+            version,
+            build_number,
+            build_string,
+            channel,
+        )
+
+        if subdir:
+            record.subdir = subdir
+        if md5:
+            record.md5 = md5
+        if sha256:
+            record.sha256 = sha256
+        if size:
+            record.size = size
+        if depends:
+            record.depends = depends
+        if constrains:
+            record.constrains = constrains
+        if track_features:
+            record.track_features = track_features
+        if features:
+            record.features = features
+        if noarch:
+            record.noarch = noarch
+        if platform:
+            record.platform = platform
+        if arch:
+            record.arch = arch
+        if timestamp:
+            record.timestamp = timestamp
+
+        return cls._from_py_record(record)
+
     @staticmethod
     def from_path(path: os.PathLike[str]) -> PrefixRecord:
         """
@@ -34,6 +134,26 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return PrefixRecord._from_py_record(PyRecord.from_path(path))
+
+    def create(
+        name: str,
+        version: str,
+        build_number: int,
+        build_string: str,
+        channel: str,
+    ) -> PrefixRecord:
+        """
+        Creates a new PrefixRecord instance.
+        """
+        return PrefixRecord._from_py_record(
+            PyRecord.create(
+                name,
+                version,
+                build_number,
+                build_string,
+                channel,
+            )
+        )
 
     def write_to_path(self, path: os.PathLike[str], pretty: bool) -> None:
         """
