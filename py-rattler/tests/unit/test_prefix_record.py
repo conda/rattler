@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord
+from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord, VersionWithSource
 
 
 def test_load_prefix_record() -> None:
@@ -42,25 +42,7 @@ def test_load_prefix_record() -> None:
 
     assert paths_with_placeholder == 3
 
-from rattler.rattler import PyRecord
-from rattler import PackageName, Version, Platform, VersionWithSource
-
 def test_create_prefix_record() -> None:
-    # r = PyRecord(
-    #     PackageName("tk")._name,
-    #     (Version("1.0")._version, "1.0"),
-    #     "foo_1",
-    #     1,
-    #     "win-64",
-    #     "win",
-    #     "x86_64",
-    # )
-    # print("Record created!")
-    # print("Record: ", r)
-    # print(r.arch)
-    # r.arch = "foo"
-    # print(r.arch)
-
     r = PrefixRecord.from_path(
         Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
     )
