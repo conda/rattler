@@ -6,14 +6,14 @@ use pyo3::{
 };
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
-    NoArchType, PackageRecord, Platform, PrefixRecord, RepoDataRecord, Version,
+    NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 
 use rattler_digest::{parse_digest_from_hex, Md5, Md5Hash, Sha256, Sha256Hash};
 
 use crate::{
     error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
-    platform::PyPlatform, prefix_paths::PyPrefixPaths, version::PyVersion,
+    prefix_paths::PyPrefixPaths, version::PyVersion,
 };
 
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
@@ -114,43 +114,43 @@ impl PyRecord {
     #[staticmethod]
     pub fn create(
         name: PyPackageName,
-        version: PyVersion,
+        version: (PyVersion, String),
+        build: String,
         build_number: u64,
-        build_string: String,
-        platform: PyPlatform,
+        subdir: String,
+        arch: Option<String>,
+        platform: Option<String>,
+        noarch: Option<PyNoArchType>,
     ) -> Self {
-        let platform: Platform = platform.into();
-        let version: Version = version.into();
-
-        let package_record = PackageRecord {
-            name: name.into(),
-            version: version.into(),
-            build_number,
-            build: build_string,
-            platform: platform.only_platform().map(|s| s.to_string()),
-            subdir: platform.to_string(),
-            arch: platform.arch().map(|a| a.to_string()),
-            constrains: Vec::new(),
-            depends: Vec::new(),
-            features: None,
-            legacy_bz2_md5: None,
-            legacy_bz2_size: None,
-            license: None,
-            license_family: None,
-            md5: None,
-            noarch: NoArchType::none(),
-            purls: None,
-            run_exports: None,
-            sha256: None,
-            size: None,
-            timestamp: None,
-            track_features: Vec::new(),
-        };
-
+        let noarch = noarch.map(|n| n.into());
         Self {
-            inner: RecordInner::Package(package_record),
+            inner: RecordInner::Package(PackageRecord {
+                name: name.into(),
+                version: VersionWithSource::new(version.0.inner.clone(), version.1),
+                build,
+                build_number,
+                arch,
+                platform,
+                subdir,
+                constrains: Vec::new(),
+                depends: Vec::new(),
+                features: None,
+                legacy_bz2_md5: None,
+                legacy_bz2_size: None,
+                license: None,
+                license_family: None,
+                md5: None,
+                noarch: noarch.unwrap_or(NoArchType::none()),
+                purls: None,
+                run_exports: None,
+                sha256: None,
+                size: None,
+                timestamp: None,
+                track_features: Vec::new(),
+            }),
         }
     }
+
     /// Returns a string representation of `PackageRecord`.
     pub fn as_str(&self) -> String {
         format!("{}", self.as_package_record())
@@ -265,12 +265,12 @@ impl PyRecord {
             if md5.as_bytes().len() != 16 {
                 return Err(PyTypeError::new_err("md5 must be 16 bytes long"));
             }
-            self.as_package_record_mut().legacy_bz2_md5 = Some(Md5Hash::clone_from_slice(md5.as_bytes()));
+            self.as_package_record_mut().legacy_bz2_md5 =
+                Some(Md5Hash::clone_from_slice(md5.as_bytes()));
         } else {
             self.as_package_record_mut().legacy_bz2_md5 = None;
         }
         Ok(())
-
     }
 
     /// A deprecated package archive size.
@@ -364,7 +364,8 @@ impl PyRecord {
             if sha256.as_bytes().len() != 32 {
                 return Err(PyTypeError::new_err("sha256 must be 32 bytes long"));
             }
-            self.as_package_record_mut().sha256 = Some(Sha256Hash::clone_from_slice(sha256.as_bytes()));
+            self.as_package_record_mut().sha256 =
+                Some(Sha256Hash::clone_from_slice(sha256.as_bytes()));
         } else {
             self.as_package_record_mut().sha256 = None;
         }
@@ -443,8 +444,9 @@ impl PyRecord {
     }
 
     #[setter]
-    pub fn set_version(&mut self, version: PyVersion) {
-        self.as_package_record_mut().version = version.inner.clone().into();
+    pub fn set_version(&mut self, version: (PyVersion, String)) {
+        self.as_package_record_mut().version =
+            VersionWithSource::new(version.0.inner.clone(), version.1);
     }
 
     /// The filename of the package.
@@ -547,6 +549,15 @@ impl PyRecord {
     pub fn set_requested_spec(&mut self, spec: Option<String>) -> PyResult<()> {
         self.try_as_prefix_record_mut()?.requested_spec = spec;
         Ok(())
+    }
+
+    pub fn to_json(&self) -> String {
+        match &self.inner {
+            RecordInner::Prefix(r) => serde_json::to_string_pretty(&r),
+            RecordInner::RepoData(r) => serde_json::to_string_pretty(&r),
+            RecordInner::Package(r) => serde_json::to_string_pretty(&r),
+        }
+        .unwrap()
     }
 }
 

@@ -174,3 +174,18 @@ class Platform(metaclass=PlatformSingleton):
         ```
         """
         return Arch._from_py_arch(self._inner.arch())
+
+    @property
+    def only_platform(self) -> Optional[str]:
+        """
+        Return the platform without the architecture.
+
+        Examples
+        --------
+        ```python
+        >>> Platform("linux-64").only_platform
+        'linux'
+        >>>
+        ```
+        """
+        return self._inner.only_platform

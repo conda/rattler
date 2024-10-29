@@ -7,6 +7,7 @@ from rattler import VersionWithSource
 from rattler.match_spec.match_spec import MatchSpec
 from rattler.package.no_arch_type import NoArchType
 from rattler.package.package_name import PackageName
+from rattler.platform.platform import Platform
 from rattler.rattler import PyRecord
 
 if TYPE_CHECKING:
@@ -131,6 +132,73 @@ class PackageRecord:
         record._record = py_record
         return record
 
+    def __init__(
+        self,
+        name: str | PackageName,
+        version: str | VersionWithSource,
+        build: str,
+        build_number: int,
+        subdir: str | Platform,
+        arch: Optional[str],
+        platform: Optional[str],
+        noarch: Optional[NoArchType] = None,
+        depends: List[str] = None,
+        constrains: List[str] = None,
+        sha256: Optional[bytes] = None,
+        md5: Optional[bytes] = None,
+        size: Optional[int] = None,
+        features: Optional[List[str]] = None,
+        legacy_bz2_md5: Optional[bytes] = None,
+        legacy_bz2_size: Optional[int] = None,
+        license: Optional[str] = None,
+        license_family: Optional[str] = None,
+    ) -> None:
+        # Convert Platform to str
+        if isinstance(subdir, Platform):
+            arch = subdir.arch
+            platform = subdir.only_platform
+            subdir = subdir.__str__()
+
+        # convert str to PackageName
+        if isinstance(name, str):
+            name = PackageName(name)
+
+        # convert str to VersionWithSource
+        if isinstance(version, str):
+            version = VersionWithSource(version)
+
+        self._record = PyRecord.create(
+            name._name,
+            (version._version, version._source),
+            build,
+            build_number,
+            subdir,
+            arch,
+            platform,
+            noarch,
+        )
+
+        if constrains is not None:
+            self._record.constrains = constrains
+        if depends is not None:
+            self._record.depends = depends
+        if sha256 is not None:
+            self._record.sha256 = sha256
+        if md5 is not None:
+            self._record.md5 = md5
+        if size is not None:
+            self._record.size = size
+        if features is not None:
+            self._record.features = features
+        if legacy_bz2_md5 is not None:
+            self._record.legacy_bz2_md5 = legacy_bz2_md5
+        if legacy_bz2_size is not None:
+            self._record.legacy_bz2_size = legacy_bz2_size
+        if license is not None:
+            self._record.license = license
+        if license_family is not None:
+            self._record.license_family = license_family
+
     @property
     def arch(self) -> Optional[str]:
         """
@@ -149,6 +217,10 @@ class PackageRecord:
         ```
         """
         return self._record.arch
+
+    @arch.setter
+    def arch(self, value: Optional[str]) -> None:
+        self._record.arch = value
 
     @property
     def build(self) -> str:
@@ -169,6 +241,10 @@ class PackageRecord:
         """
         return self._record.build
 
+    @build.setter
+    def build(self, value: str) -> None:
+        self._record.build = value
+
     @property
     def build_number(self) -> int:
         """
@@ -187,6 +263,10 @@ class PackageRecord:
         ```
         """
         return self._record.build_number
+
+    @build_number.setter
+    def build_number(self, value: int) -> None:
+        self._record.build_number = value
 
     @property
     def constrains(self) -> List[str]:
@@ -212,6 +292,10 @@ class PackageRecord:
         """
         return self._record.constrains
 
+    @constrains.setter
+    def constrains(self, value: List[str]) -> None:
+        self._record.constrains = value
+
     @property
     def depends(self) -> List[str]:
         """
@@ -231,6 +315,10 @@ class PackageRecord:
         """
         return self._record.depends
 
+    @depends.setter
+    def depends(self, value: List[str]) -> None:
+        self._record.depends = value
+
     @property
     def features(self) -> Optional[str]:
         """
@@ -241,6 +329,10 @@ class PackageRecord:
         """
         return self._record.features
 
+    @features.setter
+    def features(self, value: Optional[str]) -> None:
+        self._record.features = value
+
     @property
     def legacy_bz2_md5(self) -> Optional[bytes]:
         """
@@ -248,12 +340,20 @@ class PackageRecord:
         """
         return self._record.legacy_bz2_md5
 
+    @legacy_bz2_md5.setter
+    def legacy_bz2_md5(self, value: Optional[bytes]) -> None:
+        self._record.legacy_bz2_md5 = value
+
     @property
     def legacy_bz2_size(self) -> Optional[int]:
         """
         A deprecated package archive size.
         """
         return self._record.legacy_bz2_size
+
+    @legacy_bz2_size.setter
+    def legacy_bz2_size(self, value: Optional[int]) -> None:
+        self._record.legacy_bz2_size = value
 
     @property
     def license(self) -> Optional[str]:
@@ -273,6 +373,10 @@ class PackageRecord:
         ```
         """
         return self._record.license
+
+    @license.setter
+    def license(self, value: Optional[str]) -> None:
+        self._record.license = value
 
     @property
     def license_family(self) -> Optional[str]:
@@ -294,6 +398,10 @@ class PackageRecord:
         """
         return self._record.license_family
 
+    @license_family.setter
+    def license_family(self, value: Optional[str]) -> None:
+        self._record.license_family = value
+
     @property
     def md5(self) -> Optional[bytes]:
         """
@@ -313,6 +421,10 @@ class PackageRecord:
         """
         return self._record.md5
 
+    @md5.setter
+    def md5(self, value: Optional[bytes]) -> None:
+        self._record.md5 = value
+
     @property
     def name(self) -> PackageName:
         """
@@ -331,6 +443,10 @@ class PackageRecord:
         ```
         """
         return PackageName._from_py_package_name(self._record.name)
+
+    @name.setter
+    def name(self, value: PackageName) -> None:
+        self._record.name = value._name
 
     @property
     def noarch(self) -> Optional[str]:
@@ -360,6 +476,15 @@ class PackageRecord:
             return "generic"
         return None
 
+    @noarch.setter
+    def noarch(self, value: Optional[str]) -> None:
+        if value == "python":
+            self._record.noarch = NoArchType.python()._noarch_type
+        elif value == "generic":
+            self._record.noarch = NoArchType.generic()._noarch_type
+        else:
+            self._record.noarch = NoArchType.none()._noarch_type
+
     @property
     def platform(self) -> Optional[str]:
         """
@@ -379,6 +504,10 @@ class PackageRecord:
         """
         return self._record.platform
 
+    @platform.setter
+    def platform(self, value: Optional[str]) -> None:
+        self._record.platform = value
+
     @property
     def sha256(self) -> Optional[bytes]:
         """
@@ -396,6 +525,10 @@ class PackageRecord:
         >>>
         """
         return self._record.sha256
+
+    @sha256.setter
+    def sha256(self, value: Optional[bytes]) -> None:
+        self._record.sha256 = value
 
     @property
     def size(self) -> Optional[int]:
@@ -416,6 +549,10 @@ class PackageRecord:
         """
         return self._record.size
 
+    @size.setter
+    def size(self, value: Optional[int]) -> None:
+        self._record.size = value
+
     @property
     def subdir(self) -> str:
         """
@@ -434,6 +571,10 @@ class PackageRecord:
         ```
         """
         return self._record.subdir
+
+    @subdir.setter
+    def subdir(self, value: str) -> None:
+        self._record.subdir = value
 
     @property
     def timestamp(self) -> Optional[datetime.datetime]:
@@ -456,6 +597,13 @@ class PackageRecord:
             return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return self._record.timestamp
+
+    @timestamp.setter
+    def timestamp(self, value: Optional[datetime.datetime]) -> None:
+        if value is not None:
+            self._record.timestamp = int(value.timestamp() * 1000)
+        else:
+            self._record.timestamp = None
 
     @property
     def track_features(self) -> List[str]:
@@ -480,6 +628,10 @@ class PackageRecord:
         """
         return self._record.track_features
 
+    @track_features.setter
+    def track_features(self, value: List[str]) -> None:
+        self._record.track_features = value
+
     @property
     def version(self) -> VersionWithSource:
         """
@@ -498,6 +650,10 @@ class PackageRecord:
         ```
         """
         return VersionWithSource._from_py_version(*self._record.version)
+
+    @version.setter
+    def version(self, value: VersionWithSource) -> None:
+        self._record.version = (value._version, value._source)
 
     def __str__(self) -> str:
         """
@@ -532,3 +688,9 @@ class PackageRecord:
         ```
         """
         return f'PackageRecord("{self.__str__()}")'
+
+    def to_json(self):
+        """
+        Convert the PackageRecord to a JSON serializable object.
+        """
+        return self._record.to_json()
