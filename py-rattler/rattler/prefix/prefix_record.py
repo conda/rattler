@@ -2,9 +2,11 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
+from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
+from rattler.version.version import Version
 
 
 class PrefixRecord(RepoDataRecord):
@@ -21,8 +23,8 @@ class PrefixRecord(RepoDataRecord):
     @classmethod
     def create_from_record(
         cls,
-        name: str,
-        version: str,
+        name: str | PackageName,
+        version: str | Version,
         build_number: int,
         build_string: str,
         channel: str,
@@ -43,9 +45,9 @@ class PrefixRecord(RepoDataRecord):
 
         Parameters
         ----------
-        name : str
+        name : str | PackageName
             The name of the package
-        version : str
+        version : str | Version
             The version of the package
         build_number : int
             The build number of the package
