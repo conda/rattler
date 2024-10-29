@@ -2,11 +2,9 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
-from rattler.package.package_name import PackageName
 from rattler.rattler import PyRecord
 from rattler.prefix.prefix_paths import PrefixPaths
 from rattler.repo_data.record import RepoDataRecord
-from rattler.version.version import Version
 
 
 class PrefixRecord(RepoDataRecord):
@@ -20,105 +18,24 @@ class PrefixRecord(RepoDataRecord):
         record._record = py_record
         return record
 
-    @classmethod
-    def create_from_record(
-        cls,
-        name: str | PackageName,
-        version: str | Version,
-        build_number: int,
-        build_string: str,
-        channel: str,
-        subdir: str,
-        md5: Optional[str] = None,
-        sha256: Optional[str] = None,
-        size: Optional[int] = None,
-        depends: Optional[List[str]] = None,
-        constrains: Optional[List[str]] = None,
-        track_features: Optional[List[str]] = None,
-        features: Optional[List[str]] = None,
-        noarch: Optional[str] = None,
-        platform: Optional[str] = None,
-        arch: Optional[str] = None,
-        timestamp: Optional[int] = None,
-    ) -> PrefixRecord:
-        """Creates a new PrefixRecord with the specified attributes.
-
-        Parameters
-        ----------
-        name : str | PackageName
-            The name of the package
-        version : str | Version
-            The version of the package
-        build_number : int
-            The build number of the package
-        build_string : str
-            The build string of the package
-        channel : str
-            The channel the package is from
-        subdir : str
-            The subdirectory of the channel
-        md5 : Optional[str]
-            The MD5 hash of the package
-        sha256 : Optional[str]
-            The SHA256 hash of the package
-        size : Optional[int]
-            The size of the package in bytes
-        depends : Optional[List[str]]
-            Package dependencies
-        constrains : Optional[List[str]]
-            Package constraints
-        track_features : Optional[List[str]]
-            Features to track
-        features : Optional[List[str]]
-            Package features
-        noarch : Optional[str]
-            Noarch specification
-        platform : Optional[str]
-            Platform specification
-        arch : Optional[str]
-            Architecture specification
-        timestamp : Optional[int]
-            Package timestamp
-
-        Returns
-        -------
-        PrefixRecord
-            A new PrefixRecord instance
-        """
-        record = PyRecord.create(
-            name,
-            version,
-            build_number,
-            build_string,
-            channel,
+    def __init__(
+        self,
+        repodata_record: RepoDataRecord,
+        paths_data: PrefixPaths,
+        package_tarball_full_path: Optional[os.PathLike[str]] = None,
+        extracted_package_dir: Optional[os.PathLike[str]] = None,
+        requested_spec: Optional[str] = None,
+        files: Optional[List[os.PathLike[str]]] = None,
+    ) -> None:
+        record = PyRecord.create_prefix_record(
+            repodata_record._record,
+            paths_data._paths,
+            package_tarball_full_path,
+            extracted_package_dir,
+            requested_spec,
+            files,
         )
-
-        if subdir:
-            record.subdir = subdir
-        if md5:
-            record.md5 = md5
-        if sha256:
-            record.sha256 = sha256
-        if size:
-            record.size = size
-        if depends:
-            record.depends = depends
-        if constrains:
-            record.constrains = constrains
-        if track_features:
-            record.track_features = track_features
-        if features:
-            record.features = features
-        if noarch:
-            record.noarch = noarch
-        if platform:
-            record.platform = platform
-        if arch:
-            record.arch = arch
-        if timestamp:
-            record.timestamp = timestamp
-
-        return cls._from_py_record(record)
+        self._record = record
 
     @staticmethod
     def from_path(path: os.PathLike[str]) -> PrefixRecord:
@@ -136,26 +53,6 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return PrefixRecord._from_py_record(PyRecord.from_path(path))
-
-    def create(
-        name: str,
-        version: str,
-        build_number: int,
-        build_string: str,
-        channel: str,
-    ) -> PrefixRecord:
-        """
-        Creates a new PrefixRecord instance.
-        """
-        return PrefixRecord._from_py_record(
-            PyRecord.create(
-                name,
-                version,
-                build_number,
-                build_string,
-                channel,
-            )
-        )
 
     def write_to_path(self, path: os.PathLike[str], pretty: bool) -> None:
         """
@@ -181,6 +78,10 @@ class PrefixRecord(RepoDataRecord):
         """
         return self._record.package_tarball_full_path
 
+    @package_tarball_full_path.setter
+    def package_tarball_full_path(self, value: Optional[os.PathLike[str]]) -> None:
+        self._record.package_tarball_full_path = value
+
     @property
     def extracted_package_dir(self) -> Optional[os.PathLike[str]]:
         """
@@ -198,6 +99,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return self._record.extracted_package_dir
+
+    @extracted_package_dir.setter
+    def extracted_package_dir(self, value: Optional[os.PathLike[str]]) -> None:
+        self._record.extracted_package_dir = value
 
     @property
     def files(self) -> List[os.PathLike[str]]:
@@ -217,6 +122,10 @@ class PrefixRecord(RepoDataRecord):
         """
         return self._record.files
 
+    @files.setter
+    def files(self, value: List[os.PathLike[str]]) -> None:
+        self._record.files = value
+
     @property
     def paths_data(self) -> PrefixPaths:
         """
@@ -234,6 +143,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return PrefixPaths._from_py_prefix_paths(self._record.paths_data)
+
+    @paths_data.setter
+    def paths_data(self, value: PrefixPaths) -> None:
+        self._record.paths_data = value._inner
 
     @property
     def requested_spec(self) -> Optional[str]:
@@ -256,6 +169,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return self._record.requested_spec
+
+    @requested_spec.setter
+    def requested_spec(self, value: Optional[str]) -> None:
+        self._record.requested_spec = value
 
     def __repr__(self) -> str:
         """

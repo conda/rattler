@@ -6,10 +6,12 @@ use pyo3::{
 };
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
+    prefix_record::Link,
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 
 use rattler_digest::{parse_digest_from_hex, Md5, Md5Hash, Sha256, Sha256Hash};
+use url::Url;
 
 use crate::{
     error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
@@ -109,6 +111,32 @@ impl PyRecord {
     }
 }
 
+#[pyclass]
+#[derive(Clone)]
+pub struct PyLink {
+    #[pyo3(get, set)]
+    pub source: PathBuf,
+    #[pyo3(get, set)]
+    pub type_: String,
+}
+
+#[pymethods]
+impl PyLink {
+    #[new]
+    pub fn new(source: PathBuf, type_: String) -> Self {
+        Self { source, type_ }
+    }
+}
+
+impl Into<Link> for PyLink {
+    fn into(self) -> Link {
+        Link {
+            source: self.source,
+            link_type: None,
+        }
+    }
+}
+
 #[pymethods]
 impl PyRecord {
     #[staticmethod]
@@ -149,6 +177,58 @@ impl PyRecord {
                 track_features: Vec::new(),
             }),
         }
+    }
+
+    #[staticmethod]
+    pub fn create_repodata_record(
+        package_record: PyRecord,
+        file_name: PathBuf,
+        url: String,
+        channel: String,
+    ) -> PyResult<Self> {
+        if !package_record.is_package_record() {
+            return Err(PyTypeError::new_err(
+                "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            ));
+        }
+
+        Ok(Self {
+            inner: RecordInner::RepoData(RepoDataRecord {
+                package_record: package_record.as_package_record().clone(),
+                file_name: file_name.to_string_lossy().to_string(),
+                url: Url::parse(&url).unwrap(),
+                channel,
+            }),
+        })
+    }
+
+    #[staticmethod]
+    pub fn create_prefix_record(
+        package_record: PyRecord,
+        paths_data: PyPrefixPaths,
+        link: Option<PyLink>,
+        package_tarball_full_path: Option<PathBuf>,
+        extracted_package_dir: Option<PathBuf>,
+        requested_spec: Option<String>,
+        files: Option<Vec<PathBuf>>,
+    ) -> PyResult<Self> {
+        if !package_record.is_repodata_record() {
+            return Err(PyTypeError::new_err(
+                "Cannot use object of type 'PackageRecord' as 'RepoDataRecord'",
+            ));
+        }
+
+        Ok(Self {
+            inner: RecordInner::Prefix(PrefixRecord {
+                repodata_record: package_record.try_as_repodata_record().unwrap().clone(),
+                package_tarball_full_path,
+                extracted_package_dir,
+                files: files.unwrap_or(Vec::new()),
+                paths_data: paths_data.into(),
+                link: link.map(|l| l.into()),
+                requested_spec,
+            }),
+        })
     }
 
     /// Returns a string representation of `PackageRecord`.

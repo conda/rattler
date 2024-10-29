@@ -19,6 +19,7 @@ mod record;
 mod repo_data;
 mod shell;
 mod solver;
+mod utils;
 mod version;
 mod virtual_package;
 

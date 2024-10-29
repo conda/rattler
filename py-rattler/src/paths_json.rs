@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, PyResult, Python};
 use rattler_conda_types::package::{
     FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
 };
@@ -300,21 +300,28 @@ impl From<PyFileMode> for FileMode {
 
 #[pymethods]
 impl PyFileMode {
+    #[new]
+    pub fn new(file_mode: &str) -> PyResult<Self> {
+        match file_mode {
+            "binary" => Ok(Self {
+                inner: FileMode::Binary,
+            }),
+            "text" => Ok(Self {
+                inner: FileMode::Text,
+            }),
+            _ => Err(PyValueError::new_err("Invalid file mode")),
+        }
+    }
+
     /// The file is a binary file (needs binary prefix replacement)
     #[getter]
     pub fn binary(&self) -> bool {
-        match &self.inner {
-            FileMode::Binary => true,
-            FileMode::Text => false,
-        }
+        matches!(&self.inner, FileMode::Binary)
     }
 
     /// The file is a text file (needs text prefix replacement)
     #[getter]
     pub fn text(&self) -> bool {
-        match &self.inner {
-            FileMode::Text => true,
-            FileMode::Binary => false,
-        }
+        matches!(&self.inner, FileMode::Text)
     }
 }

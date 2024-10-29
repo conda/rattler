@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord
+from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord
 
 
 def test_load_prefix_record() -> None:
@@ -46,20 +46,20 @@ from rattler.rattler import PyRecord
 from rattler import PackageName, Version, Platform, VersionWithSource
 
 def test_create_prefix_record() -> None:
-    r = PyRecord.create(
-        PackageName("tk")._name,
-        (Version("1.0")._version, "1.0"),
-        "foo_1",
-        1,
-        "win-64",
-        "win",
-        "x86_64",
-    )
-    print("Record created!")
-    print("Record: ", r)
-    print(r.arch)
-    r.arch = "foo"
-    print(r.arch)
+    # r = PyRecord(
+    #     PackageName("tk")._name,
+    #     (Version("1.0")._version, "1.0"),
+    #     "foo_1",
+    #     1,
+    #     "win-64",
+    #     "win",
+    #     "x86_64",
+    # )
+    # print("Record created!")
+    # print("Record: ", r)
+    # print(r.arch)
+    # r.arch = "foo"
+    # print(r.arch)
 
     r = PrefixRecord.from_path(
         Path(__file__).parent / ".." / ".." / ".." / "test-data" / "conda-meta" / "tk-8.6.12-h8ffe710_0.json"
@@ -75,7 +75,7 @@ def test_create_prefix_record() -> None:
     r.sha256 = bytes.fromhex(sha256)
     assert r.sha256.hex() == sha256
 
-    r = PackageRecord(
+    package_record = PackageRecord(
         name="foobar",
         version="1.0",
         build_number=1,
@@ -84,5 +84,48 @@ def test_create_prefix_record() -> None:
         subdir="win",
         arch="x86_64",
     )
+    print(package_record.to_json())
 
-    print(r.to_json())
+    repodata_record = RepoDataRecord(
+        package_record,
+        file_name="foobar.tar.bz2",
+        url="https://foobar.com/foobar.tar.bz2",
+        channel="https://foobar.com/win-64",
+    )
+
+    assert repodata_record.url == "https://foobar.com/foobar.tar.bz2"
+    assert repodata_record.channel == "https://foobar.com/win-64"
+    assert repodata_record.file_name == "foobar.tar.bz2"
+
+    paths_data = PrefixPaths()
+
+    r = PrefixRecord(
+        repodata_record,
+        paths_data=paths_data,
+    )
+
+    r.requested_spec = "foo"
+    assert r.requested_spec == "foo"
+
+def test_prefix_paths() -> None:
+    prefix_path_type = PrefixPathType("hardlink")
+    assert prefix_path_type.hardlink
+
+    # create a paths entry
+    prefix_paths_entry = PrefixPathsEntry(
+        "foo/bar/baz",
+        prefix_path_type,
+        prefix_placeholder="placeholder_foo_bar",
+        file_mode=FileMode("binary"),
+        sha256=bytes.fromhex("c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"),
+        sha256_in_prefix=bytes.fromhex("c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"),
+        size_in_bytes=1024,
+    )
+
+    assert prefix_paths_entry.relative_path == "foo/bar/baz"
+    assert prefix_paths_entry.path_type.hardlink
+    assert prefix_paths_entry.prefix_placeholder == "placeholder_foo_bar"
+    assert prefix_paths_entry.file_mode.binary
+    assert prefix_paths_entry.sha256.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+    assert prefix_paths_entry.sha256_in_prefix.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+    assert prefix_paths_entry.size_in_bytes == 1024
