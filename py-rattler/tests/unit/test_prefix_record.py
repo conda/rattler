@@ -89,6 +89,8 @@ def test_create_prefix_record() -> None:
     r.requested_spec = "foo"
     assert r.requested_spec == "foo"
 
+    print(r.to_json())
+
 def test_prefix_paths() -> None:
     prefix_path_type = PrefixPathType("hardlink")
     assert prefix_path_type.hardlink
