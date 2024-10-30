@@ -93,7 +93,7 @@ impl Installer {
     ///
     /// This function is similar to [`Self::with_io_concurrency_limit`],
     /// but modifies an existing instance.
-    pub fn set_io_concurrentcy_limit(&mut self, limit: usize) -> &mut Self {
+    pub fn set_io_concurrency_limit(&mut self, limit: usize) -> &mut Self {
         self.io_semaphore = Some(Arc::new(Semaphore::new(limit)));
         self
     }
