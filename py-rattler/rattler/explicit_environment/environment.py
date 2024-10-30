@@ -38,12 +38,20 @@ class ExplicitEnvironmentSpec:
     def from_str(cls, content: str) -> "ExplicitEnvironmentSpec":
         """
         Parses the object from a string containing the explicit environment specification
+
         Examples:
-            >>> spec = ExplicitEnvironmentSpec.from_str("# platform: linux-64\\nhttp://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2")
-            >>> spec.platform.name
-            'linux-64'
-            >>> spec.packages[0].url
-            'http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2'
+
+        ```python
+        >>> spec = ExplicitEnvironmentSpec.from_str('''@EXPLICIT
+        ... # platform: linux-64
+        ... http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2
+        ... ''')
+        >>> spec.platform
+        Platform(linux-64)
+        >>> spec.packages[0].url
+        'http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h3.tar.bz2'
+        >>>
+        ```
         """
         return cls(_PyExplicitEnvironmentSpec.from_str(content))
 
