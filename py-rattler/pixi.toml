@@ -39,7 +39,7 @@ types-networkx = "*"
 
 [feature.test.tasks]
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
-quicktest = { cmd = "pytest ./tests" }
+quicktest = { cmd = "pytest --doctest-modules" }
 fmt-python = "ruff format rattler examples"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."

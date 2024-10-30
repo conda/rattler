@@ -31,6 +31,25 @@ class PackageRecord:
     def matches(self, spec: MatchSpec) -> bool:
         """
         Match a [`PackageRecord`] against a [`MatchSpec`].
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import MatchSpec
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> spec = MatchSpec("pysocks")
+        >>> record.matches(spec)
+        True
+        >>> spec = MatchSpec("pysocks>=1.7")
+        >>> record.matches(spec)
+        True
+        >>> spec = MatchSpec("pysocks<1.7")
+        >>> record.matches(spec)
+        False
+        >>>
+        ```
         """
         return spec.matches(self)
 
@@ -53,6 +72,12 @@ class PackageRecord:
         ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
         ... )
         >>> assert isinstance(record, PackageRecord)
+        >>> record.name
+        PackageName("pysocks")
+        >>> record.version
+        VersionWithSource(version="1.7.1", source="1.7.1")
+        >>> record.build
+        'pyh0701188_6'
         >>>
         ```
         """
@@ -80,6 +105,10 @@ class PackageRecord:
         >>> sorted = PackageRecord.sort_topologically(records)
         >>> sorted[0].name
         PackageName("python_abi")
+        >>> # Verify it's deterministic by sorting again
+        >>> sorted2 = PackageRecord.sort_topologically(records)
+        >>> [str(r) for r in sorted] == [str(r) for r in sorted2]
+        True
         >>>
         ```
         """
@@ -91,20 +120,7 @@ class PackageRecord:
         Converts a list of PackageRecords to a DAG (`networkx.DiGraph`).
         The nodes in the graph are the PackageRecords and the edges are the dependencies.
 
-        Examples
-        --------
-        ```python
-        import rattler
-        import asyncio
-        import networkx as nx
-        from matplotlib import pyplot as plt
-
-        records = asyncio.run(rattler.solve(['main'], ['python'], platforms=['osx-arm64', 'noarch']))
-        graph = rattler.PackageRecord.to_graph(records)
-
-        nx.draw(graph, with_labels=True, font_weight='bold')
-        plt.show()
-        ```
+        Note: Virtual packages (starting with `__`) are skipped.
         """
         if nx is None:
             raise ImportError("networkx is not installed")
@@ -116,6 +132,9 @@ class PackageRecord:
             graph.add_node(record)
             for dep in record.depends:
                 name = dep.split(" ")[0]
+                if name.startswith("__"):
+                    # this is a virtual package, so we just skip it
+                    continue
                 graph.add_edge(record, names_to_records[PackageName(name)])
 
         return graph
@@ -213,6 +232,12 @@ class PackageRecord:
         ... )
         >>> record.arch
         'x86_64'
+        >>> record.arch = "arm64"
+        >>> record.arch
+        'arm64'
+        >>> record.arch = None
+        >>> record.arch is None
+        True
         >>>
         ```
         """
@@ -236,6 +261,9 @@ class PackageRecord:
         ... )
         >>> record.build
         'hcfcfb64_0'
+        >>> record.build = "new_build_1"
+        >>> record.build
+        'new_build_1'
         >>>
         ```
         """
@@ -259,6 +287,9 @@ class PackageRecord:
         ... )
         >>> record.build_number
         0
+        >>> record.build_number = 42
+        >>> record.build_number
+        42
         >>>
         ```
         """
@@ -287,6 +318,9 @@ class PackageRecord:
         ... )
         >>> record.constrains
         []
+        >>> record.constrains = ["python >=3.6"]
+        >>> record.constrains
+        ['python >=3.6']
         >>>
         ```
         """
@@ -310,6 +344,9 @@ class PackageRecord:
         ... )
         >>> record.depends
         ['ucrt >=10.0.20348.0', 'vc >=14.2,<15', 'vs2015_runtime >=14.29.30139']
+        >>> record.depends = ["python >=3.6"]
+        >>> record.depends
+        ['python >=3.6']
         >>>
         ```
         """
@@ -326,6 +363,23 @@ class PackageRecord:
         sets for the conda solver. This is not supported anymore and
         should not be used. Instead, mutex packages should be used
         to specify mutually exclusive features.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.features is None
+        True
+        >>> record.features = "feature1"
+        >>> record.features
+        'feature1'
+        >>> record.features = None
+        >>> record.features is None
+        True
+        >>>
+        ```
         """
         return self._record.features
 
@@ -337,6 +391,23 @@ class PackageRecord:
     def legacy_bz2_md5(self) -> Optional[bytes]:
         """
         A deprecated md5 hash.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.legacy_bz2_md5 is None
+        True
+        >>> record.legacy_bz2_md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
+        >>> record.legacy_bz2_md5.hex()
+        '2ddbbaf3a82b46ac7214681262e3d746'
+        >>> record.legacy_bz2_md5 = None
+        >>> record.legacy_bz2_md5 is None
+        True
+        >>>
+        ```
         """
         return self._record.legacy_bz2_md5
 
@@ -348,6 +419,23 @@ class PackageRecord:
     def legacy_bz2_size(self) -> Optional[int]:
         """
         A deprecated package archive size.
+
+        Examples
+        --------
+        ```python
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> record.legacy_bz2_size is None
+        True
+        >>> record.legacy_bz2_size = 42
+        >>> record.legacy_bz2_size
+        42
+        >>> record.legacy_bz2_size = None
+        >>> record.legacy_bz2_size is None
+        True
+        >>>
+        ```
         """
         return self._record.legacy_bz2_size
 
@@ -369,6 +457,12 @@ class PackageRecord:
         ... )
         >>> record.license
         'Unlicense'
+        >>> record.license = "MIT"
+        >>> record.license
+        'MIT'
+        >>> record.license = None
+        >>> record.license is None
+        True
         >>>
         ```
         """
@@ -392,6 +486,12 @@ class PackageRecord:
         ... )
         >>> record.license_family
         'MIT'
+        >>> record.license_family = "BSD"
+        >>> record.license_family
+        'BSD'
+        >>> record.license_family = None
+        >>> record.license_family is None
+        True
         >>>
         ```
 
@@ -416,6 +516,12 @@ class PackageRecord:
         ... )
         >>> record.md5.hex()
         '5e5a97795de72f8cc3baf3d9ea6327a2'
+        >>> record.md5 = bytes.fromhex("2ddbbaf3a82b46ac7214681262e3d746")
+        >>> record.md5.hex()
+        '2ddbbaf3a82b46ac7214681262e3d746'
+        >>> record.md5 = None
+        >>> record.md5 is None
+        True
         >>>
         ```
         """
@@ -433,12 +539,15 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
+        >>> from rattler import PrefixRecord, PackageName
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.name
         PackageName("libsqlite")
+        >>> record.name = PackageName("newname")
+        >>> record.name
+        PackageName("newname")
         >>>
         ```
         """
@@ -466,6 +575,12 @@ class PackageRecord:
         ... )
         >>> record.noarch
         'python'
+        >>> record.noarch = "generic"
+        >>> record.noarch
+        'generic'
+        >>> record.noarch = None
+        >>> record.noarch is None
+        True
         >>>
         ```
         """
@@ -499,6 +614,12 @@ class PackageRecord:
         ... )
         >>> record.platform
         'win32'
+        >>> record.platform = "linux"
+        >>> record.platform
+        'linux'
+        >>> record.platform = None
+        >>> record.platform is None
+        True
         >>>
         ```
         """
@@ -522,6 +643,12 @@ class PackageRecord:
         ... )
         >>> record.sha256.hex()
         '4e50b3d90a351c9d47d239d3f90fce4870df2526e4f7fef35203ab3276a6dfc9'
+        >>> record.sha256 = bytes.fromhex("edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1")
+        >>> record.sha256.hex()
+        'edd7dd24fc070fad8ca690a920d94b6312a376faa96b47c657f9ef5fe5a97dd1'
+        >>> record.sha256 = None
+        >>> record.sha256 is None
+        True
         >>>
         """
         return self._record.sha256
@@ -544,6 +671,12 @@ class PackageRecord:
         ... )
         >>> record.size
         669941
+        >>> record.size = 42
+        >>> record.size
+        42
+        >>> record.size = None
+        >>> record.size is None
+        True
         >>>
         ```
         """
@@ -567,6 +700,9 @@ class PackageRecord:
         ... )
         >>> record.subdir
         'win-64'
+        >>> record.subdir = "linux-64"
+        >>> record.subdir
+        'linux-64'
         >>>
         ```
         """
@@ -585,11 +721,19 @@ class PackageRecord:
         --------
         ```python
         >>> from rattler import PrefixRecord
+        >>> import datetime
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.timestamp
         datetime.datetime(2022, 11, 17, 15, 7, 19, 781000, tzinfo=datetime.timezone.utc)
+        >>> new_time = datetime.datetime(2023, 1, 1, tzinfo=datetime.timezone.utc)
+        >>> record.timestamp = new_time
+        >>> record.timestamp
+        datetime.datetime(2023, 1, 1, 0, 0, tzinfo=datetime.timezone.utc)
+        >>> record.timestamp = None
+        >>> record.timestamp is None
+        True
         >>>
         ```
         """
@@ -623,6 +767,9 @@ class PackageRecord:
         ... )
         >>> record.track_features
         []
+        >>> record.track_features = ["feature1", "feature2"]
+        >>> record.track_features
+        ['feature1', 'feature2']
         >>>
         ```
         """
@@ -640,12 +787,15 @@ class PackageRecord:
         Examples
         --------
         ```python
-        >>> from rattler import PrefixRecord
+        >>> from rattler import PrefixRecord, VersionWithSource
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.version
         VersionWithSource(version="3.40.0", source="3.40.0")
+        >>> record.version = VersionWithSource("1.0.0")
+        >>> record.version
+        VersionWithSource(version="1.0.0", source="1.0.0")
         >>>
         ```
         """
@@ -692,5 +842,23 @@ class PackageRecord:
     def to_json(self):
         """
         Convert the PackageRecord to a JSON serializable object.
+
+        Examples
+        --------
+        ```python
+        >>> import json
+        >>> record = PackageRecord.from_index_json(
+        ...     "../test-data/conda-meta/pysocks-1.7.1-pyh0701188_6.json"
+        ... )
+        >>> json_data = record.to_json()
+        >>> isinstance(json_data, str)
+        True
+        >>> as_dict = json.loads(json_data)
+        >>> as_dict["name"]
+        'pysocks'
+        >>> as_dict["version"]
+        '1.7.1'
+        >>>
+        ```
         """
         return self._record.to_json()
