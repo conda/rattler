@@ -10,12 +10,16 @@ use rattler_conda_types::{
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 
-use rattler_digest::{parse_digest_from_hex, Md5, Md5Hash, Sha256, Sha256Hash};
+use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 use url::Url;
 
 use crate::{
-    error::PyRattlerError, no_arch_type::PyNoArchType, package_name::PyPackageName,
-    prefix_paths::PyPrefixPaths, version::PyVersion,
+    error::PyRattlerError,
+    no_arch_type::PyNoArchType,
+    package_name::PyPackageName,
+    prefix_paths::PyPrefixPaths,
+    utils::{md5_from_pybytes, sha256_from_pybytes},
+    version::PyVersion,
 };
 
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
@@ -40,24 +44,6 @@ pub enum RecordInner {
 }
 
 impl PyRecord {
-    // pub fn create(record_type: String, name: PyPackageName, version: VersionWithSource, build_number: u64, build_string: String) -> Self {
-    //     // create a package record, and then either type from that
-    //     let package_record = PackageRecord {
-    //         name,
-    //         version: version.into(),
-    //         build: build_string,
-    //         build_number,
-
-    //     };
-
-    //     return match record_type.as_str() {
-    //         "prefix" => Self { inner: RecordInner::Prefix(PrefixRecord::create_from_record(package_record)) },
-    //         "repodata" => Self { inner: RecordInner::RepoData(RepoDataRecord::create_from_record(package_record)) },
-    //         "package" => Self { inner: RecordInner::Package(package_record) },
-    //         _ => Err(PyTypeError::new_err("invalid record type")),
-    //     };
-    // }
-
     pub fn as_package_record(&self) -> &PackageRecord {
         self.as_ref()
     }
@@ -341,15 +327,8 @@ impl PyRecord {
 
     #[setter]
     pub fn set_legacy_bz2_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
-        if let Some(md5) = md5 {
-            if md5.as_bytes().len() != 16 {
-                return Err(PyTypeError::new_err("md5 must be 16 bytes long"));
-            }
-            self.as_package_record_mut().legacy_bz2_md5 =
-                Some(Md5Hash::clone_from_slice(md5.as_bytes()));
-        } else {
-            self.as_package_record_mut().legacy_bz2_md5 = None;
-        }
+        self.as_package_record_mut().legacy_bz2_md5 =
+            md5.map(|m| md5_from_pybytes(m)).transpose()?;
         Ok(())
     }
 
@@ -396,14 +375,7 @@ impl PyRecord {
 
     #[setter]
     pub fn set_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
-        if let Some(md5) = md5 {
-            if md5.as_bytes().len() != 16 {
-                return Err(PyTypeError::new_err("md5 must be 16 bytes long"));
-            }
-            self.as_package_record_mut().md5 = Some(Md5Hash::clone_from_slice(md5.as_bytes()));
-        } else {
-            self.as_package_record_mut().md5 = None;
-        }
+        self.as_package_record_mut().md5 = md5.map(|m| md5_from_pybytes(m)).transpose()?;
         Ok(())
     }
 
@@ -440,15 +412,7 @@ impl PyRecord {
     /// Optionally a SHA256 hash of the package archive.
     #[setter]
     pub fn set_sha256(&mut self, sha256: Option<&PyBytes>) -> PyResult<()> {
-        if let Some(sha256) = sha256 {
-            if sha256.as_bytes().len() != 32 {
-                return Err(PyTypeError::new_err("sha256 must be 32 bytes long"));
-            }
-            self.as_package_record_mut().sha256 =
-                Some(Sha256Hash::clone_from_slice(sha256.as_bytes()));
-        } else {
-            self.as_package_record_mut().sha256 = None;
-        }
+        self.as_package_record_mut().sha256 = sha256.map(|s| sha256_from_pybytes(s)).transpose()?;
         Ok(())
     }
 
