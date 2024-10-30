@@ -47,6 +47,7 @@ use lock::{
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
+use networking::middleware::{PyAuthenticationMiddleware, PyMirrorMiddleware};
 use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
@@ -96,6 +97,8 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPlatform>().unwrap();
     m.add_class::<PyArch>().unwrap();
 
+    m.add_class::<PyMirrorMiddleware>().unwrap();
+    m.add_class::<PyAuthenticationMiddleware>().unwrap();
     m.add_class::<PyAuthenticatedClient>().unwrap();
 
     // Shell activation things

@@ -18,6 +18,7 @@ use rattler_repodata_gateway::Reporter;
 
 pub mod authenticated_client;
 pub mod cached_repo_data;
+pub mod middleware;
 
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
 /// Returns a list of `PyRepoData`.
@@ -30,7 +31,7 @@ pub fn py_fetch_repo_data<'a>(
     callback: Option<&'a PyAny>,
 ) -> PyResult<&'a PyAny> {
     let mut meta_futures = Vec::new();
-    let client = PyAuthenticatedClient::new();
+    let client = PyAuthenticatedClient::new(None);
 
     for (subdir, chan) in get_subdir_urls(channels, platforms)? {
         let callback = callback.map(|callback| {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from rattler.rattler import PyAuthenticatedClient
+from rattler.networking.middleware import MirrorMiddleware
 
 
 class AuthenticatedClient:
@@ -7,8 +8,8 @@ class AuthenticatedClient:
     A client that can be used to make authenticated requests.
     """
 
-    def __init__(self) -> None:
-        self._client = PyAuthenticatedClient()
+    def __init__(self, middlewares: list[MirrorMiddleware] | None = None) -> None:
+        self._client = PyAuthenticatedClient([middleware._middleware for middleware in middlewares] if middlewares else None)
 
     @classmethod
     def _from_ffi_object(cls, client: PyAuthenticatedClient) -> AuthenticatedClient:
