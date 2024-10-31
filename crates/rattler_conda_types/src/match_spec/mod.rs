@@ -189,15 +189,15 @@ impl Display for MatchSpec {
         }
 
         if let Some(build_number) = &self.build_number {
-            keys.push(format!("build_number=\"{}\"", build_number));
+            keys.push(format!("build_number=\"{build_number}\""));
         }
 
         if let Some(file_name) = &self.file_name {
-            keys.push(format!("fn=\"{}\"", file_name));
+            keys.push(format!("fn=\"{file_name}\""));
         }
 
         if let Some(url) = &self.url {
-            keys.push(format!("url=\"{}\"", url));
+            keys.push(format!("url=\"{url}\""));
         }
 
         if !keys.is_empty() {

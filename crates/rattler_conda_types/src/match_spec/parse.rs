@@ -483,7 +483,7 @@ impl NamelessMatchSpec {
         if !input.is_empty() {
             let (version, build) = parse_version_and_build(input, strictness)?;
             match_spec.version = version.or(match_spec.version);
-            match_spec.build = build.or(match_spec.build)
+            match_spec.build = build.or(match_spec.build);
         }
 
         Ok(match_spec)
