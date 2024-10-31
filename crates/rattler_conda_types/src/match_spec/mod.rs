@@ -476,8 +476,7 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, Version,
+        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseStrictness::*, RepoDataRecord, StringMatcher, Version
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -544,7 +543,7 @@ mod tests {
             ..PackageRecord::new(
                 PackageName::new_unchecked("mamba"),
                 Version::from_str("1.0").unwrap(),
-                String::from(""),
+                String::from("foo_bar_py310_1"),
             )
         };
 
@@ -572,6 +571,26 @@ mod tests {
         assert!(spec.matches(&record));
 
         let spec = MatchSpec::from_str("mamba[version==1.0, md5=dede6252c964db3f3e41c7d30d07f6bf, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py310_1]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py310*]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba[build=*py39*]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba * [build=*py310*]", Strict).unwrap();
+        assert!(spec.matches(&record));
+
+        let spec = MatchSpec::from_str("mamba *[build=*py39*]", Strict).unwrap();
+        assert!(!spec.matches(&record));
+        assert!(spec.build == Some(StringMatcher::from_str("*py39*").unwrap()));
+
+        let spec = MatchSpec::from_str("mamba * [build=*py39*]", Strict).unwrap();
+        println!("Build: {:?}", spec.build);
         assert!(!spec.matches(&record));
     }
 

@@ -482,8 +482,8 @@ impl NamelessMatchSpec {
         // Get the version and optional build string
         if !input.is_empty() {
             let (version, build) = parse_version_and_build(input, strictness)?;
-            match_spec.version = version;
-            match_spec.build = build;
+            match_spec.version = version.or(match_spec.version);
+            match_spec.build = build.or(match_spec.build)
         }
 
         Ok(match_spec)
@@ -578,8 +578,8 @@ fn matchspec_parser(
     let input = input.trim();
     if !input.is_empty() {
         let (version, build) = parse_version_and_build(input, strictness)?;
-        match_spec.version = version;
-        match_spec.build = build;
+        match_spec.version = version.or(match_spec.version);
+        match_spec.build = build.or(match_spec.build);
     }
 
     Ok(match_spec)
@@ -772,9 +772,11 @@ mod tests {
             NamelessMatchSpec::from_str("*cpu*", Strict).unwrap(),
             NamelessMatchSpec::from_str("conda-forge::foobar", Strict).unwrap(),
             NamelessMatchSpec::from_str("foobar[channel=conda-forge]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("* [build=foo]", Strict).unwrap(),
+            NamelessMatchSpec::from_str(">=1.2[build=foo]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("[version='>=1.2', build=foo]", Strict).unwrap(),
         ],
         @r###"
-        ---
         - version: 3.8.*
           build: "*_cpython"
         - version: "==1.0"
@@ -792,6 +794,12 @@ mod tests {
           channel:
             base_url: "https://conda.anaconda.org/conda-forge/"
             name: conda-forge
+        - version: "*"
+          build: foo
+        - version: ">=1.2"
+          build: foo
+        - version: ">=1.2"
+          build: foo
         "###);
     }
 
