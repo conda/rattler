@@ -181,11 +181,23 @@ impl Display for MatchSpec {
         let mut keys = Vec::new();
 
         if let Some(md5) = &self.md5 {
-            keys.push(format!("md5={md5:x}"));
+            keys.push(format!("md5=\"{md5:x}\""));
         }
 
         if let Some(sha256) = &self.sha256 {
-            keys.push(format!("sha256={sha256:x}"));
+            keys.push(format!("sha256=\"{sha256:x}\""));
+        }
+
+        if let Some(build_number) = &self.build_number {
+            keys.push(format!("build_number=\"{}\"", build_number));
+        }
+
+        if let Some(file_name) = &self.file_name {
+            keys.push(format!("fn=\"{}\"", file_name));
+        }
+
+        if let Some(url) = &self.url {
+            keys.push(format!("url=\"{}\"", url));
         }
 
         if !keys.is_empty() {
@@ -476,7 +488,8 @@ mod tests {
     use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
     use crate::{
-        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord, ParseStrictness::*, RepoDataRecord, StringMatcher, Version
+        match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};

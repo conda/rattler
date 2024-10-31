@@ -1287,4 +1287,50 @@ mod tests {
             assert_eq!(subdir, expected_subdir.map(ToString::to_string));
         }
     }
+
+    #[test]
+    fn test_matchspec_to_string() {
+        let mut specs: Vec<MatchSpec> =
+            vec![MatchSpec::from_str("foo[version=1.0.*, build_number=\">6\"]", Strict).unwrap()];
+
+        // complete matchspec to verify that we print all fields
+        specs.push(MatchSpec {
+            name: Some("foo".parse().unwrap()),
+            version: Some(VersionSpec::from_str("1.0.*", Strict).unwrap()),
+            build: "py27_0*".parse().ok(),
+            build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
+            file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
+            channel: Some(
+                Channel::from_str("conda-forge", &channel_config())
+                    .map(Arc::new)
+                    .unwrap(),
+            ),
+            subdir: Some("linux-64".to_string()),
+            namespace: Some("foospace".to_string()),
+            md5: Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap()),
+            sha256: Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3",
+                )
+                .unwrap(),
+            ),
+            url: Some(
+                Url::parse(
+                    "https://conda.anaconda.org/conda-forge/linux-64/foo-1.0-py27_0.tar.bz2",
+                )
+                .unwrap(),
+            ),
+        });
+
+        // insta check all the strings
+        let vec_strings = specs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(vec_strings);
+
+        // parse back the strings and check if they are the same
+        let parsed_specs = vec_strings
+            .iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(specs, parsed_specs);
+    }
 }
