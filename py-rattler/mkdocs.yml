@@ -118,7 +118,7 @@ nav:
           - MatchSpec: match_spec.md
           - NamelessMatchSpec: nameless_match_spec.md
       - networking:
-          - AuthenticatedClient: authenticated_client.md
+          - Client: client.md
       - package:
           - PackageName: package_name.md
       - platform:

@@ -9,7 +9,7 @@ use rattler::{
 use rattler_conda_types::{PrefixRecord, RepoDataRecord};
 
 use crate::{
-    error::PyRattlerError, networking::authenticated_client::PyAuthenticatedClient,
+    error::PyRattlerError, networking::client::PyClientWithMiddleware,
     platform::PyPlatform, record::PyRecord,
 };
 
@@ -23,7 +23,7 @@ pub fn py_install<'a>(
     execute_link_scripts: bool,
     show_progress: bool,
     platform: Option<PyPlatform>,
-    client: Option<PyAuthenticatedClient>,
+    client: Option<PyClientWithMiddleware>,
     cache_dir: Option<PathBuf>,
     installed_packages: Option<Vec<&'a PyAny>>,
 ) -> PyResult<&'a PyAny> {

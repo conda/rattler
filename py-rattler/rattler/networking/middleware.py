@@ -13,12 +13,12 @@ class MirrorMiddleware:
         Examples
         --------
         ```python
-        >>> from rattler.networking import AuthenticatedClient
+        >>> from rattler.networking import Client
         >>> middleware = MirrorMiddleware({"https://conda.anaconda.org/conda-forge": ["https://repo.prefix.dev/conda-forge"]})
         >>> middleware
         MirrorMiddleware()
-        >>> AuthenticatedClient([middleware])
-        AuthenticatedClient()
+        >>> Client([middleware])
+        Client()
         >>>
         ```
         """
@@ -36,12 +36,12 @@ class AuthenticationMiddleware:
         Examples
         --------
         ```python
-        >>> from rattler.networking import AuthenticatedClient
+        >>> from rattler.networking import Client
         >>> middleware = AuthenticationMiddleware("hello")
         >>> middleware
         AuthenticationMiddleware()
-        >>> AuthenticatedClient([middleware])
-        AuthenticatedClient()
+        >>> Client([middleware])
+        Client()
         >>>
         ```
         """

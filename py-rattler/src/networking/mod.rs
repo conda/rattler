@@ -13,10 +13,10 @@ use crate::{
     channel::PyChannel, error::PyRattlerError, platform::PyPlatform,
     repo_data::sparse::PySparseRepoData,
 };
-use authenticated_client::PyAuthenticatedClient;
+use client::PyClientWithMiddleware;
 use rattler_repodata_gateway::Reporter;
 
-pub mod authenticated_client;
+pub mod client;
 pub mod cached_repo_data;
 pub mod middleware;
 
@@ -31,7 +31,7 @@ pub fn py_fetch_repo_data<'a>(
     callback: Option<&'a PyAny>,
 ) -> PyResult<&'a PyAny> {
     let mut meta_futures = Vec::new();
-    let client = PyAuthenticatedClient::new(None);
+    let client = PyClientWithMiddleware::new(None);
 
     for (subdir, chan) in get_subdir_urls(channels, platforms)? {
         let callback = callback.map(|callback| {

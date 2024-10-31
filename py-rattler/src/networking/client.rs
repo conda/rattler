@@ -6,12 +6,12 @@ use reqwest_middleware::ClientWithMiddleware;
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyAuthenticatedClient {
+pub struct PyClientWithMiddleware {
     pub(crate) inner: ClientWithMiddleware,
 }
 
 #[pymethods]
-impl PyAuthenticatedClient {
+impl PyClientWithMiddleware {
     #[new]
     pub fn new(middlewares: Option<Vec<PyMiddleware>>) -> Self {
         match middlewares {
@@ -21,7 +21,7 @@ impl PyAuthenticatedClient {
     }
 }
 
-impl PyAuthenticatedClient {
+impl PyClientWithMiddleware {
     pub fn new_with_middlewares(middlewares: Vec<PyMiddleware>) -> Self {
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new());
         let client = middlewares
@@ -40,19 +40,20 @@ impl PyAuthenticatedClient {
     }
 }
 
-impl From<ClientWithMiddleware> for PyAuthenticatedClient {
+impl From<ClientWithMiddleware> for PyClientWithMiddleware {
     fn from(value: ClientWithMiddleware) -> Self {
         Self { inner: value }
     }
 }
 
-impl From<PyAuthenticatedClient> for ClientWithMiddleware {
-    fn from(value: PyAuthenticatedClient) -> Self {
+impl From<PyClientWithMiddleware> for ClientWithMiddleware {
+    fn from(value: PyClientWithMiddleware) -> Self {
         value.inner
     }
 }
 
-impl Default for PyAuthenticatedClient {
+impl Default for PyClientWithMiddleware {
+    // todo: still needed?
     fn default() -> Self {
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
             .with(AuthenticationMiddleware::new(

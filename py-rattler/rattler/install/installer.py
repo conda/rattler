@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
-from rattler.networking.authenticated_client import AuthenticatedClient
+from rattler.networking.client import AuthenticatedClient
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
