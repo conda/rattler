@@ -1,6 +1,6 @@
 use crate::networking::middleware::PyMiddleware;
 use pyo3::{pyclass, pymethods};
-use rattler_networking::{AuthenticationMiddleware, AuthenticationStorage, MirrorMiddleware};
+use rattler_networking::{AuthenticationMiddleware, MirrorMiddleware};
 use reqwest_middleware::ClientWithMiddleware;
 
 #[pyclass]
@@ -32,12 +32,6 @@ impl PyClientWithMiddleware {
         let client = client.build();
 
         Self { inner: client }
-    }
-}
-
-impl From<ClientWithMiddleware> for PyClientWithMiddleware {
-    fn from(value: ClientWithMiddleware) -> Self {
-        Self { inner: value }
     }
 }
 
