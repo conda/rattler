@@ -2,9 +2,11 @@
 
 import asyncio
 from pathlib import Path
+from typing import get_args
 
 from rattler import install as rattler_install
 from rattler import LockFile, Platform
+from rattler.platform.platform import PlatformLiteral
 from rattler.networking import Client, MirrorMiddleware, AuthenticationMiddleware
 import typer
 
@@ -20,7 +22,11 @@ async def _install(
 ) -> None:
     lock_file = LockFile.from_path(lock_file_path)
     environment = lock_file.environment(environment_name)
+    if environment is None:
+        raise ValueError(f"Environment {environment_name} not found in lock file {lock_file_path}")
     records = environment.conda_repodata_records_for_platform(platform)
+    if not records:
+        raise ValueError(f"No records found for platform {platform} in lock file {lock_file_path}")
     await rattler_install(
         records=records,
         target_prefix=target_prefix,
@@ -39,15 +45,17 @@ def install(
     environment_name: str = "default",
     platform: str = str(Platform.current()),
     target_prefix: Path = Path("env").absolute(),
-):
+) -> None:
     """
     Installs a pixi.lock file to a custom prefix.
     """
+    if platform not in get_args(PlatformLiteral):
+        raise ValueError(f"Invalid platform {platform}. Must be one of {get_args(PlatformLiteral)}")
     asyncio.run(
         _install(
             lock_file_path=lock_file_path,
             environment_name=environment_name,
-            platform=Platform(platform),
+            platform=Platform(platform),  # type: ignore[arg-type]
             target_prefix=target_prefix,
         )
     )

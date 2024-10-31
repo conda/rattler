@@ -8,7 +8,7 @@ class Client:
     A client that can be used to make authenticated requests.
     """
 
-    def __init__(self, middlewares: list[MirrorMiddleware] | None = None) -> None:
+    def __init__(self, middlewares: list[AuthenticationMiddleware | MirrorMiddleware] | None = None) -> None:
         self._client = PyClientWithMiddleware(
             [middleware._middleware for middleware in middlewares] if middlewares else None
         )
