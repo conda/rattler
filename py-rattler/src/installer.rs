@@ -9,8 +9,8 @@ use rattler::{
 use rattler_conda_types::{PrefixRecord, RepoDataRecord};
 
 use crate::{
-    error::PyRattlerError, networking::client::PyClientWithMiddleware,
-    platform::PyPlatform, record::PyRecord,
+    error::PyRattlerError, networking::client::PyClientWithMiddleware, platform::PyPlatform,
+    record::PyRecord,
 };
 
 // TODO: Accept functions to report progress

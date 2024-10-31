@@ -26,8 +26,8 @@ class MirrorMiddleware:
 
 
 class AuthenticationMiddleware:
-    def __init__(self, abc: str) -> None:
-        self._middleware = PyAuthenticationMiddleware(abc)
+    def __init__(self) -> None:
+        self._middleware = PyAuthenticationMiddleware()
 
     def __repr__(self) -> str:
         """
@@ -37,7 +37,7 @@ class AuthenticationMiddleware:
         --------
         ```python
         >>> from rattler.networking import Client
-        >>> middleware = AuthenticationMiddleware("hello")
+        >>> middleware = AuthenticationMiddleware()
         >>> middleware
         AuthenticationMiddleware()
         >>> Client([middleware])

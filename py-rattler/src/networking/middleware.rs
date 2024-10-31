@@ -53,20 +53,18 @@ impl From<PyMirrorMiddleware> for MirrorMiddleware {
 #[pyclass]
 #[repr(transparent)]
 #[derive(Clone)]
-pub struct PyAuthenticationMiddleware {
-    pub(crate) inner: String,
-}
+pub struct PyAuthenticationMiddleware {}
 
 #[pymethods]
 impl PyAuthenticationMiddleware {
     #[new]
-    pub fn __init__(inner: String) -> Self {
-        Self { inner: inner }
+    pub fn __init__() -> Self {
+        Self {}
     }
 }
 
 impl From<PyAuthenticationMiddleware> for AuthenticationMiddleware {
-    fn from(value: PyAuthenticationMiddleware) -> Self {
+    fn from(_value: PyAuthenticationMiddleware) -> Self {
         AuthenticationMiddleware::new(AuthenticationStorage::default())
     }
 }

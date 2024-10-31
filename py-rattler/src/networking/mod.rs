@@ -16,8 +16,8 @@ use crate::{
 use client::PyClientWithMiddleware;
 use rattler_repodata_gateway::Reporter;
 
-pub mod client;
 pub mod cached_repo_data;
+pub mod client;
 pub mod middleware;
 
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
