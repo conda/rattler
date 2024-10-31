@@ -14,10 +14,7 @@ pub struct PyClientWithMiddleware {
 impl PyClientWithMiddleware {
     #[new]
     pub fn new(middlewares: Option<Vec<PyMiddleware>>) -> Self {
-        let middlewares = match middlewares {
-            Some(middlewares) => middlewares,
-            None => vec![],
-        };
+        let middlewares = middlewares.unwrap_or_default();
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new());
         let client = middlewares
             .into_iter()
