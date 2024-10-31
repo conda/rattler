@@ -9,7 +9,9 @@ class Client:
     """
 
     def __init__(self, middlewares: list[MirrorMiddleware] | None = None) -> None:
-        self._client = PyClientWithMiddleware([middleware._middleware for middleware in middlewares] if middlewares else None)
+        self._client = PyClientWithMiddleware(
+            [middleware._middleware for middleware in middlewares] if middlewares else None
+        )
 
     @classmethod
     def _from_ffi_object(cls, client: PyClientWithMiddleware) -> Client:

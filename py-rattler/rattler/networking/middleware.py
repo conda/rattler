@@ -5,7 +5,7 @@ from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware
 class MirrorMiddleware:
     def __init__(self, middlewares: dict[str, list[str]]) -> None:
         self._middleware = PyMirrorMiddleware(middlewares)
-    
+
     def __repr__(self) -> str:
         """
         Returns a representation of the Middleware
@@ -46,4 +46,3 @@ class AuthenticationMiddleware:
         ```
         """
         return f"{type(self).__name__}()"
-

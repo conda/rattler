@@ -34,6 +34,9 @@ pytest = "~=7.4.0"
 pytest-asyncio = "0.21.1.*"
 pytest-xprocess = ">=0.23.0,<0.24"
 
+# used in examples
+typer = "*"
+
 [feature.test.pypi-dependencies]
 types-networkx = "*"
 

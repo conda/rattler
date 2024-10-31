@@ -14,15 +14,10 @@ pub struct PyClientWithMiddleware {
 impl PyClientWithMiddleware {
     #[new]
     pub fn new(middlewares: Option<Vec<PyMiddleware>>) -> Self {
-        match middlewares {
-            Some(middlewares) => return Self::new_with_middlewares(middlewares),
-            None => Self::default(),
-        }
-    }
-}
-
-impl PyClientWithMiddleware {
-    pub fn new_with_middlewares(middlewares: Vec<PyMiddleware>) -> Self {
+        let middlewares = match middlewares {
+            Some(middlewares) => middlewares,
+            None => vec![],
+        };
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new());
         let client = middlewares
             .into_iter()
@@ -49,18 +44,5 @@ impl From<ClientWithMiddleware> for PyClientWithMiddleware {
 impl From<PyClientWithMiddleware> for ClientWithMiddleware {
     fn from(value: PyClientWithMiddleware) -> Self {
         value.inner
-    }
-}
-
-impl Default for PyClientWithMiddleware {
-    // todo: still needed?
-    fn default() -> Self {
-        let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new())
-            .with(AuthenticationMiddleware::new(
-                AuthenticationStorage::default(),
-            ))
-            .build();
-
-        Self { inner: client }
     }
 }
