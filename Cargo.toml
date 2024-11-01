@@ -33,7 +33,7 @@ async-compression = { version = "0.4.17", features = [
     "zstd",
 ] }
 async-fd-lock = "0.2.0"
-fs4 = "0.9.1"
+fs4 = "0.10.0"
 async-trait = "0.1.83"
 axum = { version = "0.7.7", default-features = false, features = [
     "tokio",
@@ -61,7 +61,7 @@ digest = "0.10.7"
 dirs = "5.0.1"
 dunce = "1.0.5"
 enum_dispatch = "0.3.13"
-fs-err = { version = "2.11.0", features = ["tokio"] }
+fs-err = { version = "3.0.0", features = ["tokio"] }
 fslock = "0.2.1"
 futures = "0.3.31"
 futures-util = "0.3.31"
