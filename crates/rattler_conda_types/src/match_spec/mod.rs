@@ -505,7 +505,7 @@ mod tests {
 
     #[test]
     fn test_nameless_matchspec_format_eq() {
-        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Strict).unwrap();
+        let spec = NamelessMatchSpec::from_str("*[version==1.0, sha256=aaac4bc9c6916ecc0e33137431645b029ade22190c7144eead61446dcbcc6f97, md5=dede6252c964db3f3e41c7d30d07f6bf]", Lenient).unwrap();
         let spec_as_string = spec.to_string();
         let rebuild_spec = NamelessMatchSpec::from_str(&spec_as_string, Strict).unwrap();
 
@@ -610,25 +610,60 @@ mod tests {
     #[test]
     fn precedence_version_build() {
         let spec =
-            MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
+            MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Lenient).unwrap();
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+
+        let spec = MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Lenient)
+            .unwrap();
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+
+        let spec =
+            NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Lenient).unwrap();
         assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
         assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
 
         let spec =
-            MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
-        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
-        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
-
-        let spec =
-            NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
-        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
-        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
-
-        let spec =
-            NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Strict)
+            NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Lenient)
                 .unwrap();
         assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
         assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+    }
+
+    #[test]
+    fn strict_parsing_multiple_values() {
+        let spec = NamelessMatchSpec::from_str("3.0.* [version=1.2.3]", Strict);
+        assert!(spec.is_err());
+
+        let spec = NamelessMatchSpec::from_str("3.0.* foo[build='foobar']", Strict);
+        assert!(spec.is_err());
+
+        let spec = NamelessMatchSpec::from_str(
+            "3.0.* [build=baz, fn='/home/bla.tar.bz2' build='foobar']",
+            Strict,
+        );
+        assert!(spec.is_err());
+
+        let spec = MatchSpec::from_str("foo 3.0.* [version=1.2.3]", Strict);
+        assert!(spec.is_err());
+
+        let spec = MatchSpec::from_str("foo 3.0.* foo[build='foobar']", Strict);
+        assert!(spec.is_err());
+        assert!(spec
+            .unwrap_err()
+            .to_string()
+            .contains("multiple values for: build"));
+
+        let spec = MatchSpec::from_str(
+            "foo 3.0.* [build=baz, fn='/home/foo.tar.bz2', build='foobar']",
+            Strict,
+        );
+        assert!(spec.is_err());
+        assert!(spec
+            .unwrap_err()
+            .to_string()
+            .contains("multiple values for: build"));
     }
 
     #[test]

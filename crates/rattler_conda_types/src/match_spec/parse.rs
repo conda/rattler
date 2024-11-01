@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -71,11 +71,11 @@ pub enum ParseMatchSpecError {
     MultipleBracketSectionsNotAllowed,
 
     /// Invalid version and build
-    #[error("Unable to parse version spec: {0}")]
+    #[error("unable to parse version spec: {0}")]
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
+    #[error("the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
     )]
     InvalidBuildString(String),
 
@@ -92,12 +92,16 @@ pub enum ParseMatchSpecError {
     InvalidBuildNumber(#[from] ParseBuildNumberSpecError),
 
     /// Unable to parse hash digest from hex
-    #[error("Unable to parse hash digest from hex")]
+    #[error("unable to parse hash digest from hex")]
     InvalidHashDigest,
 
     /// The package name was invalid
     #[error(transparent)]
     InvalidPackageName(#[from] InvalidPackageNameError),
+
+    /// Multiple values for a key in the matchspec
+    #[error("found multiple values for: {0}")]
+    MultipleValueForKey(String),
 }
 
 impl FromStr for MatchSpec {
@@ -226,6 +230,17 @@ fn parse_bracket_vec_into_components(
     strictness: ParseStrictness,
 ) -> Result<NamelessMatchSpec, ParseMatchSpecError> {
     let mut match_spec = match_spec;
+
+    if strictness == Strict {
+        // check for duplicate keys
+        let mut seen = HashSet::new();
+        for (key, _) in &bracket {
+            if seen.contains(key) {
+                return Err(ParseMatchSpecError::MultipleValueForKey(key.to_string()));
+            }
+            seen.insert(key);
+        }
+    }
 
     for elem in bracket {
         let (key, value) = elem;
@@ -482,6 +497,17 @@ impl NamelessMatchSpec {
         // Get the version and optional build string
         if !input.is_empty() {
             let (version, build) = parse_version_and_build(input, strictness)?;
+            if strictness == Strict {
+                if match_spec.version.is_some() && version.is_some() {
+                    return Err(ParseMatchSpecError::MultipleValueForKey(
+                        "version".to_owned(),
+                    ));
+                }
+
+                if match_spec.build.is_some() && build.is_some() {
+                    return Err(ParseMatchSpecError::MultipleValueForKey("build".to_owned()));
+                }
+            }
             match_spec.version = match_spec.version.or(version);
             match_spec.build = match_spec.build.or(build);
         }
@@ -578,6 +604,17 @@ fn matchspec_parser(
     let input = input.trim();
     if !input.is_empty() {
         let (version, build) = parse_version_and_build(input, strictness)?;
+        if strictness == Strict {
+            if match_spec.version.is_some() && version.is_some() {
+                return Err(ParseMatchSpecError::MultipleValueForKey(
+                    "version".to_owned(),
+                ));
+            }
+
+            if match_spec.build.is_some() && build.is_some() {
+                return Err(ParseMatchSpecError::MultipleValueForKey("build".to_owned()));
+            }
+        }
         match_spec.version = match_spec.version.or(version);
         match_spec.build = match_spec.build.or(build);
     }
