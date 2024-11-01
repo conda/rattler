@@ -1,5 +1,5 @@
 import pytest
-
+from pathlib import Path
 from rattler.explicit_environment import ExplicitEnvironmentSpec
 from rattler.platform import Platform
 
@@ -16,7 +16,7 @@ https://conda.anaconda.org/conda-forge/linux-64/xtl-0.6.21-h0efe328_0.tar.bz2#9e
 https://conda.anaconda.org/conda-forge/linux-64/xtensor-0.21.8-hc9558a2_0.tar.bz2#1030174db5c183f3afb4181a0a02873d
 """
 
-def test_parse_explicit_environment_from_str():
+def test_parse_explicit_environment_from_str() -> None:
     spec = ExplicitEnvironmentSpec.from_str(test_env)
     
     assert spec.platform is not None
@@ -27,7 +27,7 @@ def test_parse_explicit_environment_from_str():
     assert spec.packages[1].url == "https://conda.anaconda.org/conda-forge/linux-64/libstdcxx-ng-9.3.0-h2ae2ef3_17.tar.bz2#342f3c931d0a3a209ab09a522469d20c"
 
 
-def test_parse_explicit_environment_no_platform():
+def test_parse_explicit_environment_no_platform() -> None:
     content = """@EXPLICIT\nhttp://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"""
     spec = ExplicitEnvironmentSpec.from_str(content)
     
@@ -36,7 +36,7 @@ def test_parse_explicit_environment_no_platform():
     assert spec.packages[0].url == "http://repo.anaconda.com/pkgs/main/linux-64/python-3.9.0-h1234.tar.bz2"
 
 
-def test_parse_explicit_environment_from_file(tmp_path):
+def test_parse_explicit_environment_from_file(tmp_path: Path) -> None:
     content = """# platform: win-64
 @EXPLICIT
 http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
@@ -50,6 +50,6 @@ http://repo.anaconda.com/pkgs/main/win-64/python-3.9.0-h1234.tar.bz2"""
     assert len(spec.packages) == 1
 
 
-def test_parse_invalid_explicit_environment():
+def test_parse_invalid_explicit_environment() -> None:
     with pytest.raises(Exception):
         ExplicitEnvironmentSpec.from_str("invalid content # platform: invalid-platform")

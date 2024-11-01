@@ -146,7 +146,7 @@ class PrefixRecord(RepoDataRecord):
 
     @paths_data.setter
     def paths_data(self, value: PrefixPaths) -> None:
-        self._record.paths_data = value._inner
+        self._record.paths_data = value._paths
 
     @property
     def requested_spec(self) -> Optional[str]:

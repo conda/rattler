@@ -161,8 +161,8 @@ class PackageRecord:
         arch: Optional[str],
         platform: Optional[str],
         noarch: Optional[NoArchType] = None,
-        depends: List[str] = None,
-        constrains: List[str] = None,
+        depends: Optional[List[str]] = None,
+        constrains: Optional[List[str]] = None,
         sha256: Optional[bytes] = None,
         md5: Optional[bytes] = None,
         size: Optional[int] = None,
@@ -174,9 +174,9 @@ class PackageRecord:
     ) -> None:
         # Convert Platform to str
         if isinstance(subdir, Platform):
-            arch = subdir.arch
+            arch = str(subdir.arch)
             platform = subdir.only_platform
-            subdir = subdir.__str__()
+            subdir = str(subdir)
 
         # convert str to PackageName
         if isinstance(name, str):
@@ -558,7 +558,7 @@ class PackageRecord:
         self._record.name = value._name
 
     @property
-    def noarch(self) -> Optional[str]:
+    def noarch(self) -> Optional[NoArchType]:
         """
         The noarch type of the package.
 
@@ -584,21 +584,12 @@ class PackageRecord:
         >>>
         ```
         """
-        noarchtype = NoArchType._from_py_no_arch_type(self._record.noarch)
-        if noarchtype.python:
-            return "python"
-        if noarchtype.generic:
-            return "generic"
-        return None
+        return NoArchType._from_py_no_arch_type(self._record.noarch)
 
     @noarch.setter
     def noarch(self, value: Optional[str]) -> None:
-        if value == "python":
-            self._record.noarch = NoArchType.python()._noarch_type
-        elif value == "generic":
-            self._record.noarch = NoArchType.generic()._noarch_type
-        else:
-            self._record.noarch = NoArchType.none()._noarch_type
+        noarch_type = NoArchType(value)
+        self._record.noarch = noarch_type._noarch
 
     @property
     def platform(self) -> Optional[str]:
@@ -839,9 +830,9 @@ class PackageRecord:
         """
         return f'PackageRecord("{self.__str__()}")'
 
-    def to_json(self):
+    def to_json(self) -> str:
         """
-        Convert the PackageRecord to a JSON serializable object.
+        Convert the PackageRecord to a JSON string.
 
         Examples
         --------

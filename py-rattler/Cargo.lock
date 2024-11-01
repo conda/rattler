@@ -846,7 +846,7 @@ checksum = "e8c02a5121d4ea3eb16a80748c74f5549a5665e4c21333c6098f283870fbdea6"
 
 [[package]]
 name = "file_url"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "itertools 0.13.0",
  "percent-encoding",
@@ -2635,7 +2635,7 @@ dependencies = [
 
 [[package]]
 name = "rattler"
-version = "0.27.15"
+version = "0.27.16"
 dependencies = [
  "anyhow",
  "console",
@@ -2673,7 +2673,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_cache"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "anyhow",
  "dashmap",
@@ -2699,7 +2699,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_conda_types"
-version = "0.28.2"
+version = "0.28.3"
 dependencies = [
  "chrono",
  "dirs",
@@ -2748,7 +2748,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_index"
-version = "0.19.32"
+version = "0.19.33"
 dependencies = [
  "fs-err",
  "rattler_conda_types",
@@ -2761,7 +2761,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_lock"
-version = "0.22.27"
+version = "0.22.28"
 dependencies = [
  "chrono",
  "file_url",
@@ -2851,7 +2851,7 @@ dependencies = [
 
 [[package]]
 name = "rattler_repodata_gateway"
-version = "0.21.17"
+version = "0.21.18"
 dependencies = [
  "anyhow",
  "async-compression",

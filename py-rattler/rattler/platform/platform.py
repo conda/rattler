@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Dict, Literal, Tuple
+from typing import Any, Dict, Literal, Tuple, Optional
 
 from rattler.rattler import PyPlatform
 from rattler.platform.arch import Arch
