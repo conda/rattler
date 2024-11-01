@@ -14,9 +14,9 @@ expression: evaluated
 "C:\\Users\\user\\conda-bld\\linux-64\\foo-1.0-py27_0.tar.bz2":
   url: "file:///C:/Users/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2"
 "=1.0=py27_0":
-  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
+  error: "the build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 "==1.0=py27_0":
-  error: "The build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
+  error: "the build string '=py27_0' is not valid, it can only contain alphanumeric characters and underscores"
 "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda":
   url: "https://conda.anaconda.org/conda-forge/linux-64/py-rattler-0.6.1-py39h8169da8_0.conda"
 "https://repo.prefix.dev/ruben-arts/linux-64/boost-cpp-1.78.0-h75c5d50_1.tar.bz2":
@@ -25,7 +25,7 @@ expression: evaluated
   version: 3.8.*
   build: "*_cpython"
 "=*=cuda*":
-  error: "The build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
+  error: "the build string '=cuda*' is not valid, it can only contain alphanumeric characters and underscores"
 ">=1!164.3095,<1!165":
   version: ">=1!164.3095,<1!165"
 /home/user/conda-bld/linux-64/foo-1.0-py27_0.tar.bz2:
