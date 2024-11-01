@@ -70,7 +70,8 @@ fxhash = "0.2.1"
 generic-array = "0.14.7"
 getrandom = { version = "0.2.15", default-features = false }
 glob = "0.3.1"
-google-cloud-auth = { version = "0.13.2", default-features = false }
+google-cloud-auth = { version = "0.17.1", default-features = false }
+google-cloud-token = "0.1.2"
 hex = "0.4.3"
 hex-literal = "0.4.1"
 http = "1.1"
