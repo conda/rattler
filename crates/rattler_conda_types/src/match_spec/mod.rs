@@ -489,7 +489,7 @@ mod tests {
 
     use crate::{
         match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -609,21 +609,26 @@ mod tests {
 
     #[test]
     fn precedence_version_build() {
-        let spec = MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
-        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
-        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("foobar").unwrap());
+        let spec =
+            MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
 
-        let spec = MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
-        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("abcdef").unwrap());
-        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
+        let spec =
+            MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
 
-        let spec = NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
-        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
-        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("foobar").unwrap());
+        let spec =
+            NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
 
-        let spec = NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
-        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("abcdef").unwrap());
-        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
+        let spec =
+            NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Strict)
+                .unwrap();
+        assert_eq!(spec.build.unwrap(), "foobar".parse().unwrap());
+        assert_eq!(spec.version.unwrap(), "1.2.3".parse().unwrap());
     }
 
     #[test]
