@@ -558,7 +558,7 @@ class PackageRecord:
         self._record.name = value._name
 
     @property
-    def noarch(self) -> Optional[NoArchType]:
+    def noarch(self) -> NoArchType:
         """
         The noarch type of the package.
 
@@ -570,16 +570,17 @@ class PackageRecord:
         ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
         ... )
         >>> record.noarch
+        NoArchType(None)
         >>> record = PrefixRecord.from_path(
         ...     "../test-data/conda-meta/pip-23.0-pyhd8ed1ab_0.json"
         ... )
         >>> record.noarch
-        'python'
-        >>> record.noarch = "generic"
+        NoArchType("python")
+        >>> record.noarch = NoArchType("generic")
         >>> record.noarch
-        'generic'
-        >>> record.noarch = None
-        >>> record.noarch is None
+        NoArchType("generic")
+        >>> record.noarch = NoArchType(None)
+        >>> record.noarch.none
         True
         >>>
         ```
@@ -587,9 +588,8 @@ class PackageRecord:
         return NoArchType._from_py_no_arch_type(self._record.noarch)
 
     @noarch.setter
-    def noarch(self, value: Optional[str]) -> None:
-        noarch_type = NoArchType(value)
-        self._record.noarch = noarch_type._noarch
+    def noarch(self, value: NoArchType) -> None:
+        self._record.noarch = value._noarch
 
     @property
     def platform(self) -> Optional[str]:

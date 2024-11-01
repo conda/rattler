@@ -23,6 +23,7 @@ from rattler.package import (
     FileMode,
     IndexJson,
 )
+from rattler.package.no_arch_type import NoArchType
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
@@ -88,4 +89,5 @@ __all__ = [
     "IndexJson",
     "Gateway",
     "SourceConfig",
+    "NoArchType",
 ]
