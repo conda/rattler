@@ -5,7 +5,7 @@ from rattler.networking.middleware import AuthenticationMiddleware, MirrorMiddle
 
 class Client:
     """
-    A client that can be used to make authenticated requests.
+    A client that can be used to make requests.
     """
 
     def __init__(self, middlewares: list[AuthenticationMiddleware | MirrorMiddleware] | None = None) -> None:

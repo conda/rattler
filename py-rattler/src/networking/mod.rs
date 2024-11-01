@@ -29,9 +29,10 @@ pub fn py_fetch_repo_data<'a>(
     platforms: Vec<PyPlatform>,
     cache_path: PathBuf,
     callback: Option<&'a PyAny>,
+    client: Option<PyClientWithMiddleware>,
 ) -> PyResult<&'a PyAny> {
     let mut meta_futures = Vec::new();
-    let client = PyClientWithMiddleware::new(None);
+    let client = client.unwrap_or(PyClientWithMiddleware::new(None));
 
     for (subdir, chan) in get_subdir_urls(channels, platforms)? {
         let callback = callback.map(|callback| {

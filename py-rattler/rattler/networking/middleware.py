@@ -3,12 +3,12 @@ from rattler.rattler import PyMirrorMiddleware, PyAuthenticationMiddleware
 
 
 class MirrorMiddleware:
-    def __init__(self, middlewares: dict[str, list[str]]) -> None:
-        self._middleware = PyMirrorMiddleware(middlewares)
-
-    def __repr__(self) -> str:
+    def __init__(self, mirrors: dict[str, list[str]]) -> None:
         """
-        Returns a representation of the Middleware
+        Create a new MirrorMiddleware instance.
+        The mirrors argument should be a dictionary where the keys are the
+        original mirror URLs and the values are lists of mirror URLs to
+        replace the original mirror with.
 
         Examples
         --------
@@ -19,6 +19,21 @@ class MirrorMiddleware:
         MirrorMiddleware()
         >>> Client([middleware])
         Client()
+        >>>
+        ```
+        """
+        self._middleware = PyMirrorMiddleware(mirrors)
+
+    def __repr__(self) -> str:
+        """
+        Returns a representation of the Middleware
+
+        Examples
+        --------
+        ```python
+        >>> middleware = MirrorMiddleware({"https://conda.anaconda.org/conda-forge": ["https://repo.prefix.dev/conda-forge"]})
+        >>> middleware
+        MirrorMiddleware()
         >>>
         ```
         """
