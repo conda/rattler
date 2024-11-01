@@ -489,7 +489,7 @@ mod tests {
 
     use crate::{
         match_spec::Matches, MatchSpec, NamelessMatchSpec, PackageName, PackageRecord,
-        ParseStrictness::*, RepoDataRecord, StringMatcher, Version,
+        ParseStrictness::*, RepoDataRecord, StringMatcher, Version, VersionSpec,
     };
     use insta::assert_snapshot;
     use std::hash::{Hash, Hasher};
@@ -605,6 +605,25 @@ mod tests {
         let spec = MatchSpec::from_str("mamba * [build=*py39*]", Strict).unwrap();
         println!("Build: {:?}", spec.build);
         assert!(!spec.matches(&record));
+    }
+
+    #[test]
+    fn precedence_version_build() {
+        let spec = MatchSpec::from_str("foo 3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
+        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
+        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("foobar").unwrap());
+
+        let spec = MatchSpec::from_str("foo 3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
+        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("abcdef").unwrap());
+        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
+
+        let spec = NamelessMatchSpec::from_str("3.0.* [version=1.2.3, build='foobar']", Strict).unwrap();
+        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
+        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("foobar").unwrap());
+
+        let spec = NamelessMatchSpec::from_str("3.0.* abcdef[build='foobar', version=1.2.3]", Strict).unwrap();
+        assert_eq!(spec.build.unwrap(), StringMatcher::from_str("abcdef").unwrap());
+        assert_eq!(spec.version.unwrap(), VersionSpec::from_str("3.0.*", Strict).unwrap());
     }
 
     #[test]
