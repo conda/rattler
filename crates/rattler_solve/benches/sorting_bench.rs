@@ -18,7 +18,7 @@ fn bench_sort(c: &mut Criterion, sparse_repo_data: &SparseRepoData, spec: &str) 
             .expect("failed to load records");
 
     // Construct a cache
-    c.bench_function(&format!("sort {}", spec), |b| {
+    c.bench_function(&format!("sort {spec}"), |b| {
         // Get the candidates for the package
         b.iter_batched(
             || (package_name.clone(), match_spec.clone()),

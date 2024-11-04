@@ -205,8 +205,12 @@ mod test {
             "/prefix",
             false,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
-            &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::Linux64)
-                .unwrap(),
+            &PythonInfo::from_version(
+                &Version::from_str("3.11.0").unwrap(),
+                None,
+                Platform::Linux64,
+            )
+            .unwrap(),
         );
         insta::assert_snapshot!(script);
 
@@ -214,8 +218,12 @@ mod test {
             "/prefix",
             true,
             &EntryPoint::from_str("jupyter-lab = jupyterlab.labapp:main").unwrap(),
-            &PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::Linux64)
-                .unwrap(),
+            &PythonInfo::from_version(
+                &Version::from_str("3.11.0").unwrap(),
+                None,
+                Platform::Linux64,
+            )
+            .unwrap(),
         );
         insta::assert_snapshot!("windows", script);
     }

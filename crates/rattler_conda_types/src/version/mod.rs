@@ -1,21 +1,19 @@
-use std::borrow::Cow;
-use std::cell::RefCell;
-use std::collections::Bound;
-use std::hash::{Hash, Hasher};
-use std::ops::RangeBounds;
 use std::{
+    borrow::Cow,
+    cell::RefCell,
     cmp::Ordering,
+    collections::Bound,
     fmt,
     fmt::{Debug, Display, Formatter},
+    hash::{Hash, Hasher},
     iter,
+    ops::RangeBounds,
 };
 
 use itertools::{Either, EitherOrBoth, Itertools};
-use serde::de::Error;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use smallvec::SmallVec;
-
 pub use parse::{ParseVersionError, ParseVersionErrorKind};
+use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
+use smallvec::SmallVec;
 
 mod flags;
 pub(crate) mod parse;
@@ -24,53 +22,59 @@ mod with_source;
 
 pub(crate) mod bump;
 pub use bump::{VersionBumpError, VersionBumpType};
-
 use flags::Flags;
 use segment::Segment;
-
 use thiserror::Error;
 pub use with_source::VersionWithSource;
 
-/// This class implements an order relation between version strings. Version strings can contain the
-/// usual alphanumeric characters (A-Za-z0-9), separated into segments by dots and underscores.
-/// Empty segments (i.e. two consecutive dots, a leading/trailing underscore) are not permitted. An
-/// optional epoch number - an integer followed by '!' - can precede the actual version string (this
-/// is useful to indicate a change in the versioning scheme itself). Version comparison is
-/// case-insensitive.
+/// This class implements an order relation between version strings. Version
+/// strings can contain the usual alphanumeric characters (A-Za-z0-9), separated
+/// into segments by dots and underscores. Empty segments (i.e. two consecutive
+/// dots, a leading/trailing underscore) are not permitted. An optional epoch
+/// number - an integer followed by '!' - can precede the actual version string
+/// (this is useful to indicate a change in the versioning scheme itself).
+/// Version comparison is case-insensitive.
 ///
 /// Rattler supports six types of version strings:
 ///
 /// * Release versions contain only integers, e.g. '1.0', '2.3.5'.
-/// * Pre-release versions use additional letters such as 'a' or 'rc', for example '1.0a1',
-///   '1.2.beta3', '2.3.5rc3'.
-/// * Development versions are indicated by the string 'dev', for example '1.0dev42', '2.3.5.dev12'.
-/// * Post-release versions are indicated by the string 'post', for example '1.0post1', '2.3.5.post2'.
-/// * Tagged versions have a suffix that specifies a particular property of interest, e.g. '1.1.parallel'.
-///   Tags can be added  to any of the preceding four types. As far as sorting is concerned,
-///   tags are treated like strings in pre-release versions.
-/// * An optional local version string separated by '+' can be appended to the main (upstream) version string.
-///   It is only considered in comparisons when the main versions are equal, but otherwise handled in
-///   exactly the same manner.
+/// * Pre-release versions use additional letters such as 'a' or 'rc', for
+///   example '1.0a1', '1.2.beta3', '2.3.5rc3'.
+/// * Development versions are indicated by the string 'dev', for example
+///   '1.0dev42', '2.3.5.dev12'.
+/// * Post-release versions are indicated by the string 'post', for example
+///   '1.0post1', '2.3.5.post2'.
+/// * Tagged versions have a suffix that specifies a particular property of
+///   interest, e.g. '1.1.parallel'. Tags can be added  to any of the preceding
+///   four types. As far as sorting is concerned, tags are treated like strings
+///   in pre-release versions.
+/// * An optional local version string separated by '+' can be appended to the
+///   main (upstream) version string. It is only considered in comparisons when
+///   the main versions are equal, but otherwise handled in exactly the same
+///   manner.
 ///
 /// To obtain a predictable version ordering, it is crucial to keep the
 /// version number scheme of a given package consistent over time.
 ///
 /// Specifically,
 ///
-/// * version strings should always have the same number of components (except for an optional tag suffix
-///   or local version string),
-/// * letters/strings indicating non-release versions should always occur at the same position.
+/// * version strings should always have the same number of components (except
+///   for an optional tag suffix or local version string),
+/// * letters/strings indicating non-release versions should always occur at the
+///   same position.
 ///
 /// Before comparison, version strings are parsed as follows:
 ///
-/// * They are first split into epoch, version number, and local version number at '!' and '+' respectively.
-///   If there is no '!', the epoch is set to 0. If there is no '+', the local version is empty.
+/// * They are first split into epoch, version number, and local version number
+///   at '!' and '+' respectively. If there is no '!', the epoch is set to 0. If
+///   there is no '+', the local version is empty.
 /// * The version part is then split into components at '.' and '_'.
 /// * Each component is split again into runs of numerals and non-numerals
 /// * Subcomponents containing only numerals are converted to integers.
-/// * Strings are converted to lower case, with special treatment for 'dev' and 'post'.
-/// * When a component starts with a letter, the fillvalue 0 is inserted to keep numbers and strings in phase,
-///   resulting in '1.1.a1' == 1.1.0a1'.
+/// * Strings are converted to lower case, with special treatment for 'dev' and
+///   'post'.
+/// * When a component starts with a letter, the fillvalue 0 is inserted to keep
+///   numbers and strings in phase, resulting in '1.1.a1' == 1.1.0a1'.
 /// * The same is repeated for the local version part.
 ///
 /// # Examples:
@@ -137,16 +141,17 @@ pub use with_source::VersionWithSource;
 pub struct Version {
     /// Individual components of the version.
     ///
-    /// We store a maximum of 3 components on the stack. If a version consists of more components
-    /// they are stored on the heap instead. We choose 3 here because most versions only consist of
-    /// 3 components.
+    /// We store a maximum of 3 components on the stack. If a version consists
+    /// of more components they are stored on the heap instead. We choose 3
+    /// here because most versions only consist of 3 components.
     ///
     /// So for the version `1.2g.beta15.rc` this stores:
     ///
     /// [1, 2, 'g', 0, 'beta', 15, 0, 'rc']
     components: ComponentVec,
 
-    /// Information on each individual segment. Segments group different components together.
+    /// Information on each individual segment. Segments group different
+    /// components together.
     ///
     /// So for the version `1.2g.beta15.rc` this stores:
     ///
@@ -154,15 +159,16 @@ pub struct Version {
     ///
     /// e.g. `1` consists of 1 component
     ///      `2g` consists of 2 components (`2` and `g`)
-    ///      `beta15` consists of 3 components (`0`, `beta` and `15`). Segments must always start
-    ///             with a number.
-    ///      `rc` consists of 2 components (`0`, `rc`). Segments must always start with a number.
+    ///      `beta15` consists of 3 components (`0`, `beta` and `15`). Segments
+    /// must always start             with a number.
+    ///      `rc` consists of 2 components (`0`, `rc`). Segments must always
+    /// start with a number.
     segments: SegmentVec,
 
     /// Flags to indicate edge cases
     /// The first bit indicates whether or not this version has an epoch.
-    /// The rest of the bits indicate from which segment the local version starts or 0 if there is
-    /// no local version.
+    /// The rest of the bits indicate from which segment the local version
+    /// starts or 0 if there is no local version.
     flags: Flags,
 }
 
@@ -179,7 +185,8 @@ pub enum VersionExtendError {
 }
 
 impl Version {
-    /// Constructs a version with just a major component and no other components, e.g. "1".
+    /// Constructs a version with just a major component and no other
+    /// components, e.g. "1".
     pub fn major(major: u64) -> Version {
         Version {
             components: smallvec::smallvec![Component::Numeral(major)],
@@ -198,8 +205,8 @@ impl Version {
         self.flags.local_segment_index() > 0
     }
 
-    /// Returns the index of the first segment that belongs to the local version or `None` if there
-    /// is no local version
+    /// Returns the index of the first segment that belongs to the local version
+    /// or `None` if there is no local version
     fn local_segment_index(&self) -> Option<usize> {
         let index = self.flags.local_segment_index();
         if index > 0 {
@@ -209,13 +216,14 @@ impl Version {
         }
     }
 
-    /// Returns the epoch part of the version. If the version did not specify an epoch `0` is
-    /// returned.
+    /// Returns the epoch part of the version. If the version did not specify an
+    /// epoch `0` is returned.
     pub fn epoch(&self) -> u64 {
         self.epoch_opt().unwrap_or(0)
     }
 
-    /// Returns the epoch part of the version or `None` if the version did not specify an epoch.
+    /// Returns the epoch part of the version or `None` if the version did not
+    /// specify an epoch.
     pub fn epoch_opt(&self) -> Option<u64> {
         if self.has_epoch() {
             Some(
@@ -251,7 +259,8 @@ impl Version {
 
     /// Returns the segments that belong the local part of the version.
     ///
-    /// The local part of a a version is the part behind the (optional) `+`. E.g.:
+    /// The local part of a a version is the part behind the (optional) `+`.
+    /// E.g.:
     ///
     /// ```text
     /// 1.2+3.2.1-alpha0
@@ -281,8 +290,9 @@ impl Version {
         }
     }
 
-    /// Tries to extract the major and minor versions from the version. Returns None if this instance
-    /// doesnt appear to contain a major and minor version.
+    /// Tries to extract the major and minor versions from the version. Returns
+    /// None if this instance doesnt appear to contain a major and minor
+    /// version.
     pub fn as_major_minor(&self) -> Option<(u64, u64)> {
         let mut segments = self.segments();
         let major_segment = segments.next()?;
@@ -306,14 +316,16 @@ impl Version {
 
     /// Returns true if this is considered a dev version.
     ///
-    /// If a version has a single component named "dev" it is considered to be a dev version.
+    /// If a version has a single component named "dev" it is considered to be a
+    /// dev version.
     pub fn is_dev(&self) -> bool {
         self.segments()
             .flat_map(|segment| segment.components())
             .any(Component::is_dev)
     }
 
-    /// Check if this version version and local strings start with the same as other.
+    /// Check if this version version and local strings start with the same as
+    /// other.
     pub fn starts_with(&self, other: &Self) -> bool {
         self.epoch() == other.epoch()
             && segments_starts_with(self.segments(), other.segments())
@@ -332,8 +344,8 @@ impl Version {
 
     /// Returns a new version with only the given segments.
     ///
-    /// Calling this function on a version that looks like `1.3a.4-alpha3` with the range `[1..3]`
-    /// will return the version: `3a.4`.
+    /// Calling this function on a version that looks like `1.3a.4-alpha3` with
+    /// the range `[1..3]` will return the version: `3a.4`.
     pub fn with_segments(&self, segments: impl RangeBounds<usize>) -> Option<Version> {
         // Determine the actual bounds to use
         let segment_count = self.segment_count();
@@ -411,8 +423,9 @@ impl Version {
         })
     }
 
-    /// Pops the specified number of segments from the version. Returns `None` if the resulting
-    /// version would become invalid because it no longer contains any segments.
+    /// Pops the specified number of segments from the version. Returns `None`
+    /// if the resulting version would become invalid because it no longer
+    /// contains any segments.
     pub fn pop_segments(&self, n: usize) -> Option<Version> {
         let segment_count = self.segment_count();
         if segment_count < n {
@@ -422,8 +435,8 @@ impl Version {
         }
     }
 
-    /// Returns the number of segments in the version. Segments are the part of the version
-    /// separated by dots or dashes.
+    /// Returns the number of segments in the version. Segments are the part of
+    /// the version separated by dots or dashes.
     pub fn segment_count(&self) -> usize {
         if let Some(local_index) = self.local_segment_index() {
             local_index
@@ -432,8 +445,8 @@ impl Version {
         }
     }
 
-    /// Returns either this [`Version`] or a new [`Version`] where the local version part has been
-    /// removed.
+    /// Returns either this [`Version`] or a new [`Version`] where the local
+    /// version part has been removed.
     pub fn strip_local(&self) -> Cow<'_, Version> {
         if self.has_local() {
             let mut components = SmallVec::<[Component; 3]>::default();
@@ -464,8 +477,9 @@ impl Version {
         }
     }
 
-    /// Extend the version to the specified length by adding default components (0s).
-    /// If the version is already longer than the specified length it is returned as is.
+    /// Extend the version to the specified length by adding default components
+    /// (0s). If the version is already longer than the specified length it
+    /// is returned as is.
     pub fn extend_to_length(&self, length: usize) -> Result<Cow<'_, Version>, VersionExtendError> {
         if self.segment_count() >= length {
             return Ok(Cow::Borrowed(self));
@@ -510,7 +524,8 @@ impl Version {
     }
 }
 
-/// Returns true if the specified segments are considered to start with the other segments.
+/// Returns true if the specified segments are considered to start with the
+/// other segments.
 fn segments_starts_with<
     'a,
     'b,
@@ -585,9 +600,10 @@ impl Hash for Version {
         ) {
             let default = Component::default();
             for segment in segments {
-                // The versions `1.0` and `1` are considered equal because a version has an infinite
-                // number of default components in each segment. The get an equivalent hash we skip
-                // trailing default components when computing the hash
+                // The versions `1.0` and `1` are considered equal because a version has an
+                // infinite number of default components in each segment. The
+                // get an equivalent hash we skip trailing default components
+                // when computing the hash
                 segment
                     .components()
                     .rev()
@@ -614,9 +630,10 @@ impl Debug for Version {
     }
 }
 
-/// A helper struct to format an iterator of [`SegmentIter`]. Implements both [`std::fmt::Debug`]
-/// where segments are displayed as an array of arrays (e.g. `[[1], [2,3,4]]`) and
-/// [`std::fmt::Display`] where segments are display in their canonical form (e.g. `1.2-rc2`).
+/// A helper struct to format an iterator of [`SegmentIter`]. Implements both
+/// [`std::fmt::Debug`] where segments are displayed as an array of arrays (e.g.
+/// `[[1], [2,3,4]]`) and [`std::fmt::Display`] where segments are display in
+/// their canonical form (e.g. `1.2-rc2`).
 struct SegmentFormatter<'v, I: Iterator<Item = SegmentIter<'v>> + 'v> {
     inner: RefCell<Option<(Option<u64>, I)>>,
 }
@@ -691,8 +708,8 @@ pub enum Component {
     /// Dev should always be ordered less than anything else.
     Dev,
 
-    /// A generic string identifier. Identifiers are compared lexicographically. They are always
-    /// ordered less than numbers.
+    /// A generic string identifier. Identifiers are compared lexicographically.
+    /// They are always ordered less than numbers.
     Iden(Box<str>),
 
     /// An underscore or dash.
@@ -943,20 +960,22 @@ impl<'v> SegmentIter<'v> {
         self.components().all(Component::is_zero)
     }
 
-    /// Returns true if the first component is an implicit default added while parsing the version.
-    /// E.g. `2.a` is represented as `2.0a`. The `0` is added implicitly.
+    /// Returns true if the first component is an implicit default added while
+    /// parsing the version. E.g. `2.a` is represented as `2.0a`. The `0` is
+    /// added implicitly.
     pub fn has_implicit_default(&self) -> bool {
         self.segment.has_implicit_default()
     }
 
-    /// Returns the separator that is found in from of this segment or `None` if this segment was
-    /// not preceded by a separator.
+    /// Returns the separator that is found in from of this segment or `None` if
+    /// this segment was not preceded by a separator.
     pub fn separator(&self) -> Option<char> {
         self.segment.separator()
     }
 
-    /// Returns the number of components stored in the version. Note that the number of components
-    /// returned by [`Self::components`] might differ because it might include an implicit default.
+    /// Returns the number of components stored in the version. Note that the
+    /// number of components returned by [`Self::components`] might differ
+    /// because it might include an implicit default.
     pub fn component_count(&self) -> usize {
         self.segment.len() as usize
     }
@@ -1026,18 +1045,18 @@ impl Hash for StrictVersion {
 
 #[cfg(test)]
 mod test {
-    use std::cmp::Ordering;
-    use std::str::FromStr;
-
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        cmp::Ordering,
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+        str::FromStr,
+    };
 
     use rand::seq::SliceRandom;
     use rstest::rstest;
 
-    use crate::version::StrictVersion;
-
     use super::{Component, Version};
+    use crate::version::StrictVersion;
 
     // Tests are inspired by: https://github.com/conda/conda/blob/33a142c16530fcdada6c377486f1c1a385738a96/tests/models/test_version.py
 
@@ -1160,8 +1179,8 @@ mod test {
 
     #[test]
     fn test_pep440() {
-        // this list must be in sorted order (slightly modified from the PEP 440 test suite
-        // https://github.com/pypa/packaging/blob/master/tests/test_version.py)
+        // this list must be in sorted order (slightly modified from the PEP 440 test
+        // suite https://github.com/pypa/packaging/blob/master/tests/test_version.py)
         let versions = [
             // Implicit epoch of 0
             "1.0a1",
@@ -1422,10 +1441,7 @@ mod test {
                 assert_eq!(
                     ord,
                     Ordering::Less,
-                    "Expected {:?} < {:?}, but found {:?}",
-                    a,
-                    b,
-                    ord
+                    "Expected {a:?} < {b:?}, but found {ord:?}",
                 );
             }
             // Check the reverse ordering as well
@@ -1436,10 +1452,7 @@ mod test {
                 assert_eq!(
                     ord,
                     Ordering::Greater,
-                    "Expected {:?} > {:?}, but found {:?}",
-                    a,
-                    b,
-                    ord
+                    "Expected {a:?} > {b:?}, but found {ord:?}",
                 );
             }
         }
