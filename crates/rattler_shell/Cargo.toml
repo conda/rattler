@@ -17,7 +17,7 @@ itertools = { workspace = true }
 rattler_conda_types = { path="../rattler_conda_types", version = "0.28.3", default-features = false }
 serde_json = { workspace = true, features = ["preserve_order"] }
 shlex = { workspace = true }
-sysinfo = { workspace = true, optional = true }
+sysinfo = { workspace = true , optional = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }

@@ -662,16 +662,21 @@ impl ShellEnum {
 
         // Get current process information
         let mut current_pid = get_current_pid().ok()?;
-        system_info.refresh_process(current_pid);
+        system_info.refresh_processes(sysinfo::ProcessesToUpdate::Some(&[current_pid]), true);
 
         while let Some(parent_process_id) = system_info
             .process(current_pid)
             .and_then(sysinfo::Process::parent)
         {
             // Get the name of the parent process
-            system_info.refresh_process(parent_process_id);
+            system_info
+                .refresh_processes(sysinfo::ProcessesToUpdate::Some(&[parent_process_id]), true);
             let parent_process = system_info.process(parent_process_id)?;
-            let parent_process_name = parent_process.name().to_lowercase();
+            let parent_process_name = parent_process
+                .name()
+                .to_string_lossy()
+                .to_lowercase()
+                .to_string();
 
             let shell: Option<ShellEnum> = if parent_process_name.contains("bash") {
                 Some(Bash.into())
@@ -683,7 +688,7 @@ impl ShellEnum {
                 || (parent_process_name.contains("python")
                 && parent_process
                 .cmd().iter()
-                .any(|arg| arg.contains("xonsh")))
+                .any(|arg| arg.to_string_lossy().contains("xonsh")))
             {
                 Some(Xonsh.into())
             } else if parent_process_name.contains("fish") {
@@ -695,7 +700,7 @@ impl ShellEnum {
             {
                 Some(
                     PowerShell {
-                        executable_path: parent_process_name.clone(),
+                        executable_path: parent_process_name.to_string(),
                     }
                     .into(),
                 )
