@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use crate::install::python::PythonInfoError;
-use crate::install::PythonInfo;
 use rattler_conda_types::{PackageRecord, Platform};
+
+use crate::install::{python::PythonInfoError, PythonInfo};
 
 /// Error that occurred during creation of a Transaction
 #[derive(Debug, thiserror::Error)]
@@ -31,8 +31,9 @@ pub enum TransactionOperation<Old, New> {
         new: New,
     },
 
-    /// Reinstall a package. This can happen if the Python version changed in the environment, we
-    /// need to relink all noarch python packages in that case.
+    /// Reinstall a package. This can happen if the Python version changed in
+    /// the environment, we need to relink all noarch python packages in
+    /// that case.
     Reinstall(Old),
 
     /// Completely remove a package
@@ -40,8 +41,9 @@ pub enum TransactionOperation<Old, New> {
 }
 
 impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
-    /// Returns the record of the package to install for this operation. If this operation does not
-    /// refer to an installable package, `None` is returned.
+    /// Returns the record of the package to install for this operation. If this
+    /// operation does not refer to an installable package, `None` is
+    /// returned.
     pub fn record_to_install(&self) -> Option<&New> {
         match self {
             TransactionOperation::Install(record) => Some(record),
@@ -53,8 +55,9 @@ impl<Old: AsRef<New>, New> TransactionOperation<Old, New> {
 }
 
 impl<Old, New> TransactionOperation<Old, New> {
-    /// Returns the record of the package to remove for this operation. If this operation does not
-    /// refer to an removable package, `None` is returned.
+    /// Returns the record of the package to remove for this operation. If this
+    /// operation does not refer to an removable package, `None` is
+    /// returned.
     pub fn record_to_remove(&self) -> Option<&Old> {
         match self {
             TransactionOperation::Install(_) => None,
@@ -65,17 +68,19 @@ impl<Old, New> TransactionOperation<Old, New> {
     }
 }
 
-/// Describes the operations to perform to bring an environment from one state into another.
+/// Describes the operations to perform to bring an environment from one state
+/// into another.
 #[derive(Debug)]
 pub struct Transaction<Old, New> {
     /// A list of operations to update an environment
     pub operations: Vec<TransactionOperation<Old, New>>,
 
-    /// The python version of the target state, or None if python doesnt exist in the environment.
+    /// The python version of the target state, or None if python doesnt exist
+    /// in the environment.
     pub python_info: Option<PythonInfo>,
 
-    /// The python version of the current state, or None if python didnt exist in the previous
-    /// environment.
+    /// The python version of the current state, or None if python didnt exist
+    /// in the previous environment.
     pub current_python_info: Option<PythonInfo>,
 
     /// The target platform of the transaction
@@ -83,7 +88,8 @@ pub struct Transaction<Old, New> {
 }
 
 impl<Old, New> Transaction<Old, New> {
-    /// Return an iterator over the prefix records of all packages that are going to be removed.
+    /// Return an iterator over the prefix records of all packages that are
+    /// going to be removed.
     pub fn removed_packages(&self) -> impl Iterator<Item = &Old> + '_ {
         self.operations
             .iter()
@@ -97,7 +103,8 @@ impl<Old, New> Transaction<Old, New> {
 }
 
 impl<Old: AsRef<New>, New> Transaction<Old, New> {
-    /// Return an iterator over the prefix records of all packages that are going to be installed.
+    /// Return an iterator over the prefix records of all packages that are
+    /// going to be installed.
     pub fn installed_packages(&self) -> impl Iterator<Item = &New> + '_ {
         self.operations
             .iter()
@@ -111,8 +118,8 @@ impl<Old: AsRef<New>, New> Transaction<Old, New> {
 }
 
 impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New> {
-    /// Constructs a [`Transaction`] by taking the current situation and diffing that against the
-    /// desired situation.
+    /// Constructs a [`Transaction`] by taking the current situation and diffing
+    /// that against the desired situation.
     pub fn from_current_and_desired<
         CurIter: IntoIterator<Item = Old>,
         NewIter: IntoIterator<Item = New>,
@@ -148,7 +155,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
             .map(|r| r.as_ref().name.clone())
             .collect::<HashSet<_>>();
 
-        // Remove all current packages that are not in desired (but keep order of current)
+        // Remove all current packages that are not in desired (but keep order of
+        // current)
         for record in current_iter {
             if !desired_names.contains(&record.as_ref().name) {
                 operations.push(TransactionOperation::Remove(record));
@@ -158,7 +166,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
         // reverse all removals, last in first out
         operations.reverse();
 
-        // Figure out the operations to perform, but keep the order of the original "desired" iterator
+        // Figure out the operations to perform, but keep the order of the original
+        // "desired" iterator
         for record in desired_iter {
             let name = &record.as_ref().name;
             let old_record = current_map.remove(name);
@@ -190,8 +199,8 @@ impl<Old: AsRef<PackageRecord>, New: AsRef<PackageRecord>> Transaction<Old, New>
     }
 }
 
-/// Determine the version of Python used by a set of packages. Returns `None` if none of the
-/// packages refers to a Python installation.
+/// Determine the version of Python used by a set of packages. Returns `None` if
+/// none of the packages refers to a Python installation.
 fn find_python_info(
     records: impl IntoIterator<Item = impl AsRef<PackageRecord>>,
     platform: Platform,
@@ -199,7 +208,7 @@ fn find_python_info(
     records
         .into_iter()
         .find(|r| is_python_record(r.as_ref()))
-        .map(|record| PythonInfo::from_version(&record.as_ref().version, &record.as_ref().python_site_packages_path, platform))
+        .map(|record| PythonInfo::from_python_record(record.as_ref(), platform))
         .map_or(Ok(None), |info| info.map(Some))
 }
 

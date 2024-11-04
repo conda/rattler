@@ -1,12 +1,7 @@
 //! A module that enables parsing of lock files version 3 or lower.
 
-use super::ParseCondaLockError;
-use crate::file_format_version::FileFormatVersion;
-use crate::{
-    Channel, CondaPackageData, EnvironmentData, EnvironmentPackageData, LockFile, LockFileInner,
-    PackageHashes, PypiPackageData, PypiPackageEnvironmentData, UrlOrPath,
-    DEFAULT_ENVIRONMENT_NAME,
-};
+use std::{collections::BTreeSet, ops::Not, sync::Arc};
+
 use fxhash::FxHashMap;
 use indexmap::IndexSet;
 use pep440_rs::VersionSpecifiers;
@@ -16,9 +11,14 @@ use rattler_conda_types::{
 };
 use serde::Deserialize;
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
-use std::ops::Not;
-use std::{collections::BTreeSet, sync::Arc};
 use url::Url;
+
+use super::ParseCondaLockError;
+use crate::{
+    file_format_version::FileFormatVersion, Channel, CondaPackageData, EnvironmentData,
+    EnvironmentPackageData, LockFile, LockFileInner, PackageHashes, PypiPackageData,
+    PypiPackageEnvironmentData, UrlOrPath, DEFAULT_ENVIRONMENT_NAME,
+};
 
 #[derive(Deserialize)]
 struct LockFileV3 {
@@ -109,6 +109,7 @@ pub struct CondaLockedPackageV3 {
     pub track_features: Vec<String>,
     pub license: Option<String>,
     pub license_family: Option<String>,
+    pub python_site_packages_path: Option<String>,
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
     pub size: Option<u64>,
@@ -126,8 +127,8 @@ pub fn parse_v3_or_lower(
     let lock_file: LockFileV3 =
         serde_yaml::from_value(document).map_err(ParseCondaLockError::ParseError)?;
 
-    // Iterate over all packages, deduplicate them and store the list of packages per platform.
-    // There might be duplicates for noarch packages.
+    // Iterate over all packages, deduplicate them and store the list of packages
+    // per platform. There might be duplicates for noarch packages.
     let mut conda_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_packages = IndexSet::with_capacity(lock_file.package.len());
     let mut pypi_runtime_configs = IndexSet::with_capacity(lock_file.package.len());
@@ -172,6 +173,7 @@ pub fn parse_v3_or_lower(
                             track_features: value.track_features,
                             version: value.version,
                             purls: value.purls.is_empty().not().then_some(value.purls),
+                            python_site_packages_path: value.python_site_packages_path,
                             run_exports: None,
                         },
                         url: value.url,

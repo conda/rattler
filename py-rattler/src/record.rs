@@ -8,7 +8,6 @@ use rattler_conda_types::{
     package::{IndexJson, PackageFile},
     PackageRecord, PrefixRecord, RepoDataRecord,
 };
-
 use rattler_digest::{parse_digest_from_hex, Md5, Sha256};
 
 use crate::{
@@ -19,7 +18,8 @@ use crate::{
 /// Python bindings for `PrefixRecord`, `RepoDataRecord`, `PackageRecord`.
 /// This is to expose these structs in Object Oriented manner, via a single
 /// class. This class handles the conversion on its own.
-/// It uses a `RecordInner` enum and (try_)as_{x}_record methods for this interface.
+/// It uses a `RecordInner` enum and (try_)as_{x}_record methods for this
+/// interface.
 ///
 /// PyO3 cannot expose tagged enums directly, to achieve this we use the
 /// `PyRecord` wrapper pyclass on top of `RecordInner`.
@@ -236,6 +236,17 @@ impl PyRecord {
         )
     }
 
+    /// Optionally a path within the environment of the site-packages directory.
+    #[getter]
+    pub fn python_site_packages_path(&self) -> Option<String> {
+        self.as_package_record().python_site_packages_path.clone()
+    }
+
+    #[setter]
+    pub fn set_python_site_packages_path(&mut self, python_site_packages_path: Option<String>) {
+        self.as_package_record_mut().python_site_packages_path = python_site_packages_path;
+    }
+
     /// The filename of the package.
     #[getter]
     pub fn file_name(&self) -> PyResult<String> {
@@ -277,14 +288,15 @@ impl PyRecord {
         Ok(self.try_as_prefix_record()?.files.clone())
     }
 
-    /// Information about how files have been linked when installing the package.
+    /// Information about how files have been linked when installing the
+    /// package.
     #[getter]
     pub fn paths_data(&self) -> PyResult<PyPrefixPaths> {
         Ok(self.try_as_prefix_record()?.paths_data.clone().into())
     }
 
-    /// The spec that was used when this package was installed. Note that this field is not updated if the
-    /// currently another spec was used.
+    /// The spec that was used when this package was installed. Note that this
+    /// field is not updated if the currently another spec was used.
     #[getter]
     pub fn requested_spec(&self) -> PyResult<Option<String>> {
         Ok(self.try_as_prefix_record()?.requested_spec.clone())
@@ -386,7 +398,8 @@ impl PyRecord {
             .map_err(PyRattlerError::from)?)
     }
 
-    /// Writes the contents of this instance to the file at the specified location.
+    /// Writes the contents of this instance to the file at the specified
+    /// location.
     pub fn write_to_path(&self, path: PathBuf, pretty: bool) -> PyResult<()> {
         Ok(self
             .try_as_prefix_record()?
@@ -424,10 +437,11 @@ impl PyRecord {
             .map_err(PyRattlerError::from)?)
     }
 
-    /// Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
-    /// This function will return nothing if all records form a valid environment, i.e., all dependencies
-    /// of each package are satisfied by the other packages in the list.
-    /// If there is a dependency that is not satisfied, this function will raise an exception.
+    /// Validate that the given package records are valid w.r.t. 'depends' and
+    /// 'constrains'. This function will return nothing if all records form
+    /// a valid environment, i.e., all dependencies of each package are
+    /// satisfied by the other packages in the list. If there is a
+    /// dependency that is not satisfied, this function will raise an exception.
     #[staticmethod]
     fn validate(records: Vec<&PyAny>) -> PyResult<()> {
         let records = records
@@ -439,8 +453,9 @@ impl PyRecord {
 
     /// Sorts the records topologically.
     ///
-    /// This function is deterministic, meaning that it will return the same result
-    /// regardless of the order of records and of the depends vector inside the records.
+    /// This function is deterministic, meaning that it will return the same
+    /// result regardless of the order of records and of the depends vector
+    /// inside the records.
     ///
     /// Note that this function only works for packages with unique names.
     #[staticmethod]

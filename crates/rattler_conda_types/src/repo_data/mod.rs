@@ -19,15 +19,15 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
 
-use crate::utils::url::add_trailing_slash;
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
-    utils::serde::DeserializeFromStrUnchecked,
-    Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
-};
-use crate::{
-    utils::serde::sort_map_alphabetically, MatchSpec, Matches, ParseMatchSpecError, ParseStrictness,
+    utils::{
+        serde::{sort_map_alphabetically, DeserializeFromStrUnchecked},
+        url::add_trailing_slash,
+    },
+    Channel, MatchSpec, Matches, NoArchType, PackageName, PackageUrl, ParseMatchSpecError,
+    ParseStrictness, Platform, RepoDataRecord, VersionWithSource,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -153,7 +153,9 @@ pub struct PackageRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub purls: Option<BTreeSet<PackageUrl>>,
 
-    /// Optionally a path within the environment of the site-packages directory
+    /// Optionally a path within the environment of the site-packages directory.
+    /// This field is only present for python interpreter packages.
+    /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
     pub python_site_packages_path: Option<String>,
 
     /// Run exports that are specified in the package.
@@ -328,10 +330,11 @@ impl PackageRecord {
         topological_sort::sort_topologically(records)
     }
 
-    /// Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
-    /// This function will return Ok(()) if all records form a valid environment, i.e., all dependencies
-    /// of each package are satisfied by the other packages in the list.
-    /// If there is a dependency that is not satisfied, this function will return an error.
+    /// Validate that the given package records are valid w.r.t. 'depends' and
+    /// 'constrains'. This function will return Ok(()) if all records form a
+    /// valid environment, i.e., all dependencies of each package are
+    /// satisfied by the other packages in the list. If there is a
+    /// dependency that is not satisfied, this function will return an error.
     pub fn validate<T: AsRef<PackageRecord>>(
         records: Vec<T>,
     ) -> Result<(), ValidatePackageRecordsError> {

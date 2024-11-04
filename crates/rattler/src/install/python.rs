@@ -1,9 +1,13 @@
-use rattler_conda_types::{Platform, Version};
-use std::borrow::Cow;
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
-/// Information required for linking no-arch python packages. The struct contains information about
-/// a specific Python version that is installed in an environment.
+use rattler_conda_types::{PackageRecord, Platform, Version};
+
+/// Information required for linking no-arch python packages. The struct
+/// contains information about a specific Python version that is installed in an
+/// environment.
 #[derive(Debug, Clone)]
 pub struct PythonInfo {
     /// The platform that the python package is installed for
@@ -29,9 +33,26 @@ pub enum PythonInfoError {
 }
 
 impl PythonInfo {
-    /// Build an instance based on the version of the python package and the platform it is
-    /// installed for.
-    pub fn from_version(version: &Version, sp_path: &Option<String>, platform: Platform) -> Result<Self, PythonInfoError> {
+    /// Build an instance based on metadata of the package that represents the
+    /// python interpreter.
+    pub fn from_python_record(
+        record: &PackageRecord,
+        platform: Platform,
+    ) -> Result<Self, PythonInfoError> {
+        Self::from_version(
+            record.version.version(),
+            record.python_site_packages_path.as_deref(),
+            platform,
+        )
+    }
+
+    /// Build an instance based on the version of the python package and the
+    /// platform it is installed for.
+    pub fn from_version(
+        version: &Version,
+        site_packages_path: Option<&str>,
+        platform: Platform,
+    ) -> Result<Self, PythonInfoError> {
         // Determine the major, and minor versions of the version
         let (major, minor) = version
             .as_major_minor()
@@ -45,14 +66,16 @@ impl PythonInfo {
         };
 
         // Find the location of the site packages
-        let site_packages_path = match sp_path {
-            Some(sp_path) => PathBuf::from(sp_path),
-            None => if platform.is_windows() {
-                        PathBuf::from("Lib/site-packages")
-                    } else {
+        let site_packages_path = site_packages_path.map_or_else(
+            || {
+                if platform.is_windows() {
+                    PathBuf::from("Lib/site-packages")
+                } else {
                     PathBuf::from(format!("lib/python{major}.{minor}/site-packages"))
+                }
             },
-        };
+            PathBuf::from,
+        );
 
         // Binary directory
         let bin_dir = if platform.is_windows() {
@@ -92,8 +115,8 @@ impl PythonInfo {
         }
     }
 
-    /// Returns the target location of a file in a noarch python package given its location in its
-    /// package archive.
+    /// Returns the target location of a file in a noarch python package given
+    /// its location in its package archive.
     pub fn get_python_noarch_target_path<'a>(&self, relative_path: &'a Path) -> Cow<'a, Path> {
         if let Ok(rest) = relative_path.strip_prefix("site-packages/") {
             self.site_packages_path.join(rest).into()
@@ -104,8 +127,8 @@ impl PythonInfo {
         }
     }
 
-    /// Returns true if this version of python differs so much that a relink is required for all
-    /// noarch python packages.
+    /// Returns true if this version of python differs so much that a relink is
+    /// required for all noarch python packages.
     pub fn is_relink_required(&self, previous: &PythonInfo) -> bool {
         self.short_version.0 != previous.short_version.0
             || self.short_version.1 != previous.short_version.1

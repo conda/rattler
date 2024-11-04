@@ -1,16 +1,17 @@
 use std::path::Path;
 
-use super::PackageFile;
-use crate::{NoArchType, PackageName, VersionWithSource};
+use rattler_macros::sorted;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 
-use rattler_macros::sorted;
+use super::PackageFile;
+use crate::{NoArchType, PackageName, VersionWithSource};
 
 /// A representation of the `index.json` file found in package archives.
 ///
-/// The `index.json` file contains information about the package build and dependencies of the package.
-/// This data makes up the repodata.json file in the repository.
+/// The `index.json` file contains information about the package build and
+/// dependencies of the package. This data makes up the repodata.json file in
+/// the repository.
 #[serde_as]
 #[sorted]
 #[skip_serializing_none]
@@ -22,7 +23,8 @@ pub struct IndexJson {
     /// The build string of the package.
     pub build: String,
 
-    /// The build number of the package. This is also included in the build string.
+    /// The build number of the package. This is also included in the build
+    /// string.
     pub build_number: u64,
 
     /// The package constraints of the package
@@ -33,8 +35,9 @@ pub struct IndexJson {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub depends: Vec<String>,
 
-    /// Features are a deprecated way to specify different feature sets for the conda solver. This is not
-    /// supported anymore and should not be used. Instead, `mutex` packages should be used to specify
+    /// Features are a deprecated way to specify different feature sets for the
+    /// conda solver. This is not supported anymore and should not be used.
+    /// Instead, `mutex` packages should be used to specify
     /// mutually exclusive features.
     pub features: Option<String>,
 
@@ -47,15 +50,17 @@ pub struct IndexJson {
     /// The lowercase name of the package
     pub name: PackageName,
 
-    /// If this package is independent of architecture this field specifies in what way. See
-    /// [`NoArchType`] for more information.
+    /// If this package is independent of architecture this field specifies in
+    /// what way. See [`NoArchType`] for more information.
     #[serde(skip_serializing_if = "NoArchType::is_none")]
     pub noarch: NoArchType,
 
     /// Optionally, the OS the package is build for.
     pub platform: Option<String>,
 
-    /// Optionally a path within the environment of the site-packages directory
+    /// Optionally a path within the environment of the site-packages directory.
+    /// This field is only present for python interpreter packages.
+    /// This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
     pub python_site_packages_path: Option<String>,
 
     /// The subdirectory that contains this package
@@ -65,8 +70,9 @@ pub struct IndexJson {
     #[serde_as(as = "Option<crate::utils::serde::Timestamp>")]
     pub timestamp: Option<chrono::DateTime<chrono::Utc>>,
 
-    /// Track features are nowadays only used to downweight packages (ie. give them less priority). To
-    /// that effect, the number of track features is counted (number of commas) and the package is downweighted
+    /// Track features are nowadays only used to downweight packages (ie. give
+    /// them less priority). To that effect, the number of track features is
+    /// counted (number of commas) and the package is downweighted
     /// by the number of track_features.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     #[serde_as(as = "OneOrMany<_>")]

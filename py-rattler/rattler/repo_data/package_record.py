@@ -35,10 +35,10 @@ class PackageRecord:
 
     @staticmethod
     def from_index_json(
-        path: os.PathLike[str],
-        size: Optional[int] = None,
-        sha256: Optional[str] = None,
-        md5: Optional[str] = None,
+            path: os.PathLike[str],
+            size: Optional[int] = None,
+            sha256: Optional[str] = None,
+            md5: Optional[str] = None,
     ) -> PackageRecord:
         """
         Builds a PackageRecord from an `index.json`.
@@ -484,7 +484,8 @@ class PackageRecord:
         ```
         """
         if self._record.timestamp:
-            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
+            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0,
+                                                   tz=datetime.timezone.utc)
 
         return self._record.timestamp
 
@@ -529,6 +530,48 @@ class PackageRecord:
         ```
         """
         return VersionWithSource._from_py_version(*self._record.version)
+
+    @property
+    def python_site_packages_path(self) -> Optional[str]:
+        """
+        Optionally a path within the environment of the site-packages directory. This field is only
+        present for python interpreter packages.
+        This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/python-3.11.9-h932a869_0_cpython.json"
+        ... )
+        >>> record.python_site_packages_path
+        'lib/python3.11/site-packages'
+        >>>
+        ```
+        """
+        return self._record.python_site_packages_path
+
+    @python_site_packages_path.setter
+    def python_site_packages_path(self, value: Optional[str]) -> None:
+        """
+        Sets the optional path within the environment of the site-packages directory.
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.python_site_packages_path
+        None
+        >>> record.python_site_packages_path = "lib/something"
+        >>> record.python_site_packages_path
+        'lib/something'
+        >>>
+        ```
+        """
+        self._record.set_python_site_packages_path(value)
 
     def __str__(self) -> str:
         """
