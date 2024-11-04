@@ -202,6 +202,7 @@ class PackageRecord:
         legacy_bz2_size: Optional[int] = None,
         license: Optional[str] = None,
         license_family: Optional[str] = None,
+        python_site_packages_path: Optional[str] = None,
     ) -> None:
         # Convert Platform to str
         if isinstance(subdir, Platform):
@@ -226,6 +227,7 @@ class PackageRecord:
             arch,
             platform,
             noarch,
+            python_site_packages_path,
         )
 
         if constrains is not None:
@@ -826,6 +828,48 @@ class PackageRecord:
     @version.setter
     def version(self, value: VersionWithSource) -> None:
         self._record.version = (value._version, value._source)
+
+    @property
+    def python_site_packages_path(self) -> Optional[str]:
+        """
+        Optionally a path within the environment of the site-packages directory. This field is only
+        present for python interpreter packages.
+        This field was introduced with <https://github.com/conda/ceps/blob/main/cep-17.md>.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/python-3.11.9-h932a869_0_cpython.json"
+        ... )
+        >>> record.python_site_packages_path
+        'lib/python3.11/site-packages'
+        >>>
+        ```
+        """
+        return self._record.python_site_packages_path
+
+    @python_site_packages_path.setter
+    def python_site_packages_path(self, value: Optional[str]) -> None:
+        """
+        Sets the optional path within the environment of the site-packages directory.
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.python_site_packages_path
+        None
+        >>> record.python_site_packages_path = "lib/something"
+        >>> record.python_site_packages_path
+        'lib/something'
+        >>>
+        ```
+        """
+        self._record.set_python_site_packages_path(value)
 
     def __str__(self) -> str:
         """

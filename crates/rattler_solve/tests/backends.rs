@@ -108,6 +108,7 @@ fn installed_package(
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
             purls: None,
+            python_site_packages_path: None,
             run_exports: None,
         },
     }
