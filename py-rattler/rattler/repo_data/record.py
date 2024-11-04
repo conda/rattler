@@ -5,6 +5,15 @@ from rattler.repo_data import PackageRecord
 
 
 class RepoDataRecord(PackageRecord):
+    def __init__(self, package_record: PackageRecord, file_name: str, url: str, channel: str) -> None:
+        record = PyRecord.create_repodata_record(
+            package_record._record,
+            file_name,
+            url,
+            channel,
+        )
+        self._record = record
+
     @property
     def url(self) -> str:
         """
@@ -23,6 +32,26 @@ class RepoDataRecord(PackageRecord):
         ```
         """
         return self._record.url
+
+    @url.setter
+    def url(self, value: str) -> None:
+        """
+        Set the canonical URL for this package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.url = "https://example.com/package.tar.bz2"
+        >>> record.url
+        'https://example.com/package.tar.bz2'
+        >>>
+        ```
+        """
+        self._record.set_url(value)
 
     @property
     def channel(self) -> str:
@@ -45,6 +74,26 @@ class RepoDataRecord(PackageRecord):
         """
         return self._record.channel
 
+    @channel.setter
+    def channel(self, value: str) -> None:
+        """
+        Set the channel for this package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.channel = "conda-forge"
+        >>> record.channel
+        'conda-forge'
+        >>>
+        ```
+        """
+        self._record.set_channel(value)
+
     @property
     def file_name(self) -> str:
         """
@@ -63,6 +112,26 @@ class RepoDataRecord(PackageRecord):
         ```
         """
         return self._record.file_name
+
+    @file_name.setter
+    def file_name(self, value: str) -> None:
+        """
+        Set the filename of the package.
+
+        Examples
+        --------
+        ```python
+        >>> from rattler import PrefixRecord
+        >>> record = PrefixRecord.from_path(
+        ...     "../test-data/conda-meta/libsqlite-3.40.0-hcfcfb64_0.json"
+        ... )
+        >>> record.file_name = "new-package-1.0.tar.bz2"
+        >>> record.file_name
+        'new-package-1.0.tar.bz2'
+        >>>
+        ```
+        """
+        self._record.set_file_name(value)
 
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> RepoDataRecord:

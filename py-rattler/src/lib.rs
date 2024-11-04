@@ -1,6 +1,7 @@
 mod about_json;
 mod channel;
 mod error;
+mod explicit_environment_spec;
 mod generic_virtual_package;
 mod index;
 mod installer;
@@ -18,6 +19,7 @@ mod record;
 mod repo_data;
 mod shell;
 mod solver;
+mod utils;
 mod version;
 mod virtual_package;
 
@@ -36,6 +38,7 @@ use error::{
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
     ValidatePackageRecordsException, VersionBumpException,
 };
+use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
 use index::py_index;
 use index_json::PyIndexJson;
@@ -149,6 +152,10 @@ fn rattler<'py>(py: Python<'py>, m: Bound<'py, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_rattler_version, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_install, &m).unwrap())?;
     m.add_function(wrap_pyfunction!(py_index, &m).unwrap())?;
+
+    // Explicit environment specification
+    m.add_class::<PyExplicitEnvironmentSpec>()?;
+    m.add_class::<PyExplicitEnvironmentEntry>()?;
 
     // Exceptions
     m.add(
