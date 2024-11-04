@@ -46,4 +46,4 @@ jobs:
       - name: Run tests
         run: |
           cd py-rattler
-          pixi run -e test test
+          pixi run -e test test --color=yes
