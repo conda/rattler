@@ -1,5 +1,5 @@
 use crate::paths_json::PyFileMode;
-use pyo3::{pyclass, pymethods, types::PyBytes, Python};
+use pyo3::{pyclass, pymethods, types::PyBytes, Bound, Python};
 use rattler_conda_types::prefix_record::{PathType, PathsEntry, PrefixPaths};
 use std::path::PathBuf;
 
@@ -152,18 +152,18 @@ impl PyPrefixPathsEntry {
     /// If prefix_placeholder is present, this represents the hash of the file *before*
     /// any placeholders were replaced
     #[getter]
-    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.sha256.map(|sha| PyBytes::new(py, &sha))
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
     }
 
     /// A hex representation of the SHA256 hash of the contents of the file as installed
     /// This will be present only if prefix_placeholder is defined. In this case,
     /// this is the hash of the file after the placeholder has been replaced.
     #[getter]
-    pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+    pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.inner
             .sha256_in_prefix
-            .map(|shla| PyBytes::new(py, &shla))
+            .map(|shla| PyBytes::new_bound(py, &shla))
     }
 
     /// The size of the file in bytes

@@ -83,8 +83,8 @@ impl PyChannel {
     }
 }
 
-#[pyclass]
-#[derive(Clone)]
+#[pyclass(eq, eq_int)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum PyChannelPriority {
     /// The channel that the package is first found in will be used as the only channel
     /// for that package.
