@@ -55,10 +55,10 @@ class PackageRecord:
 
     @staticmethod
     def from_index_json(
-            path: os.PathLike[str],
-            size: Optional[int] = None,
-            sha256: Optional[str] = None,
-            md5: Optional[str] = None,
+        path: os.PathLike[str],
+        size: Optional[int] = None,
+        sha256: Optional[str] = None,
+        md5: Optional[str] = None,
     ) -> PackageRecord:
         """
         Builds a PackageRecord from an `index.json`.
@@ -183,26 +183,26 @@ class PackageRecord:
         return record
 
     def __init__(
-            self,
-            name: str | PackageName,
-            version: str | VersionWithSource,
-            build: str,
-            build_number: int,
-            subdir: str | Platform,
-            arch: Optional[str],
-            platform: Optional[str],
-            noarch: Optional[NoArchType] = None,
-            depends: Optional[List[str]] = None,
-            constrains: Optional[List[str]] = None,
-            sha256: Optional[bytes] = None,
-            md5: Optional[bytes] = None,
-            size: Optional[int] = None,
-            features: Optional[List[str]] = None,
-            legacy_bz2_md5: Optional[bytes] = None,
-            legacy_bz2_size: Optional[int] = None,
-            license: Optional[str] = None,
-            license_family: Optional[str] = None,
-            python_site_packages_path: Optional[str] = None,
+        self,
+        name: str | PackageName,
+        version: str | VersionWithSource,
+        build: str,
+        build_number: int,
+        subdir: str | Platform,
+        arch: Optional[str],
+        platform: Optional[str],
+        noarch: Optional[NoArchType] = None,
+        depends: Optional[List[str]] = None,
+        constrains: Optional[List[str]] = None,
+        sha256: Optional[bytes] = None,
+        md5: Optional[bytes] = None,
+        size: Optional[int] = None,
+        features: Optional[List[str]] = None,
+        legacy_bz2_md5: Optional[bytes] = None,
+        legacy_bz2_size: Optional[int] = None,
+        license: Optional[str] = None,
+        license_family: Optional[str] = None,
+        python_site_packages_path: Optional[str] = None,
     ) -> None:
         # Convert Platform to str
         if isinstance(subdir, Platform):
@@ -227,7 +227,7 @@ class PackageRecord:
             arch,
             platform,
             noarch,
-            python_site_packages_path
+            python_site_packages_path,
         )
 
         if constrains is not None:
@@ -762,8 +762,7 @@ class PackageRecord:
         ```
         """
         if self._record.timestamp:
-            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0,
-                                                   tz=datetime.timezone.utc)
+            return datetime.datetime.fromtimestamp(self._record.timestamp / 1000.0, tz=datetime.timezone.utc)
 
         return self._record.timestamp
 
