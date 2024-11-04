@@ -36,7 +36,6 @@ class Client:
         """
         return f"{type(self).__name__}()"
 
-
     @staticmethod
     def authenticated_client() -> Client:
         """
