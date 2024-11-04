@@ -34,12 +34,15 @@ pytest = "~=7.4.0"
 pytest-asyncio = "0.21.1.*"
 pytest-xprocess = ">=0.23.0,<0.24"
 
+# used in examples
+typer = "*"
+
 [feature.test.pypi-dependencies]
 types-networkx = "*"
 
 [feature.test.tasks]
 test = { cmd = "pytest --doctest-modules", depends_on = ["build"] }
-fmt-python = "ruff format rattler examples"
+fmt-python = "ruff format rattler examples tests"
 fmt-rust = "cargo fmt --all"
 lint-python = "ruff check ."
 lint-rust = "cargo clippy --all"
@@ -49,7 +52,7 @@ type-check = { cmd = "mypy", depends_on = ["build"] }
 
 # checks for the CI
 fmt-rust-check = "cargo fmt --all --check"
-fmt-python-check = "ruff format rattler examples --diff"
+fmt-python-check = "ruff format rattler examples tests --diff"
 fmt-check = { depends_on = ["fmt-python-check", "fmt-rust-check"] }
 
 [feature.docs.dependencies]

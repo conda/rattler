@@ -748,6 +748,19 @@ impl PyRecord {
             .map_err(PyRattlerError::from)?)
     }
 
+    /// Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
+    /// This function will return nothing if all records form a valid environment, i.e., all dependencies
+    /// of each package are satisfied by the other packages in the list.
+    /// If there is a dependency that is not satisfied, this function will raise an exception.
+    #[staticmethod]
+    fn validate(records: Vec<&PyAny>) -> PyResult<()> {
+        let records = records
+            .into_iter()
+            .map(PyRecord::try_from)
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(PackageRecord::validate(records).map_err(PyRattlerError::from)?)
+    }
+
     /// Sorts the records topologically.
     ///
     /// This function is deterministic, meaning that it will return the same result

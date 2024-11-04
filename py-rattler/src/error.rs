@@ -4,8 +4,8 @@ use pyo3::{create_exception, exceptions::PyException, PyErr};
 use rattler::install::TransactionError;
 use rattler_conda_types::{
     ConvertSubdirError, InvalidPackageNameError, ParseArchError, ParseChannelError,
-    ParseMatchSpecError, ParsePlatformError, ParseVersionError, VersionBumpError,
-    VersionExtendError,
+    ParseMatchSpecError, ParsePlatformError, ParseVersionError, ValidatePackageRecordsError,
+    VersionBumpError, VersionExtendError,
 };
 use rattler_lock::{ConversionError, ParseCondaLockError};
 use rattler_package_streaming::ExtractError;
@@ -74,6 +74,7 @@ pub enum PyRattlerError {
     ParseExplicitEnvironmentSpecError(
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
+    ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
 }
 
 fn pretty_print_error(mut err: &dyn Error) -> String {
@@ -160,6 +161,8 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
                 ParseExplicitEnvironmentSpecException::new_err(pretty_print_error(&err))
+            PyRattlerError::ValidatePackageRecordsError(err) => {
+                ValidatePackageRecordsException::new_err(pretty_print_error(&err))
             }
         }
     }
@@ -196,3 +199,4 @@ create_exception!(
     ParseExplicitEnvironmentSpecException,
     PyException
 );
+create_exception!(exceptions, ValidatePackageRecordsException, PyException);

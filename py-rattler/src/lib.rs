@@ -36,7 +36,7 @@ use error::{
     InvalidChannelException, InvalidMatchSpecException, InvalidPackageNameException,
     InvalidUrlException, InvalidVersionException, IoException, LinkException, ParseArchException,
     ParsePlatformException, PyRattlerError, SolverException, TransactionException,
-    VersionBumpException,
+    ValidatePackageRecordsException, VersionBumpException,
 };
 use explicit_environment_spec::{PyExplicitEnvironmentEntry, PyExplicitEnvironmentSpec};
 use generic_virtual_package::PyGenericVirtualPackage;
@@ -50,7 +50,8 @@ use lock::{
 use match_spec::PyMatchSpec;
 use meta::get_rattler_version;
 use nameless_match_spec::PyNamelessMatchSpec;
-use networking::{authenticated_client::PyAuthenticatedClient, py_fetch_repo_data};
+use networking::middleware::{PyAuthenticationMiddleware, PyMirrorMiddleware};
+use networking::{client::PyClientWithMiddleware, py_fetch_repo_data};
 use no_arch_type::PyNoArchType;
 use package_name::PyPackageName;
 use paths_json::{PyFileMode, PyPathType, PyPathsEntry, PyPathsJson, PyPrefixPlaceholder};
@@ -99,7 +100,9 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPlatform>().unwrap();
     m.add_class::<PyArch>().unwrap();
 
-    m.add_class::<PyAuthenticatedClient>().unwrap();
+    m.add_class::<PyMirrorMiddleware>().unwrap();
+    m.add_class::<PyAuthenticationMiddleware>().unwrap();
+    m.add_class::<PyClientWithMiddleware>().unwrap();
 
     // Shell activation things
     m.add_class::<PyActivationVariables>().unwrap();
@@ -229,6 +232,12 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     m.add("GatewayError", py.get_type::<GatewayException>())
         .unwrap();
+
+    m.add(
+        "ValidatePackageRecordsException",
+        py.get_type::<ValidatePackageRecordsException>(),
+    )
+    .unwrap();
 
     Ok(())
 }
