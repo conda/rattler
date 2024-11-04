@@ -140,6 +140,7 @@ impl From<PyLink> for Link {
 impl PyRecord {
     #[staticmethod]
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (name, version, build, build_number, subdir, arch=None, platform=None, noarch=None))]
     pub fn create(
         name: PyPackageName,
         version: (PyVersion, String),
@@ -203,6 +204,7 @@ impl PyRecord {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (package_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
     pub fn create_prefix_record(
         package_record: PyRecord,
         paths_data: PyPrefixPaths,
@@ -340,7 +342,7 @@ impl PyRecord {
     }
 
     #[setter]
-    pub fn set_legacy_bz2_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_legacy_bz2_md5(&mut self, md5: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().legacy_bz2_md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
@@ -387,7 +389,7 @@ impl PyRecord {
     }
 
     #[setter]
-    pub fn set_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_md5(&mut self, md5: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
@@ -424,7 +426,7 @@ impl PyRecord {
 
     /// Optionally a SHA256 hash of the package archive.
     #[setter]
-    pub fn set_sha256(&mut self, sha256: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_sha256(&mut self, sha256: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().sha256 = sha256.map(sha256_from_pybytes).transpose()?;
         Ok(())
     }
