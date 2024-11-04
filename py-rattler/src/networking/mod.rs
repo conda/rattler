@@ -1,5 +1,5 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python, ToPyObject};
 use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
@@ -30,7 +30,7 @@ pub fn py_fetch_repo_data<'a>(
     cache_path: PathBuf,
     callback: Option<&'a PyAny>,
     client: Option<PyClientWithMiddleware>,
-) -> PyResult<&'a PyAny> {
+) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
     let client = client.unwrap_or(PyClientWithMiddleware::new(None));
 

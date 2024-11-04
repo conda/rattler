@@ -40,7 +40,7 @@ pyo3 = { version = "0.22.5", features = [
     "abi3-py38",
     "extension-module",
     "multiple-pymethods",
-    "chrono"
+    "chrono","gil-refs"
 ] }
 pyo3-async-runtimes = { version = "0.22", features = ["tokio-runtime"] }
 tokio = { version = "1.37" }
