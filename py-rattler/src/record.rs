@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
+use pyo3::prelude::PyAnyMethods;
 use pyo3::{
-    exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, FromPyObject, PyAny,
-    PyErr, PyResult, Python,
+    exceptions::PyTypeError, intern, pyclass, pymethods, types::PyBytes, Bound, FromPyObject,
+    PyAny, PyErr, PyResult, Python,
 };
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
@@ -139,6 +140,7 @@ impl From<PyLink> for Link {
 impl PyRecord {
     #[staticmethod]
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (name, version, build, build_number, subdir, arch=None, platform=None, noarch=None))]
     pub fn create(
         name: PyPackageName,
         version: (PyVersion, String),
@@ -202,6 +204,7 @@ impl PyRecord {
     }
 
     #[staticmethod]
+    #[pyo3(signature = (package_record, paths_data, link=None, package_tarball_full_path=None, extracted_package_dir=None, requested_spec=None, files=None))]
     pub fn create_prefix_record(
         package_record: PyRecord,
         paths_data: PyPrefixPaths,
@@ -332,14 +335,14 @@ impl PyRecord {
 
     /// A deprecated md5 hash.
     #[getter]
-    pub fn legacy_bz2_md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+    pub fn legacy_bz2_md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .legacy_bz2_md5
-            .map(|md5| PyBytes::new(py, &md5))
+            .map(|md5| PyBytes::new_bound(py, &md5))
     }
 
     #[setter]
-    pub fn set_legacy_bz2_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_legacy_bz2_md5(&mut self, md5: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().legacy_bz2_md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
@@ -379,14 +382,14 @@ impl PyRecord {
 
     /// Optionally a MD5 hash of the package archive.
     #[getter]
-    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .md5
-            .map(|md5| PyBytes::new(py, &md5))
+            .map(|md5| PyBytes::new_bound(py, &md5))
     }
 
     #[setter]
-    pub fn set_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_md5(&mut self, md5: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
@@ -415,15 +418,15 @@ impl PyRecord {
 
     /// Optionally a SHA256 hash of the package archive.
     #[getter]
-    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.as_package_record()
             .sha256
-            .map(|sha| PyBytes::new(py, &sha))
+            .map(|sha| PyBytes::new_bound(py, &sha))
     }
 
     /// Optionally a SHA256 hash of the package archive.
     #[setter]
-    pub fn set_sha256(&mut self, sha256: Option<&PyBytes>) -> PyResult<()> {
+    pub fn set_sha256(&mut self, sha256: Option<Bound<'_, PyBytes>>) -> PyResult<()> {
         self.as_package_record_mut().sha256 = sha256.map(sha256_from_pybytes).transpose()?;
         Ok(())
     }
@@ -640,9 +643,9 @@ impl TryFrom<PyRecord> for PrefixRecord {
     }
 }
 
-impl<'a> TryFrom<&'a PyAny> for PyRecord {
+impl<'a> TryFrom<Bound<'a, PyAny>> for PyRecord {
     type Error = PyErr;
-    fn try_from(value: &'a PyAny) -> Result<Self, Self::Error> {
+    fn try_from(value: Bound<'a, PyAny>) -> Result<Self, Self::Error> {
         let intern_val = intern!(value.py(), "_record");
         if !value.hasattr(intern_val)? {
             return Err(PyTypeError::new_err("object is not a record type"));
@@ -653,7 +656,7 @@ impl<'a> TryFrom<&'a PyAny> for PyRecord {
             return Err(PyTypeError::new_err("'_record' is invalid"));
         }
 
-        PyRecord::extract(inner)
+        PyRecord::extract_bound(&inner)
     }
 }
 
@@ -736,6 +739,7 @@ impl PyRecord {
 impl PyRecord {
     /// Builds a `PyRecord` from path to an `index.json` and optionally a size.
     #[staticmethod]
+    #[pyo3(signature = (index_json, size=None, sha256=None, md5=None))]
     fn from_index_json(
         index_json: PathBuf,
         size: Option<u64>,
@@ -765,7 +769,7 @@ impl PyRecord {
     /// of each package are satisfied by the other packages in the list.
     /// If there is a dependency that is not satisfied, this function will raise an exception.
     #[staticmethod]
-    fn validate(records: Vec<&PyAny>) -> PyResult<()> {
+    fn validate(records: Vec<Bound<'_, PyAny>>) -> PyResult<()> {
         let records = records
             .into_iter()
             .map(PyRecord::try_from)
@@ -780,7 +784,7 @@ impl PyRecord {
     ///
     /// Note that this function only works for packages with unique names.
     #[staticmethod]
-    fn sort_topologically(records: Vec<&PyAny>) -> PyResult<Vec<Self>> {
+    fn sort_topologically(records: Vec<Bound<'_, PyAny>>) -> PyResult<Vec<Self>> {
         let records = records
             .into_iter()
             .map(PyRecord::try_from)

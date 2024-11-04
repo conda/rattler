@@ -13,6 +13,7 @@ pub struct PyClientWithMiddleware {
 #[pymethods]
 impl PyClientWithMiddleware {
     #[new]
+    #[pyo3(signature = (middlewares=None))]
     pub fn new(middlewares: Option<Vec<PyMiddleware>>) -> Self {
         let middlewares = middlewares.unwrap_or_default();
         let client = reqwest_middleware::ClientBuilder::new(reqwest::Client::new());

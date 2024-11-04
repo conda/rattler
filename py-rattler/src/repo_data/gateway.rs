@@ -4,8 +4,8 @@ use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::{PyChannel, Wrap};
 use pyo3::exceptions::PyValueError;
-use pyo3::{pyclass, pymethods, FromPyObject, PyAny, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3::{pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult, Python};
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::CacheAction;
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};
@@ -31,8 +31,8 @@ impl From<Gateway> for PyGateway {
 }
 
 impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        let parsed = match ob.extract::<Option<HashSet<PyPlatform>>>()? {
+    fn extract_bound(ob: &Bound<'source, PyAny>) -> PyResult<Self> {
+        let parsed = match <Option<HashSet<PyPlatform>>>::extract_bound(ob)? {
             Some(platforms) => SubdirSelection::Some(
                 platforms
                     .into_iter()
@@ -48,6 +48,8 @@ impl<'source> FromPyObject<'source> for Wrap<SubdirSelection> {
 #[pymethods]
 impl PyGateway {
     #[new]
+    #[pyo3(signature = (max_concurrent_requests, default_config, per_channel_config, cache_dir=None)
+    )]
     pub fn new(
         max_concurrent_requests: usize,
         default_config: PySourceConfig,
@@ -86,7 +88,7 @@ impl PyGateway {
         platforms: Vec<PyPlatform>,
         specs: Vec<PyMatchSpec>,
         recursive: bool,
-    ) -> PyResult<&'a PyAny> {
+    ) -> PyResult<Bound<'a, PyAny>> {
         let gateway = self.inner.clone();
         future_into_py(py, async move {
             let repodatas = gateway
@@ -129,9 +131,9 @@ impl From<SourceConfig> for PySourceConfig {
     }
 }
 
-impl FromPyObject<'_> for Wrap<CacheAction> {
-    fn extract(ob: &'_ PyAny) -> PyResult<Self> {
-        let parsed = match &*ob.extract::<String>()? {
+impl<'py> FromPyObject<'py> for Wrap<CacheAction> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let parsed = match <&'py str>::extract_bound(ob)? {
             "cache-or-fetch" => CacheAction::CacheOrFetch,
             "use-cache-only" => CacheAction::UseCacheOnly,
             "force-cache-only" => CacheAction::ForceCacheOnly,
@@ -140,7 +142,7 @@ impl FromPyObject<'_> for Wrap<CacheAction> {
                 return Err(PyValueError::new_err(format!(
                     "cache action must be one of {{'cache-or-fetch', 'use-cache-only', 'force-cache-only', 'no-cache'}}, got {v}",
                 )))
-            },
+            }
         };
         Ok(Wrap(parsed))
     }

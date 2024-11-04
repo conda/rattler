@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, PyResult, Python};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::package::{
     FileMode, PackageFile, PathType, PathsEntry, PathsJson, PrefixPlaceholder,
 };
@@ -186,8 +186,8 @@ impl PyPathsEntry {
     /// A hex representation of the SHA256 hash of the contents of the file.
     /// This entry is only present in version 1 of the paths.json file.
     #[getter]
-    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.sha256.map(|sha| PyBytes::new(py, &sha))
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
     }
 
     /// The size of the file in bytes

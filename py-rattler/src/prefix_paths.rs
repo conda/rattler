@@ -1,5 +1,5 @@
 use crate::{paths_json::PyFileMode, utils::sha256_from_pybytes};
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, PyResult, Python};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::prefix_record::{PathType, PathsEntry, PrefixPaths};
 use std::path::PathBuf;
 
@@ -20,13 +20,14 @@ impl PyPrefixPaths {
 impl PyPrefixPathsEntry {
     #[new]
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (relative_path, path_type, prefix_placeholder=None, file_mode=None, sha256=None, sha256_in_prefix=None, size_in_bytes=None, original_path=None))]
     pub fn new(
         relative_path: PathBuf,
         path_type: PyPrefixPathType,
         prefix_placeholder: Option<String>,
         file_mode: Option<PyFileMode>,
-        sha256: Option<&PyBytes>,
-        sha256_in_prefix: Option<&PyBytes>,
+        sha256: Option<Bound<'_, PyBytes>>,
+        sha256_in_prefix: Option<Bound<'_, PyBytes>>,
         size_in_bytes: Option<u64>,
         original_path: Option<PathBuf>,
     ) -> PyResult<Self> {
@@ -251,8 +252,8 @@ impl PyPrefixPathsEntry {
     /// If prefix_placeholder is present, this represents the hash of the file *before*
     /// any placeholders were replaced
     #[getter]
-    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.sha256.map(|sha| PyBytes::new(py, &sha))
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.inner.sha256.map(|sha| PyBytes::new_bound(py, &sha))
     }
 
     // #[setter]
@@ -264,10 +265,10 @@ impl PyPrefixPathsEntry {
     /// This will be present only if prefix_placeholder is defined. In this case,
     /// this is the hash of the file after the placeholder has been replaced.
     #[getter]
-    pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
+    pub fn sha256_in_prefix<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
         self.inner
             .sha256_in_prefix
-            .map(|shla| PyBytes::new(py, &shla))
+            .map(|shla| PyBytes::new_bound(py, &shla))
     }
 
     // #[setter]

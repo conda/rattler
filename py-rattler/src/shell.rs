@@ -1,6 +1,6 @@
 use crate::error::PyRattlerError;
 use crate::platform::PyPlatform;
-use pyo3::{exceptions::PyValueError, pyclass, pymethods, FromPyObject, PyAny, PyResult};
+use pyo3::{exceptions::PyValueError, pyclass, pymethods, Bound, FromPyObject, PyAny, PyResult};
 use rattler_shell::{
     activation::{ActivationResult, ActivationVariables, Activator, PathModificationBehavior},
     shell::{Bash, CmdExe, Fish, PowerShell, ShellEnum, Xonsh, Zsh},
@@ -23,9 +23,9 @@ impl From<ActivationVariables> for PyActivationVariables {
 #[repr(transparent)]
 pub struct Wrap<T>(pub T);
 
-impl FromPyObject<'_> for Wrap<PathModificationBehavior> {
-    fn extract(ob: &PyAny) -> PyResult<Self> {
-        let parsed = match ob.extract::<&str>()? {
+impl<'py> FromPyObject<'py> for Wrap<PathModificationBehavior> {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        let parsed = match <&'py str>::extract_bound(ob)? {
             "prepend" => PathModificationBehavior::Prepend,
             "append" => PathModificationBehavior::Append,
             "replace" => PathModificationBehavior::Replace,
@@ -98,8 +98,8 @@ impl PyActivationResult {
     }
 }
 
-#[pyclass]
-#[derive(Clone)]
+#[pyclass(eq, eq_int)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum PyShellEnum {
     Bash,
     Zsh,
