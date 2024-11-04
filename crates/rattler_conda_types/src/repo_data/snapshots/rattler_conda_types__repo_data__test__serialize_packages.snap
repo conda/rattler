@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_conda_types/src/repo_data/mod.rs
-assertion_line: 493
 expression: repodata
 ---
 info:
@@ -238,5 +237,45 @@ packages:
     subdir: linux-64
     timestamp: 1715610974
     version: "2.1"
+  xbar-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends:
+      - xfoo >=2
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: xbar
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974
+    version: "1"
+  xfoo-1-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: xfoo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974
+    version: "1"
+  xfoo-2-xxx.tar.bz2:
+    build: xxx
+    build_number: 0
+    depends: []
+    license: MIT
+    license_family: MIT
+    md5: bc13aa58e2092bcb0b97c561373d3905
+    name: xfoo
+    sha256: 97ec377d2ad83dfef1194b7aa31b0c9076194e10d995a6e696c9d07dd782b14a
+    size: 414494
+    subdir: linux-64
+    timestamp: 1715610974
+    version: "2"
 packages.conda: {}
 repodata_version: 2
