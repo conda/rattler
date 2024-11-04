@@ -33,7 +33,7 @@ async-compression = { version = "0.4.17", features = [
     "zstd",
 ] }
 async-fd-lock = "0.2.0"
-fs4 = "0.10.0"
+fs4 = "0.11.0"
 async-trait = "0.1.83"
 axum = { version = "0.7.7", default-features = false, features = [
     "tokio",
