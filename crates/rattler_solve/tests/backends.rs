@@ -935,14 +935,13 @@ mod resolvo {
                     "1",
                     "xxx",
                     1,
-                )], 
+                )],
                 ..SimpleSolveTask::default()
             },
         );
 
         println!("{:?}", result);
     }
-
 }
 
 #[derive(Default)]
@@ -960,7 +959,10 @@ fn solve<T: SolverImpl + Default>(
     repo_path: &[String],
     task: SimpleSolveTask<'_>,
 ) -> Result<Vec<RepoDataRecord>, SolveError> {
-    let repo_data = repo_path.iter().map(|path| read_repodata(path)).collect::<Vec<_>>();
+    let repo_data = repo_path
+        .iter()
+        .map(|path| read_repodata(path))
+        .collect::<Vec<_>>();
 
     let specs: Vec<_> = task
         .specs
