@@ -1,6 +1,15 @@
 import os
 from pathlib import Path
-from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord, VersionWithSource
+from rattler import (
+    PrefixRecord,
+    PrefixPaths,
+    PrefixPathsEntry,
+    PrefixPathType,
+    FileMode,
+    PackageRecord,
+    RepoDataRecord,
+    VersionWithSource,
+)
 
 
 def test_load_prefix_record() -> None:
@@ -41,6 +50,7 @@ def test_load_prefix_record() -> None:
         isinstance(entry, os.PathLike)
 
     assert paths_with_placeholder == 3
+
 
 def test_create_prefix_record() -> None:
     r = PrefixRecord.from_path(
@@ -91,6 +101,7 @@ def test_create_prefix_record() -> None:
 
     print(r.to_json())
 
+
 def test_prefix_paths() -> None:
     prefix_path_type = PrefixPathType("hardlink")
     assert prefix_path_type.hardlink
@@ -111,5 +122,7 @@ def test_prefix_paths() -> None:
     assert prefix_paths_entry.prefix_placeholder == "placeholder_foo_bar"
     assert prefix_paths_entry.file_mode.binary
     assert prefix_paths_entry.sha256.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
-    assert prefix_paths_entry.sha256_in_prefix.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+    assert (
+        prefix_paths_entry.sha256_in_prefix.hex() == "c505c9636f910d737b3a304ca2daff88fef1a92450d4dcd2f1a9d735eb1fa4d6"
+    )
     assert prefix_paths_entry.size_in_bytes == 1024
