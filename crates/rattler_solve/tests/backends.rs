@@ -938,7 +938,7 @@ mod resolvo {
             },
         );
 
-        println!("{:?}", result);
+        insta::assert_snapshot!(result.unwrap_err());
     }
 }
 
