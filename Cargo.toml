@@ -99,8 +99,8 @@ once_cell = "1.20.2"
 ouroboros = "0.18.4"
 parking_lot = "0.12.3"
 pathdiff = "0.2.2"
-pep440_rs = { version = "0.6.6" }
-pep508_rs = { version = "0.6.1" }
+pep440_rs = { version = "0.7.2" }
+pep508_rs = { version = "0.9.1" }
 percent-encoding = "2.3.1"
 pin-project-lite = "0.2.15"
 plist = "1"

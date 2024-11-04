@@ -95,26 +95,26 @@ packages:
     url: "direct+https://github.com/pallets/click/releases/download/8.1.7/click-8.1.7-py3-none-any.whl"
     requires_dist:
       - "colorama ; platform_system == 'Windows'"
-      - "importlib-metadata ; python_version < '3.8'"
+      - "importlib-metadata ; python_full_version < '3.8'"
     requires_python: ">=3.7"
   - kind: pypi
     name: colorama
     version: 0.4.6
     url: "https://files.pythonhosted.org/packages/d1/d6/3965ed04c63042e047cb6a3e6ed1a63a35087b6a609aa3a15ed8ac56c221/colorama-0.4.6-py2.py3-none-any.whl"
     sha256: 4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6
-    requires_python: "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
+    requires_python: ">=2.7,!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*"
   - kind: pypi
     name: flask
     version: 3.0.2
     url: "git+ssh://git@github.com/pallets/flask@b90a4f1f4a370e92054b9cc9db0efcb864f87ebe"
     requires_dist:
-      - werkzeug >=3.0.0
-      - jinja2 >=3.1.2
-      - itsdangerous >=2.1.2
-      - click >=8.1.3
-      - blinker >=1.6.2
-      - "importlib-metadata >=3.6.0 ; python_version < '3.10'"
-      - "asgiref >=3.2 ; extra == 'async'"
+      - werkzeug>=3.0.0
+      - jinja2>=3.1.2
+      - itsdangerous>=2.1.2
+      - click>=8.1.3
+      - blinker>=1.6.2
+      - "importlib-metadata>=3.6.0 ; python_full_version < '3.10'"
+      - "asgiref>=3.2 ; extra == 'async'"
       - "python-dotenv ; extra == 'dotenv'"
     requires_python: ">=3.8"
   - kind: pypi
@@ -135,8 +135,8 @@ packages:
     url: "https://files.pythonhosted.org/packages/30/6d/6de6be2d02603ab56e72997708809e8a5b0fbfee080735109b40a3564843/Jinja2-3.1.3-py3-none-any.whl"
     sha256: 7d6d50dd97d52cbc355597bd845fabfbac3f551e1f99619e39a35ce8c370b5fa
     requires_dist:
-      - markupsafe >=2.0
-      - "babel >=2.7 ; extra == 'i18n'"
+      - markupsafe>=2.0
+      - "babel>=2.7 ; extra == 'i18n'"
     requires_python: ">=3.7"
   - kind: conda
     name: libexpat
@@ -208,17 +208,17 @@ packages:
     url: "https://files.pythonhosted.org/packages/42/d7/1ec15b46af6af88f19b8e5ffea08fa375d433c998b8a7639e76935c14f1f/markdown_it_py-3.0.0-py3-none-any.whl"
     sha256: 355216845c60bd96232cd8d8c40e8f9765cc86f46880e43a8fd22dc1a1a8cab1
     requires_dist:
-      - mdurl ~=0.1
+      - mdurl~=0.1
       - "psutil ; extra == 'benchmarking'"
       - "pytest ; extra == 'benchmarking'"
       - "pytest-benchmark ; extra == 'benchmarking'"
-      - "pre-commit ~=3.0 ; extra == 'code_style'"
-      - "commonmark ~=0.9 ; extra == 'compare'"
-      - "markdown ~=3.4 ; extra == 'compare'"
-      - "mistletoe ~=1.0 ; extra == 'compare'"
-      - "mistune ~=2.0 ; extra == 'compare'"
-      - "panflute ~=2.3 ; extra == 'compare'"
-      - "linkify-it-py >=1, <3 ; extra == 'linkify'"
+      - "pre-commit~=3.0 ; extra == 'code-style'"
+      - "commonmark~=0.9 ; extra == 'compare'"
+      - "markdown~=3.4 ; extra == 'compare'"
+      - "mistletoe~=1.0 ; extra == 'compare'"
+      - "mistune~=2.0 ; extra == 'compare'"
+      - "panflute~=2.3 ; extra == 'compare'"
+      - "linkify-it-py>=1,<3 ; extra == 'linkify'"
       - "mdit-py-plugins ; extra == 'plugins'"
       - "gprof2dot ; extra == 'profiling'"
       - "mdit-py-plugins ; extra == 'rtd'"
@@ -277,8 +277,8 @@ packages:
     url: "https://files.pythonhosted.org/packages/97/9c/372fef8377a6e340b1704768d20daaded98bf13282b5327beb2e2fe2c7ef/pygments-2.17.2-py3-none-any.whl"
     sha256: b27c2826c47d0f3219f29554824c30c5e8945175d888647acd804ddd04af846c
     requires_dist:
-      - "importlib-metadata ; python_version < '3.8' and extra == 'plugins'"
-      - "colorama >=0.4.6 ; extra == 'windows-terminal'"
+      - "importlib-metadata ; python_full_version < '3.8' and extra == 'plugins'"
+      - "colorama>=0.4.6 ; extra == 'windows-terminal'"
     requires_python: ">=3.7"
   - kind: conda
     name: python
@@ -311,12 +311,12 @@ packages:
     version: 2.31.0
     url: "git+https://github.com/psf/requests.git@0106aced5faa299e6ede89d1230bd6784f2c3660"
     requires_dist:
-      - "charset-normalizer <4, >=2"
-      - "idna <4, >=2.5"
-      - "urllib3 <3, >=1.21.1"
-      - certifi >=2017.4.17
-      - "pysocks !=1.5.7, >=1.5.6 ; extra == 'socks'"
-      - "chardet <6, >=3.0.2 ; extra == 'use_chardet_on_py3'"
+      - "charset-normalizer>=2,<4"
+      - "idna>=2.5,<4"
+      - "urllib3>=1.21.1,<3"
+      - certifi>=2017.4.17
+      - "pysocks>=1.5.6,!=1.5.7 ; extra == 'socks'"
+      - "chardet>=3.0.2,<6 ; extra == 'use-chardet-on-py3'"
     requires_python: ">=3.7"
   - kind: pypi
     name: rich
@@ -324,10 +324,10 @@ packages:
     url: "https://files.pythonhosted.org/packages/87/67/a37f6214d0e9fe57f6ae54b2956d550ca8365857f42a1ce0392bb21d9410/rich-13.7.1-py3-none-any.whl"
     sha256: 4edbae314f59eb482f54e9e30bf00d33350aaa94f4bfcd4e9e3110e64d0d7222
     requires_dist:
-      - "ipywidgets >=7.5.1, <9 ; extra == 'jupyter'"
-      - markdown-it-py >=2.2.0
-      - "pygments >=2.13.0, <3.0.0"
-      - "typing-extensions >=4.0.0, <5.0 ; python_version < '3.9'"
+      - "ipywidgets>=7.5.1,<9 ; extra == 'jupyter'"
+      - markdown-it-py>=2.2.0
+      - "pygments>=2.13.0,<3.0.0"
+      - "typing-extensions>=4.0.0,<5.0 ; python_full_version < '3.9'"
     requires_python: ">=3.7.0"
   - kind: conda
     name: tk
@@ -378,11 +378,11 @@ packages:
     url: "https://files.pythonhosted.org/packages/a2/73/a68704750a7679d0b6d3ad7aa8d4da8e14e151ae82e6fee774e6e0d05ec8/urllib3-2.2.1-py3-none-any.whl"
     sha256: 450b20ec296a467077128bff42b73080516e71b56ff59a60a02bef2232c4fa9d
     requires_dist:
-      - "brotli >=1.0.9 ; platform_python_implementation == 'CPython' and extra == 'brotli'"
-      - "brotlicffi >=0.8.0 ; platform_python_implementation != 'CPython' and extra == 'brotli'"
-      - "h2 <5, >=4 ; extra == 'h2'"
-      - "pysocks !=1.5.7, <2.0, >=1.5.6 ; extra == 'socks'"
-      - "zstandard >=0.18.0 ; extra == 'zstd'"
+      - "brotli>=1.0.9 ; platform_python_implementation == 'CPython' and extra == 'brotli'"
+      - "brotlicffi>=0.8.0 ; platform_python_implementation != 'CPython' and extra == 'brotli'"
+      - "h2>=4,<5 ; extra == 'h2'"
+      - "pysocks>=1.5.6,!=1.5.7,<2.0 ; extra == 'socks'"
+      - "zstandard>=0.18.0 ; extra == 'zstd'"
     requires_python: ">=3.8"
   - kind: conda
     name: vc
@@ -439,8 +439,8 @@ packages:
     url: "https://files.pythonhosted.org/packages/c3/fc/254c3e9b5feb89ff5b9076a23218dafbc99c96ac5941e900b71206e6313b/werkzeug-3.0.1-py3-none-any.whl"
     sha256: 90a285dc0e42ad56b34e696398b8122ee4c681833fb35b8334a095d82c56da10
     requires_dist:
-      - markupsafe >=2.1.1
-      - "watchdog >=2.3 ; extra == 'watchdog'"
+      - markupsafe>=2.1.1
+      - "watchdog>=2.3 ; extra == 'watchdog'"
     requires_python: ">=3.8"
   - kind: conda
     name: xz
