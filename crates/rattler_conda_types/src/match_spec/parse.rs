@@ -236,7 +236,7 @@ fn parse_bracket_vec_into_components(
         let mut seen = HashSet::new();
         for (key, _) in &bracket {
             if seen.contains(key) {
-                return Err(ParseMatchSpecError::MultipleValueForKey(key.to_string()));
+                return Err(ParseMatchSpecError::MultipleValueForKey((*key).to_string()));
             }
             seen.insert(key);
         }

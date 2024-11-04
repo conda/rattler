@@ -316,45 +316,45 @@ packages:
     url: "https://files.pythonhosted.org/packages/07/2e/0122487af85f542f8d65a883b6470f044ddb9d0159c95488a6747314d231/matplotlib-3.5.1-cp39-cp39-macosx_10_9_x86_64.whl"
     sha256: edf5e4e1d5fb22c18820e8586fb867455de3b109c309cb4fce3aaed85d9468d1
     requires_dist:
-      - cycler >=0.10
-      - fonttools >=4.22.0
-      - kiwisolver >=1.0.1
-      - numpy >=1.17
-      - packaging >=20.0
-      - pillow >=6.2.0
-      - pyparsing >=2.2.1
-      - python-dateutil >=2.7
-      - setuptools-scm >=4
+      - cycler>=0.10
+      - fonttools>=4.22.0
+      - kiwisolver>=1.0.1
+      - numpy>=1.17
+      - packaging>=20.0
+      - pillow>=6.2.0
+      - pyparsing>=2.2.1
+      - python-dateutil>=2.7
+      - setuptools-scm>=4
   - kind: pypi
     name: matplotlib
     version: 3.5.1
     url: "https://files.pythonhosted.org/packages/6a/52/703f568256a3e614a448503a698557d7832b7893fd63d3f7c2ebb54cd6e2/matplotlib-3.5.1-cp39-cp39-manylinux_2_5_x86_64.manylinux1_x86_64.whl"
     sha256: 87900c67c0f1728e6db17c6809ec05c025c6624dcf96a8020326ea15378fe8e7
     requires_dist:
-      - cycler >=0.10
-      - fonttools >=4.22.0
-      - kiwisolver >=1.0.1
-      - numpy >=1.17
-      - packaging >=20.0
-      - pillow >=6.2.0
-      - pyparsing >=2.2.1
-      - python-dateutil >=2.7
-      - setuptools-scm >=4
+      - cycler>=0.10
+      - fonttools>=4.22.0
+      - kiwisolver>=1.0.1
+      - numpy>=1.17
+      - packaging>=20.0
+      - pillow>=6.2.0
+      - pyparsing>=2.2.1
+      - python-dateutil>=2.7
+      - setuptools-scm>=4
   - kind: pypi
     name: matplotlib
     version: 3.5.1
     url: "https://files.pythonhosted.org/packages/86/cd/619a45613393293117297f2f0e5086a619e1ea98c5e2ce6d0f554ddc97c3/matplotlib-3.5.1-cp39-cp39-win_amd64.whl"
     sha256: fe8d40c434a8e2c68d64c6d6a04e77f21791a93ff6afe0dce169597c110d3079
     requires_dist:
-      - cycler >=0.10
-      - fonttools >=4.22.0
-      - kiwisolver >=1.0.1
-      - numpy >=1.17
-      - packaging >=20.0
-      - pillow >=6.2.0
-      - pyparsing >=2.2.1
-      - python-dateutil >=2.7
-      - setuptools-scm >=4
+      - cycler>=0.10
+      - fonttools>=4.22.0
+      - kiwisolver>=1.0.1
+      - numpy>=1.17
+      - packaging>=20.0
+      - pillow>=6.2.0
+      - pyparsing>=2.2.1
+      - python-dateutil>=2.7
+      - setuptools-scm>=4
   - kind: conda
     name: ncurses
     version: "6.3"
@@ -427,7 +427,7 @@ packages:
     url: "https://files.pythonhosted.org/packages/05/8e/8de486cbd03baba4deef4142bd643a3e7bbe954a784dc1bb17142572d127/packaging-21.3-py3-none-any.whl"
     sha256: ef103e05f519cdc783ae24ea4e2e0f508a9c99b2d4969652eed6a2e1ea5bd522
     requires_dist:
-      - "pyparsing !=3.0.5, >=2.0.2"
+      - "pyparsing>=2.0.2,!=3.0.5"
   - kind: pypi
     name: pillow
     version: 9.0.1
@@ -554,7 +554,7 @@ packages:
     url: "https://files.pythonhosted.org/packages/36/7a/87837f39d0296e723bb9b62bbb257d0355c7f6128853c78955f57342a56d/python_dateutil-2.8.2-py2.py3-none-any.whl"
     sha256: 961d03dc3453ebbc59dbdea9e4e11c5651520a876d0f4db161e8674aae935da9
     requires_dist:
-      - six >=1.5
+      - six>=1.5
   - kind: conda
     name: python_abi
     version: "3.9"
@@ -645,8 +645,8 @@ packages:
     url: "https://files.pythonhosted.org/packages/e3/e5/c28b544051340e63e0d507eb893c9513d3a300e5e9183e2990518acbfe36/setuptools_scm-6.4.2-py3-none-any.whl"
     sha256: acea13255093849de7ccb11af9e1fb8bde7067783450cee9ef7a93139bddf6d4
     requires_dist:
-      - packaging >=20.0
-      - tomli >=1.0.0
+      - packaging>=20.0
+      - tomli>=1.0.0
   - kind: pypi
     name: six
     version: 1.16.0
