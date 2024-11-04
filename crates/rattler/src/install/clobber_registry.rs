@@ -1154,9 +1154,12 @@ mod tests {
         // Create a transaction
         let operations = test_python_noarch_operations();
 
-        let python_info =
-            PythonInfo::from_version(&Version::from_str("3.11.0").unwrap(), Platform::current())
-                .unwrap();
+        let python_info = PythonInfo::from_version(
+            &Version::from_str("3.11.0").unwrap(),
+            None,
+            Platform::current(),
+        )
+        .unwrap();
         let transaction = transaction::Transaction::<PrefixRecord, RepoDataRecord> {
             operations,
             python_info: Some(python_info.clone()),

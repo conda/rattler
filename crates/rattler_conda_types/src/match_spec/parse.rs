@@ -1360,7 +1360,7 @@ mod tests {
         });
 
         // insta check all the strings
-        let vec_strings = specs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let vec_strings = specs.iter().map(ToString::to_string).collect::<Vec<_>>();
         insta::assert_debug_snapshot!(vec_strings);
 
         // parse back the strings and check if they are the same

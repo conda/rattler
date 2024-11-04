@@ -163,7 +163,7 @@ mod tests {
         rattler_package_streaming::fs::extract(&package_path, package_dir.path()).unwrap();
 
         let py_info =
-            PythonInfo::from_version(&Version::from_str("3.10").unwrap(), Platform::Linux64)
+            PythonInfo::from_version(&Version::from_str("3.10").unwrap(), None, Platform::Linux64)
                 .unwrap();
         let install_options = InstallOptions {
             python_info: Some(py_info),
