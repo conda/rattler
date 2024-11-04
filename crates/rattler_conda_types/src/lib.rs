@@ -50,7 +50,7 @@ pub use repo_data::{
     compute_package_url,
     patches::{PackageRecordPatch, PatchInstructions, RepoDataPatch},
     sharded::{Shard, ShardedRepodata, ShardedSubdirInfo},
-    ChannelInfo, ConvertSubdirError, PackageRecord, RepoData,
+    ChannelInfo, ConvertSubdirError, PackageRecord, RepoData, ValidatePackageRecordsError,
 };
 pub use repo_data_record::RepoDataRecord;
 pub use run_export::RunExportKind;
