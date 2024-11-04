@@ -10,7 +10,7 @@ from rattler.repo_data import (
     SourceConfig,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
-from rattler.networking import AuthenticatedClient, fetch_repo_data
+from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
     PackageName,
@@ -51,7 +51,7 @@ __all__ = [
     "Channel",
     "ChannelConfig",
     "ChannelPriority",
-    "AuthenticatedClient",
+    "Client",
     "PatchInstructions",
     "RepoDataRecord",
     "RepoData",
