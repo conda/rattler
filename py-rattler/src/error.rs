@@ -71,6 +71,10 @@ pub enum PyRattlerError {
     #[error(transparent)]
     InstallerError(#[from] rattler::install::InstallerError),
     #[error(transparent)]
+    ParseExplicitEnvironmentSpecError(
+        #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
+    ),
+    #[error(transparent)]
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
 }
 
@@ -156,6 +160,9 @@ impl From<PyRattlerError> for PyErr {
             PyRattlerError::InstallerError(err) => {
                 InstallerException::new_err(pretty_print_error(&err))
             }
+            PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
+                ParseExplicitEnvironmentSpecException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ValidatePackageRecordsError(err) => {
                 ValidatePackageRecordsException::new_err(pretty_print_error(&err))
             }
@@ -189,4 +196,9 @@ create_exception!(exceptions, ExtractException, PyException);
 create_exception!(exceptions, ActivationScriptFormatException, PyException);
 create_exception!(exceptions, GatewayException, PyException);
 create_exception!(exceptions, InstallerException, PyException);
+create_exception!(
+    exceptions,
+    ParseExplicitEnvironmentSpecException,
+    PyException
+);
 create_exception!(exceptions, ValidatePackageRecordsException, PyException);
