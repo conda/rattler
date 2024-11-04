@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0](https://github.com/conda/rattler/compare/rattler_solve-v1.1.0...rattler_solve-v1.2.0) - 2024-11-04
+
+### Added
+
+- use python_site_packages_path field when available for installing noarch: python packages, CEP-17 ([#909](https://github.com/conda/rattler/pull/909))
+- Add `PackageRecord::validate` function ([#911](https://github.com/conda/rattler/pull/911))
+
+### Other
+
+- root constraint shouldnt crash ([#916](https://github.com/conda/rattler/pull/916))
+- release ([#903](https://github.com/conda/rattler/pull/903))
+
 ## [1.1.0](https://github.com/conda/rattler/compare/rattler_solve-v1.0.10...rattler_solve-v1.1.0) - 2024-10-07
 
 ### Added
