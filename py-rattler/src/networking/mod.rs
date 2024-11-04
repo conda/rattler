@@ -1,6 +1,6 @@
 use futures::future::try_join_all;
-use pyo3::{pyfunction, types::PyTuple, Py, PyAny, PyResult, Python, ToPyObject};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3::{pyfunction, types::PyTuple, Bound, Py, PyAny, PyResult, Python, ToPyObject};
+use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
     fetch_repo_data, CachedRepoData, FetchRepoDataError, FetchRepoDataOptions,
@@ -23,19 +23,20 @@ pub mod middleware;
 /// High-level function to fetch repodata for all the subdirectory of channels and platform.
 /// Returns a list of `PyRepoData`.
 #[pyfunction]
+#[pyo3(signature = (channels, platforms, cache_path, callback=None, client=None))]
 pub fn py_fetch_repo_data<'a>(
     py: Python<'a>,
     channels: Vec<PyChannel>,
     platforms: Vec<PyPlatform>,
     cache_path: PathBuf,
-    callback: Option<&'a PyAny>,
+    callback: Option<Bound<'a, PyAny>>,
     client: Option<PyClientWithMiddleware>,
-) -> PyResult<&'a PyAny> {
+) -> PyResult<Bound<'a, PyAny>> {
     let mut meta_futures = Vec::new();
     let client = client.unwrap_or(PyClientWithMiddleware::new(None));
 
     for (subdir, chan) in get_subdir_urls(channels, platforms)? {
-        let callback = callback.map(|callback| {
+        let callback = callback.as_ref().map(|callback| {
             Arc::new(ProgressReporter {
                 callback: callback.to_object(py),
             }) as _
@@ -87,7 +88,7 @@ impl Reporter for ProgressReporter {
         total_bytes: Option<usize>,
     ) {
         Python::with_gil(|py| {
-            let args = PyTuple::new(py, [Some(bytes_downloaded), total_bytes]);
+            let args = PyTuple::new_bound(py, [Some(bytes_downloaded), total_bytes]);
             self.callback.call1(py, args).expect("Callback failed!");
         });
     }

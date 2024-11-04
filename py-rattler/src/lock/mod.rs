@@ -5,7 +5,7 @@ use std::{
 };
 
 use pep508_rs::Requirement;
-use pyo3::{pyclass, pymethods, types::PyBytes, PyResult, Python};
+use pyo3::{pyclass, pymethods, types::PyBytes, Bound, PyResult, Python};
 use rattler_conda_types::{MatchSpec, ParseStrictness, RepoDataRecord};
 use rattler_lock::{
     Channel, Environment, LockFile, Package, PackageHashes, PypiPackageData,
@@ -522,12 +522,14 @@ impl PyPackageHashes {
     // }
 
     #[getter]
-    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.sha256().map(|sha256| PyBytes::new(py, sha256))
+    pub fn sha256<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.inner
+            .sha256()
+            .map(|sha256| PyBytes::new_bound(py, sha256))
     }
 
     #[getter]
-    pub fn md5<'a>(&self, py: Python<'a>) -> Option<&'a PyBytes> {
-        self.inner.md5().map(|md5| PyBytes::new(py, md5))
+    pub fn md5<'a>(&self, py: Python<'a>) -> Option<Bound<'a, PyBytes>> {
+        self.inner.md5().map(|md5| PyBytes::new_bound(py, md5))
     }
 }

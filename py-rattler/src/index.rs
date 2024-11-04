@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::{error::PyRattlerError, platform::PyPlatform};
 
 #[pyfunction]
+#[pyo3(signature = (channel_directory, target_platform=None))]
 pub fn py_index(
     py: Python<'_>,
     channel_directory: PathBuf,
