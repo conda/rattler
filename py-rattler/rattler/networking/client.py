@@ -37,24 +37,16 @@ class Client:
         return f"{type(self).__name__}()"
 
 
-class AuthenticatedClient(Client):
-    """
-    A client that can be used to make authenticated requests.
-    """
-
-    def __init__(self) -> None:
-        super().__init__([AuthenticationMiddleware()])
-
-    def __repr__(self) -> str:
+    @staticmethod
+    def authenticated_client() -> Client:
         """
-        Returns a representation of the AuthenticatedClient
+        Returns an authenticated client.
 
         Examples
         --------
         ```python
-        >>> AuthenticatedClient()
-        AuthenticatedClient()
+        >>> Client.authenticated_client()
+        Client()
         >>>
-        ```
         """
-        return f"{type(self).__name__}()"
+        return Client([AuthenticationMiddleware()])
