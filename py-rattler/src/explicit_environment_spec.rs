@@ -58,8 +58,8 @@ impl PyExplicitEnvironmentSpec {
     pub fn packages(&self) -> Vec<PyExplicitEnvironmentEntry> {
         self.inner
             .packages
-            .clone()
-            .into_iter()
+	    .iter()
+	    .cloned() 
             .map(PyExplicitEnvironmentEntry)
             .collect()
     }
