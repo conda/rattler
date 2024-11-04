@@ -48,7 +48,7 @@ async fn authenticate_with_google_cloud(mut req: Request) -> MiddlewareResult<Re
     match DefaultTokenSourceProvider::new(config).await {
         Ok(provider) => match provider.token_source().token().await {
             Ok(token) => {
-                let bearer_auth = format!("Bearer {}", token);
+                let bearer_auth = format!("Bearer {token}");
                 let header_value = reqwest::header::HeaderValue::from_str(&bearer_auth)
                     .map_err(reqwest_middleware::Error::middleware)?;
                 req.headers_mut()
