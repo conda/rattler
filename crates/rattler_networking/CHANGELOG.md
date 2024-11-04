@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.5](https://github.com/conda/rattler/compare/rattler_networking-v0.21.4...rattler_networking-v0.21.5) - 2024-11-04
+
+### Other
+
+- root constraint shouldnt crash ([#916](https://github.com/conda/rattler/pull/916))
+- update all versions of packages ([#886](https://github.com/conda/rattler/pull/886))
+
 ## [0.21.4](https://github.com/conda/rattler/compare/rattler_networking-v0.21.3...rattler_networking-v0.21.4) - 2024-09-05
 
 ### Fixed
