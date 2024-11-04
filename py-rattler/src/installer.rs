@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use pyo3::{pyfunction, PyAny, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler::{
     install::{IndicatifReporter, Installer},
     package_cache::PackageCache,

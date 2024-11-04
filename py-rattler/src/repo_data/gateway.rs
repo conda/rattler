@@ -5,7 +5,7 @@ use crate::record::PyRecord;
 use crate::{PyChannel, Wrap};
 use pyo3::exceptions::PyValueError;
 use pyo3::{pyclass, pymethods, FromPyObject, PyAny, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::fetch::CacheAction;
 use rattler_repodata_gateway::{ChannelConfig, Gateway, SourceConfig, SubdirSelection};
 use std::collections::{HashMap, HashSet};

@@ -183,7 +183,7 @@ fn rattler(py: Python<'_>, m: &PyModule) -> PyResult<()> {
         .unwrap();
     m.add(
         "InvalidChannelError",
-        py.get_type::<InvalidChannelException>(),
+        py.get_type_bound::<InvalidChannelException>(),
     )
     .unwrap();
     m.add("ActivationError", py.get_type::<ActivationException>())

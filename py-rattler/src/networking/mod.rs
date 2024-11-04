@@ -1,6 +1,6 @@
 use futures::future::try_join_all;
 use pyo3::{pyfunction, types::PyTuple, Py, PyAny, PyResult, Python, ToPyObject};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::future_into_py;
 
 use rattler_repodata_gateway::fetch::{
     fetch_repo_data, CachedRepoData, FetchRepoDataError, FetchRepoDataOptions,

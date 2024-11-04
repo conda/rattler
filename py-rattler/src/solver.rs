@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use pyo3::{exceptions::PyValueError, pyfunction, FromPyObject, PyAny, PyErr, PyResult, Python};
-use pyo3_asyncio::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::future_into_py;
 use rattler_repodata_gateway::sparse::SparseRepoData;
 use rattler_solve::{resolvo::Solver, RepoDataIter, SolveStrategy, SolverImpl, SolverTask};
 use std::sync::Arc;
