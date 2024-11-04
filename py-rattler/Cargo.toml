@@ -1,6 +1,6 @@
 [package]
 name = "py-rattler"
-version = "0.7.2"
+version = "0.8.0"
 edition = "2021"
 license = "BSD-3-Clause"
 publish = false
@@ -16,9 +16,9 @@ rustls-tls = ["rattler_networking/rustls-tls", "rattler_repodata_gateway/rustls-
 vendored-openssl = ["openssl", "openssl/vendored"]
 
 [dependencies]
-anyhow = "1.0.82"
+anyhow = "1.0.92"
 chrono = { version = "0.4" }
-futures = "0.3.30"
+futures = "0.3.31"
 
 rattler = { path = "../crates/rattler", default-features = false, features = ["indicatif"] }
 rattler_repodata_gateway = { path = "../crates/rattler_repodata_gateway", default-features = false, features = [
@@ -44,12 +44,12 @@ pyo3 = { version = "0.22.5", features = [
     "gil-refs"
 ] }
 pyo3-async-runtimes = { version = "0.22.0", features = ["tokio-runtime"] }
-tokio = { version = "1.37" }
+tokio = { version = "1.41" }
 
-reqwest = { version = "0.12.3", default-features = false }
-reqwest-middleware = "0.3.0"
+reqwest = { version = "0.12.9", default-features = false }
+reqwest-middleware = "0.3.3"
 
-thiserror = "1.0.61"
+thiserror = "1.0.67"
 url = "2.5.3"
 
 openssl = { version = "0.10", optional = true }
