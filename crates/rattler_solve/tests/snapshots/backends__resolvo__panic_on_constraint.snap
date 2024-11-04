@@ -1,0 +1,10 @@
+---
+source: crates/rattler_solve/tests/backends.rs
+expression: result.unwrap_err()
+---
+Cannot solve the request because of: The following packages are incompatible
+└─ xbar * can be installed with any of the following options:
+   └─ xbar 1 would require
+      └─ xfoo >=2, which can be installed with any of the following options:
+         └─ xfoo 2
+├─ constraint '==1' cannot be fulfilled

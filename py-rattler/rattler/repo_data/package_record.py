@@ -119,6 +119,37 @@ class PackageRecord:
 
         return graph
 
+    @staticmethod
+    def validate(records: List[PackageRecord]) -> None:
+        """
+        Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
+
+        This function will return nothing if all records form a valid environment, i.e., all dependencies
+        of each package are satisfied by the other packages in the list.
+        If there is a dependency that is not satisfied, this function will raise an exception.
+
+        Examples
+        --------
+        ```python
+        >>> from os import listdir
+        >>> from os.path import isfile, join
+        >>> from rattler import PrefixRecord
+        >>> from rattler.exceptions import ValidatePackageRecordsException
+        >>> records = [
+        ...     PrefixRecord.from_path(join("../test-data/conda-meta/", f))
+        ...     for f in sorted(listdir("../test-data/conda-meta"))
+        ...     if isfile(join("../test-data/conda-meta", f))
+        ... ]
+        >>> try:
+        ...     PackageRecord.validate(records)
+        ... except ValidatePackageRecordsException as e:
+        ...     print(e)
+        package 'libsqlite=3.40.0=hcfcfb64_0' has dependency 'ucrt >=10.0.20348.0', which is not in the environment
+        >>>
+        ```
+        """
+        return PyRecord.validate(records)
+
     @classmethod
     def _from_py_record(cls, py_record: PyRecord) -> PackageRecord:
         """

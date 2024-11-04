@@ -1,4 +1,4 @@
-use std::{borrow::Cow, ops::Not, str::FromStr, sync::Arc};
+use std::{borrow::Cow, collections::HashSet, ops::Not, str::FromStr, sync::Arc};
 
 use nom::{
     branch::alt,
@@ -71,11 +71,11 @@ pub enum ParseMatchSpecError {
     MultipleBracketSectionsNotAllowed,
 
     /// Invalid version and build
-    #[error("Unable to parse version spec: {0}")]
+    #[error("unable to parse version spec: {0}")]
     InvalidVersionAndBuild(String),
 
     /// Invalid build string
-    #[error("The build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
+    #[error("the build string '{0}' is not valid, it can only contain alphanumeric characters and underscores"
     )]
     InvalidBuildString(String),
 
@@ -92,12 +92,16 @@ pub enum ParseMatchSpecError {
     InvalidBuildNumber(#[from] ParseBuildNumberSpecError),
 
     /// Unable to parse hash digest from hex
-    #[error("Unable to parse hash digest from hex")]
+    #[error("unable to parse hash digest from hex")]
     InvalidHashDigest,
 
     /// The package name was invalid
     #[error(transparent)]
     InvalidPackageName(#[from] InvalidPackageNameError),
+
+    /// Multiple values for a key in the matchspec
+    #[error("found multiple values for: {0}")]
+    MultipleValueForKey(String),
 }
 
 impl FromStr for MatchSpec {
@@ -226,6 +230,17 @@ fn parse_bracket_vec_into_components(
     strictness: ParseStrictness,
 ) -> Result<NamelessMatchSpec, ParseMatchSpecError> {
     let mut match_spec = match_spec;
+
+    if strictness == Strict {
+        // check for duplicate keys
+        let mut seen = HashSet::new();
+        for (key, _) in &bracket {
+            if seen.contains(key) {
+                return Err(ParseMatchSpecError::MultipleValueForKey((*key).to_string()));
+            }
+            seen.insert(key);
+        }
+    }
 
     for elem in bracket {
         let (key, value) = elem;
@@ -482,8 +497,19 @@ impl NamelessMatchSpec {
         // Get the version and optional build string
         if !input.is_empty() {
             let (version, build) = parse_version_and_build(input, strictness)?;
-            match_spec.version = version;
-            match_spec.build = build;
+            if strictness == Strict {
+                if match_spec.version.is_some() && version.is_some() {
+                    return Err(ParseMatchSpecError::MultipleValueForKey(
+                        "version".to_owned(),
+                    ));
+                }
+
+                if match_spec.build.is_some() && build.is_some() {
+                    return Err(ParseMatchSpecError::MultipleValueForKey("build".to_owned()));
+                }
+            }
+            match_spec.version = match_spec.version.or(version);
+            match_spec.build = match_spec.build.or(build);
         }
 
         Ok(match_spec)
@@ -578,8 +604,19 @@ fn matchspec_parser(
     let input = input.trim();
     if !input.is_empty() {
         let (version, build) = parse_version_and_build(input, strictness)?;
-        match_spec.version = version;
-        match_spec.build = build;
+        if strictness == Strict {
+            if match_spec.version.is_some() && version.is_some() {
+                return Err(ParseMatchSpecError::MultipleValueForKey(
+                    "version".to_owned(),
+                ));
+            }
+
+            if match_spec.build.is_some() && build.is_some() {
+                return Err(ParseMatchSpecError::MultipleValueForKey("build".to_owned()));
+            }
+        }
+        match_spec.version = match_spec.version.or(version);
+        match_spec.build = match_spec.build.or(build);
     }
 
     Ok(match_spec)
@@ -772,9 +809,11 @@ mod tests {
             NamelessMatchSpec::from_str("*cpu*", Strict).unwrap(),
             NamelessMatchSpec::from_str("conda-forge::foobar", Strict).unwrap(),
             NamelessMatchSpec::from_str("foobar[channel=conda-forge]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("* [build=foo]", Strict).unwrap(),
+            NamelessMatchSpec::from_str(">=1.2[build=foo]", Strict).unwrap(),
+            NamelessMatchSpec::from_str("[version='>=1.2', build=foo]", Strict).unwrap(),
         ],
         @r###"
-        ---
         - version: 3.8.*
           build: "*_cpython"
         - version: "==1.0"
@@ -792,6 +831,12 @@ mod tests {
           channel:
             base_url: "https://conda.anaconda.org/conda-forge/"
             name: conda-forge
+        - version: "*"
+          build: foo
+        - version: ">=1.2"
+          build: foo
+        - version: ">=1.2"
+          build: foo
         "###);
     }
 
@@ -1278,5 +1323,51 @@ mod tests {
             );
             assert_eq!(subdir, expected_subdir.map(ToString::to_string));
         }
+    }
+
+    #[test]
+    fn test_matchspec_to_string() {
+        let mut specs: Vec<MatchSpec> =
+            vec![MatchSpec::from_str("foo[version=1.0.*, build_number=\">6\"]", Strict).unwrap()];
+
+        // complete matchspec to verify that we print all fields
+        specs.push(MatchSpec {
+            name: Some("foo".parse().unwrap()),
+            version: Some(VersionSpec::from_str("1.0.*", Strict).unwrap()),
+            build: "py27_0*".parse().ok(),
+            build_number: Some(BuildNumberSpec::from_str(">=6").unwrap()),
+            file_name: Some("foo-1.0-py27_0.tar.bz2".to_string()),
+            channel: Some(
+                Channel::from_str("conda-forge", &channel_config())
+                    .map(Arc::new)
+                    .unwrap(),
+            ),
+            subdir: Some("linux-64".to_string()),
+            namespace: Some("foospace".to_string()),
+            md5: Some(parse_digest_from_hex::<Md5>("8b1a9953c4611296a827abf8c47804d7").unwrap()),
+            sha256: Some(
+                parse_digest_from_hex::<Sha256>(
+                    "315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3",
+                )
+                .unwrap(),
+            ),
+            url: Some(
+                Url::parse(
+                    "https://conda.anaconda.org/conda-forge/linux-64/foo-1.0-py27_0.tar.bz2",
+                )
+                .unwrap(),
+            ),
+        });
+
+        // insta check all the strings
+        let vec_strings = specs.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        insta::assert_debug_snapshot!(vec_strings);
+
+        // parse back the strings and check if they are the same
+        let parsed_specs = vec_strings
+            .iter()
+            .map(|s| MatchSpec::from_str(s, Strict).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(specs, parsed_specs);
     }
 }

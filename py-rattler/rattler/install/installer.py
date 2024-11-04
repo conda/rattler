@@ -2,7 +2,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional
 
-from rattler.networking.authenticated_client import AuthenticatedClient
+from rattler.networking.client import Client
 from rattler.platform.platform import Platform
 from rattler.prefix.prefix_record import PrefixRecord
 from rattler.repo_data.record import RepoDataRecord
@@ -18,7 +18,7 @@ async def install(
     platform: Optional[Platform] = None,
     execute_link_scripts: bool = False,
     show_progress: bool = True,
-    client: Optional[AuthenticatedClient] = None,
+    client: Optional[Client] = None,
 ) -> None:
     """
     Create an environment by downloading and linking the `dependencies` in

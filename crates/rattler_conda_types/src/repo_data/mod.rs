@@ -19,13 +19,15 @@ use serde_with::{serde_as, skip_serializing_none, OneOrMany};
 use thiserror::Error;
 use url::Url;
 
-use crate::utils::serde::sort_map_alphabetically;
 use crate::utils::url::add_trailing_slash;
 use crate::{
     build_spec::BuildNumber,
     package::{IndexJson, RunExportsJson},
     utils::serde::DeserializeFromStrUnchecked,
     Channel, NoArchType, PackageName, PackageUrl, Platform, RepoDataRecord, VersionWithSource,
+};
+use crate::{
+    utils::serde::sort_map_alphabetically, MatchSpec, Matches, ParseMatchSpecError, ParseStrictness,
 };
 
 /// [`RepoData`] is an index of package binaries available on in a subdirectory
@@ -278,6 +280,12 @@ pub fn compute_package_url(
         .expect("failed to join base_url and filename")
 }
 
+impl AsRef<PackageRecord> for PackageRecord {
+    fn as_ref(&self) -> &PackageRecord {
+        self
+    }
+}
+
 impl PackageRecord {
     /// A simple helper method that constructs a `PackageRecord` with the bare
     /// minimum values.
@@ -319,6 +327,74 @@ impl PackageRecord {
     pub fn sort_topologically<T: AsRef<PackageRecord> + Clone>(records: Vec<T>) -> Vec<T> {
         topological_sort::sort_topologically(records)
     }
+
+    /// Validate that the given package records are valid w.r.t. 'depends' and 'constrains'.
+    /// This function will return Ok(()) if all records form a valid environment, i.e., all dependencies
+    /// of each package are satisfied by the other packages in the list.
+    /// If there is a dependency that is not satisfied, this function will return an error.
+    pub fn validate<T: AsRef<PackageRecord>>(
+        records: Vec<T>,
+    ) -> Result<(), ValidatePackageRecordsError> {
+        for package in records.iter() {
+            let package = package.as_ref();
+            // First we check if all dependencies are in the environment.
+            for dep in package.depends.iter() {
+                // We ignore virtual packages, e.g. `__unix`.
+                if dep.starts_with("__") {
+                    continue;
+                }
+                let dep_spec = MatchSpec::from_str(dep, ParseStrictness::Lenient)?;
+                if !records.iter().any(|p| dep_spec.matches(p.as_ref())) {
+                    return Err(ValidatePackageRecordsError::DependencyNotInEnvironment {
+                        package: package.to_owned(),
+                        dependency: dep.to_string(),
+                    });
+                }
+            }
+
+            // Then we check if all constraints are satisfied.
+            for constraint in package.constrains.iter() {
+                let constraint_spec = MatchSpec::from_str(constraint, ParseStrictness::Lenient)?;
+                let matching_package = records
+                    .iter()
+                    .find(|record| Some(record.as_ref().name.clone()) == constraint_spec.name);
+                if matching_package.is_some_and(|p| !constraint_spec.matches(p.as_ref())) {
+                    return Err(ValidatePackageRecordsError::PackageConstraintNotSatisfied {
+                        package: package.to_owned(),
+                        constraint: constraint.to_owned(),
+                        violating_package: matching_package.unwrap().as_ref().to_owned(),
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// An error when validating package records.
+#[derive(Debug, Error)]
+pub enum ValidatePackageRecordsError {
+    /// A package is not present in the environment.
+    #[error("package '{package}' has dependency '{dependency}', which is not in the environment")]
+    DependencyNotInEnvironment {
+        /// The package containing the unmet dependency.
+        package: PackageRecord,
+        /// The dependency that is not in the environment.
+        dependency: String,
+    },
+    /// A package constraint is not met in the environment.
+    #[error("package '{package}' has constraint '{constraint}', which is not satisfied by '{violating_package}' in the environment")]
+    PackageConstraintNotSatisfied {
+        /// The package containing the unmet constraint.
+        package: PackageRecord,
+        /// The constraint that is violated.
+        constraint: String,
+        /// The corresponding package that violates the constraint.
+        violating_package: PackageRecord,
+    },
+    /// Failed to parse a matchspec.
+    #[error(transparent)]
+    ParseMatchSpec(#[from] ParseMatchSpecError),
 }
 
 /// An error that can occur when parsing a platform from a string.
@@ -335,7 +411,7 @@ pub enum ConvertSubdirError {
     /// Platform key is empty
     #[error("platform key is empty in index.json")]
     PlatformEmpty,
-    /// Arc key is empty
+    /// Arch key is empty
     #[error("arch key is empty in index.json")]
     ArchEmpty,
 }
@@ -442,7 +518,7 @@ mod test {
 
     use crate::{
         repo_data::{compute_package_url, determine_subdir},
-        Channel, ChannelConfig, RepoData,
+        Channel, ChannelConfig, PackageRecord, RepoData,
     };
 
     // isl-0.12.2-1.tar.bz2
@@ -558,5 +634,47 @@ mod test {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data");
         let data_path = test_data_path.join(path);
         RepoData::from_path(data_path).unwrap()
+    }
+
+    #[test]
+    fn test_validate() {
+        // load test data
+        let test_data_path = dunce::canonicalize(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../test-data"),
+        )
+        .unwrap();
+        let data_path = test_data_path.join("channels/dummy/linux-64/repodata.json");
+        let repodata = RepoData::from_path(&data_path).unwrap();
+
+        let package_depends_only_virtual_package = repodata
+            .packages
+            .get("baz-1.0-unix_py36h1af98f8_2.tar.bz2")
+            .unwrap();
+        let package_depends = repodata.packages.get("foobar-2.0-bla_1.tar.bz2").unwrap();
+        let package_constrains = repodata
+            .packages
+            .get("foo-3.0.2-py36h1af98f8_3.conda")
+            .unwrap();
+        let package_bors_1 = repodata.packages.get("bors-1.2.1-bla_1.tar.bz2").unwrap();
+        let package_bors_2 = repodata.packages.get("bors-2.1-bla_1.tar.bz2").unwrap();
+
+        assert!(PackageRecord::validate(vec![package_depends_only_virtual_package]).is_ok());
+        for packages in [vec![package_depends], vec![package_depends, package_bors_2]] {
+            let result = PackageRecord::validate(packages);
+            assert!(result.is_err());
+            assert!(result.err().unwrap().to_string().contains(
+                "package 'foobar=2.0=bla_1' has dependency 'bors <2.0', which is not in the environment"
+            ));
+        }
+
+        assert!(PackageRecord::validate(vec![package_depends, package_bors_1]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains]).is_ok());
+        assert!(PackageRecord::validate(vec![package_constrains, package_bors_1]).is_ok());
+
+        let result = PackageRecord::validate(vec![package_constrains, package_bors_2]);
+        assert!(result.is_err());
+        assert!(result.err().unwrap().to_string().contains(
+            "package 'foo=3.0.2=py36h1af98f8_3' has constraint 'bors <2.0', which is not satisfied by 'bors=2.1=bla_1' in the environment"
+        ));
     }
 }
