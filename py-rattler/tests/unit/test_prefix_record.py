@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord, VersionWithSource, NoArchType
+from rattler import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType, FileMode, PackageRecord, RepoDataRecord, VersionWithSource
 
 
 def test_load_prefix_record() -> None:
