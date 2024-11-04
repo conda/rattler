@@ -51,15 +51,15 @@ impl PyExplicitEnvironmentSpec {
 
     /// Returns the platform specified in the explicit environment specification
     pub fn platform(&self) -> Option<PyPlatform> {
-        self.inner.platform.map(|p| PyPlatform::from(p))
+        self.inner.platform.map(PyPlatform::from)
     }
 
     /// Returns the environment entries (URLs) specified in the explicit environment specification
     pub fn packages(&self) -> Vec<PyExplicitEnvironmentEntry> {
         self.inner
             .packages
-	    .iter()
-	    .cloned() 
+            .iter()
+            .cloned()
             .map(PyExplicitEnvironmentEntry)
             .collect()
     }

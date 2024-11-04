@@ -19,6 +19,7 @@ impl PyPrefixPaths {
 #[pymethods]
 impl PyPrefixPathsEntry {
     #[new]
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         relative_path: PathBuf,
         path_type: PyPrefixPathType,
@@ -29,10 +30,8 @@ impl PyPrefixPathsEntry {
         size_in_bytes: Option<u64>,
         original_path: Option<PathBuf>,
     ) -> PyResult<Self> {
-        let sha256 = sha256.map(|s| sha256_from_pybytes(s)).transpose()?;
-        let sha256_in_prefix = sha256_in_prefix
-            .map(|s| sha256_from_pybytes(s))
-            .transpose()?;
+        let sha256 = sha256.map(sha256_from_pybytes).transpose()?;
+        let sha256_in_prefix = sha256_in_prefix.map(sha256_from_pybytes).transpose()?;
 
         Ok(Self {
             inner: PathsEntry {
@@ -41,7 +40,7 @@ impl PyPrefixPathsEntry {
                 no_link: false,
                 path_type: path_type.into(),
                 prefix_placeholder,
-                file_mode: file_mode.map(|f| f.into()),
+                file_mode: file_mode.map(Into::into),
                 sha256,
                 sha256_in_prefix,
                 size_in_bytes,

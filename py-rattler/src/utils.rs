@@ -6,7 +6,7 @@ pub fn sha256_from_pybytes(bytes: &PyBytes) -> Result<Sha256Hash, PyErr> {
         return Err(PyValueError::new_err("Expected a 32 byte SHA256 digest"));
     }
     let digest = Sha256Hash::from_slice(bytes.as_bytes());
-    Ok(digest.clone())
+    Ok(*digest)
 }
 
 pub fn md5_from_pybytes(bytes: &PyBytes) -> Result<Md5Hash, PyErr> {
@@ -14,5 +14,5 @@ pub fn md5_from_pybytes(bytes: &PyBytes) -> Result<Md5Hash, PyErr> {
         return Err(PyValueError::new_err("Expected a 16 byte MD5 digest"));
     }
     let digest = Md5Hash::from_slice(bytes.as_bytes());
-    Ok(digest.clone())
+    Ok(*digest)
 }

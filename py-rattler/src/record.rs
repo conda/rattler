@@ -6,7 +6,7 @@ use pyo3::{
 };
 use rattler_conda_types::{
     package::{IndexJson, PackageFile},
-    prefix_record::Link,
+    prefix_record::{Link, LinkType},
     NoArchType, PackageRecord, PrefixRecord, RepoDataRecord, VersionWithSource,
 };
 
@@ -114,11 +114,23 @@ impl PyLink {
     }
 }
 
-impl Into<Link> for PyLink {
-    fn into(self) -> Link {
+impl From<PyLink> for Link {
+    fn from(value: PyLink) -> Self {
+        let link_type = if value.type_.is_empty() {
+            None
+        } else {
+            match value.type_.as_str() {
+                "hardlink" => Some(LinkType::HardLink),
+                "softlink" => Some(LinkType::SoftLink),
+                "copy" => Some(LinkType::Copy),
+                "directory" => Some(LinkType::Directory),
+                _ => None,
+            }
+        };
+
         Link {
-            source: self.source,
-            link_type: None,
+            source: value.source,
+            link_type,
         }
     }
 }
@@ -126,6 +138,7 @@ impl Into<Link> for PyLink {
 #[pymethods]
 impl PyRecord {
     #[staticmethod]
+    #[allow(clippy::too_many_arguments)]
     pub fn create(
         name: PyPackageName,
         version: (PyVersion, String),
@@ -136,7 +149,7 @@ impl PyRecord {
         platform: Option<String>,
         noarch: Option<PyNoArchType>,
     ) -> Self {
-        let noarch = noarch.map(|n| n.into());
+        let noarch = noarch.map(Into::into);
         Self {
             inner: RecordInner::Package(PackageRecord {
                 name: name.into(),
@@ -209,9 +222,9 @@ impl PyRecord {
                 repodata_record: package_record.try_as_repodata_record().unwrap().clone(),
                 package_tarball_full_path,
                 extracted_package_dir,
-                files: files.unwrap_or(Vec::new()),
+                files: files.unwrap_or_default(),
                 paths_data: paths_data.into(),
-                link: link.map(|l| l.into()),
+                link: link.map(Into::into),
                 requested_spec,
             }),
         })
@@ -327,8 +340,7 @@ impl PyRecord {
 
     #[setter]
     pub fn set_legacy_bz2_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
-        self.as_package_record_mut().legacy_bz2_md5 =
-            md5.map(|m| md5_from_pybytes(m)).transpose()?;
+        self.as_package_record_mut().legacy_bz2_md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
 
@@ -375,7 +387,7 @@ impl PyRecord {
 
     #[setter]
     pub fn set_md5(&mut self, md5: Option<&PyBytes>) -> PyResult<()> {
-        self.as_package_record_mut().md5 = md5.map(|m| md5_from_pybytes(m)).transpose()?;
+        self.as_package_record_mut().md5 = md5.map(md5_from_pybytes).transpose()?;
         Ok(())
     }
 
@@ -412,7 +424,7 @@ impl PyRecord {
     /// Optionally a SHA256 hash of the package archive.
     #[setter]
     pub fn set_sha256(&mut self, sha256: Option<&PyBytes>) -> PyResult<()> {
-        self.as_package_record_mut().sha256 = sha256.map(|s| sha256_from_pybytes(s)).transpose()?;
+        self.as_package_record_mut().sha256 = sha256.map(sha256_from_pybytes).transpose()?;
         Ok(())
     }
 

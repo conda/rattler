@@ -74,6 +74,7 @@ pub enum PyRattlerError {
     ParseExplicitEnvironmentSpecError(
         #[from] rattler_conda_types::ParseExplicitEnvironmentSpecError,
     ),
+    #[error(transparent)]
     ValidatePackageRecordsError(#[from] ValidatePackageRecordsError),
 }
 
@@ -161,6 +162,7 @@ impl From<PyRattlerError> for PyErr {
             }
             PyRattlerError::ParseExplicitEnvironmentSpecError(err) => {
                 ParseExplicitEnvironmentSpecException::new_err(pretty_print_error(&err))
+            }
             PyRattlerError::ValidatePackageRecordsError(err) => {
                 ValidatePackageRecordsException::new_err(pretty_print_error(&err))
             }
