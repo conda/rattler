@@ -703,8 +703,6 @@ mod resolvo {
     use rattler_solve::{SolveStrategy, SolverImpl, SolverTask};
     use url::Url;
 
-    use crate::{conda_json_path, conda_json_path_noarch};
-
     use super::{
         dummy_channel_json_path, installed_package, solve, solve_real_world, FromStr,
         GenericVirtualPackage, SimpleSolveTask, SolveError, Version,
