@@ -249,7 +249,7 @@ impl RepoDataQuery {
                         let result = &mut result[result_idx];
 
                         for record in records.iter() {
-                            if !self.recursive && !request_specs.iter().any(|spec| spec.matches(record)) {
+                            if !request_specs.is_empty() && !request_specs.iter().any(|spec| spec.matches(record)) {
                                 // Do not return records that do not match to root spec.
                                 continue;
                             }

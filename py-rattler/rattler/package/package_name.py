@@ -101,10 +101,15 @@ class PackageName:
         >>> PackageName("test-abc") == PackageName("test-ABC")
         True
         >>> PackageName("test-abc") == "test-abc"
+        True
+        >>> PackageName("test-abc") == "not-test-abc"
         False
         >>>
         ```
         """
+        if isinstance(other, str):
+            return self._name == PyPackageName(other)
+
         if not isinstance(other, PackageName):
             return False
 
@@ -124,10 +129,15 @@ class PackageName:
         >>> PackageName("test-abc") != PackageName("abc-test")
         True
         >>> PackageName("test-abc") != "test-abc"
+        False
+        >>> PackageName("test-abc") != "not-test-abc"
         True
         >>>
         ```
         """
+        if isinstance(other, str):
+            return self._name != PyPackageName(other)
+
         if not isinstance(other, PackageName):
             return True
 

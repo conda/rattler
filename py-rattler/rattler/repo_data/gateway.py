@@ -190,10 +190,12 @@ class Gateway:
 
         Examples
         --------
+        ```python
         >>> gateway = Gateway()
         >>> gateway.clear_repodata_cache("conda-forge", ["linux-64"])
         >>> gateway.clear_repodata_cache("robostack")
         >>>
+        ```
         """
         self._gateway.clear_repodata_cache(
             channel._channel if isinstance(channel, Channel) else Channel(channel)._channel,
