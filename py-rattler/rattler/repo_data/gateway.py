@@ -173,6 +173,43 @@ class Gateway:
         # Convert the records into python objects
         return [[RepoDataRecord._from_py_record(record) for record in records] for records in py_records]
 
+    async def names(
+        self, channels: List[Channel | str], platforms: List[Platform | PlatformLiteral]
+    ) -> List[PackageName]:
+        """Queries all the names of packages in a channel.
+
+        Arguments:
+            channels: The channels to query.
+            platforms: The platforms to query.
+
+        Returns:
+            A list of package names that are present in the given subdirectories.
+
+        Examples
+        --------
+        ```python
+        >>> import asyncio
+        >>> gateway = Gateway()
+        >>> records = asyncio.run(gateway.names(["conda-forge"], ["linux-64"]))
+        >>> PackageName("python") in records
+        True
+        >>>
+        ```
+        """
+
+        py_package_names = await self._gateway.names(
+            channels=[
+                channel._channel if isinstance(channel, Channel) else Channel(channel)._channel for channel in channels
+            ],
+            platforms=[
+                platform._inner if isinstance(platform, Platform) else Platform(platform)._inner
+                for platform in platforms
+            ],
+        )
+
+        # Convert the records into python objects
+        return [PackageName._from_py_package_name(package_name) for package_name in py_package_names]
+
     def clear_repodata_cache(
         self, channel: Channel | str, subdirs: Optional[List[Platform | PlatformLiteral]] = None
     ) -> None:
