@@ -47,5 +47,6 @@ class Client:
         >>> Client.authenticated_client()
         Client()
         >>>
+        ```
         """
         return Client([AuthenticationMiddleware()])
