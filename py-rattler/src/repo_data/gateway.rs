@@ -1,5 +1,6 @@
 use crate::error::PyRattlerError;
 use crate::match_spec::PyMatchSpec;
+use crate::package_name::PyPackageName;
 use crate::platform::PyPlatform;
 use crate::record::PyRecord;
 use crate::{PyChannel, Wrap};
@@ -107,6 +108,28 @@ impl PyGateway {
                         .map(PyRecord::from)
                         .collect::<Vec<_>>()
                 })
+                .collect::<Vec<_>>())
+        })
+    }
+
+    pub fn names<'a>(
+        &self,
+        py: Python<'a>,
+        channels: Vec<PyChannel>,
+        platforms: Vec<PyPlatform>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let gateway = self.inner.clone();
+        future_into_py(py, async move {
+            let names = gateway
+                .names(channels, platforms.into_iter().map(|p| p.inner))
+                .execute()
+                .await
+                .map_err(PyRattlerError::from)?;
+
+            // Convert the records into a list of lists
+            Ok(names
+                .into_iter()
+                .map(PyPackageName::from)
                 .collect::<Vec<_>>())
         })
     }
