@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.20](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.19...rattler_repodata_gateway-v0.21.20) - 2024-11-05
+
+### Fixed
+
+- gateway recursive records ([#930](https://github.com/conda/rattler/pull/930))
+
 ## [0.21.19](https://github.com/conda/rattler/compare/rattler_repodata_gateway-v0.21.18...rattler_repodata_gateway-v0.21.19) - 2024-11-04
 
 ### Other
