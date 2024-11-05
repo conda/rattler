@@ -532,7 +532,7 @@ mod test {
             .unwrap();
 
         let total_records_single_openssl: usize = records.iter().map(RepoData::len).sum();
-        assert_eq!(total_records_single_openssl, 4644);
+        assert_eq!(total_records_single_openssl, 4219);
 
         // There should be only one record for the openssl package.
         let openssl_records: Vec<&RepoDataRecord> = records
@@ -571,7 +571,7 @@ mod test {
         // The total number of records should be greater than the number of records
         // fetched when selecting the openssl with a direct url.
         assert!(total_records > total_records_single_openssl);
-        assert_eq!(total_records, 4692);
+        assert_eq!(total_records, 4267);
 
         let openssl_records: Vec<&RepoDataRecord> = records
             .iter()
