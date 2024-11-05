@@ -7,4 +7,4 @@ Cannot solve the request because of: The following packages are incompatible
    └─ xbar 1 would require
       └─ xfoo >=2, which can be installed with any of the following options:
          └─ xfoo 2
-├─ constraint '==1' cannot be fulfilled
+├─ the constraint xfoo ==1 cannot be fulfilled
