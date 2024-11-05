@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1](https://github.com/conda/rattler/compare/rattler_solve-v1.2.0...rattler_solve-v1.2.1) - 2024-11-05
+
+### Fixed
+
+- solver crash when using unrelated locked record ([#927](https://github.com/conda/rattler/pull/927))
+
+### Other
+
+- bump py-rattler to 0.8.1 ([#929](https://github.com/conda/rattler/pull/929))
+
 ## [1.2.0](https://github.com/conda/rattler/compare/rattler_solve-v1.1.0...rattler_solve-v1.2.0) - 2024-11-04
 
 ### Added
