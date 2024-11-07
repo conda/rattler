@@ -373,8 +373,6 @@ impl<'a> CondaDependencyProvider<'a> {
                         &record.channel,
                     );
                 }
-
-                candidates.hint_dependencies_available.push(solvable_id);
             }
         }
 
@@ -393,6 +391,11 @@ impl<'a> CondaDependencyProvider<'a> {
             let candidates = records.entry(name).or_default();
             candidates.candidates.push(solvable);
             candidates.locked = Some(solvable);
+        }
+
+        // The dependencies for all candidates are always available.
+        for candidates in records.values_mut() {
+            candidates.hint_dependencies_available = candidates.candidates.clone();
         }
 
         Ok(Self {

@@ -18,6 +18,25 @@ class PrefixRecord(RepoDataRecord):
         record._record = py_record
         return record
 
+    def __init__(
+        self,
+        repodata_record: RepoDataRecord,
+        paths_data: PrefixPaths,
+        package_tarball_full_path: Optional[os.PathLike[str]] = None,
+        extracted_package_dir: Optional[os.PathLike[str]] = None,
+        requested_spec: Optional[str] = None,
+        files: Optional[List[os.PathLike[str]]] = None,
+    ) -> None:
+        record = PyRecord.create_prefix_record(
+            repodata_record._record,
+            paths_data._paths,
+            package_tarball_full_path,
+            extracted_package_dir,
+            requested_spec,
+            files,
+        )
+        self._record = record
+
     @staticmethod
     def from_path(path: os.PathLike[str]) -> PrefixRecord:
         """
@@ -59,6 +78,10 @@ class PrefixRecord(RepoDataRecord):
         """
         return self._record.package_tarball_full_path
 
+    @package_tarball_full_path.setter
+    def package_tarball_full_path(self, value: Optional[os.PathLike[str]]) -> None:
+        self._record.package_tarball_full_path = value
+
     @property
     def extracted_package_dir(self) -> Optional[os.PathLike[str]]:
         """
@@ -76,6 +99,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return self._record.extracted_package_dir
+
+    @extracted_package_dir.setter
+    def extracted_package_dir(self, value: Optional[os.PathLike[str]]) -> None:
+        self._record.extracted_package_dir = value
 
     @property
     def files(self) -> List[os.PathLike[str]]:
@@ -95,6 +122,10 @@ class PrefixRecord(RepoDataRecord):
         """
         return self._record.files
 
+    @files.setter
+    def files(self, value: List[os.PathLike[str]]) -> None:
+        self._record.files = value
+
     @property
     def paths_data(self) -> PrefixPaths:
         """
@@ -112,6 +143,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return PrefixPaths._from_py_prefix_paths(self._record.paths_data)
+
+    @paths_data.setter
+    def paths_data(self, value: PrefixPaths) -> None:
+        self._record.paths_data = value._paths
 
     @property
     def requested_spec(self) -> Optional[str]:
@@ -134,6 +169,10 @@ class PrefixRecord(RepoDataRecord):
         ```
         """
         return self._record.requested_spec
+
+    @requested_spec.setter
+    def requested_spec(self, value: Optional[str]) -> None:
+        self._record.requested_spec = value
 
     def __repr__(self) -> str:
         """

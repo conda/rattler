@@ -10,7 +10,7 @@ from rattler.repo_data import (
     SourceConfig,
 )
 from rattler.channel import Channel, ChannelConfig, ChannelPriority
-from rattler.networking import AuthenticatedClient, fetch_repo_data
+from rattler.networking import Client, fetch_repo_data
 from rattler.virtual_package import GenericVirtualPackage, VirtualPackage, VirtualPackageOverrides, Override
 from rattler.package import (
     PackageName,
@@ -23,6 +23,7 @@ from rattler.package import (
     FileMode,
     IndexJson,
 )
+from rattler.package.no_arch_type import NoArchType
 from rattler.prefix import PrefixRecord, PrefixPaths, PrefixPathsEntry, PrefixPathType
 from rattler.platform import Platform
 from rattler.utils.rattler_version import get_rattler_version as _get_rattler_version
@@ -51,7 +52,7 @@ __all__ = [
     "Channel",
     "ChannelConfig",
     "ChannelPriority",
-    "AuthenticatedClient",
+    "Client",
     "PatchInstructions",
     "RepoDataRecord",
     "RepoData",
@@ -88,4 +89,5 @@ __all__ = [
     "IndexJson",
     "Gateway",
     "SourceConfig",
+    "NoArchType",
 ]

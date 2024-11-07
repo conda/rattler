@@ -30,6 +30,7 @@
   "url": "https://conda.anaconda.org/conda-forge/osx-arm64/python-3.11.9-h932a869_0_cpython.conda",
   "channel": "https://conda.anaconda.org/conda-forge/",
   "extracted_package_dir": "/Users/graf/Library/Caches/rattler/cache/pkgs/python-3.11.9-h932a869_0_cpython",
+  "python_site_packages_path": "lib/python3.11/site-packages",
   "files": [
     "bin/2to3",
     "bin/2to3-3.11",

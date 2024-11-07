@@ -1,35 +1,38 @@
-use crate::CondaPackageData;
+use std::{borrow::Cow, cmp::Ordering, collections::BTreeSet};
+
 use rattler_conda_types::{
     BuildNumber, NoArchType, PackageName, PackageRecord, PackageUrl, VersionWithSource,
 };
 use rattler_digest::{serde::SerializableHash, Md5Hash, Sha256Hash};
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
-use std::borrow::Cow;
-use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use url::Url;
+
+use crate::CondaPackageData;
 
 fn is_default<T: Default + Eq>(value: &T) -> bool {
     value == &T::default()
 }
 
-/// A helper struct that wraps all fields of a [`CondaPackageData`] and allows for easy conversion
-/// between the two.
+/// A helper struct that wraps all fields of a [`CondaPackageData`] and allows
+/// for easy conversion between the two.
 ///
-/// This type provides full control over the order of the fields when serializing. This is important
-/// because one of the design goals is that it should be easy to read the lock file. A
-/// [`PackageRecord`] is serialized in alphabetic order which might not be the most readable. This
-/// type instead puts the "most important" fields at the top followed by more detailed ones.
+/// This type provides full control over the order of the fields when
+/// serializing. This is important because one of the design goals is that it
+/// should be easy to read the lock file. A [`PackageRecord`] is serialized in
+/// alphabetic order which might not be the most readable. This type instead
+/// puts the "most important" fields at the top followed by more detailed ones.
 ///
-/// So note that for reproducibility the order of these fields should not change or should be
-/// reflected in a version change.
+/// So note that for reproducibility the order of these fields should not change
+/// or should be reflected in a version change.
 //
-/// This type also adds more default values (e.g. for `build_number` and `build_string`).
+/// This type also adds more default values (e.g. for `build_number` and
+/// `build_string`).
 ///
-/// The complexity with `Cow<_>` types is introduced to allow both efficient deserialization and
-/// serialization without requiring all data to be cloned when serializing. We want to be able
-/// to use the same type of both serialization and deserialization to ensure that when any of the
+/// The complexity with `Cow<_>` types is introduced to allow both efficient
+/// deserialization and serialization without requiring all data to be cloned
+/// when serializing. We want to be able to use the same type of both
+/// serialization and deserialization to ensure that when any of the
 /// types involved change we are forced to update this struct as well.
 #[serde_as]
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
@@ -84,6 +87,9 @@ pub(crate) struct RawCondaPackageData<'a> {
     pub file_name: Cow<'a, Option<String>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub python_site_packages_path: Cow<'a, Option<String>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Cow<'a, Option<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license_family: Cow<'a, Option<String>>,
@@ -126,6 +132,7 @@ impl<'a> From<RawCondaPackageData<'a>> for CondaPackageData {
                 track_features: value.track_features.into_owned(),
                 version: value.version.into_owned(),
                 run_exports: None,
+                python_site_packages_path: value.python_site_packages_path.into_owned(),
             },
             url: value.url.into_owned(),
             file_name: value.file_name.into_owned(),
@@ -161,6 +168,9 @@ impl<'a> From<&'a CondaPackageData> for RawCondaPackageData<'a> {
             track_features: Cow::Borrowed(&value.package_record.track_features),
             license: Cow::Borrowed(&value.package_record.license),
             license_family: Cow::Borrowed(&value.package_record.license_family),
+            python_site_packages_path: Cow::Borrowed(
+                &value.package_record.python_site_packages_path,
+            ),
         }
     }
 }

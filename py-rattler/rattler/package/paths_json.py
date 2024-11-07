@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Literal
 from rattler.rattler import (
     PyPathsJson,
     PyPathsEntry,
@@ -455,6 +455,9 @@ class FileMode:
     """
 
     _inner: PyFileMode | None = None
+
+    def __init__(self, file_mode: Literal["binary", "text"]) -> None:
+        self._inner = PyFileMode(file_mode)
 
     @property
     def binary(self) -> bool:

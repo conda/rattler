@@ -20,6 +20,7 @@ try:
         EnvironmentCreationError,
         ExtractError,
         GatewayError,
+        ValidatePackageRecordsException,
     )
 except ImportError:
     # They are only redefined for documentation purposes
@@ -85,6 +86,9 @@ except ImportError:
     class GatewayError(Exception):  # type: ignore[no-redef]
         """An error that can occur when querying the repodata gateway."""
 
+    class ValidatePackageRecordsException(Exception):  # type: ignore[no-redef]
+        """An error when validating package records."""
+
 
 __all__ = [
     "ActivationError",
@@ -107,4 +111,5 @@ __all__ = [
     "EnvironmentCreationError",
     "ExtractError",
     "GatewayError",
+    "ValidatePackageRecordsException",
 ]

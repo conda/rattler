@@ -8,7 +8,10 @@ from rattler import (
     ChannelPriority,
     RepoDataRecord,
     Channel,
-    Gateway, SparseRepoData, MatchSpec, solve_with_sparse_repodata,
+    Gateway,
+    SparseRepoData,
+    MatchSpec,
+    solve_with_sparse_repodata,
 )
 
 
@@ -27,9 +30,7 @@ async def test_solve(gateway: Gateway, conda_forge_channel: Channel) -> None:
 
 
 @pytest.mark.asyncio
-async def test_solve_exclude_newer(
-        gateway: Gateway, dummy_channel: Channel
-) -> None:
+async def test_solve_exclude_newer(gateway: Gateway, dummy_channel: Channel) -> None:
     """Tests the exclude_newer parameter of the solve function.
 
     The exclude_newer parameter is used to exclude any record that is newer than
@@ -105,7 +106,7 @@ async def test_solve_lowest_direct(gateway: Gateway, dummy_channel: Channel) -> 
 
 @pytest.mark.asyncio
 async def test_solve_channel_priority_disabled(
-        gateway: Gateway, pytorch_channel: Channel, conda_forge_channel: Channel
+    gateway: Gateway, pytorch_channel: Channel, conda_forge_channel: Channel
 ) -> None:
     solved_data = await solve(
         [conda_forge_channel, pytorch_channel],
@@ -118,11 +119,11 @@ async def test_solve_channel_priority_disabled(
     assert isinstance(solved_data, list)
     assert isinstance(solved_data[0], RepoDataRecord)
     assert (
-            list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"),
-                        solved_data))[0].channel
-            == pytorch_channel.base_url
+        list(filter(lambda r: r.file_name.startswith("pytorch-cpu-0.4.1-py36_cpu_1"), solved_data))[0].channel
+        == pytorch_channel.base_url
     )
     assert len(solved_data) == 32
+
 
 @pytest.mark.asyncio
 async def test_solve_constraints(gateway: Gateway, dummy_channel: Channel) -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from typing import List, TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Literal, Optional
 
 from rattler.package.paths_json import FileMode
 from rattler.rattler import PyPrefixPaths, PyPrefixPathsEntry, PyPrefixPathType
@@ -14,6 +14,37 @@ else:
 
 class PrefixPathType:
     _inner: PyPrefixPathType
+
+    def __init__(
+        self,
+        path_type: Literal[
+            "hardlink",
+            "softlink",
+            "directory",
+            "pyc_file",
+            "windows_python_entrypoint_script",
+            "windows_python_entrypoint_exe",
+            "unix_python_entrypoint",
+        ],
+    ) -> None:
+        """
+        Create a new PrefixPathType instance.
+
+        Parameters
+        ----------
+        path_type : str
+            The type of path. Must be one of: "hardlink", "softlink", "directory"
+
+        Examples
+        --------
+        ```python
+        >>> path_type = PrefixPathType("hardlink")
+        >>> path_type.hardlink
+        True
+        >>>
+        ```
+        """
+        self._inner = PyPrefixPathType(path_type)
 
     @classmethod
     def from_py_path_type(cls, py_path_type: PyPrefixPathType) -> PrefixPathType:
@@ -75,6 +106,50 @@ class PrefixPathType:
 class PrefixPathsEntry(BasePathLike):
     _inner: PyPrefixPathsEntry
 
+    def __init__(
+        self,
+        relative_path: os.PathLike[str],
+        path_type: PrefixPathType,
+        prefix_placeholder: Optional[str] = None,
+        file_mode: Optional[FileMode] = None,
+        sha256: Optional[bytes] = None,
+        sha256_in_prefix: Optional[bytes] = None,
+        size_in_bytes: Optional[int] = None,
+        original_path: Optional[os.PathLike[str]] = None,
+    ) -> None:
+        """
+        Create a new PrefixPathsEntry instance.
+
+        Parameters
+        ----------
+        relative_path : os.PathLike[str]
+            The relative path from the root of the package
+        path_type : PrefixPathType
+            Determines how to include the file when installing the package
+        prefix_placeholder : Optional[str], optional
+            The placeholder prefix used in the file, by default None
+        file_mode : Optional[FileMode], optional
+            The file mode of the path, by default None
+        sha256 : Optional[bytes], optional
+            The sha256 of the path, by default None
+        sha256_in_prefix : Optional[bytes], optional
+            The sha256 of the path in the prefix, by default None
+        size_in_bytes : Optional[int], optional
+            The size of the path in bytes, by default None
+        original_path : Optional[os.PathLike[str]], optional
+            The original path of the file, by default None
+        """
+        self._inner = PyPrefixPathsEntry(
+            relative_path,
+            path_type._inner,
+            prefix_placeholder,
+            file_mode._inner if file_mode else None,
+            sha256,
+            sha256_in_prefix,
+            size_in_bytes,
+            original_path,
+        )
+
     def __fspath__(self) -> str:
         return str(self._inner.path)
 
@@ -105,6 +180,10 @@ class PrefixPathsEntry(BasePathLike):
         """
         return self._inner.relative_path
 
+    @relative_path.setter
+    def relative_path(self, path: os.PathLike[str]) -> None:
+        self._inner.set_relative_path(path)
+
     @property
     def no_link(self) -> bool:
         """
@@ -122,6 +201,10 @@ class PrefixPathsEntry(BasePathLike):
         >>>
         ```
         """
+
+    @no_link.setter
+    def no_link(self, no_link: bool) -> None:
+        self._inner.set_no_link(no_link)
 
     @property
     def path_type(self) -> PrefixPathType:
@@ -142,6 +225,10 @@ class PrefixPathsEntry(BasePathLike):
         """
         return PrefixPathType.from_py_path_type(self._inner.path_type)
 
+    @path_type.setter
+    def path_type(self, path_type: PrefixPathType) -> None:
+        self._inner.set_path_type(path_type._inner)
+
     @property
     def prefix_placeholder(self) -> str | None:
         """
@@ -160,6 +247,10 @@ class PrefixPathsEntry(BasePathLike):
         ```
         """
         return self._inner.prefix_placeholder
+
+    @prefix_placeholder.setter
+    def prefix_placeholder(self, placeholder: Optional[str]) -> None:
+        self._inner.set_prefix_placeholder(placeholder)
 
     @property
     def file_mode(self) -> FileMode:
@@ -180,6 +271,10 @@ class PrefixPathsEntry(BasePathLike):
         """
         return FileMode._from_py_file_mode(self._inner.file_mode)
 
+    @file_mode.setter
+    def file_mode(self, file_mode: Optional[FileMode]) -> None:
+        self._inner.set_file_mode(file_mode._inner if file_mode else None)
+
     @property
     def sha256(self) -> bytes:
         """
@@ -198,6 +293,10 @@ class PrefixPathsEntry(BasePathLike):
         ```
         """
         return self._inner.sha256
+
+    @sha256.setter
+    def sha256(self, sha256: Optional[bytes]) -> None:
+        self._inner.set_sha256(sha256)
 
     @property
     def sha256_in_prefix(self) -> bytes:
@@ -218,6 +317,10 @@ class PrefixPathsEntry(BasePathLike):
         """
         return self._inner.sha256_in_prefix
 
+    @sha256_in_prefix.setter
+    def sha256_in_prefix(self, sha256: Optional[bytes]) -> None:
+        self._inner.set_sha256_in_prefix(sha256)
+
     @property
     def size_in_bytes(self) -> int:
         """
@@ -237,6 +340,10 @@ class PrefixPathsEntry(BasePathLike):
         """
         return self._inner.size_in_bytes
 
+    @size_in_bytes.setter
+    def size_in_bytes(self, size: Optional[int]) -> None:
+        self._inner.set_size_in_bytes(size)
+
 
 class PrefixPaths:
     _paths: PyPrefixPaths
@@ -247,6 +354,26 @@ class PrefixPaths:
         paths = cls.__new__(cls)
         paths._paths = py_prefix_paths
         return paths
+
+    def __init__(self, paths_version: int = 1) -> None:
+        """
+        Create a new PrefixPaths instance.
+
+        Parameters
+        ----------
+        paths_version : int, optional
+            The version of the paths file format, by default 1
+
+        Examples
+        --------
+        ```python
+        >>> paths = PrefixPaths()
+        >>> paths.paths_version
+        1
+        >>>
+        ```
+        """
+        self._paths = PyPrefixPaths(paths_version)
 
     @property
     def paths_version(self) -> int:
@@ -268,6 +395,10 @@ class PrefixPaths:
         """
         return self._paths.paths_version
 
+    @paths_version.setter
+    def paths_version(self, version: int) -> None:
+        self._paths.paths_version = version
+
     @property
     def paths(self) -> List[PrefixPathsEntry]:
         """
@@ -287,6 +418,10 @@ class PrefixPaths:
         ```
         """
         return [PrefixPathsEntry._from_py_paths_entry(path) for path in self._paths.paths]
+
+    @paths.setter
+    def paths(self, paths: List[PrefixPathsEntry]) -> None:
+        self._paths.paths = [path._inner for path in paths]
 
     def __repr__(self) -> str:
         """

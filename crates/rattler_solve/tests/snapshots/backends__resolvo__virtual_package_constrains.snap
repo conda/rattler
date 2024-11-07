@@ -1,6 +1,5 @@
 ---
 source: crates/rattler_solve/tests/backends.rs
-assertion_line: 711
 expression: output
 ---
 Cannot solve the request because of: The following packages are incompatible
@@ -8,4 +7,4 @@ Cannot solve the request because of: The following packages are incompatible
 │  └─ __cuda 1
 └─ cuda-version * cannot be installed because there are no viable options:
    └─ cuda-version 12.5 would constrain
-      └─ __cuda >=12.1 , which conflicts with any installable versions previously reported
+      └─ __cuda >=12.1, which conflicts with any installable versions previously reported

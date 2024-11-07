@@ -108,6 +108,7 @@ fn installed_package(
             legacy_bz2_size: None,
             legacy_bz2_md5: None,
             purls: None,
+            python_site_packages_path: None,
             run_exports: None,
         },
     }
@@ -244,7 +245,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_favored() {
             let result = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["bors"],
                     installed_packages: vec![installed_package(
@@ -267,7 +268,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_with_error() {
             let result = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foobar >=2", "bors >= 2"],
                     ..SimpleSolveTask::default()
@@ -283,7 +284,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_dummy_repo_install_non_existent() {
             let result = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["asdfasdf", "foo<4"],
                     ..SimpleSolveTask::default()
@@ -299,7 +300,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_dummy_repo_missing_virtual_package() {
             let result = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["bar"],
                     ..SimpleSolveTask::default()
@@ -312,7 +313,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_dummy_repo_with_virtual_package() {
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["bar"],
                     virtual_packages: vec![GenericVirtualPackage {
@@ -335,7 +336,7 @@ macro_rules! solver_backend_tests {
         #[test]
         fn test_solve_dummy_repo_install_new() {
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foo<4"],
                     ..SimpleSolveTask::default()
@@ -346,17 +347,17 @@ macro_rules! solver_backend_tests {
             assert_eq!(1, pkgs.len());
             let info = &pkgs[0];
 
-            assert_eq!("foo-3.0.2-py36h1af98f8_2.conda", info.file_name);
+            assert_eq!("foo-3.0.2-py36h1af98f8_3.conda", info.file_name);
             assert_eq!(
-                "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_2.conda",
+                "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
                 info.url.to_string()
             );
             assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
             assert_eq!("foo", info.package_record.name.as_normalized());
             assert_eq!("linux-64", info.package_record.subdir);
             assert_eq!("3.0.2", info.package_record.version.to_string());
-            assert_eq!("py36h1af98f8_2", info.package_record.build);
-            assert_eq!(2, info.package_record.build_number);
+            assert_eq!("py36h1af98f8_3", info.package_record.build);
+            assert_eq!(3, info.package_record.build_number);
             assert_eq!(
                 rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
                     "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
@@ -381,7 +382,7 @@ macro_rules! solver_backend_tests {
             let match_spec = "foo=3.0.2=py36h1af98f8_1";
 
             let operations = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &[match_spec],
                     ..SimpleSolveTask::default()
@@ -406,7 +407,7 @@ macro_rules! solver_backend_tests {
             )];
 
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foo<4"],
                     installed_packages: already_installed,
@@ -435,7 +436,7 @@ macro_rules! solver_backend_tests {
             )];
 
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foo>=4"],
                     installed_packages: already_installed,
@@ -462,7 +463,7 @@ macro_rules! solver_backend_tests {
             )];
 
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foo<4"],
                     installed_packages: already_installed,
@@ -491,7 +492,7 @@ macro_rules! solver_backend_tests {
             )];
 
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     installed_packages: already_installed,
                     ..SimpleSolveTask::default()
@@ -508,7 +509,7 @@ macro_rules! solver_backend_tests {
             let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
 
             let pkgs = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foo"],
                     exclude_newer: Some(date),
@@ -546,7 +547,7 @@ macro_rules! solver_backend_tests {
         fn test_constraints() {
             // There following package is provided as .tar.bz and as .conda in repodata.json
             let mut operations = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["foobar"],
                     constraints: vec!["bors <=1", "nonexisting"],
@@ -568,7 +569,7 @@ macro_rules! solver_backend_tests {
             // This tests that a package that has a constrains on a virtual package is
             // properly restricted.
             let result = solve::<$T>(
-                dummy_channel_json_path(),
+                &[dummy_channel_json_path()],
                 SimpleSolveTask {
                     specs: &["cuda-version"],
                     virtual_packages: vec![GenericVirtualPackage {
@@ -665,17 +666,17 @@ mod libsolv_c {
         assert_eq!(1, pkgs.len());
         let info = &pkgs[0];
 
-        assert_eq!("foo-3.0.2-py36h1af98f8_2.conda", info.file_name);
+        assert_eq!("foo-3.0.2-py36h1af98f8_3.conda", info.file_name);
         assert_eq!(
-            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_2.conda",
+            "https://conda.anaconda.org/conda-forge/linux-64/foo-3.0.2-py36h1af98f8_3.conda",
             info.url.to_string()
         );
         assert_eq!("https://conda.anaconda.org/conda-forge/", info.channel);
         assert_eq!("foo", info.package_record.name.as_normalized());
         assert_eq!("linux-64", info.package_record.subdir);
         assert_eq!("3.0.2", info.package_record.version.to_string());
-        assert_eq!("py36h1af98f8_2", info.package_record.build);
-        assert_eq!(2, info.package_record.build_number);
+        assert_eq!("py36h1af98f8_3", info.package_record.build);
+        assert_eq!(3, info.package_record.build_number);
         assert_eq!(
             rattler_digest::parse_digest_from_hex::<rattler_digest::Sha256>(
                 "67a63bec3fd3205170eaad532d487595b8aaceb9814d13c6858d7bac3ef24cd4"
@@ -713,7 +714,7 @@ mod resolvo {
     #[test]
     fn test_solve_locked() {
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["bors >=2"],
                 pinned_packages: vec![installed_package(
@@ -735,7 +736,7 @@ mod resolvo {
     #[test]
     fn test_issue_717() {
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["issue_717"],
                 ..SimpleSolveTask::default()
@@ -751,7 +752,7 @@ mod resolvo {
         let date = "2021-12-12T12:12:12Z".parse::<DateTime<Utc>>().unwrap();
 
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foo>=4"],
                 exclude_newer: Some(date),
@@ -766,7 +767,7 @@ mod resolvo {
     #[test]
     fn test_lowest_version_strategy_highest_build_number() {
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foo"],
                 strategy: rattler_solve::SolveStrategy::LowestVersion,
@@ -781,7 +782,7 @@ mod resolvo {
             Version::from_str("3.0.2").unwrap()
         );
         assert_eq!(
-            result[0].package_record.build_number, 2,
+            result[0].package_record.build_number, 3,
             "expected the highest build number"
         );
     }
@@ -789,7 +790,7 @@ mod resolvo {
     #[test]
     fn test_lowest_version_strategy_all() {
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foobar"],
                 strategy: rattler_solve::SolveStrategy::LowestVersion,
@@ -817,7 +818,7 @@ mod resolvo {
     #[test]
     fn test_lowest_direct_version_strategy() {
         let result = solve::<rattler_solve::resolvo::Solver>(
-            dummy_channel_json_path(),
+            &[dummy_channel_json_path()],
             SimpleSolveTask {
                 specs: &["foobar"],
                 strategy: rattler_solve::SolveStrategy::LowestVersionDirect,
@@ -918,6 +919,28 @@ mod resolvo {
 
         assert!(matches!(solve_error, SolveError::Unsolvable(_)));
     }
+
+    #[test]
+    fn test_panic_on_constraint() {
+        let result = solve::<rattler_solve::resolvo::Solver>(
+            &[dummy_channel_json_path()],
+            SimpleSolveTask {
+                specs: &["xbar"],
+                constraints: vec!["xfoo==1"],
+                pinned_packages: vec![installed_package(
+                    "conda-forge",
+                    "linux-64",
+                    "xfoo",
+                    "1",
+                    "xxx",
+                    1,
+                )],
+                ..SimpleSolveTask::default()
+            },
+        );
+
+        insta::assert_snapshot!(result.unwrap_err());
+    }
 }
 
 #[derive(Default)]
@@ -932,10 +955,13 @@ struct SimpleSolveTask<'a> {
 }
 
 fn solve<T: SolverImpl + Default>(
-    repo_path: String,
+    repo_path: &[String],
     task: SimpleSolveTask<'_>,
 ) -> Result<Vec<RepoDataRecord>, SolveError> {
-    let repo_data = read_repodata(&repo_path);
+    let repo_data = repo_path
+        .iter()
+        .map(|path| read_repodata(path))
+        .collect::<Vec<_>>();
 
     let specs: Vec<_> = task
         .specs
@@ -957,7 +983,7 @@ fn solve<T: SolverImpl + Default>(
         pinned_packages: task.pinned_packages,
         exclude_newer: task.exclude_newer,
         strategy: task.strategy,
-        ..SolverTask::from_iter([&repo_data])
+        ..SolverTask::from_iter(&repo_data)
     };
 
     let pkgs = T::default().solve(task)?;

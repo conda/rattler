@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.34](https://github.com/conda/rattler/compare/rattler_index-v0.19.33...rattler_index-v0.19.34) - 2024-11-04
+
+### Added
+
+- use python_site_packages_path field when available for installing noarch: python packages, CEP-17 ([#909](https://github.com/conda/rattler/pull/909))
+
 ## [0.19.33](https://github.com/conda/rattler/compare/rattler_index-v0.19.32...rattler_index-v0.19.33) - 2024-10-21
 
 ### Fixed
